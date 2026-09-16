@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { api } from '../services/api'
-import type { Entry, CreateEntryInput, UpdateEntryInput, UrlPath } from '../types'
+import type { Entry, CreateEntryInput, UpdateEntryInput } from '../types'
 
 interface LocalPath {
   id: string // 临时 ID 或真实 ID

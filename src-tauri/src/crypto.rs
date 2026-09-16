@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use crate::error::AppError;
 
-const PBKDF2_ITERATIONS: u32 = 100_000;
+const PBKDF2_ITERATIONS: u32 = 10_000;
 const SALT_LENGTH: usize = 16;
 const IV_LENGTH: usize = 12;
 const KEY_LENGTH: usize = 32;

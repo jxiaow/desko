@@ -4,7 +4,7 @@ import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
 import type { FileShortcut } from '../types'
 
-const props = defineProps<{
+defineProps<{
   searchKeyword: string
   loading: boolean
   filteredShortcuts: FileShortcut[]
