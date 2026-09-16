@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 124 124">
+  <defs>
+    <linearGradient id="deskoPurple" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6A63FF"/>
+      <stop offset="0.48" stop-color="#554BE8"/>
+      <stop offset="1" stop-color="#3327B8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- App tile -->
+  <rect x="4.5" y="6.5" width="115" height="115" rx="20" fill="#FFFFFF"/>
+  <rect x="4.5" y="6.5" width="115" height="115" rx="20" fill="none" stroke="#F0F0F2" stroke-width="1"/>
+
+  <!-- Left circular / portal body -->
+  <path
+    d="M94 35
+       L51 49
+       C47.8 50.1 46 52.4 46 56
+       L46 98
+       C33.7 91.0 26 77.9 26 63
+       C26 40.9 43.9 23 66 23
+       C73.5 23 80.2 24.8 85.9 28.1
+       L94 35 Z"
+    fill="url(#deskoPurple)"/>
+
+  <!-- Door -->
+  <path
+    d="M97 40
+       L65 51.8
+       C63 52.5 62 54.0 62 56.2
+       L62 105.5
+       C62 107.8 63.8 109.2 66 108.4
+       L95 98
+       C97.0 97.3 98 95.8 98 93.6
+       L98 42.5
+       C98 41.2 97.7 40.5 97 40 Z"
+    fill="url(#deskoPurple)"/>
+
+  <!-- Door knob -->
+  <circle cx="75" cy="79" r="5" fill="#FFFFFF"/>
+</svg>
