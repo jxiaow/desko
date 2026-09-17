@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
 import type { Entry } from '../types'
 
 defineProps<{
@@ -24,11 +25,24 @@ const getAvatarClass = (id: string) => {
   }
   return `c${Math.abs(hash) % 6}`
 }
+
+let handleEscape: ((e: KeyboardEvent) => void) | null = null
+
+onMounted(() => {
+  handleEscape = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') emit('close')
+  }
+  window.addEventListener('keydown', handleEscape)
+})
+
+onUnmounted(() => {
+  if (handleEscape) window.removeEventListener('keydown', handleEscape)
+})
 </script>
 
 <template>
   <Transition name="dialog">
-    <div v-if="true" class="dialog-overlay" @click.self="emit('close')">
+    <div v-if="true" class="dialog-overlay">
     <div class="dialog detail-dialog">
       <div class="dialog-header">
         <div class="detail-header-left">
@@ -60,11 +74,11 @@ const getAvatarClass = (id: string) => {
           <div class="detail-row">
             <svg class="detail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span class="detail-label">用户名</span>
-            <span class="detail-value">{{ entry.username || '-' }}</span>
-            <button class="detail-action-btn" @click="emit('copyText', entry.username || '', '用户名')" title="复制用户名">
+            <span class="detail-value">{{ entry.username || '' }}</span>
+            <button v-if="entry.username" class="detail-action-btn" @click="emit('copyText', entry.username, '用户名')" title="复制用户名">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
-            <span class="detail-action-spacer"></span>
+            <span class="detail-action-spacer" v-else></span>
           </div>
         </div>
         <div class="detail-section">
@@ -72,15 +86,18 @@ const getAvatarClass = (id: string) => {
             <svg class="detail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <span class="detail-label">密码</span>
             <span class="detail-value" :class="{ masked: !visiblePasswords[entry.id] }">
-              {{ visiblePasswords[entry.id] ? (passwordCache[entry.id]?.value || '••••••••') : '••••••••' }}
+              {{ visiblePasswords[entry.id] ? (passwordCache[entry.id]?.value || '') : '' }}
             </span>
-            <button class="detail-action-btn toggle" @click="emit('togglePassword', entry.id)" :title="visiblePasswords[entry.id] ? '隐藏密码' : '显示密码'">
-              <svg v-if="!visiblePasswords[entry.id]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </button>
-            <button class="detail-action-btn" @click="emit('copyPassword', entry.id)" title="复制密码">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
+            <template v-if="passwordCache[entry.id]?.value">
+              <button class="detail-action-btn toggle" @click="emit('togglePassword', entry.id)" :title="visiblePasswords[entry.id] ? '隐藏密码' : '显示密码'">
+                <svg v-if="!visiblePasswords[entry.id]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+              <button class="detail-action-btn" @click="emit('copyPassword', entry.id)" title="复制密码">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </template>
+            <span class="detail-action-spacer" v-else></span>
           </div>
         </div>
         <div v-if="entry.notes" class="detail-section">

@@ -157,7 +157,9 @@ fn main() {
             commands::delete_url_path,
             commands::list_file_shortcuts,
             commands::create_file_shortcut,
+            commands::update_file_shortcut,
             commands::delete_file_shortcut,
+            commands::open_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

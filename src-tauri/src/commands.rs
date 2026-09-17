@@ -649,3 +649,17 @@ pub fn delete_file_shortcut(state: State<AppState>, id: String) -> Result<(), Ap
     db.delete_file_shortcut(&id)?;
     Ok(())
 }
+
+#[tauri::command]
+pub fn update_file_shortcut(state: State<AppState>, id: String, name: Option<String>, path: Option<String>, shortcut_type: Option<String>) -> Result<(), AppError> {
+    let _key = get_master_key(&state)?;
+    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    db.update_file_shortcut(&id, name.as_deref(), path.as_deref(), shortcut_type.as_deref())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_file(path: String) -> Result<(), AppError> {
+    open::that(&path).map_err(|e| AppError::Io(format!("无法打开: {}", e)))?;
+    Ok(())
+}

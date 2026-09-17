@@ -220,7 +220,8 @@ onUnmounted(() => {
               <a
                 v-if="item.url"
                 class="card-url"
-                @click.prevent="emit('openUrl', item.url!)"
+                @click.prevent.stop="emit('openUrl', item.url!)"
+                @contextmenu.prevent="emit('copyText', item.url!, '网址')"
               >{{ item.url }}</a>
             </div>
           </div>
@@ -237,26 +238,9 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="card-body" @click="emit('openDetail', item)">
-          <div class="card-info-row">
-            <span class="card-info-label">用户</span>
-            <span class="card-info-value">{{ item.username || '-' }}</span>
-            <button class="card-action-btn" @click.stop="emit('copyText', item.username || '', '用户名')" title="复制用户名">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
-            <span class="card-action-spacer"></span>
-          </div>
-          <div class="card-info-row">
-            <span class="card-info-label">密码</span>
-            <span class="card-info-value" :class="{ masked: !visiblePasswords[item.id] }">
-              {{ visiblePasswords[item.id] ? (passwordCache[item.id]?.value || '••••••••') : '••••••••' }}
-            </span>
-            <button class="card-action-btn toggle" @click.stop="emit('togglePassword', item.id)" :title="visiblePasswords[item.id] ? '隐藏密码' : '显示密码'">
-              <svg v-if="!visiblePasswords[item.id]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </button>
-            <button class="card-action-btn" @click.stop="emit('copyPassword', item.id)" title="复制密码">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
+          <div v-if="item.username || passwordCache[item.id]?.value" class="card-credential-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>{{ item.username ? '有凭证' : '有密码' }}</span>
           </div>
           <div v-if="item.notes" class="card-notes">
             <span class="card-notes-icon"></span>
@@ -329,17 +313,17 @@ onUnmounted(() => {
 
 .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-bottom: 14px; }
 
-.entry-card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius); transition: all 0.15s ease; overflow: hidden; position: relative; box-shadow: var(--shadow-xs); }
+.entry-card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius); transition: all 0.15s ease; overflow: hidden; position: relative; box-shadow: var(--shadow-xs); min-height: 120px; display: flex; flex-direction: column; }
 .entry-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
 .entry-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); background: var(--accent-light); }
 
-.card-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 12px 12px 8px; gap: 8px; border-bottom: 1px solid var(--border); }
+.card-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 14px 14px 10px; gap: 8px; }
 .card-header-main { display: flex; align-items: flex-start; gap: 8px; flex: 1; min-width: 0; }
 .card-header-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 0.12s; }
 .entry-card:hover .card-header-actions { opacity: 1; }
 
 .card-avatar { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
-.card-avatar.c0 { background: #6366f1; }
+.card-avatar.c0 { background: #3b82f6; }
 .card-avatar.c1 { background: #8b5cf6; }
 .card-avatar.c2 { background: #ec4899; }
 .card-avatar.c3 { background: #f59e0b; }
@@ -352,19 +336,22 @@ onUnmounted(() => {
 .card-icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
 
 .card-title-area { flex: 1; min-width: 0; }
-.card-title-row { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
-.card-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card-category { font-size: 10px; color: var(--text-muted); background: var(--hover); padding: 1px 6px; border-radius: 3px; font-weight: 500; }
-.card-url { font-size: 11px; color: var(--accent); text-decoration: none; cursor: pointer; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.card-title-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.card-name { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-category { font-size: 11px; color: var(--text-muted); background: var(--hover); padding: 2px 6px; border-radius: 3px; font-weight: 500; }
+.card-url { font-size: 12px; color: var(--accent); text-decoration: none; cursor: pointer; display: -webkit-box; overflow: hidden; text-overflow: ellipsis; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; margin-top: 2px; line-height: 1.4; }
 .card-url:hover { text-decoration: underline; }
 
-.card-body { padding: 0 12px 12px; cursor: pointer; }
+.card-body { padding: 0 14px 14px; cursor: pointer; flex: 1; display: flex; flex-direction: column; }
+.card-credential-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; font-size: 12px; font-weight: 500; margin-bottom: 6px; }
+.card-credential-badge svg { color: var(--accent); }
 .card-info-row { display: flex; align-items: center; padding: 3px 0; gap: 5px; }
 .card-info-row + .card-info-row { border-top: 1px solid var(--border); }
-.card-info-label { font-size: 11px; color: var(--text-muted); width: 32px; flex-shrink: 0; }
+.card-info-label { font-size: 12px; color: var(--text-muted); width: 36px; flex-shrink: 0; }
 .card-action-spacer { width: 20px; flex-shrink: 0; }
-.card-info-value { font-size: 12px; color: var(--text); font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-info-value { font-size: 13px; color: var(--text); font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-info-value.masked { letter-spacing: 2px; color: var(--text-muted); }
+.card-info-value.empty { color: var(--text-muted); font-family: inherit; }
 
 .card-action-btn { width: 20px; height: 20px; padding: 0; border: none; background: transparent; border-radius: 4px; color: var(--text-muted); cursor: pointer; transition: all 0.12s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .card-action-btn:hover { background: var(--hover); color: var(--text-secondary); }
@@ -372,21 +359,21 @@ onUnmounted(() => {
 .card-action-btn.toggle { color: var(--accent); }
 .card-action-btn.toggle:hover { background: var(--accent-soft); }
 
-.card-notes { display: flex; align-items: flex-start; gap: 5px; margin-top: 3px; padding-top: 5px; border-top: 1px solid var(--border); }
-.card-notes-icon::before { content: ''; display: block; width: 3px; height: 3px; border-radius: 50%; background: var(--text-muted); margin-top: 5px; flex-shrink: 0; }
-.card-notes-text { font-size: 11px; color: var(--text-muted); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.card-notes { display: flex; align-items: flex-start; gap: 6px; margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); }
+.card-notes-icon::before { content: ''; display: block; width: 3px; height: 3px; border-radius: 50%; background: var(--text-muted); margin-top: 6px; flex-shrink: 0; }
+.card-notes-text { font-size: 12px; color: var(--text-muted); line-height: 1.5; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
-.card-paths { display: flex; align-items: center; gap: 4px; margin-top: 3px; padding-top: 5px; border-top: 1px solid var(--border); overflow: hidden; }
-.card-path-link { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 4px; cursor: pointer; text-decoration: none; transition: all 0.12s; }
+.card-paths { display: flex; align-items: center; gap: 4px; margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); overflow: hidden; }
+.card-path-link { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; font-size: 12px; color: var(--accent); background: var(--accent-soft); border-radius: 4px; cursor: pointer; text-decoration: none; transition: all 0.12s; }
 .card-path-link:hover { background: var(--accent); color: #fff; }
 .card-path-label { font-weight: 500; }
 .card-path-path { font-family: monospace; opacity: 0.8; }
 .card-paths-more { position: relative; display: inline-flex; }
-.card-paths-count { display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 4px; cursor: pointer; min-width: 20px; transition: all 0.12s; }
+.card-paths-count { display: inline-flex; align-items: center; justify-content: center; padding: 3px 7px; font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 4px; cursor: pointer; min-width: 20px; transition: all 0.12s; }
 .card-paths-count:hover { background: var(--accent); color: #fff; }
 .card-paths-popover { display: none; position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 20; min-width: 160px; max-width: 280px; padding: 4px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow); flex-direction: column; gap: 2px; }
 .card-paths-more:hover .card-paths-popover { display: flex; }
-.card-paths-popover-item { display: flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 11px; color: var(--accent); background: transparent; border-radius: 4px; cursor: pointer; text-decoration: none; transition: all 0.12s; white-space: nowrap; overflow: hidden; }
+.card-paths-popover-item { display: flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 12px; color: var(--accent); background: transparent; border-radius: 4px; cursor: pointer; text-decoration: none; transition: all 0.12s; white-space: nowrap; overflow: hidden; }
 .card-paths-popover-item:hover { background: var(--accent-soft); }
 
 .card-checkbox { position: absolute; top: 8px; left: 8px; z-index: 10; }

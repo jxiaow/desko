@@ -629,6 +629,35 @@ impl Database {
         self.conn.execute("DELETE FROM file_shortcuts WHERE id = ?1", params![id])?;
         Ok(())
     }
+
+    pub fn update_file_shortcut(&self, id: &str, name: Option<&str>, path: Option<&str>, shortcut_type: Option<&str>) -> Result<(), AppError> {
+        let mut updates = Vec::new();
+        let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(n) = name {
+            updates.push("name = ?");
+            params_vec.push(Box::new(n.to_string()));
+        }
+        if let Some(p) = path {
+            updates.push("path = ?");
+            params_vec.push(Box::new(p.to_string()));
+        }
+        if let Some(t) = shortcut_type {
+            updates.push("shortcut_type = ?");
+            params_vec.push(Box::new(t.to_string()));
+        }
+
+        if updates.is_empty() {
+            return Ok(());
+        }
+
+        let sql = format!("UPDATE file_shortcuts SET {} WHERE id = ?", updates.join(", "));
+        params_vec.push(Box::new(id.to_string()));
+
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        self.conn.execute(&sql, params_ref.as_slice())?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

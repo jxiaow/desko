@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { api } from '../services/api'
 import type { Entry, CreateEntryInput, UpdateEntryInput } from '../types'
 
@@ -13,6 +13,7 @@ interface LocalPath {
 
 const props = defineProps<{
   editEntry: Entry | null
+  categories: string[]
 }>()
 
 const emit = defineEmits<{
@@ -34,6 +35,48 @@ const localPaths = ref<LocalPath[]>([])
 let tempIdCounter = 0
 
 const generateTempId = () => `temp-${++tempIdCounter}`
+
+const showCategoryDropdown = ref(false)
+const categoryInputRef = ref<HTMLInputElement | null>(null)
+const dropdownPos = ref({ top: 0, left: 0, width: 0 })
+
+const filteredCategories = computed(() => {
+  const kw = form.value.category.toLowerCase()
+  if (!kw) return props.categories
+  return props.categories.filter(c => c.toLowerCase().includes(kw))
+})
+
+const selectCategory = (cat: string) => {
+  form.value.category = cat
+  showCategoryDropdown.value = false
+}
+
+const updateDropdownPos = () => {
+  if (categoryInputRef.value) {
+    const rect = categoryInputRef.value.getBoundingClientRect()
+    dropdownPos.value = { top: rect.bottom + 2, left: rect.left, width: rect.width }
+  }
+}
+
+const onCategoryFocus = () => {
+  updateDropdownPos()
+  showCategoryDropdown.value = true
+}
+
+const onCategoryBlur = () => {
+  setTimeout(() => { showCategoryDropdown.value = false }, 200)
+}
+
+// Update position on scroll and resize
+onMounted(() => {
+  window.addEventListener('scroll', updateDropdownPos, true)
+  window.addEventListener('resize', updateDropdownPos)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', updateDropdownPos, true)
+  window.removeEventListener('resize', updateDropdownPos)
+})
 
 watch(() => props.editEntry, async (entry) => {
   if (entry) {
@@ -150,11 +193,24 @@ const doSave = async () => {
     emit('showToast', e.message || '保存失败', 'error')
   }
 }
+
+let handleEscape: ((e: KeyboardEvent) => void) | null = null
+
+onMounted(() => {
+  handleEscape = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') emit('close')
+  }
+  window.addEventListener('keydown', handleEscape)
+})
+
+onUnmounted(() => {
+  if (handleEscape) window.removeEventListener('keydown', handleEscape)
+})
 </script>
 
 <template>
   <Transition name="dialog">
-    <div v-if="true" class="dialog-overlay" @click.self="emit('close')">
+    <div v-if="true" class="dialog-overlay">
     <div class="dialog">
       <div class="dialog-header">
         <div class="dialog-header-left">
@@ -184,9 +240,36 @@ const doSave = async () => {
             <label>名称 *</label>
             <input v-model="form.name" placeholder="例如：OA系统" />
           </div>
-          <div class="form-group">
+          <div class="form-group category-group">
             <label>分类</label>
-            <input v-model="form.category" placeholder="例如：办公、开发" />
+            <div class="category-input-wrapper">
+              <input
+                ref="categoryInputRef"
+                v-model="form.category"
+                placeholder="选择或输入新分类"
+                @focus="onCategoryFocus"
+                @blur="onCategoryBlur"
+                @input="showCategoryDropdown = true"
+              />
+              <Teleport to="body">
+                <div
+                  v-if="showCategoryDropdown"
+                  class="category-dropdown-teleported"
+                  :style="{ top: dropdownPos.top + 'px', left: dropdownPos.left + 'px', width: dropdownPos.width + 'px' }"
+                >
+                  <div v-if="filteredCategories.length > 0">
+                    <div
+                      v-for="cat in filteredCategories"
+                      :key="cat"
+                      class="category-option"
+                      :class="{ active: form.category === cat }"
+                      @mousedown.prevent="selectCategory(cat)"
+                    >{{ cat }}</div>
+                  </div>
+                  <div v-else class="category-empty">输入新分类名称</div>
+                </div>
+              </Teleport>
+            </div>
           </div>
         </div>
         <div class="form-group">
@@ -252,28 +335,39 @@ const doSave = async () => {
 
 <style scoped>
 .form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; }
-.form-group input, .form-group textarea { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; outline: none; transition: all 0.15s; font-family: inherit; background: var(--bg); }
+.form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
+.form-group input, .form-group textarea { width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; outline: none; transition: all 0.15s; font-family: inherit; background: var(--bg); }
 .form-group input:focus, .form-group textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: #fff; }
 .form-group textarea { resize: vertical; min-height: 56px; font-family: inherit; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
 .form-row .form-group { margin-bottom: 0; }
 
+.category-group { position: relative; }
+.category-input-wrapper { position: relative; }
+
 /* URL Paths Section */
 .paths-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 .paths-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .paths-header label { margin-bottom: 0; }
-.paths-hint { font-size: 11px; color: var(--text-muted); }
+.paths-hint { font-size: 12px; color: var(--text-muted); }
 
 .path-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .path-item { display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border); }
 .path-inputs { display: flex; gap: 8px; flex: 1; min-width: 0; }
-.path-input { flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; outline: none; background: var(--bg); font-family: inherit; }
+.path-input { flex: 1; padding: 7px 9px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; outline: none; background: var(--bg); font-family: inherit; }
 .path-input:focus { border-color: var(--accent); }
 .path-input:first-child { font-family: monospace; }
 .btn-delete-path { padding: 4px; color: var(--text-secondary); background: none; border: none; cursor: pointer; border-radius: 4px; transition: all 0.15s; flex-shrink: 0; }
 .btn-delete-path:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
 
-.btn-add-path { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 12px; color: var(--accent); background: none; border: 1px dashed var(--accent); border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s; }
+.btn-add-path { display: flex; align-items: center; gap: 6px; padding: 7px 13px; font-size: 13px; color: var(--accent); background: none; border: 1px dashed var(--accent); border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s; }
 .btn-add-path:hover { background: var(--accent-soft); }
+</style>
+
+<style>
+.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow); max-height: 120px; overflow-y: auto; pointer-events: auto; }
+.category-dropdown-teleported .category-option { padding: 7px 11px; font-size: 13px; cursor: pointer; transition: background 0.1s; }
+.category-dropdown-teleported .category-option:hover { background: var(--accent-soft); }
+.category-dropdown-teleported .category-option.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.category-dropdown-teleported .category-empty { padding: 7px 11px; font-size: 13px; color: var(--text-muted); }
 </style>

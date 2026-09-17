@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { Entry, CreateEntryInput, UpdateEntryInput, Note, CreateNoteInput, UpdateNoteInput, UrlPath, CreateUrlPathInput, UpdateUrlPathInput, FileShortcut, CreateFileShortcutInput } from '../types'
+import type { Entry, CreateEntryInput, UpdateEntryInput, Note, CreateNoteInput, UpdateNoteInput, UrlPath, CreateUrlPathInput, UpdateUrlPathInput, FileShortcut, CreateFileShortcutInput, UpdateFileShortcutInput } from '../types'
 
 export const api = {
   // Auth
@@ -92,6 +92,12 @@ export const api = {
   createFileShortcut: (input: CreateFileShortcutInput): Promise<FileShortcut> =>
     invoke('create_file_shortcut', { input }),
 
+  updateFileShortcut: (id: string, input: UpdateFileShortcutInput): Promise<void> =>
+    invoke('update_file_shortcut', { id, ...input }),
+
   deleteFileShortcut: (id: string): Promise<void> =>
     invoke('delete_file_shortcut', { id }),
+
+  openFile: (path: string): Promise<void> =>
+    invoke('open_file', { path }),
 }

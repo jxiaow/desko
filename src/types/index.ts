@@ -102,3 +102,9 @@ export interface CreateFileShortcutInput {
   path: string
   shortcut_type: 'file' | 'folder'
 }
+
+export interface UpdateFileShortcutInput {
+  name?: string
+  path?: string
+  shortcut_type?: 'file' | 'folder'
+}

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { open as shellOpen } from '@tauri-apps/plugin-shell'
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
+import { api } from '../services/api'
 import type { FileShortcut } from '../types'
 
 defineProps<{
@@ -13,12 +13,14 @@ defineProps<{
 const emit = defineEmits<{
   'update:searchKeyword': [value: string]
   addShortcut: [name: string, path: string, type: 'file' | 'folder']
+  updateShortcut: [id: string, name: string, path: string, type: 'file' | 'folder']
   removeShortcut: [id: string]
   showToast: [msg: string, type?: 'success' | 'error' | 'info']
   showConfirm: [title: string, message: string, onConfirm: () => void]
 }>()
 
 const showAddDialog = ref(false)
+const editingId = ref<string | null>(null)
 const addForm = ref({ name: '', path: '', type: 'file' as 'file' | 'folder' })
 
 const contextMenu = ref({ show: false, x: 0, y: 0, shortcut: null as FileShortcut | null })
@@ -77,24 +79,40 @@ const onPathInput = () => {
   }
 }
 
+const isEditing = () => editingId.value !== null
+
+const openEdit = (shortcut: FileShortcut) => {
+  addForm.value = { name: shortcut.name, path: shortcut.path, type: shortcut.shortcut_type }
+  editingId.value = shortcut.id
+  showAddDialog.value = true
+}
+
 const doAdd = () => {
   if (!addForm.value.name || !addForm.value.path) {
     emit('showToast', '请填写名称和路径', 'error')
     return
   }
-  emit('addShortcut', addForm.value.name, addForm.value.path, addForm.value.type)
+  if (editingId.value) {
+    emit('updateShortcut', editingId.value, addForm.value.name, addForm.value.path, addForm.value.type)
+  } else {
+    emit('addShortcut', addForm.value.name, addForm.value.path, addForm.value.type)
+  }
+  closeDialog()
+}
+
+const closeDialog = () => {
   showAddDialog.value = false
+  editingId.value = null
   addForm.value = { name: '', path: '', type: 'file' }
 }
 
 const cancelAdd = () => {
-  showAddDialog.value = false
-  addForm.value = { name: '', path: '', type: 'file' }
+  closeDialog()
 }
 
 const openShortcut = async (shortcut: FileShortcut) => {
   try {
-    await shellOpen(shortcut.path)
+    await api.openFile(shortcut.path)
   } catch {
     emit('showToast', '无法打开，文件可能不存在', 'error')
   }
@@ -108,6 +126,13 @@ const onContextMenu = (event: MouseEvent, shortcut: FileShortcut) => {
 const closeContextMenu = () => {
   contextMenu.value.show = false
   contextMenu.value.shortcut = null
+}
+
+const editFromMenu = () => {
+  if (contextMenu.value.shortcut) {
+    openEdit(contextMenu.value.shortcut)
+  }
+  closeContextMenu()
 }
 
 const deleteFromMenu = () => {
@@ -127,7 +152,7 @@ const openContainingFolder = async () => {
     const folder = path.substring(0, path.lastIndexOf('/'))
     if (folder) {
       try {
-        await shellOpen(folder)
+        await api.openFile(folder)
       } catch {
         emit('showToast', '无法打开所在目录', 'error')
       }
@@ -145,12 +170,12 @@ const getExtColor = (ext: string) => {
   const colors: Record<string, string> = {
     pdf: '#dc2626', doc: '#2563eb', docx: '#2563eb',
     xls: '#16a34a', xlsx: '#16a34a', ppt: '#ea580c', pptx: '#ea580c',
-    zip: '#6d28d9', rar: '#6d28d9', '7z': '#6d28d9',
+    zip: '#7c3aed', rar: '#7c3aed', '7z': '#7c3aed',
     js: '#ca8a04', ts: '#2563eb', py: '#16a34a', rs: '#ea580c',
-    md: '#57534e', txt: '#57534e', json: '#ca8a04',
+    md: '#64748b', txt: '#64748b', json: '#ca8a04',
     png: '#db2777', jpg: '#db2777', jpeg: '#db2777', svg: '#db2777', gif: '#db2777',
   }
-  return colors[ext] || '#a8a29e'
+  return colors[ext] || '#94a3b8'
 }
 
 onMounted(() => {
@@ -215,13 +240,13 @@ onBeforeUnmount(() => {
       <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「添加快捷方式」开始' }}</div>
     </div>
 
-    <!-- Add Dialog -->
+    <!-- Add/Edit Dialog -->
     <Transition name="dialog">
       <div v-if="showAddDialog" class="dialog-overlay" @click.self="cancelAdd">
         <div class="dialog">
           <div class="dialog-header">
             <div class="dialog-header-left">
-              <h3>添加快捷方式</h3>
+              <h3>{{ isEditing() ? '编辑快捷方式' : '添加快捷方式' }}</h3>
             </div>
             <button class="dialog-close" @click="cancelAdd">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -256,7 +281,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="dialog-footer">
             <button class="btn-secondary" @click="cancelAdd">取 消</button>
-            <button class="btn-primary" @click="doAdd">添 加</button>
+            <button class="btn-primary" @click="doAdd">{{ isEditing() ? '保 存' : '添 加' }}</button>
           </div>
         </div>
       </div>
@@ -264,6 +289,10 @@ onBeforeUnmount(() => {
 
     <!-- Context Menu -->
     <div v-if="contextMenu.show" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
+      <div class="context-menu-item" @click="editFromMenu">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        编辑
+      </div>
       <div class="context-menu-item" @click="openContainingFolder">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
         打开所在目录
@@ -318,8 +347,8 @@ onBeforeUnmount(() => {
 }
 
 .shortcut-info { flex: 1; min-width: 0; }
-.shortcut-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.shortcut-path { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shortcut-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shortcut-path { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Loading skeleton */
 .loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
@@ -331,18 +360,18 @@ onBeforeUnmount(() => {
 
 /* Add dialog */
 .form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px; }
-.form-group input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; outline: none; transition: all 0.15s; font-family: inherit; background: var(--bg); }
+.form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
+.form-group input { width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; outline: none; transition: all 0.15s; font-family: inherit; background: var(--bg); }
 .form-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: #fff; }
 
 .path-input-row { display: flex; gap: 6px; align-items: stretch; }
-.path-input-row input { flex: 1; font-size: 12px; }
+.path-input-row input { flex: 1; font-size: 13px; }
 .path-browse-btns { display: flex; gap: 4px; }
-.browse-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-bg); cursor: pointer; color: var(--text-muted); transition: all 0.12s; flex-shrink: 0; }
+.browse-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-bg); cursor: pointer; color: var(--text-muted); transition: all 0.12s; flex-shrink: 0; }
 .browse-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 .type-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-.type-btn { flex: 1; padding: 6px 12px; font-size: 12px; font-weight: 500; border: none; background: var(--panel-bg); color: var(--text-muted); cursor: pointer; transition: all 0.12s; font-family: inherit; }
+.type-btn { flex: 1; padding: 7px 13px; font-size: 13px; font-weight: 500; border: none; background: var(--panel-bg); color: var(--text-muted); cursor: pointer; transition: all 0.12s; font-family: inherit; }
 .type-btn:not(:last-child) { border-right: 1px solid var(--border); }
 .type-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .type-btn:hover:not(.active) { background: var(--hover); color: var(--text-secondary); }

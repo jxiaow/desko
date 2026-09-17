@@ -32,6 +32,14 @@ export function useFileShortcuts() {
     return created
   }
 
+  const updateShortcut = async (id: string, name: string, path: string, shortcutType: 'file' | 'folder') => {
+    await api.updateFileShortcut(id, { name, path, shortcut_type: shortcutType })
+    const idx = shortcuts.value.findIndex(s => s.id === id)
+    if (idx !== -1) {
+      shortcuts.value[idx] = { ...shortcuts.value[idx], name, path, shortcut_type: shortcutType }
+    }
+  }
+
   const removeShortcut = async (id: string) => {
     await api.deleteFileShortcut(id)
     shortcuts.value = shortcuts.value.filter(s => s.id !== id)
@@ -44,6 +52,7 @@ export function useFileShortcuts() {
     filteredShortcuts,
     fetchShortcuts,
     addShortcut,
+    updateShortcut,
     removeShortcut,
   }
 }

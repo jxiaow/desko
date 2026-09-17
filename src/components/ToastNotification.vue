@@ -30,9 +30,9 @@ defineProps<{
   max-width: 360px;
 }
 
-.toast.success { background: #1c1917; color: #4ade80; }
-.toast.error { background: #1c1917; color: #f87171; }
-.toast.info { background: #1c1917; color: #818cf8; }
+.toast.success { background: #0f172a; color: #4ade80; }
+.toast.error { background: #0f172a; color: #f87171; }
+.toast.info { background: #0f172a; color: #60a5fa; }
 
 .toast-enter-active,
 .toast-leave-active {

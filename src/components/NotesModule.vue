@@ -25,6 +25,12 @@ const exportNote = async (note: Note) => {
 }
 
 const contextMenu = ref({ show: false, x: 0, y: 0, note: null as Note | null })
+const isNoteFullscreen = ref(false)
+
+const toggleFullscreen = () => {
+  isNoteFullscreen.value = !isNoteFullscreen.value
+  emit('toggleFullscreen', isNoteFullscreen.value)
+}
 
 const onNoteContextMenu = (event: MouseEvent, note: Note) => {
   event.preventDefault()
@@ -78,6 +84,7 @@ const emit = defineEmits<{
   noteContentChange: [html: string]
   deleteNote: [note: Note]
   showToast: [msg: string, type?: 'success' | 'error' | 'info']
+  toggleFullscreen: [isFullscreen: boolean]
 }>()
 
 const onTitleInput = (event: Event) => {
@@ -101,7 +108,7 @@ const formatDate = (ts: number) => {
 </script>
 
 <template>
-  <div class="notes-layout">
+  <div class="notes-layout" :class="{ 'note-fullscreen': isNoteFullscreen }">
     <div class="notes-list-panel">
       <div class="notes-list-header">
         <div class="search-box">
@@ -150,6 +157,10 @@ const formatDate = (ts: number) => {
       <div v-if="selectedNote" class="notes-editor-container">
         <div class="notes-editor-header">
           <input class="notes-title-input" :value="selectedNote.title" @input="onTitleInput($event)" placeholder="无标题" />
+          <button class="note-action-btn" @click="toggleFullscreen" :title="isNoteFullscreen ? '退出全屏' : '全屏'">
+            <svg v-if="!isNoteFullscreen" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          </button>
           <button class="note-action-btn" @click="exportNote(selectedNote)" title="导出为 Markdown">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -195,14 +206,14 @@ const formatDate = (ts: number) => {
 .notes-list::-webkit-scrollbar-track { background: transparent; }
 .notes-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-.note-list-item { padding: 8px 10px; margin: 0 5px; border-radius: 6px; cursor: pointer; transition: all 0.1s ease; }
+.note-list-item { padding: 9px 11px; margin: 0 5px; border-radius: 6px; cursor: pointer; transition: all 0.1s ease; }
 .note-list-item:hover { background: var(--hover); }
 .note-list-item.active { background: var(--accent-soft); }
 .note-list-item.active .note-list-title { color: var(--accent); }
-.note-list-title { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
-.note-list-preview { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
-.note-list-meta { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-muted); }
-.note-list-cat { background: var(--hover); padding: 1px 4px; border-radius: 3px; font-size: 10px; font-weight: 500; }
+.note-list-title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+.note-list-preview { font-size: 12px; color: var(--text-muted); margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
+.note-list-meta { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
+.note-list-cat { background: var(--hover); padding: 1px 5px; border-radius: 3px; font-size: 11px; font-weight: 500; }
 .notes-empty, .notes-loading { padding: 32px 16px; text-align: center; }
 .notes-loading .skeleton-note { padding: 8px 10px; margin: 0 5px; }
 .notes-loading .skeleton-line { height: 7px; background: var(--hover); border-radius: 3px; margin-bottom: 5px; }
@@ -212,19 +223,22 @@ const formatDate = (ts: number) => {
 .notes-editor-panel { flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; min-width: 0; }
 .notes-editor-container { display: flex; flex-direction: column; height: 100%; }
 .notes-editor-header { display: flex; align-items: center; gap: 6px; padding: 10px 18px 6px; border-bottom: 1px solid var(--border); background: #fff; }
-.notes-title-input { flex: 1; border: none; background: transparent; font-size: 16px; font-weight: 600; color: var(--text); outline: none; font-family: inherit; padding: 3px 0; }
+.notes-title-input { flex: 1; border: none; background: transparent; font-size: 17px; font-weight: 600; color: var(--text); outline: none; font-family: inherit; padding: 3px 0; }
 .notes-title-input::placeholder { color: var(--text-muted); font-weight: 400; }
 
-.note-action-btn { width: 26px; height: 26px; border: none; background: transparent; border-radius: 5px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center; transition: all 0.1s; opacity: 0.5; }
-.note-action-btn:hover { background: var(--hover); color: var(--accent); opacity: 1; }
+.note-action-btn { width: 28px; height: 28px; border: none; background: transparent; border-radius: 6px; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.note-action-btn:hover { background: var(--hover); color: var(--accent); }
 
-.note-delete-btn { width: 26px; height: 26px; border: none; background: transparent; border-radius: 5px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center; transition: all 0.1s; opacity: 0.5; }
-.note-delete-btn:hover { background: var(--danger-soft); color: var(--danger); opacity: 1; }
+.note-delete-btn { width: 28px; height: 28px; border: none; background: transparent; border-radius: 6px; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.note-delete-btn:hover { background: var(--danger-soft); color: var(--danger); }
+
+/* Fullscreen mode */
+.note-fullscreen .notes-list-panel { display: none; }
 
 .notes-editor-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); }
 .notes-editor-empty .empty-icon { margin-bottom: 10px; opacity: 0.25; }
-.notes-editor-empty .empty-title { font-size: 13px; font-weight: 500; margin-bottom: 3px; color: var(--text-secondary); }
-.notes-editor-empty .empty-desc { font-size: 11px; color: var(--text-muted); }
+.notes-editor-empty .empty-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; color: var(--text-secondary); }
+.notes-editor-empty .empty-desc { font-size: 12px; color: var(--text-muted); }
 
 .context-menu {
   position: fixed;

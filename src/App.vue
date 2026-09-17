@@ -51,7 +51,7 @@ const {
 
 const {
   loading: filesLoading, searchKeyword: fileSearchKeyword,
-  filteredShortcuts, fetchShortcuts, addShortcut, removeShortcut
+  filteredShortcuts, fetchShortcuts, addShortcut, updateShortcut, removeShortcut
 } = useFileShortcuts()
 
 const showForm = ref(false)
@@ -68,6 +68,14 @@ const isSidebarCollapsed = ref(true)
 const currentModule = ref<'entries' | 'notes' | 'files'>('entries')
 const showSettings = ref(false)
 const showChangePassword = ref(false)
+const noteFullscreen = ref(false)
+
+const onNoteToggleFullscreen = (isFullscreen: boolean) => {
+  noteFullscreen.value = isFullscreen
+  if (isFullscreen) {
+    isSidebarCollapsed.value = true
+  }
+}
 
 const doLock = async () => {
   await lock()
@@ -205,6 +213,7 @@ onMounted(async () => {
             @note-title-change="onNoteTitleChange"
             @note-content-change="onNoteContentChange"
             @delete-note="doDeleteNote"
+            @toggle-fullscreen="onNoteToggleFullscreen"
           />
 
           <FileShortcutsModule
@@ -214,6 +223,7 @@ onMounted(async () => {
             :filtered-shortcuts="filteredShortcuts"
             @update:search-keyword="fileSearchKeyword = $event"
             @add-shortcut="addShortcut"
+            @update-shortcut="updateShortcut"
             @remove-shortcut="removeShortcut"
             @show-toast="showToast"
             @show-confirm="showConfirm"
@@ -225,6 +235,7 @@ onMounted(async () => {
     <EntryFormDialog
       v-if="showForm"
       :edit-entry="editEntry"
+      :categories="tabs.filter(t => t.id !== 'all').map(t => t.name)"
       @close="showForm = false"
       @saved="onFormSaved"
       @show-toast="showToast"
