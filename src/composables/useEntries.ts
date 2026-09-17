@@ -40,25 +40,15 @@ export function useEntries() {
     return list
   })
 
-  const fetchEntries = async () => {
+  const fetchEntries = async (onError?: (msg: string) => void) => {
     loading.value = true
     try {
-      const entriesList = await api.listEntries()
-      // Load paths for each entry
-      const entriesWithPaths = await Promise.all(
-        entriesList.map(async (entry) => {
-          try {
-            const paths = await api.listUrlPaths(entry.id)
-            return { ...entry, paths: paths.length > 0 ? paths : undefined }
-          } catch {
-            return entry
-          }
-        })
-      )
-      entries.value = entriesWithPaths
-    } catch (e) {
+      entries.value = await api.listEntriesWithPaths()
+    } catch (e: any) {
       console.error('Failed to fetch entries:', e)
-      throw e
+      if (onError) {
+        onError(e.message || '加载数据失败')
+      }
     } finally {
       loading.value = false
     }

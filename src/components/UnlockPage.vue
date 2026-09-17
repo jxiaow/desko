@@ -8,6 +8,10 @@ const { unlock } = useAuth()
 const unlockPwd = ref('')
 const unlockErr = ref('')
 
+const onUnlockSuccess = () => {
+  emit('unlockComplete')
+}
+
 const quotes = [
   '生活不止眼前的苟且，还有诗和远方',
   '愿你出走半生，归来仍是少年',
@@ -83,8 +87,7 @@ const rotateQuote = () => {
 const doUnlock = async () => {
   unlockErr.value = ''
   try {
-    await unlock(unlockPwd.value)
-    emit('unlockComplete')
+    await unlock(unlockPwd.value, onUnlockSuccess)
   } catch (e: any) {
     unlockErr.value = '主密码错误，请重试'
   }

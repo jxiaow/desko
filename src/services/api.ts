@@ -19,6 +19,9 @@ export const api = {
   // Entries
   listEntries: (): Promise<Entry[]> =>
     invoke('list_entries'),
+
+  listEntriesWithPaths: (): Promise<Entry[]> =>
+    invoke('list_entries_with_paths'),
   
   createEntry: (input: CreateEntryInput): Promise<Entry> => 
     invoke('create_entry', { input }),

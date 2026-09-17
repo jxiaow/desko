@@ -95,7 +95,7 @@ const onFormSaved = () => {
     delete passwordCache.value[editEntry.value.id]
     delete visiblePasswords.value[editEntry.value.id]
   }
-  fetchEntries()
+  fetchEntries((msg) => showToast(msg, 'error'))
 }
 
 const doDelete = (entry: Entry) => {
@@ -118,13 +118,13 @@ const openUrl = async (url: string) => {
   }
 }
 
-const onSetupComplete = async () => { await fetchEntries() }
-const onUnlockComplete = async () => { await fetchEntries() }
+const onSetupComplete = async () => { await fetchEntries((msg) => showToast(msg, 'error')) }
+const onUnlockComplete = async () => { await fetchEntries((msg) => showToast(msg, 'error')) }
 
 onMounted(async () => {
   await checkInitialized()
   if (appState.value === 'unlocked') {
-    await fetchEntries()
+    await fetchEntries((msg) => showToast(msg, 'error'))
   }
 
   watch(currentModule, async (newModule) => {

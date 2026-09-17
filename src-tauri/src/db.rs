@@ -44,6 +44,19 @@ impl EntryResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntryWithPaths {
+    pub id: String,
+    pub name: String,
+    pub url: Option<String>,
+    pub username: Option<String>,
+    pub notes: Option<String>,
+    pub category: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub paths: Vec<UrlPath>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateEntryInput {
     pub name: String,
     pub url: Option<String>,
@@ -233,6 +246,26 @@ impl Database {
         )?;
         let rows = stmt.query_map([], Self::row_to_entry)?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    pub fn list_all_entries_with_paths(&self) -> Result<Vec<EntryWithPaths>, AppError> {
+        let entries = self.list_all_entries()?;
+        let mut result = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let paths = self.list_url_paths(&entry.id)?;
+            result.push(EntryWithPaths {
+                id: entry.id,
+                name: entry.name,
+                url: entry.url,
+                username: entry.username,
+                notes: entry.notes,
+                category: entry.category,
+                created_at: entry.created_at,
+                updated_at: entry.updated_at,
+                paths,
+            });
+        }
+        Ok(result)
     }
     
     pub fn create_entry(&self, entry: &Entry) -> Result<(), AppError> {

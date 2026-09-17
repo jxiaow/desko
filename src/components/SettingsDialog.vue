@@ -75,7 +75,7 @@ const doImportSql = async () => {
   input.onchange = async (e) => {
     const file = (e.target as HTMLInputElement).files?.[0]
     if (!file) return
-    
+
     emit('showConfirm', '确认导入', '导入将覆盖现有数据，确定继续吗？', async () => {
       try {
         const sql = await file.text()
@@ -90,18 +90,6 @@ const doImportSql = async () => {
   input.click()
 }
 
-const doCreateTestData = async () => {
-  emit('showConfirm', '确认生成', '将生成 20 条测试数据，确定继续吗？', async () => {
-    try {
-      await api.createTestData()
-      emit('entriesRefreshed')
-      emit('showToast', '测试数据已生成')
-    } catch (e: any) {
-      emit('showToast', '生成失败: ' + e.message, 'error')
-    }
-  })
-}
-
 const close = () => {
   show.value = false
   emit('close')
@@ -113,148 +101,369 @@ onMounted(() => { loadSettings() })
 <template>
   <Transition name="dialog">
     <div v-if="show" class="dialog-overlay" @click.self="close">
-    <div class="dialog">
-      <div class="dialog-header">
-        <div class="dialog-header-left">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          <h3>设置</h3>
+      <div class="settings-dialog">
+        <div class="settings-header">
+          <div class="settings-header-content">
+            <svg class="settings-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <h2>设置</h2>
+          </div>
+          <button class="close-btn" @click="close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
-        <button class="dialog-close" @click="close">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="dialog-body">
-        <div class="settings-section">
-          <div class="settings-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            数据存储
-          </div>
-          <div class="settings-path">{{ dbPath }}</div>
-          <div class="settings-actions">
-            <button class="btn-secondary" @click="doExportSql">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              导出 SQL
-            </button>
-            <button class="btn-secondary" @click="doImportSql">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              导入 SQL
-            </button>
-          </div>
-        </div>
-        <div class="settings-divider"></div>
-        <div class="settings-section">
-          <div class="settings-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            安全
-          </div>
-          <button class="btn-secondary" @click="emit('openChangePassword')">修改主密码</button>
-          <div class="setting-row">
-            <label class="setting-label">自动锁定超时</label>
-            <div class="setting-control">
-              <input
-                type="number"
-                class="setting-input"
-                v-model.number="autoLockTimeout"
-                min="1"
-                max="60"
-                @change="saveAutoLockTimeout"
-              />
-              <span class="setting-unit">分钟</span>
+
+        <div class="settings-body">
+          <!-- 数据存储 -->
+          <div class="settings-group">
+            <div class="group-header">
+              <svg class="group-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+              </svg>
+              <span class="group-title">数据存储</span>
+            </div>
+            <div class="group-content">
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">数据库路径</span>
+                  <span class="setting-desc">{{ dbPath }}</span>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">数据备份</span>
+                  <span class="setting-desc">导出或导入 SQL 文件</span>
+                </div>
+                <div class="setting-actions">
+                  <button class="action-btn" @click="doExportSql">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    导出
+                  </button>
+                  <button class="action-btn" @click="doImportSql">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    导入
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="setting-row">
-            <label class="setting-label">关闭窗口时锁定</label>
-            <label class="toggle">
-              <input type="checkbox" v-model="lockOnClose" @change="saveLockOnClose" />
-              <span class="toggle-slider"></span>
-            </label>
+
+          <!-- 安全 -->
+          <div class="settings-group">
+            <div class="group-header">
+              <svg class="group-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <span class="group-title">安全</span>
+            </div>
+            <div class="group-content">
+              <div class="setting-item clickable" @click="emit('openChangePassword')">
+                <div class="setting-info">
+                  <span class="setting-name">修改主密码</span>
+                  <span class="setting-desc">定期更换密码以提高安全性</span>
+                </div>
+                <svg class="arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </div>
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">自动锁定</span>
+                  <span class="setting-desc">无操作后自动锁定应用</span>
+                </div>
+                <div class="setting-control">
+                  <input
+                    type="number"
+                    class="number-input"
+                    v-model.number="autoLockTimeout"
+                    min="1"
+                    max="60"
+                    @change="saveAutoLockTimeout"
+                  />
+                  <span class="unit">分钟</span>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">关闭窗口时锁定</span>
+                  <span class="setting-desc">关闭窗口时自动锁定应用</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" v-model="lockOnClose" @change="saveLockOnClose" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 关于 -->
+          <div class="settings-about">
+            <div class="about-logo">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 12h-6l-2 3h-4l-2-3H2"/>
+                <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+              </svg>
+            </div>
+            <div class="about-info">
+              <span class="about-name">案头 Desko</span>
+              <span class="about-version">v1.0.0</span>
+            </div>
           </div>
         </div>
-        <div class="settings-divider"></div>
-        <div class="settings-section">
-          <div class="settings-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-            开发
-          </div>
-          <button class="btn-secondary" @click="doCreateTestData">生成测试数据</button>
-        </div>
-        <div class="settings-divider"></div>
-        <div class="settings-about">案头 Desko v1.0.0</div>
       </div>
-    </div>
     </div>
   </Transition>
 </template>
 
 <style scoped>
-.settings-section { margin-bottom: 14px; }
-
-.settings-title {
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: var(--text);
+  justify-content: center;
+  z-index: 1000;
 }
 
-.settings-title svg { width: 12px; height: 12px; color: var(--accent); flex-shrink: 0; }
-
-.settings-path {
-  background: var(--hover);
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-  font-size: 11px;
-  color: var(--text-secondary);
-  word-break: break-all;
-  margin-bottom: 8px;
-  line-height: 1.5;
+.settings-dialog {
+  background: var(--panel-bg);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
 }
 
-.settings-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-
-.setting-row {
+.settings-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border);
 }
 
-.setting-row:last-child { border-bottom: none; }
-.setting-label { font-size: 12px; color: var(--text); font-weight: 400; }
+.settings-header-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
-.setting-control { display: flex; align-items: center; gap: 6px; }
+.settings-icon {
+  color: var(--accent);
+}
 
-.setting-input {
-  width: 60px;
-  padding: 4px 8px;
+.settings-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.close-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+
+.close-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.settings-body {
+  padding: 20px;
+  overflow-y: auto;
+  max-height: calc(80vh - 60px);
+}
+
+.settings-group {
+  margin-bottom: 24px;
+}
+
+.settings-group:last-of-type {
+  margin-bottom: 0;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.group-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.group-content {
+  background: var(--bg);
+  border-radius: 8px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.setting-item:last-child {
+  border-bottom: none;
+}
+
+.setting-item.clickable {
+  cursor: pointer;
+}
+
+.setting-item.clickable:hover {
+  background: var(--hover);
+}
+
+.setting-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setting-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.setting-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.action-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.setting-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.number-input {
+  width: 56px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
   font-size: 12px;
   text-align: right;
   outline: none;
+  background: var(--panel-bg);
+  color: var(--text);
   transition: border-color 0.15s;
+  font-family: inherit;
 }
 
-.setting-input:focus { border-color: var(--accent); }
-.setting-unit { font-size: 12px; color: var(--text-secondary); }
+.number-input:focus {
+  border-color: var(--accent);
+}
 
-.toggle { position: relative; display: inline-block; width: 36px; height: 20px; }
-.toggle input { opacity: 0; width: 0; height: 0; }
+.unit {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
-.toggle-slider {
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
   position: absolute;
   cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
+  inset: 0;
   background-color: var(--border);
   transition: 0.2s;
   border-radius: 20px;
 }
 
-.toggle-slider:before {
+.switch-slider:before {
   position: absolute;
   content: "";
   height: 16px;
@@ -264,20 +473,70 @@ onMounted(() => { loadSettings() })
   background-color: white;
   transition: 0.2s;
   border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.toggle input:checked + .toggle-slider { background-color: var(--accent); }
-.toggle input:checked + .toggle-slider:before { transform: translateX(16px); }
+.switch input:checked + .switch-slider {
+  background-color: var(--accent);
+}
 
-.settings-divider { height: 1px; background: var(--border); margin: 14px 0; }
+.switch input:checked + .switch-slider:before {
+  transform: translateX(16px);
+}
+
+.arrow-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
 
 .settings-about {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  margin-top: 24px;
+  background: var(--bg);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.about-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.about-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.about-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.about-version {
+  font-size: 11px;
   color: var(--text-muted);
-  font-size: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-  margin-top: 8px;
+}
+
+/* Dialog transition */
+.dialog-enter-active,
+.dialog-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.dialog-enter-from,
+.dialog-leave-to {
+  opacity: 0;
 }
 </style>

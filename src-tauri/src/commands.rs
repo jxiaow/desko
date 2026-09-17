@@ -1,5 +1,5 @@
 use crate::crypto::{decrypt_password, encrypt_password, generate_salt, compute_verify_hash, verify_master_password, derive_key, EncryptedData};
-use crate::db::{CreateEntryInput, CreateFileShortcutInput, CreateNoteInput, EntryResponse, FileShortcut, Note, UpdateEntryInput, UpdateNoteInput, UrlPath};
+use crate::db::{CreateEntryInput, CreateFileShortcutInput, CreateNoteInput, EntryResponse, EntryWithPaths, FileShortcut, Note, UpdateEntryInput, UpdateNoteInput, UrlPath};
 use crate::error::AppError;
 use crate::AppState;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
@@ -148,6 +148,13 @@ pub fn list_entries(state: State<AppState>) -> Result<Vec<EntryResponse>, AppErr
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     let entries = db.list_all_entries()?;
     Ok(entries.iter().map(EntryResponse::from_entry).collect())
+}
+
+#[tauri::command]
+pub fn list_entries_with_paths(state: State<AppState>) -> Result<Vec<EntryWithPaths>, AppError> {
+    let _key = get_master_key(&state)?;
+    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    db.list_all_entries_with_paths()
 }
 
 #[tauri::command]

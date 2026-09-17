@@ -134,6 +134,7 @@ fn main() {
             commands::lock,
             commands::change_master_password,
             commands::list_entries,
+            commands::list_entries_with_paths,
             commands::create_entry,
             commands::update_entry,
             commands::delete_entry,

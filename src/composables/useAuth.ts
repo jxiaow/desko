@@ -22,8 +22,9 @@ export function useAuth() {
     appState.value = 'unlocked'
   }
 
-  const unlock = async (password: string) => {
+  const unlock = async (password: string, onUnlock?: () => void) => {
     await api.unlock(password)
+    if (onUnlock) onUnlock()
     appState.value = 'unlocked'
   }
 

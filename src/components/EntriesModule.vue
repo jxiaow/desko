@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import type { Entry, Tab } from '../types'
 
 defineProps<{
@@ -38,6 +38,67 @@ const tabsRef = ref<HTMLElement | null>(null)
 
 let tabsObserver: ResizeObserver | null = null
 
+
+const pathVisibleCount = ref<Map<string, number>>(new Map())
+const pathContainers = ref<Map<string, HTMLElement>>(new Map())
+let pathObserver: ResizeObserver | null = null
+
+const calcPathVisible = (entryId: string) => {
+  const container = pathContainers.value.get(entryId)
+  if (!container) return
+  
+  const children = Array.from(container.children) as HTMLElement[]
+  const links = children.filter(c => c.classList.contains('card-path-link'))
+  const moreEl = children.find(c => c.classList.contains('card-paths-more'))
+  
+  if (links.length === 0) return
+  
+  const containerWidth = container.clientWidth
+  const moreWidth = moreEl ? moreEl.offsetWidth : 40
+  
+  let totalWidth = 0
+  let visibleCount = links.length
+  
+  for (let i = 0; i < links.length; i++) {
+    totalWidth += links[i].offsetWidth + 4
+    if (i < links.length - 1 && totalWidth + moreWidth > containerWidth) {
+      visibleCount = i
+      break
+    }
+  }
+  
+  if (totalWidth > containerWidth && visibleCount === links.length) {
+    visibleCount = links.length - 1
+  }
+  
+  const newCount = Math.max(0, visibleCount)
+  const oldCount = pathVisibleCount.value.get(entryId)
+  if (oldCount !== newCount) {
+    pathVisibleCount.value.set(entryId, newCount)
+  }
+}
+
+const registerPathContainer = (entryId: string, el: HTMLElement | null) => {
+  if (el) {
+    const old = pathContainers.value.get(entryId)
+    if (old !== el) {
+      pathContainers.value.set(entryId, el)
+      if (!pathObserver) {
+        pathObserver = new ResizeObserver(() => {
+          pathContainers.value.forEach((_, id) => calcPathVisible(id))
+        })
+      }
+      if (old) pathObserver.unobserve(old)
+      pathObserver.observe(el)
+      nextTick(() => calcPathVisible(entryId))
+    }
+  } else {
+    const old = pathContainers.value.get(entryId)
+    if (old && pathObserver) pathObserver.unobserve(old)
+    pathContainers.value.delete(entryId)
+    pathVisibleCount.value.delete(entryId)
+  }
+}
 const getAvatarClass = (id: string) => {
   let hash = 0
   for (let i = 0; i < id.length; i++) {
@@ -59,6 +120,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (tabsObserver) tabsObserver.disconnect()
+  if (pathObserver) pathObserver.disconnect()
 })
 </script>
 
@@ -200,19 +262,30 @@ onUnmounted(() => {
             <span class="card-notes-icon"></span>
             <span class="card-notes-text">{{ item.notes }}</span>
           </div>
-          <div v-if="item.paths && item.paths.length > 0" class="card-paths">
-            <span class="card-paths-label">路径:</span>
-            <div class="card-paths-list">
-              <a
-                v-for="path in item.paths"
-                :key="path.id"
-                class="card-path-link"
-                @click.stop.prevent="emit('openUrl', item.url ? item.url.replace(/\/$/, '') + (path.path.startsWith('/') ? path.path : '/' + path.path) : path.path)"
-                :title="path.label || path.path"
-              >
-                <span v-if="path.label" class="card-path-label">{{ path.label }}</span>
-                <span class="card-path-path">{{ path.path }}</span>
-              </a>
+          <div v-if="item.paths && item.paths.length > 0" class="card-paths" :ref="(el) => registerPathContainer(item.id, el as HTMLElement)">
+            <a
+              v-for="path in item.paths.slice(0, pathVisibleCount.get(item.id) ?? item.paths.length)"
+              :key="path.id"
+              class="card-path-link"
+              @click.stop.prevent="emit('openUrl', item.url ? item.url.replace(/\/$/, '') + (path.path.startsWith('/') ? path.path : '/' + path.path) : path.path)"
+              :title="path.label || path.path"
+            >
+              <span v-if="path.label" class="card-path-label">{{ path.label }}</span>
+              <span class="card-path-path">{{ path.path }}</span>
+            </a>
+            <div v-if="(pathVisibleCount.get(item.id) ?? item.paths.length) < item.paths.length" class="card-paths-more" @click.stop>
+              <span class="card-paths-count">+{{ item.paths.length - (pathVisibleCount.get(item.id) ?? item.paths.length) }}</span>
+              <div class="card-paths-popover">
+                <a
+                  v-for="path in item.paths.slice(pathVisibleCount.get(item.id) ?? item.paths.length)"
+                  :key="path.id"
+                  class="card-paths-popover-item"
+                  @click.stop.prevent="emit('openUrl', item.url ? item.url.replace(/\/$/, '') + (path.path.startsWith('/') ? path.path : '/' + path.path) : path.path)"
+                >
+                  <span v-if="path.label" class="card-path-label">{{ path.label }}</span>
+                  <span class="card-path-path">{{ path.path }}</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -235,7 +308,6 @@ onUnmounted(() => {
 .toolbar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .toolbar-actions { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
 
-/* EntriesModule search box overrides */
 .search-box { flex: 1; max-width: 440px; min-width: 160px; }
 
 .tabs { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 14px; max-height: 36px; overflow: hidden; transition: max-height 0.2s ease; align-items: center; }
@@ -266,6 +338,14 @@ onUnmounted(() => {
 .card-header-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 0.12s; }
 .entry-card:hover .card-header-actions { opacity: 1; }
 
+.card-avatar { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
+.card-avatar.c0 { background: #6366f1; }
+.card-avatar.c1 { background: #8b5cf6; }
+.card-avatar.c2 { background: #ec4899; }
+.card-avatar.c3 { background: #f59e0b; }
+.card-avatar.c4 { background: #10b981; }
+.card-avatar.c5 { background: #06b6d4; }
+
 .card-icon-btn { width: 22px; height: 22px; border: none; background: transparent; border-radius: 4px; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; transition: all 0.12s; color: var(--text-muted); }
 .card-icon-btn:hover { background: var(--hover); color: var(--text-secondary); }
 .card-icon-btn:active { transform: scale(0.9); }
@@ -274,6 +354,7 @@ onUnmounted(() => {
 .card-title-area { flex: 1; min-width: 0; }
 .card-title-row { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
 .card-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-category { font-size: 10px; color: var(--text-muted); background: var(--hover); padding: 1px 6px; border-radius: 3px; font-weight: 500; }
 .card-url { font-size: 11px; color: var(--accent); text-decoration: none; cursor: pointer; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
 .card-url:hover { text-decoration: underline; }
 
@@ -295,13 +376,18 @@ onUnmounted(() => {
 .card-notes-icon::before { content: ''; display: block; width: 3px; height: 3px; border-radius: 50%; background: var(--text-muted); margin-top: 5px; flex-shrink: 0; }
 .card-notes-text { font-size: 11px; color: var(--text-muted); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
-.card-paths { display: flex; align-items: flex-start; gap: 6px; margin-top: 3px; padding-top: 5px; border-top: 1px solid var(--border); }
-.card-paths-label { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
-.card-paths-list { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+.card-paths { display: flex; align-items: center; gap: 4px; margin-top: 3px; padding-top: 5px; border-top: 1px solid var(--border); overflow: hidden; }
 .card-path-link { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 4px; cursor: pointer; text-decoration: none; transition: all 0.12s; }
 .card-path-link:hover { background: var(--accent); color: #fff; }
 .card-path-label { font-weight: 500; }
 .card-path-path { font-family: monospace; opacity: 0.8; }
+.card-paths-more { position: relative; display: inline-flex; }
+.card-paths-count { display: inline-flex; align-items: center; justify-content: center; padding: 2px 6px; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 4px; cursor: pointer; min-width: 20px; transition: all 0.12s; }
+.card-paths-count:hover { background: var(--accent); color: #fff; }
+.card-paths-popover { display: none; position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 20; min-width: 160px; max-width: 280px; padding: 4px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow); flex-direction: column; gap: 2px; }
+.card-paths-more:hover .card-paths-popover { display: flex; }
+.card-paths-popover-item { display: flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 11px; color: var(--accent); background: transparent; border-radius: 4px; cursor: pointer; text-decoration: none; transition: all 0.12s; white-space: nowrap; overflow: hidden; }
+.card-paths-popover-item:hover { background: var(--accent-soft); }
 
 .card-checkbox { position: absolute; top: 8px; left: 8px; z-index: 10; }
 .checkbox { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 2px solid var(--border); border-radius: 3px; background: var(--panel-bg); font-size: 9px; font-weight: 600; color: var(--accent); cursor: pointer; transition: all 0.12s; }
