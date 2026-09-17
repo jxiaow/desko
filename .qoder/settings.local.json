@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find C:/Code/desko -name \"*logo*\" -o -name \"*icon*\" | grep -v node_modules | grep -v target | grep -v \".git/\")"
+    ]
+  }
+}

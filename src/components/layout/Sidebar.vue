@@ -1,0 +1,192 @@
+<script setup lang="ts">
+import { useRoute } from 'vue-router'
+
+defineProps<{
+  collapsed: boolean
+}>()
+
+defineEmits<{
+  'update:collapsed': [value: boolean]
+}>()
+
+const route = useRoute()
+</script>
+
+<template>
+  <div class="sidebar" :class="{ collapsed }">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <svg viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="deskoGradient" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#6366f1"/>
+              <stop offset="0.48" stop-color="#4f46e5"/>
+              <stop offset="1" stop-color="#4338ca"/>
+            </linearGradient>
+          </defs>
+          <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#deskoGradient)"/>
+          <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#deskoGradient)"/>
+          <circle cx="75" cy="79" r="5" fill="#FFFFFF"/>
+        </svg>
+      </div>
+      <span v-if="!collapsed" class="sidebar-brand">Desko</span>
+    </div>
+
+    <div class="sidebar-nav">
+      <router-link to="/entries" class="nav-item" :class="{ active: route.path === '/entries' }">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <span v-if="!collapsed" class="nav-text">网址导航</span>
+        <div v-if="!collapsed && route.path === '/entries'" class="nav-indicator"></div>
+      </router-link>
+      <router-link to="/notes" class="nav-item" :class="{ active: route.path === '/notes' }">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </div>
+        <span v-if="!collapsed" class="nav-text">笔记</span>
+        <div v-if="!collapsed && route.path === '/notes'" class="nav-indicator"></div>
+      </router-link>
+      <router-link to="/files" class="nav-item" :class="{ active: route.path === '/files' }">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        </div>
+        <span v-if="!collapsed" class="nav-text">文件</span>
+        <div v-if="!collapsed && route.path === '/files'" class="nav-indicator"></div>
+      </router-link>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="version-tag">v1.0</div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: relative;
+  transition: width var(--transition-slow);
+  height: 100%;
+}
+
+.sidebar.collapsed {
+  width: 64px;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  height: 56px;
+}
+
+.sidebar-logo {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.sidebar-logo svg {
+  width: 100%;
+  height: 100%;
+}
+
+.sidebar-brand {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-2);
+  min-height: 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-1);
+  border-radius: var(--radius);
+  color: var(--sidebar-text);
+  cursor: pointer;
+  transition: all var(--transition);
+  font-size: 13px;
+  font-weight: 500;
+  gap: var(--space-3);
+  white-space: nowrap;
+  text-decoration: none;
+  position: relative;
+}
+
+.nav-item:hover {
+  background: var(--sidebar-hover);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-text-active);
+  font-weight: 600;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: var(--space-3);
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.nav-text {
+  flex: 1;
+  overflow: hidden;
+}
+
+.nav-indicator {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.sidebar-footer {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+
+.version-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.sidebar.collapsed .version-tag {
+  display: none;
+}
+</style>

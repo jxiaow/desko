@@ -2,7 +2,7 @@
 // 在浏览器控制台中运行：
 // import('./dev-helpers').then(m => m.addTestData())
 
-import { api } from './services/api'
+import { entriesApi as api } from './services/api/entries'
 
 const testData = [
   { name: 'GitHub', url: 'https://github.com', username: 'user@example.com', password: 'Gh!tHub2024', notes: '代码托管平台', category: '开发' },

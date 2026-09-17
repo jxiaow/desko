@@ -1,13 +1,14 @@
-import { ref, type ComputedRef } from 'vue'
-import { api } from '../services/api'
-import type { Entry } from '../types'
+import { ref } from 'vue'
+import { entriesApi as api } from '../services/api/entries'
+import { useEntriesStore } from '../stores/entries'
+import { useToastStore } from '../stores/toast'
+import { useConfirmStore } from '../stores/confirm'
 
-export function useBatch(
-  filteredEntries: ComputedRef<Entry[]>,
-  fetchEntries: () => Promise<void>,
-  showToast: (msg: string, type?: 'success' | 'error' | 'info') => void,
-  showConfirm: (title: string, msg: string, cb: () => void) => void,
-) {
+export function useBatch() {
+  const entriesStore = useEntriesStore()
+  const toastStore = useToastStore()
+  const confirmStore = useConfirmStore()
+
   const isBatchMode = ref(false)
   const selectedIds = ref<Set<string>>(new Set())
 
@@ -27,7 +28,7 @@ export function useBatch(
   }
 
   const selectAll = () => {
-    filteredEntries.value.forEach(item => {
+    entriesStore.filteredEntries.forEach(item => {
       selectedIds.value.add(item.id)
     })
   }
@@ -38,16 +39,16 @@ export function useBatch(
 
   const doBatchDelete = () => {
     if (selectedIds.value.size === 0) return
-    showConfirm('确认删除', `确定删除选中的 ${selectedIds.value.size} 条记录吗？`, async () => {
+    confirmStore.showConfirm('确认删除', `确定删除选中的 ${selectedIds.value.size} 条记录吗？`, async () => {
       try {
         const ids = Array.from(selectedIds.value)
         const count = await api.batchDeleteEntries(ids)
-        await fetchEntries()
+        await entriesStore.fetchEntries()
         selectedIds.value.clear()
         isBatchMode.value = false
-        showToast(`已删除 ${count} 条记录`)
+        toastStore.showToast(`已删除 ${count} 条记录`)
       } catch (e: any) {
-        showToast('删除失败: ' + e.message, 'error')
+        toastStore.showToast('删除失败: ' + e.message, 'error')
       }
     })
   }

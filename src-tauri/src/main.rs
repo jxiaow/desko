@@ -4,6 +4,7 @@ mod commands;
 mod db;
 mod crypto;
 mod error;
+mod services;
 
 use db::Database;
 use std::sync::Mutex;
@@ -128,38 +129,38 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::is_initialized,
-            commands::setup_master_password,
-            commands::unlock,
-            commands::lock,
-            commands::change_master_password,
-            commands::list_entries,
-            commands::list_entries_with_paths,
-            commands::create_entry,
-            commands::update_entry,
-            commands::delete_entry,
-            commands::batch_delete_entries,
-            commands::get_password,
-            commands::export_sql,
-            commands::import_sql,
-            commands::get_db_path,
-            commands::create_test_data,
-            commands::list_notes,
-            commands::create_note,
-            commands::update_note,
-            commands::delete_note,
-            commands::batch_delete_notes,
-            commands::get_setting,
-            commands::set_setting,
-            commands::list_url_paths,
-            commands::create_url_path,
-            commands::update_url_path,
-            commands::delete_url_path,
-            commands::list_file_shortcuts,
-            commands::create_file_shortcut,
-            commands::update_file_shortcut,
-            commands::delete_file_shortcut,
-            commands::open_file,
+            commands::auth::is_initialized,
+            commands::auth::setup_master_password,
+            commands::auth::unlock,
+            commands::auth::lock,
+            commands::auth::change_master_password,
+            commands::entries::list_entries,
+            commands::entries::list_entries_with_paths,
+            commands::entries::create_entry,
+            commands::entries::update_entry,
+            commands::entries::delete_entry,
+            commands::entries::batch_delete_entries,
+            commands::entries::get_password,
+            commands::data::export_sql,
+            commands::data::import_sql,
+            commands::data::get_db_path,
+            commands::entries::create_test_data,
+            commands::notes::list_notes,
+            commands::notes::create_note,
+            commands::notes::update_note,
+            commands::notes::delete_note,
+            commands::notes::batch_delete_notes,
+            commands::settings::get_setting,
+            commands::settings::set_setting,
+            commands::url_paths::list_url_paths,
+            commands::url_paths::create_url_path,
+            commands::url_paths::update_url_path,
+            commands::url_paths::delete_url_path,
+            commands::file_shortcuts::list_file_shortcuts,
+            commands::file_shortcuts::create_file_shortcut,
+            commands::file_shortcuts::update_file_shortcut,
+            commands::file_shortcuts::delete_file_shortcut,
+            commands::file_shortcuts::open_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
