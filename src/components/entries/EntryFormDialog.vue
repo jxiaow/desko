@@ -252,7 +252,7 @@ onUnmounted(() => {
           </div>
           <h3>{{ editEntry ? '编辑条目' : '新增条目' }}</h3>
         </div>
-        <button class="dialog-close" @click="emit('close')">
+        <button  class="dialog-close" @click="emit('close')" title="关闭">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -334,7 +334,7 @@ onUnmounted(() => {
                   placeholder="标签"
                 />
               </div>
-              <button class="btn-delete-path" @click="removePath(index)" title="删除">
+              <button  class="btn-delete-path" @click="removePath(index)" title="删除">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>

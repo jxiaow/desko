@@ -54,5 +54,35 @@ pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
         );
         CREATE INDEX IF NOT EXISTS idx_file_shortcuts_name ON file_shortcuts(name);
     ")?;
+
+    // 迁移：为 notes 表添加 pinned 和 starred 字段（如果不存在）
+    let has_pinned: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='pinned'",
+        [],
+        |r| r.get(0),
+    ).unwrap_or(0) > 0;
+
+    if !has_pinned {
+        conn.execute_batch(
+            "ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE notes ADD COLUMN starred INTEGER NOT NULL DEFAULT 0;"
+        )?;
+    }
+
+    // 创建 note_attachments 表
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS note_attachments (
+            id TEXT PRIMARY KEY,
+            note_id TEXT NOT NULL,
+            file_name TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            mime_type TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_note_attachments_note_id ON note_attachments(note_id);"
+    )?;
+
     Ok(())
 }

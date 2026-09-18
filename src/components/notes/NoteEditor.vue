@@ -6,6 +6,8 @@ import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Extension } from '@tiptap/core'
+import { Plugin } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { createLowlight } from 'lowlight'
 import ts from 'highlight.js/lib/languages/typescript'
@@ -20,17 +22,26 @@ import sql from 'highlight.js/lib/languages/sql'
 import java from 'highlight.js/lib/languages/java'
 import go from 'highlight.js/lib/languages/go'
 import cpp from 'highlight.js/lib/languages/cpp'
+import AppIcon from '../shared/AppIcon.vue'
+import type { IconName } from '../../utils/icons'
 
 const lowlight = createLowlight({
   typescript: ts, javascript: js, python, rust, css, html: xml, xml, json, bash, shell: bash, sql, java, go, cpp, c: cpp,
 })
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   initialContent?: string
-}>()
+  variant?: 'composer' | 'card' | 'full'
+  placeholder?: string
+}>(), {
+  initialContent: '',
+  variant: 'card',
+  placeholder: '输入 / 打开命令...',
+})
 
 const emit = defineEmits<{
   update: [html: string]
+  submit: []
 }>()
 
 // Wrapper ref for position calculation
@@ -40,25 +51,51 @@ const slashMenuEl = ref<HTMLElement | null>(null)
 // Slash command state
 const showSlashMenu = ref(false)
 const slashMenuIndex = ref(0)
-const slashMenuPos = ref({ top: 0, left: 0 })
+type SlashMenuPos = { top?: number; left: number; bottom?: number }
+const slashMenuPos = ref<SlashMenuPos>({ left: 0 })
+const slashMenuMaxH = ref(0)
 
-const slashCommands = [
-  { label: '标题 1', action: (e: any) => e.chain().focus().toggleHeading({ level: 1 }).run() },
-  { label: '标题 2', action: (e: any) => e.chain().focus().toggleHeading({ level: 2 }).run() },
-  { label: '标题 3', action: (e: any) => e.chain().focus().toggleHeading({ level: 3 }).run() },
-  { label: '无序列表', action: (e: any) => e.chain().focus().toggleBulletList().run() },
-  { label: '有序列表', action: (e: any) => e.chain().focus().toggleOrderedList().run() },
-  { label: '任务列表', action: (e: any) => e.chain().focus().toggleTaskList().run() },
-  { label: '引用', action: (e: any) => e.chain().focus().toggleBlockquote().run() },
-  { label: '代码块', action: (e: any) => e.chain().focus().toggleCodeBlock().run() },
-  { label: '分割线', action: (e: any) => e.chain().focus().setHorizontalRule().run() },
+const slashMenuStyle = computed(() => ({
+  top: slashMenuPos.value.top !== undefined ? slashMenuPos.value.top + 'px' : 'auto',
+  left: slashMenuPos.value.left + 'px',
+  bottom: slashMenuPos.value.bottom !== undefined ? slashMenuPos.value.bottom + 'px' : 'auto',
+  maxHeight: slashMenuMaxH.value + 'px',
+}))
+
+const MARGIN = 12
+/** 与 .slash-menu 的宽度保持一致，用于右缘收拢 */
+const MENU_W = 208
+const MENU_MIN_H = 168
+/** 菜单与光标之间的间距 */
+const GAP = 6
+
+/** 命令菜单的条目：图标位用线性图标，标题类保留 H1/H2/H3 字形；右侧提示 markdown 触发符 */
+type SlashCmd = {
+  label: string
+  icon?: IconName
+  badge?: string
+  hint: string
+  keys: string
+  action: (e: any) => void
+}
+
+const slashCommands: SlashCmd[] = [
+  { label: '标题 1', badge: 'H1', hint: '#', keys: 'h1 heading title biaoti', action: (e: any) => e.chain().focus().toggleHeading({ level: 1 }).run() },
+  { label: '标题 2', badge: 'H2', hint: '##', keys: 'h2 heading title biaoti', action: (e: any) => e.chain().focus().toggleHeading({ level: 2 }).run() },
+  { label: '标题 3', badge: 'H3', hint: '###', keys: 'h3 heading title biaoti', action: (e: any) => e.chain().focus().toggleHeading({ level: 3 }).run() },
+  { label: '无序列表', icon: 'bulletlist', hint: '-', keys: 'bullet ul list liebiao wuxu', action: (e: any) => e.chain().focus().toggleBulletList().run() },
+  { label: '有序列表', icon: 'orderedlist', hint: '1.', keys: 'ordered ol number list liebiao youxu', action: (e: any) => e.chain().focus().toggleOrderedList().run() },
+  { label: '任务列表', icon: 'checkall', hint: '[]', keys: 'task todo checkbox list renwu', action: (e: any) => e.chain().focus().toggleTaskList().run() },
+  { label: '引用', icon: 'quote', hint: '>', keys: 'quote blockquote yinyong', action: (e: any) => e.chain().focus().toggleBlockquote().run() },
+  { label: '代码块', icon: 'code', hint: '```', keys: 'code pre daimaku', action: (e: any) => e.chain().focus().toggleCodeBlock().run() },
+  { label: '分割线', icon: 'divider', hint: '---', keys: 'hr divider line fengexian', action: (e: any) => e.chain().focus().setHorizontalRule().run() },
 ]
 
 const slashQuery = ref('')
 const filteredCommands = computed(() => {
-  if (!slashQuery.value) return slashCommands
-  const query = slashQuery.value.toLowerCase()
-  return slashCommands.filter(cmd => cmd.label.toLowerCase().includes(query))
+  const query = slashQuery.value.trim().toLowerCase()
+  if (!query) return slashCommands
+  return slashCommands.filter(cmd => cmd.label.toLowerCase().includes(query) || cmd.keys.includes(query))
 })
 
 // Custom extension for slash command keyboard handling
@@ -91,7 +128,48 @@ const SlashCommandExtension = Extension.create({
         showSlashMenu.value = false
         return true
       },
+      'Ctrl-Enter': () => {
+        if (showSlashMenu.value) return false
+        emit('submit')
+        return true
+      },
+      'Mod-Enter': () => {
+        if (showSlashMenu.value) return false
+        emit('submit')
+        return true
+      },
     }
+  },
+})
+
+const TAG_PATTERN = /#([\w\u4e00-\u9fa5]+)/g
+
+// 正文里的 #标签 内联着色（flomo 式），三种书写形态共用同一个编辑器所以只看这一处实现
+const TagHighlightExtension = Extension.create({
+  name: 'tagHighlight',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          decorations: (state) => {
+            const decorations: Decoration[] = []
+            state.doc.descendants((node, pos) => {
+              if (!node.isText || !node.text) return
+              TAG_PATTERN.lastIndex = 0
+              let match
+              while ((match = TAG_PATTERN.exec(node.text!)) !== null) {
+                decorations.push(
+                  Decoration.inline(pos + match.index, pos + match.index + match[0].length, {
+                    class: 'tag-inline',
+                  }),
+                )
+              }
+            })
+            return DecorationSet.create(state.doc, decorations)
+          },
+        },
+      }),
+    ]
   },
 })
 
@@ -112,9 +190,10 @@ const editor = useEditor({
       codeBlock: false,
     }),
     CodeBlockLowlight.configure({ lowlight }),
-    Placeholder.configure({ placeholder: '输入 / 打开命令...' }),
+    Placeholder.configure({ placeholder: props.placeholder }),
     TaskList,
     TaskItem.configure({ nested: true }),
+    TagHighlightExtension,
     SlashCommandExtension,
   ],
   onUpdate: ({ editor }) => {
@@ -133,7 +212,7 @@ watch(() => props.initialContent, (val) => {
 watch(slashMenuIndex, (newIndex) => {
   if (!showSlashMenu.value || filteredCommands.value.length === 0) return
   const menu = document.querySelector('.slash-menu')
-  const activeItem = menu?.querySelector(`.slash-item:nth-child(${newIndex + 1})`)
+  const activeItem = menu?.querySelector(`.slash-item[data-index="${newIndex}"]`)
   if (menu && activeItem) {
     const menuRect = menu.getBoundingClientRect()
     const itemRect = activeItem.getBoundingClientRect()
@@ -146,6 +225,10 @@ watch(slashMenuIndex, (newIndex) => {
 })
 
 const checkSlashMenu = (editor: any) => {
+  // 几种书写形态共用同一份草稿：内容同步会在后台那个编辑器上也触发 onUpdate，
+  // 只有正在输入的编辑器该跟 slash，否则全屏里会同时浮出两个菜单
+  if (!editor.isFocused) return
+
   const { from } = editor.state.selection
   // Look back up to 50 chars to find / and any query text
   const lineStart = Math.max(0, from - 50)
@@ -170,18 +253,25 @@ const checkSlashMenu = (editor: any) => {
     return
   }
 
+  // 先定位再显示：反过来会让菜单首帧画在旧坐标（首次进入时是 0,0），然后才跳到光标处
+  const coords = editor.view.coordsAtPos(from)
+  const left = Math.max(MARGIN, Math.min(coords.left, window.innerWidth - MENU_W - MARGIN))
+
+  // 高度交给内容，只被那一侧的剩余空间截断；下方不够就贴着光标向上翻，
+  // 而不是钉在视口顶部——那样菜单会离光标很远，还盖住页面标题栏
+  const below = window.innerHeight - coords.bottom - GAP - MARGIN
+  const above = coords.top - GAP - MARGIN
+  if (below >= MENU_MIN_H || below >= above) {
+    slashMenuPos.value = { top: coords.bottom + GAP, left }
+    slashMenuMaxH.value = below
+  } else {
+    slashMenuPos.value = { bottom: window.innerHeight - coords.top + GAP, left }
+    slashMenuMaxH.value = above
+  }
+
   showSlashMenu.value = true
   slashQuery.value = afterSlash
   slashMenuIndex.value = 0
-
-  // Position the menu
-  setTimeout(() => {
-    const coords = editor.view.coordsAtPos(from)
-    slashMenuPos.value = {
-      top: coords.bottom + 4,
-      left: coords.left,
-    }
-  }, 0)
 }
 
 const executeCommand = (cmd: typeof slashCommands[0]) => {
@@ -277,18 +367,45 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleClickOutside)
   editor.value?.destroy()
 })
+
+const focusEnd = () => {
+  editor.value?.chain().focus('end').run()
+}
+
+const insertText = (text: string) => {
+  editor.value?.chain().focus().insertContent(text).run()
+}
+
+defineExpose({ focusEnd, insertText })
 </script>
 
 <template>
-  <div ref="editorWrapper" class="note-editor">
+  <div ref="editorWrapper" class="note-editor" :class="`v-${variant}`">
     <EditorContent :editor="editor" />
-    <div v-if="showSlashMenu && filteredCommands.length > 0" ref="slashMenuEl" class="slash-menu" :style="{ top: slashMenuPos.top + 'px', left: slashMenuPos.left + 'px' }">
-      <div v-for="(cmd, i) in filteredCommands" :key="cmd.label"
-           class="slash-item" :class="{ active: i === slashMenuIndex }"
-           @mousedown.prevent="executeCommand(cmd)">
-        {{ cmd.label }}
+    <Teleport to="body">
+      <div
+        v-if="showSlashMenu"
+        ref="slashMenuEl"
+        class="slash-menu"
+        :style="slashMenuStyle"
+      >
+        <div
+          v-for="(cmd, i) in filteredCommands"
+          :key="cmd.label"
+          class="slash-item"
+          :class="{ active: i === slashMenuIndex }"
+          :data-index="i"
+          @mouseenter="slashMenuIndex = i"
+          @mousedown.prevent="executeCommand(cmd)"
+        >
+          <AppIcon v-if="cmd.icon" :name="cmd.icon" :size="15" class="sm-icon" />
+          <span v-else class="sm-badge">{{ cmd.badge }}</span>
+          <span class="sm-label">{{ cmd.label }}</span>
+          <span class="sm-hint">{{ cmd.hint }}</span>
+        </div>
+        <div v-if="!filteredCommands.length" class="sm-empty">没有匹配的块</div>
       </div>
-    </div>
+    </Teleport>
     <div v-if="showLangSelector" class="lang-selector" :style="{ top: langSelectorPos.top + 'px', right: langSelectorPos.right + 'px' }">
       <div class="lang-dropdown">
         <button class="lang-btn" @click="showLangDropdown = !showLangDropdown">
@@ -313,22 +430,57 @@ onBeforeUnmount(() => {
 .note-editor {
   position: relative;
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: transparent;
 }
 
 .note-editor :deep(.ProseMirror) {
   outline: none;
-  padding: 8px 24px 24px;
-  font-size: 14px;
-  line-height: 1.7;
   color: var(--text);
   flex: 1;
-  overflow-y: auto;
   background: transparent;
+  word-break: break-word;
 }
+
+/* 胶囊输入：约三行起写，随内容长高，最高到视口 46% */
+.note-editor.v-composer :deep(.ProseMirror) {
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  font-size: 14.5px;
+  line-height: 1.7;
+  min-height: 104px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+/* 卡片就地展开：与只读态同一套字号，避免展开时文字跳动；留出三行书写余量 */
+.note-editor.v-card :deep(.ProseMirror) {
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  min-height: 76px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+/* 全屏书写：一张纸的排版尺度 */
+.note-editor.v-full :deep(.ProseMirror) {
+  padding: 0;
+  font-size: 17px;
+  line-height: 1.9;
+  letter-spacing: -0.012em;
+  min-height: 40vh;
+  caret-color: var(--accent);
+}
+
+.note-editor.v-full :deep(* + *) { margin-top: var(--space-4); }
+.note-editor.v-full :deep(h1) { font-size: 27px; font-weight: 650; line-height: 1.35; letter-spacing: -0.026em; margin-top: var(--space-6); }
+.note-editor.v-full :deep(h2) { font-size: 21px; font-weight: 620; line-height: 1.45; letter-spacing: -0.02em; margin-top: var(--space-5); }
+.note-editor.v-full :deep(h3) { font-size: 18px; font-weight: 600; }
+.note-editor.v-full :deep(blockquote) { border-left-width: 3px; padding-left: var(--space-4); }
+.note-editor.v-full :deep(pre) { font-size: 13.5px; line-height: 1.75; padding: var(--space-4); background: var(--panel-bg); border: none; box-shadow: var(--shadow-xs); }
+.note-editor.v-full :deep(hr) { border: none; height: 1px; background: linear-gradient(90deg, transparent, var(--border-strong), transparent); margin: var(--space-6) 0; }
 
 .note-editor :deep(.ProseMirror p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder);
@@ -338,17 +490,24 @@ onBeforeUnmount(() => {
   height: 0;
 }
 
-.note-editor :deep(h1) { font-size: 22px; font-weight: 700; margin: 16px 0 8px; }
-.note-editor :deep(h2) { font-size: 18px; font-weight: 600; margin: 14px 0 6px; }
-.note-editor :deep(h3) { font-size: 15px; font-weight: 600; margin: 12px 0 4px; }
-.note-editor :deep(p) { margin: 4px 0; }
-.note-editor :deep(ul) { padding-left: 24px; margin: 4px 0; }
-.note-editor :deep(ol) { padding-left: 24px; margin: 4px 0; }
+.note-editor :deep(* + *) { margin-top: var(--space-2); }
+.note-editor :deep(* + h1), .note-editor :deep(* + h2), .note-editor :deep(* + h3) { margin-top: var(--space-4); }
+.note-editor :deep(h1) { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
+.note-editor :deep(h2) { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.5; }
+.note-editor :deep(h3) { font-size: 14.5px; font-weight: 600; line-height: 1.5; }
+.note-editor :deep(p) { margin: 0; }
+.note-editor :deep(ul), .note-editor :deep(ol) { padding-left: var(--space-5); margin: 0; }
 .note-editor :deep(li) { margin: 2px 0; }
-.note-editor :deep(blockquote) { border-left: 3px solid var(--accent); padding: 8px 12px; margin: 8px 0; color: var(--text-secondary); background: var(--bg); border-radius: 0 6px 6px 0; }
-.note-editor :deep(pre) { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: 'SF Mono', 'Cascadia Code', monospace; font-size: 13px; line-height: 1.6; margin: 8px 0; }
-.note-editor :deep(code) { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', 'Cascadia Code', monospace; font-size: 13px; }
-.note-editor :deep(pre code) { background: none; padding: 0; color: inherit; }
+.note-editor :deep(li::marker) { color: var(--text-faint); }
+.note-editor :deep(strong) { font-weight: 600; color: var(--text); }
+.note-editor :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
+.note-editor :deep(code) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; background: var(--hover); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
+.note-editor :deep(pre) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.65; background: var(--hover); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.note-editor :deep(pre code) { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+.note-editor :deep(hr) { border: none; border-top: 1px solid var(--border); margin: var(--space-3) 0; }
+.note-editor :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 3px; }
+.note-editor :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
+.note-editor :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 5px; }
 
 /* Syntax highlighting - Catppuccin Latte (light theme) */
 .note-editor :deep(.hljs-keyword), .note-editor :deep(.hljs-selector-tag), .note-editor :deep(.hljs-deletion) { color: #d20f39; }
@@ -360,19 +519,22 @@ onBeforeUnmount(() => {
 .note-editor :deep(.hljs-comment), .note-editor :deep(.hljs-quote) { color: #9ca0b0; font-style: italic; }
 .note-editor :deep(.hljs-tag), .note-editor :deep(.hljs-name), .note-editor :deep(.hljs-selector-class), .note-editor :deep(.hljs-selector-id) { color: #8839ef; }
 .note-editor :deep(.hljs-punctuation), .note-editor :deep(.hljs-symbol) { color: #6c6f85; }
-.note-editor :deep(hr) { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
 .slash-menu {
   position: fixed;
-  background: var(--panel-bg);
-  border: 1px solid var(--border-strong, #d1d5db);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
-  max-height: 260px;
-  overflow-y: auto;
-  z-index: 100;
+  width: 208px;
+  z-index: 300;
   padding: 4px;
-  min-width: 160px;
+  overflow-y: auto;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  animation: sm-in var(--transition-fast) ease both;
+}
+
+@keyframes sm-in {
+  from { opacity: 0; transform: translateY(-3px) scale(0.98); }
 }
 
 .slash-menu::-webkit-scrollbar { width: 4px; }
@@ -381,17 +543,43 @@ onBeforeUnmount(() => {
 .slash-menu::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
 .slash-item {
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 7px;
+  border-radius: var(--radius);
   cursor: pointer;
-  font-size: 13px;
   color: var(--text);
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 }
 
-.slash-item:hover, .slash-item.active {
-  background: var(--hover);
+.sm-icon { flex-shrink: 0; color: var(--text-secondary); }
+
+.sm-badge {
+  width: 15px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-secondary);
 }
+
+.sm-label { flex: 1; min-width: 0; font-size: 13px; }
+
+.sm-hint {
+  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.sm-empty { padding: 9px 7px; font-size: 12.5px; color: var(--text-muted); }
+
+.slash-item.active { background: var(--accent-soft); }
+.slash-item.active .sm-label { color: var(--accent-active); font-weight: 500; }
+.slash-item.active .sm-icon, .slash-item.active .sm-badge { color: var(--accent-active); }
+.slash-item.active .sm-hint { color: var(--accent-active); opacity: 0.6; }
 
 .lang-selector {
   position: absolute;

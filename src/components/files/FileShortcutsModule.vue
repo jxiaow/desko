@@ -164,6 +164,18 @@ const openContainingFolder = async () => {
   closeContextMenu()
 }
 
+const copyPathToClipboard = async () => {
+  if (contextMenu.value.shortcut) {
+    try {
+      await navigator.clipboard.writeText(contextMenu.value.shortcut.path)
+      toastStore.showToast('地址已复制')
+    } catch {
+      toastStore.showToast('复制失败', 'error')
+    }
+  }
+  closeContextMenu()
+}
+
 const getFileExt = (path: string) => {
   const parts = path.split('.')
   return parts.length > 1 ? parts.pop()!.toLowerCase() : ''
@@ -198,7 +210,7 @@ onBeforeUnmount(() => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </span>
         <input :value="searchKeyword" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" placeholder="搜索快捷方式..." />
-        <button v-if="searchKeyword" class="search-clear" @click="emit('update:searchKeyword', '')">
+        <button v-if="searchKeyword"  class="search-clear" @click="emit('update:searchKeyword', '')" title="清除搜索">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -229,7 +241,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="shortcut-info">
           <div class="shortcut-name">{{ shortcut.name }}</div>
-          <div class="shortcut-path" :title="shortcut.path">{{ shortcut.path }}</div>
+          <div  class="shortcut-path" :title="shortcut.path">{{ shortcut.path }}</div>
         </div>
       </div>
     </div>
@@ -251,7 +263,7 @@ onBeforeUnmount(() => {
             <div class="dialog-header-left">
               <h3>{{ isEditing() ? '编辑快捷方式' : '添加快捷方式' }}</h3>
             </div>
-            <button class="dialog-close" @click="cancelAdd">
+            <button  class="dialog-close" @click="cancelAdd" title="关闭">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
@@ -261,10 +273,10 @@ onBeforeUnmount(() => {
               <div class="path-input-row">
                 <input v-model="addForm.path" placeholder="粘贴文件/文件夹路径，或点击右侧浏览" @blur="onPathInput" />
                 <div class="path-browse-btns">
-                  <button class="browse-btn" @click="pickFile" title="选择文件">
+                  <button  class="browse-btn" @click="pickFile" title="选择文件">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   </button>
-                  <button class="browse-btn" @click="pickFolder" title="选择文件夹">
+                  <button  class="browse-btn" @click="pickFolder" title="选择文件夹">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
                   </button>
                 </div>
@@ -299,6 +311,10 @@ onBeforeUnmount(() => {
       <div class="context-menu-item" @click="openContainingFolder">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
         打开所在目录
+      </div>
+      <div class="context-menu-item" @click="copyPathToClipboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        复制地址
       </div>
       <div class="context-menu-item danger" @click="deleteFromMenu">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>

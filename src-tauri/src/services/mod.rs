@@ -3,6 +3,7 @@ pub mod entry_service;
 pub mod note_service;
 pub mod file_service;
 pub mod data_service;
+pub mod attachment_service;
 
 use crate::error::AppError;
 use crate::AppState;

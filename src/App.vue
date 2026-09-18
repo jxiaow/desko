@@ -4,7 +4,6 @@ import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import { useEntriesStore } from './stores/entries'
-import { useNotesStore } from './stores/notes'
 import { useFileShortcutsStore } from './stores/fileShortcuts'
 import { useToastStore } from './stores/toast'
 import { useConfirmStore } from './stores/confirm'
@@ -30,8 +29,6 @@ const { confirmDialog } = storeToRefs(confirmStore)
 const { handleConfirm } = confirmStore
 const entriesStore = useEntriesStore()
 const { fetchEntries } = entriesStore
-const notesStore = useNotesStore()
-const { fetchNotes } = notesStore
 const fileShortcutsStore = useFileShortcutsStore()
 const { fetchShortcuts } = fileShortcutsStore
 
@@ -57,9 +54,6 @@ const onUnlockComplete = async () => { await fetchEntries((msg) => showToast(msg
 
 const route = useRoute()
 watch(route, (newRoute) => {
-  if (newRoute.name === 'notes' && notesStore.notes.length === 0) {
-    fetchNotes()
-  }
   if (newRoute.name === 'files') {
     fetchShortcuts()
   }

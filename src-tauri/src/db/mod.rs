@@ -4,6 +4,7 @@ pub mod entry_repo;
 pub mod note_repo;
 pub mod url_path_repo;
 pub mod file_repo;
+pub mod attachment_repo;
 mod export;
 
 pub use models::*;

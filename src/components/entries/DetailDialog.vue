@@ -54,7 +54,7 @@ onUnmounted(() => {
             <span class="card-category">{{ entry.category || '未分类' }}</span>
           </div>
         </div>
-        <button class="dialog-close" @click="emit('close')">
+        <button  class="dialog-close" @click="emit('close')" title="关闭">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -65,7 +65,7 @@ onUnmounted(() => {
             <span class="detail-label">网址</span>
             <a v-if="entry.url" class="detail-value detail-link" @click.prevent="emit('openUrl', entry.url!)">{{ entry.url }}</a>
             <span v-else class="detail-value">-</span>
-            <button v-if="entry.url" class="detail-action-btn" @click="emit('openUrl', entry.url!)" title="打开网址">
+            <button v-if="entry.url"  class="detail-action-btn" @click="emit('openUrl', entry.url!)" title="打开网址">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             </button>
           </div>
@@ -75,7 +75,7 @@ onUnmounted(() => {
             <svg class="detail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span class="detail-label">用户名</span>
             <span class="detail-value">{{ entry.username || '' }}</span>
-            <button v-if="entry.username" class="detail-action-btn" @click="emit('copyText', entry.username, '用户名')" title="复制用户名">
+            <button v-if="entry.username"  class="detail-action-btn" @click="emit('copyText', entry.username, '用户名')" title="复制用户名">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
             <span class="detail-action-spacer" v-else></span>
@@ -89,11 +89,11 @@ onUnmounted(() => {
               {{ visiblePasswords[entry.id] ? (passwordCache[entry.id]?.value || '') : '' }}
             </span>
             <template v-if="passwordCache[entry.id]?.value">
-              <button class="detail-action-btn toggle" @click="emit('togglePassword', entry.id)" :title="visiblePasswords[entry.id] ? '隐藏密码' : '显示密码'">
+              <button  class="detail-action-btn toggle" @click="emit('togglePassword', entry.id)" :title="visiblePasswords[entry.id] ? '隐藏密码' : '显示密码'">
                 <svg v-if="!visiblePasswords[entry.id]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
               </button>
-              <button class="detail-action-btn" @click="emit('copyPassword', entry.id)" title="复制密码">
+              <button  class="detail-action-btn" @click="emit('copyPassword', entry.id)" title="复制密码">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               </button>
             </template>

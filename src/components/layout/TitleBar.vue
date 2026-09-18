@@ -55,7 +55,7 @@ onUnmounted(() => {
     <div class="titlebar-drag" @mousedown="startDrag" @dblclick="toggleMaximize"></div>
 
     <div v-if="!isLocked" class="titlebar-left">
-      <button class="titlebar-btn" @click="emit('toggleSidebar')" title="切换侧边栏">
+      <button  class="titlebar-btn" @click="emit('toggleSidebar')" title="切换侧边栏">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2"/>
           <line x1="9" y1="3" x2="9" y2="21"/>
@@ -65,13 +65,13 @@ onUnmounted(() => {
 
     <div class="titlebar-buttons">
       <template v-if="!isLocked">
-        <button class="titlebar-btn" @click="emit('openSettings')" title="设置">
+        <button  class="titlebar-btn" @click="emit('openSettings')" title="设置">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
-        <button class="titlebar-btn" @click="emit('lock')" title="锁定">
+        <button  class="titlebar-btn" @click="emit('lock')" title="锁定">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -79,12 +79,12 @@ onUnmounted(() => {
         </button>
         <div class="titlebar-divider"></div>
       </template>
-      <button class="titlebar-btn" @click="minimize" title="最小化">
+      <button  class="titlebar-btn" @click="minimize" title="最小化">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <rect x="1" y="5.5" width="10" height="1" fill="currentColor"/>
         </svg>
       </button>
-      <button class="titlebar-btn" @click="toggleMaximize" :title="isMaximized ? '还原' : '最大化'">
+      <button  class="titlebar-btn" @click="toggleMaximize" :title="isMaximized ? '还原' : '最大化'">
         <svg v-if="!isMaximized" width="12" height="12" viewBox="0 0 12 12">
           <rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
@@ -93,7 +93,7 @@ onUnmounted(() => {
           <rect x="0.5" y="3" width="8.5" height="8.5" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
       </button>
-      <button class="titlebar-btn titlebar-btn-close" @click="close" title="关闭">
+      <button  class="titlebar-btn titlebar-btn-close" @click="close" title="关闭">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <path d="M1 1 L11 11 M1 11 L11 1" stroke="currentColor" stroke-width="1.2"/>
         </svg>

@@ -75,6 +75,27 @@ const openUrl = async (url: string) => {
     toastStore.showToast('无法打开浏览器', 'error')
   }
 }
+
+const duplicateEntry = async (entry: Entry) => {
+  try {
+    let password = passwordCache.value[entry.id]?.value
+    if (!password) {
+      password = await passwordStore.getPassword(entry.id)
+      passwordCache.value[entry.id] = { value: password, ts: Date.now() }
+    }
+    await entriesStore.createEntry({
+      name: `${entry.name} 副本`,
+      url: entry.url || undefined,
+      username: entry.username || undefined,
+      password,
+      notes: entry.notes || undefined,
+      category: entry.category || undefined,
+    })
+    toastStore.showToast('已复制卡片')
+  } catch (e: any) {
+    toastStore.showToast(e.message || '复制失败', 'error')
+  }
+}
 </script>
 
 <template>
@@ -103,6 +124,7 @@ const openUrl = async (url: string) => {
     @copy-password="copyPassword"
     @copy-text="copyToClipboard"
     @open-url="openUrl"
+    @duplicate-entry="duplicateEntry"
   />
 
   <EntryFormDialog

@@ -12,6 +12,8 @@ pub fn create_note(db: &Database, input: CreateNoteInput) -> Result<Note, AppErr
         category: input.category,
         created_at: now,
         updated_at: now,
+        pinned: false,
+        starred: false,
     };
 
     db.create_note(&note)?;
@@ -27,4 +29,12 @@ pub fn update_note(db: &Database, id: &str, input: UpdateNoteInput) -> Result<()
 
     db.update_note(&note)?;
     Ok(())
+}
+
+pub fn toggle_pin_note(db: &Database, id: &str) -> Result<bool, AppError> {
+    db.toggle_pin_note(id)
+}
+
+pub fn toggle_star_note(db: &Database, id: &str) -> Result<bool, AppError> {
+    db.toggle_star_note(id)
 }

@@ -91,6 +91,8 @@ pub struct Note {
     pub category: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub pinned: bool,
+    pub starred: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +107,17 @@ pub struct UpdateNoteInput {
     pub title: String,
     pub content_html: String,
     pub category: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Attachment {
+    pub id: String,
+    pub note_id: String,
+    pub file_name: String,
+    pub file_path: String,
+    pub file_size: i64,
+    pub mime_type: String,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

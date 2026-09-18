@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, onBeforeUnmount } from 'vue'
+import { ref } from 'vue'
 
 export type ToastType = 'success' | 'error' | 'info'
 
@@ -20,10 +20,6 @@ export const useToastStore = defineStore('toast', () => {
       toast.value.show = false
     }, 2500)
   }
-
-  onBeforeUnmount(() => {
-    if (toastTimer) clearTimeout(toastTimer)
-  })
 
   return { toast, showToast }
 })

@@ -60,6 +60,18 @@ export interface Note {
   category: string | null
   created_at: number
   updated_at: number
+  pinned: boolean
+  starred: boolean
+}
+
+export interface Attachment {
+  id: string
+  note_id: string
+  file_name: string
+  file_path: string
+  file_size: number
+  mime_type: string
+  created_at: number
 }
 
 export interface CreateNoteInput {

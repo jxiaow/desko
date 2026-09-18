@@ -17,6 +17,7 @@
   --text: #111827;
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
+  --text-faint: #b6bcc6;
   
   /* 高级感的阴影系统 */
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -52,6 +53,8 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
   
   /* 圆角系统 */
   --radius-sm: 6px;
@@ -65,6 +68,16 @@
   --transition: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* 全屏书写栏宽度：正文越宽越要收着 */
+  --fs-max: 900px;
+  /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
+  --stream-max: 1200px;
+  /* 小记卡片正文高度上限：短的小记按实际内容，长的裁到这里并渐隐 */
+  --memo-max-h: 24vh;
+  --rail-w: 208px;
+  /* 容器窄于此值时收起右栏，筛选降级为浮层 */
+  --rail-min-room: 900px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -89,7 +102,7 @@ body {
 .app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 .app-root.locked-bg { background: linear-gradient(135deg, #fafbfc 0%, #f3f4f6 100%); }
 .app-layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
-.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); height: 100%; }
+.main-area { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); height: 100%; }
 .main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); min-height: 0; }
 
 /* 按钮系统 */
@@ -376,3 +389,182 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 3px; transition: background var(--transition); }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
+
+/* 弹性布局里的撑开项 */
+.spacer { flex: 1; }
+
+/* 键盘按键标记 */
+.kbd {
+  font-size: 10.5px;
+  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  color: var(--text-muted);
+  background: var(--hover);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+  line-height: 15px;
+}
+
+/* 图标按钮 + 胶囊成组：同类操作收进一个容器，替代一排零散按钮 */
+.ib {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+.ib:hover { background: var(--hover); color: var(--text-secondary); }
+.ib:active { transform: scale(0.9); }
+.ib.on { color: var(--accent); }
+.ib.on.warn { color: var(--warning); }
+.ib.danger:hover { color: var(--danger); background: var(--danger-soft); }
+
+/* 编辑态底栏：带文字的描边按钮（原型 .eb），操作可读出而不靠猜图标 */
+.eb {
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.eb:hover { border-color: var(--border-strong); color: var(--text); background: var(--hover); }
+.eb:active { transform: scale(0.97); }
+.eb.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.eb.on.warn { border-color: var(--warning); color: var(--warning); background: var(--warning-soft); }
+.eb.danger { color: var(--danger); }
+.eb.danger:hover { background: var(--danger-soft); border-color: #fecaca; }
+.eb.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+.eb.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+.eb:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* 新建态底栏：无边框轻量按钮（原型 .mini-btn） */
+.mini-btn {
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.mini-btn:hover { background: var(--hover); color: var(--text-secondary); }
+.mini-btn:active { transform: scale(0.97); }
+.mini-btn.on { color: var(--accent); background: var(--accent-soft); }
+
+/* 自动保存状态 */
+.save-hint { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.save-hint.saving { color: var(--warning); }
+.save-hint.saved { color: var(--success); }
+
+/* 正文里的 #标签（只读卡片与编辑器 decoration 共用）：紫色药丸，与正文拉开层级 */
+.tag-inline {
+  color: var(--accent-active);
+  background: var(--accent-soft);
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.tag-inline:hover { background: var(--accent-light); }
+
+/* 浮层菜单 */
+.popover {
+  position: fixed;
+  z-index: 200;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  padding: var(--space-1);
+  min-width: 148px;
+  animation: pop-in var(--transition-fast) ease both;
+}
+.popover.wide { min-width: 260px; padding: 0; }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-3px) scale(0.98); } }
+
+/* 全局悬停提示：所有 title 属性自动换成深色气泡，共用挂在 body 上的这一个节点 */
+.app-tip {
+  position: fixed;
+  z-index: 400;
+  max-width: 268px;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+.app-tip.show { opacity: 1; transform: none; }
+
+.pop-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: left;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.pop-item:hover { background: var(--hover); color: var(--text); }
+.pop-item.danger { color: var(--danger); }
+.pop-item.danger:hover { background: var(--danger-soft); }
+.pop-sep { height: 1px; background: var(--border); margin: var(--space-1) var(--space-2); }
+.pop-sec { padding: var(--space-3) var(--space-4); }
+.pop-sec + .pop-sec { border-top: 1px solid var(--border); }
+.pop-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; margin-bottom: var(--space-2); }
+.pop-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.tab-count { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.tab.active .tab-count { color: var(--accent); }
+
+/* 焦点可见性：只给离散控件；书写区（ProseMirror）靠容器边框表达，不叠加 ring */
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.tab:focus-visible,
+.ib:focus-visible,
+.eb:focus-visible,
+.mini-btn:focus-visible,
+.pop-item:focus-visible,
+input[type="datetime-local"]:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}

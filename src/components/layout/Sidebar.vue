@@ -37,21 +37,21 @@ const route = useRoute()
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         </div>
-        <span v-if="!collapsed" class="nav-text">网址导航</span>
+        <span v-if="!collapsed" class="nav-text">网址收藏</span>
         <div v-if="!collapsed && route.path === '/entries'" class="nav-indicator"></div>
       </router-link>
       <router-link to="/notes" class="nav-item" :class="{ active: route.path === '/notes' }">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         </div>
-        <span v-if="!collapsed" class="nav-text">笔记</span>
+        <span v-if="!collapsed" class="nav-text">小记</span>
         <div v-if="!collapsed && route.path === '/notes'" class="nav-indicator"></div>
       </router-link>
       <router-link to="/files" class="nav-item" :class="{ active: route.path === '/files' }">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
         </div>
-        <span v-if="!collapsed" class="nav-text">文件</span>
+        <span v-if="!collapsed" class="nav-text">文件快捷</span>
         <div v-if="!collapsed && route.path === '/files'" class="nav-indicator"></div>
       </router-link>
     </div>

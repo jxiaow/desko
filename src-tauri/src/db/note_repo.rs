@@ -12,12 +12,14 @@ impl Database {
             category: row.get(3)?,
             created_at: row.get(4)?,
             updated_at: row.get(5)?,
+            pinned: row.get::<_, i32>(6)? != 0,
+            starred: row.get::<_, i32>(7)? != 0,
         })
     }
 
     pub fn list_all_notes(&self) -> Result<Vec<Note>, AppError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, content_html, category, created_at, updated_at FROM notes ORDER BY updated_at DESC"
+            "SELECT id, title, content_html, category, created_at, updated_at, pinned, starred FROM notes ORDER BY pinned DESC, created_at DESC"
         )?;
         let rows = stmt.query_map([], Self::row_to_note)?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -25,16 +27,33 @@ impl Database {
 
     pub fn create_note(&self, note: &Note) -> Result<(), AppError> {
         self.conn.execute(
-            "INSERT INTO notes (id, title, content_html, category, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![note.id, note.title, note.content_html, note.category, note.created_at, note.updated_at],
+            "INSERT INTO notes (id, title, content_html, category, created_at, updated_at, pinned, starred) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                note.id,
+                note.title,
+                note.content_html,
+                note.category,
+                note.created_at,
+                note.updated_at,
+                note.pinned as i32,
+                note.starred as i32,
+            ],
         )?;
         Ok(())
     }
 
     pub fn update_note(&self, note: &Note) -> Result<(), AppError> {
         self.conn.execute(
-            "UPDATE notes SET title=?2, content_html=?3, category=?4, updated_at=?5 WHERE id=?1",
-            params![note.id, note.title, note.content_html, note.category, note.updated_at],
+            "UPDATE notes SET title=?2, content_html=?3, category=?4, updated_at=?5, pinned=?6, starred=?7 WHERE id=?1",
+            params![
+                note.id,
+                note.title,
+                note.content_html,
+                note.category,
+                note.updated_at,
+                note.pinned as i32,
+                note.starred as i32,
+            ],
         )?;
         Ok(())
     }
@@ -46,7 +65,7 @@ impl Database {
 
     pub fn get_note(&self, id: &str) -> Result<Option<Note>, AppError> {
         let result = self.conn.query_row(
-            "SELECT id, title, content_html, category, created_at, updated_at FROM notes WHERE id = ?1",
+            "SELECT id, title, content_html, category, created_at, updated_at, pinned, starred FROM notes WHERE id = ?1",
             params![id],
             Self::row_to_note,
         );
@@ -65,5 +84,25 @@ impl Database {
         }
         tx.commit()?;
         Ok(count)
+    }
+
+    pub fn toggle_pin_note(&self, id: &str) -> Result<bool, AppError> {
+        let note = self.get_note(id)?.ok_or(AppError::Database("note not found".to_string()))?;
+        let new_pinned = !note.pinned;
+        self.conn.execute(
+            "UPDATE notes SET pinned = ?1 WHERE id = ?2",
+            params![new_pinned as i32, id],
+        )?;
+        Ok(new_pinned)
+    }
+
+    pub fn toggle_star_note(&self, id: &str) -> Result<bool, AppError> {
+        let note = self.get_note(id)?.ok_or(AppError::Database("note not found".to_string()))?;
+        let new_starred = !note.starred;
+        self.conn.execute(
+            "UPDATE notes SET starred = ?1 WHERE id = ?2",
+            params![new_starred as i32, id],
+        )?;
+        Ok(new_starred)
     }
 }
