@@ -28,3 +28,8 @@ npm-debug.log*
 
 # Tauri
 src-tauri/WixTools/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
