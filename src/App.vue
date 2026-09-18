@@ -64,6 +64,13 @@ onMounted(async () => {
   if (appState.value === 'unlocked') {
     await fetchEntries((msg) => showToast(msg, 'error'))
   }
+
+  // WebView 收不到窗口隐藏/最小化时的 mouseleave，:hover 会残留到下次打开
+  const suppressHover = () => document.documentElement.classList.add('hover-suppressed')
+  const releaseHover = () => document.documentElement.classList.remove('hover-suppressed')
+  window.addEventListener('blur', suppressHover)
+  document.addEventListener('visibilitychange', () => { if (document.hidden) suppressHover() })
+  document.addEventListener('mousemove', releaseHover, { passive: true })
 })
 </script>
 
