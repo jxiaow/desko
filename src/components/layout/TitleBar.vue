@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { suppressHover } from '../../utils/hoverGuard'
 
 defineProps<{
   isLocked?: boolean
@@ -19,8 +20,20 @@ const updateMaximizedState = async () => {
   isMaximized.value = await appWindow.isMaximized()
 }
 
+// 先盖遮罩并等两帧，让 WebView 基于遮罩重算 hover，再真正隐藏窗口，
+// 避免残留的 :hover 态被带进下次显示
+const withHoverGuard = (action: () => void) => {
+  suppressHover()
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      suppressHover()
+      action()
+    })
+  })
+}
+
 const minimize = () => {
-  appWindow.minimize()
+  withHoverGuard(() => appWindow.minimize())
 }
 
 const toggleMaximize = async () => {
@@ -29,7 +42,7 @@ const toggleMaximize = async () => {
 }
 
 const close = () => {
-  appWindow.close()
+  withHoverGuard(() => appWindow.close())
 }
 
 const startDrag = () => {
@@ -37,16 +50,22 @@ const startDrag = () => {
 }
 
 let unlisten: (() => void) | null = null
+let unlistenFocus: (() => void) | null = null
 
 onMounted(async () => {
   await updateMaximizedState()
   unlisten = await appWindow.onResized(async () => {
     await updateMaximizedState()
   })
+  unlistenFocus = await appWindow.onFocusChanged(() => {
+    // 失焦时冻结；重新获得焦点（托盘恢复）时再冻结一次，防止隐藏前被假移动解除
+    suppressHover()
+  })
 })
 
 onUnmounted(() => {
   if (unlisten) unlisten()
+  if (unlistenFocus) unlistenFocus()
 })
 </script>
 

@@ -9,6 +9,7 @@ import { useToastStore } from './stores/toast'
 import { useConfirmStore } from './stores/confirm'
 import { usePasswordStore } from './stores/password'
 import { useAutoLock } from './composables/useAutoLock'
+import { installHoverGuard } from './utils/hoverGuard'
 import TitleBar from './components/layout/TitleBar.vue'
 import Sidebar from './components/layout/Sidebar.vue'
 import SetupPage from './components/auth/SetupPage.vue'
@@ -65,12 +66,8 @@ onMounted(async () => {
     await fetchEntries((msg) => showToast(msg, 'error'))
   }
 
-  // WebView 收不到窗口隐藏/最小化时的 mouseleave，:hover 会残留到下次打开
-  const suppressHover = () => document.documentElement.classList.add('hover-suppressed')
-  const releaseHover = () => document.documentElement.classList.remove('hover-suppressed')
-  window.addEventListener('blur', suppressHover)
-  document.addEventListener('visibilitychange', () => { if (document.hidden) suppressHover() })
-  document.addEventListener('mousemove', releaseHover, { passive: true })
+  // WebView 收不到窗口隐藏/最小化时的 mouseleave，:hover 与 tooltip 会残留到下次打开
+  installHoverGuard()
 })
 </script>
 

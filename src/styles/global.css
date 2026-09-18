@@ -527,6 +527,9 @@ body {
 }
 .app-tip.show { opacity: 1; transform: none; }
 
+/* 窗口失焦/隐藏后临时盖上，截留残留的 :hover，鼠标一动即移除 */
+.hover-blocker { position: fixed; inset: 0; z-index: 10000; }
+
 .pop-item {
   display: flex;
   align-items: center;

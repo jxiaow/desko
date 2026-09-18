@@ -29,6 +29,8 @@ const hide = () => {
   node?.classList.remove('show')
 }
 
+export const hideGlobalTip = hide
+
 /** 先按目标定位再显示：反过来会让气泡首帧闪在旧位置 */
 const place = (target: HTMLElement, text: string) => {
   const el = tipNode()
@@ -59,6 +61,8 @@ const findTarget = (start: EventTarget | null): HTMLElement | null =>
   start instanceof Element ? start.closest<HTMLElement>('[data-tip], [title]') : null
 
 const showFor = (el: HTMLElement) => {
+  // 窗口恢复时 WebView 会用缓存的事件目标重放 pointerover，绕过遮罩直达按钮
+  if (document.documentElement.classList.contains('hover-suppressed')) return
   const text = adopt(el)
   if (!text) return
   current = el
