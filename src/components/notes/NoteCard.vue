@@ -273,8 +273,8 @@ const insertTag = () => editorRef.value?.insertText(' #')
 .memo-body :deep(li) { margin: 2px 0; }
 .memo-body :deep(li::marker) { color: var(--text-faint); }
 .memo-body :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
-.memo-body :deep(code) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; background: var(--hover); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
-.memo-body :deep(pre) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.65; background: var(--hover); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.memo-body :deep(code) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
+.memo-body :deep(pre) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .memo-body :deep(pre code) { background: none; border: none; padding: 0; color: inherit; }
 .memo-body :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 3px; }
 .memo-body :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
@@ -324,7 +324,7 @@ const insertTag = () => editorRef.value?.insertText(' #')
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #fff;
+  color: var(--accent-on);
   transition: all var(--transition);
 }
 .memo-check:hover { border-color: var(--accent); }

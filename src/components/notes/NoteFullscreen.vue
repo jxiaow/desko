@@ -197,7 +197,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   gap: var(--space-2);
   padding: var(--space-2) var(--space-5);
   border-top: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--frost-bg);
   backdrop-filter: blur(10px);
 }
 

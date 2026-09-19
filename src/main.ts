@@ -2,11 +2,19 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import router from './router'
 import { setupGlobalTips } from './utils/tooltip'
+import { applyTheme, readTheme } from './services/theme'
 import './styles/global.css'
 import App from './App.vue'
 
-const app = createApp(App)
-app.use(createPinia())
-app.use(router)
-setupGlobalTips()
-app.mount('#app')
+async function bootstrap() {
+  // 先把主题挂上再挂载：否则深色主题会先闪一屏浅色
+  applyTheme(await readTheme())
+
+  const app = createApp(App)
+  app.use(createPinia())
+  app.use(router)
+  setupGlobalTips()
+  app.mount('#app')
+}
+
+void bootstrap()

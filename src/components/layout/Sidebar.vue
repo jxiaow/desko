@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandLogo from '../shared/BrandLogo.vue'
 import { useRoute } from 'vue-router'
 
 defineProps<{
@@ -16,18 +17,7 @@ const route = useRoute()
   <div class="sidebar" :class="{ collapsed }">
     <div class="sidebar-header">
       <div class="sidebar-logo">
-        <svg viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="deskoGradient" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
-              <stop offset="0" stop-color="#6366f1"/>
-              <stop offset="0.48" stop-color="#4f46e5"/>
-              <stop offset="1" stop-color="#4338ca"/>
-            </linearGradient>
-          </defs>
-          <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#deskoGradient)"/>
-          <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#deskoGradient)"/>
-          <circle cx="75" cy="79" r="5" fill="#FFFFFF"/>
-        </svg>
+        <BrandLogo />
       </div>
       <span v-if="!collapsed" class="sidebar-brand">Desko</span>
     </div>

@@ -130,7 +130,8 @@ export interface E2EBridge {
 }
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close']
+// 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme']
 
 // 错误以纯字符串 reject —— 与 Tauri v2 中 AppError(serialize 为 user_message) 一致
 const ERR_NOT_INITIALIZED = '应用未初始化'

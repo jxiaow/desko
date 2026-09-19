@@ -183,7 +183,7 @@ onUnmounted(() => {
 
 .titlebar-btn-close:hover {
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-on);
 }
 
 .titlebar-divider {

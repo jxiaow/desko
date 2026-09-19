@@ -1,5 +1,7 @@
 <script setup lang="ts">
-defineProps<{
+import { useEscapeClose } from '../../composables/useEscapeClose'
+
+const props = defineProps<{
   dialog: { show: boolean; title: string; message: string }
 }>()
 
@@ -7,11 +9,15 @@ const emit = defineEmits<{
   confirm: []
   cancel: []
 }>()
+
+// 常驻组件，注册时机跟着可见性走，否则它在栈里的位置是"应用启动那一下"，
+// 叠在它上面的设置弹窗反而会先被 Esc 关掉
+useEscapeClose(() => emit('cancel'), () => props.dialog.show)
 </script>
 
 <template>
   <Transition name="dialog">
-    <div v-if="dialog.show" class="dialog-overlay" @click.self="emit('cancel')">
+    <div v-if="dialog.show" class="dialog-overlay">
     <div class="dialog confirm-dialog">
       <div class="dialog-header">
         <h3>{{ dialog.title }}</h3>

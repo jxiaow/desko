@@ -501,24 +501,15 @@ defineExpose({ focusEnd, insertText })
 .note-editor :deep(li::marker) { color: var(--text-faint); }
 .note-editor :deep(strong) { font-weight: 600; color: var(--text); }
 .note-editor :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
-.note-editor :deep(code) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; background: var(--hover); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
-.note-editor :deep(pre) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.65; background: var(--hover); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.note-editor :deep(code) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
+.note-editor :deep(pre) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .note-editor :deep(pre code) { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
 .note-editor :deep(hr) { border: none; border-top: 1px solid var(--border); margin: var(--space-3) 0; }
 .note-editor :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 3px; }
 .note-editor :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
 .note-editor :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 5px; }
 
-/* Syntax highlighting - Catppuccin Latte (light theme) */
-.note-editor :deep(.hljs-keyword), .note-editor :deep(.hljs-selector-tag), .note-editor :deep(.hljs-deletion) { color: #d20f39; }
-.note-editor :deep(.hljs-string), .note-editor :deep(.hljs-meta .hljs-meta-string), .note-editor :deep(.hljs-regexp) { color: #40a02b; }
-.note-editor :deep(.hljs-number), .note-editor :deep(.hljs-literal) { color: #fe640b; }
-.note-editor :deep(.hljs-built_in), .note-editor :deep(.hljs-builtin-name), .note-editor :deep(.hljs-type) { color: #df8e1d; }
-.note-editor :deep(.hljs-function), .note-editor :deep(.hljs-title), .note-editor :deep(.hljs-section) { color: #1e66f5; }
-.note-editor :deep(.hljs-attr), .note-editor :deep(.hljs-attribute), .note-editor :deep(.hljs-variable) { color: #e64553; }
-.note-editor :deep(.hljs-comment), .note-editor :deep(.hljs-quote) { color: #9ca0b0; font-style: italic; }
-.note-editor :deep(.hljs-tag), .note-editor :deep(.hljs-name), .note-editor :deep(.hljs-selector-class), .note-editor :deep(.hljs-selector-id) { color: #8839ef; }
-.note-editor :deep(.hljs-punctuation), .note-editor :deep(.hljs-symbol) { color: #6c6f85; }
+/* 语法高亮的配色规则在 global.css：那里写一次，编辑器与只读渲染共用 */
 
 .slash-menu {
   position: fixed;

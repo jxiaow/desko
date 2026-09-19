@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import BrandLogo from '../shared/BrandLogo.vue'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { entriesApi } from '../../services/api/entries'
 import { urlPathsApi } from '../../services/api/urlPaths'
 import type { Entry, CreateEntryInput, UpdateEntryInput } from '../../types'
 import { useToastStore } from '../../stores/toast'
+import { useEscapeClose } from '../../composables/useEscapeClose'
 
 interface LocalPath {
   id: string // 临时 ID 或真实 ID
@@ -216,18 +218,7 @@ const doSave = async () => {
   }
 }
 
-let handleEscape: ((e: KeyboardEvent) => void) | null = null
-
-onMounted(() => {
-  handleEscape = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') emit('close')
-  }
-  window.addEventListener('keydown', handleEscape)
-})
-
-onUnmounted(() => {
-  if (handleEscape) window.removeEventListener('keydown', handleEscape)
-})
+useEscapeClose(() => emit('close'))
 </script>
 
 <template>
@@ -237,18 +228,7 @@ onUnmounted(() => {
       <div class="dialog-header">
         <div class="dialog-header-left">
           <div class="dialog-logo">
-            <svg viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="deskoPurpleDialog" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
-                  <stop offset="0" stop-color="#6A63FF"/>
-                  <stop offset="0.48" stop-color="#554BE8"/>
-                  <stop offset="1" stop-color="#3327B8"/>
-                </linearGradient>
-              </defs>
-              <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#deskoPurpleDialog)"/>
-              <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#deskoPurpleDialog)"/>
-              <circle cx="75" cy="79" r="5" fill="#FFFFFF"/>
-            </svg>
+            <BrandLogo />
           </div>
           <h3>{{ editEntry ? '编辑条目' : '新增条目' }}</h3>
         </div>
@@ -356,13 +336,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
-.form-group input, .form-group textarea { width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; outline: none; transition: all 0.15s; font-family: inherit; background: var(--bg); }
-.form-group input:focus, .form-group textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: #fff; }
-.form-group textarea { resize: vertical; min-height: 56px; font-family: inherit; }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-.form-row .form-group { margin-bottom: 0; }
+/* .form-group / .form-row 已提到 global.css 全站共用 */
 
 .category-group { position: relative; }
 .category-input-wrapper { position: relative; }
@@ -374,13 +348,13 @@ onUnmounted(() => {
 .paths-hint { font-size: 12px; color: var(--text-muted); }
 
 .path-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-.path-item { display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.path-item { display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--sunken); border-radius: var(--radius-sm); border: 1px solid var(--border); }
 .path-inputs { display: flex; gap: 8px; flex: 1; min-width: 0; }
 .path-input { flex: 1; padding: 7px 9px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; outline: none; background: var(--bg); font-family: inherit; }
 .path-input:focus { border-color: var(--accent); }
 .path-input:first-child { font-family: monospace; }
 .btn-delete-path { padding: 4px; color: var(--text-secondary); background: none; border: none; cursor: pointer; border-radius: 4px; transition: all 0.15s; flex-shrink: 0; }
-.btn-delete-path:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+.btn-delete-path:hover { color: var(--danger); background: var(--danger-soft); }
 
 .btn-add-path { display: flex; align-items: center; gap: 6px; padding: 7px 13px; font-size: 13px; color: var(--accent); background: none; border: 1px dashed var(--accent); border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s; }
 .btn-add-path:hover { background: var(--accent-soft); }

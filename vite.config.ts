@@ -25,6 +25,10 @@ export default defineConfig(({ mode }) => {
       host: '127.0.0.1',
       port: 1420,
       strictPort: true,
+      watch: {
+        // 否则 vite 会 watch 编译产物里的 desko.exe，运行中被占用直接 EBUSY 崩溃
+        ignored: ['**/src-tauri/target/**'],
+      },
       ...(isE2E
         ? {
             warmup: {

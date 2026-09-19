@@ -33,3 +33,6 @@ src-tauri/WixTools/
 test-results/
 playwright-report/
 blob-report/
+
+# 四主题实机截图，node scripts/theme-shots.mjs 可随时重生成
+design/theme-shots/

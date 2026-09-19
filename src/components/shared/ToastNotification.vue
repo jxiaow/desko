@@ -28,11 +28,14 @@ defineProps<{
   align-items: center;
   gap: 6px;
   max-width: 360px;
+  background: var(--toast-bg);
 }
 
-.toast.success { background: #0f172a; color: #4ade80; }
-.toast.error { background: #0f172a; color: #f87171; }
-.toast.info { background: #0f172a; color: #60a5fa; }
+/* toast 是一块反色浮层：底色和三种文字色都由当前主题给（--toast-*），
+   深色主题下它会翻成亮底暗字，而不是继续压在一团黑上。 */
+.toast.success { color: var(--toast-ok); }
+.toast.error { color: var(--toast-err); }
+.toast.info { color: var(--toast-info); }
 
 .toast-enter-active,
 .toast-leave-active {

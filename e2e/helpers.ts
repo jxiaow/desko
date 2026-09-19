@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Page, Locator } from '@playwright/test'
 import type { E2EConfig } from './mocks/backend'
 
 export const E2E_PASSWORD = 'e2e-master-123'
@@ -68,5 +68,31 @@ export function cardByName(name: string): string {
 export async function hoverCard(page: Page, name: string): Promise<void> {
   const card = page.locator(cardByName(name))
   await card.hover()
+}
+
+/** 设置弹窗是左菜单 / 右内容，非默认面板要先点菜单项才有可见的可交互节点 */
+const SETTINGS_TAB = {
+  appearance: '外观',
+  data: '数据存储',
+  security: '安全',
+  about: '关于',
+} as const
+export type SettingsTab = keyof typeof SETTINGS_TAB
+
+/** 打开设置弹窗并停在指定面板，返回 dialog 定位器 */
+export async function openSettings(
+  page: Page,
+  tab: SettingsTab = 'appearance',
+): Promise<Locator> {
+  await page.locator('button[title="设置"]').click()
+  const dialog = page.locator('.settings-dialog')
+  await expect(dialog).toBeVisible()
+  await settingsTab(dialog, tab)
+  return dialog
+}
+
+/** 切到指定面板（默认停在「外观」，其余面板要点菜单才露出来） */
+export function settingsTab(dialog: Locator, tab: SettingsTab): Promise<void> {
+  return dialog.locator('.nav-tab', { hasText: SETTINGS_TAB[tab] }).click()
 }
 

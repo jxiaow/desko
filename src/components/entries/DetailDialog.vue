@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
 import type { Entry } from '../../types'
+import { avatarClass } from '../../utils/avatar'
+import { useEscapeClose } from '../../composables/useEscapeClose'
 
 defineProps<{
   entry: Entry
@@ -18,26 +19,8 @@ const emit = defineEmits<{
   openUrl: [url: string]
 }>()
 
-const getAvatarClass = (id: string) => {
-  let hash = 0
-  for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return `c${Math.abs(hash) % 6}`
-}
 
-let handleEscape: ((e: KeyboardEvent) => void) | null = null
-
-onMounted(() => {
-  handleEscape = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') emit('close')
-  }
-  window.addEventListener('keydown', handleEscape)
-})
-
-onUnmounted(() => {
-  if (handleEscape) window.removeEventListener('keydown', handleEscape)
-})
+useEscapeClose(() => emit('close'))
 </script>
 
 <template>
@@ -46,7 +29,7 @@ onUnmounted(() => {
     <div class="dialog detail-dialog">
       <div class="dialog-header">
         <div class="detail-header-left">
-          <div class="card-avatar" :class="getAvatarClass(entry.id)" style="width:38px;height:38px;font-size:15px;border-radius:10px;">
+          <div class="card-avatar" :class="avatarClass(entry.category)" style="width:38px;height:38px;font-size:15px;border-radius:10px;">
             {{ entry.name.charAt(0) }}
           </div>
           <div>
@@ -160,9 +143,9 @@ onUnmounted(() => {
 .detail-action-btn.toggle:hover { background: var(--accent-soft); }
 
 .paths-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; padding-left: 56px; }
-.path-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 12px; cursor: pointer; text-decoration: none; color: inherit; transition: all 0.12s; }
+.path-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--sunken); border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 12px; cursor: pointer; text-decoration: none; color: inherit; transition: all 0.12s; }
 .path-item:hover { background: var(--accent-soft); border-color: var(--accent); }
-.path-label { font-weight: 500; color: var(--text-primary); }
+.path-label { font-weight: 500; color: var(--text); }
 .path-path { color: var(--text-secondary); font-family: monospace; flex: 1; }
 .path-open-icon { color: var(--text-muted); flex-shrink: 0; }
 .path-item:hover .path-open-icon { color: var(--accent); }

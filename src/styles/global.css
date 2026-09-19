@@ -1,50 +1,9 @@
+/* ═══════════════════════════════════════════════════════════════════
+   第 1 层 · 尺度 —— 主题之间恒定。
+   换主题只换颜色；圆角、间距、字号、动效一律不随主题变，
+   否则比较两套配色时会把"形状不一样"误读成"颜色不一样"。
+   ═══════════════════════════════════════════════════════════════════ */
 :root {
-  /* 品牌色 - 深紫蓝渐变 */
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --accent-active: #4338ca;
-  --accent-soft: #eef2ff;
-  --accent-light: #e0e7ff;
-  --accent-ring: rgba(99, 102, 241, 0.12);
-  
-  /* 精致的灰色层次 */
-  --bg: #fafbfc;
-  --panel-bg: #ffffff;
-  --chrome-bg: #ffffff;
-  --border: #e5e7eb;
-  --border-strong: #d1d5db;
-  --hover: #f9fafb;
-  --text: #111827;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
-  --text-faint: #b6bcc6;
-  
-  /* 高级感的阴影系统 */
-  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  --shadow-pop: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  
-  /* 状态色 */
-  --danger: #ef4444;
-  --danger-hover: #dc2626;
-  --danger-soft: #fef2f2;
-  --success: #10b981;
-  --success-soft: #ecfdf5;
-  --warning: #f59e0b;
-  --warning-soft: #fffbeb;
-  
-  /* Sidebar */
-  --sidebar-bg: #f8fafc;
-  --sidebar-w: 220px;
-  --sidebar-border: var(--border);
-  --sidebar-hover: #f3f4f6;
-  --sidebar-active: var(--accent-soft);
-  --sidebar-text: var(--text-secondary);
-  --sidebar-text-active: var(--accent);
-  
   /* 间距系统 - 4px 基础 */
   --space-1: 4px;
   --space-2: 8px;
@@ -55,20 +14,22 @@
   --space-8: 32px;
   --space-10: 40px;
   --space-12: 48px;
-  
+
   /* 圆角系统 */
   --radius-sm: 6px;
   --radius: 8px;
   --radius-md: 10px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  
+
   /* 过渡 */
   --transition-fast: 0.1s cubic-bezier(0.4, 0, 0.2, 1);
   --transition: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 
+  /* 布局尺度 */
+  --sidebar-w: 220px;
   /* 全屏书写栏宽度：正文越宽越要收着 */
   --fs-max: 900px;
   /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
@@ -80,8 +41,476 @@
   --rail-min-room: 900px;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   第 2 层 · 主题 —— 只有颜色。
+
+   四套主题必须交出**完全相同**的槽位名。少填一个，切过去那个位置
+   就留着上一套主题的值，变成一块切换后不动的颜色。
+   改槽位时跑 scripts/check-theme-coverage.mjs，它会比对四套的键集。
+
+   槽位分两类：
+   · 语义角色（面 / 文字 / 描边 / 状态 / 浮层）—— 每套主题一套值
+   · 策略角色（--cat-* 头像、--ft-* 文件类型、--code-* 语法）——
+     用几个色相、什么决定它，是全局定死的；主题只负责给它填 hex。
+     所以切主题时头像会换色，但"这个色块代表工作分类"这件事不变。
+
+   :root 上挂的是 cool 的值，作为 data-theme 缺失时的兜底。
+   ═══════════════════════════════════════════════════════════════════ */
+:root, [data-theme="cool"] {
+  /* 品牌：单一紫蓝，从 public/app-icon.svg 收敛而来 */
+  --accent: #5b57d9;
+  --accent-hover: #4c48c6;
+  --accent-active: #3e3aa4;
+  --accent-on: #ffffff;
+  --accent-soft: #eeedfb;
+  --accent-light: #dcd9f6;
+  --accent-ring: rgba(91, 87, 217, 0.15);
+  --text-brand: #4f4ac0;
+
+  /* 面：四级灰阶，相邻 L* 差 ≥2，看得见但不成条纹。
+     --sunken 是静态凹陷（代码块、键帽），--hover 是指针反馈，两者不共用。 */
+  --bg: #f8f8fa;
+  --panel-bg: #ffffff;
+  --chrome-bg: #f1f1f5;
+  --sunken: #e9ebf1;
+  --fill: #e4e6ee;
+  --hover: #eef0f4;
+  --active: #ececfb;
+  --overlay: rgba(18, 18, 26, 0.42);
+
+  /* 文字 */
+  --text: #1a1b20;
+  --text-secondary: #5c5e68;
+  --text-muted: #8b8d98;
+  --text-faint: #b4b6c0;
+
+  /* 描边 */
+  --border: #e3e3ea;
+  --border-strong: #c9c9d3;
+  --border-subtle: #eeeff3;
+
+  /* 阴影 */
+  --shadow-xs: 0 1px 2px 0 rgba(26, 27, 32, 0.07);
+  --shadow-sm: 0 1px 2px 0 rgba(26, 27, 32, 0.05);
+  --shadow: 0 2px 6px -1px rgba(26, 27, 32, 0.08);
+  --shadow-md: 0 6px 16px -6px rgba(26, 27, 32, 0.14), 0 1px 3px rgba(26, 27, 32, 0.06);
+  --shadow-lg: 0 12px 28px -8px rgba(26, 27, 32, 0.18);
+  --shadow-pop: 0 20px 44px -12px rgba(26, 27, 32, 0.24), 0 2px 8px rgba(26, 27, 32, 0.08);
+
+  /* 状态色：一个语义一档强度。--danger-on 是危险按钮上的文字色 */
+  --danger: #c9453f;
+  --danger-on: #ffffff;
+  --danger-hover: #ab3833;
+  --danger-soft: #fbeceb;
+  --danger-border: #f0cfcd;
+  --success: #2f8168;
+  --success-soft: #e9f3f0;
+  --warning: #b0801f;
+  --warning-soft: #f8f1e2;
+  --info: #3d6fb0;
+  --info-soft: #ebf1f8;
+
+  /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
+  --sidebar-bg: #f1f1f5;
+  --sidebar-hover: #e6e7ee;
+
+  /* 品牌标渐变 */
+  --brand-g1: #6a63ff;
+  --brand-g2: #5b57d9;
+  --brand-g3: #3e3aa4;
+  --brand-knob: #ffffff;
+
+  /* 锁屏 */
+  --lock-wash-a: #f8f8fa;
+  --lock-wash-b: #e9ebf0;
+  --lock-orb-1: rgba(91, 87, 217, 0.07);
+  --lock-orb-2: rgba(91, 87, 217, 0.045);
+
+  /* 毛玻璃底栏 */
+  --frost-bg: rgba(255, 255, 255, 0.86);
+  --frost-border: #e2e2e8;
+
+  /* 深色面：气泡与 toast */
+  --tip-bg: #1a1b20;
+  --tip-fg: #f4f4f7;
+  --toast-bg: #1a1b20;
+  --toast-ok: #7fd3ae;
+  --toast-err: #f0938e;
+  --toast-info: #9d99f2;
+
+  /* 滚动条与选区 */
+  --scrollbar: rgba(26, 27, 32, 0.16);
+  --scrollbar-hover: rgba(26, 27, 32, 0.28);
+  --selection: rgba(91, 87, 217, 0.18);
+
+  /* 头像：按分类取色，六档同明度同彩度 */
+  --cat-1: #5f62b8;
+  --cat-2: #7b5fb0;
+  --cat-3: #a85b7d;
+  --cat-4: #a8804b;
+  --cat-5: #4b8a73;
+  --cat-6: #4b8a96;
+  --cat-text: #ffffff;
+
+  /* 文件类型：保留 pdf红/doc蓝/xls绿 的通用认知，只降饱和 */
+  --ft-pdf: #b8564f;
+  --ft-doc: #4a6d9c;
+  --ft-sheet: #3f7a5e;
+  --ft-deck: #a0603a;
+  --ft-arch: #6a5a99;
+  --ft-code: #8a7534;
+  --ft-mark: #5e6672;
+  --ft-img: #9a5a72;
+  --ft-unk: #7a7f88;
+
+  /* 代码块：与界面同一只手的色温 */
+  --code-fg: #1a1b20;
+  --code-kw: #a85b7d;
+  --code-str: #3f7a5e;
+  --code-num: #a0603a;
+  --code-type: #8a7534;
+  --code-fn: #4a6d9c;
+  --code-var: #5e6672;
+  --code-com: #b4b6c0;
+  --code-tag: #6a5a99;
+  --code-pun: #8b8d98;
+}
+
+/* ---------- classic：改版前的原样，留作回退档 ---------- */
+[data-theme="classic"] {
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-active: #4338ca;
+  --accent-on: #ffffff;
+  --accent-soft: #eef2ff;
+  --accent-light: #e0e7ff;
+  --accent-ring: rgba(99, 102, 241, 0.12);
+  --text-brand: #6366f1;
+
+  --bg: #fafbfc;
+  --panel-bg: #ffffff;
+  --chrome-bg: #ffffff;
+  --sunken: #f9fafb;
+  --fill: #f9fafb;
+  --hover: #f9fafb;
+  --active: #eef2ff;
+  --overlay: rgba(0, 0, 0, 0.4);
+
+  --text: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-faint: #b6bcc6;
+
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --border-subtle: #f0f1f3;
+
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --shadow-pop: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+  --danger: #ef4444;
+  --danger-on: #ffffff;
+  --danger-hover: #dc2626;
+  --danger-soft: #fef2f2;
+  --danger-border: #fecaca;
+  --success: #10b981;
+  --success-soft: #ecfdf5;
+  --warning: #f59e0b;
+  --warning-soft: #fffbeb;
+  --info: #3b82f6;
+  --info-soft: #eff6ff;
+
+  --sidebar-bg: #f8fafc;
+  --sidebar-hover: #f3f4f6;
+
+  --brand-g1: #6366f1;
+  --brand-g2: #4f46e5;
+  --brand-g3: #4338ca;
+  --brand-knob: #ffffff;
+
+  --lock-wash-a: #fafbfc;
+  --lock-wash-b: #f3f4f6;
+  --lock-orb-1: rgba(99, 102, 241, 0.08);
+  --lock-orb-2: rgba(139, 92, 246, 0.06);
+
+  --frost-bg: rgba(255, 255, 255, 0.9);
+  --frost-border: #e5e7eb;
+
+  --tip-bg: #111827;
+  --tip-fg: #fafbfc;
+  --toast-bg: #0f172a;
+  --toast-ok: #4ade80;
+  --toast-err: #f87171;
+  --toast-info: #60a5fa;
+
+  --scrollbar: rgba(0, 0, 0, 0.15);
+  --scrollbar-hover: rgba(0, 0, 0, 0.25);
+  --selection: rgba(99, 102, 241, 0.18);
+
+  /* 现状的六色是按 id 哈希的彩虹；策略已改成按分类，色值保留原样 */
+  --cat-1: #6366f1;
+  --cat-2: #8b5cf6;
+  --cat-3: #ec4899;
+  --cat-4: #f59e0b;
+  --cat-5: #10b981;
+  --cat-6: #06b6d4;
+  --cat-text: #ffffff;
+
+  --ft-pdf: #dc2626;
+  --ft-doc: #2563eb;
+  --ft-sheet: #16a34a;
+  --ft-deck: #ea580c;
+  --ft-arch: #7c3aed;
+  --ft-code: #ca8a04;
+  --ft-mark: #64748b;
+  --ft-img: #db2777;
+  --ft-unk: #94a3b8;
+
+  --code-fg: #111827;
+  --code-kw: #d20f39;
+  --code-str: #40a02b;
+  --code-num: #fe640b;
+  --code-type: #df8e1d;
+  --code-fn: #1e66f5;
+  --code-var: #e64553;
+  --code-com: #9ca0b0;
+  --code-tag: #8839ef;
+  --code-pun: #6c6f85;
+}
+
+/* ---------- white：满版纯白，层次靠描边和排版，不靠底色 ---------- */
+[data-theme="white"] {
+  --accent: #4b47c4;
+  --accent-hover: #3e3aab;
+  --accent-active: #33308d;
+  --accent-on: #ffffff;
+  --accent-soft: #f0f0fb;
+  --accent-light: #deddf6;
+  --accent-ring: rgba(75, 71, 196, 0.13);
+  --text-brand: #3f3bb8;
+
+  --bg: #ffffff;
+  --panel-bg: #ffffff;
+  --chrome-bg: #ffffff;
+  --sunken: #fafafa;
+  --fill: #f5f5f6;
+  --hover: #f4f4f5;
+  --active: #eeeefb;
+  --overlay: rgba(20, 20, 24, 0.35);
+
+  --text: #18181b;
+  --text-secondary: #6f6f76;
+  --text-muted: #9b9ba1;
+  --text-faint: #c4c4c9;
+
+  --border: #ebebeb;
+  --border-strong: #d9d9dc;
+  --border-subtle: #f3f3f4;
+
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow: 0 1px 3px rgba(24, 24, 27, 0.05);
+  --shadow-md: 0 1px 3px rgba(24, 24, 27, 0.07);
+  --shadow-lg: 0 4px 12px rgba(24, 24, 27, 0.08);
+  --shadow-pop: 0 16px 40px -10px rgba(24, 24, 27, 0.18), 0 2px 6px rgba(24, 24, 27, 0.06);
+
+  --danger: #c2413c;
+  --danger-on: #ffffff;
+  --danger-hover: #a43531;
+  --danger-soft: #fcf0ef;
+  --danger-border: #f2d5d3;
+  --success: #2b7d64;
+  --success-soft: #ebf3f0;
+  --warning: #a97a1c;
+  --warning-soft: #f9f2e4;
+  --info: #3a6ba8;
+  --info-soft: #eff4fa;
+
+  --sidebar-bg: #fbfbfc;
+  --sidebar-hover: #f1f1f3;
+
+  --brand-g1: #6a63ff;
+  --brand-g2: #4b47c4;
+  --brand-g3: #2f2c86;
+  --brand-knob: #ffffff;
+
+  --lock-wash-a: #ffffff;
+  --lock-wash-b: #fafafb;
+  --lock-orb-1: rgba(75, 71, 196, 0.045);
+  --lock-orb-2: rgba(75, 71, 196, 0.03);
+
+  --frost-bg: rgba(255, 255, 255, 0.9);
+  --frost-border: #ececee;
+
+  --tip-bg: #18181b;
+  --tip-fg: #ffffff;
+  --toast-bg: #18181b;
+  --toast-ok: #84d6b4;
+  --toast-err: #f09994;
+  --toast-info: #a3a0f5;
+
+  --scrollbar: rgba(24, 24, 27, 0.14);
+  --scrollbar-hover: rgba(24, 24, 27, 0.24);
+  --selection: rgba(75, 71, 196, 0.16);
+
+  --cat-1: #585bb0;
+  --cat-2: #7358a8;
+  --cat-3: #a05575;
+  --cat-4: #a07a48;
+  --cat-5: #448269;
+  --cat-6: #448290;
+  --cat-text: #ffffff;
+
+  --ft-pdf: #b05049;
+  --ft-doc: #43658f;
+  --ft-sheet: #397055;
+  --ft-deck: #965936;
+  --ft-arch: #625390;
+  --ft-code: #82703a;
+  --ft-mark: #5e6672;
+  --ft-img: #92536c;
+  --ft-unk: #83878f;
+
+  --code-fg: #18181b;
+  --code-kw: #a05575;
+  --code-str: #397055;
+  --code-num: #965936;
+  --code-type: #82703a;
+  --code-fn: #43658f;
+  --code-var: #5e6672;
+  --code-com: #c4c4c9;
+  --code-tag: #625390;
+  --code-pun: #6f6f76;
+}
+
+/* ---------- dark：近黑底，分层靠 1px 高光描边不靠投影 ---------- */
+[data-theme="dark"] {
+  --accent: #7b77f0;
+  --accent-hover: #8d89f5;
+  --accent-active: #6a66d8;
+  --accent-on: #0c0c12;
+  --accent-soft: #22213a;
+  --accent-light: #312f55;
+  --accent-ring: rgba(123, 119, 240, 0.3);
+  --text-brand: #a5a1ff;
+
+  --bg: #0c0c0f;
+  --panel-bg: #151519;
+  --chrome-bg: #101014;
+  --sunken: #0a0a0d;
+  --fill: #1e1e24;
+  --hover: #1c1c22;
+  --active: #23223a;
+  --overlay: rgba(0, 0, 0, 0.62);
+
+  --text: #eeeef3;
+  --text-secondary: #a0a0ad;
+  --text-muted: #75757f;
+  --text-faint: #4f4f58;
+
+  --border: #26262e;
+  --border-strong: #373742;
+  --border-subtle: #1d1d24;
+
+  /* 深色下投影看不见，分层改用顶部 1px 高光 */
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --shadow-md: 0 10px 26px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow-lg: 0 16px 34px -10px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow-pop: 0 26px 60px -14px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+
+  --danger: #e8635d;
+  --danger-on: #0c0c12;
+  --danger-hover: #f27a75;
+  --danger-soft: #2d1a1c;
+  --danger-border: #4d2528;
+  --success: #3fbf94;
+  --success-soft: #142722;
+  --warning: #dda03c;
+  --warning-soft: #2a2216;
+  --info: #6fa3e0;
+  --info-soft: #16202e;
+
+  --sidebar-bg: #101014;
+  --sidebar-hover: #1a1a20;
+
+  --brand-g1: #8f8aff;
+  --brand-g2: #6f6ae4;
+  --brand-g3: #4a45b8;
+  --brand-knob: #0c0c12;
+
+  --lock-wash-a: #0c0c0f;
+  --lock-wash-b: #131318;
+  --lock-orb-1: rgba(123, 119, 240, 0.14);
+  --lock-orb-2: rgba(123, 119, 240, 0.08);
+
+  --frost-bg: rgba(21, 21, 25, 0.82);
+  --frost-border: #2a2a33;
+
+  /* 深色界面的浮层反过来：亮底暗字 */
+  --tip-bg: #f0f0f5;
+  --tip-fg: #101014;
+  --toast-bg: #f0f0f5;
+  --toast-ok: #1f7a58;
+  --toast-err: #b23c37;
+  --toast-info: #4b47b8;
+
+  --scrollbar: rgba(255, 255, 255, 0.14);
+  --scrollbar-hover: rgba(255, 255, 255, 0.24);
+  --selection: rgba(123, 119, 240, 0.32);
+
+  /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
+  --cat-1: #7a7ec9;
+  --cat-2: #9a7ec7;
+  --cat-3: #c97e9c;
+  --cat-4: #c9a06e;
+  --cat-5: #6eb898;
+  --cat-6: #6eb8c4;
+  --cat-text: #0c0c12;
+
+  --ft-pdf: #d97d77;
+  --ft-doc: #7ea6e0;
+  --ft-sheet: #6eb898;
+  --ft-deck: #d99a6e;
+  --ft-arch: #a08ed0;
+  --ft-code: #cbb878;
+  --ft-mark: #9a9daa;
+  --ft-img: #d08cb0;
+  --ft-unk: #6f7280;
+
+  --code-fg: #e8e8ee;
+  --code-kw: #e0809c;
+  --code-str: #78c9a4;
+  --code-num: #e0a870;
+  --code-type: #d0bc78;
+  --code-fn: #7ea6e0;
+  --code-var: #d08c90;
+  --code-com: #6f7280;
+  --code-tag: #b28ae0;
+  --code-pun: #a0a3b2;
+}
+
+/* ---------- 别名槽位：不填 hex，只指向别的槽，所以四套主题不必各写一遍。
+     放在主题块之后、同一条 :root 上，切换主题时自动跟着源头走。 ---------- */
+:root {
+  --sidebar-border: var(--border);
+  --sidebar-active: var(--accent-soft);
+  --sidebar-text: var(--text-secondary);
+  --sidebar-text-active: var(--accent);
+  --ft-bg: var(--fill);
+  --code-bg: var(--sunken);
+  --code-bd: var(--border);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
+::selection { background: var(--selection); }
+
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -100,7 +529,7 @@ body {
 #app { height: 100%; }
 
 .app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.app-root.locked-bg { background: linear-gradient(135deg, #fafbfc 0%, #f3f4f6 100%); }
+.app-root.locked-bg { background: linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%); }
 .app-layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 .main-area { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); height: 100%; }
 .main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); min-height: 0; }
@@ -110,7 +539,7 @@ body {
   padding: 0 var(--space-4);
   height: 36px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
   border: none;
   border-radius: var(--radius);
   font-size: 13px;
@@ -165,7 +594,7 @@ body {
 .btn-danger {
   padding: var(--space-2) var(--space-4);
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-on);
   border: none;
   border-radius: var(--radius);
   font-size: 13px;
@@ -186,7 +615,7 @@ body {
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   display: flex;
@@ -270,7 +699,7 @@ body {
   font-size: 11px;
   font-weight: 500;
   color: var(--text-muted);
-  background: var(--hover);
+  background: var(--fill);
   padding: 2px var(--space-2);
   border-radius: 4px;
   flex-shrink: 0;
@@ -286,14 +715,15 @@ body {
   font-weight: 600;
   font-size: 13px;
   flex-shrink: 0;
+  color: var(--cat-text);
 }
 
-.card-avatar.c0 { background: #6366f1; color: #ffffff; }
-.card-avatar.c1 { background: #8b5cf6; color: #ffffff; }
-.card-avatar.c2 { background: #ec4899; color: #ffffff; }
-.card-avatar.c3 { background: #f59e0b; color: #ffffff; }
-.card-avatar.c4 { background: #10b981; color: #ffffff; }
-.card-avatar.c5 { background: #06b6d4; color: #ffffff; }
+.card-avatar.c0 { background: var(--cat-1); }
+.card-avatar.c1 { background: var(--cat-2); }
+.card-avatar.c2 { background: var(--cat-3); }
+.card-avatar.c3 { background: var(--cat-4); }
+.card-avatar.c4 { background: var(--cat-5); }
+.card-avatar.c5 { background: var(--cat-6); }
 
 /* 搜索框 */
 .search-box {
@@ -348,6 +778,33 @@ body {
 }
 .search-clear:hover { background: var(--hover); color: var(--text-secondary); }
 
+/* 表单件：全站共用一套。原先这几条在 EntryFormDialog 和 FileShortcutsModule 里
+   各抄了一份，ChangePasswordDialog 想要却没有，于是它三个输入框是浏览器默认样式。 */
+.form-group { margin-bottom: var(--space-3); }
+.form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  outline: none;
+  transition: all var(--transition);
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--text);
+}
+.form-group input::placeholder,
+.form-group textarea::placeholder { color: var(--text-faint); }
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg); }
+.form-group textarea { resize: vertical; min-height: 56px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: var(--space-3); }
+.form-row .form-group { margin-bottom: 0; }
+
 /* 标签页 */
 .tab {
   padding: var(--space-1) var(--space-3);
@@ -387,8 +844,8 @@ body {
 /* 滚动条 */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 3px; transition: background var(--transition); }
-::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; transition: background var(--transition); }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 
 /* 弹性布局里的撑开项 */
 .spacer { flex: 1; }
@@ -398,7 +855,7 @@ body {
   font-size: 10.5px;
   font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
   color: var(--text-muted);
-  background: var(--hover);
+  background: var(--sunken);
   border: 1px solid var(--border);
   border-bottom-width: 2px;
   border-radius: 4px;
@@ -450,9 +907,9 @@ body {
 .eb.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .eb.on.warn { border-color: var(--warning); color: var(--warning); background: var(--warning-soft); }
 .eb.danger { color: var(--danger); }
-.eb.danger:hover { background: var(--danger-soft); border-color: #fecaca; }
-.eb.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
-.eb.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+.eb.danger:hover { background: var(--danger-soft); border-color: var(--danger-border); }
+.eb.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); font-weight: 500; }
+.eb.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-on); }
 .eb:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* 新建态底栏：无边框轻量按钮（原型 .mini-btn） */
@@ -510,12 +967,13 @@ body {
 /* 全局悬停提示：所有 title 属性自动换成深色气泡，共用挂在 body 上的这一个节点 */
 .app-tip {
   position: fixed;
-  z-index: 400;
+  /* 弹窗遮罩是 1000：气泡必须压在它上面，否则设置弹窗里的 hover 提示会被弹窗吃掉 */
+  z-index: 1500;
   max-width: 268px;
   padding: 5px 9px;
   border-radius: var(--radius-sm);
-  background: var(--text);
-  color: var(--bg);
+  background: var(--tip-bg);
+  color: var(--tip-fg);
   font-size: 11.5px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -557,6 +1015,17 @@ body {
 .pop-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .tab-count { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-left: 4px; }
 .tab.active .tab-count { color: var(--accent); }
+
+/* 语法高亮：编辑器与只读渲染共用，色值全部来自当前主题的 --code-* */
+.hljs-keyword, .hljs-selector-tag, .hljs-deletion { color: var(--code-kw); }
+.hljs-string, .hljs-meta .hljs-meta-string, .hljs-regexp { color: var(--code-str); }
+.hljs-number, .hljs-literal { color: var(--code-num); }
+.hljs-built_in, .hljs-builtin-name, .hljs-type { color: var(--code-type); }
+.hljs-function, .hljs-title, .hljs-section { color: var(--code-fn); }
+.hljs-attr, .hljs-attribute, .hljs-variable { color: var(--code-var); }
+.hljs-comment, .hljs-quote { color: var(--code-com); font-style: italic; }
+.hljs-tag, .hljs-name, .hljs-selector-class, .hljs-selector-id { color: var(--code-tag); }
+.hljs-punctuation, .hljs-symbol { color: var(--code-pun); }
 
 /* 焦点可见性：只给离散控件；书写区（ProseMirror）靠容器边框表达，不叠加 ring */
 .btn-primary:focus-visible,

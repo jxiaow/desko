@@ -77,8 +77,8 @@ const broken = reactive(new Set<string>())
   height: 16px;
   border: none;
   border-radius: 4px;
-  background: rgba(17, 24, 39, 0.6);
-  color: #fff;
+  background: var(--tip-bg);
+  color: var(--tip-fg);
   display: flex;
   align-items: center;
   justify-content: center;

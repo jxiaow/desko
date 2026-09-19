@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { authApi as api } from '../../services/api/auth'
 import { useToastStore } from '../../stores/toast'
+import { useEscapeClose } from '../../composables/useEscapeClose'
 
 const toastStore = useToastStore()
 
@@ -43,11 +44,13 @@ const close = () => {
   show.value = false
   emit('close')
 }
+
+useEscapeClose(close)
 </script>
 
 <template>
   <Transition name="dialog">
-    <div v-if="show" class="dialog-overlay" @click.self="close">
+    <div v-if="show" class="dialog-overlay">
     <div class="dialog">
       <div class="dialog-header">
         <h3>修改主密码</h3>

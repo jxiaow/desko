@@ -5,6 +5,7 @@ import { fileShortcutsApi as api } from '../../services/api/fileShortcuts'
 import type { FileShortcut } from '../../types'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
+import { useEscapeClose } from '../../composables/useEscapeClose'
 
 defineProps<{
   searchKeyword: string
@@ -113,6 +114,8 @@ const cancelAdd = () => {
   closeDialog()
 }
 
+useEscapeClose(cancelAdd, () => showAddDialog.value)
+
 const openShortcut = async (shortcut: FileShortcut) => {
   try {
     await api.openFile(shortcut.path)
@@ -181,17 +184,21 @@ const getFileExt = (path: string) => {
   return parts.length > 1 ? parts.pop()!.toLowerCase() : ''
 }
 
-const getExtColor = (ext: string) => {
-  const colors: Record<string, string> = {
-    pdf: '#dc2626', doc: '#2563eb', docx: '#2563eb',
-    xls: '#16a34a', xlsx: '#16a34a', ppt: '#ea580c', pptx: '#ea580c',
-    zip: '#7c3aed', rar: '#7c3aed', '7z': '#7c3aed',
-    js: '#ca8a04', ts: '#2563eb', py: '#16a34a', rs: '#ea580c',
-    md: '#64748b', txt: '#64748b', json: '#ca8a04',
-    png: '#db2777', jpg: '#db2777', jpeg: '#db2777', svg: '#db2777', gif: '#db2777',
-  }
-  return colors[ext] || '#94a3b8'
+/* 扩展名 → 文件类型槽位。这里只定"哪类文件归哪个槽"，
+   具体什么颜色由当前主题给（global.css 的 --ft-*），切主题才会跟着换。 */
+const EXT_SLOT: Record<string, string> = {
+  pdf: 'pdf',
+  doc: 'doc', docx: 'doc', rtf: 'doc', pages: 'doc',
+  xls: 'sheet', xlsx: 'sheet', csv: 'sheet', numbers: 'sheet',
+  ppt: 'deck', pptx: 'deck', key: 'deck',
+  zip: 'arch', rar: 'arch', '7z': 'arch', tar: 'arch', gz: 'arch',
+  js: 'code', jsx: 'code', ts: 'code', tsx: 'code', py: 'code', rs: 'code',
+  go: 'code', java: 'code', c: 'code', h: 'code', cpp: 'code', sh: 'code', json: 'code',
+  md: 'mark', markdown: 'mark', txt: 'mark',
+  png: 'img', jpg: 'img', jpeg: 'img', gif: 'img', svg: 'img', webp: 'img', ico: 'img',
 }
+
+const extVar = (ext: string) => `var(--ft-${EXT_SLOT[ext] || 'unk'})`
 
 onMounted(() => {
   document.addEventListener('click', closeContextMenu)
@@ -237,7 +244,7 @@ onBeforeUnmount(() => {
            @contextmenu="onContextMenu($event, shortcut)">
         <div class="shortcut-icon" :class="shortcut.shortcut_type">
           <svg v-if="shortcut.shortcut_type === 'folder'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-          <span v-else class="file-ext" :style="{ color: getExtColor(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
+          <span v-else class="file-ext" :style="{ color: extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
         </div>
         <div class="shortcut-info">
           <div class="shortcut-name">{{ shortcut.name }}</div>
@@ -257,7 +264,7 @@ onBeforeUnmount(() => {
 
     <!-- Add/Edit Dialog -->
     <Transition name="dialog">
-      <div v-if="showAddDialog" class="dialog-overlay" @click.self="cancelAdd">
+      <div v-if="showAddDialog" class="dialog-overlay">
         <div class="dialog">
           <div class="dialog-header">
             <div class="dialog-header-left">
@@ -358,8 +365,8 @@ onBeforeUnmount(() => {
   width: 40px; height: 40px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.shortcut-icon.folder { background: #fff7ed; color: #ea580c; }
-.shortcut-icon.file { background: var(--hover); }
+.shortcut-icon.folder { background: var(--warning-soft); color: var(--warning); }
+.shortcut-icon.file { background: var(--fill); }
 
 .file-ext {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
@@ -381,7 +388,7 @@ onBeforeUnmount(() => {
 .form-group { margin-bottom: 12px; }
 .form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
 .form-group input { width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; outline: none; transition: all 0.15s; font-family: inherit; background: var(--bg); }
-.form-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: #fff; }
+.form-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg); }
 
 .path-input-row { display: flex; gap: 6px; align-items: stretch; }
 .path-input-row input { flex: 1; font-size: 13px; }

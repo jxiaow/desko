@@ -677,7 +677,7 @@ onBeforeUnmount(() => {
 .dock-btn:hover { background: var(--hover); border-color: var(--border); color: var(--text); }
 .dock-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .dock-btn.danger { color: var(--danger); }
-.dock-btn.danger:hover { background: var(--danger-soft); border-color: #fecaca; }
+.dock-btn.danger:hover { background: var(--danger-soft); border-color: var(--danger-border); }
 
 .pop-sec.tight { padding-top: 0; }
 .tab.danger { color: var(--danger); }

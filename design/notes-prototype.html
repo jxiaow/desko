@@ -8,23 +8,27 @@
 /* ============================================================
    令牌 —— 逐字转录自 src/styles/global.css:1-68
    ============================================================ */
+/* 这里的色值与 src/styles/global.css 的 cool 主题块保持一致（应用的新默认档）。
+   原型是独立文件，不 import 全局样式，所以改主题时记得回来同步一次。 */
 :root {
-  --accent: #6366f1; --accent-hover: #4f46e5; --accent-active: #4338ca;
-  --accent-soft: #eef2ff; --accent-light: #e0e7ff; --accent-ring: rgba(99, 102, 241, 0.12);
-  --bg: #fafbfc; --panel-bg: #ffffff; --chrome-bg: #ffffff;
-  --border: #e5e7eb; --border-strong: #d1d5db; --hover: #f9fafb;
-  --text: #111827; --text-secondary: #6b7280; --text-muted: #9ca3af; --text-faint: #b6bcc6;
-  --shadow-xs: 0 1px 2px 0 rgba(0,0,0,.05);
-  --shadow-sm: 0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px -1px rgba(0,0,0,.1);
-  --shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
-  --shadow-md: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
-  --shadow-lg: 0 20px 25px -5px rgba(0,0,0,.1), 0 8px 10px -6px rgba(0,0,0,.1);
-  --shadow-pop: 0 25px 50px -12px rgba(0,0,0,.25);
-  --danger: #ef4444; --danger-hover: #dc2626; --danger-soft: #fef2f2;
-  --success: #10b981; --success-soft: #ecfdf5;
-  --warning: #f59e0b; --warning-soft: #fffbeb;
-  --sidebar-bg: #f8fafc; --sidebar-w: 220px; --sidebar-rail-w: 64px;
-  --sidebar-border: var(--border); --sidebar-hover: #f3f4f6;
+  --accent: #5b57d9; --accent-hover: #4c48c6; --accent-active: #3e3aa4;
+  --accent-soft: #eeedfb; --accent-light: #dcd9f6; --accent-ring: rgba(91, 87, 217, 0.15);
+  --bg: #f8f8fa; --panel-bg: #ffffff; --chrome-bg: #f1f1f5;
+  --sunken: #e9ebf1; --fill: #e4e6ee; --active: #ececfb;
+  --border: #e3e3ea; --border-strong: #c9c9d3; --border-subtle: #eeeff3; --hover: #eef0f4;
+  --text: #1a1b20; --text-secondary: #5c5e68; --text-muted: #8b8d98; --text-faint: #b4b6c0;
+  --shadow-xs: 0 1px 2px 0 rgba(26, 27, 32, 0.07);
+  --shadow-sm: 0 1px 2px 0 rgba(26, 27, 32, 0.05);
+  --shadow: 0 2px 6px -1px rgba(26, 27, 32, 0.08);
+  --shadow-md: 0 6px 16px -6px rgba(26, 27, 32, 0.14), 0 1px 3px rgba(26, 27, 32, 0.06);
+  --shadow-lg: 0 12px 28px -8px rgba(26, 27, 32, 0.18);
+  --shadow-pop: 0 20px 44px -12px rgba(26, 27, 32, 0.24), 0 2px 8px rgba(26, 27, 32, 0.08);
+  --danger: #c9453f; --danger-hover: #ab3833; --danger-soft: #fbeceb; --danger-border: #f0cfcd;
+  --success: #2f8168; --success-soft: #e9f3f0;
+  --warning: #b0801f; --warning-soft: #f8f1e2;
+  --info: #3d6fb0; --info-soft: #ebf1f8;
+  --sidebar-bg: #f1f1f5; --sidebar-w: 220px; --sidebar-rail-w: 64px;
+  --sidebar-border: var(--border); --sidebar-hover: #e6e7ee;
   --sidebar-active: var(--accent-soft); --sidebar-text: var(--text-secondary); --sidebar-text-active: var(--accent);
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px;
   --radius-sm: 6px; --radius: 8px; --radius-md: 10px; --radius-lg: 12px; --radius-xl: 16px;

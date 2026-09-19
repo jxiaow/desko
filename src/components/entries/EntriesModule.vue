@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import type { Entry, Tab } from '../../types'
+import { avatarClass } from '../../utils/avatar'
 
 defineProps<{
   searchKeyword: string
@@ -99,13 +100,6 @@ const registerPathContainer = (entryId: string, el: HTMLElement | null) => {
     pathContainers.value.delete(entryId)
     pathVisibleCount.value.delete(entryId)
   }
-}
-const getAvatarClass = (id: string) => {
-  let hash = 0
-  for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return `c${Math.abs(hash) % 6}`
 }
 
 onMounted(() => {
@@ -210,7 +204,7 @@ onUnmounted(() => {
         </div>
         <div class="card-header">
           <div class="card-header-main">
-            <div class="card-avatar" :class="getAvatarClass(item.id)">
+            <div class="card-avatar" :class="avatarClass(item.category)">
               {{ item.name.charAt(0) }}
             </div>
             <div class="card-title-area">
@@ -325,7 +319,7 @@ onUnmounted(() => {
 .entry-card:hover .card-header-actions { opacity: 1; pointer-events: auto; }
 html.hover-suppressed .entry-card:hover .card-header-actions { opacity: 0; pointer-events: none; }
 
-.card-avatar { width: 32px; height: 32px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
+.card-avatar { width: 32px; height: 32px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--cat-text); flex-shrink: 0; }
 
 .card-icon-btn { width: 24px; height: 24px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; transition: all var(--transition); color: var(--text-muted); }
 .card-icon-btn:hover { background: var(--hover); color: var(--text-secondary); }
@@ -349,12 +343,12 @@ html.hover-suppressed .entry-card:hover .card-header-actions { opacity: 0; point
 
 .card-paths { display: flex; align-items: center; gap: var(--space-1); margin-top: auto; padding-top: var(--space-2); border-top: 1px solid var(--border); overflow: hidden; }
 .card-path-link { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); font-size: 12px; color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm); cursor: pointer; text-decoration: none; transition: all var(--transition); }
-.card-path-link:hover { background: var(--accent); color: #fff; }
+.card-path-link:hover { background: var(--accent); color: var(--accent-on); }
 .card-path-label { font-weight: 500; }
 .card-path-path { font-family: monospace; opacity: 0.8; }
 .card-paths-more { position: relative; display: inline-flex; }
 .card-paths-count { display: inline-flex; align-items: center; justify-content: center; padding: var(--space-1) var(--space-2); font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm); cursor: pointer; min-width: 20px; transition: all var(--transition); }
-.card-paths-count:hover { background: var(--accent); color: #fff; }
+.card-paths-count:hover { background: var(--accent); color: var(--accent-on); }
 .card-paths-popover { display: none; position: absolute; bottom: calc(100% + var(--space-1)); left: 0; z-index: 20; min-width: 160px; max-width: 280px; padding: var(--space-1); background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-md); flex-direction: column; gap: var(--space-1); }
 .card-paths-more:hover .card-paths-popover { display: flex; }
 .card-paths-popover-item { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); font-size: 12px; color: var(--accent); background: transparent; border-radius: var(--radius-sm); cursor: pointer; text-decoration: none; transition: all var(--transition); white-space: nowrap; overflow: hidden; }
@@ -362,7 +356,7 @@ html.hover-suppressed .entry-card:hover .card-header-actions { opacity: 0; point
 
 .card-checkbox { position: absolute; top: var(--space-2); left: var(--space-2); z-index: 10; }
 .checkbox { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 2px solid var(--border); border-radius: 4px; background: var(--panel-bg); font-size: 9px; font-weight: 600; color: var(--accent); cursor: pointer; transition: all var(--transition); }
-.checkbox.checked { background: var(--accent); border-color: var(--accent); color: #fff; }
+.checkbox.checked { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
 
 .empty-state { text-align: center; padding: var(--space-12) var(--space-5); color: var(--text-muted); }
 .empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: var(--radius-lg); background: var(--panel-bg); border: 1px solid var(--border); color: var(--text-muted); opacity: 0.4; margin-bottom: var(--space-4); }

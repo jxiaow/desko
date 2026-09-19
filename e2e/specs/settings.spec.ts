@@ -1,16 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, waitForToastGone, E2E_PASSWORD } from '../helpers'
+import { bootUnlocked, e2e, expectToast, openSettings, settingsTab, E2E_PASSWORD } from '../helpers'
 import { AuthPage } from '../pages/auth-page'
 
 const SEED = {
   settings: { auto_lock_timeout: '10', lock_on_close: 'false' },
-}
-
-async function openSettings(page: import('@playwright/test').Page) {
-  await page.locator('button[title="设置"]').click()
-  const dialog = page.locator('.settings-dialog')
-  await expect(dialog).toBeVisible()
-  return dialog
 }
 
 test.describe('Settings 设置', () => {
@@ -19,16 +12,51 @@ test.describe('Settings 设置', () => {
     const dialog = await openSettings(page)
     await expect(dialog.locator('h2')).toHaveText('设置')
     // getDbPath 的 mock 值渲染在「数据库路径」描述里
+    await settingsTab(dialog, 'data')
     await expect(dialog.locator('.setting-item', { hasText: '数据库路径' }).locator('.setting-desc')).toContainText('desko.db')
+    await settingsTab(dialog, 'security')
     await expect(dialog.locator('.number-input')).toHaveValue('10')
+    await settingsTab(dialog, 'about')
     await expect(dialog.locator('.settings-about .about-name')).toHaveText('案头 Desko')
     expect(await e2e.count(page, 'get_db_path')).toBe(1)
     expect(await e2e.count(page, 'get_setting')).toBeGreaterThanOrEqual(2)
   })
 
-  test('修改自动锁定时间', async ({ page }) => {
+  test('点遮罩不关窗，Esc 只关最上面那层', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const dialog = await openSettings(page, 'security')
+    // 打在遮罩左上角，落在弹窗之外
+    await page.locator('.dialog-overlay').click({ position: { x: 4, y: 4 } })
+    await expect(dialog).toBeVisible()
+
+    await dialog.locator('.setting-item.clickable').click()
+    const pwdDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '修改主密码' }) })
+    await expect(pwdDialog).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(pwdDialog).toBeHidden()
+    await expect(dialog).toBeVisible() // 设置弹窗不该被同一次按键带走
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+  })
+
+  test('弹窗内的 hover 提示压在遮罩之上', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page)
+    await dialog.locator('.close-btn').hover()
+    await expect(page.locator('.app-tip')).toHaveText('关闭')
+    // 气泡是挂在 body 上的单例，层级一旦低于弹窗遮罩，在弹窗里就永远看不见
+    const [tipZ, overlayZ] = await page.evaluate(() => {
+      const z = (sel: string) => Number(getComputedStyle(document.querySelector(sel)!).zIndex)
+      return [z('.app-tip'), z('.dialog-overlay')]
+    })
+    expect(tipZ).toBeGreaterThan(overlayZ)
+  })
+
+  test('修改自动锁定时间', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const dialog = await openSettings(page, 'security')
     await dialog.locator('.number-input').fill('15')
     await dialog.locator('h2').click() // 触发 change
     await expectToast(page, '设置已保存')
@@ -37,7 +65,7 @@ test.describe('Settings 设置', () => {
 
   test('切换关闭窗口时锁定', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    const dialog = await openSettings(page)
+    const dialog = await openSettings(page, 'security')
     await dialog.locator('label.switch').click()
     await expectToast(page, '设置已保存')
     expect((await e2e.snapshot(page)).settings.lock_on_close).toBe('true')
@@ -45,7 +73,7 @@ test.describe('Settings 设置', () => {
 
   test('导出 SQL', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    const dialog = await openSettings(page)
+    const dialog = await openSettings(page, 'data')
     await dialog.locator('button.action-btn', { hasText: '导出' }).click()
     await expect.poll(() => e2e.count(page, 'export_sql')).toBe(1)
     await expectToast(page, '导出成功')
@@ -53,8 +81,7 @@ test.describe('Settings 设置', () => {
 
   test('导入 SQL：确认后覆盖数据并刷新条目', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    const dialog = await openSettings(page)
-
+    const dialog = await openSettings(page, 'data')
     const chooserPromise = page.waitForEvent('filechooser')
     await dialog.locator('button.action-btn', { hasText: '导入' }).click()
     const chooser = await chooserPromise
@@ -75,7 +102,7 @@ test.describe('Settings 设置', () => {
 
   test('修改主密码：校验与成功路径，新口令生效', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    const dialog = await openSettings(page)
+    const dialog = await openSettings(page, 'security')
     await dialog.locator('.setting-item.clickable').click()
 
     const pwdDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '修改主密码' }) })
