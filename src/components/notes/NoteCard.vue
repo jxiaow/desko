@@ -92,9 +92,42 @@ const openEditor = () => {
   emit('open')
 }
 
+/**
+ * 只读卡片上的勾选框是真控件，点下去必须落库。
+ * 改的是模型 HTML（不是页面上那个 input）：浏览器的默认勾选先 preventDefault 掉，
+ * 状态一律由 content_html 重新渲染出来，否则存不上却已经亮给用户看了。
+ */
+const toggleTask = (e: MouseEvent, box: HTMLInputElement) => {
+  cancelClick()
+  // 只拦默认勾选，不拦冒泡：拦了冒泡会让第二次 click 不再派发，双击就再也进不了编辑态
+  e.preventDefault()
+  const rendered = Array.from(
+    bodyEl.value?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]') ?? [],
+  )
+  const index = rendered.indexOf(box)
+  if (index < 0) return
+
+  const doc = new DOMParser().parseFromString(props.note.content_html, 'text/html')
+  const items = doc.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+  const target = items[index]
+  if (!target) return
+
+  const checked = !target.hasAttribute('checked')
+  if (checked) target.setAttribute('checked', 'checked')
+  else target.removeAttribute('checked')
+  // Tiptap 的 TaskItem 认 li 上的 data-checked，少记一个进编辑态就弹回
+  target.closest('li')?.setAttribute('data-checked', String(checked))
+  emit('update', doc.body.innerHTML)
+}
+
 const onBodyClick = (e: MouseEvent) => {
   if (props.isBatchMode) {
     emit('select')
+    return
+  }
+  const box = (e.target as HTMLElement).closest<HTMLInputElement>('input[type="checkbox"]')
+  if (box) {
+    toggleTask(e, box)
     return
   }
   const tag = (e.target as HTMLElement).closest<HTMLElement>('.tag-inline')?.dataset.tag
@@ -162,7 +195,6 @@ const insertTag = () => editorRef.value?.insertText(' #')
       </span>
       <span class="spacer"></span>
       <span class="memo-state">
-        <span v-if="props.note.pinned"  class="state-pin" title="已置顶"><AppIcon name="pin" :size="12" /></span>
         <span v-if="props.note.starred"  class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
       </span>
       <span class="memo-acts">
@@ -241,7 +273,7 @@ const insertTag = () => editorRef.value?.insertText(' #')
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   box-shadow: var(--shadow-xs);
   transition: box-shadow var(--transition), border-color var(--transition), transform var(--transition);
 }
@@ -257,13 +289,14 @@ const insertTag = () => editorRef.value?.insertText(' #')
   max-height: var(--memo-max-h);
   overflow: hidden;
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.6;
   color: var(--text);
   word-break: break-word;
   cursor: pointer;
 }
 .memo-body.expanded { max-height: none; }
-.memo-body :deep(* + *) { margin-top: var(--space-2); }
+/* 只给正文顶层块加间距，理由同 NoteEditor：* + * 会把任务项的正文压到勾选框下面 */
+.memo-body :deep(> * + *) { margin-top: var(--space-2); }
 .memo-body :deep(* + h1), .memo-body :deep(* + h2), .memo-body :deep(* + h3) { margin-top: var(--space-4); }
 .memo-body :deep(h1) { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
 .memo-body :deep(h2) { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.5; }
@@ -278,7 +311,8 @@ const insertTag = () => editorRef.value?.insertText(' #')
 .memo-body :deep(pre code) { background: none; border: none; padding: 0; color: inherit; }
 .memo-body :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 3px; }
 .memo-body :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
-.memo-body :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 5px; }
+.memo-body :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
+.memo-body :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 5px; cursor: pointer; }
 .memo-body :deep(hr) { border: none; border-top: 1px solid var(--border); }
 
 /* 被裁掉时才铺这层渐隐，提示下面还有内容：单击正文就地展开。
@@ -299,13 +333,14 @@ const insertTag = () => editorRef.value?.insertText(' #')
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-2);
-  min-height: 22px;
+  margin-top: 3px;
+  min-height: 20px;
 }
 .memo-time { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-muted); }
-.memo-state { display: inline-flex; align-items: center; gap: var(--space-1); }
-.state-pin { color: var(--accent); display: inline-flex; }
+/* 状态标只在不悬停时出现：悬停后动作排上的同一个图标已带状态，两个并排就是重复 */
+.memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
+.memo:hover .memo-state, .memo:focus-within .memo-state { opacity: 0; }
 .state-star { color: var(--warning); display: inline-flex; }
 .memo-acts { display: flex; gap: 1px; opacity: 0; transition: opacity var(--transition); }
 .memo:hover .memo-acts, .memo:focus-within .memo-acts { opacity: 1; }

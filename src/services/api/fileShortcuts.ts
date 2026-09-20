@@ -12,4 +12,6 @@ export const fileShortcutsApi = {
     invoke('delete_file_shortcut', { id }),
   openFile: (path: string): Promise<void> =>
     invoke('open_file', { path }),
+  openTerminal: (path: string): Promise<void> =>
+    invoke('open_terminal', { path }),
 }

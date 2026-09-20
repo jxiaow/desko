@@ -76,6 +76,16 @@ export function highlightTagsInHtml(html: string): string {
     `${pre}<span class="tag-inline" data-tag="${tag}">${full}</span>`)
 }
 
+/** 卡片上只显示 host + 路径：协议和结尾斜杠是噪音，解析失败就原样显示 */
+export function formatUrlDisplay(url: string): string {
+  try {
+    const u = new URL(url)
+    return u.host + u.pathname.replace(/\/+$/, '') + u.search
+  } catch {
+    return url.replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '')
+  }
+}
+
 export function getDateGroupLabel(timestamp: number): string {
   const now = new Date()
   const date = new Date(timestamp)

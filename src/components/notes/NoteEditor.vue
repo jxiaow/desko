@@ -183,7 +183,9 @@ const isBlankContent = (html: string | undefined): boolean => {
 
 const editor = useEditor({
   content: props.initialContent || '',
-  autofocus: isBlankContent(props.initialContent) ? 'start' : 'end',
+  // 胶囊输入不抢焦点：它默认收成一行，抢了焦点就等于永远是展开的，折叠态白做。
+  // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
+  autofocus: props.variant === 'composer' ? false : (isBlankContent(props.initialContent) ? 'start' : 'end'),
   extensions: [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
@@ -201,6 +203,26 @@ const editor = useEditor({
     checkSlashMenu(editor)
   },
 })
+
+/**
+ * 勾完任务项把光标放回这一条。
+ * Tiptap 的节点视图在 checkbox 上 preventDefault 掉了 mousedown，又只 focus(undefined)
+ * 还原上一次的选区，所以勾完打字会掉到列表后面的段落里去。
+ */
+const relocateCaret = (e: Event) => {
+  const ed = editor.value
+  const box = e.target as HTMLInputElement | null
+  if (!ed || !box || box.type !== 'checkbox') return
+  const line = box.closest('li')?.querySelector('p')
+  if (!line) return
+  // posAtDOM 的 offset 在元素上数的是子节点序号、在文本节点上才是字符偏移，所以要喂文本节点
+  const text = line.firstChild
+  const pos = text
+    ? ed.view.posAtDOM(text, text.textContent?.length ?? 0)
+    : ed.view.posAtDOM(line, 0)
+  if (pos < 0) return
+  ed.chain().focus().setTextSelection(pos).run()
+}
 
 watch(() => props.initialContent, (val) => {
   if (editor.value && val !== editor.value.getHTML()) {
@@ -287,9 +309,10 @@ const executeCommand = (cmd: typeof slashCommands[0]) => {
   // Delete / plus the query text
   editor.value.chain().focus().deleteRange({ from: beforeSlash, to: from }).run()
 
-  // If there was other content on the line, insert a newline first
+  // 行上还有别的内容：先拆成新块，再让命令作用在这个空块上。
+  // 早先用 insertContentAt('\n') 只是插了个段内硬换行，正文会掉到勾选框下面一行
   if (hasOtherContent) {
-    editor.value.chain().focus().insertContentAt(editor.value.state.selection.from, '\n').run()
+    editor.value.chain().focus().splitBlock().run()
   }
 
   cmd.action(editor.value)
@@ -380,7 +403,7 @@ defineExpose({ focusEnd, insertText })
 </script>
 
 <template>
-  <div ref="editorWrapper" class="note-editor" :class="`v-${variant}`">
+  <div ref="editorWrapper" class="note-editor" :class="`v-${variant}`" @change="relocateCaret">
     <EditorContent :editor="editor" />
     <Teleport to="body">
       <div
@@ -444,22 +467,24 @@ defineExpose({ focusEnd, insertText })
   word-break: break-word;
 }
 
-/* 胶囊输入：约三行起写，随内容长高，最高到视口 46% */
+/* 胶囊输入：平时收成一行的占位高度，聚焦后长到约五行；有内容时按内容撑开 */
 .note-editor.v-composer :deep(.ProseMirror) {
-  padding: var(--space-4) var(--space-4) var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-2);
   font-size: 14.5px;
   line-height: 1.7;
-  min-height: 104px;
+  min-height: 22px;
   max-height: 46vh;
   overflow-y: auto;
+  transition: min-height var(--transition-slow);
 }
+.note-editor.v-composer:focus-within :deep(.ProseMirror) { min-height: 148px; }
 
 /* 卡片就地展开：与只读态同一套字号，避免展开时文字跳动；留出三行书写余量 */
 .note-editor.v-card :deep(.ProseMirror) {
   padding: 0;
   font-size: 14px;
-  line-height: 1.7;
-  min-height: 76px;
+  line-height: 1.6;
+  min-height: 72px;
   max-height: 46vh;
   overflow-y: auto;
 }
@@ -474,7 +499,7 @@ defineExpose({ focusEnd, insertText })
   caret-color: var(--accent);
 }
 
-.note-editor.v-full :deep(* + *) { margin-top: var(--space-4); }
+.note-editor.v-full :deep(.ProseMirror > * + *) { margin-top: var(--space-4); }
 .note-editor.v-full :deep(h1) { font-size: 27px; font-weight: 650; line-height: 1.35; letter-spacing: -0.026em; margin-top: var(--space-6); }
 .note-editor.v-full :deep(h2) { font-size: 21px; font-weight: 620; line-height: 1.45; letter-spacing: -0.02em; margin-top: var(--space-5); }
 .note-editor.v-full :deep(h3) { font-size: 18px; font-weight: 600; }
@@ -490,7 +515,8 @@ defineExpose({ focusEnd, insertText })
   height: 0;
 }
 
-.note-editor :deep(* + *) { margin-top: var(--space-2); }
+/* 只给文档顶层块加间距：写成 * + * 会连任务项里 label 后面的正文 div 一起压下去 8px */
+.note-editor :deep(.ProseMirror > * + *) { margin-top: var(--space-2); }
 .note-editor :deep(* + h1), .note-editor :deep(* + h2), .note-editor :deep(* + h3) { margin-top: var(--space-4); }
 .note-editor :deep(h1) { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
 .note-editor :deep(h2) { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.5; }
@@ -507,6 +533,8 @@ defineExpose({ focusEnd, insertText })
 .note-editor :deep(hr) { border: none; border-top: 1px solid var(--border); margin: var(--space-3) 0; }
 .note-editor :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 3px; }
 .note-editor :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
+/* 正文必须撑满剩余宽度：弹性项默认按内容收缩，空条目会缩成 0 宽，光标没有行盒可落 = 看不见光标 */
+.note-editor :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
 .note-editor :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 5px; }
 
 /* 语法高亮的配色规则在 global.css：那里写一次，编辑器与只读渲染共用 */

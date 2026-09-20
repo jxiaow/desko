@@ -62,7 +62,20 @@ export async function waitForToastGone(page: Page): Promise<void> {
 
 /** 按 .card-name / .shortcut-name 等文本精确定位卡片 */
 export function cardByName(name: string): string {
-  return `.entry-card:has(.card-name:text-is("${name}"))`
+  return `.entry-card:has(.ec-name:text-is("${name}"))`
+}
+
+/** 全局 tooltip 在首次悬停后会把 title 摘成 data-tip（src/utils/tooltip.ts），选择器要兼容两种状态 */
+export function tipButton(scope: Page | Locator, text: string): Locator {
+  return scope.locator(`button[title="${text}"], button[data-tip="${text}"]`)
+}
+
+/** 卡片动作收进 ⋯ 菜单：先悬停露出入口，再按菜单项文字点 */
+export async function openCardMenu(page: Page, name: string): Promise<Locator> {
+  const card = page.locator(cardByName(name))
+  await card.hover()
+  await tipButton(card, '更多操作').first().click()
+  return page.locator('.popover .pop-item')
 }
 
 export async function hoverCard(page: Page, name: string): Promise<void> {

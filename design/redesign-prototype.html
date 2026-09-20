@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="zh" data-theme="cool">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Desko · 重设计原型（外壳 + 网址收藏 + 文件快捷）</title>
+<style>
+/* ===== 尺度（主题间恒定，取自 global.css） ===== */
+:root{
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;--space-12:48px;
+  --radius-sm:6px;--radius:8px;--radius-md:10px;--radius-lg:12px;--radius-xl:16px;
+  --tf:.1s cubic-bezier(.4,0,.2,1);--t:.15s cubic-bezier(.4,0,.2,1);--ts:.2s cubic-bezier(.4,0,.2,1);
+  --spring:.32s cubic-bezier(.34,1.56,.64,1);
+  --sidebar-w:232px;--titlebar-h:44px;
+  --font:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono","Cascadia Code",Consolas,monospace;
+}
+/* ===== cool ===== */
+[data-theme="cool"]{
+  --accent:#5b57d9;--accent-hover:#4c48c6;--accent-on:#fff;--accent-soft:#eeedfb;--accent-light:#dcd9f6;--accent-ring:rgba(91,87,217,.15);
+  --bg:#f6f6f9;--panel-bg:#fff;--chrome-bg:#fbfbfd;--sunken:#eaeaf0;--fill:#e6e6ee;--hover:#f0f0f4;--active:#ececfb;--overlay:rgba(18,18,26,.42);
+  --text:#1b1b20;--text-secondary:#5e5e68;--text-muted:#8d8d98;--text-faint:#b6b6c0;
+  --border:#e6e6ee;--border-strong:#cdccd8;--border-subtle:#efeff3;
+  --shadow-xs:0 1px 2px rgba(26,27,32,.06);--shadow-sm:0 1px 3px rgba(26,27,32,.07);--shadow:0 4px 12px -4px rgba(26,27,32,.12);--shadow-md:0 8px 22px -8px rgba(26,27,32,.18),0 1px 3px rgba(26,27,32,.06);--shadow-pop:0 22px 48px -14px rgba(26,27,32,.28),0 2px 8px rgba(26,27,32,.1);
+  --danger:#c9453f;--danger-soft:#fbeceb;--danger-border:#f0cfcd;--success:#2f8168;--success-soft:#e9f3f0;--warning:#b0801f;--warning-soft:#f8f1e2;--info:#3d6fb0;--info-soft:#ebf1f8;
+  --sidebar-bg:#f2f2f6;--sidebar-hover:#e7e7ef;--sidebar-border:#e6e6ee;--sidebar-text:#5e5e68;--sidebar-text-active:#1b1b20;--sidebar-active:#e4e4f3;
+  --tip-bg:#1b1b20;--tip-fg:#f4f4f7;--scrollbar:rgba(27,27,32,.14);
+  --cat-1:#5f62b8;--cat-2:#7b5fb0;--cat-3:#a85b7d;--cat-4:#a8804b;--cat-5:#4b8a73;--cat-6:#4b8a96;
+  --ft-pdf:#b8564f;--ft-doc:#4a6d9c;--ft-sheet:#3f7a5e;--ft-deck:#a0603a;--ft-arch:#6a5a99;--ft-code:#8a7534;--ft-mark:#5e6672;--ft-img:#9a5a72;--ft-unk:#7a7f88;
+}
+/* ===== dark ===== */
+[data-theme="dark"]{
+  --accent:#7b77f0;--accent-hover:#8f8bf5;--accent-on:#0c0c0f;--accent-soft:rgba(123,119,240,.16);--accent-light:rgba(123,119,240,.3);--accent-ring:rgba(123,119,240,.25);
+  --bg:#0c0c0f;--panel-bg:#151519;--chrome-bg:#101013;--sunken:#0e0e11;--fill:#22222a;--hover:#1e1e25;--active:#20202a;--overlay:rgba(0,0,0,.6);
+  --text:#eeeef3;--text-secondary:#a6a7b2;--text-muted:#75767f;--text-faint:#4c4d57;
+  --border:#26262e;--border-strong:#34343e;--border-subtle:#1e1e25;
+  --shadow-xs:0 1px 2px rgba(0,0,0,.4);--shadow-sm:0 1px 3px rgba(0,0,0,.5);--shadow:0 4px 12px -4px rgba(0,0,0,.6);--shadow-md:0 8px 22px -8px rgba(0,0,0,.7);--shadow-pop:0 22px 48px -14px rgba(0,0,0,.8);
+  --danger:#f0938e;--danger-soft:rgba(240,147,142,.14);--danger-border:rgba(240,147,142,.3);--success:#7fd3ae;--success-soft:rgba(127,211,174,.12);--warning:#e6c07a;--warning-soft:rgba(230,192,122,.12);--info:#9db8e0;--info-soft:rgba(157,184,224,.12);
+  --sidebar-bg:#101013;--sidebar-hover:#1a1a20;--sidebar-border:#202027;--sidebar-text:#a6a7b2;--sidebar-text-active:#eeeef3;--sidebar-active:#20202e;
+  --tip-bg:#eeeef3;--tip-fg:#151519;--scrollbar:rgba(255,255,255,.14);
+  --cat-1:#7c7fd6;--cat-2:#9d7fd0;--cat-3:#cf7fa5;--cat-4:#cf9f5f;--cat-5:#5fb896;--cat-6:#5fb8c8;
+  --ft-pdf:#e08a83;--ft-doc:#7ba0d0;--ft-sheet:#6bb08e;--ft-deck:#cf9266;--ft-arch:#9c8cc0;--ft-code:#c0aa66;--ft-mark:#969dab;--ft-img:#c07f9c;--ft-unk:#a6a7b2;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+*:focus,*:focus-visible{outline:none}
+html,body{height:100%}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.5}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--text-faint);background-clip:content-box;border:3px solid transparent}
+svg{display:block}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input{font-family:inherit}
+a{color:inherit;text-decoration:none}
+
+/* ===== 原型外壳：屏切换条（不属于 app，仅演示用） ===== */
+.proto-bar{position:fixed;bottom:14px;left:14px;top:auto;right:auto;transform:none;z-index:999;display:flex;gap:2px;background:var(--tip-bg);color:var(--tip-fg);padding:4px;border-radius:99px;box-shadow:var(--shadow-pop);font-size:12px}
+.proto-bar button{padding:5px 12px;border-radius:99px;color:inherit;opacity:.7;font-weight:500}
+.proto-bar button.on{opacity:1;background:rgba(255,255,255,.16)}
+[data-theme="dark"] .proto-bar button.on{background:rgba(0,0,0,.2)}
+.proto-bar .theme-sw{width:26px;padding:5px 0;display:flex;justify-content:center}
+
+/* ===== 窗口框 ===== */
+.app{display:flex;flex-direction:column;height:100vh}
+.titlebar{height:var(--titlebar-h);background:var(--chrome-bg);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 var(--space-2);gap:var(--space-2);user-select:none;flex-shrink:0}
+.tb-brand{display:flex;align-items:center;gap:8px;padding-left:6px}
+.tb-logo{width:20px;height:20px;border-radius:6px;background:linear-gradient(145deg,#6a63ff,#5b57d9 55%,#3e3aa4)}
+.tb-crumb{font-size:13px;font-weight:600;color:var(--text);letter-spacing:-.01em;padding-left:2px}
+/* 分段控件做主导航（取代只有图标） */
+.seg{display:flex;gap:2px;background:var(--fill);border-radius:var(--radius);padding:3px;margin-left:var(--space-3)}
+.seg a{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:calc(var(--radius) - 3px);font-size:13px;font-weight:500;color:var(--text-secondary);transition:all var(--t)}
+.seg a .cnt{font-size:11px;font-weight:600;color:var(--text-faint);font-variant-numeric:tabular-nums}
+.seg a:hover{color:var(--text)}
+.seg a.on{background:var(--panel-bg);color:var(--text);box-shadow:var(--shadow-xs);font-weight:600}
+.seg a.on .cnt{color:var(--accent)}
+.tb-spacer{flex:1}
+.tb-btn{width:40px;height:32px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);transition:all var(--t)}
+.tb-btn:hover{background:var(--hover);color:var(--text)}
+.tb-btn.close:hover{background:var(--danger);color:#fff}
+.tb-dots{width:1px;height:18px;background:var(--border);margin:0 4px}
+
+.body{flex:1;display:flex;min-height:0}
+
+/* ===== 侧栏 ===== */
+.sidebar{width:var(--sidebar-w);background:var(--sidebar-bg);border-right:1px solid var(--sidebar-border);display:flex;flex-direction:column;flex-shrink:0;padding:var(--space-3) var(--space-2)}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius);color:var(--sidebar-text);font-size:13px;font-weight:500;position:relative;transition:all var(--t)}
+.nav-item .ico{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.nav-item .nm{flex:1}
+.nav-item .badge{font-size:11px;font-weight:600;color:var(--text-muted);background:var(--fill);padding:1px 7px;border-radius:99px;font-variant-numeric:tabular-nums}
+.nav-item:hover{background:var(--sidebar-hover);color:var(--text)}
+.nav-item.on{background:var(--sidebar-active);color:var(--sidebar-text-active);font-weight:600}
+.nav-item.on .badge{background:var(--accent-soft);color:var(--accent)}
+/* active 左侧竖条取代小圆点 */
+.nav-item.on::before{content:"";position:absolute;left:-8px;top:50%;transform:translateY(-50%);width:3px;height:18px;border-radius:99px;background:var(--accent)}
+.side-sect{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-faint);padding:var(--space-5) 10px 6px}
+.side-foot{margin-top:auto;padding:10px;color:var(--text-faint);font-size:11px;display:flex;align-items:center;gap:6px}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+
+/* ===== 通用内容框架（对齐小记 stream 语言） ===== */
+.page{flex:1;overflow-y:auto;position:relative;display:none}
+.page.on{display:block}
+.page-inner{max-width:1180px;margin:0 auto;padding:var(--space-5) var(--space-6) 96px}
+.sticky-bar{position:sticky;top:0;z-index:20;background:var(--bg);display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) 0 var(--space-3);margin-bottom:var(--space-2)}
+.search{display:flex;align-items:center;gap:var(--space-2);flex:1;max-width:360px;background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius);padding:0 var(--space-3);height:36px;transition:all var(--t)}
+.search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
+.search .sic{color:var(--text-muted);display:inline-flex;align-items:center;flex-shrink:0}
+.search input{flex:1;border:none;background:none;padding:0;font-size:13px;outline:none;color:var(--text);height:100%;min-width:0;font-family:inherit}
+.search input::placeholder{color:var(--text-muted)}
+.bar-count{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap;margin-right:auto;padding-left:4px}
+.btn{height:32px;padding:0 12px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:6px;transition:all var(--t);white-space:nowrap}
+.btn.pri{background:var(--accent);color:var(--accent-on);box-shadow:var(--shadow-xs);font-weight:600}
+.btn.pri:hover{background:var(--accent-hover)}
+.btn.ghost{color:var(--text-secondary);border:1px solid var(--border)}
+.btn.ghost:hover{background:var(--hover);color:var(--text);border-color:var(--border-strong)}
+.btn.ghost.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-light)}
+.btn.dan{color:var(--danger);border:1px solid transparent}
+.btn.dan:hover{background:var(--danger-soft);border-color:var(--danger-border)}
+
+/* 分类 chips 行（复用 tab-count 规格） */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:var(--space-4)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:99px;font-size:12.5px;font-weight:500;color:var(--text-secondary);background:var(--panel-bg);border:1px solid var(--border);transition:all var(--t)}
+.chip .c{font-size:11px;font-weight:600;color:var(--text-faint);font-variant-numeric:tabular-nums}
+.chip:hover{border-color:var(--border-strong);color:var(--text)}
+.chip.on{background:var(--accent);color:var(--accent-on);border-color:var(--accent)}
+.chip.on .c{color:rgba(255,255,255,.75)}
+
+/* ===== 网址收藏：favicon 锚点卡片 ===== */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:var(--space-3)}
+.ecard{position:relative;background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-4);box-shadow:var(--shadow-xs);transition:all var(--t);display:flex;flex-direction:column;gap:10px;min-height:152px;cursor:pointer}
+.ecard:hover{border-color:var(--border-strong);box-shadow:var(--shadow);transform:translateY(-2px)}
+.ec-top{display:flex;align-items:center;gap:11px}
+.fav{width:36px;height:36px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:15px;position:relative;overflow:hidden}
+.fav img{width:100%;height:100%;object-fit:contain}
+.ec-id{flex:1;min-width:0}
+.ec-name{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ec-domain{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;display:flex;align-items:center;gap:5px}
+.ec-domain .dot{width:6px;height:6px;border-radius:99px;background:var(--success);flex-shrink:0}
+.ec-more{width:26px;height:26px;border-radius:var(--radius-sm);color:var(--text-muted);display:flex;align-items:center;justify-content:center;opacity:0;transition:all var(--t);flex-shrink:0}
+.ecard:hover .ec-more,.ec-more:focus{opacity:1}
+.ec-more:hover{background:var(--hover);color:var(--text)}
+.ec-note{font-size:12.5px;color:var(--text-secondary);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}
+.ec-foot{display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:10px;border-top:1px solid var(--border-subtle)}
+.cred{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--text-secondary);background:var(--fill);border:1px solid transparent;transition:all var(--t)}
+.cred:hover{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-light)}
+.cred svg{color:currentColor}
+.cred.revealed{background:var(--sunken);font-family:var(--mono);letter-spacing:.05em;color:var(--text)}
+.ec-tags{display:flex;gap:5px;flex-wrap:wrap}
+.path-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:6px;font-size:11.5px;font-weight:500;color:var(--accent);background:var(--accent-soft);transition:all var(--t)}
+.path-pill:hover{background:var(--accent);color:var(--accent-on)}
+.ec-cat{margin-left:auto;font-size:11px;color:var(--text-muted);background:var(--hover);padding:2px 8px;border-radius:99px;font-weight:500;white-space:nowrap}
+/* 批量态：卡片左上 checkbox，选中项描边高亮 */
+.grid.batching .ec-top{padding-left:26px}
+.grid.batching .ecard::before{content:"";position:absolute;top:15px;left:15px;width:16px;height:16px;border:1.5px solid var(--border-strong);border-radius:4px;background:var(--panel-bg);transition:all var(--t)}
+.grid.batching .ecard.sel::before{background:var(--accent);border-color:var(--accent)}
+.grid.batching .ecard.sel::after{content:"✓";position:absolute;top:14px;left:18px;color:var(--accent-on);font-size:11px;font-weight:700;line-height:18px}
+.grid.batching .ecard.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-ring)}
+
+/* ===== 文件快捷：高密度行式列表 ===== */
+.list{background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-xs)}
+.lhead,.lrow{display:grid;grid-template-columns:minmax(200px,1fr) 90px minmax(150px,1.1fr) 88px;align-items:center;gap:var(--space-3)}
+.lhead{padding:9px var(--space-4);background:var(--chrome-bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--text-muted);text-transform:uppercase;white-space:nowrap}
+.lhead .sortable{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.lhead .sortable:hover{color:var(--text)}
+.lhead .sortable.on{color:var(--accent)}
+.lrow{padding:0 var(--space-4);height:52px;border-bottom:1px solid var(--border-subtle);cursor:pointer;transition:background var(--tf);position:relative}
+.lrow:last-child{border-bottom:none}
+.lrow:hover{background:var(--hover)}
+.lrow:hover .row-acts{opacity:1;transform:translateX(0)}
+.lc-name{display:flex;align-items:center;gap:11px;min-width:0}
+.ft-ico{width:32px;height:32px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;letter-spacing:.02em;color:#fff;text-transform:uppercase}
+.lname{font-size:13.5px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ltype{font-size:11.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lpath{font-size:12px;color:var(--text-muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ltime{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-acts{position:absolute;right:12px;top:50%;transform:translateX(6px) ;opacity:0;display:flex;gap:2px;background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:2px;box-shadow:var(--shadow-sm);transition:all var(--t)}
+.row-acts button{width:26px;height:26px;border-radius:5px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;transition:all var(--t)}
+.row-acts button:hover{background:var(--hover);color:var(--text)}
+.row-acts button.dan:hover{background:var(--danger-soft);color:var(--danger)}
+
+/* 拖拽建快捷区 */
+.dropzone{margin-top:var(--space-4);border:1.5px dashed var(--border-strong);border-radius:var(--radius-lg);padding:var(--space-6);text-align:center;color:var(--text-muted);transition:all var(--t);background:var(--panel-bg)}
+.dropzone:hover,.dropzone.hot{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.dropzone .dz-ic{width:40px;height:40px;margin:0 auto 10px;border-radius:11px;background:var(--fill);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)}
+.dropzone:hover .dz-ic,.dropzone.hot .dz-ic{background:var(--panel-bg);color:var(--accent)}
+.dropzone b{color:var(--text-secondary);font-weight:600}
+
+/* 批量底栏 dock */
+.dock{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:120;display:flex;align-items:center;gap:4px;background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-pop);padding:6px}
+.dock .dc{font-size:12px;font-weight:600;color:var(--accent);padding:0 8px;white-space:nowrap}
+.dock .dsep{width:1px;align-self:stretch;background:var(--border);margin:0 4px}
+.dock button{height:28px;padding:0 10px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--text-secondary);display:inline-flex;align-items:center;gap:5px;transition:all var(--t);white-space:nowrap}
+.dock button:hover{background:var(--hover);color:var(--text)}
+.dock button.dan{color:var(--danger)}
+.dock button.dan:hover{background:var(--danger-soft)}
+
+/* checkbox */
+.chk{width:16px;height:16px;border:1.5px solid var(--border-strong);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:transparent;transition:all var(--t)}
+.chk.on{background:var(--accent);border-color:var(--accent);color:var(--accent-on)}
+
+.hidden{display:none!important}
+.view{display:none}
+.view.on{display:block}
+
+/* ===== 弹窗层：详情与新增都是居中模态，浏览↔编辑在同一处切换 ===== */
+/* 遮罩只压暗、不响应点击——关闭只走 X / 取消 / Esc */
+.modal{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;background:var(--overlay);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.modal.on{display:flex}
+.modal .mbox{width:520px;max-width:92vw;max-height:85vh;background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow-pop);display:flex;flex-direction:column;overflow:hidden;animation:dlg-in var(--ts) cubic-bezier(.22,1,.36,1) both}
+@keyframes dlg-in{from{opacity:0;transform:scale(.97) translateY(8px)}}
+.modal .mh{display:flex;align-items:center;gap:11px;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border);flex-shrink:0}
+.modal .mh h3{font-size:15px;font-weight:600}
+.mh-t{flex:1;min-width:0}
+.mh-t .n{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mh-t .d{font-size:11.5px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.xbtn{width:28px;height:28px;border-radius:var(--radius-sm);color:var(--text-muted);display:flex;align-items:center;justify-content:center;transition:all var(--t);flex-shrink:0}
+.xbtn:hover{background:var(--hover);color:var(--text)}
+.modal .mb{padding:var(--space-5);overflow-y:auto;flex:1;min-height:0}
+.modal .mf{display:flex;align-items:center;gap:8px;padding:var(--space-3) var(--space-5);border-top:1px solid var(--border);flex-shrink:0}
+.mf .fill,.mh .fill{flex:1}
+/* 详情分组 */
+.dsec{padding:15px 0}
+.dsec:first-child{padding-top:4px}
+.dsec + .dsec{border-top:1px solid var(--border-subtle)}
+.dlab{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:9px}
+.dfield{display:flex;align-items:center;gap:8px}
+.dfield + .dfield{margin-top:8px}
+.dval{flex:1;font-size:13.5px;color:var(--text);min-width:0;word-break:break-all}
+.dval.mono{font-family:var(--mono);letter-spacing:.08em}
+.dval.link{color:var(--accent);cursor:pointer}
+.mini{height:28px;padding:0 10px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--text-secondary);background:var(--fill);display:inline-flex;align-items:center;gap:5px;transition:all var(--t);flex-shrink:0}
+.mini:hover{background:var(--accent-soft);color:var(--accent)}
+/* 表单字段 */
+.fld{margin-bottom:14px}
+.fld:last-child{margin-bottom:0}
+.fld label{display:block;font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:6px}
+.fld input,.fld textarea{width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13.5px;outline:none;background:var(--bg);color:var(--text);font-family:inherit;transition:all var(--t);resize:vertical}
+.fld input:focus,.fld textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring);background:var(--panel-bg)}
+.fld2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+/* 新增模态（去 logo 瘦身版） */
+.modal{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center}
+.modal.on{display:flex}
+.modal .mbox{width:520px;max-width:92vw;max-height:85vh;background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow-pop);display:flex;flex-direction:column;overflow:hidden;animation:dlg-in var(--ts) cubic-bezier(.22,1,.36,1) both}
+@keyframes dlg-in{from{opacity:0;transform:scale(.97) translateY(8px)}}
+.modal .mh{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)}
+.modal .mh h3{font-size:15px;font-weight:600}
+.modal .mb{padding:var(--space-5);overflow-y:auto}
+.modal .mf{display:flex;justify-content:flex-end;gap:8px;padding:var(--space-3) var(--space-5);border-top:1px solid var(--border)}
+
+/* ===== 小记页重画 ===== */
+.sic{color:var(--text-muted);display:inline-flex}
+.page.npage{overflow:hidden;padding:0}
+.page.npage.on{display:flex}
+.nstream{flex:1;min-width:0;overflow-y:auto}
+.ninner{max-width:880px;margin:0 auto;padding:var(--space-4) var(--space-6) 96px}
+/* 顶栏：三组，语义分组 */
+.nbar{position:sticky;top:0;z-index:20;background:var(--bg);display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) 0 var(--space-3)}
+.nbar .grp{display:flex;align-items:center;gap:3px;flex-shrink:0}
+.nbar .grp.gsearch{flex:1;min-width:0}
+.nbar .count{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap;margin-left:4px}
+.vdiv{width:1px;height:20px;background:var(--border);margin:0 2px;flex-shrink:0}
+/* 统一静默图标按钮 */
+.sbtn{width:32px;height:32px;border-radius:var(--radius-sm);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;position:relative;transition:all var(--t);flex-shrink:0}
+.sbtn:hover{background:var(--hover);color:var(--text)}
+.sbtn.on{background:var(--accent-soft);color:var(--accent)}
+.sbtn.warn.on{background:var(--warning-soft);color:var(--warning)}
+.sbtn.dan:hover{background:var(--danger-soft);color:var(--danger)}
+.sbtn[data-tip]:hover::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--tip-bg);color:var(--tip-fg);font-size:11px;font-weight:500;padding:3px 8px;border-radius:5px;white-space:nowrap;z-index:60;pointer-events:none}
+/* composer：空态一行，聚焦才展开成书写面 */
+.comp{background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xs);margin-bottom:var(--space-5);transition:border-color var(--t),box-shadow var(--t);overflow:hidden}
+.comp:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
+.comp .cline{display:flex;align-items:center;gap:8px;padding:14px var(--space-2) 14px var(--space-4);transition:align-items var(--ts)}
+.comp:focus-within .cline{align-items:flex-start}
+.comp .cinput{flex:1;border:none;background:none;outline:none;resize:none;font-family:inherit;font-size:14px;line-height:1.6;color:var(--text);height:24px;padding:0;transition:height var(--ts)}
+.comp .cinput::placeholder{color:var(--text-muted)}
+.comp:focus-within .cinput{height:156px}
+.comp .cbar{display:flex;align-items:center;gap:2px;max-height:0;overflow:hidden;border-top:1px solid transparent;padding:0 var(--space-3);transition:max-height var(--ts),padding var(--ts)}
+.comp:focus-within .cbar{max-height:48px;border-top-color:var(--border);padding:var(--space-2) var(--space-3)}
+.comp .cbar .fill{flex:1}
+.comp .cbar .hint{font-size:11px;color:var(--text-muted);margin-right:8px}
+.pub{height:30px;padding:0 14px;border-radius:var(--radius-sm);background:var(--accent);color:var(--accent-on);font-size:13px;font-weight:600;display:inline-flex;align-items:center;transition:all var(--t);opacity:.35;pointer-events:none;flex-shrink:0}
+.comp:focus-within .pub{opacity:1;pointer-events:auto}
+.comp:focus-within .pub:hover{background:var(--accent-hover)}
+/* 日期组 */
+.nday{margin-bottom:var(--space-4)}
+.ndayh{position:sticky;top:56px;z-index:10;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text-faint);padding:var(--space-2) 0;background:var(--bg)}
+.ndayh.pin{color:var(--accent)}
+.ndayh::after{content:"";flex:1;height:1px;background:var(--border);opacity:.7}
+.ndayh .c{font-variant-numeric:tabular-nums}
+/* 小记卡 */
+.memo{position:relative;background:var(--panel-bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-4);box-shadow:var(--shadow-xs);transition:all var(--t);margin-bottom:var(--space-3)}
+.memo:hover{border-color:var(--border-strong);box-shadow:var(--shadow-sm)}
+.memo.pinned{border-color:var(--accent-light)}
+.memo.editing{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
+.memo .txt{font-size:14px;line-height:1.7;color:var(--text)}
+.memo .txt b{font-weight:600}
+.memo .txt .tg{color:var(--accent);font-weight:500}
+.memo .txt h4{font-size:15px;font-weight:600;margin-bottom:6px;letter-spacing:-.01em}
+.memo .txt .bq{border-left:2px solid var(--accent-light);padding-left:var(--space-3);color:var(--text-secondary);margin-top:6px}
+.memo .txt .cb{font-family:var(--mono);font-size:12.5px;line-height:1.6;background:var(--sunken);border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-2) var(--space-3);margin-top:8px;overflow-x:auto;color:var(--text-secondary);white-space:pre}
+.memo .task{display:flex;align-items:center;gap:8px;margin-top:4px}
+.memo .task .box{width:14px;height:14px;border:1.5px solid var(--border-strong);border-radius:4px;flex-shrink:0}
+.memo .task.done .box{background:var(--accent);border-color:var(--accent)}
+.memo .task.done{color:var(--text-muted)}
+.memo .foot{display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-3)}
+.memo .foot .time{font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.memo .foot .fill{flex:1}
+.memo .onmark{display:inline-flex}
+.memo .onmark.pin{color:var(--accent)}.memo .onmark.star{color:var(--warning)}
+.memo .acts{display:flex;gap:1px;opacity:.32;transition:opacity var(--t)}
+.memo:hover .acts,.memo.editing .acts{opacity:1}
+.memo .acts .sbtn{width:26px;height:26px}
+.memo .acts .sbtn[data-tip]:hover::after{top:auto;bottom:calc(100% + 6px)}
+/* 编辑态底栏工具条 */
+.etools{display:flex;align-items:center;gap:2px;margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px dashed var(--border)}
+.etools .fill{flex:1}
+.etools .save{font-size:11px;color:var(--success);margin-right:4px}
+.etools .sbtn{width:26px;height:26px}
+.etools .sbtn[data-tip]:hover::after{top:auto;bottom:calc(100% + 6px)}
+.etools .pub{opacity:1;pointer-events:auto}
+/* 右栏 */
+.nrail{width:200px;flex-shrink:0;border-left:1px solid var(--border);background:var(--sidebar-bg);padding:var(--space-4) var(--space-2);overflow-y:auto}
+.nrail .rt{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint);padding:0 var(--space-2) 8px;margin-top:var(--space-4)}
+.nrail .rt:first-child{margin-top:0}
+.ri{display:flex;align-items:center;gap:8px;width:100%;padding:6px var(--space-2);border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);transition:all var(--t);text-align:left}
+.ri:hover{background:var(--sidebar-hover);color:var(--text)}
+.ri.on{background:var(--sidebar-active);color:var(--sidebar-text-active);font-weight:600}
+.ri .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ri .c{font-size:11px;color:var(--text-faint);font-variant-numeric:tabular-nums}
+.ri.on .c{color:var(--accent)}
+
+/* ===== 添加小记：展开书写面 / 斜杠命令菜单 / 全屏新建 ===== */
+.kbd{font-family:var(--mono);font-size:10.5px;color:var(--text-secondary);background:var(--fill);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:0 4px;line-height:15px;display:inline-block;vertical-align:middle}
+/* 展开态 composer（聚焦或 .expanded 时）—— 正文区显出，工具条常驻 */
+.comp.expanded{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-ring)}
+.comp.expanded .cbar{max-height:52px;border-top-color:var(--border);padding:var(--space-2) var(--space-3)}
+.comp.expanded .pub{opacity:1;pointer-events:auto}
+.comp .cbody{display:none;padding:0 var(--space-4) var(--space-2);font-size:14px;line-height:1.7;color:var(--text);outline:none;position:relative}
+.comp.expanded .cbody{display:block}
+.comp.expanded .cinput{min-height:40px;padding:12px var(--space-4) 0}
+/* 斜杠命令菜单 */
+.slash{position:absolute;z-index:60;width:250px;background:var(--panel-bg);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:var(--shadow-pop);padding:5px;max-height:284px;overflow-y:auto}
+.slash .sh{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint);padding:6px 8px 4px}
+.slash .si{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:background var(--tf)}
+.slash .si:hover,.slash .si.on{background:var(--accent-soft)}
+.slash .si .ic{width:26px;height:26px;border-radius:6px;background:var(--fill);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0;font-weight:700;font-size:12px}
+.slash .si.on .ic{background:var(--panel-bg);color:var(--accent)}
+.slash .si .lb{flex:1;font-size:13px;color:var(--text)}
+.slash .si .hk{font-size:11px;color:var(--text-faint);font-family:var(--mono)}
+/* 全屏新建小记 */
+.fsnew{position:fixed;inset:0;z-index:250;background:radial-gradient(900px 420px at 50% -6%,var(--accent-soft),transparent 72%),var(--bg);display:none;flex-direction:column}
+.fsnew.on{display:flex;animation:fs-in .2s ease both}
+@keyframes fs-in{from{opacity:0}}
+.fsn-head{height:52px;flex-shrink:0;display:flex;align-items:center;gap:var(--space-3);padding:0 var(--space-5)}
+.fsn-exit{height:30px;padding:0 12px;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:var(--panel-bg);border-radius:999px;color:var(--text-secondary);font-size:12.5px;box-shadow:var(--shadow-xs);transition:all var(--t)}
+.fsn-exit:hover{color:var(--accent);border-color:var(--accent-light);background:var(--accent-soft)}
+.fsn-head .fill{flex:1}
+.fsn-save{font-size:11.5px;color:var(--text-muted)}
+.fsn-scroll{flex:1;overflow-y:auto;min-height:0}
+.fsn-inner{max-width:760px;margin:0 auto;padding:var(--space-6) var(--space-6) var(--space-12)}
+.fsn-meta{display:flex;align-items:center;gap:var(--space-2);font-size:11.5px;color:var(--text-muted);margin-bottom:var(--space-5);font-variant-numeric:tabular-nums}
+.fsn-meta .dot{width:2px;height:2px;border-radius:50%;background:currentColor;opacity:.5}
+.fsn-body{font-size:16px;line-height:1.75;color:var(--text);outline:none;min-height:220px;position:relative}
+.fsn-body .ph{color:var(--text-muted)}
+.fsn-body h2{font-size:22px;font-weight:600;margin-bottom:10px;letter-spacing:-.02em}
+.fsn-body p{margin-bottom:8px}
+.fsn-foot{flex-shrink:0;display:flex;align-items:center;gap:var(--space-1);padding:var(--space-2) var(--space-5);border-top:1px solid var(--border);background:var(--frost-bg);backdrop-filter:blur(10px)}
+.fsn-foot .fill{flex:1}
+.fsn-hint{font-size:11px;color:var(--text-muted);margin-right:8px}
+.fsn-foot .pub{opacity:1;pointer-events:auto}
+
+/* 提示浮层（⋯ 菜单示例） */
+.menu{position:absolute;right:16px;top:44px;z-index:50;background:var(--panel-bg);border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:var(--shadow-pop);padding:4px;min-width:176px}
+.menu a{display:flex;align-items:center;gap:9px;padding:7px 10px;font-size:12.5px;color:var(--text);border-radius:6px;transition:background var(--tf)}
+.menu a:hover{background:var(--hover)}
+.menu a.dan{color:var(--danger)}
+.menu a.dan:hover{background:var(--danger-soft)}
+.menu .msep{height:1px;background:var(--border);margin:4px 2px}
+.menu svg{color:var(--text-muted)}
+.menu a:hover svg{color:var(--text-secondary)}
+</style>
+</head>
+<body>
+
+<!-- 演示用切换条 -->
+<div class="proto-bar">
+  <button data-v="entries" class="on">网址收藏</button>
+  <button data-v="files">文件快捷</button>
+  <button data-v="notes">小记（现状参考）</button>
+  <button class="theme-sw" id="themeSw" title="切换主题">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>
+  </button>
+</div>
+
+<div class="app">
+  <!-- 标题栏：分段导航（品牌化） -->
+  <div class="titlebar">
+    <button class="tb-btn" title="切换侧边栏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg></button>
+    <div class="tb-brand"><div class="tb-logo"></div><span class="tb-crumb" id="crumb">网址收藏</span></div>
+    <div class="tb-spacer"></div>
+    <button class="tb-btn" title="设置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82 2 2 0 1 1-2.83 2.83 1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51 2 2 0 0 1-4 0 1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33 2 2 0 1 1-2.83-2.83A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1 2 2 0 0 1 0-4 1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82 2 2 0 1 1 2.83-2.83A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51 2 2 0 0 1 4 0 1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33 2 2 0 1 1 2.83 2.83A1.65 1.65 0 0 0 19.4 9c.68.28 1.16.9 1.16 1.51a2 2 0 0 1 0 4c0 .61-.48 1.23-1.16 1.49z"/></svg></button>
+    <button class="tb-btn" title="锁定"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
+    <div class="tb-dots"></div>
+    <button class="tb-btn" title="最小化"><svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1" fill="currentColor"/></svg></button>
+    <button class="tb-btn" title="最大化"><svg width="12" height="12" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor"/></svg></button>
+    <button class="tb-btn close" title="关闭"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1 L11 11 M1 11 L11 1" stroke="currentColor" stroke-width="1.2"/></svg></button>
+  </div>
+
+  <div class="body">
+    <!-- 侧栏：图标+文字+计数+active 竖条 -->
+    <aside class="sidebar">
+      <nav class="nav">
+        <a class="nav-item on" data-v="entries"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span><span class="nm">网址收藏</span><span class="badge">128</span></a>
+        <a class="nav-item" data-v="notes"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg></span><span class="nm">小记</span><span class="badge">56</span></a>
+        <a class="nav-item" data-v="files"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span class="nm">文件快捷</span><span class="badge">34</span></a>
+      </nav>
+      <div class="side-foot"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>本地加密 · v1.0</div>
+    </aside>
+
+    <div class="main">
+
+      <!-- ========== 网址收藏 ========== -->
+      <div class="page on" data-v="entries"><div class="page-inner">
+        <div class="sticky-bar">
+          <div class="search"><span class="sic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span><input placeholder="搜索名称、域名或备注…" /></div>
+          <span class="bar-count">128 / 128</span>
+          <button class="btn ghost on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>批量</button>
+          <button class="btn pri"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>新增</button>
+        </div>
+
+        <div class="chips">
+          <button class="chip on">全部<span class="c">128</span></button>
+          <button class="chip">工作<span class="c">41</span></button>
+          <button class="chip">开发<span class="c">33</span></button>
+          <button class="chip">设计<span class="c">18</span></button>
+          <button class="chip">资讯<span class="c">22</span></button>
+          <button class="chip">账号<span class="c">14</span></button>
+        </div>
+
+        <div class="grid batching">
+          <!-- 卡片 1：有凭证 + path 药丸 -->
+          <div class="ecard">
+            <div class="ec-top">
+              <div class="fav" style="background:var(--cat-2)">
+                <img src="https://www.google.com/s2/favicons?domain=github.com&sz=32" onerror="this.remove()" alt=""/>G
+              </div>
+              <div class="ec-id">
+                <div class="ec-name">GitHub — desko 主仓</div>
+                <div class="ec-domain"><span class="dot"></span>github.com/jiang/desko</div>
+              </div>
+              <button class="ec-more"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+            </div>
+            <div class="ec-note">Tauri 桌面端主仓库，CI 从这里出 NSIS 安装包。</div>
+            <div class="ec-foot">
+              <button class="cred"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>凭证</button>
+              <div class="ec-tags">
+                <a class="path-pill">Issues</a><a class="path-pill">Actions</a><span class="path-pill" style="cursor:default">+3</span>
+              </div>
+              <span class="ec-cat">开发</span>
+            </div>
+          </div>
+
+          <!-- 卡片 2：密码已就地揭示 -->
+          <div class="ecard">
+            <div class="ec-top">
+              <div class="fav" style="background:var(--cat-5)">J</div>
+              <div class="ec-id">
+                <div class="ec-name">Jenkins 内网构建</div>
+                <div class="ec-domain"><span class="dot"></span>jenkins.internal.co</div>
+              </div>
+              <button class="ec-more"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+            </div>
+            <div class="ec-note">部署流水线，触发前确认分支。</div>
+            <div class="ec-foot">
+              <button class="cred revealed">•••••••••3f9 &nbsp;⧉</button>
+              <span class="ec-cat">工作</span>
+            </div>
+          </div>
+
+          <!-- 卡片 3 -->
+          <div class="ecard">
+            <div class="ec-top">
+              <div class="fav" style="background:var(--cat-3)">F</div>
+              <div class="ec-id">
+                <div class="ec-name">Figma · 设计系统</div>
+                <div class="ec-domain">figma.com/files/design-system</div>
+              </div>
+              <button class="ec-more"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+            </div>
+            <div class="ec-note">组件库与 token 规范，主题色以这里为准。</div>
+            <div class="ec-foot">
+              <div class="ec-tags"><a class="path-pill">Tokens</a><a class="path-pill">Components</a></div>
+              <span class="ec-cat">设计</span>
+            </div>
+          </div>
+
+          <!-- 卡片 4：无 URL 只有 path -->
+          <div class="ecard">
+            <div class="ec-top">
+              <div class="fav" style="background:var(--cat-4)">N</div>
+              <div class="ec-id">
+                <div class="ec-name">Notion 需求池</div>
+                <div class="ec-domain">notion.so/requirements</div>
+              </div>
+              <button class="ec-more"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+            </div>
+            <div class="ec-foot">
+              <button class="cred"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>凭证</button>
+              <span class="ec-cat">工作</span>
+            </div>
+          </div>
+
+          <!-- 卡片 5：带菜单展开示例 -->
+          <div class="ecard" style="border-color:var(--border-strong)">
+            <div class="ec-top">
+              <div class="fav" style="background:var(--cat-6)">R</div>
+              <div class="ec-id">
+                <div class="ec-name">Rust 官方文档</div>
+                <div class="ec-domain">doc.rust-lang.org</div>
+              </div>
+              <button class="ec-more" style="opacity:1;background:var(--hover);color:var(--text)"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+            </div>
+            <div class="ec-note">std 与常用 crate 参考。</div>
+            <div class="ec-foot">
+              <div class="ec-tags"><a class="path-pill">std</a><a class="path-pill">book</a></div>
+              <span class="ec-cat">开发</span>
+            </div>
+            <div class="menu">
+              <a><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>在浏览器打开</a>
+              <a><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>编辑</a>
+              <a><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制卡片</a>
+              <div class="msep"></div>
+              <a class="dan"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</a>
+            </div>
+          </div>
+
+          <!-- 卡片 6 -->
+          <div class="ecard">
+            <div class="ec-top">
+              <div class="fav" style="background:var(--cat-1)">H</div>
+              <div class="ec-id">
+                <div class="ec-name">Hacker News</div>
+                <div class="ec-domain">news.ycombinator.com</div>
+              </div>
+              <button class="ec-more"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+            </div>
+            <div class="ec-foot">
+              <span class="ec-cat">资讯</span>
+            </div>
+          </div>
+        </div>
+      </div></div>
+
+      <!-- ========== 文件快捷 ========== -->
+      <div class="page" data-v="files"><div class="page-inner">
+        <div class="sticky-bar">
+          <div class="search"><span class="sic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span><input placeholder="搜索快捷方式…" /></div>
+          <span class="bar-count">34 项</span>
+          <button class="btn ghost"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>批量</button>
+          <button class="btn pri"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>添加快捷方式</button>
+        </div>
+
+        <div class="list">
+          <div class="lhead">
+            <span class="sortable on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>名称</span>
+            <span class="sortable">类型</span>
+            <span>路径</span>
+            <span class="sortable">修改时间</span>
+          </div>
+
+          <div class="lrow">
+            <div class="lc-name"><div class="ft-ico" style="background:var(--ft-mark)">MD</div><span class="lname">架构设计-v2.md</span></div>
+            <span class="ltype">文档</span>
+            <span class="lpath" title="C:/Code/desko/docs">…/desko/docs</span>
+            <span class="ltime">2 小时前</span>
+            <div class="row-acts"><button title="打开所在目录"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6"/></svg></button><button title="复制地址"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button><button title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button class="dan" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>
+          </div>
+
+          <div class="lrow">
+            <div class="lc-name"><div class="ft-ico" style="background:var(--ft-folder,var(--warning));color:var(--warning);background:var(--warning-soft)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6"/></svg></div><span class="lname">设计稿输出目录</span></div>
+            <span class="ltype">文件夹</span>
+            <span class="lpath" title="D:/Work/design-out">…/design-out</span>
+            <span class="ltime">昨天</span>
+          </div>
+
+          <div class="lrow">
+            <div class="lc-name"><div class="ft-ico" style="background:var(--ft-pdf)">PDF</div><span class="lname">合规审计报告-Q3.pdf</span></div>
+            <span class="ltype">文档</span>
+            <span class="lpath" title="D:/Docs/legal/audit-q3.pdf">…/legal/audit-q3.pdf</span>
+            <span class="ltime">周一</span>
+          </div>
+
+          <div class="lrow">
+            <div class="lc-name"><div class="ft-ico" style="background:var(--ft-code)">TS</div><span class="lname">notes.ts</span></div>
+            <span class="ltype">代码</span>
+            <span class="lpath" title="C:/Code/desko/src/stores/notes.ts">…/src/stores/notes.ts</span>
+            <span class="ltime">3 天前</span>
+          </div>
+
+          <div class="lrow">
+            <div class="lc-name"><div class="ft-ico" style="background:var(--ft-sheet)">XLS</div><span class="lname">埋点数据-9月.xlsx</span></div>
+            <span class="ltype">表格</span>
+            <span class="lpath" title="D:/Data/metrics-09.xlsx">…/Data/metrics-09.xlsx</span>
+            <span class="ltime">上周</span>
+          </div>
+
+          <div class="lrow">
+            <div class="lc-name"><div class="ft-ico" style="background:var(--ft-arch)">ZIP</div><span class="lname">desko-1.0.0-win-src.zip</span></div>
+            <span class="ltype">归档</span>
+            <span class="lpath" title="D:/Releases/desko-1.0.0.zip">…/Releases/desko-1.0.0.zip</span>
+            <span class="ltime">09-10</span>
+          </div>
+        </div>
+
+        <div class="dropzone">
+          <div class="dz-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg></div>
+          把文件或文件夹<b>拖到这里</b>即可创建快捷方式 · 或点击「添加」手动选路径
+        </div>
+      </div></div>
+
+      <!-- ========== 小记（重画：统一按钮 / 可展开 composer / 分组顶栏 / 常驻页脚动作） ========== -->
+      <div class="page npage" data-v="notes">
+        <div class="nstream"><div class="ninner">
+          <div class="nbar">
+            <div class="grp gsearch">
+              <div class="search"><span class="sic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span><input placeholder="搜索小记…" /></div>
+              <span class="count">56 条</span>
+            </div>
+            <div class="vdiv"></div>
+            <div class="grp">
+              <button class="sbtn" data-tip="排序：最新"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
+              <button class="sbtn" data-tip="筛选"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></svg></button>
+            </div>
+            <div class="vdiv"></div>
+            <div class="grp">
+              <button class="sbtn" data-tip="批量选择"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg></button>
+              <button class="sbtn" data-tip="收起侧栏"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg></button>
+            </div>
+          </div>
+
+          <div class="comp" id="comp">
+            <div class="cline">
+              <textarea class="cinput" placeholder="此刻的想法… 用 #标签 归类" rows="1"></textarea>
+              <button class="sbtn" data-tip="全屏书写"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+              <button class="pub">发布</button>
+            </div>
+            <div class="cbar">
+              <button class="sbtn" data-tip="添加图片"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
+              <button class="sbtn" data-tip="插入标签"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><path d="M7 7h.01"/></svg></button>
+              <span class="fill"></span>
+              <span class="hint">Ctrl+Enter 发布</span>
+            </div>
+          </div>
+
+          <div class="nday">
+            <div class="ndayh pin"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>置顶 <span class="c">· 1</span></div>
+            <article class="memo pinned">
+              <div class="txt">
+                <h4>周会纪要</h4>
+                <div>尺度层不动，<b>主题层只管颜色</b>。</div>
+                <div class="task done"><span class="box"></span>令牌化 global.css</div>
+                <div class="task"><span class="box"></span>逐屏实机检查</div>
+              </div>
+              <div class="foot">
+                <span class="time">刚刚</span>
+                <span class="onmark pin" title="已置顶"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span>
+                <span class="fill"></span>
+                <div class="acts">
+                  <button class="sbtn" data-tip="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button>
+                  <button class="sbtn on" data-tip="已置顶"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+                  <button class="sbtn" data-tip="收藏"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></button>
+                  <button class="sbtn" data-tip="更多"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div class="nday">
+            <div class="ndayh">今天 <span class="c">· 2</span></div>
+            <article class="memo">
+              <div class="txt">暗色下靠高光描边分层，不靠阴影。<div class="bq">近黑底要留一档高光边。</div></div>
+              <div class="foot">
+                <span class="time">刚刚</span>
+                <span class="onmark star" title="已收藏"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></span>
+                <span class="fill"></span>
+                <div class="acts">
+                  <button class="sbtn" data-tip="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button>
+                  <button class="sbtn" data-tip="置顶"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+                  <button class="sbtn warn on" data-tip="已收藏"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></button>
+                  <button class="sbtn" data-tip="更多"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+                </div>
+              </div>
+            </article>
+
+            <!-- 编辑态卡：全页唯一一条工具条在此（composer 未聚焦，其工具条已收起） -->
+            <article class="memo editing">
+              <div class="txt">头像色由分类哈希决定：<div class="cb">const hash = (s: string) =&gt; {
+  let h = 0
+  for (let i = 0; i &lt; s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return Math.abs(h) % 6 // 六色循环
+}</div></div>
+              <div class="etools">
+                <button class="sbtn" data-tip="添加图片"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
+                <button class="sbtn" data-tip="插入标签"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><path d="M7 7h.01"/></svg></button>
+                <button class="sbtn" data-tip="置顶"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+                <button class="sbtn" data-tip="收藏"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></button>
+                <button class="sbtn" data-tip="全屏书写"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+                <span class="fill"></span>
+                <span class="save">已保存</span>
+                <button class="sbtn dan" data-tip="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                <button class="pub">完成</button>
+              </div>
+            </article>
+          </div>
+        </div></div>
+
+        <aside class="nrail">
+          <div class="rt">视图</div>
+          <button class="ri on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span class="nm">全部</span><span class="c">56</span></button>
+          <button class="ri"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg><span class="nm">置顶</span><span class="c">4</span></button>
+          <button class="ri"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><span class="nm">收藏</span><span class="c">9</span></button>
+          <div class="rt">标签</div>
+          <button class="ri"><span class="nm">#设计</span><span class="c">12</span></button>
+          <button class="ri"><span class="nm">#交互</span><span class="c">7</span></button>
+          <button class="ri"><span class="nm">#待办</span><span class="c">5</span></button>
+        </aside>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- 批量 dock 示例（仅收藏/快捷屏显示） -->
+<div class="dock" id="dock">
+  <span class="dc">已选 2 项</span>
+  <div class="dsep"></div>
+  <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>全选</button>
+  <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>取消</button>
+  <div class="dsep"></div>
+  <button class="dan"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>
+  <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>完成</button>
+</div>
+
+<!-- 条目详情弹窗：浏览态 ↔ 编辑态在同一个窗里换体，不弹第二个窗 -->
+<div class="modal" id="detailModal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="mbox">
+    <div class="mh">
+      <div class="fav" style="background:var(--cat-2)">
+        <img src="https://www.google.com/s2/favicons?domain=github.com&sz=32" onerror="this.remove()" alt=""/>G
+      </div>
+      <div class="mh-t"><div class="n">GitHub — desko 主仓</div><div class="d">开发 · 3 天前使用</div></div>
+      <button class="xbtn" id="detailClose" title="关闭 (Esc)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+
+    <!-- 浏览态 -->
+    <div class="mb" id="dtBrowse">
+      <div class="dsec">
+        <div class="dlab">网址</div>
+        <div class="dfield"><span class="dval link">https://github.com/jiang/desko</span><button class="mini"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button></div>
+      </div>
+      <div class="dsec">
+        <div class="dlab">凭证</div>
+        <div class="dfield"><span class="dval" style="color:var(--text-muted)">jiang</span><button class="mini"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button></div>
+        <div class="dfield"><span class="dval mono">••••••••••••</span><button class="mini"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>显示</button><button class="mini"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
+      </div>
+      <div class="dsec">
+        <div class="dlab">备注</div>
+        <div class="dval" style="color:var(--text-secondary);line-height:1.6">Tauri 桌面端主仓库，CI 从这里出 NSIS 安装包。合并前跑 Playwright E2E。</div>
+      </div>
+      <div class="dsec">
+        <div class="dlab">路径 · 5</div>
+        <div class="ec-tags" style="gap:6px">
+          <a class="path-pill">Issues</a><a class="path-pill">Actions</a><a class="path-pill">Pull requests</a><a class="path-pill">Wiki</a><a class="path-pill">Settings</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 编辑态 -->
+    <div class="mb hidden" id="dtEdit">
+      <div class="fld2">
+        <div class="fld"><label>名称 *</label><input value="GitHub — desko 主仓"/></div>
+        <div class="fld"><label>分类</label><input value="开发"/></div>
+      </div>
+      <div class="fld"><label>网址</label><input value="https://github.com/jiang/desko"/></div>
+      <div class="fld2">
+        <div class="fld"><label>用户名</label><input value="jiang"/></div>
+        <div class="fld"><label>密码（留空不改）</label><input type="password" placeholder="••••••"/></div>
+      </div>
+      <div class="fld"><label>备注</label><textarea rows="3">Tauri 桌面端主仓库，CI 从这里出 NSIS 安装包。合并前跑 Playwright E2E。</textarea></div>
+    </div>
+
+    <!-- 底栏：破坏性动作靠左，主操作靠右 -->
+    <div class="mf" id="dtFootBrowse">
+      <button class="btn dan"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button>
+      <span class="fill"></span>
+      <button class="btn ghost" id="toEdit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>编辑</button>
+      <button class="btn pri">在浏览器打开</button>
+    </div>
+    <div class="mf hidden" id="dtFootEdit">
+      <span class="fill"></span>
+      <button class="btn ghost" id="cancelEdit">取消</button>
+      <button class="btn pri" id="saveEdit">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增条目模态：去掉 header logo，字段合并，分类下拉换成统一浮层规格 -->
+<div class="modal" id="addModal">
+  <div class="mbox">
+    <div class="mh"><h3>新增条目</h3><span class="fill"></span><button class="xbtn" id="addClose"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="mb">
+      <div class="fld2">
+        <div class="fld"><label>名称 *</label><input placeholder="例如：OA 系统"/></div>
+        <div class="fld"><label>分类</label><input placeholder="选择或输入新分类"/></div>
+      </div>
+      <div class="fld"><label>网址</label><input placeholder="https://..."/></div>
+      <div class="fld2">
+        <div class="fld"><label>用户名</label><input placeholder="登录用户名"/></div>
+        <div class="fld"><label>密码</label><input type="password" placeholder="登录密码"/></div>
+      </div>
+      <div class="fld"><label>备注</label><textarea rows="2" placeholder="可选"></textarea></div>
+    </div>
+    <div class="mf"><button class="btn ghost" id="addCancel">取消</button><button class="btn pri">保存</button></div>
+  </div>
+</div>
+
+<!-- 全屏新建小记：书写面 + 斜杠命令菜单（/ 触发），工具条与列表页同一套 sbtn -->
+<div class="fsnew" id="fsnew" aria-hidden="true">
+  <div class="fsn-head">
+    <button class="fsn-exit" id="fsnExit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M8 21v-3a2 2 0 0 0-2-2H3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>退出全屏 <span class="kbd">Esc</span></button>
+    <span class="fill"></span>
+    <span class="fsn-save">草稿不会丢</span>
+  </div>
+  <div class="fsn-scroll"><div class="fsn-inner">
+    <div class="fsn-meta"><span>新小记</span><span class="dot"></span><span>18 字</span></div>
+    <div class="fsn-body" contenteditable="true">
+      <h2>重设计要点</h2>
+      <p>把三个模块收敛到同一套按钮与浮层语言。<b>/</b></p>
+      <div class="slash" style="left:200px;top:70px">
+        <div class="sh">基本块</div>
+        <div class="si"><span class="ic">¶</span><span class="lb">正文</span><span class="hk">文本</span></div>
+        <div class="si"><span class="ic">H1</span><span class="lb">标题 1</span><span class="hk">#</span></div>
+        <div class="si on"><span class="ic">H2</span><span class="lb">标题 2</span><span class="hk">##</span></div>
+        <div class="si"><span class="ic">•</span><span class="lb">无序列表</span><span class="hk">-</span></div>
+        <div class="si"><span class="ic">☑</span><span class="lb">待办</span><span class="hk">[]</span></div>
+        <div class="si"><span class="ic">❝</span><span class="lb">引用</span><span class="hk">&gt;</span></div>
+        <div class="sh">插入</div>
+        <div class="si"><span class="ic">{ }</span><span class="lb">代码块</span><span class="hk">```</span></div>
+        <div class="si"><span class="ic">#</span><span class="lb">标签</span><span class="hk">#tag</span></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="fsn-foot">
+    <button class="sbtn" data-tip="添加图片"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
+    <button class="sbtn" data-tip="插入标签"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><path d="M7 7h.01"/></svg></button>
+    <span class="fill"></span>
+    <span class="fsn-hint"><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> 发布</span>
+    <button class="pub" id="fsnPub">发布</button>
+  </div>
+</div>
+
+<script>
+const CRUMB={entries:'网址收藏',notes:'小记',files:'文件快捷'};
+function setView(v){
+  document.querySelectorAll('[data-v]').forEach(el=>el.classList.toggle('on', el.dataset.v===v));
+  document.getElementById('crumb').textContent=CRUMB[v];
+  // dock 只在收藏页（默认批量态演示）出现
+  document.getElementById('dock').classList.toggle('hidden', v!=='entries');
+}
+document.querySelectorAll('[data-v]').forEach(el=>el.addEventListener('click',()=>{if(el.dataset.v)setView(el.dataset.v)}));
+document.getElementById('themeSw').addEventListener('click',()=>{
+  const cur=document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme',cur==='cool'?'dark':'cool');
+});
+// 默认选中前两张卡，与 dock「已选 2 项」对齐
+document.querySelectorAll('.grid.batching .ecard').forEach((c,i)=>{if(i<2)c.classList.add('sel')});
+
+// 条目详情弹窗：点卡片开（按钮/链接除外），浏览↔编辑同处切换
+const detailModal=document.getElementById('detailModal');
+function detailMode(m){
+  const browse=m==='browse';
+  document.getElementById('dtBrowse').classList.toggle('hidden',!browse);
+  document.getElementById('dtEdit').classList.toggle('hidden',browse);
+  document.getElementById('dtFootBrowse').classList.toggle('hidden',!browse);
+  document.getElementById('dtFootEdit').classList.toggle('hidden',browse);
+}
+function openDetail(){detailModal.classList.add('on');detailModal.setAttribute('aria-hidden','false');detailMode('browse')}
+function closeDetail(){detailModal.classList.remove('on');detailModal.setAttribute('aria-hidden','true')}
+document.querySelectorAll('.ecard').forEach(c=>c.addEventListener('click',e=>{if(e.target.closest('button,a'))return;openDetail()}));
+document.getElementById('detailClose').addEventListener('click',closeDetail);
+document.getElementById('toEdit').addEventListener('click',()=>detailMode('edit'));
+document.getElementById('cancelEdit').addEventListener('click',()=>detailMode('browse'));
+document.getElementById('saveEdit').addEventListener('click',()=>detailMode('browse'));
+
+// 新增模态
+const addModal=document.getElementById('addModal');
+const closeAdd=()=>addModal.classList.remove('on');
+document.getElementById('addClose').addEventListener('click',closeAdd);
+document.getElementById('addCancel').addEventListener('click',closeAdd);
+[...document.querySelectorAll('.btn.pri')].forEach(b=>{if(b.textContent.includes('新增'))b.addEventListener('click',()=>addModal.classList.add('on'))});
+
+// 单一书写面：聚焦 composer 时，退出任何卡片的编辑态（反之亦然）
+document.getElementById('comp').addEventListener('focusin',()=>{
+  document.querySelectorAll('.memo.editing').forEach(m=>m.classList.remove('editing'));
+});
+
+// 全屏新建小记：composer 与编辑卡的「全屏书写」都进入同一面
+const fsnew=document.getElementById('fsnew');
+const openFs=()=>{fsnew.classList.add('on');fsnew.setAttribute('aria-hidden','false')};
+const closeFs=()=>{fsnew.classList.remove('on');fsnew.setAttribute('aria-hidden','true')};
+document.querySelectorAll('[data-tip="全屏书写"]').forEach(b=>b.addEventListener('click',openFs));
+document.getElementById('fsnExit').addEventListener('click',closeFs);
+document.getElementById('fsnPub').addEventListener('click',closeFs);
+
+// Esc 逐层退出；遮罩点击不关闭（关闭只走 X/Esc/取消）
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(fsnew.classList.contains('on'))closeFs();
+  else if(addModal.classList.contains('on'))closeAdd();
+  else if(detailModal.classList.contains('on'))closeDetail();
+});
+
+setView('entries');
+</script>
+</body>
+</html>

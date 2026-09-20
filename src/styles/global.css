@@ -37,6 +37,8 @@
   /* 小记卡片正文高度上限：短的小记按实际内容，长的裁到这里并渐隐 */
   --memo-max-h: 24vh;
   --rail-w: 208px;
+  /* 小记顶栏的实际占位高度：粘性日期行和窄窗口下的浮层侧栏都要从它下面开始 */
+  --stream-bar-h: 52px;
   /* 容器窄于此值时收起右栏，筛选降级为浮层 */
   --rail-min-room: 900px;
 }
@@ -72,22 +74,22 @@
   --bg: #f8f8fa;
   --panel-bg: #ffffff;
   --chrome-bg: #f1f1f5;
-  --sunken: #e9ebf1;
-  --fill: #e4e6ee;
-  --hover: #eef0f4;
+  --sunken: #eaeaf0;
+  --fill: #e6e6ee;
+  --hover: #f0f0f4;
   --active: #ececfb;
   --overlay: rgba(18, 18, 26, 0.42);
 
   /* 文字 */
-  --text: #1a1b20;
-  --text-secondary: #5c5e68;
-  --text-muted: #8b8d98;
-  --text-faint: #b4b6c0;
+  --text: #1b1b20;
+  --text-secondary: #5e5e68;
+  --text-muted: #8d8d98;
+  --text-faint: #b6b6c0;
 
   /* 描边 */
   --border: #e3e3ea;
   --border-strong: #c9c9d3;
-  --border-subtle: #eeeff3;
+  --border-subtle: #efeff3;
 
   /* 阴影 */
   --shadow-xs: 0 1px 2px 0 rgba(26, 27, 32, 0.07);
@@ -97,22 +99,22 @@
   --shadow-lg: 0 12px 28px -8px rgba(26, 27, 32, 0.18);
   --shadow-pop: 0 20px 44px -12px rgba(26, 27, 32, 0.24), 0 2px 8px rgba(26, 27, 32, 0.08);
 
-  /* 状态色：一个语义一档强度。--danger-on 是危险按钮上的文字色 */
-  --danger: #c9453f;
+  /* 状态色：一个语义一档强度。--danger-on 是危险按钮上的文字色。
+     三个状态色按"同一档可读写对比度"配平（浅色主题 ≥4.6:1，深色 ≥5.7:1），
+     所以明度看起来不齐——绿和琥珀的相对亮度天生比红高，等对比度才等重量。 */
+  --danger: #cc4740;
   --danger-on: #ffffff;
-  --danger-hover: #ab3833;
-  --danger-soft: #fbeceb;
-  --danger-border: #f0cfcd;
-  --success: #2f8168;
-  --success-soft: #e9f3f0;
-  --warning: #b0801f;
-  --warning-soft: #f8f1e2;
-  --info: #3d6fb0;
-  --info-soft: #ebf1f8;
+  --danger-hover: #bd3932;
+  --danger-soft: #f7eeee;
+  --danger-border: #e7ccca;
+  --success: #238366;
+  --success-soft: #eef7f4;
+  --warning: #936f22;
+  --warning-soft: #f7f4ed;
 
   /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
   --sidebar-bg: #f1f1f5;
-  --sidebar-hover: #e6e7ee;
+  --sidebar-hover: #e7e7ee;
 
   /* 品牌标渐变 */
   --brand-g1: #6a63ff;
@@ -122,7 +124,7 @@
 
   /* 锁屏 */
   --lock-wash-a: #f8f8fa;
-  --lock-wash-b: #e9ebf0;
+  --lock-wash-b: #eaeaf0;
   --lock-orb-1: rgba(91, 87, 217, 0.07);
   --lock-orb-2: rgba(91, 87, 217, 0.045);
 
@@ -131,16 +133,16 @@
   --frost-border: #e2e2e8;
 
   /* 深色面：气泡与 toast */
-  --tip-bg: #1a1b20;
+  --tip-bg: #1b1b20;
   --tip-fg: #f4f4f7;
-  --toast-bg: #1a1b20;
+  --toast-bg: #1b1b20;
   --toast-ok: #7fd3ae;
   --toast-err: #f0938e;
   --toast-info: #9d99f2;
 
   /* 滚动条与选区 */
-  --scrollbar: rgba(26, 27, 32, 0.16);
-  --scrollbar-hover: rgba(26, 27, 32, 0.28);
+  --scrollbar: rgba(27, 27, 32, 0.16);
+  --scrollbar-hover: rgba(27, 27, 32, 0.28);
   --selection: rgba(91, 87, 217, 0.18);
 
   /* 头像：按分类取色，六档同明度同彩度 */
@@ -212,17 +214,15 @@
   --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
   --shadow-pop: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 
-  --danger: #ef4444;
+  --danger: #e42323;
   --danger-on: #ffffff;
-  --danger-hover: #dc2626;
-  --danger-soft: #fef2f2;
-  --danger-border: #fecaca;
-  --success: #10b981;
-  --success-soft: #ecfdf5;
-  --warning: #f59e0b;
-  --warning-soft: #fffbeb;
-  --info: #3b82f6;
-  --info-soft: #eff6ff;
+  --danger-hover: #d11a1a;
+  --danger-soft: #f8ecec;
+  --danger-border: #ecc5c5;
+  --success: #10845f;
+  --success-soft: #ecf8f4;
+  --warning: #a16812;
+  --warning-soft: #f9f4ec;
 
   --sidebar-bg: #f8fafc;
   --sidebar-hover: #f3f4f6;
@@ -318,17 +318,15 @@
   --shadow-lg: 0 4px 12px rgba(24, 24, 27, 0.08);
   --shadow-pop: 0 16px 40px -10px rgba(24, 24, 27, 0.18), 0 2px 6px rgba(24, 24, 27, 0.06);
 
-  --danger: #c2413c;
+  --danger: #ca4944;
   --danger-on: #ffffff;
-  --danger-hover: #a43531;
-  --danger-soft: #fcf0ef;
-  --danger-border: #f2d5d3;
-  --success: #2b7d64;
-  --success-soft: #ebf3f0;
-  --warning: #a97a1c;
-  --warning-soft: #f9f2e4;
-  --info: #3a6ba8;
-  --info-soft: #eff4fa;
+  --danger-hover: #bb3935;
+  --danger-soft: #f7eeee;
+  --danger-border: #e7cccb;
+  --success: #258367;
+  --success-soft: #eef7f4;
+  --warning: #936e25;
+  --warning-soft: #f7f4ee;
 
   --sidebar-bg: #fbfbfc;
   --sidebar-hover: #f1f1f3;
@@ -424,17 +422,15 @@
   --shadow-lg: 0 16px 34px -10px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --shadow-pop: 0 26px 60px -14px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.07);
 
-  --danger: #e8635d;
+  --danger: #e56a62;
   --danger-on: #0c0c12;
-  --danger-hover: #f27a75;
-  --danger-soft: #2d1a1c;
-  --danger-border: #4d2528;
-  --success: #3fbf94;
-  --success-soft: #142722;
-  --warning: #dda03c;
-  --warning-soft: #2a2216;
-  --info: #6fa3e0;
-  --info-soft: #16202e;
+  --danger-hover: #f07f78;
+  --danger-soft: #281715;
+  --danger-border: #522b28;
+  --success: #2ec996;
+  --success-soft: #152822;
+  --warning: #d69a33;
+  --warning-soft: #282115;
 
   --sidebar-bg: #101014;
   --sidebar-hover: #1a1a20;
@@ -933,6 +929,115 @@ body {
 .mini-btn:active { transform: scale(0.97); }
 .mini-btn.on { color: var(--accent); background: var(--accent-soft); }
 
+/* ---------- 页眉工具条：每个页面顶部唯一一条 chrome。
+     原先只有小记页有这套，收藏页和文件页各写各的，看起来像三个时代的东西。 ---------- */
+.bar-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-right: auto;
+  padding-left: var(--space-1);
+}
+/* 32px 见方、平时无底，靠 hover 才亮 —— 与同一行的主按钮拉开重量但不错成两个框 */
+.bar-btn {
+  height: 32px;
+  min-width: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all var(--transition);
+  white-space: nowrap;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.bar-btn:hover { background: var(--hover); color: var(--text); }
+.bar-btn:active { transform: scale(0.95); }
+.bar-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.bar-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* 语义分组之间的竖线：一行里塞三组按钮时靠它断句 */
+.bar-div { width: 1px; align-self: stretch; background: var(--border); margin: 0 var(--space-1); flex-shrink: 0; }
+
+/* ---------- 批量底栏：从列表底部浮起，取代插在顶部的批量条 ---------- */
+.batch-dock {
+  position: fixed;
+  bottom: var(--space-5);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  padding: var(--space-2);
+  animation: dock-in var(--transition-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes dock-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+.dock-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+.dock-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 var(--space-1); }
+.dock-btn {
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all var(--transition);
+  white-space: nowrap;
+  font-family: inherit;
+}
+.dock-btn:hover { background: var(--hover); border-color: var(--border); color: var(--text); }
+.dock-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.dock-btn.danger { color: var(--danger); }
+.dock-btn.danger:hover { background: var(--danger-soft); border-color: var(--danger-border); }
+
+/* 读行里的就地动作：复制 / 显示密码 这类挂在值右侧的小动作。
+   比 .mini-btn 多一层底色，否则短值 + 长留白会让它看起来像孤立的文字 */
+.mini {
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.mini:hover { background: var(--accent-soft); color: var(--accent); }
+.mini:active { transform: scale(0.97); }
+.mini.danger:hover { background: var(--danger-soft); color: var(--danger); }
+
 /* 自动保存状态 */
 .save-hint { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
 .save-hint.saving { color: var(--warning); }
@@ -963,6 +1068,13 @@ body {
 }
 .popover.wide { min-width: 260px; padding: 0; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-3px) scale(0.98); } }
+
+/* Teleport 到 body 的分类下拉：脱离组件作用域，样式只能挂全局 */
+.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); max-height: 168px; overflow-y: auto; }
+.category-dropdown-teleported .category-option { padding: 7px 11px; font-size: 13px; cursor: pointer; transition: background var(--transition-fast); }
+.category-dropdown-teleported .category-option:hover { background: var(--accent-soft); }
+.category-dropdown-teleported .category-option.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.category-dropdown-teleported .category-empty { padding: 7px 11px; font-size: 13px; color: var(--text-muted); }
 
 /* 全局悬停提示：所有 title 属性自动换成深色气泡，共用挂在 body 上的这一个节点 */
 .app-tip {
@@ -1034,6 +1146,7 @@ body {
 .ib:focus-visible,
 .eb:focus-visible,
 .mini-btn:focus-visible,
+.mini:focus-visible,
 .pop-item:focus-visible,
 input[type="datetime-local"]:focus-visible {
   outline: none;

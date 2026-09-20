@@ -6,6 +6,8 @@ import type { FileShortcut } from '../../types'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import AppIcon from '../shared/AppIcon.vue'
+import { formatRelativeTime } from '../../utils/format'
 
 defineProps<{
   searchKeyword: string
@@ -141,42 +143,50 @@ const editFromMenu = () => {
   closeContextMenu()
 }
 
+/** 右键菜单项复用行内动作：先取当前条目，再收起菜单 */
+const runOnMenu = (fn: (shortcut: FileShortcut) => void) => {
+  if (contextMenu.value.shortcut) fn(contextMenu.value.shortcut)
+  closeContextMenu()
+}
+
+const confirmDelete = (shortcut: FileShortcut) => {
+  confirmStore.showConfirm('确认删除', `确定删除「${shortcut.name}」快捷方式？`, () => {
+    emit('removeShortcut', shortcut.id)
+    toastStore.showToast('已删除')
+  })
+}
+
 const deleteFromMenu = () => {
-  if (contextMenu.value.shortcut) {
-    const s = contextMenu.value.shortcut
-    confirmStore.showConfirm('确认删除', `确定删除「${s.name}」快捷方式？`, () => {
-      emit('removeShortcut', s.id)
-      toastStore.showToast('已删除')
-    })
-  }
+  if (contextMenu.value.shortcut) confirmDelete(contextMenu.value.shortcut)
   closeContextMenu()
 }
 
-const openContainingFolder = async () => {
-  if (contextMenu.value.shortcut) {
-    const path = contextMenu.value.shortcut.path.replace(/\\/g, '/')
-    const folder = path.substring(0, path.lastIndexOf('/'))
-    if (folder) {
-      try {
-        await api.openFile(folder)
-      } catch {
-        toastStore.showToast('无法打开所在目录', 'error')
-      }
-    }
+const openContainingFolder = async (shortcut: FileShortcut) => {
+  const path = shortcut.path.replace(/\\/g, '/')
+  const folder = path.substring(0, path.lastIndexOf('/'))
+  if (!folder) return
+  try {
+    await api.openFile(folder)
+  } catch {
+    toastStore.showToast('无法打开所在目录', 'error')
   }
-  closeContextMenu()
 }
 
-const copyPathToClipboard = async () => {
-  if (contextMenu.value.shortcut) {
-    try {
-      await navigator.clipboard.writeText(contextMenu.value.shortcut.path)
-      toastStore.showToast('地址已复制')
-    } catch {
-      toastStore.showToast('复制失败', 'error')
-    }
+const openInTerminal = async (shortcut: FileShortcut) => {
+  try {
+    await api.openTerminal(shortcut.path)
+  } catch {
+    toastStore.showToast('无法打开终端', 'error')
   }
-  closeContextMenu()
+}
+
+const copyPathToClipboard = async (shortcut: FileShortcut) => {
+  try {
+    await navigator.clipboard.writeText(shortcut.path)
+    toastStore.showToast('地址已复制')
+  } catch {
+    toastStore.showToast('复制失败', 'error')
+  }
 }
 
 const getFileExt = (path: string) => {
@@ -200,6 +210,21 @@ const EXT_SLOT: Record<string, string> = {
 
 const extVar = (ext: string) => `var(--ft-${EXT_SLOT[ext] || 'unk'})`
 
+/** 行列表的「类型」列说人话：色块已经给了具体扩展名，这里只给归类 */
+const SLOT_LABEL: Record<string, string> = {
+  pdf: '文档', doc: '文档', sheet: '表格', deck: '演示', arch: '归档',
+  code: '代码', mark: '文本', img: '图片', unk: '文件',
+}
+const typeLabel = (s: FileShortcut) =>
+  s.shortcut_type === 'folder' ? '文件夹' : (SLOT_LABEL[EXT_SLOT[getFileExt(s.path)] || 'unk'] ?? '文件')
+
+/** 路径只保留尾部：行宽有限，盘符和上层目录是噪音，完整路径在 title 里 */
+const pathTail = (path: string) => {
+  const parts = path.replace(/\\/g, '/').split('/').filter(Boolean)
+  if (parts.length <= 2) return parts.join('/')
+  return `…/${parts.slice(-2).join('/')}`
+}
+
 onMounted(() => {
   document.addEventListener('click', closeContextMenu)
 })
@@ -211,52 +236,80 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="content-inner">
-    <div class="toolbar">
+    <div class="page-bar">
       <div class="search-box">
-        <span class="search-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </span>
-        <input :value="searchKeyword" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" placeholder="搜索快捷方式..." />
-        <button v-if="searchKeyword"  class="search-clear" @click="emit('update:searchKeyword', '')" title="清除搜索">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <span class="search-icon"><AppIcon name="search" :size="15" /></span>
+        <input :value="searchKeyword" placeholder="搜索快捷方式…" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" />
+        <button v-if="searchKeyword" class="search-clear" @click="emit('update:searchKeyword', '')" title="清除搜索">
+          <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <div class="toolbar-actions">
-        <button class="btn-primary" @click="showAddDialog = true">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          添加快捷方式
-        </button>
+      <span class="bar-count">{{ filteredShortcuts.length }} 项</span>
+      <button class="btn-primary" @click="showAddDialog = true">
+        <AppIcon name="plus" :size="14" />
+        添加快捷方式
+      </button>
+    </div>
+
+    <div v-if="loading" class="loading-list">
+      <div class="skeleton-row" v-for="n in 6" :key="n">
+        <span class="skeleton-icon"></span>
+        <span class="skeleton-line w40"></span>
+        <span class="skeleton-line w24"></span>
       </div>
     </div>
 
-    <div v-if="loading" class="loading-grid">
-      <div class="skeleton-card" v-for="n in 6" :key="n">
-        <div class="skeleton-icon"></div>
-        <div class="skeleton-line w60"></div>
-        <div class="skeleton-line w80"></div>
+    <div v-else-if="filteredShortcuts.length > 0" class="shortcut-list">
+      <div class="list-head">
+        <span>名称</span>
+        <span>类型</span>
+        <span>路径</span>
+        <span>添加时间</span>
       </div>
-    </div>
-
-    <div v-else-if="filteredShortcuts.length > 0" class="shortcuts-grid">
-      <div v-for="shortcut in filteredShortcuts" :key="shortcut.id"
-           class="shortcut-card"
-           @click="openShortcut(shortcut)"
-           @contextmenu="onContextMenu($event, shortcut)">
-        <div class="shortcut-icon" :class="shortcut.shortcut_type">
-          <svg v-if="shortcut.shortcut_type === 'folder'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-          <span v-else class="file-ext" :style="{ color: extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
+      <div
+        v-for="shortcut in filteredShortcuts"
+        :key="shortcut.id"
+        class="shortcut-row"
+        role="button"
+        tabindex="0"
+        :aria-label="`打开 ${shortcut.name}`"
+        @click="openShortcut(shortcut)"
+        @keydown.enter.prevent="openShortcut(shortcut)"
+        @contextmenu="onContextMenu($event, shortcut)"
+      >
+        <div class="cell-name">
+          <span v-if="shortcut.shortcut_type === 'folder'" class="ft-ico folder" aria-hidden="true">
+            <AppIcon name="folder" :size="14" />
+          </span>
+          <span v-else class="ft-ico" :style="{ color: extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
+          <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
         </div>
-        <div class="shortcut-info">
-          <div class="shortcut-name">{{ shortcut.name }}</div>
-          <div  class="shortcut-path" :title="shortcut.path">{{ shortcut.path }}</div>
+        <span class="cell-type">{{ typeLabel(shortcut) }}</span>
+        <span class="cell-path" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span>
+        <span class="cell-time">{{ formatRelativeTime(shortcut.created_at) }}</span>
+        <div class="row-acts">
+          <button class="ib" type="button" title="打开所在目录" @click.stop="openContainingFolder(shortcut)">
+            <AppIcon name="folder" :size="13" />
+          </button>
+          <button class="ib" type="button" title="在终端中打开" @click.stop="openInTerminal(shortcut)">
+            <AppIcon name="terminal" :size="13" />
+          </button>
+          <button class="ib" type="button" title="复制地址" @click.stop="copyPathToClipboard(shortcut)">
+            <AppIcon name="copy" :size="13" />
+          </button>
+          <button class="ib" type="button" title="编辑" @click.stop="openEdit(shortcut)">
+            <AppIcon name="edit" :size="13" />
+          </button>
+          <button class="ib danger" type="button" title="删除" @click.stop="confirmDelete(shortcut)">
+            <AppIcon name="trash" :size="13" />
+          </button>
         </div>
       </div>
     </div>
 
     <div v-else class="empty-state">
       <div class="empty-icon">
-        <svg v-if="searchKeyword" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <svg v-else width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <AppIcon :name="searchKeyword ? 'searchEmpty' : 'folder'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无快捷方式' }}</div>
       <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「添加快捷方式」开始' }}</div>
@@ -310,20 +363,24 @@ onBeforeUnmount(() => {
     </Transition>
 
     <!-- Context Menu -->
-    <div v-if="contextMenu.show" class="context-menu" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
-      <div class="context-menu-item" @click="editFromMenu">
+    <div v-if="contextMenu.show" class="popover" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
+      <div class="pop-item" @click="editFromMenu">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         编辑
       </div>
-      <div class="context-menu-item" @click="openContainingFolder">
+      <div class="pop-item" @click="runOnMenu(openContainingFolder)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
         打开所在目录
       </div>
-      <div class="context-menu-item" @click="copyPathToClipboard">
+      <div class="pop-item" @click="runOnMenu(openInTerminal)">
+        <AppIcon name="terminal" :size="14" />
+        在终端中打开
+      </div>
+      <div class="pop-item" @click="runOnMenu(copyPathToClipboard)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         复制地址
       </div>
-      <div class="context-menu-item danger" @click="deleteFromMenu">
+      <div class="pop-item danger" @click="deleteFromMenu">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         删除
       </div>
@@ -332,88 +389,96 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.content-inner { flex: 1; overflow-y: auto; padding: 20px; }
+/* 顶部不留内边距：滚动容器带 padding-top 时 sticky 的 top:0 会贴在它下面，露出一条能看见内容的缝 */
+.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) 96px; }
 
-.toolbar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-.toolbar-actions { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
-
-.search-box {
-  flex: 1; max-width: 440px; min-width: 160px; display: flex; align-items: center; gap: 6px;
-  background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 0 10px; height: 34px; transition: all 0.15s;
+/* 与小记页同一条工具条 */
+.page-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: calc(var(--space-5) + var(--space-1)) 0 var(--space-3);
 }
-.search-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-.search-box input { flex: 1; border: none; background: none; padding: 0; font-size: 12px; outline: none; font-family: inherit; color: var(--text); height: 100%; }
-.search-box input::placeholder { color: var(--text-muted); }
+.page-bar .search-box { flex: 1; min-width: 80px; max-width: 440px; }
 
-.shortcuts-grid {
+/* 高密度行列表：一屏能看十几条，比原来的卡片网格密一倍 */
+.shortcut-list { border-top: 1px solid var(--border-subtle); }
+.list-head,
+.shortcut-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
+  /* 最后一列给行内动作常驻留位，hover 时才切换显示，行内容不会左右跳动 */
+  grid-template-columns: minmax(200px, 1.5fr) 78px minmax(150px, 1fr) 96px 124px;
+  gap: var(--space-3);
+  align-items: center;
 }
-
-.shortcut-card {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 16px; background: var(--panel-bg);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  cursor: pointer; transition: all 0.12s;
+.list-head {
+  padding: var(--space-2) var(--space-3);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
-.shortcut-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
-.shortcut-card:active { transform: scale(0.98); }
-
-.shortcut-icon {
-  width: 40px; height: 40px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+.shortcut-row {
+  position: relative;
+  padding: 7px var(--space-3);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition), box-shadow var(--transition);
 }
-.shortcut-icon.folder { background: var(--warning-soft); color: var(--warning); }
-.shortcut-icon.file { background: var(--fill); }
+.shortcut-row:hover { background: var(--panel-bg); box-shadow: inset 0 0 0 1px var(--border); }
+.shortcut-row:focus-visible { background: var(--panel-bg); box-shadow: inset 0 0 0 2px var(--accent-ring); }
 
-.file-ext {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+.cell-name { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.ft-ico {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--fill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
 }
+.ft-ico.folder { background: var(--warning-soft); color: var(--warning); }
+.row-name { font-size: 13px; font-weight: 500; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-type,
+.cell-path,
+.cell-time { font-size: 11.5px; color: var(--text-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-path { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; }
+.cell-time { font-variant-numeric: tabular-nums; }
 
-.shortcut-info { flex: 1; min-width: 0; }
-.shortcut-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.shortcut-path { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-acts { display: flex; gap: 1px; justify-content: flex-end; opacity: 0; pointer-events: none; transition: opacity var(--transition); }
+.shortcut-row:hover .row-acts, .shortcut-row:focus-within .row-acts { opacity: 1; pointer-events: auto; }
+html.hover-suppressed .shortcut-row:hover .row-acts { opacity: 0; pointer-events: none; }
 
 /* Loading skeleton */
-.loading-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-.skeleton-card { padding: 14px 16px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; gap: 8px; }
-.skeleton-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--hover); }
+.loading-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.skeleton-row { display: flex; align-items: center; gap: var(--space-3); padding: 9px var(--space-3); }
+.skeleton-icon { width: 26px; height: 26px; border-radius: 7px; background: var(--hover); flex-shrink: 0; }
 .skeleton-line { height: 10px; border-radius: 4px; background: var(--hover); }
-.skeleton-line.w60 { width: 60%; }
-.skeleton-line.w80 { width: 80%; }
+.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w24 { width: 24%; margin-left: auto; }
 
-/* Add dialog */
-.form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
-.form-group input { width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; outline: none; transition: all 0.15s; font-family: inherit; background: var(--bg); }
-.form-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg); }
-
-.path-input-row { display: flex; gap: 6px; align-items: stretch; }
+/* Add dialog（输入框本体用 global.css 的 .form-group） */
+.path-input-row { display: flex; gap: var(--space-1); align-items: stretch; }
 .path-input-row input { flex: 1; font-size: 13px; }
-.path-browse-btns { display: flex; gap: 4px; }
-.browse-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-bg); cursor: pointer; color: var(--text-muted); transition: all 0.12s; flex-shrink: 0; }
+.path-browse-btns { display: flex; gap: var(--space-1); }
+.browse-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-bg); cursor: pointer; color: var(--text-muted); transition: all var(--transition); flex-shrink: 0; }
 .browse-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 .type-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-.type-btn { flex: 1; padding: 7px 13px; font-size: 13px; font-weight: 500; border: none; background: var(--panel-bg); color: var(--text-muted); cursor: pointer; transition: all 0.12s; font-family: inherit; }
+.type-btn { flex: 1; padding: 7px 13px; font-size: 13px; font-weight: 500; border: none; background: var(--panel-bg); color: var(--text-muted); cursor: pointer; transition: all var(--transition); font-family: inherit; }
 .type-btn:not(:last-child) { border-right: 1px solid var(--border); }
 .type-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .type-btn:hover:not(.active) { background: var(--hover); color: var(--text-secondary); }
 
-/* Context menu */
-.context-menu {
-  position: fixed; background: var(--panel-bg); border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm); box-shadow: var(--shadow-pop);
-  padding: 4px; min-width: 160px; z-index: 1000;
-}
-.context-menu-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; font-size: 12px; color: var(--text);
-  cursor: pointer; border-radius: 4px; transition: background 0.1s;
-}
-.context-menu-item:hover { background: var(--hover); }
-.context-menu-item.danger { color: var(--danger); }
-.context-menu-item.danger:hover { background: var(--danger-soft); }
 </style>

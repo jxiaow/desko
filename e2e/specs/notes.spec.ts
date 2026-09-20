@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast } from '../helpers'
+import { bootUnlocked, e2e, expectToast, tipButton } from '../helpers'
 
 const SEED = {
   notes: [
@@ -13,6 +13,14 @@ function memo(page: Page, text: string) {
   return page.locator('.memo').filter({ hasText: text })
 }
 
+/** Tiptap 3 的 TaskItem 结构：li[data-checked] + label>input + div>p */
+const TODO_HTML =
+  '<p>发布前清单</p>' +
+  '<ul data-type="taskList">' +
+  '<li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p>跑一遍 E2E</p></div></li>' +
+  '<li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p>打包</p></div></li>' +
+  '</ul>'
+
 async function gotoNotes(page: Page) {
   await bootUnlocked(page, SEED, '/notes')
   await expect(page.locator('.notes-page')).toBeVisible()
@@ -24,8 +32,9 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.memo')).toHaveCount(3)
     await expect(page.locator('.bar-count')).toHaveText('3 / 3 条')
     expect(await e2e.count(page, 'list_notes')).toBe(1)
-    // 默认视口下 rail 可见（主区 >= 900px）
-    await expect(page.locator('.rail')).toBeVisible()
+    // 窄栏默认收起，列表占满宽度
+    await expect(page.locator('.rail')).toHaveCount(0)
+    await expect(page.locator('[aria-label="展开侧栏"]')).toBeVisible()
   })
 
   test('composer 发布新小记', async ({ page }) => {
@@ -76,12 +85,18 @@ test.describe('Notes 小记', () => {
     await target.hover()
     await target.locator('button.ib[title="置顶"]').click()
     await expect(target).toHaveClass(/pinned/)
-    await expect(page.locator('.state-pin[title="已置顶"]')).toBeVisible()
+    // 置顶态只由动作按钮表达：状态标里不再放第二个图钉
+    await expect(target.locator('.state-pin')).toHaveCount(0)
+    await expect(tipButton(target, '取消置顶')).toHaveClass(/on/)
     expect((await e2e.snapshot(page)).notes.find((n: any) => n.content_html.includes('第三条')).pinned).toBe(true)
 
     await target.hover()
     await target.locator('button.ib[title="收藏"]').click()
-    await expect(target.locator('.state-star[title="已收藏"]')).toBeVisible()
+    await expect(tipButton(target, '取消收藏')).toHaveClass(/on warn/)
+    // 悬停时状态标让位（opacity 归零），否则同一行出现两个星
+    expect(await target.locator('.memo-state').evaluate((el) => getComputedStyle(el).opacity)).toBe('0')
+    await page.mouse.move(4, 4)
+    await expect(target.locator('.state-star')).toBeVisible()
     expect((await e2e.snapshot(page)).notes.find((n: any) => n.content_html.includes('第三条')).starred).toBe(true)
   })
 
@@ -94,7 +109,8 @@ test.describe('Notes 小记', () => {
     await page.locator('button[title="清空搜索"]').click()
     await expect(page.locator('.memo')).toHaveCount(3)
 
-    // rail 视图切到「收藏」：无收藏 -> 空态
+    // 窄栏默认收起，视图筛选要先展开它
+    await tipButton(page, '展开侧栏').click()
     await page.locator('.rail button.rail-item', { hasText: '收藏' }).click()
     await expect(page.locator('.empty-title')).toHaveText('未找到匹配的小记')
     await page.locator('.rail button.rail-item.danger', { hasText: '清空筛选' }).click()
@@ -103,7 +119,7 @@ test.describe('Notes 小记', () => {
 
   test('批量删除小记', async ({ page }) => {
     await gotoNotes(page)
-    await page.locator('.stream-bar button.bar-btn', { hasText: '批量' }).click()
+    await tipButton(page, '批量选择').click()
     await expect(page.locator('.batch-dock')).toBeVisible()
 
     await memo(page, '第一条小记').click()
@@ -124,7 +140,9 @@ test.describe('Notes 小记', () => {
 
   test('全屏书写发布', async ({ page }) => {
     await gotoNotes(page)
-    await page.locator('.composer button[title="全屏书写"]').click()
+    // 工具条随展开才出现：先点输入框，再走全屏入口
+    await page.locator('.composer .ProseMirror').click()
+    await page.locator('.composer button[title="全屏书写"], .composer button[data-tip="全屏书写"]').click()
     const fs = page.locator('section.fs')
     await expect(fs).toBeVisible()
 
@@ -134,5 +152,100 @@ test.describe('Notes 小记', () => {
     await expect(fs).toHaveCount(0)
     await expect(memo(page, '全屏书写的内容')).toBeVisible()
     await expect(page.locator('.memo')).toHaveCount(4)
+  })
+
+  test('卡片上勾选任务项：改动落库，进编辑态不弹回', async ({ page }) => {
+    await bootUnlocked(page, { notes: [{ title: '清单', content_html: TODO_HTML }] }, '/notes')
+    const boxes = page.locator('.memo .memo-body input[type=checkbox]')
+    await expect(boxes).toHaveCount(2)
+    const checked = (i: number) => boxes.nth(i).evaluate((el) => (el as HTMLInputElement).checked)
+    const stored = async () => (await e2e.snapshot(page)).notes[0].content_html as string
+
+    await boxes.first().click()
+    await expect.poll(() => e2e.count(page, 'update_note')).toBe(1)
+    expect(await stored()).toContain('data-checked="true"')
+    // 只动点中的那一项
+    expect(await checked(1)).toBe(false)
+
+    await boxes.first().click()
+    await expect.poll(() => e2e.count(page, 'update_note')).toBe(2)
+    expect(await stored()).toContain('data-checked="false"')
+
+    // 连点勾选框是勾了又撤，不该顺手把编辑态拉开
+    await boxes.first().dblclick()
+    await expect(page.locator('.memo.editing')).toHaveCount(0)
+    expect(await checked(0)).toBe(false)
+
+    await boxes.first().click()
+    await expect.poll(() => e2e.count(page, 'update_note')).toBe(3)
+    expect(await stored()).toContain('data-checked="true"')
+
+    // 双击正文进编辑态，勾选状态要跟着带进去
+    await page.locator('.memo .memo-body p').first().dblclick()
+    await expect(page.locator('.memo.editing')).toBeVisible()
+    await expect(
+      page.locator('.memo.editing .ProseMirror input[type=checkbox]').first(),
+    ).toBeChecked()
+  })
+
+  test('斜杠命令在有文字的行上另起一块，不留段内换行', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('发布前 /')
+    await page.locator('.slash-item', { hasText: '任务列表' }).first().click()
+    await page.keyboard.type('abc')
+    const sum = await page.evaluate(() => {
+      const root = document.querySelector('.composer .ProseMirror')!
+      const li = root.querySelector('li')
+      const p = li?.querySelector('div > p')
+      return {
+        blocks: Array.from(root.children).map((c) => c.tagName).join(','),
+        itemText: p?.textContent ?? null,
+        itemBr: Array.from(p?.querySelectorAll('br') ?? []).length,
+        caretInLi: li?.contains(window.getSelection()?.anchorNode ?? null) ?? false,
+      }
+    })
+    // 旧实现插的是段内硬换行：正文掉到勾选框下面一行，光标也不可见
+    expect(sum).toEqual({ blocks: 'P,UL,P', itemText: 'abc', itemBr: 0, caretInLi: true })
+  })
+
+  test('空任务项的正文撑满行宽，光标有行盒可落', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('/')
+    await page.locator('.slash-item', { hasText: '任务列表' }).first().click()
+    const w = await page.evaluate(() => {
+      const li = document.querySelector('.composer .ProseMirror li')!
+      return Math.round(li.querySelector('div > p')!.getBoundingClientRect().width)
+    })
+    // 正文 div 是弹性项，不撑开就按内容缩成 0 宽，空条目里看不见光标
+    expect(w).toBeGreaterThan(100)
+  })
+
+  test('任务项勾选框与正文在同一视觉行', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('[] 第一项')
+    const diff = await page.evaluate(() => {
+      const li = document.querySelector('.composer .ProseMirror li')!
+      const box = li.querySelector('input')!.getBoundingClientRect()
+      const text = li.querySelector('div p')!.getBoundingClientRect()
+      return Math.abs(text.top + text.height / 2 - (box.top + box.height / 2))
+    })
+    // 块间距规则泄漏进 li 时正文会被压下去 8px，肉眼就是「文字掉到勾选框下面」
+    expect(diff).toBeLessThan(3)
+  })
+
+  test('勾完任务项光标留在这一条，打字不跑到下一行', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('[] 第一项')
+    await page.locator('.composer .ProseMirror input[type=checkbox]').first().click()
+    await page.keyboard.type('ABC')
+    await expect(pm.locator('li p').first()).toHaveText('第一项ABC')
   })
 })

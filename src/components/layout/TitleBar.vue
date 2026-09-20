@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { suppressHover } from '../../utils/hoverGuard'
+import BrandLogo from '../shared/BrandLogo.vue'
 
 defineProps<{
   isLocked?: boolean
@@ -15,6 +17,8 @@ const emit = defineEmits<{
 
 const appWindow = getCurrentWindow()
 const isMaximized = ref(false)
+const route = useRoute()
+const crumb = computed(() => (route.meta.title as string) ?? 'Desko')
 
 const updateMaximizedState = async () => {
   isMaximized.value = await appWindow.isMaximized()
@@ -45,7 +49,9 @@ const close = () => {
   withHoverGuard(() => appWindow.close())
 }
 
-const startDrag = () => {
+// 品牌区没有交互控件，自己接管拖拽，与空白拖拽区行为一致
+const startDrag = (e: MouseEvent) => {
+  if ((e.target as HTMLElement).closest('button')) return
   appWindow.startDragging()
 }
 
@@ -74,12 +80,16 @@ onUnmounted(() => {
     <div class="titlebar-drag" @mousedown="startDrag" @dblclick="toggleMaximize"></div>
 
     <div v-if="!isLocked" class="titlebar-left">
-      <button  class="titlebar-btn" @click="emit('toggleSidebar')" title="切换侧边栏">
+      <button class="titlebar-btn" @click="emit('toggleSidebar')" title="切换侧边栏">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2"/>
           <line x1="9" y1="3" x2="9" y2="21"/>
         </svg>
       </button>
+      <div class="titlebar-brand" @mousedown="startDrag" @dblclick="toggleMaximize">
+        <span class="brand-slot"><BrandLogo /></span>
+        <span class="titlebar-crumb">{{ crumb }}</span>
+      </div>
     </div>
 
     <div class="titlebar-buttons">
@@ -153,6 +163,33 @@ onUnmounted(() => {
   height: 100%;
   padding-left: 0;
   z-index: 1;
+}
+
+/* 品牌锚点：标题栏只留这一处身份标记，页面名靠右侧面包屑读出 */
+.titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: var(--space-1);
+  height: 100%;
+}
+
+.brand-slot {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.brand-slot svg { width: 100%; height: 100%; }
+
+.titlebar-crumb {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .titlebar-buttons {

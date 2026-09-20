@@ -166,6 +166,7 @@ fn main() {
             commands::file_shortcuts::update_file_shortcut,
             commands::file_shortcuts::delete_file_shortcut,
             commands::file_shortcuts::open_file,
+            commands::file_shortcuts::open_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

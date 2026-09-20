@@ -38,3 +38,26 @@ pub fn open_file(path: String) -> Result<(), AppError> {
     open::that(&path).map_err(|e| AppError::Io(format!("无法打开: {}", e)))?;
     Ok(())
 }
+
+#[tauri::command]
+pub fn open_terminal(path: String) -> Result<(), AppError> {
+    let target = std::path::PathBuf::from(&path);
+    // 目录快捷方式进自己，文件快捷方式进它所在的目录
+    let dir = if target.is_dir() {
+        target
+    } else {
+        target
+            .parent()
+            .ok_or_else(|| AppError::Io("路径里没有可进入的目录".to_string()))?
+            .to_path_buf()
+    };
+
+    // Windows Terminal 优先（Win11 自带），没装则退回经典控制台
+    std::process::Command::new("wt.exe")
+        .arg("-d")
+        .arg(&dir)
+        .spawn()
+        .or_else(|_| std::process::Command::new("cmd.exe").current_dir(&dir).spawn())
+        .map_err(|e| AppError::Io(format!("无法打开终端: {}", e)))?;
+    Ok(())
+}

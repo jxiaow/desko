@@ -8,14 +8,14 @@ import type { Entry } from '../types'
 import EntriesModule from '../components/entries/EntriesModule.vue'
 import EntryFormDialog from '../components/entries/EntryFormDialog.vue'
 import DetailDialog from '../components/entries/DetailDialog.vue'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useToastStore } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
 
 const entriesStore = useEntriesStore()
 const toastStore = useToastStore()
 const passwordStore = usePasswordStore()
-const { searchKeyword, activeTab, tabs, loading, filteredEntries } = storeToRefs(entriesStore)
+const { entries, searchKeyword, activeTab, tabs, loading, filteredEntries } = storeToRefs(entriesStore)
 const { visiblePasswords, passwordCache } = storeToRefs(passwordStore)
 const { togglePassword } = passwordStore
 const { fetchEntries } = entriesStore
@@ -28,44 +28,49 @@ const {
 } = useBatch()
 
 const showForm = ref(false)
-const editEntry = ref<Entry | null>(null)
-const showDetail = ref(false)
-const detailEntry = ref<Entry | null>(null)
+const detailId = ref<string | null>(null)
+const detailEditing = ref(false)
+/** 从 store 取当前对象：编辑保存后弹窗内容跟着刷新，不会停在旧快照上 */
+const detailEntry = computed(() => entries.value.find(e => e.id === detailId.value) ?? null)
 
-const openAdd = () => {
-  editEntry.value = null
-  showForm.value = true
+const openAdd = () => { showForm.value = true }
+
+const openDetail = (entry: Entry) => {
+  detailEditing.value = false
+  detailId.value = entry.id
 }
 
 const openEdit = (entry: Entry) => {
-  editEntry.value = entry
-  showForm.value = true
+  detailEditing.value = true
+  detailId.value = entry.id
 }
 
-const openDetail = (entry: Entry) => {
-  detailEntry.value = entry
-  showDetail.value = true
+const closeDetail = () => { detailId.value = null }
+
+const evictPassword = (id: string) => {
+  delete passwordCache.value[id]
+  delete visiblePasswords.value[id]
 }
 
-const onFormSaved = () => {
-  if (editEntry.value) {
-    delete passwordCache.value[editEntry.value.id]
-    delete visiblePasswords.value[editEntry.value.id]
-  }
+const onFormSaved = (id: string) => {
+  evictPassword(id)
   fetchEntries((msg) => toastStore.showToast(msg, 'error'))
 }
 
-const doDelete = (entry: Entry) => {
+const doDelete = (entry: Entry, after?: () => void) => {
   const { showConfirm } = useConfirmStore()
   showConfirm('确认删除', `确定删除「${entry.name}」？`, async () => {
     try {
       await entriesStore.deleteEntry(entry.id)
       toastStore.showToast('已删除')
+      after?.()
     } catch (e: any) {
       toastStore.showToast(e.message || '删除失败', 'error')
     }
   })
 }
+
+const categoryNames = computed(() => tabs.value.filter(t => t.id !== 'all').map(t => t.name))
 
 const openUrl = async (url: string) => {
   try {
@@ -129,20 +134,22 @@ const duplicateEntry = async (entry: Entry) => {
 
   <EntryFormDialog
     v-if="showForm"
-    :edit-entry="editEntry"
-    :categories="tabs.filter(t => t.id !== 'all').map(t => t.name)"
+    :categories="categoryNames"
     @close="showForm = false"
     @saved="onFormSaved"
   />
 
   <DetailDialog
-    v-if="showDetail && detailEntry"
+    v-if="detailEntry"
+    :key="detailEntry.id"
     :entry="detailEntry"
+    :categories="categoryNames"
+    :initial-editing="detailEditing"
     :visible-passwords="visiblePasswords"
     :password-cache="passwordCache"
-    @close="showDetail = false"
-    @edit="openEdit"
-    @delete="doDelete"
+    @close="closeDetail"
+    @delete="doDelete($event, closeDetail)"
+    @saved="onFormSaved"
     @toggle-password="togglePassword"
     @copy-password="copyPassword"
     @copy-text="copyToClipboard"

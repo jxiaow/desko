@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import BrandLogo from '../shared/BrandLogo.vue'
 import { useRoute } from 'vue-router'
 
 defineProps<{
@@ -15,39 +14,25 @@ const route = useRoute()
 
 <template>
   <div class="sidebar" :class="{ collapsed }">
-    <div class="sidebar-header">
-      <div class="sidebar-logo">
-        <BrandLogo />
-      </div>
-      <span v-if="!collapsed" class="sidebar-brand">Desko</span>
-    </div>
-
     <div class="sidebar-nav">
       <router-link to="/entries" class="nav-item" :class="{ active: route.path === '/entries' }">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         </div>
         <span v-if="!collapsed" class="nav-text">网址收藏</span>
-        <div v-if="!collapsed && route.path === '/entries'" class="nav-indicator"></div>
       </router-link>
       <router-link to="/notes" class="nav-item" :class="{ active: route.path === '/notes' }">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         </div>
         <span v-if="!collapsed" class="nav-text">小记</span>
-        <div v-if="!collapsed && route.path === '/notes'" class="nav-indicator"></div>
       </router-link>
       <router-link to="/files" class="nav-item" :class="{ active: route.path === '/files' }">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
         </div>
         <span v-if="!collapsed" class="nav-text">文件快捷</span>
-        <div v-if="!collapsed && route.path === '/files'" class="nav-indicator"></div>
       </router-link>
-    </div>
-
-    <div class="sidebar-footer">
-      <div class="version-tag">v1.0</div>
     </div>
   </div>
 </template>
@@ -67,33 +52,6 @@ const route = useRoute()
 
 .sidebar.collapsed {
   width: 64px;
-}
-
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-4);
-  border-bottom: 1px solid var(--border);
-  height: 56px;
-}
-
-.sidebar-logo {
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-}
-
-.sidebar-logo svg {
-  width: 100%;
-  height: 100%;
-}
-
-.sidebar-brand {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.02em;
 }
 
 .sidebar-nav {
@@ -130,10 +88,26 @@ const route = useRoute()
   color: var(--sidebar-text-active);
   font-weight: 600;
 }
+/* 选中靠左侧竖条读出，不再额外挂一个圆点 */
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-2) * -1);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  border-radius: 99px;
+  background: var(--accent);
+}
 
 .sidebar.collapsed .nav-item {
   justify-content: center;
   padding: var(--space-3);
+}
+
+.sidebar.collapsed .nav-item.active::before {
+  left: calc(var(--space-3) * -1);
 }
 
 .nav-icon {
@@ -153,30 +127,5 @@ const route = useRoute()
 .nav-text {
   flex: 1;
   overflow: hidden;
-}
-
-.nav-indicator {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
-}
-
-.sidebar-footer {
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--border);
-  display: flex;
-  justify-content: center;
-}
-
-.version-tag {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.sidebar.collapsed .version-tag {
-  display: none;
 }
 </style>

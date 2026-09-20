@@ -7,6 +7,7 @@ node_modules/
 # Build outputs
 dist/
 src-tauri/target/
+installer/
 
 # IDE
 .vscode/
@@ -36,3 +37,9 @@ blob-report/
 
 # 四主题实机截图，node scripts/theme-shots.mjs 可随时重生成
 design/theme-shots/
+
+# 走查与验证截图，Playwright 跑一遍就能重生成，不进版本库
+design/fix-shots/
+design/redesign-shots/
+design/status-shots/
+design/proto-*.png

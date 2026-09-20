@@ -6,7 +6,7 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const ANCHORS = {
-  cool:    { bg: 'rgb(248, 248, 250)', text: 'rgb(26, 27, 32)',    accent: '#5b57d9' },
+  cool:    { bg: 'rgb(248, 248, 250)', text: 'rgb(27, 27, 32)',    accent: '#5b57d9' },
   classic: { bg: 'rgb(250, 251, 252)', text: 'rgb(17, 24, 39)',    accent: '#6366f1' },
   white:   { bg: 'rgb(255, 255, 255)', text: 'rgb(24, 24, 27)',    accent: '#4b47c4' },
   dark:    { bg: 'rgb(12, 12, 15)',    text: 'rgb(238, 238, 243)', accent: '#7b77f0' },
@@ -108,7 +108,7 @@ test.describe('主题', () => {
     await dialog.locator('.theme-chip', { hasText: '冷灰' }).click()
     await waitForToastGone(page)
     await settingsTab(dialog, 'security')
-    expect(await probeToast('8')).toEqual({ bg: 'rgb(26, 27, 32)', color: 'rgb(127, 211, 174)' })
+    expect(await probeToast('8')).toEqual({ bg: 'rgb(27, 27, 32)', color: 'rgb(127, 211, 174)' })
   })
 
   test('品牌标渐变读主题令牌，多实例的 id 互不相同', async ({ page }) => {

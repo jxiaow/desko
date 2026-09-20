@@ -46,8 +46,8 @@ export const useNotesStore = defineStore('notes', () => {
   const noteView = ref<NoteView>('all')
   const activeTags = ref<Set<string>>(new Set())
   const noteSort = ref<NoteSort>('new')
-  // 右窄栏由用户收起的状态：跟着会话走，宽度不够时另有自动隐藏
-  const noteRailCollapsed = ref(false)
+  // 右窄栏默认收起，列表占满宽度；顶栏按钮展开后跟着会话走，宽度不够时另有浮层侧栏
+  const noteRailCollapsed = ref(true)
 
   // 批量操作状态
   const isBatchMode = ref(false)

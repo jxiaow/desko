@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { Entry, Tab } from '../../types'
 import { avatarClass } from '../../utils/avatar'
+import { formatUrlDisplay } from '../../utils/format'
+import AppIcon from '../shared/AppIcon.vue'
+import PopoverMenu from '../shared/PopoverMenu.vue'
+import EntryActionMenu from './EntryActionMenu.vue'
 
 defineProps<{
   searchKeyword: string
@@ -40,7 +44,6 @@ const tabsRef = ref<HTMLElement | null>(null)
 
 let tabsObserver: ResizeObserver | null = null
 
-
 const pathVisibleCount = ref<Map<string, number>>(new Map())
 const pathContainers = ref<Map<string, HTMLElement>>(new Map())
 let pathObserver: ResizeObserver | null = null
@@ -48,36 +51,31 @@ let pathObserver: ResizeObserver | null = null
 const calcPathVisible = (entryId: string) => {
   const container = pathContainers.value.get(entryId)
   if (!container) return
-  
-  const children = Array.from(container.children) as HTMLElement[]
-  const links = children.filter(c => c.classList.contains('card-path-link'))
-  const moreEl = children.find(c => c.classList.contains('card-paths-more'))
-  
-  if (links.length === 0) return
-  
-  const containerWidth = container.clientWidth
-  const moreWidth = moreEl ? moreEl.offsetWidth : 40
-  
-  let totalWidth = 0
-  let visibleCount = links.length
-  
+
+  const links = (Array.from(container.children) as HTMLElement[])
+    .filter(c => c.classList.contains('card-path-link'))
+  const moreEl = (Array.from(container.children) as HTMLElement[])
+    .find(c => c.classList.contains('card-paths-more'))
+  if (!links.length) return
+
+  const width = container.clientWidth
+  const moreWidth = moreEl?.offsetWidth ?? 40
+  const gap = 4
+  let used = 0
+  let count = 0
   for (let i = 0; i < links.length; i++) {
-    totalWidth += links[i].offsetWidth + 4
-    if (i < links.length - 1 && totalWidth + moreWidth > containerWidth) {
-      visibleCount = i
-      break
-    }
+    const w = links[i].offsetWidth + (i ? gap : 0)
+    // 只有还会剩下未显示项时才预留 +N 的位置，最后一枚不需要
+    const reserve = i < links.length - 1 ? moreWidth + gap : 0
+    if (used + w + reserve > width) break
+    used += w
+    count++
   }
-  
-  if (totalWidth > containerWidth && visibleCount === links.length) {
-    visibleCount = links.length - 1
-  }
-  
-  const newCount = Math.max(0, visibleCount)
+  // 一枚都不留比截断更糟：整行只剩个 "+N"，看不出这里有什么可点
+  if (count === 0) count = 1
+
   const oldCount = pathVisibleCount.value.get(entryId)
-  if (oldCount !== newCount) {
-    pathVisibleCount.value.set(entryId, newCount)
-  }
+  if (oldCount !== count) pathVisibleCount.value.set(entryId, count)
 }
 
 const registerPathContainer = (entryId: string, el: HTMLElement | null) => {
@@ -102,6 +100,56 @@ const registerPathContainer = (entryId: string, el: HTMLElement | null) => {
   }
 }
 
+/** 一次只开一张卡片的动作菜单 */
+const menuAnchor = ref<HTMLElement | null>(null)
+const menuEntry = ref<Entry | null>(null)
+
+const openMenu = (el: HTMLElement, item: Entry) => {
+  if (menuEntry.value?.id === item.id) {
+    menuAnchor.value = null
+    menuEntry.value = null
+    return
+  }
+  menuAnchor.value = el
+  menuEntry.value = item
+}
+
+const closeMenu = () => {
+  menuAnchor.value = null
+  menuEntry.value = null
+}
+
+/** 路径溢出的「+N」浮层：点击开合，条目可跳转（hover 浮层跨不过间隙，点不到就消失） */
+const pathsAnchor = ref<HTMLElement | null>(null)
+const pathsEntry = ref<Entry | null>(null)
+
+const openPathsMenu = (el: HTMLElement, item: Entry) => {
+  if (pathsEntry.value?.id === item.id) {
+    pathsAnchor.value = null
+    pathsEntry.value = null
+    return
+  }
+  pathsAnchor.value = el
+  pathsEntry.value = item
+}
+
+const closePathsMenu = () => {
+  pathsAnchor.value = null
+  pathsEntry.value = null
+}
+
+/** 批量态下整张卡就是选择热区，非批量态才落到详情 */
+const onCardClick = (item: Entry, isBatchMode: boolean) => {
+  if (isBatchMode) emit('toggleSelect', item.id)
+  else emit('openDetail', item)
+}
+
+const openPath = (entry: Entry, path: string) => {
+  emit('openUrl', entry.url
+    ? entry.url.replace(/\/$/, '') + (path.startsWith('/') ? path : '/' + path)
+    : path)
+}
+
 onMounted(() => {
   if (tabsRef.value) {
     tabsObserver = new ResizeObserver(() => {
@@ -121,36 +169,29 @@ onUnmounted(() => {
 
 <template>
   <div class="content-inner">
-    <div class="toolbar">
+    <div class="page-bar">
       <div class="search-box">
         <span class="search-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <AppIcon name="search" :size="15" />
         </span>
-        <input :value="searchKeyword" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" placeholder="搜索名称或网址..." />
-        <button v-if="searchKeyword"  class="search-clear" @click="emit('update:searchKeyword', '')" title="清除搜索">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <input :value="searchKeyword" placeholder="搜索名称或网址…" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" />
+        <button v-if="searchKeyword" class="search-clear" @click="emit('update:searchKeyword', '')" title="清除搜索">
+          <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <div class="toolbar-actions">
-        <button class="btn-primary" @click="emit('openAdd')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          新增条目
-        </button>
-        <button class="btn-secondary" :class="{ active: isBatchMode }" @click="emit('toggleBatchMode')">
-          {{ isBatchMode ? '取消选择' : '批量选择' }}
-        </button>
-      </div>
-    </div>
-
-    <div v-if="isBatchMode" class="batch-bar">
-      <span class="batch-info">已选择 {{ selectedIds.size }} 项</span>
-      <div class="batch-actions">
-        <button class="batch-btn" @click="emit('selectAll')">全选</button>
-        <button class="batch-btn" @click="emit('deselectAll')">取消全选</button>
-        <button class="batch-btn danger" @click="emit('batchDelete')" :disabled="selectedIds.size === 0">
-          删除选中
-        </button>
-      </div>
+      <span class="bar-count">{{ filteredEntries.length }} / {{ tabs.find(t => t.id === 'all')?.count ?? 0 }}</span>
+      <button
+        class="bar-btn"
+        :class="{ active: isBatchMode }"
+        :title="isBatchMode ? '退出批量' : '批量选择'"
+        @click="emit('toggleBatchMode')"
+      >
+        <AppIcon name="checkall" :size="14" />
+      </button>
+      <button class="btn-primary" @click="emit('openAdd')">
+        <AppIcon name="plus" :size="14" />
+        新增条目
+      </button>
     </div>
 
     <div class="tabs" :class="{ expanded: tabsExpanded }" ref="tabsRef">
@@ -191,104 +232,157 @@ onUnmounted(() => {
       </div>
     </div>
     <div v-else-if="filteredEntries.length" class="cards-grid">
-      <div
+      <article
         v-for="item in filteredEntries"
         :key="item.id"
         class="entry-card"
-        :class="{ selected: selectedIds.has(item.id) }"
+        :class="{ selected: selectedIds.has(item.id), batching: isBatchMode }"
+        tabindex="0"
+        role="button"
+        :aria-label="`条目：${item.name}`"
+        @click="onCardClick(item, isBatchMode)"
+        @keydown.enter.prevent="onCardClick(item, isBatchMode)"
       >
-        <div v-if="isBatchMode" class="card-checkbox" @click.stop="emit('toggleSelect', item.id)">
-          <span class="checkbox" :class="{ checked: selectedIds.has(item.id) }">
-            {{ selectedIds.has(item.id) ? '✓' : '' }}
+        <span v-if="isBatchMode" class="card-check" :class="{ checked: selectedIds.has(item.id) }" aria-hidden="true">
+          <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="11" />
+        </span>
+
+        <div class="ec-top">
+          <div class="card-avatar" :class="avatarClass(item.category)">{{ item.name.charAt(0) }}</div>
+          <div class="ec-id">
+            <div class="ec-name-row">
+              <span class="ec-name">{{ item.name }}</span>
+              <span class="ec-cat">{{ item.category || '未分类' }}</span>
+            </div>
+            <a
+              v-if="item.url"
+              class="ec-domain"
+              :title="item.url"
+              @click.prevent.stop="emit('openUrl', item.url!)"
+              @contextmenu.prevent="emit('copyText', item.url!, '网址')"
+            >{{ formatUrlDisplay(item.url) }}</a>
+          </div>
+          <button
+            class="ib ec-more"
+            type="button"
+            title="更多操作"
+            aria-label="更多操作"
+            @click.stop="openMenu($event.currentTarget as HTMLElement, item)"
+          >
+            <AppIcon name="dots" :size="14" />
+          </button>
+        </div>
+
+        <p v-if="item.notes" class="ec-note" :title="item.notes">{{ item.notes }}</p>
+
+        <!-- 底栏整条留给多路径快捷访问，分类不占这里。没有路径也占一行，网格才只有一种卡高 -->
+        <div class="ec-foot">
+          <span v-if="item.username || passwordCache[item.id]?.value" class="ec-cred" title="已存登录凭证">
+            <AppIcon name="lock" :size="11" />
+            凭证
           </span>
-        </div>
-        <div class="card-header">
-          <div class="card-header-main">
-            <div class="card-avatar" :class="avatarClass(item.category)">
-              {{ item.name.charAt(0) }}
-            </div>
-            <div class="card-title-area">
-              <div class="card-title-row">
-                <span class="card-name">{{ item.name }}</span>
-                <span class="card-category">{{ item.category || '未分类' }}</span>
-              </div>
-              <a
-                v-if="item.url"
-                class="card-url"
-                @click.prevent.stop="emit('openUrl', item.url!)"
-                @contextmenu.prevent="emit('copyText', item.url!, '网址')"
-              >{{ item.url }}</a>
-            </div>
-          </div>
-          <div class="card-header-actions">
-            <button  class="card-icon-btn" @click.stop="emit('duplicateEntry', item)" title="复制卡片">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
-            <button  class="card-icon-btn" @click.stop="emit('openDetail', item)" title="查看详情">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
-            <button  class="card-icon-btn" @click.stop="emit('openEdit', item)" title="编辑">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            <button  class="card-icon-btn danger" @click.stop="emit('delete', item)" title="删除">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </button>
-          </div>
-        </div>
-        <div class="card-body" @click="emit('openDetail', item)">
-          <div v-if="item.username || passwordCache[item.id]?.value" class="card-credential-badge">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span>{{ item.username ? '有凭证' : '有密码' }}</span>
-          </div>
-          <div v-if="item.notes" class="card-notes">
-            <span class="card-notes-icon"></span>
-            <span class="card-notes-text">{{ item.notes }}</span>
-          </div>
-          <div v-if="item.paths && item.paths.length > 0" class="card-paths" :ref="(el) => registerPathContainer(item.id, el as HTMLElement)">
+          <div
+            v-if="item.paths && item.paths.length"
+            class="ec-paths"
+            :ref="(el) => registerPathContainer(item.id, el as HTMLElement)"
+          >
             <a
               v-for="path in item.paths.slice(0, pathVisibleCount.get(item.id) ?? item.paths.length)"
               :key="path.id"
               class="card-path-link"
-              @click.stop.prevent="emit('openUrl', item.url ? item.url.replace(/\/$/, '') + (path.path.startsWith('/') ? path.path : '/' + path.path) : path.path)"
               :title="path.label || path.path"
-            >
-              <span>{{ path.label || path.path }}</span>
-            </a>
-            <div v-if="(pathVisibleCount.get(item.id) ?? item.paths.length) < item.paths.length" class="card-paths-more" @click.stop>
-              <span class="card-paths-count">+{{ item.paths.length - (pathVisibleCount.get(item.id) ?? item.paths.length) }}</span>
-              <div class="card-paths-popover">
-                <a
-                  v-for="path in item.paths.slice(pathVisibleCount.get(item.id) ?? item.paths.length)"
-                  :key="path.id"
-                  class="card-paths-popover-item"
-                  @click.stop.prevent="emit('openUrl', item.url ? item.url.replace(/\/$/, '') + (path.path.startsWith('/') ? path.path : '/' + path.path) : path.path)"
-                >
-                  <span>{{ path.label || path.path }}</span>
-                </a>
-              </div>
-            </div>
+              @click.stop.prevent="openPath(item, path.path)"
+            >{{ path.label || path.path }}</a>
+            <button
+              v-if="(pathVisibleCount.get(item.id) ?? item.paths.length) < item.paths.length"
+              class="card-paths-more"
+              type="button"
+              :title="`还有 ${item.paths.length - (pathVisibleCount.get(item.id) ?? item.paths.length)} 个路径`"
+              @click.stop="openPathsMenu($event.currentTarget as HTMLElement, item)"
+            >+{{ item.paths.length - (pathVisibleCount.get(item.id) ?? item.paths.length) }}</button>
           </div>
         </div>
-      </div>
+
+        <PopoverMenu
+          v-if="pathsEntry?.id === item.id && pathsAnchor"
+          :anchor="pathsAnchor"
+          align="start"
+          wide
+          @close="closePathsMenu"
+        >
+          <div class="pop-sec">
+            <div class="pop-label">路径 · {{ item.paths?.length ?? 0 }}</div>
+            <button
+              v-for="path in item.paths ?? []"
+              :key="path.id"
+              class="pop-item"
+              type="button"
+              @click="closePathsMenu(); openPath(item, path.path)"
+            >
+              <AppIcon name="external" :size="13" />
+              <span class="pop-path-label">{{ path.label || path.path }}</span>
+              <span v-if="path.label" class="pop-path-value">{{ path.path }}</span>
+            </button>
+          </div>
+        </PopoverMenu>
+
+        <EntryActionMenu
+          v-if="menuEntry?.id === item.id"
+          :anchor="menuAnchor"
+          :entry="item"
+          @detail="closeMenu(); emit('openDetail', item)"
+          @edit="closeMenu(); emit('openEdit', item)"
+          @duplicate="closeMenu(); emit('duplicateEntry', item)"
+          @open-url="closeMenu(); emit('openUrl', $event)"
+          @delete="closeMenu(); emit('delete', item)"
+          @close="closeMenu"
+        />
+      </article>
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon">
-        <svg v-if="searchKeyword" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-        <svg v-else width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        <AppIcon :name="searchKeyword ? 'searchEmpty' : 'folder'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无记录' }}</div>
       <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」添加' }}</div>
+    </div>
+
+    <div v-if="isBatchMode" class="batch-dock">
+      <span class="dock-count">已选 {{ selectedIds.size }} 项</span>
+      <button class="dock-btn" type="button" @click="emit('selectAll')">
+        <AppIcon name="checkall" :size="12" />全选
+      </button>
+      <button class="dock-btn" type="button" :disabled="!selectedIds.size" @click="emit('deselectAll')">
+        <AppIcon name="x" :size="12" />取消全选
+      </button>
+      <span class="dock-sep"></span>
+      <button class="dock-btn danger" type="button" :disabled="!selectedIds.size" @click="emit('batchDelete')">
+        <AppIcon name="trash" :size="12" />删除选中
+      </button>
+      <button class="dock-btn" type="button" @click="emit('toggleBatchMode')">
+        <AppIcon name="check" :size="12" />完成
+      </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.content-inner { flex: 1; overflow-y: auto; padding: var(--space-5); }
+/* 底部留 96px：批量底栏浮在它上面，不压住最后一行卡片。
+   顶部不留内边距：滚动容器带 padding-top 时 sticky 的 top:0 会贴在它下面，露出一条能看见内容的缝 */
+.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) 96px; }
 
-.toolbar { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); align-items: center; padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
-.toolbar-actions { display: flex; gap: var(--space-2); margin-left: auto; flex-shrink: 0; }
-
-.search-box { flex: 1; max-width: 440px; min-width: 160px; }
+/* 与小记页同一条工具条：粘顶、无分隔线，靠底色遮住滚动内容 */
+.page-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: calc(var(--space-5) + var(--space-1)) 0 var(--space-3);
+}
+.page-bar .search-box { flex: 1; min-width: 80px; max-width: 440px; }
 
 .tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-4); max-height: 36px; overflow: hidden; transition: max-height var(--transition-slow); align-items: center; }
 .tabs.expanded { max-height: 200px; }
@@ -297,66 +391,150 @@ onUnmounted(() => {
 .tabs-toggle { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); font-size: 11px; font-weight: 500; color: var(--text-muted); background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; transition: all var(--transition); font-family: inherit; }
 .tabs-toggle:hover { color: var(--text-secondary); border-color: var(--border-strong); background: var(--hover); }
 
-.batch-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); background: var(--accent-soft); border: 1px solid var(--accent-light); border-radius: var(--radius); margin-bottom: var(--space-4); }
-.batch-info { font-size: 12px; color: var(--accent); font-weight: 600; }
-.batch-actions { display: flex; gap: var(--space-2); }
-.batch-btn { padding: var(--space-1) var(--space-3); border: 1px solid var(--accent-light); background: var(--panel-bg); border-radius: var(--radius-sm); font-size: 11px; color: var(--accent); cursor: pointer; transition: all var(--transition); font-family: inherit; font-weight: 500; }
-.batch-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
-.batch-btn:active { transform: scale(0.95); }
-.batch-btn.danger { color: var(--danger); border-color: var(--danger-soft); }
-.batch-btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
-.batch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--space-3); }
 
-.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
-
-.entry-card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-md); transition: all var(--transition); overflow: hidden; position: relative; box-shadow: var(--shadow-xs); min-height: 120px; display: flex; flex-direction: column; }
+.entry-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-xs);
+  transition: all var(--transition);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+}
 .entry-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-2px); }
-.entry-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); background: var(--accent-light); }
+.entry-card:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.entry-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); background: var(--accent-soft); }
+/* 批量态整张卡变成选择热区，动作入口先让位 */
+.entry-card.batching { padding-left: calc(var(--space-8) + var(--space-3)); }
+.entry-card.batching .ec-more { display: none; }
 
-.card-header { position: relative; display: flex; align-items: flex-start; padding: var(--space-4) var(--space-4) var(--space-3); gap: var(--space-2); }
-.card-header-main { display: flex; align-items: flex-start; gap: var(--space-3); flex: 1; min-width: 0; }
-.card-header-actions { position: absolute; top: var(--space-4); right: var(--space-4); display: flex; gap: var(--space-1); background: var(--panel-bg); border-radius: var(--radius-sm); opacity: 0; pointer-events: none; transition: opacity var(--transition); }
-.entry-card:hover .card-header-actions { opacity: 1; pointer-events: auto; }
-html.hover-suppressed .entry-card:hover .card-header-actions { opacity: 0; pointer-events: none; }
+.card-check {
+  position: absolute;
+  left: var(--space-3);
+  top: var(--space-4);
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--panel-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-on);
+  transition: all var(--transition);
+}
+.card-check:hover { border-color: var(--accent); }
+.card-check.checked { background: var(--accent); border-color: var(--accent); }
 
-.card-avatar { width: 32px; height: 32px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--cat-text); flex-shrink: 0; }
+.ec-top { display: flex; align-items: center; gap: var(--space-3); }
+.card-avatar { width: 36px; height: 36px; border-radius: 9px; font-size: 14px; }
+.ec-id { flex: 1; min-width: 0; }
+.ec-name-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.ec-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ec-cat { font-size: 11px; font-weight: 500; color: var(--text-muted); background: var(--fill); padding: 1px 7px; border-radius: 99px; flex-shrink: 0; }
+.ec-domain {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ec-domain:hover { color: var(--accent); }
+/* 动作收进一个 ⋯：四个并排的 hover 按钮把卡片顶成一排工具 */
+.ec-more { opacity: 0; pointer-events: none; transition: opacity var(--transition); flex-shrink: 0; }
+.entry-card:hover .ec-more, .entry-card:focus-within .ec-more { opacity: 1; pointer-events: auto; }
+html.hover-suppressed .entry-card:hover .ec-more { opacity: 0; pointer-events: none; }
 
-.card-icon-btn { width: 24px; height: 24px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; transition: all var(--transition); color: var(--text-muted); }
-.card-icon-btn:hover { background: var(--hover); color: var(--text-secondary); }
-.card-icon-btn:active { transform: scale(0.9); }
-.card-icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
+/* 备注只占一行：两行会让同一网格出现两种卡高，空白从中间挪到卡片末尾 */
+.ec-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-.card-title-area { flex: 1; min-width: 0; }
-.card-title-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.card-name { font-size: 14px; font-weight: 600; color: var(--text); word-break: break-word; line-height: 1.3; flex: 0 1 auto; min-width: 0; }
-.card-category { font-size: 11px; color: var(--text-muted); background: var(--hover); padding: 2px var(--space-2); border-radius: 4px; font-weight: 500; flex-shrink: 0; }
-.card-url { font-size: 12px; color: var(--accent); text-decoration: none; cursor: pointer; display: -webkit-box; overflow: hidden; text-overflow: ellipsis; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; margin-top: 6px; line-height: 1.4; }
-.card-url:hover { text-decoration: underline; }
-
-.card-body { padding: 0 var(--space-4) var(--space-4); cursor: pointer; flex: 1; display: flex; flex-direction: column; }
-.card-credential-badge { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); background: var(--accent-soft); color: var(--accent); border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; margin-bottom: var(--space-2); }
-.card-credential-badge svg { color: var(--accent); }
-
-.card-notes { display: flex; align-items: flex-start; gap: var(--space-2); margin-top: auto; padding-top: var(--space-2); border-top: 1px solid var(--border); }
-.card-notes-icon::before { content: ''; display: block; width: 3px; height: 3px; border-radius: 50%; background: var(--text-muted); margin-top: 6px; flex-shrink: 0; }
-.card-notes-text { font-size: 12px; color: var(--text-muted); line-height: 1.5; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-
-.card-paths { display: flex; align-items: center; gap: var(--space-1); margin-top: auto; padding-top: var(--space-2); border-top: 1px solid var(--border); overflow: hidden; }
-.card-path-link { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); font-size: 12px; color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm); cursor: pointer; text-decoration: none; transition: all var(--transition); }
+/* 不换行：路径药丸本来就按可用宽度截断，换行会把卡片顶出第二种高度 */
+.ec-foot { display: flex; align-items: center; gap: var(--space-2); margin-top: auto; min-width: 0; min-height: 23px; }
+.ec-cred {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: 99px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  flex-shrink: 0;
+}
+/* 弹性项是路径区本身，不是占位符：否则容器被挤到几十像素，药丸全塌成 +N */
+.ec-paths { display: flex; align-items: center; gap: var(--space-1); flex: 1; min-width: 0; overflow: hidden; }
+.card-path-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .card-path-link:hover { background: var(--accent); color: var(--accent-on); }
-.card-path-label { font-weight: 500; }
-.card-path-path { font-family: monospace; opacity: 0.8; }
-.card-paths-more { position: relative; display: inline-flex; }
-.card-paths-count { display: inline-flex; align-items: center; justify-content: center; padding: var(--space-1) var(--space-2); font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm); cursor: pointer; min-width: 20px; transition: all var(--transition); }
-.card-paths-count:hover { background: var(--accent); color: var(--accent-on); }
-.card-paths-popover { display: none; position: absolute; bottom: calc(100% + var(--space-1)); left: 0; z-index: 20; min-width: 160px; max-width: 280px; padding: var(--space-1); background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-md); flex-direction: column; gap: var(--space-1); }
-.card-paths-more:hover .card-paths-popover { display: flex; }
-.card-paths-popover-item { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); font-size: 12px; color: var(--accent); background: transparent; border-radius: var(--radius-sm); cursor: pointer; text-decoration: none; transition: all var(--transition); white-space: nowrap; overflow: hidden; }
-.card-paths-popover-item:hover { background: var(--accent-soft); }
+.card-paths-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+.card-paths-more:hover, .card-paths-more[aria-expanded] { background: var(--accent); color: var(--accent-on); }
 
-.card-checkbox { position: absolute; top: var(--space-2); left: var(--space-2); z-index: 10; }
-.checkbox { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 2px solid var(--border); border-radius: 4px; background: var(--panel-bg); font-size: 9px; font-weight: 600; color: var(--accent); cursor: pointer; transition: all var(--transition); }
-.checkbox.checked { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+.pop-path-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pop-path-value {
+  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .empty-state { text-align: center; padding: var(--space-12) var(--space-5); color: var(--text-muted); }
 .empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: var(--radius-lg); background: var(--panel-bg); border: 1px solid var(--border); color: var(--text-muted); opacity: 0.4; margin-bottom: var(--space-4); }
@@ -365,10 +543,10 @@ html.hover-suppressed .entry-card:hover .card-header-actions { opacity: 0; point
 .empty-desc { font-size: 13px; color: var(--text-muted); }
 
 .loading { padding: var(--space-4) 0; }
-.skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-3); }
-.skeleton-card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); animation: skeleton-pulse 1.5s ease-in-out infinite; }
+.skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--space-3); }
+.skeleton-card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-3); animation: skeleton-pulse 1.5s ease-in-out infinite; }
 .skeleton-header { display: flex; gap: var(--space-3); margin-bottom: var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
-.skeleton-avatar { width: 32px; height: 32px; border-radius: var(--radius); background: var(--hover); flex-shrink: 0; }
+.skeleton-avatar { width: 36px; height: 36px; border-radius: 9px; background: var(--hover); flex-shrink: 0; }
 .skeleton-title-area { flex: 1; display: flex; flex-direction: column; gap: var(--space-1); }
 .skeleton-line { height: 8px; background: var(--hover); border-radius: 4px; width: 100%; }
 .skeleton-line.short { width: 55%; }

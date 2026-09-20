@@ -55,13 +55,27 @@ const fsTarget = ref<'new' | string | null>(null)
 const newbornId = ref<string | null>(null)
 
 const railRoom = ref(true)
+/** 窄窗口下用户手动叫出来的浮层侧栏。放不下的时候开关也不能消失，否则侧栏就再也回不来了 */
+const railPinned = ref(false)
 const filterAnchor = ref<HTMLElement | null>(null)
 const sortAnchor = ref<HTMLElement | null>(null)
 
-/** 侧栏真正可见 = 放得下 且 用户没收起 */
+/** 侧栏真正在流内可见 = 放得下 且 用户没收起 */
 const railOpen = computed(() => railRoom.value && !noteRailCollapsed.value)
-const toggleRail = () => { noteRailCollapsed.value = !noteRailCollapsed.value }
-watch(railOpen, (open) => { if (open) filterAnchor.value = null })
+const railOverlay = computed(() => !railRoom.value && railPinned.value)
+const railVisible = computed(() => railOpen.value || railOverlay.value)
+const toggleRail = () => {
+  if (railRoom.value) {
+    noteRailCollapsed.value = !noteRailCollapsed.value
+    railPinned.value = false
+  } else {
+    railPinned.value = !railPinned.value
+  }
+}
+watch(railRoom, (room) => {
+  if (room) railPinned.value = false
+  if (room || railOpen.value) filterAnchor.value = null
+})
 
 const draftText = computed(() => htmlToText(draftHtml.value))
 const draftEmpty = computed(() => !draftText.value.trim())
@@ -254,39 +268,49 @@ onBeforeUnmount(() => {
 
           <span class="bar-count">{{ filteredNotes.length }} / {{ notes.length }} 条</span>
 
-          <button
-            v-if="!railOpen"
-            class="bar-btn"
-            :class="{ active: hasActiveFilters }"
-            type="button"
-            @click="pickFilter"
-          >
-            <AppIcon name="filter" :size="13" />
-            筛选
-          </button>
+          <div class="bar-div"></div>
           <button
             class="bar-btn"
             :class="{ active: noteSort !== 'new' }"
             type="button"
+            :title="`排序：${sortLabel}`"
+            :aria-label="`排序：${sortLabel}`"
             @click="pickSort"
           >
-            <AppIcon name="clock" :size="13" />
-            {{ sortLabel }}
-          </button>
-          <button class="bar-btn" :class="{ active: isBatchMode }" type="button" @click="toggleBatch">
-            <AppIcon name="checkall" :size="13" />
-            {{ isBatchMode ? '退出' : '批量' }}
+            <AppIcon name="clock" :size="15" />
           </button>
           <button
-            v-if="railRoom"
+            v-if="!railVisible"
             class="bar-btn"
-            :class="{ active: noteRailCollapsed }"
+            :class="{ active: hasActiveFilters }"
             type="button"
-            :title="noteRailCollapsed ? '展开侧栏' : '收起侧栏'"
+            title="筛选视图与标签"
+            aria-label="筛选视图与标签"
+            @click="pickFilter"
+          >
+            <AppIcon name="filter" :size="15" />
+          </button>
+
+          <div class="bar-div"></div>
+          <button
+            class="bar-btn"
+            :class="{ active: isBatchMode }"
+            type="button"
+            :title="isBatchMode ? '退出批量' : '批量选择'"
+            :aria-label="isBatchMode ? '退出批量' : '批量选择'"
+            @click="toggleBatch"
+          >
+            <AppIcon name="checkall" :size="15" />
+          </button>
+          <button
+            class="bar-btn"
+            :class="{ active: railVisible }"
+            type="button"
+            :title="railVisible ? '收起侧栏' : '展开侧栏'"
+            :aria-label="railVisible ? '收起侧栏' : '展开侧栏'"
             @click="toggleRail"
           >
-            <AppIcon name="panel" :size="13" />
-            {{ noteRailCollapsed ? '展开' : '收起' }}
+            <AppIcon name="panel" :size="15" />
           </button>
         </div>
 
@@ -353,7 +377,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <aside v-if="railOpen" class="rail">
+    <aside v-if="railVisible" class="rail" :class="{ overlay: railOverlay }">
       <div class="rail-title">视图</div>
       <button
         v-for="v in VIEWS"
@@ -496,6 +520,7 @@ onBeforeUnmount(() => {
   display: flex;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .stream {
@@ -526,38 +551,12 @@ onBeforeUnmount(() => {
   margin-bottom: var(--space-1);
 }
 .stream-bar .search-box { flex: 1; min-width: 80px; max-width: 320px; }
-.bar-count {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  margin-right: auto;
-  padding-left: var(--space-1);
-}
-.bar-btn {
-  height: 32px;
-  padding: 0 var(--space-2);
-  border: 1px solid transparent;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  transition: all var(--transition);
-  white-space: nowrap;
-  font-family: inherit;
-}
-.bar-btn:hover { background: var(--hover); }
-.bar-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 
 /* ---------- 日期分组 ---------- */
 .day { margin-bottom: var(--space-4); }
 .day-head {
   position: sticky;
-  top: calc(36px + var(--space-2) * 2);
+  top: var(--stream-bar-h);
   z-index: 10;
   display: flex;
   align-items: center;
@@ -575,7 +574,7 @@ onBeforeUnmount(() => {
 .day-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .memo-skeleton {
@@ -628,56 +627,24 @@ onBeforeUnmount(() => {
 .rail-item.danger { color: var(--danger); }
 .rail-item.danger:hover { background: var(--danger-soft); }
 .rail-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 窄窗口下侧栏浮在流的上方，而不是把书写流挤扁。
+   从顶栏下面开始：盖住顶栏就等于把「收起侧栏」那颗按钮一起盖掉，开了关不上 */
+.rail.overlay {
+  position: absolute;
+  top: var(--stream-bar-h);
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  box-shadow: var(--shadow-pop);
+  border-left: 1px solid var(--border);
+  animation: rail-in var(--transition) ease both;
+}
+@keyframes rail-in { from { opacity: 0; transform: translateX(8px); } }
 .rail-sep { height: 1px; background: var(--border); margin: var(--space-3) var(--space-2); }
 .rail-empty { font-size: 12px; color: var(--text-muted); padding: 0 var(--space-2); }
 
-/* ---------- 批量底栏 ---------- */
-.batch-dock {
-  position: fixed;
-  bottom: var(--space-5);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 120;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
-  padding: var(--space-2);
-  animation: dock-in var(--transition-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@keyframes dock-in { from { opacity: 0; transform: translate(-50%, 10px); } }
-.dock-count {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
-  padding: 0 var(--space-2);
-  white-space: nowrap;
-}
-.dock-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 var(--space-1); }
-.dock-btn {
-  height: 28px;
-  padding: 0 var(--space-2);
-  border: 1px solid transparent;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  transition: all var(--transition);
-  white-space: nowrap;
-  font-family: inherit;
-}
-.dock-btn:hover { background: var(--hover); border-color: var(--border); color: var(--text); }
-.dock-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.dock-btn.danger { color: var(--danger); }
-.dock-btn.danger:hover { background: var(--danger-soft); border-color: var(--danger-border); }
+/* ---------- 批量底栏的骨架在 global.css，三页共用 ---------- */
 
 .pop-sec.tight { padding-top: 0; }
 .tab.danger { color: var(--danger); }

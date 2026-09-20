@@ -656,6 +656,11 @@ class MockBackend {
       // 真实实现调用 OS open；mock 仅记录（已由 invoke 统一记录）
       void path
     },
+
+    open_terminal: ({ path }) => {
+      // 真实实现拉起终端进程；mock 仅记录
+      void path
+    },
   }
 }
 

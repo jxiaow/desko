@@ -223,6 +223,8 @@ describe('NotesModule', () => {
     ])
     const wrapper = await mountModule()
     const store = useNotesStore()
+    await wrapper.find('.bar-btn[aria-label="展开侧栏"]').trigger('click')
+    await flushPromises()
 
     await wrapper.find('input[aria-label="搜索小记"]').setValue('甲')
     expect(wrapper.findAll('.memo')).toHaveLength(1)
@@ -267,12 +269,12 @@ describe('NotesModule', () => {
     const wrapper = await mountModule()
     const store = useNotesStore()
 
-    const batchPill = () => wrapper.findAll('.bar-btn').find(b => b.text().includes('批量'))!
+    const batchPill = () => wrapper.find('.bar-btn[aria-label="批量选择"]')
     await batchPill().trigger('click')
     await flushPromises()
     expect(store.isBatchMode).toBe(true)
     expect(wrapper.find('.batch-dock').exists()).toBe(true)
-    expect(wrapper.text()).toContain('退出')
+    expect(wrapper.find('.bar-btn[aria-label="退出批量"]').exists()).toBe(true)
 
     await wrapper.find('.dock-btn').trigger('click') // 全选
     expect(store.selectedNoteIds.size).toBe(2)
@@ -291,6 +293,8 @@ describe('NotesModule', () => {
   it('hides the rail below the min room and shows the filter pill', async () => {
     stageNotes([makeNote()])
     const wrapper = await mountModule()
+    await wrapper.find('.bar-btn[aria-label="展开侧栏"]').trigger('click')
+    await flushPromises()
     expect(wrapper.find('.rail').exists()).toBe(true)
 
     const fire = (width: number) => {
@@ -300,7 +304,7 @@ describe('NotesModule', () => {
 
     await fire(700)
     expect(wrapper.find('.rail').exists()).toBe(false)
-    expect(wrapper.text()).toContain('筛选')
+    expect(wrapper.find('[aria-label="筛选视图与标签"]').exists()).toBe(true)
 
     await fire(720) // 未跨越阈值不再改状态
     expect(wrapper.find('.rail').exists()).toBe(false)
@@ -310,29 +314,32 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
-  it('collapses the rail from the top bar and restores it from the same slot', async () => {
+  it('starts with the rail collapsed and keeps the opened state across remounts', async () => {
     stageNotes([makeNote()])
     const wrapper = await mountModule()
     const store = useNotesStore()
     const pill = (w: typeof wrapper, label: string) =>
-      w.findAll('.bar-btn').find(b => b.text().includes(label))!
+      w.find(`.bar-btn[aria-label="${label}侧栏"]`)
 
-    expect(wrapper.text()).toContain('收起')
-    await pill(wrapper, '收起').trigger('click')
-    await flushPromises()
+    // 默认收起，筛选入口回到顶栏
     expect(store.noteRailCollapsed).toBe(true)
     expect(wrapper.find('.rail').exists()).toBe(false)
-    expect(wrapper.text()).toContain('筛选')
-    wrapper.unmount()
+    expect(wrapper.find('[aria-label="筛选视图与标签"]').exists()).toBe(true)
 
-    // 收起是会话级的：切走再回来仍是收起的
-    const again = await mountModule()
-    expect(again.find('.rail').exists()).toBe(false)
-
-    await pill(again, '展开').trigger('click')
+    await pill(wrapper, '展开').trigger('click')
     await flushPromises()
     expect(store.noteRailCollapsed).toBe(false)
+    expect(wrapper.find('.rail').exists()).toBe(true)
+    wrapper.unmount()
+
+    // 展开是会话级的：切走再回来仍是展开的
+    const again = await mountModule()
     expect(again.find('.rail').exists()).toBe(true)
+
+    await pill(again, '收起').trigger('click')
+    await flushPromises()
+    expect(store.noteRailCollapsed).toBe(true)
+    expect(again.find('.rail').exists()).toBe(false)
     again.unmount()
   })
 
