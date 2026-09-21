@@ -7,7 +7,6 @@ use crate::error::AppError;
 use crate::webdav::Client;
 
 pub const META_CFG: &str = "cloud_cfg";
-pub const META_AUTO: &str = "auto_cloud_sync";
 pub const META_KEEP_REMOTE: &str = "keep_remote";
 
 /// 同步记录写在备份目录的 sidecar 里，不进库。
@@ -42,7 +41,6 @@ pub struct CloudStatus {
     pub configured: bool,
     pub server: String,
     pub account: String,
-    pub auto_sync: bool,
     pub keep_remote: i64,
     pub last_sync_at: i64,
     pub synced_packages: usize,
@@ -115,7 +113,6 @@ pub fn status(db: &Database, master_key: &[u8], backups: &Path) -> Result<CloudS
         configured: cfg.is_some(),
         server: cfg.as_ref().map(|c| c.server.clone()).unwrap_or_default(),
         account: cfg.as_ref().map(|c| c.account.clone()).unwrap_or_default(),
-        auto_sync: enabled(db),
         keep_remote: keep_remote(db),
         last_sync_at: state.last_sync_at,
         synced_packages: state.packages.len(),
@@ -123,9 +120,10 @@ pub fn status(db: &Database, master_key: &[u8], backups: &Path) -> Result<CloudS
     })
 }
 
+/// 断开 = 抹掉凭据与同步记录。自动那一档不用另写开关：`auto_on` 要求 configured，
+/// 凭据没了轮次自然就停。
 pub fn disconnect(db: &Database, backups: &Path) -> Result<(), AppError> {
     db.set_meta(META_CFG, "")?;
-    db.set_meta(META_AUTO, "false")?;
     clear_state(backups)
 }
 
@@ -214,10 +212,15 @@ pub fn configured(db: &Database) -> bool {
     db.get_meta(META_CFG).ok().flatten().map(|v| !v.is_empty()).unwrap_or(false)
 }
 
-/// 用户有没有把"自动备份到云"打开、并且真配了云端。只看 meta 在不在，不解密凭据，
-/// 所以持锁时也能调。定时器整轮的总闸就在这：没开就连本地包都不打。
-pub fn enabled(db: &Database) -> bool {
-    db.get_meta(META_AUTO).ok().flatten().as_deref() == Some("true") && configured(db)
+/// 自动那一档到底开没开：配了云端，并且至少有一种触发方式（定时或停笔即备）。
+///
+/// 判据只有一条，界面上也只留一个控件：以前"自动同步"和"定时备份"是两把闸，
+/// 那是本地备份与云备份分家时的遗留 —— 现在本地那份只是等上传的中转，两把闸就是一个东西。
+/// 只看 meta，不解密凭据，所以持锁时也能调。
+pub fn auto_on(db: &Database) -> bool {
+    configured(db)
+        && (crate::services::auto_backup::interval_min(db) > 0
+            || crate::services::auto_backup::realtime_on(db))
 }
 
 /// 云端轮转后收敛同步记录：只留下本地还认得的名字。

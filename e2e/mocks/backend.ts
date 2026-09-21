@@ -143,7 +143,7 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'auto_cloud_sync', 'keep_remote']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote']
 
 /** 与 Rust 端 backup::LOCAL_FLOOR 对齐：传上云的包本地只留这么几份兜底 */
 const LOCAL_FLOOR = 3
@@ -791,7 +791,6 @@ class MockBackend {
         configured: c.configured,
         server: c.server,
         account: c.account,
-        autoSync: this.state.settings.auto_cloud_sync === 'true',
         keepRemote: parseInt(this.state.settings.keep_remote || '20') || 20,
         lastSyncAt: c.lastSyncAt,
         syncedPackages: c.packages.length,

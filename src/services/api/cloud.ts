@@ -4,7 +4,6 @@ export interface CloudStatus {
   configured: boolean
   server: string
   account: string
-  autoSync: boolean
   keepRemote: number
   lastSyncAt: number
   syncedPackages: number

@@ -112,7 +112,7 @@ test.describe('Settings 设置', () => {
     expect((await e2e.snapshot(page)).settings.lock_on_close).toBe('true')
   })
 
-  test('导出 SQL 入口已移除，未连云端时备份入口也只有连接', async ({ page }) => {
+  test('导出 SQL 入口已移除，未连云端时整档置灰而不是消失', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
@@ -122,33 +122,33 @@ test.describe('Settings 设置', () => {
     await expect(pane.locator('.section-label', { hasText: '数据' })).toBeVisible()
     await expect(pane.locator('.section-label', { hasText: '云端备份' })).toBeVisible()
     await expect(pane.locator('.section-label', { hasText: '迁移' })).toBeVisible()
-    // 备份只服务于云同步：没连云端时除了密码和连接，一行都不给
-    await expect(pane.locator('.setting-item')).toHaveCount(6)
-    await expect(pane.locator('.setting-item', { hasText: '立即备份' })).toHaveCount(0)
+    // 只有一把闸：既没有第二个"自动同步"开关，也没有单独的"定时备份"行了
+    await expect(pane.locator('.setting-item', { hasText: '自动备份到云' })).toHaveCount(0)
     await expect(pane.locator('.setting-item', { hasText: '定时备份' })).toHaveCount(0)
-    await expect(pane.locator('button', { hasText: '云端列表' })).toHaveCount(0)
-    // 本地包降级成中转副本：不再列文件、不再让用户配保留份数
+    // WebDAV 没配置时，备份这一档每个控件都摆着看但点不动
+    await expect(pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn')).toBeDisabled()
+    await expect(pane.locator('.setting-item', { hasText: '自动备份' }).locator('select.select-input')).toBeDisabled()
+    await expect(pane.locator('.setting-item', { hasText: '停笔即备' }).locator('input[type="checkbox"]')).toBeDisabled()
+    await expect(pane.locator('.setting-item', { hasText: '云端保留份数' }).locator('.number-input')).toBeDisabled()
+    await expect(pane.locator('button', { hasText: '云端列表' })).toBeDisabled()
+    // 本地包只是中转：不列文件、不让用户配本地保留份数
     await expect(pane.locator('.file-row')).toHaveCount(0)
     await expect(pane.locator('.setting-item', { hasText: '本地保留份数' })).toHaveCount(0)
     await expect(pane.locator('button', { hasText: '打开文件夹' })).toHaveCount(0)
+    await expect(pane.locator('.setting-item')).toHaveCount(11)
   })
 
-  test('定时备份与停笔即备：连上云端才出现，改动落盘', async ({ page }) => {
+  test('自动备份：一把闸管到底，未连接置灰、连上后可选、改动落盘', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
-    const select = pane.locator('.setting-item', { hasText: '定时备份' }).locator('select.select-input')
-    // 没连云端：这几行根本不存在
-    await expect(select).toHaveCount(0)
+    const select = pane.locator('.setting-item', { hasText: '自动备份' }).locator('select.select-input')
+    await expect(select).toBeDisabled()
 
     await setBackupPwd(page, pane)
-    await connectCloud(page, pane)
-
-    // 总闸（自动备份到云）没开时，定时与停笔都无从谈起
+    // 光有备份密码不够，没云端照样灰着
     await expect(select).toBeDisabled()
-    const auto = pane.locator('.setting-item', { hasText: '自动备份到云' })
-    await auto.locator('label.switch').click()
-    expect((await e2e.snapshot(page))).toMatchObject({ settings: { auto_cloud_sync: 'true' } })
+    await connectCloud(page, pane)
     await expect(select).toBeEnabled()
 
     // 默认按 5 分钟显示（Rust 侧默认值，seed 未写）
@@ -157,7 +157,7 @@ test.describe('Settings 设置', () => {
     expect((await e2e.snapshot(page))).toMatchObject({
       settings: { auto_backup_interval: '15' },
     })
-    // 选「关闭」写 0，不是空串
+    // 选「关闭」写 0，不是空串 —— 这一档关掉就等于自动备份全关
     await select.selectOption('0')
     expect((await e2e.snapshot(page))).toMatchObject({
       settings: { auto_backup_interval: '0' },
@@ -198,16 +198,18 @@ test.describe('Settings 设置', () => {
     await expect(dialog).toBeVisible()
   })
 
-  test('未连云端没有备份入口；连上之后一轮打完随即上传', async ({ page }) => {
+  test('未连云端时备份按钮点不动；连上之后一轮打完随即上传', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
+    const row = pane.locator('.setting-item', { hasText: '立即备份' })
     await setBackupPwd(page, pane)
     // 密码只是前置，没云端这个动作毫无意义
-    await expect(pane.locator('.setting-item', { hasText: '立即备份' })).toHaveCount(0)
+    await expect(row.locator('button.action-btn')).toBeDisabled()
+    await expect(row.locator('.setting-desc')).toContainText('请先配置上方')
 
     await connectCloud(page, pane)
-    const row = pane.locator('.setting-item', { hasText: '立即备份' })
+    await expect(row.locator('button.action-btn')).toBeEnabled()
     await expect(row.locator('.setting-desc')).toHaveText('尚无备份')
 
     // 行内进度条一闪而过，别去断言它，只看结果
@@ -334,7 +336,7 @@ test.describe('Settings 设置', () => {
       .toEqual(['C:/e2e/attachments/kept__b.png'])
   })
 
-  test('云端连接：配置校验 → 保存 → 打完即传 → 断开收起整档', async ({ page }) => {
+  test('云端连接：配置校验 → 保存 → 打完即传 → 断开重新置灰', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
@@ -375,7 +377,7 @@ test.describe('Settings 设置', () => {
     await expect(confirm).toBeVisible()
     await confirm.locator('.btn-danger').click()
     await expectToast(page, '已断开')
-    await expect(pane.locator('.setting-item', { hasText: '立即备份' })).toHaveCount(0)
+    await expect(pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn')).toBeDisabled()
     // 断开 = 同步记录一起清掉（重连时全量重传），本地那一份没人家的份数规则可管，原样留着
     const off = await e2e.snapshot(page)
     expect(off.cloud.packages).toHaveLength(0)

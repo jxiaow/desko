@@ -11,7 +11,7 @@ use crate::error::AppError;
 use crate::services::{attachment_service, backup_service, cloud_service};
 use crate::AppState;
 
-/// 定时备份间隔（分钟），0 = 关
+/// 定时备份间隔（分钟），0 = 关。这就是「自动备份」唯一的开关，界面上不再有第二把闸
 pub const META_INTERVAL: &str = "auto_backup_interval";
 /// 实时备份：写入平息 8 秒后立即补一轮，默认关
 pub const META_REALTIME: &str = "auto_backup_realtime";
@@ -157,7 +157,7 @@ pub fn sync_cloud(state: &AppState, job: &Job, progress: &dyn Fn(&str, u8), forc
             Ok(d) => d,
             Err(e) => return SyncOutcome::Failed(format!("锁失败: {}", e)),
         };
-        if force { cloud_service::configured(&db) } else { cloud_service::enabled(&db) }
+        if force { cloud_service::configured(&db) } else { cloud_service::auto_on(&db) }
     };
     if !want {
         return SyncOutcome::Failed("还没连接坚果云".to_string());
@@ -255,17 +255,14 @@ pub fn spawn(app: AppHandle) {
         let mut has_debt = false;
         loop {
             let Cfg {
+                auto,
                 interval,
                 realtime,
-                auto_sync,
             } = read_cfg(&app);
             std::thread::sleep(if realtime { REALTIME_POLL } else { NORMAL_POLL });
-            // 备份只服务于云同步：没连云、或者用户把自动那一档关了，就一个本地包都不产生。
+            // 备份只服务于云同步：没连云、或定时选成「关闭」且没开停笔即备，就一个本地包都不产生。
             // 想换机走「迁移」里的单文件导出，那条路不需要定时轮替它攒包。
-            if !auto_sync {
-                continue;
-            }
-            if interval == 0 && !realtime {
+            if !auto {
                 continue;
             }
             let Some((db_path, attachments, backups)) = paths(&app) else { continue };
@@ -328,20 +325,21 @@ pub fn spawn(app: AppHandle) {
 }
 
 struct Cfg {
+    /// 自动那一档开没开（= 配了云端 && 定时或停笔至少有一个）
+    auto: bool,
     interval: i64,
     realtime: bool,
-    auto_sync: bool,
 }
 
 fn read_cfg(app: &AppHandle) -> Cfg {
     let state = app.state::<AppState>();
     let Ok(db) = state.db.lock() else {
-        return Cfg { interval: 0, realtime: false, auto_sync: false };
+        return Cfg { auto: false, interval: 0, realtime: false };
     };
     Cfg {
+        auto: cloud_service::auto_on(&db),
         interval: interval_min(&db),
         realtime: realtime_on(&db),
-        auto_sync: cloud_service::enabled(&db),
     }
 }
 

@@ -19,7 +19,7 @@ const emit = defineEmits<{ restored: [] }>()
 
 const status = ref<BackupStatus | null>(null)
 const cloud = ref<CloudStatus>({
-  configured: false, server: '', account: '', autoSync: false,
+  configured: false, server: '', account: '',
   keepRemote: 20, lastSyncAt: 0, syncedPackages: 0, syncedAttachments: 0,
 })
 const dbPath = ref('')
@@ -107,6 +107,10 @@ const fmtTime = (ts: number | null) => {
 
 const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/\/+$/, '')
 
+/** 没连上云端之前，备份这一档每个控件都只能摆着看：不是藏起来，是明晃晃地灰着 */
+const cloudReady = computed(() => cloud.value.configured)
+const schedulable = computed(() => cloudReady.value && st.value.hasPassword)
+
 const connText = computed(() => {
   if (!cloud.value.configured) return '未配置 · 需开启 WebDAV 并使用应用密码'
   const base = `已连接 · ${hostOf(cloud.value.server)}（${cloud.value.account}）`
@@ -162,7 +166,7 @@ const submitPwd = async () => {
 
 /* ---------- 备份节奏（都只在连上云端之后才有意义） ---------- */
 const INTERVAL_OPTIONS = [
-  { value: 0, label: '关闭' },
+  { value: 0, label: '关闭 · 只留手动' },
   { value: 1, label: '每 1 分钟' },
   { value: 5, label: '每 5 分钟' },
   { value: 15, label: '每 15 分钟' },
@@ -305,15 +309,6 @@ const doDisconnect = () => {
   })
 }
 
-const saveCloudEnabled = async (v: boolean) => {
-  try {
-    await settingsApi.setSetting('auto_cloud_sync', v ? 'true' : 'false')
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-  }
-  refresh()
-}
-
 const saveKeepRemote = async (v: number) => {
   const n = Math.max(1, Math.min(100, v || 1))
   try {
@@ -444,83 +439,71 @@ const doRestoreFile = async () => {
         </div>
       </div>
 
-      <template v-if="st.cloud.configured">
-        <div class="setting-item">
-          <div class="setting-info">
-            <span class="setting-name">立即备份</span>
-            <span v-if="busy?.op === 'backup'" class="row-progress">
-              <span class="rp-text">{{ busy.text }}</span>
-              <span class="rp-bar"><span class="rp-bar-in" :style="{ width: busy.pct + '%' }" /></span>
-              <span class="rp-pct">{{ busy.pct }}%</span>
-            </span>
-            <span v-else class="setting-desc">{{ roundText }}</span>
-          </div>
-          <div class="setting-actions">
-            <button class="action-btn" :disabled="!!busy || !st.hasPassword" @click="doBackup">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              备份
-            </button>
-          </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-name">立即备份</span>
+          <span v-if="busy?.op === 'backup'" class="row-progress">
+            <span class="rp-text">{{ busy.text }}</span>
+            <span class="rp-bar"><span class="rp-bar-in" :style="{ width: busy.pct + '%' }" /></span>
+            <span class="rp-pct">{{ busy.pct }}%</span>
+          </span>
+          <span v-else class="setting-desc">{{ cloudReady ? roundText : '打完包就得传上去 · 请先配置上方那行' }}</span>
         </div>
-        <div class="setting-item">
-          <div class="setting-info">
-            <span class="setting-name">自动备份到云</span>
-            <span class="setting-desc">总闸：关掉之后自动那一档整个停摆，只剩手动「备份」按钮</span>
-          </div>
-          <label class="switch">
-            <input type="checkbox" :checked="st.cloud.autoSync" @change="saveCloudEnabled(($event.target as HTMLInputElement).checked)" />
-            <span class="switch-slider"></span>
-          </label>
+        <div class="setting-actions">
+          <button class="action-btn" :disabled="!!busy || !schedulable" @click="doBackup">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            备份
+          </button>
         </div>
-        <div class="setting-item">
-          <div class="setting-info">
-            <span class="setting-name">定时备份</span>
-            <span class="setting-desc">到点先看数据变没变：没变一轮什么都不做，变了才打包并上传</span>
-          </div>
-          <div class="setting-control">
-            <select
-              class="select-input" :value="st.intervalMin" :disabled="!st.hasPassword || !st.cloud.autoSync"
-              @change="saveInterval(parseInt(($event.target as HTMLSelectElement).value))"
-            >
-              <option v-for="c in INTERVAL_OPTIONS" :key="c.value" :value="c.value">{{ c.label }}</option>
-            </select>
-          </div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-name">自动备份</span>
+          <span class="setting-desc">到点先看数据变没变：没变一轮什么都不做；选「关闭」就只剩手动</span>
         </div>
-        <div class="setting-item">
-          <div class="setting-info">
-            <span class="setting-name">停笔即备</span>
-            <span class="setting-desc">最后一次写入平息 8 秒就提前跑同一轮（最快 1 分钟一轮），不等定时器</span>
-          </div>
-          <label class="switch" :class="{ off: !st.cloud.autoSync }">
-            <input type="checkbox" :checked="st.realtime" :disabled="!st.hasPassword || !st.cloud.autoSync" @change="saveRealtime(($event.target as HTMLInputElement).checked)" />
-            <span class="switch-slider"></span>
-          </label>
+        <div class="setting-control">
+          <select
+            class="select-input" :value="st.intervalMin" :disabled="!schedulable"
+            @change="saveInterval(parseInt(($event.target as HTMLSelectElement).value))"
+          >
+            <option v-for="c in INTERVAL_OPTIONS" :key="c.value" :value="c.value">{{ c.label }}</option>
+          </select>
         </div>
-        <div class="setting-item">
-          <div class="setting-info">
-            <span class="setting-name">云端保留份数</span>
-            <span class="setting-desc">只轮转库包；云端附件密文永不删除</span>
-          </div>
-          <div class="setting-control">
-            <input
-              type="number" class="number-input" min="1" max="100" :value="st.cloud.keepRemote"
-              @change="saveKeepRemote(parseInt(($event.target as HTMLInputElement).value))"
-            />
-            <span class="unit">份</span>
-          </div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-name">停笔即备</span>
+          <span class="setting-desc">最后一次写入平息 8 秒就提前跑同一轮（最快 1 分钟一轮），不等定时器</span>
         </div>
-        <div class="setting-item">
-          <div class="setting-info">
-            <span class="setting-name">从云端恢复</span>
-            <span class="setting-desc">下载远端备份包，整机覆盖当前数据</span>
-          </div>
-          <div class="setting-actions">
-            <button class="action-btn" @click="openRemote">云端列表</button>
-          </div>
+        <label class="switch" :class="{ off: !schedulable }">
+          <input type="checkbox" :checked="st.realtime" :disabled="!schedulable" @change="saveRealtime(($event.target as HTMLInputElement).checked)" />
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-name">云端保留份数</span>
+          <span class="setting-desc">只轮转库包；云端附件密文永不删除</span>
         </div>
-      </template>
+        <div class="setting-control">
+          <input
+            type="number" class="number-input" min="1" max="100" :value="st.cloud.keepRemote" :disabled="!cloudReady"
+            @change="saveKeepRemote(parseInt(($event.target as HTMLInputElement).value))"
+          />
+          <span class="unit">份</span>
+        </div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-name">从云端恢复</span>
+          <span class="setting-desc">下载远端备份包，整机覆盖当前数据</span>
+        </div>
+        <div class="setting-actions">
+          <button class="action-btn" :disabled="!cloudReady" @click="openRemote">云端列表</button>
+        </div>
+      </div>
     </div>
 
     <h4 class="section-label">迁移<span class="label-tag">不依赖云端</span></h4>
