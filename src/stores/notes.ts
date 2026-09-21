@@ -4,6 +4,7 @@ import { notesApi as api } from '../services/api/notes'
 import { useToastStore } from './toast'
 import { useConfirmStore } from './confirm'
 import { extractTags, getDateGroupLabel, deriveTitleFromHtml, htmlToText } from '../utils/format'
+import { collectAttachmentPaths } from '../services/attachmentSrc'
 import type { Note, Attachment } from '../types'
 
 export type NoteView = 'all' | 'pinned' | 'starred'
@@ -147,9 +148,10 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
-  /** 发布一条小记；正文为空时不做任何事，返回新记录供调用方接续操作 */
+  /** 发布一条小记；正文既无文字也无图片时不做任何事，返回新记录供调用方接续操作 */
   const publishNote = async (html: string): Promise<Note | null> => {
-    if (!noteMeta(html).text.trim()) return null
+    const imagePaths = collectAttachmentPaths(html)
+    if (!noteMeta(html).text.trim() && !imagePaths.length) return null
     const category = noteMeta(html).tags[0]
     try {
       const note = await api.createNote({
@@ -157,6 +159,15 @@ export const useNotesStore = defineStore('notes', () => {
         content_html: html,
         category,
       })
+      // 正文引用的 staged 图片此刻才登记成附件，删小记才能连带清文件
+      if (imagePaths.length) {
+        try {
+          const bound = await api.bindAttachments(note.id, imagePaths)
+          noteAttachments.value[note.id] = [...bound, ...(noteAttachments.value[note.id] ?? [])]
+        } catch (e: any) {
+          toastStore.showToast('附件登记失败：' + e.message, 'error')
+        }
+      }
       notes.value = [note, ...notes.value]
       return note
     } catch (e: any) {
@@ -180,6 +191,22 @@ export const useNotesStore = defineStore('notes', () => {
         content_html: note.content_html,
         category: note.category ?? undefined,
       })
+      // 编辑态新贴的图也要登记，否则文件没人认领（发布路径做了，保存路径漏了）
+      const paths = collectAttachmentPaths(note.content_html)
+      if (paths.length) {
+        const known = new Set((noteAttachments.value[note.id] ?? []).map(a => a.file_path))
+        const fresh = paths.filter(p => !known.has(p))
+        if (fresh.length) {
+          try {
+            const bound = await api.bindAttachments(note.id, fresh)
+            if (bound.length) {
+              noteAttachments.value[note.id] = [...bound, ...(noteAttachments.value[note.id] ?? [])]
+            }
+          } catch (e: any) {
+            toastStore.showToast('附件登记失败：' + e.message, 'error')
+          }
+        }
+      }
       noteSaveState.value = 'saved'
       if (hintTimer) clearTimeout(hintTimer)
       hintTimer = setTimeout(() => { noteSaveState.value = '' }, SAVED_HINT_DELAY)
@@ -347,6 +374,16 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
+  /** 草稿阶段用：文件收进附件目录但不入库，发布时按正文补记录 */
+  const stageImage = async (filePath: string): Promise<Attachment | null> => {
+    try {
+      return await api.stageAttachment(filePath)
+    } catch (e: any) {
+      toastStore.showToast('图片读取失败：' + e.message, 'error')
+      return null
+    }
+  }
+
   const deleteAttachment = async (noteId: string, attachmentId: string) => {
     try {
       await api.deleteAttachment(attachmentId)
@@ -368,6 +405,6 @@ export const useNotesStore = defineStore('notes', () => {
     doDeleteNote, togglePin, toggleStar,
     toggleBatchMode, toggleSelectNote, selectAllNotes, clearSelection,
     batchDelete, batchSetPinned, batchSetStarred,
-    loadAttachments, uploadAttachment, deleteAttachment,
+    loadAttachments, uploadAttachment, deleteAttachment, stageImage,
   }
 })

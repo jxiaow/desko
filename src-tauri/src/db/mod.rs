@@ -5,7 +5,6 @@ pub mod note_repo;
 pub mod url_path_repo;
 pub mod file_repo;
 pub mod attachment_repo;
-mod export;
 
 pub use models::*;
 
@@ -19,6 +18,9 @@ pub struct Database {
 impl Database {
     pub fn new(path: &str) -> Result<Self, AppError> {
         let conn = Connection::open(path)?;
+        // 这套 bundled SQLite 实测默认就开着外键（见 attachment_service 的回归测试），
+        // 但 ON DELETE CASCADE 是删数据路径的正确性依赖，不靠默认值兜
+        conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         schema::run_schema(&conn)?;
         Ok(Database { conn })
     }
@@ -60,6 +62,23 @@ impl Database {
 
     pub fn get_db_path(&self) -> String {
         self.conn.path().unwrap_or("").to_string()
+    }
+
+    /// 恢复用的整机换库：先释放文件句柄（Windows 下不关连接 rename 会失败），
+    /// 换完文件再重开。swap_live_files 自带失败回滚，这里只负责兜底重开旧路径。
+    pub fn swap_into_restored(
+        &mut self,
+        app_data_dir: &std::path::Path,
+        attachments_dir: &std::path::Path,
+        staging: &std::path::Path,
+    ) -> Result<(), AppError> {
+        let old = std::mem::replace(&mut self.conn, Connection::open_in_memory()?);
+        drop(old);
+        let swapped = crate::backup::swap_live_files(app_data_dir, attachments_dir, staging);
+        let db_file = app_data_dir.join("data.db");
+        self.conn = Connection::open(&db_file)?;
+        schema::run_schema(&self.conn)?;
+        swapped
     }
 }
 

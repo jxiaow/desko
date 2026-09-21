@@ -16,6 +16,10 @@ vi.mock('../services/api/notes', () => ({
     listAttachments: vi.fn(),
     uploadAttachment: vi.fn(),
     deleteAttachment: vi.fn(),
+    stageAttachment: vi.fn(),
+    bindAttachments: vi.fn(),
+    orphans: vi.fn(),
+    cleanupOrphans: vi.fn(),
   },
 }))
 
@@ -118,6 +122,39 @@ describe('Notes Store', () => {
       expect(notesApi.updateNote).toHaveBeenCalledTimes(1)
       expect(notesApi.updateNote).toHaveBeenCalledWith('1',
         expect.objectContaining({ content_html: '<p>更新</p>' }))
+    })
+
+    /** 正文里的图片 src 是整条路径 encode 后的单段（与 attachmentSrc 的形态一致） */
+    const bodyWithImg = (p: string) => `<img src="asset://localhost/${encodeURIComponent(p)}">`
+
+    it('编辑时新贴的图片会补登记，不然文件没人认领', async () => {
+      const store = useNotesStore()
+      const img = 'C:\\Users\\x\\desko\\attachments\\u9__a.png'
+      store.notes = [mockNote({ id: '1', content_html: '<p>旧</p>' })]
+      vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
+      vi.mocked(notesApi.bindAttachments).mockResolvedValue([])
+
+      store.saveNoteContent('1', bodyWithImg(img))
+      await store.flushNoteSave()
+
+      expect(notesApi.bindAttachments).toHaveBeenCalledTimes(1)
+      expect(notesApi.bindAttachments).toHaveBeenCalledWith('1', [img])
+    })
+
+    it('已登记过的图片不重复补登记', async () => {
+      const store = useNotesStore()
+      const img = 'C:\\Users\\x\\desko\\attachments\\u9__a.png'
+      store.notes = [mockNote({ id: '1', content_html: bodyWithImg(img) })]
+      store.noteAttachments['1'] = [{
+        id: 'a1', note_id: '1', file_name: 'u9__a.png', file_path: img,
+        file_size: 1, mime_type: 'image/png', created_at: 1,
+      } as any]
+      vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
+
+      store.saveNoteContent('1', bodyWithImg(img) + '<p>加行字</p>')
+      await store.flushNoteSave()
+
+      expect(notesApi.bindAttachments).not.toHaveBeenCalled()
     })
   })
 

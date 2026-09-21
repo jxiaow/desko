@@ -5,3 +5,5 @@ pub mod url_paths;
 pub mod file_shortcuts;
 pub mod settings;
 pub mod data;
+pub mod backup;
+pub mod cloud;

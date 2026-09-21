@@ -10,6 +10,7 @@ import NoteFullscreen from './NoteFullscreen.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { htmlToText } from '../../utils/format'
+import { attachmentSrc, collectAttachmentPaths } from '../../services/attachmentSrc'
 import type { IconName } from '../../utils/icons'
 import type { Note } from '../../types'
 import type { NoteSort, NoteView } from '../../stores/notes'
@@ -40,13 +41,14 @@ const {
   fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, clearFilters, toggleTagFilter,
   doDeleteNote, togglePin, toggleStar,
   toggleBatchMode, toggleSelectNote, selectAllNotes, clearSelection,
-  batchDelete, batchSetPinned, batchSetStarred,
-  loadAttachments, uploadAttachment, deleteAttachment,
+  batchDelete, batchSetPinned, batchSetStarred,  loadAttachments, uploadAttachment, deleteAttachment, stageImage,
 } = notesStore
 
 const pageEl = ref<HTMLElement | null>(null)
 const searchEl = ref<HTMLInputElement | null>(null)
 const composerRef = ref<InstanceType<typeof NoteComposer> | null>(null)
+const fsRef = ref<InstanceType<typeof NoteFullscreen> | null>(null)
+const cardRefs = ref<InstanceType<typeof NoteCard>[]>([])
 
 /** 任何时刻只有一个书写面：草稿正文、就地展开的 note id、全屏层目标 */
 const draftHtml = ref('')
@@ -78,7 +80,7 @@ watch(railRoom, (room) => {
 })
 
 const draftText = computed(() => htmlToText(draftHtml.value))
-const draftEmpty = computed(() => !draftText.value.trim())
+const draftEmpty = computed(() => !draftText.value.trim() && !collectAttachmentPaths(draftHtml.value).length)
 const fsNote = computed(() =>
   typeof fsTarget.value === 'string' ? findNote(fsTarget.value) : null)
 const sortLabel = computed(() =>
@@ -170,23 +172,26 @@ const pickImagePath = async (): Promise<string | null> => {
   }
 }
 
+/** 已有小记配图：落盘即登记附件，再把图片块补进当前打开的书写面 */
 const addImageToNote = async (noteId: string) => {
   const path = await pickImagePath()
-  if (path) await uploadAttachment(noteId, path)
+  if (!path) return
+  const att = await uploadAttachment(noteId, path)
+  if (!att?.mime_type.startsWith('image/')) return
+  const src = attachmentSrc(att.file_path)
+  if (fsTarget.value === noteId) fsRef.value?.insertImage(src)
+  else cardRefs.value?.find((c) => c.noteId === noteId)?.insertImage(src)
 }
 
-/** 上传附件要有 note id：先选文件（取消就什么都不动），再发布，最后挂上去 */
+/** 新小记配图：文件只收进附件目录（stage），发布时才按正文补附件记录——纯图小记也发得出去 */
 const addImageToDraft = async () => {
-  if (draftEmpty.value) {
-    toastStore.showToast('先写点内容，再配图', 'info')
-    return
-  }
   const path = await pickImagePath()
   if (!path) return
-  const note = await publishNote(draftHtml.value)
-  if (!note) return
-  await uploadAttachment(note.id, path)
-  await afterPublish(note)
+  const att = await stageImage(path)
+  if (!att) return
+  const src = attachmentSrc(att.file_path)
+  if (fsTarget.value === 'new') fsRef.value?.insertImage(src)
+  else composerRef.value?.insertImage(src)
 }
 
 const copyNote = (note: Note) => copyToClipboard(htmlToText(note.content_html), '小记')
@@ -343,6 +348,7 @@ onBeforeUnmount(() => {
               <NoteCard
                 v-for="note in group.notes"
                 :key="note.id"
+                ref="cardRefs"
                 :note="note"
                 :editing="editingId === note.id"
                 :is-batch-mode="isBatchMode"
@@ -449,6 +455,7 @@ onBeforeUnmount(() => {
     <NoteFullscreen
       v-if="fsTarget"
       :key="fsTarget"
+      ref="fsRef"
       :note="fsNote"
       :initial-html="fsTarget === 'new' ? draftHtml : fsNote?.content_html ?? ''"
       :attachments="fsNote ? noteAttachments[fsNote.id] ?? [] : []"

@@ -60,7 +60,19 @@ pub fn change_master_password(db: &Database, old_key: &[u8], old_password: &str,
         updates.push((entry.id.clone(), new_encrypted_json));
     }
     let new_salt_b64 = BASE64.encode(&new_salt);
-    db.finish_password_change(&updates, now, &new_salt_b64, &new_verify_hash)?;
+    // 备份密钥是用旧主密钥封存的，同一事务里换封
+    let mut extra_meta: Vec<(&str, String)> = Vec::new();
+    let backup_key_json = db.get_meta(crate::services::backup_service::META_KEY)?;
+    let rewrapped;
+    if let Some(json) = backup_key_json.as_deref() {
+        let sealed: EncryptedData = serde_json::from_str(json).map_err(|e| AppError::Crypto(e.to_string()))?;
+        let b64 = decrypt_password(&sealed, old_key)?;
+        let sealed_new = encrypt_password(&b64, &new_key)?;
+        rewrapped = serde_json::to_string(&sealed_new).map_err(|e| AppError::Crypto(e.to_string()))?;
+        extra_meta.push((crate::services::backup_service::META_KEY, rewrapped));
+    }
+    let extra_refs: Vec<(&str, &str)> = extra_meta.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    db.finish_password_change(&updates, now, &new_salt_b64, &new_verify_hash, &extra_refs)?;
 
     Ok(new_key)
 }

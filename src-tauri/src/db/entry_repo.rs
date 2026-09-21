@@ -116,7 +116,14 @@ impl Database {
         Ok(count)
     }
 
-    pub fn finish_password_change(&self, updates: &[(String, String)], updated_at: i64, salt_b64: &str, verify_hash: &str) -> Result<(), AppError> {
+    pub fn finish_password_change(
+        &self,
+        updates: &[(String, String)],
+        updated_at: i64,
+        salt_b64: &str,
+        verify_hash: &str,
+        extra_meta: &[(&str, &str)],
+    ) -> Result<(), AppError> {
         let tx = self.conn.unchecked_transaction()?;
         for (id, encrypted_password) in updates {
             tx.execute(
@@ -126,6 +133,9 @@ impl Database {
         }
         tx.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('salt', ?1)", params![salt_b64])?;
         tx.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('verify_hash', ?1)", params![verify_hash])?;
+        for (key, value) in extra_meta {
+            tx.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)", params![key, value])?;
+        }
         tx.commit()?;
         Ok(())
     }

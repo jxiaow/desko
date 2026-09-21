@@ -6,6 +6,7 @@ import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatAbsTime, htmlToText, wordCount } from '../../utils/format'
+import { collectAttachmentPaths, unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import type { NoteSaveState } from '../../stores/notes'
 
@@ -35,7 +36,9 @@ const html = ref(props.initialHtml)
 const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
 
 const text = computed(() => htmlToText(html.value))
-const empty = computed(() => !text.value.trim())
+// 只有图的小记也算有内容：正文引用了附件就不空
+const empty = computed(() => !text.value.trim() && !collectAttachmentPaths(html.value).length)
+const visibleAtts = computed(() => unreferencedAttachments(html.value, props.attachments))
 const saveText = { '': '', saving: '保存中…', saved: '已保存' } as const
 
 const onUpdate = (value: string) => {
@@ -44,6 +47,9 @@ const onUpdate = (value: string) => {
 }
 
 const insertTag = () => editorRef.value?.insertText(' #')
+const insertImage = (src: string) => editorRef.value?.insertImage(src)
+
+defineExpose({ insertImage })
 
 const onPrimary = () => {
   if (props.note) emit('close')
@@ -95,8 +101,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
           @submit="onPrimary"
         />
 
-        <div v-if="props.attachments.length" class="fs-atts">
-          <NoteAttachments :attachments="props.attachments" @remove="emit('removeAttachment', $event)" />
+        <div v-if="visibleAtts.length" class="fs-atts">
+          <NoteAttachments :attachments="visibleAtts" @remove="emit('removeAttachment', $event)" />
         </div>
       </div>
     </div>

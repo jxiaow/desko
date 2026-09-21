@@ -8,8 +8,9 @@ export async function invoke<T = unknown>(
   return (await getBackend().invoke(cmd, args ?? {})) as T
 }
 
+// 与 tauri/scripts/core.js 的注入版同形：整条路径 encodeURIComponent 后挂在最后一段
 export function convertFileSrc(filePath: string): string {
-  return filePath
+  return `asset://localhost/${encodeURIComponent(filePath)}`
 }
 
 // @tauri-apps/plugin-shell、plugin-fs 在预构建时从 core 导入这两个符号

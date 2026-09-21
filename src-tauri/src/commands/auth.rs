@@ -50,6 +50,9 @@ pub fn unlock(state: State<AppState>, password: String) -> Result<(), AppError> 
 pub fn lock(state: State<AppState>) -> Result<(), AppError> {
     let mut master_key = state.master_key.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     *master_key = None;
+    if let Ok(mut backup_key) = state.backup_key.lock() {
+        *backup_key = None;
+    }
     if let Ok(mut attempts) = state.unlock_attempts.lock() {
         *attempts = 0;
     }

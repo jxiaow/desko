@@ -57,6 +57,31 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.composer .ProseMirror')).toHaveText('')
   })
 
+  test('composer 展开粘滞：失焦不收起，空内容按 Esc 才收起', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    const minHeight = () => pm.evaluate((el) => getComputedStyle(el).minHeight)
+
+    // 默认单行胶囊
+    await expect(minHeight).resolves.toBe('22px')
+    await expect(page.locator('.composer button.btn-primary')).toBeHidden()
+
+    // 点开后展开成书写面
+    await pm.click()
+    await expect.poll(minHeight, { timeout: 3000 }).toBe('148px')
+    await expect(page.locator('.composer button.btn-primary')).toBeVisible()
+
+    // 点击页面别处（空内容失焦）：不许收回
+    await page.locator('.memo').first().click()
+    await page.waitForTimeout(500)
+    await expect(minHeight).resolves.toBe('148px')
+
+    // 空内容按 Esc：收回胶囊
+    await pm.click()
+    await page.keyboard.press('Escape')
+    await expect.poll(minHeight, { timeout: 3000 }).toBe('22px')
+  })
+
   test('就地编辑：双击进入、自动保存、完成退出', async ({ page }) => {
     await gotoNotes(page)
     const target = memo(page, '第一条小记')
@@ -77,6 +102,66 @@ test.describe('Notes 小记', () => {
     const snap = await e2e.snapshot(page)
     const changed = snap.notes.find((n: any) => n.content_html.includes('改写后的第一条内容'))
     expect(changed).toBeTruthy()
+  })
+
+  test('草稿纯图发布：stage 后正文出图块，发布时补附件记录', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await e2e.queueDialog(page, 'C:/pics/avatar.png')
+    await pm.click()
+    await page.locator('.composer button[aria-label="添加图片"]').click()
+
+    // 正文追加了图片块（列表默认 30% 宽），且没有任何文字也能发布
+    await expect(pm.locator('.img-node')).toHaveCount(1)
+    await expect(pm.locator('.img-node')).toHaveAttribute('style', /width: 30%/)
+    const publish = page.locator('.composer button.btn-primary')
+    await expect(publish).toBeEnabled()
+    await publish.click()
+
+    await expect(page.locator('.memo')).toHaveCount(4)
+    const newMemo = page.locator('.memo').first()
+    await expect(newMemo.locator('img[data-note-image]')).toHaveCount(1)
+    // 正文已引用 -> 不再重复出现在附件位
+    await expect(newMemo.locator('.memo-att')).toHaveCount(0)
+
+    const snap = await e2e.snapshot(page)
+    const bound = snap.attachments.find((a: any) => a.file_path.includes('avatar.png'))
+    expect(bound).toBeTruthy()
+    expect(bound.note_id).toBeTruthy()
+  })
+
+  test('已有小记配图：上传后图片块插进编辑正文', async ({ page }) => {
+    await gotoNotes(page)
+    await memo(page, '第一条小记').dblclick()
+    const editor = page.locator('.memo.editing .ProseMirror')
+    await expect(editor).toBeVisible()
+
+    // 光标放到开头再插图：图块应落在光标处而不是文末
+    await editor.click()
+    await page.keyboard.press('Control+Home')
+    await e2e.queueDialog(page, 'C:/pics/pic.png')
+    await page.locator('.memo.editing button[aria-label="添加图片"]').click()
+    await expect(editor.locator('.img-node')).toHaveCount(1)
+    await expect(editor.locator('> *').first()).toHaveClass(/img-node/)
+    await expect(editor.locator('.img-node')).toHaveAttribute('style', /width: 30%/)
+
+    // 拖右下角手柄：改宽度并随正文落库。
+    // e2e 里 asset:// 图加载失败、块高为 0，坐标命中不到手柄，改为直接派发 pointerdown，
+    // 后续 move/up 用真实鼠标事件走 window 监听。
+    const handle = page.locator('.memo.editing .img-node .img-resize')
+    const box = await handle.boundingBox()
+    await handle.dispatchEvent('pointerdown', { clientX: box!.x + 7, clientY: box!.y + 7 })
+    await page.mouse.move(box!.x + 150, box!.y + 7, { steps: 6 })
+    await page.mouse.up()
+    await expect(editor.locator('.img-node')).not.toHaveAttribute('style', /width: 30%/)
+
+    await page.locator('.memo.editing button.eb.primary', { hasText: '完成' }).click()
+    await expect(memo(page, '第一条小记').locator('img[data-note-image]')).toHaveCount(1)
+    const snap = await e2e.snapshot(page)
+    const saved = snap.notes.find((n: any) => n.content_html.includes('pic.png'))
+    expect(saved).toBeTruthy()
+    expect(saved.content_html).toMatch(/style="width: \d+(\.\d+)?%/)
+    expect(snap.attachments.some((a: any) => a.file_path.includes('pic.png'))).toBe(true)
   })
 
   test('置顶与收藏', async ({ page }) => {

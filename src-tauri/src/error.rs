@@ -26,6 +26,9 @@ pub enum AppError {
     
     #[error("IO error: {0}")]
     Io(String),
+
+    #[error("Backup error: {0}")]
+    Backup(String),
 }
 
 impl AppError {
@@ -39,6 +42,8 @@ impl AppError {
             AppError::NotUnlocked => "应用已锁定".to_string(),
             AppError::EntryNotFound => "记录不存在".to_string(),
             AppError::Io(_) => "文件操作失败".to_string(),
+            // 备份的错误信息本身就是给人看的（含校验失败原因），原样透出
+            AppError::Backup(msg) => msg.clone(),
         }
     }
 }
@@ -61,5 +66,11 @@ impl From<rusqlite::Error> for AppError {
 impl From<std::io::Error> for AppError {
     fn from(err: std::io::Error) -> Self {
         AppError::Io(err.to_string())
+    }
+}
+
+impl From<zip::result::ZipError> for AppError {
+    fn from(err: zip::result::ZipError) -> Self {
+        AppError::Backup(format!("备份包读写失败: {}", err))
     }
 }

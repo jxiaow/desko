@@ -31,14 +31,20 @@ pub fn update_note(state: State<AppState>, id: String, input: UpdateNoteInput) -
 pub fn delete_note(state: State<AppState>, id: String) -> Result<(), AppError> {
     let _key = services::get_master_key(&state)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    db.delete_note(&id)
+    let paths = db.attachment_paths_for_notes(std::slice::from_ref(&id))?;
+    db.delete_note(&id)?;
+    attachment_service::delete_files(&paths);
+    Ok(())
 }
 
 #[tauri::command]
 pub fn batch_delete_notes(state: State<AppState>, ids: Vec<String>) -> Result<usize, AppError> {
     let _key = services::get_master_key(&state)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    db.batch_delete_notes(&ids)
+    let paths = db.attachment_paths_for_notes(&ids)?;
+    let n = db.batch_delete_notes(&ids)?;
+    attachment_service::delete_files(&paths);
+    Ok(n)
 }
 
 #[tauri::command]
@@ -70,14 +76,29 @@ pub fn upload_attachment(
 ) -> Result<crate::db::Attachment, AppError> {
     let _key = services::get_master_key(&state)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    
-    // 获取应用数据目录
-    let app_data_dir = std::env::var("APPDATA")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".to_string());
-    let app_data_dir = format!("{}/desko", app_data_dir);
-    
-    attachment_service::create_attachment(&db, &note_id, &file_path, &app_data_dir)
+    attachment_service::create_attachment(&db, &note_id, &file_path)
+}
+
+/// 草稿还没 note id，先把文件收进附件目录，正文里放它的 asset: 地址
+#[tauri::command]
+pub fn stage_attachment(
+    state: State<AppState>,
+    file_path: String,
+) -> Result<crate::db::Attachment, AppError> {
+    let _key = services::get_master_key(&state)?;
+    attachment_service::store_file(&file_path)
+}
+
+/// 发布后按正文里的图片路径补附件记录，删小记时才能连带清掉文件
+#[tauri::command]
+pub fn bind_attachments(
+    state: State<AppState>,
+    note_id: String,
+    paths: Vec<String>,
+) -> Result<Vec<crate::db::Attachment>, AppError> {
+    let _key = services::get_master_key(&state)?;
+    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    attachment_service::bind_paths(&db, &note_id, &paths)
 }
 
 #[tauri::command]
@@ -85,4 +106,22 @@ pub fn delete_attachment(state: State<AppState>, id: String) -> Result<(), AppEr
     let _key = services::get_master_key(&state)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     attachment_service::delete_attachment(&db, &id)
+}
+
+/// 未引用附件清单（设置页"清理"用）
+#[tauri::command]
+pub fn attachment_orphans(state: State<AppState>) -> Result<Vec<attachment_service::OrphanFile>, AppError> {
+    let _key = services::get_master_key(&state)?;
+    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    attachment_service::scan_orphans(&db)
+}
+
+#[tauri::command]
+pub fn attachment_cleanup(
+    state: State<AppState>,
+    names: Vec<String>,
+) -> Result<usize, AppError> {
+    let _key = services::get_master_key(&state)?;
+    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    attachment_service::cleanup_orphans(&db, &names)
 }

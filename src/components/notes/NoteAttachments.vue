@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
 import AppIcon from '../shared/AppIcon.vue'
+import { attachmentSrc } from '../../services/attachmentSrc'
 import type { Attachment } from '../../types'
 
 const props = defineProps<{
@@ -11,7 +12,7 @@ const emit = defineEmits<{
   remove: [attachmentId: string]
 }>()
 
-// asset: 协议未在本项目开启，图片可能加载失败——失败时退回文件名色块，不留破图
+// 附件目录已由 asset 协议放行（main.rs allow_directory）；文件被外部删掉时退回文件名色块，不留破图
 const broken = reactive(new Set<string>())
 </script>
 
@@ -21,7 +22,7 @@ const broken = reactive(new Set<string>())
       <div class="att-thumb">
         <img
           v-if="att.mime_type.startsWith('image/') && !broken.has(att.id)"
-          :src="'asset://localhost/' + att.file_path"
+          :src="attachmentSrc(att.file_path)"
           :alt="att.file_name"
           @error="broken.add(att.id)"
         />

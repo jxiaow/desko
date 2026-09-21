@@ -48,6 +48,13 @@ export function htmlToText(html: string): string {
     .join('\n')
 }
 
+/** 只有图片也算有内容：图片是正文的一部分，不该被当成空草稿拦下来 */
+export function htmlHasContent(html: string): boolean {
+  if (!html) return false
+  if (/<img\b/i.test(html)) return true
+  return htmlToText(html).trim().length > 0
+}
+
 /** 标题取正文第一行非空文本，最多 20 字 */
 export function deriveTitleFromHtml(html: string): string {
   const firstLine = htmlToText(html).split('\n').find(Boolean) || ''

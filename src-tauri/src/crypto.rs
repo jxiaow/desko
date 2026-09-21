@@ -10,9 +10,11 @@ use sha2::{Digest, Sha256};
 use crate::error::AppError;
 
 const PBKDF2_ITERATIONS: u32 = 10_000;
+// 备份口令长期躺在云上，离线爆破窗口以年计，迭代次数单独拉高
+pub const BACKUP_ITERATIONS: u32 = 600_000;
 const SALT_LENGTH: usize = 16;
 const IV_LENGTH: usize = 12;
-const KEY_LENGTH: usize = 32;
+pub const KEY_LENGTH: usize = 32;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptedData {
@@ -35,6 +37,12 @@ pub fn generate_iv() -> Vec<u8> {
 pub fn derive_key(password: &str, salt: &[u8]) -> Vec<u8> {
     let mut key = vec![0u8; KEY_LENGTH];
     pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, PBKDF2_ITERATIONS, &mut key);
+    key
+}
+
+pub fn derive_backup_key(password: &str, salt: &[u8]) -> Vec<u8> {
+    let mut key = vec![0u8; KEY_LENGTH];
+    pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, BACKUP_ITERATIONS, &mut key);
     key
 }
 
@@ -73,7 +81,6 @@ pub fn encrypt_password(plaintext: &str, key: &[u8]) -> Result<EncryptedData, Ap
 }
 
 pub fn decrypt_password(encrypted: &EncryptedData, key: &[u8]) -> Result<String, AppError> {
-    // Validate key length
     if key.len() != 32 {
         return Err(AppError::Crypto(format!("Invalid key length: {}", key.len())));
     }
@@ -103,6 +110,42 @@ pub fn decrypt_password(encrypted: &EncryptedData, key: &[u8]) -> Result<String,
             .map_err(|e| AppError::Crypto(format!("UTF8 decode failed: {}", e))),
         Err(e) => Err(AppError::Crypto(format!("Decryption failed (wrong key or corrupted data): {}", e))),
     }
+}
+
+/// 带附加认证数据（AAD）的加解密：头部字段被绑进标签，改一个字都解不开
+pub fn encrypt_blob_ad(plaintext: &[u8], key: &[u8], nonce: &[u8], aad: &[u8]) -> Result<Vec<u8>, AppError> {
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| AppError::Crypto(e.to_string()))?;
+    cipher
+        .encrypt(
+            Nonce::from_slice(nonce),
+            aes_gcm::aead::Payload { msg: plaintext, aad },
+        )
+        .map_err(|e| AppError::Crypto(e.to_string()))
+}
+
+pub fn decrypt_blob_ad(nonce: &[u8], ciphertext: &[u8], key: &[u8], aad: &[u8]) -> Result<Vec<u8>, AppError> {
+    if key.len() != KEY_LENGTH {
+        return Err(AppError::Crypto(format!("Invalid key length: {}", key.len())));
+    }
+    if nonce.len() != IV_LENGTH {
+        return Err(AppError::Crypto(format!("Invalid nonce length: {}", nonce.len())));
+    }
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| AppError::Crypto(e.to_string()))?;
+    cipher
+        .decrypt(
+            Nonce::from_slice(nonce),
+            aes_gcm::aead::Payload { msg: ciphertext, aad },
+        )
+        .map_err(|e| AppError::Crypto(format!("Decryption failed (wrong key or corrupted data): {}", e)))
+}
+
+/// 生成定长随机密钥（备份数据密钥 DEK 用）
+pub fn random_bytes(len: usize) -> Vec<u8> {
+    let mut v = vec![0u8; len];
+    rand::thread_rng().fill(&mut v[..]);
+    v
 }
 
 #[cfg(test)]

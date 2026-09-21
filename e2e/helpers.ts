@@ -86,7 +86,7 @@ export async function hoverCard(page: Page, name: string): Promise<void> {
 /** 设置弹窗是左菜单 / 右内容，非默认面板要先点菜单项才有可见的可交互节点 */
 const SETTINGS_TAB = {
   appearance: '外观',
-  data: '数据存储',
+  backup: '数据与备份',
   security: '安全',
   about: '关于',
 } as const
@@ -107,5 +107,10 @@ export async function openSettings(
 /** 切到指定面板（默认停在「外观」，其余面板要点菜单才露出来） */
 export function settingsTab(dialog: Locator, tab: SettingsTab): Promise<void> {
   return dialog.locator('.nav-tab', { hasText: SETTINGS_TAB[tab] }).click()
+}
+
+/** 面板都是 v-show 常驻，跨面板的类名会撞车；按可见性锁定当前面板 */
+export function visiblePane(dialog: Locator): Locator {
+  return dialog.locator('.settings-pane:visible')
 }
 

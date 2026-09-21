@@ -6,6 +6,7 @@ import NoteAttachments from './NoteAttachments.vue'
 import NoteActionMenu from './NoteActionMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatRelativeTime, highlightTagsInHtml } from '../../utils/format'
+import { unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import type { NoteSaveState } from '../../stores/notes'
 
@@ -84,6 +85,10 @@ watch(() => props.editing, (on) => {
 })
 
 const bodyHtml = computed(() => highlightTagsInHtml(props.note.content_html))
+
+/** 正文已引用的图片不再进附件条；编辑中按草稿过滤，保存前就不该闪出第二个 */
+const visibleAtts = computed(() =>
+  unreferencedAttachments(props.editing ? draft.value : props.note.content_html, props.attachments))
 
 watch(() => props.note.content_html, measureClipped)
 
@@ -167,6 +172,10 @@ const onUpdate = (value: string) => {
 }
 
 const insertTag = () => editorRef.value?.insertText(' #')
+const insertImage = (src: string) => editorRef.value?.insertImage(src)
+
+// 暴露出去的实例只剩这两个键：props 不在代理上，外面要认哪张卡只能靠 noteId
+defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 </script>
 
 <template>
@@ -189,9 +198,9 @@ const insertTag = () => editorRef.value?.insertText(' #')
 
     <div class="memo-foot">
       <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
-      <span v-if="props.attachments.length"  class="memo-att" :title="`${props.attachments.length} 个附件`">
+      <span v-if="visibleAtts.length"  class="memo-att" :title="`${visibleAtts.length} 个附件`">
         <AppIcon name="clip" :size="11" />
-        {{ props.attachments.length }}
+        {{ visibleAtts.length }}
       </span>
       <span class="spacer"></span>
       <span class="memo-state">
@@ -246,8 +255,8 @@ const insertTag = () => editorRef.value?.insertText(' #')
       @update="onUpdate"
       @submit="emit('close')"
     />
-    <div v-if="props.attachments.length" class="edit-atts">
-      <NoteAttachments :attachments="props.attachments" @remove="emit('removeAttachment', $event)" />
+    <div v-if="visibleAtts.length" class="edit-atts">
+      <NoteAttachments :attachments="visibleAtts" @remove="emit('removeAttachment', $event)" />
     </div>
     <div class="edit-bar">
       <NoteToolbar
@@ -314,6 +323,7 @@ const insertTag = () => editorRef.value?.insertText(' #')
 .memo-body :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
 .memo-body :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 5px; cursor: pointer; }
 .memo-body :deep(hr) { border: none; border-top: 1px solid var(--border); }
+.memo-body :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 34vh; object-fit: contain; border-radius: var(--radius); }
 
 /* 被裁掉时才铺这层渐隐，提示下面还有内容：单击正文就地展开。
    裁切边界可能正好落在段落之间的空隙上，固定 32px 会糊在空白上看不见，

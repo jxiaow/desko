@@ -5,8 +5,12 @@ mod db;
 mod crypto;
 mod error;
 mod services;
+mod backup;
+mod webdav;
 
 use db::Database;
+use services::attachment_service;
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -19,6 +23,10 @@ pub struct AppState {
     pub db: Mutex<Database>,
     pub master_key: Mutex<Option<Vec<u8>>>,
     pub unlock_attempts: Mutex<u32>,
+    /// 备份密钥只在解锁后驻留内存，锁屏即清
+    pub backup_key: Mutex<Option<Vec<u8>>>,
+    /// 同一时刻只跑一个备份任务（手动、退出、定时共用一把闸）
+    pub backup_busy: AtomicBool,
 }
 
 fn main() {
@@ -41,14 +49,27 @@ fn main() {
             let db_path_str = db_path.to_str().ok_or_else(|| {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid database path encoding")
             }).expect("failed to convert database path");
-            
+
+            // 上次恢复中途断电留下的 .swap，先收拾干净再开库
+            backup::recover_swap(&app_data_dir, &attachment_service::attachments_dir());
+
             let db = Database::new(db_path_str).expect("failed to init database");
             
             app.manage(AppState {
                 db: Mutex::new(db),
                 master_key: Mutex::new(None),
                 unlock_attempts: Mutex::new(0),
+                backup_key: Mutex::new(None),
+                backup_busy: AtomicBool::new(false),
             });
+
+            // 正文里的图片走 asset: 协议读附件目录，只放行那一个目录
+            if let Some(window) = app.get_webview_window("main") {
+                let dir = attachment_service::attachments_dir();
+                if std::fs::create_dir_all(&dir).is_ok() {
+                    let _ = window.asset_protocol_scope().allow_directory(&dir, true);
+                }
+            }
 
             // Setup tray menu
             let show_item = MenuItem::with_id(app, "show", "显示", true, None::<&str>)?;
@@ -71,6 +92,10 @@ fn main() {
                         }
                         "lock" => {
                             if let Some(window) = app.get_webview_window("main") {
+                                let state = app.state::<AppState>();
+                                if let Ok(mut key) = state.backup_key.lock() {
+                                    *key = None;
+                                }
                                 let _ = window.emit("tray-lock", ());
                             }
                         }
@@ -95,6 +120,9 @@ fn main() {
                 })
                 .build(app)?;
 
+            // 自动备份线程：定时/实时两档，都在后台判变更指纹，锁屏或没设备份密码就空转
+            services::auto_backup::spawn(app.handle().clone());
+
             // Handle window close - minimize to tray instead
             if let Some(window) = app.get_webview_window("main") {
                 let window_clone = window.clone();
@@ -114,6 +142,9 @@ fn main() {
                             let app_state = app_handle.state::<AppState>();
                             if let Ok(mut master_key) = app_state.master_key.lock() {
                                 *master_key = None;
+                            }
+                            if let Ok(mut backup_key) = app_state.backup_key.lock() {
+                                *backup_key = None;
                             }
                             if let Ok(mut attempts) = app_state.unlock_attempts.lock() {
                                 *attempts = 0;
@@ -141,9 +172,22 @@ fn main() {
             commands::entries::delete_entry,
             commands::entries::batch_delete_entries,
             commands::entries::get_password,
-            commands::data::export_sql,
-            commands::data::import_sql,
             commands::data::get_db_path,
+            commands::backup::backup_dir,
+            commands::backup::backup_status,
+            commands::backup::backup_set_password,
+            commands::backup::backup_run,
+            commands::backup::backup_delete,
+            commands::backup::backup_restore,
+            commands::backup::backup_restore_file,
+            commands::backup::backup_export,
+            commands::cloud::cloud_status,
+            commands::cloud::cloud_test_config,
+            commands::cloud::cloud_save_config,
+            commands::cloud::cloud_disconnect,
+            commands::cloud::cloud_sync,
+            commands::cloud::cloud_list,
+            commands::cloud::cloud_restore,
             commands::entries::create_test_data,
             commands::notes::list_notes,
             commands::notes::create_note,
@@ -154,7 +198,11 @@ fn main() {
             commands::notes::toggle_star_note,
             commands::notes::list_attachments,
             commands::notes::upload_attachment,
+            commands::notes::stage_attachment,
+            commands::notes::bind_attachments,
             commands::notes::delete_attachment,
+            commands::notes::attachment_orphans,
+            commands::notes::attachment_cleanup,
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::url_paths::list_url_paths,
@@ -168,6 +216,11 @@ fn main() {
             commands::file_shortcuts::open_file,
             commands::file_shortcuts::open_terminal,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, _event| {
+            // 退出不做事：这是个托盘常驻应用，真「退出」几周才一回，而崩溃、断电、
+            // 强杀都不走这个钩子，护不住东西却每次关闭都堵一次磁盘和网络 IO。
+            // 及时备份交给 auto_backup 的定时/停笔即备两档。
+        });
 }

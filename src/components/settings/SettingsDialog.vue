@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import BrandLogo from '../shared/BrandLogo.vue'
+import BackupPane from './BackupPane.vue'
 import { ref, onMounted } from 'vue'
 import { settingsApi } from '../../services/api/settings'
-import { dataApi } from '../../services/api/data'
 import { THEMES, chooseTheme, readTheme } from '../../services/theme'
 import type { ThemeId } from '../../services/theme'
 import { useToastStore } from '../../stores/toast'
-import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 
 const toastStore = useToastStore()
-const confirmStore = useConfirmStore()
 
 const emit = defineEmits<{
   close: []
@@ -21,13 +19,14 @@ const emit = defineEmits<{
 const show = ref(true)
 const TAB_LABELS = {
   appearance: '外观',
-  data: '数据存储',
+  backup: '数据与备份',
   security: '安全',
   about: '关于',
 } as const
 type TabId = keyof typeof TAB_LABELS
 const tab = ref<TabId>('appearance')
-const dbPath = ref('')
+// 存 0 表示不开自动锁定，useAutoLock 读到 0 直接跳过这一轮
+const autoLockEnabled = ref(false)
 const autoLockTimeout = ref(5)
 const lockOnClose = ref(false)
 const theme = ref<ThemeId>('cool')
@@ -35,24 +34,26 @@ const theme = ref<ThemeId>('cool')
 const loadSettings = async () => {
   theme.value = await readTheme()
   try {
-    dbPath.value = await dataApi.getDbPath()
     const timeout = await settingsApi.getSetting('auto_lock_timeout')
-    if (timeout) {
-      autoLockTimeout.value = parseInt(timeout) || 5
+    const minutes = parseInt(timeout)
+    if (!isNaN(minutes) && minutes > 0) {
+      autoLockEnabled.value = true
+      autoLockTimeout.value = Math.min(60, minutes)
     }
     const lockClose = await settingsApi.getSetting('lock_on_close')
     lockOnClose.value = lockClose === 'true'
-  } catch (e) {
-    dbPath.value = 'Unknown'
-  }
+  } catch { /* 读不到就保持默认 */ }
 }
 
-const saveAutoLockTimeout = async () => {
-  const value = Math.max(1, Math.min(60, autoLockTimeout.value))
-  autoLockTimeout.value = value
+const saveAutoLock = async () => {
+  if (autoLockEnabled.value) {
+    // 关掉再打开要回到原来的分钟数，所以关闭时不动这个值，只在落盘时写 0
+    autoLockTimeout.value = Math.max(1, Math.min(60, autoLockTimeout.value))
+  }
+  const value = autoLockEnabled.value ? autoLockTimeout.value : 0
   try {
     await settingsApi.setSetting('auto_lock_timeout', value.toString())
-    toastStore.showToast('设置已保存')
+    toastStore.showToast(value ? '设置已保存' : '已关闭自动锁定')
   } catch (e: any) {
     toastStore.showToast('保存失败: ' + e.message, 'error')
   }
@@ -73,47 +74,6 @@ const pickTheme = async (id: ThemeId) => {
   // chooseTheme 会先把 data-theme 挂上再落盘，所以这里失败只是"下次回来还是旧的"
   const saved = await chooseTheme(id)
   toastStore.showToast(saved ? '已切换主题' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
-}
-
-const doExportSql = async () => {
-  try {
-    const sql = await dataApi.exportSql()
-    const blob = new Blob([sql], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'desko-export.sql'
-    try {
-      a.click()
-    } finally {
-      URL.revokeObjectURL(url)
-    }
-    toastStore.showToast('导出成功')
-  } catch (e: any) {
-    toastStore.showToast('导出失败: ' + e.message, 'error')
-  }
-}
-
-const doImportSql = async () => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.sql'
-  input.onchange = async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0]
-    if (!file) return
-
-    confirmStore.showConfirm('确认导入', '导入将覆盖现有数据，确定继续吗？', async () => {
-      try {
-        const sql = await file.text()
-        await dataApi.importSql(sql)
-        emit('entriesRefreshed')
-        toastStore.showToast('导入成功')
-      } catch (e: any) {
-        toastStore.showToast('导入失败: ' + e.message, 'error')
-      }
-    })
-  }
-  input.click()
 }
 
 const close = () => {
@@ -145,13 +105,13 @@ onMounted(() => { loadSettings() })
             </svg>
             <span>{{ TAB_LABELS.appearance }}</span>
           </button>
-          <button class="nav-tab" :class="{ on: tab === 'data' }" @click="tab = 'data'">
+          <button class="nav-tab" :class="{ on: tab === 'backup' }" @click="tab = 'backup'">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <ellipse cx="12" cy="5" rx="9" ry="3"/>
               <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
               <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
             </svg>
-            <span>{{ TAB_LABELS.data }}</span>
+            <span>{{ TAB_LABELS.backup }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'security' }" @click="tab = 'security'">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -206,39 +166,9 @@ onMounted(() => { loadSettings() })
             </div>
           </section>
 
-          <!-- 数据存储 -->
-          <section v-show="tab === 'data'" class="settings-pane">
-            <div class="group-content">
-              <div class="setting-item">
-                <div class="setting-info">
-                  <span class="setting-name">数据库路径</span>
-                  <span class="setting-desc">{{ dbPath }}</span>
-                </div>
-              </div>
-              <div class="setting-item">
-                <div class="setting-info">
-                  <span class="setting-name">数据备份</span>
-                </div>
-                <div class="setting-actions">
-                  <button class="action-btn" @click="doExportSql">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="7 10 12 15 17 10"/>
-                      <line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                    导出
-                  </button>
-                  <button class="action-btn" @click="doImportSql">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="17 8 12 3 7 8"/>
-                      <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    导入
-                  </button>
-                </div>
-              </div>
-            </div>
+          <!-- 数据与备份 -->
+          <section v-show="tab === 'backup'" class="settings-pane">
+            <BackupPane @restored="emit('entriesRefreshed')" />
           </section>
 
           <!-- 安全 -->
@@ -263,9 +193,14 @@ onMounted(() => { loadSettings() })
                     v-model.number="autoLockTimeout"
                     min="1"
                     max="60"
-                    @change="saveAutoLockTimeout"
+                    :disabled="!autoLockEnabled"
+                    @change="saveAutoLock"
                   />
                   <span class="unit">分钟</span>
+                  <label class="switch">
+                    <input type="checkbox" v-model="autoLockEnabled" @change="saveAutoLock" />
+                    <span class="switch-slider"></span>
+                  </label>
                 </div>
               </div>
               <div class="setting-item">
@@ -434,7 +369,7 @@ onMounted(() => { loadSettings() })
 }
 
 /* 面板用 v-show 而非 v-if：切页时 number-input 不卸载，@change 才不会被切页吞掉。
-   弹窗定高，四页同高，切页不跳。 */
+   弹窗定高，各页同高，切页不跳。 */
 .settings-pane {
   flex: 1;
   min-width: 0;
@@ -548,6 +483,12 @@ onMounted(() => { loadSettings() })
 
 .number-input:focus {
   border-color: var(--accent);
+}
+
+.number-input:disabled {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: transparent;
 }
 
 .unit {

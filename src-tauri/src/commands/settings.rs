@@ -11,7 +11,7 @@ pub fn get_setting(state: State<AppState>, key: String) -> Result<String, AppErr
 
 #[tauri::command]
 pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result<(), AppError> {
-    const ALLOWED_KEYS: &[&str] = &["auto_lock_timeout", "lock_on_close", "theme"];
+    const ALLOWED_KEYS: &[&str] = &["auto_lock_timeout", "lock_on_close", "theme", "auto_backup_interval", "auto_backup_realtime", "keep_local", "auto_cloud_sync", "keep_remote"];
     if !ALLOWED_KEYS.contains(&key.as_str()) {
         return Err(AppError::Database(format!("setting key not allowed: {}", key)));
     }

@@ -63,6 +63,13 @@ impl Database {
         Ok(())
     }
 
+    /// 全部小记正文，扫未引用附件用（正文里出现的 asset 地址就是文件的存活证明）
+    pub fn all_note_html(&self) -> Result<Vec<String>, AppError> {
+        let mut stmt = self.conn.prepare("SELECT content_html FROM notes")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        Ok(rows.flatten().collect())
+    }
+
     pub fn get_note(&self, id: &str) -> Result<Option<Note>, AppError> {
         let result = self.conn.query_row(
             "SELECT id, title, content_html, category, created_at, updated_at, pinned, starred FROM notes WHERE id = ?1",

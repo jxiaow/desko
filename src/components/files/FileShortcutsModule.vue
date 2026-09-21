@@ -410,8 +410,9 @@ onBeforeUnmount(() => {
 .list-head,
 .shortcut-row {
   display: grid;
-  /* 最后一列给行内动作常驻留位，hover 时才切换显示，行内容不会左右跳动 */
-  grid-template-columns: minmax(200px, 1.5fr) 78px minmax(150px, 1fr) 96px 124px;
+  /* 最后一列给行内动作常驻留位，hover 时才切换显示，行内容不会左右跳动。
+     两个文字列下限到 0：窗口再窄也只是名字截省略，动作列不会被顶出可视区 */
+  grid-template-columns: minmax(0, 1.5fr) 78px minmax(0, 1fr) 96px 124px;
   gap: var(--space-3);
   align-items: center;
 }

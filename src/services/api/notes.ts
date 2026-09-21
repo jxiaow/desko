@@ -20,6 +20,21 @@ export const notesApi = {
     invoke('list_attachments', { noteId }),
   uploadAttachment: (noteId: string, filePath: string): Promise<Attachment> =>
     invoke('upload_attachment', { noteId, filePath }),
+  /** 草稿还没有 note id：先把文件收进附件目录，发布时再补记录 */
+  stageAttachment: (filePath: string): Promise<Attachment> =>
+    invoke('stage_attachment', { filePath }),
+  bindAttachments: (noteId: string, paths: string[]): Promise<Attachment[]> =>
+    invoke('bind_attachments', { noteId, paths }),
   deleteAttachment: (id: string): Promise<void> =>
     invoke('delete_attachment', { id }),
+  /** 无存活登记、也不被任何正文引用的附件文件（草稿刚暂存的除外） */
+  orphans: (): Promise<OrphanFile[]> =>
+    invoke('attachment_orphans'),
+  cleanupOrphans: (names: string[]): Promise<number> =>
+    invoke('attachment_cleanup', { names }),
+}
+
+export interface OrphanFile {
+  name: string
+  size: number
 }

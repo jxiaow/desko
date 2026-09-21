@@ -112,15 +112,6 @@ describe('api', () => {
   })
 
   describe('data', () => {
-    it('exportSql should call invoke', async () => {
-      mockInvoke.mockResolvedValue('SQL content')
-
-      const result = await dataApi.exportSql()
-
-      expect(mockInvoke).toHaveBeenCalledWith('export_sql')
-      expect(result).toBe('SQL content')
-    })
-
     it('getDbPath should call invoke', async () => {
       mockInvoke.mockResolvedValue('/path/to/db')
 
@@ -128,16 +119,6 @@ describe('api', () => {
 
       expect(mockInvoke).toHaveBeenCalledWith('get_db_path')
       expect(result).toBe('/path/to/db')
-    })
-
-    it('importSql should pass sql', async () => {
-      mockInvoke.mockResolvedValue(undefined)
-
-      await dataApi.importSql('INSERT INTO ...')
-
-      expect(mockInvoke).toHaveBeenCalledWith('import_sql', {
-        sql: 'INSERT INTO ...'
-      })
     })
   })
 })

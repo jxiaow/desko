@@ -54,6 +54,25 @@ test.describe('Files 文件快捷', () => {
     expect(calls).toEqual([{ path: 'C:/e2e/project' }])
   })
 
+  test('窄窗口 + 展开侧边栏时动作列仍在可视区内', async ({ page }) => {
+    // 800x600 是窗口最小尺寸（tauri.conf minWidth/minHeight），侧边栏展开占 220px，
+    // 这是最吃宽度的一档；两个文字列的下限必须是 0，否则动作列被顶出去点不到
+    await gotoFiles(page)
+    await page.setViewportSize({ width: 800, height: 600 })
+    await tipButton(page.locator('.titlebar'), '切换侧边栏').click()
+    await expect(page.locator('.sidebar')).not.toHaveClass(/collapsed/)
+
+    const row = shortcutRow(page, '项目资料')
+    await row.hover()
+    const box = await row.locator('.row-acts').boundingBox()
+    expect(box).not.toBeNull()
+    expect(box!.x + box!.width).toBeLessThanOrEqual(800)
+    await tipButton(row, '在终端中打开').click()
+    expect(await e2e.count(page, 'open_terminal')).toBe(1)
+    // 名字列只是省略，不换行也不撑高
+    await expect(row.locator('.row-name')).toHaveCSS('text-overflow', 'ellipsis')
+  })
+
   test('搜索过滤', async ({ page }) => {
     await gotoFiles(page)
     await page.locator('.search-box input').fill('报告')

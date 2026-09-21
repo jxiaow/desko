@@ -150,7 +150,8 @@ svg { display: block; flex-shrink: 0; }
 .bar-btn:hover { background: var(--hover); }
 .bar-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 
-/* ---------- 输入区：流的第一个元素 ---------- */
+/* ---------- 输入区：流的第一个元素 ----------
+   交互契约（与 NoteComposer.vue 一致）：点开后失焦不收回，只有空内容按 Esc 才收回胶囊态 */
 .composer {
   background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs); transition: all var(--transition); margin-bottom: var(--space-5);

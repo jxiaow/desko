@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, settingsTab } from '../helpers'
+import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, settingsTab, visiblePane } from '../helpers'
 
 /** 每套主题的三个锚点色，与 global.css 的主题块一一对应。
  *  选这三个是因为它们分别代表"面 / 文字 / 主色"，切换时最容易露馅。
@@ -84,13 +84,14 @@ test.describe('主题', () => {
   })
 
   test('toast 跟着主题翻面：深色下是亮底暗字', async ({ page }) => {
-    await bootUnlocked(page, { settings: { theme: 'dark' } })
+    // 自动锁定行要有值才可用，否则数字框跟着开关一起禁用
+    await bootUnlocked(page, { settings: { theme: 'dark', auto_lock_timeout: '5' } })
     const dialog = await openSettings(page, 'security')
 
     // 改自动锁定并失焦提交，这是成本最低的"必出一条 toast"的路径。
     // 每次传不同值：input 的 change 只在内容真的变了时才触发。
     const probeToast = async (minutes: string) => {
-      await dialog.locator('.number-input').fill(minutes)
+      await visiblePane(dialog).locator('.number-input').fill(minutes)
       await dialog.locator('h2').click()
       const toast = page.locator('.toast.success')
       await expect(toast).toBeVisible()

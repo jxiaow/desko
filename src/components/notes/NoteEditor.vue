@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
-import { useEditor, EditorContent } from '@tiptap/vue-3'
+import { useEditor, EditorContent, VueNodeViewRenderer } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
-import { Extension } from '@tiptap/core'
+import { Extension, mergeAttributes, Node } from '@tiptap/core'
 import { Plugin } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
@@ -23,6 +23,7 @@ import java from 'highlight.js/lib/languages/java'
 import go from 'highlight.js/lib/languages/go'
 import cpp from 'highlight.js/lib/languages/cpp'
 import AppIcon from '../shared/AppIcon.vue'
+import ImageNodeView from './ImageNodeView.vue'
 import type { IconName } from '../../utils/icons'
 
 const lowlight = createLowlight({
@@ -142,7 +143,36 @@ const SlashCommandExtension = Extension.create({
   },
 })
 
-const TAG_PATTERN = /#([\w\u4e00-\u9fa5]+)/g
+const TAG_PATTERN = /#([\w一-龥]+)/g
+
+/** 图片是正文里的一个块，src 只存附件的 asset 地址，字节留在附件目录里；
+ *  width 存书写面百分比，默认半宽，拖右下角手柄调整 */
+const NoteImage = Node.create({
+  name: 'image',
+  group: 'block',
+  atom: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      alt: { default: null },
+      width: {
+        default: '50%',
+        parseHTML: (el) =>
+          el.getAttribute('style')?.match(/width:\s*([^;]+)/)?.[1]?.trim() || '50%',
+        renderHTML: (attrs) => (attrs.width ? { style: `width: ${attrs.width}` } : {}),
+      },
+    }
+  },
+  parseHTML() {
+    return [{ tag: 'img[src]' }]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['img', mergeAttributes(HTMLAttributes, { 'data-note-image': '' })]
+  },
+  addNodeView() {
+    return VueNodeViewRenderer(ImageNodeView)
+  },
+})
 
 // 正文里的 #标签 内联着色（flomo 式），三种书写形态共用同一个编辑器所以只看这一处实现
 const TagHighlightExtension = Extension.create({
@@ -197,6 +227,7 @@ const editor = useEditor({
     TaskItem.configure({ nested: true }),
     TagHighlightExtension,
     SlashCommandExtension,
+    NoteImage,
   ],
   onUpdate: ({ editor }) => {
     emit('update', editor.getHTML())
@@ -377,7 +408,7 @@ watch(() => editor.value, (ed) => {
 
 // Click outside to close slash menu
 const handleClickOutside = (e: MouseEvent) => {
-  if (showSlashMenu.value && slashMenuEl.value && !slashMenuEl.value.contains(e.target as Node)) {
+  if (showSlashMenu.value && slashMenuEl.value && !slashMenuEl.value.contains(e.target as HTMLElement)) {
     showSlashMenu.value = false
   }
 }
@@ -399,7 +430,15 @@ const insertText = (text: string) => {
   editor.value?.chain().focus().insertContent(text).run()
 }
 
-defineExpose({ focusEnd, insertText })
+/** 图片块追加到光标处；默认宽度按书写面区分：列表窄栏小图够用，全屏才给大图 */
+const insertImage = (src: string) => {
+  const ed = editor.value
+  if (!ed) return
+  const width = props.variant === 'full' ? '55%' : '30%'
+  ed.chain().focus().insertContent({ type: 'image', attrs: { src, width } }).run()
+}
+
+defineExpose({ focusEnd, insertText, insertImage })
 </script>
 
 <template>
@@ -478,6 +517,9 @@ defineExpose({ focusEnd, insertText })
   transition: min-height var(--transition-slow);
 }
 .note-editor.v-composer:focus-within :deep(.ProseMirror) { min-height: 148px; }
+/* 竖长图只封顶宽会撑出半屏高；书写面里按视口高度收着放，全屏给更大的额度 */
+.note-editor :deep(.img-node img) { max-height: 34vh; object-fit: contain; }
+.note-editor.v-full :deep(.img-node img) { max-height: 60vh; }
 
 /* 卡片就地展开：与只读态同一套字号，避免展开时文字跳动；留出三行书写余量 */
 .note-editor.v-card :deep(.ProseMirror) {

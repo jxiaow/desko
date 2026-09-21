@@ -40,6 +40,8 @@ export interface E2EConfig {
   fileShortcuts?: E2EFileShortcutSeed[]
   urlPaths?: E2EUrlPathSeed[]
   settings?: Record<string, string>
+  /** 附件目录里"已落盘"的文件名，用来演未引用扫描 */
+  staged?: string[]
 }
 
 interface EntryRecord {
@@ -97,6 +99,13 @@ export interface Invocation {
   args: Record<string, unknown>
 }
 
+interface BackupPackageRecord {
+  name: string
+  time: number
+  size: number
+  attachments: number | null
+}
+
 interface BackendState {
   initialized: boolean
   masterPassword: string
@@ -107,8 +116,11 @@ interface BackendState {
   urlPaths: UrlPathRecord[]
   fileShortcuts: FileShortcutRecord[]
   attachments: AttachmentRecord[]
+  /** 附件目录里"已落盘"的文件，用来演未引用扫描 */
+  staged: { file_path: string; file_size: number }[]
   settings: Record<string, string>
-  sqlImport: string | null
+  backup: { hasPassword: boolean; files: BackupPackageRecord[]; exports: string[] }
+  cloud: { configured: boolean; server: string; account: string; lastSyncAt: number; packages: BackupPackageRecord[]; attachments: string[] }
 }
 
 declare global {
@@ -131,7 +143,7 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'keep_local', 'auto_cloud_sync', 'keep_remote']
 
 // 错误以纯字符串 reject —— 与 Tauri v2 中 AppError(serialize 为 user_message) 一致
 const ERR_NOT_INITIALIZED = '应用未初始化'
@@ -141,8 +153,26 @@ const ERR_NOT_UNLOCKED = '应用已锁定'
 const ERR_ENTRY_NOT_FOUND = '记录不存在'
 const ERR_DB = '操作失败'
 
-function nextId(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+/** 与 Rust attachment_service::mime_of 同表 */
+function mimeOf(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? ''
+  const map: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+    webp: 'image/webp', pdf: 'application/pdf', txt: 'text/plain',
+  }
+  return map[ext] ?? 'application/octet-stream'
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** 与 Rust backup::package_name 同规则：desko-YYYYMMDD-HHMMSS */
+function backupStamp(ts: number): string {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+}
+
+function nextId(): string {  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0
     const v = c === 'x' ? r : (r & 0x3) | 0x8
     return v.toString(16)
@@ -173,8 +203,13 @@ class MockBackend {
       urlPaths: [],
       fileShortcuts: [],
       attachments: [],
+      staged: (config.staged ?? []).map((n) => ({
+        file_path: `C:/e2e/attachments/${n}`,
+        file_size: 2048,
+      })),
       settings: { ...(config.settings ?? {}) },
-      sqlImport: null,
+      backup: { hasPassword: false, files: [], exports: [] },
+      cloud: { configured: false, server: '', account: '', lastSyncAt: 0, packages: [], attachments: [] },
     }
 
     // seed 数据按倒序时间戳，保证列表顺序确定（最新在前）
@@ -276,6 +311,11 @@ class MockBackend {
     if (!this.eventListeners.has(event)) this.eventListeners.set(event, new Set())
     this.eventListeners.get(event)!.add(handler)
     return () => this.eventListeners.get(event)?.delete(handler)
+  }
+
+  /** 命令内部主动推事件（backup-progress 等） */
+  private emit(event: string, payload: unknown) {
+    this.eventListeners.get(event)?.forEach((h) => h(payload))
   }
 
   // ---- 命令路由 ----
@@ -505,16 +545,20 @@ class MockBackend {
 
     delete_note: ({ id }) => {
       this.requireUnlocked()
+      const paths = this.state.attachments.filter((a) => a.note_id === id).map((a) => a.file_path)
       this.state.notes = this.state.notes.filter((n) => n.id !== id)
       this.state.attachments = this.state.attachments.filter((a) => a.note_id !== id)
+      this.state.staged = this.state.staged.filter((f) => !paths.includes(f.file_path))
     },
 
     batch_delete_notes: ({ ids }) => {
       this.requireUnlocked()
       const set = new Set<string>(ids)
       const before = this.state.notes.length
+      const paths = this.state.attachments.filter((a) => set.has(a.note_id)).map((a) => a.file_path)
       this.state.notes = this.state.notes.filter((n) => !set.has(n.id))
       this.state.attachments = this.state.attachments.filter((a) => !set.has(a.note_id))
+      this.state.staged = this.state.staged.filter((f) => !paths.includes(f.file_path))
       return before - this.state.notes.length
     },
 
@@ -550,7 +594,7 @@ class MockBackend {
         file_name: fileName,
         file_path: filePath,
         file_size: 0,
-        mime_type: 'application/octet-stream',
+        mime_type: mimeOf(fileName),
         created_at: Date.now(),
       }
       this.state.attachments.push(att)
@@ -562,6 +606,69 @@ class MockBackend {
       this.state.attachments = this.state.attachments.filter((a) => a.id !== id)
     },
 
+    // 真实后端会把文件拷进附件目录；mock 只换个目录前缀，够前端反解出落盘路径
+    stage_attachment: ({ filePath }) => {
+      this.requireUnlocked()
+      const p = String(filePath)
+      const fileName = p.split(/[\\/]/).pop() || p
+      const stagedPath = `C:/e2e/attachments/${fileName}`
+      this.state.staged.push({ file_path: stagedPath, file_size: 2048 })
+      return {
+        id: nextId(),
+        note_id: '',
+        file_name: fileName,
+        file_path: stagedPath,
+        file_size: 0,
+        mime_type: 'image/png',
+        created_at: Date.now(),
+      }
+    },
+
+    // 无存活登记、也不被任何正文引用的落盘文件
+    attachment_orphans: () => {
+      this.requireUnlocked()
+      const live = new Set(this.state.attachments.map((a) => a.file_path))
+      const html = this.state.notes.map((n) => String(n.content_html || '')).join(' ')
+      for (const f of this.state.staged) {
+        const name = f.file_path.split('/').pop() as string
+        // 正文里的 src 是整条路径 percent-encode 后的结果，两种形态都算引用
+        if (name && (html.includes(name) || html.includes(encodeURIComponent(name)))) live.add(f.file_path)
+      }
+      return this.state.staged
+        .filter((f) => !live.has(f.file_path))
+        .map((f) => ({ name: f.file_path.split('/').pop() as string, size: f.file_size }))
+    },
+
+    attachment_cleanup: ({ names }) => {
+      this.requireUnlocked()
+      const want = new Set(names as string[])
+      const before = this.state.staged.length
+      this.state.staged = this.state.staged.filter((f) => !want.has(f.file_path.split('/').pop() as string))
+      this.state.attachments = this.state.attachments.filter((a) => !want.has(a.file_name))
+      return before - this.state.staged.length
+    },
+
+    bind_attachments: ({ noteId, paths }) => {
+      this.requireUnlocked()
+      this.findNote(noteId)
+      const bound: AttachmentRecord[] = []
+      for (const raw of paths as string[]) {
+        if (this.state.attachments.some((a) => a.file_path === raw)) continue
+        const att: AttachmentRecord = {
+          id: nextId(),
+          note_id: noteId,
+          file_name: String(raw).split(/[\\/]/).pop() || String(raw),
+          file_path: raw,
+          file_size: 0,
+          mime_type: 'image/png',
+          created_at: Date.now(),
+        }
+        this.state.attachments.push(att)
+        bound.push(att)
+      }
+      return bound.map((a) => ({ ...a }))
+    },
+
     // ===== settings.rs =====
     get_setting: ({ key }) => this.state.settings[key] ?? '',
 
@@ -570,15 +677,155 @@ class MockBackend {
       this.state.settings[key] = value
     },
 
-    // ===== data.rs =====
-    export_sql: () => {
+    // ===== backup.rs =====
+    backup_dir: () => 'C:/Users/e2e/AppData/Roaming/com.desko.app/backups',
+
+    backup_status: () => {
       this.requireUnlocked()
-      return `-- e2e mock sql dump\n${JSON.stringify(this.state)}`
+      return {
+        hasPassword: this.state.backup.hasPassword,
+        intervalMin: parseInt(this.state.settings.auto_backup_interval ?? '5') || 0,
+        realtime: this.state.settings.auto_backup_realtime === 'true',
+        keepLocal: parseInt(this.state.settings.keep_local || '10') || 10,
+        files: this.state.backup.files.map((f) => ({ ...f })),
+      }
     },
 
-    import_sql: ({ sql }) => {
+    backup_set_password: async ({ password }) => {
       this.requireUnlocked()
-      this.state.sqlImport = sql
+      if (!password || [...password].length < 8) throw '备份密码至少 8 位'
+      await sleep(60)
+      this.state.backup.hasPassword = true
+      // 真实后端返回换头失败的文件名，mock 恒为空
+      return []
+    },
+
+    backup_run: async () => {
+      this.requireUnlocked()
+      if (!this.state.backup.hasPassword) throw '请先设置备份密码'
+      for (const [text, pct] of [['导出库快照', 8], ['镜像附件 3/3', 60], ['打包并加密（AES-256-GCM）', 88], ['完成', 100]] as const) {
+        await sleep(40)
+        this.emit('backup-progress', { op: 'backup', text, pct })
+      }
+      const now = Date.now()
+      const file: BackupPackageRecord = {
+        name: `desko-${backupStamp(now)}.dsbk`,
+        time: now,
+        size: 262_144,
+        attachments: 3,
+      }
+      this.state.backup.files.unshift(file)
+      return { ...file }
+    },
+
+    backup_delete: ({ name }) => {
+      this.requireUnlocked()
+      this.state.backup.files = this.state.backup.files.filter((f) => f.name !== name)
+    },
+
+    backup_restore: async ({ name, password }) => {
+      this.requireUnlocked()
+      if (!this.state.backup.hasPassword) throw '尚未设置备份密码'
+      if (!password) throw '备份密码错误'
+      if (!this.state.backup.files.some((f) => f.name === name)) throw '备份文件不存在'
+      for (const [text, pct] of [['解密备份包', 20], ['校验数据库完整性', 60], ['替换数据库', 92], ['完成', 100]] as const) {
+        await sleep(40)
+        this.emit('backup-progress', { op: 'restore', text, pct })
+      }
+    },
+
+    // 迁移导出：附件本体一起装进单个 .dsbk，写到用户选的路径，不进本地备份列表
+    backup_export: async ({ path }) => {
+      this.requireUnlocked()
+      if (!this.state.backup.hasPassword) throw '请先设置备份密码'
+      if (!String(path ?? '').endsWith('.dsbk')) throw '导出路径必须以 .dsbk 结尾'
+      for (const [text, pct] of [['导出库快照', 8], ['装附件 3/3', 60], ['打包并加密（AES-256-GCM）', 88], ['完成', 100]] as const) {
+        await sleep(40)
+        this.emit('backup-progress', { op: 'export', text, pct })
+      }
+      this.state.backup.exports.push(String(path))
+      return { name: String(path).replace(/^.*[\\/]/, ''), time: Date.now(), size: 5_242_880, attachments: 3 }
+    },
+
+    backup_restore_file: async ({ path, password }) => {
+      this.requireUnlocked()
+      if (!this.state.backup.hasPassword) throw '尚未设置备份密码'
+      if (!String(path ?? '').endsWith('.dsbk')) throw '只能恢复 .dsbk 备份文件'
+      if (!password) throw '备份密码错误'
+      // 迁移包通常不在本机列表里（U 盘/新机器），所以不按 files 校验存在性
+      for (const [text, pct] of [['解密备份包', 20], ['还原附件 3/3', 55], ['校验数据库完整性', 60], ['替换数据库', 92], ['完成', 100]] as const) {
+        await sleep(40)
+        this.emit('backup-progress', { op: 'restore', text, pct })
+      }
+    },
+
+    // ===== cloud.rs（WebDAV 语义同形，网络部分为内存模拟）=====
+    cloud_status: () => {
+      this.requireUnlocked()
+      const c = this.state.cloud
+      return {
+        configured: c.configured,
+        server: c.server,
+        account: c.account,
+        autoSync: this.state.settings.auto_cloud_sync === 'true',
+        keepRemote: parseInt(this.state.settings.keep_remote || '20') || 20,
+        lastSyncAt: c.lastSyncAt,
+        syncedPackages: c.packages.length,
+        syncedAttachments: c.attachments.length,
+      }
+    },
+
+    cloud_test_config: async ({ server, account, appPassword }) => {
+      this.requireUnlocked()
+      await sleep(80)
+      if (!/^https:\/\/.+/.test(String(server ?? ''))) throw '服务器地址需为 https 开头'
+      if (!account) throw '账号与应用密码不能为空（应用密码在坚果云网页端「安全选项」生成）'
+      if (!appPassword && !this.state.cloud.configured) throw '账号与应用密码不能为空（应用密码在坚果云网页端「安全选项」生成）'
+    },
+
+    cloud_save_config: async ({ server, account, appPassword }) => {
+      await this.commands.cloud_test_config({ server, account, appPassword })
+      this.state.cloud.configured = true
+      this.state.cloud.server = String(server).replace(/\/+$/, '')
+      this.state.cloud.account = String(account)
+    },
+
+    cloud_disconnect: () => {
+      this.requireUnlocked()
+      this.state.cloud = { configured: false, server: '', account: '', lastSyncAt: 0, packages: [], attachments: [] }
+    },
+
+    cloud_sync: async () => {
+      this.requireUnlocked()
+      if (!this.state.cloud.configured) throw '尚未配置坚果云'
+      // 与真实后端同形：先算待传清单，全是空就不发任何请求、也不动「最近同步」时刻
+      const allAtt = ['u1__a.png', 'u2__b.png']
+      const atts = allAtt.filter((a) => !this.state.cloud.attachments.includes(a))
+      const pend = this.state.backup.files.filter((f) => !this.state.cloud.packages.some((p) => p.name === f.name))
+      if (!atts.length && !pend.length) return
+      for (let i = 0; i < atts.length; i++) {
+        await sleep(40)
+        this.emit('backup-progress', { op: 'sync', text: `上传附件 ${i + 1}/${atts.length}`, pct: Math.round(((i + 1) / atts.length) * (pend.length ? 70 : 100)) })
+      }
+      this.state.cloud.attachments = allAtt
+      for (let i = 0; i < pend.length; i++) {
+        await sleep(40)
+        this.emit('backup-progress', { op: 'sync', text: `上传备份包 ${i + 1}/${pend.length}`, pct: 70 + Math.round(((i + 1) / pend.length) * 20) })
+      }
+      await sleep(40)
+      this.emit('backup-progress', { op: 'sync', text: '云端轮转', pct: 92 })
+      this.state.cloud.packages = [...this.state.backup.files]
+      this.state.cloud.lastSyncAt = Date.now()
+    },
+
+    cloud_list: () => {
+      this.requireUnlocked()
+      if (!this.state.cloud.configured) throw '尚未配置坚果云'
+      return this.state.cloud.packages.map((f) => ({ name: f.name, size: f.size }))
+    },
+
+    cloud_restore: async ({ name, password }) => {
+      await this.commands.backup_restore({ name, password })
     },
 
     get_db_path: () => 'C:/Users/e2e/AppData/Roaming/desko/desko.db',

@@ -19,16 +19,36 @@ const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
 
 const focus = () => editorRef.value?.focusEnd()
 const insertTag = () => editorRef.value?.insertText(' #')
+const insertImage = (src: string) => editorRef.value?.insertImage(src)
 
-/** 工具条只在展开时出现；有草稿时保持展开，免得失焦把内容挤成一行 */
+defineExpose({ focus, insertImage })
+
+/**
+ * 展开态是粘滞的：点开后失焦也不收回——失焦收起会把"只是点了别处"当成"不想写了"，
+ * 书写面忽大忽小。收回只有一条路：内容为空时按 Esc，明确表达"我不写了"。
+ * 有草稿时本来就必须展开（!empty），免得失焦把内容挤成一行。
+ */
 const focused = ref(false)
-const open = computed(() => focused.value || !props.empty)
+const expanded = ref(false)
+const open = computed(() => !props.empty || expanded.value)
 
-defineExpose({ focus })
+const onFocusIn = () => {
+  focused.value = true
+  expanded.value = true
+}
+const onFocusOut = () => {
+  focused.value = false
+}
+const onKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && props.empty && focused.value) {
+    expanded.value = false
+    ;(document.activeElement as HTMLElement | null)?.blur()
+  }
+}
 </script>
 
 <template>
-  <section class="composer" :class="{ open }" @focusin="focused = true" @focusout="focused = false">
+  <section class="composer" :class="{ open }" @focusin="onFocusIn" @focusout="onFocusOut" @keydown="onKeydown">
     <NoteEditor
       ref="editorRef"
       variant="composer"
@@ -67,6 +87,9 @@ defineExpose({ focus })
 }
 /* 焦点态：容器描边转主色 + 3px 光圈，指明当前唯一的书写面 */
 .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }
+
+/* 书写面高度由 NoteEditor 的 :focus-within 负责展开；失焦后 .open 接管，粘滞保持不收回 */
+.composer.open :deep(.note-editor.v-composer .ProseMirror) { min-height: 148px; }
 
 /* 收起时工具条整条让位，只留一行输入；展开才滑出来。
    visibility 不能省：max-height:0 只裁掉绘制，按钮仍可命中，会在输入框下面吃掉一截点击 */
