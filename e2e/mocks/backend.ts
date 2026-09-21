@@ -143,7 +143,10 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'keep_local', 'auto_cloud_sync', 'keep_remote']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'auto_cloud_sync', 'keep_remote']
+
+/** 与 Rust 端 backup::LOCAL_FLOOR 对齐：传上云的包本地只留这么几份兜底 */
+const LOCAL_FLOOR = 3
 
 // 错误以纯字符串 reject —— 与 Tauri v2 中 AppError(serialize 为 user_message) 一致
 const ERR_NOT_INITIALIZED = '应用未初始化'
@@ -378,6 +381,37 @@ class MockBackend {
     const p = this.state.urlPaths.find((x) => x.id === id)
     if (!p) throw ERR_DB
     return p
+  }
+
+  /**
+   * 把本地 spool 里还没传的推上云，然后收拾本地 —— 与真实后端同形：
+   * 待传清单为空就一个请求都不发、也不刷新「最近同步」；传成功的包本地只留最近 3 份兜底。
+   */
+  private async uploadAndSettle(op: string) {
+    const allAtt = ['u1__a.png', 'u2__b.png']
+    const atts = allAtt.filter((a) => !this.state.cloud.attachments.includes(a))
+    const pend = this.state.backup.files.filter((f) => !this.state.cloud.packages.some((p) => p.name === f.name))
+    if (!atts.length && !pend.length) return
+    for (let i = 0; i < atts.length; i++) {
+      await sleep(40)
+      this.emit('backup-progress', { op, text: `上传附件 ${i + 1}/${atts.length}`, pct: Math.round(((i + 1) / atts.length) * (pend.length ? 70 : 100)) })
+    }
+    this.state.cloud.attachments = allAtt
+    for (let i = 0; i < pend.length; i++) {
+      await sleep(40)
+      this.emit('backup-progress', { op, text: `上传备份包 ${i + 1}/${pend.length}`, pct: 70 + Math.round(((i + 1) / pend.length) * 20) })
+    }
+    await sleep(40)
+    this.emit('backup-progress', { op, text: '云端轮转', pct: 92 })
+    // 远端只增不减（除了轮转）：本地清掉的那几份在云上还在
+    const keepRemote = parseInt(this.state.settings.keep_remote || '20') || 20
+    this.state.cloud.packages = [...pend, ...this.state.cloud.packages]
+      .sort((a, b) => b.name.localeCompare(a.name))
+      .slice(0, keepRemote)
+    this.state.cloud.lastSyncAt = Date.now()
+    // 本地只当中转用：确认躺在云端的那几份才删，超出兜底份数但没传上的留着
+    const uploaded = new Set(this.state.cloud.packages.map((p) => p.name))
+    this.state.backup.files = this.state.backup.files.filter((f, i) => i < LOCAL_FLOOR || !uploaded.has(f.name))
   }
 
   // handler 的 args 键名与 src/services/api/*.ts 中 JS 侧发送的一致
@@ -678,16 +712,15 @@ class MockBackend {
     },
 
     // ===== backup.rs =====
-    backup_dir: () => 'C:/Users/e2e/AppData/Roaming/com.desko.app/backups',
-
     backup_status: () => {
       this.requireUnlocked()
+      const files = this.state.backup.files
       return {
         hasPassword: this.state.backup.hasPassword,
         intervalMin: parseInt(this.state.settings.auto_backup_interval ?? '5') || 0,
         realtime: this.state.settings.auto_backup_realtime === 'true',
-        keepLocal: parseInt(this.state.settings.keep_local || '10') || 10,
-        files: this.state.backup.files.map((f) => ({ ...f })),
+        pending: files.filter((f) => !this.state.cloud.packages.some((p) => p.name === f.name)).length,
+        lastRoundAt: files[0]?.time ?? 0,
       }
     },
 
@@ -700,38 +733,29 @@ class MockBackend {
       return []
     },
 
+    /** 一轮 = 打包 + 上云 + 收拾本地，跟定时器跑的是同一件事。没连云端这个动作没有意义 */
     backup_run: async () => {
       this.requireUnlocked()
+      if (!this.state.cloud.configured) throw '还没连接云端，备份无处可传'
       if (!this.state.backup.hasPassword) throw '请先设置备份密码'
       for (const [text, pct] of [['导出库快照', 8], ['镜像附件 3/3', 60], ['打包并加密（AES-256-GCM）', 88], ['完成', 100]] as const) {
         await sleep(40)
         this.emit('backup-progress', { op: 'backup', text, pct })
       }
       const now = Date.now()
+      // 包名只到秒：连点两次会撞名，往后挪一秒（真实后端同样处理）
+      let ts = now
+      while (this.state.backup.files.some((f) => f.name === `desko-${backupStamp(ts)}.dsbk`)) ts += 1000
       const file: BackupPackageRecord = {
-        name: `desko-${backupStamp(now)}.dsbk`,
-        time: now,
+        name: `desko-${backupStamp(ts)}.dsbk`,
+        time: ts,
         size: 262_144,
         attachments: 3,
       }
       this.state.backup.files.unshift(file)
-      return { ...file }
-    },
-
-    backup_delete: ({ name }) => {
-      this.requireUnlocked()
-      this.state.backup.files = this.state.backup.files.filter((f) => f.name !== name)
-    },
-
-    backup_restore: async ({ name, password }) => {
-      this.requireUnlocked()
-      if (!this.state.backup.hasPassword) throw '尚未设置备份密码'
-      if (!password) throw '备份密码错误'
-      if (!this.state.backup.files.some((f) => f.name === name)) throw '备份文件不存在'
-      for (const [text, pct] of [['解密备份包', 20], ['校验数据库完整性', 60], ['替换数据库', 92], ['完成', 100]] as const) {
-        await sleep(40)
-        this.emit('backup-progress', { op: 'restore', text, pct })
-      }
+      // 手动这一档不看自动开关：配了云端就传（force）
+      await this.uploadAndSettle('backup')
+      return { package: { ...file }, uploaded: true, error: null }
     },
 
     // 迁移导出：附件本体一起装进单个 .dsbk，写到用户选的路径，不进本地备份列表
@@ -795,29 +819,6 @@ class MockBackend {
       this.state.cloud = { configured: false, server: '', account: '', lastSyncAt: 0, packages: [], attachments: [] }
     },
 
-    cloud_sync: async () => {
-      this.requireUnlocked()
-      if (!this.state.cloud.configured) throw '尚未配置坚果云'
-      // 与真实后端同形：先算待传清单，全是空就不发任何请求、也不动「最近同步」时刻
-      const allAtt = ['u1__a.png', 'u2__b.png']
-      const atts = allAtt.filter((a) => !this.state.cloud.attachments.includes(a))
-      const pend = this.state.backup.files.filter((f) => !this.state.cloud.packages.some((p) => p.name === f.name))
-      if (!atts.length && !pend.length) return
-      for (let i = 0; i < atts.length; i++) {
-        await sleep(40)
-        this.emit('backup-progress', { op: 'sync', text: `上传附件 ${i + 1}/${atts.length}`, pct: Math.round(((i + 1) / atts.length) * (pend.length ? 70 : 100)) })
-      }
-      this.state.cloud.attachments = allAtt
-      for (let i = 0; i < pend.length; i++) {
-        await sleep(40)
-        this.emit('backup-progress', { op: 'sync', text: `上传备份包 ${i + 1}/${pend.length}`, pct: 70 + Math.round(((i + 1) / pend.length) * 20) })
-      }
-      await sleep(40)
-      this.emit('backup-progress', { op: 'sync', text: '云端轮转', pct: 92 })
-      this.state.cloud.packages = [...this.state.backup.files]
-      this.state.cloud.lastSyncAt = Date.now()
-    },
-
     cloud_list: () => {
       this.requireUnlocked()
       if (!this.state.cloud.configured) throw '尚未配置坚果云'
@@ -825,7 +826,14 @@ class MockBackend {
     },
 
     cloud_restore: async ({ name, password }) => {
-      await this.commands.backup_restore({ name, password })
+      this.requireUnlocked()
+      if (!this.state.cloud.configured) throw '尚未配置坚果云'
+      if (!this.state.cloud.packages.some((p) => p.name === name)) throw '备份文件不存在'
+      if (!password) throw '备份密码错误'
+      for (const [text, pct] of [['下载备份包', 8], ['解密备份包', 20], ['还原附件 3/3', 55], ['校验数据库完整性', 60], ['替换数据库', 92], ['完成', 100]] as const) {
+        await sleep(40)
+        this.emit('backup-progress', { op: 'restore', text, pct })
+      }
     },
 
     get_db_path: () => 'C:/Users/e2e/AppData/Roaming/desko/desko.db',

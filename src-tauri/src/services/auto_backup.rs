@@ -62,7 +62,6 @@ pub struct Job {
     pub backups: PathBuf,
     pub dek: Vec<u8>,
     pub wrap: Wrap,
-    pub keep: i64,
     master: Vec<u8>,
 }
 
@@ -107,12 +106,12 @@ impl Job {
                 k
             }
         };
-        let (db_path, keep) = {
+        let db_path = {
             let db = state
                 .db
                 .lock()
                 .map_err(|_| AppError::Database("lock error".to_string()))?;
-            (db.get_db_path(), backup_service::keep_local(&db))
+            db.get_db_path()
         };
         let data_dir = app
             .path()
@@ -124,14 +123,13 @@ impl Job {
             backups: backup::backups_dir(&data_dir),
             dek,
             wrap,
-            keep,
             master,
         }))
     }
 
-    /// 打本地包 + 轮转。云端上传是另一件事（run_round 里按节流决定）
+    /// 打一个本地包。清理是同步之后的事（settle_local），传没传上云决定能删哪些
     pub fn package(&self, progress: &dyn Fn(&str, u8)) -> Result<PackageInfo, AppError> {
-        let info = backup::create_package(
+        backup::create_package(
             &self.db_path,
             &self.attachments,
             &self.backups,
@@ -139,43 +137,67 @@ impl Job {
             &self.wrap,
             env!("CARGO_PKG_VERSION"),
             progress,
-        )?;
-        backup::rotate(&self.backups, self.keep as usize);
-        Ok(info)
+        )
     }
 }
 
-/// 备份后的云端捎带：没开自动同步或没配置就是空话，失败原因回给调用方
-pub fn sync_cloud(state: &AppState, job: &Job, progress: &dyn Fn(&str, u8)) -> Option<String> {
-    let auto = {
-        let db = state.db.lock().ok()?;
-        db.get_meta(cloud_service::META_AUTO)
-            .ok()
-            .flatten()
-            .map(|v| v == "true")
-            .unwrap_or(false)
+/// 这一轮"上云"的结果，决定本地那份中转副本能不能删
+pub enum SyncOutcome {
+    /// 传完了，同步记录已落盘
+    Done(cloud_service::SyncState),
+    /// 失败了。没确认落到云端的包一份都不许删
+    Failed(String),
+}
+
+/// 备份后的云端捎带。`force` = 用户当面点的「立即备份」：只要配了云端就传，
+/// 不看自动同步开关；定时器那一档 force=false，开关关着等于这轮不上云。
+pub fn sync_cloud(state: &AppState, job: &Job, progress: &dyn Fn(&str, u8), force: bool) -> SyncOutcome {
+    let want = {
+        let db = match state.db.lock() {
+            Ok(d) => d,
+            Err(e) => return SyncOutcome::Failed(format!("锁失败: {}", e)),
+        };
+        if force { cloud_service::configured(&db) } else { cloud_service::enabled(&db) }
     };
-    if !auto {
-        return None;
+    if !want {
+        return SyncOutcome::Failed("还没连接坚果云".to_string());
     }
     let (cfg, record, keep_remote) = {
-        let db = state.db.lock().ok()?;
+        let db = match state.db.lock() {
+            Ok(d) => d,
+            Err(_) => return SyncOutcome::Failed("锁失败".to_string()),
+        };
         (
             cloud_service::load_cfg(&db, &job.master).ok().flatten(),
             cloud_service::load_state(&job.backups),
             cloud_service::keep_remote(&db),
         )
     };
-    let Some(cfg) = cfg else { return None };
+    let Some(cfg) = cfg else { return SyncOutcome::Failed("还没连接坚果云".to_string()) };
     match cloud_service::sync_core(&cfg, &record, keep_remote, &job.backups, progress) {
-        Ok(new_state) => {
-            if let Err(e) = cloud_service::write_state(&job.backups, &new_state) {
-                return Some(e.to_string());
-            }
-            None
-        }
-        Err(e) => Some(e.to_string()),
+        Ok(new_state) => match cloud_service::write_state(&job.backups, &new_state) {
+            Ok(()) => SyncOutcome::Done(new_state),
+            Err(e) => SyncOutcome::Failed(e.to_string()),
+        },
+        Err(e) => SyncOutcome::Failed(e.to_string()),
     }
+}
+
+/// 收拾本地：上了云的包只留最近几份兜底，没人引用的附件密文直接回收。
+/// `record` 是这次同步**之后**的记录 —— 不在里面的包和密文一份都不许动。
+pub fn settle_local(job: &Job, record: &cloud_service::SyncState) {
+    backup::prune(&job.backups, &record.packages);
+    backup::reclaim_enc(&job.backups, &job.attachments, &job.dek, &record.attachments);
+}
+
+/// 一轮的尾巴：上云 + 按结果收拾本地。失败原因回给调用方（定时器那档会 emit 给界面）
+pub fn sync_and_settle(app: &AppHandle, job: &Job, progress: &dyn Fn(&str, u8), force: bool) -> SyncOutcome {
+    let state = app.state::<AppState>();
+    let outcome = sync_cloud(&state, job, progress, force);
+    if let SyncOutcome::Done(record) = &outcome {
+        settle_local(job, record);
+    }
+    outcome
 }
 
 
@@ -238,6 +260,11 @@ pub fn spawn(app: AppHandle) {
                 auto_sync,
             } = read_cfg(&app);
             std::thread::sleep(if realtime { REALTIME_POLL } else { NORMAL_POLL });
+            // 备份只服务于云同步：没连云、或者用户把自动那一档关了，就一个本地包都不产生。
+            // 想换机走「迁移」里的单文件导出，那条路不需要定时轮替它攒包。
+            if !auto_sync {
+                continue;
+            }
             if interval == 0 && !realtime {
                 continue;
             }
@@ -255,10 +282,10 @@ pub fn spawn(app: AppHandle) {
                 last_fp = Some(fp);
             }
 
-            // 上一轮传云端失败了、或者本地还有没进记录的包/附件：算欠账，得补
-            if auto_sync && (has_debt || last_debt.elapsed() >= DEBT_CHECK) {
+            // 上一轮传云端失败了、本地还有没进记录的包/附件、或者中转区堆着该清理的：算欠账
+            if has_debt || last_debt.elapsed() >= DEBT_CHECK {
                 last_debt = Instant::now();
-                has_debt = cloud_service::has_pending_upload(&backups);
+                has_debt = cloud_service::has_backlog(&backups);
             }
             if !dirty && !has_debt {
                 continue;
@@ -314,12 +341,7 @@ fn read_cfg(app: &AppHandle) -> Cfg {
     Cfg {
         interval: interval_min(&db),
         realtime: realtime_on(&db),
-        auto_sync: db
-            .get_meta(cloud_service::META_AUTO)
-            .ok()
-            .flatten()
-            .map(|v| v == "true")
-            .unwrap_or(false),
+        auto_sync: cloud_service::enabled(&db),
     }
 }
 
@@ -338,7 +360,8 @@ fn paths(app: &AppHandle) -> Option<(String, PathBuf, PathBuf)> {
     ))
 }
 
-/// 跑一轮。package=false 时只补上云（欠账重传），不再打新包。
+/// 跑一轮：打包 → 上云 → 收拾本地。package=false 时只补上云（欠账重传/清理）。
+/// 调用方已经保证云端在用（`cloud_service::enabled`），所以这里一定会上云。
 /// 返回 true = 真的做了事；false = 这轮跳过（锁屏/没密码/已有任务在跑）
 fn run_round(app: &AppHandle, package: bool) -> Result<bool, AppError> {
     let state = app.state::<AppState>();
@@ -352,7 +375,7 @@ fn run_round(app: &AppHandle, package: bool) -> Result<bool, AppError> {
         let info = job.package(&|_, _| {})?;
         let _ = app.emit("auto-backup", info);
     }
-    if let Some(err) = sync_cloud(&state, &job, &|_, _| {}) {
+    if let SyncOutcome::Failed(err) = sync_and_settle(app, &job, &|_, _| {}, false) {
         // 释放版没有控制台，光 eprintln 等于把失败吞了：抛给界面，下一轮还会补传
         eprintln!("auto cloud sync failed: {}", err);
         let _ = app.emit("auto-backup-note", err);

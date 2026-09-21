@@ -12,10 +12,19 @@ export interface BackupStatus {
   hasPassword: boolean
   /** 定时备份间隔（分钟），0 = 关 */
   intervalMin: number
-  /** 实时备份：写入平息 8 秒后补一轮 */
+  /** 停笔即备：写入平息 8 秒后补一轮 */
   realtime: boolean
-  keepLocal: number
-  files: BackupPackage[]
+  /** 还没传上云的份数（包 + 附件密文） */
+  pending: number
+  /** 最近一轮打包的时刻，0 = 还没有 */
+  lastRoundAt: number
+}
+
+/** 手动一轮的回报：包 + 有没有真的传上去 */
+export interface BackupRunResult {
+  package: BackupPackage
+  uploaded: boolean
+  error: string | null
 }
 
 export interface BackupProgress {
@@ -32,17 +41,14 @@ export function errText(e: unknown): string {
 }
 
 export const backupApi = {
-  dir: () => invoke<string>('backup_dir'),
   status: () => invoke<BackupStatus>('backup_status'),
   /** 返回换头失败（仍是旧密码）的文件名，正常为空 */
   setPassword: (password: string) => invoke<string[]>('backup_set_password', { password }),
-  run: () => invoke<BackupPackage>('backup_run'),
-  remove: (name: string) => invoke<void>('backup_delete', { name }),
-  restore: (name: string, password: string) => invoke<void>('backup_restore', { name, password }),
+  /** 一轮 = 打包 + 传云端 + 收拾本地中转副本。没连云端直接报错 */
+  run: () => invoke<BackupRunResult>('backup_run'),
   /** 单文件迁移包：附件本体一起打包，拷这一个文件就能换机恢复 */
   exportPackage: (path: string) => invoke<BackupPackage>('backup_export', { path }),
   restoreFile: (path: string, password: string) => invoke<void>('backup_restore_file', { path, password }),
-  openPath: (path: string) => invoke<void>('open_file', { path }),
   onProgress: (cb: (p: BackupProgress) => void): Promise<UnlistenFn> =>
     listen<BackupProgress>('backup-progress', (e) => cb(e.payload)),
 }

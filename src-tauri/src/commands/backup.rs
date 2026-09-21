@@ -21,41 +21,14 @@ pub(crate) fn emit_progress(app: &AppHandle, op: &str, text: &str, pct: u8) {
     );
 }
 
-/// 取数据密钥 DEK：优先内存缓存，锁屏后重新解锁时再用主密钥从库里解出来
-fn get_dek(state: &AppState) -> Result<Vec<u8>, AppError> {
-    let mut cached = state
-        .backup_key
-        .lock()
-        .map_err(|_| AppError::Database("lock error".to_string()))?;
-    if let Some(key) = cached.as_ref() {
-        return Ok(key.clone());
-    }
-    let master = services::get_master_key(state)?;
-    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    let key = backup_service::unwrap_backup_key(&db, &master)?
-        .ok_or_else(|| AppError::Backup("尚未设置备份密码".to_string()))?;
-    *cached = Some(key.clone());
-    Ok(key)
-}
-
 fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
     app.path().app_data_dir().map_err(|e| AppError::Io(e.to_string()))
 }
 
 #[tauri::command]
-pub fn backup_dir(app: AppHandle) -> Result<String, AppError> {
-    let dir = backup::backups_dir(&app_data_dir(&app)?);
-    std::fs::create_dir_all(&dir).map_err(|e| AppError::Io(e.to_string()))?;
-    Ok(dir.to_string_lossy().to_string())
-}
-
-#[tauri::command]
 pub fn backup_status(app: AppHandle, state: State<AppState>) -> Result<backup_service::BackupStatus, AppError> {
-    // 先取密钥再锁库：get_dek 内部会锁 db，std Mutex 不可重入，反过来写会死锁
-    let key = get_dek(&state).ok();
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    let data_dir = app_data_dir(&app)?;
-    backup_service::status(&db, key.as_deref(), &data_dir)
+    backup_service::status(&db, &app_data_dir(&app)?)
 }
 
 #[tauri::command]
@@ -85,8 +58,24 @@ pub async fn backup_set_password(app: AppHandle, state: State<'_, AppState>, pas
     Ok(skipped)
 }
 
+/// 手动一轮的回报。传失败时本地那份照样留着，下一轮补传 —— 所以不当错误抛
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunResult {
+    pub package: PackageInfo,
+    pub uploaded: bool,
+    pub error: Option<String>,
+}
+
 #[tauri::command]
-pub async fn backup_run(app: AppHandle, state: State<'_, AppState>) -> Result<PackageInfo, AppError> {
+pub async fn backup_run(app: AppHandle, state: State<'_, AppState>) -> Result<RunResult, AppError> {
+    // 备份就是"打个包传上坚果云"，没连云这个动作没有意义：换机请走去「迁移」里导出单文件包
+    {
+        let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+        if !services::cloud_service::configured(&db) {
+            return Err(AppError::Backup("还没连接云端，备份无处可传".to_string()));
+        }
+    }
     // 已有任务在跑就直接回错，不排队：用户点第二下是想看进度，不是想要第二个包
     let _guard = auto_backup::BusyGuard::try_acquire(&state)
         .ok_or_else(|| AppError::Backup("已有备份任务在进行中".to_string()))?;
@@ -94,7 +83,14 @@ pub async fn backup_run(app: AppHandle, state: State<'_, AppState>) -> Result<Pa
         .ok_or_else(|| AppError::Backup("尚未设置备份密码".to_string()))?;
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        job.package(&|text, pct| emit_progress(&handle, "backup", text, pct))
+        // 和定时器跑的是同一轮：打包 → 上云 → 收拾本地
+        let progress = |text: &str, pct: u8| emit_progress(&handle, "backup", text, pct);
+        let package = job.package(&progress)?;
+        let (uploaded, error) = match auto_backup::sync_and_settle(&handle, &job, &progress, true) {
+            auto_backup::SyncOutcome::Done(_) => (true, None),
+            auto_backup::SyncOutcome::Failed(e) => (false, Some(e)),
+        };
+        Ok::<RunResult, AppError>(RunResult { package, uploaded, error })
     })
     .await
     .map_err(|e| AppError::Backup(format!("备份任务失败: {}", e)))?
@@ -124,13 +120,6 @@ mod name_tests {
             assert!(check_package_name(bad).is_err(), "{} 应当被拒绝", bad);
         }
     }
-}
-
-#[tauri::command]
-pub fn backup_delete(app: AppHandle, name: String) -> Result<(), AppError> {
-    check_package_name(&name)?;
-    let path = app_data_dir(&app)?.join("backups").join(&name);
-    std::fs::remove_file(&path).map_err(|e| AppError::Io(e.to_string()))
 }
 
 #[tauri::command]
@@ -224,19 +213,6 @@ async fn restore_from(
             .map_err(|e| AppError::Backup(format!("任务失败: {}", e)))??
     };
     restore_package(app, state, pkg, dek, wrap).await
-}
-
-/// 从 backups 目录里按包名恢复
-#[tauri::command]
-pub async fn backup_restore(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    name: String,
-    password: String,
-) -> Result<(), AppError> {
-    check_package_name(&name)?;
-    let pkg = app_data_dir(&app)?.join("backups").join(&name);
-    restore_from(app, state, pkg, password).await
 }
 
 /// 把当前数据打成一个自足的迁移包写到指定路径：附件本体在包里，拷这一个文件就能换机恢复

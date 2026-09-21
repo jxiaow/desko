@@ -115,7 +115,7 @@ pub fn status(db: &Database, master_key: &[u8], backups: &Path) -> Result<CloudS
         configured: cfg.is_some(),
         server: cfg.as_ref().map(|c| c.server.clone()).unwrap_or_default(),
         account: cfg.as_ref().map(|c| c.account.clone()).unwrap_or_default(),
-        auto_sync: db.get_meta(META_AUTO).ok().flatten().as_deref() == Some("true"),
+        auto_sync: enabled(db),
         keep_remote: keep_remote(db),
         last_sync_at: state.last_sync_at,
         synced_packages: state.packages.len(),
@@ -192,19 +192,38 @@ fn local_inventory(backups: &Path) -> (Vec<String>, Vec<String>) {
     (packages, atts)
 }
 
-/// 本地有没有还没传上云的东西（包或附件）。纯本地比对，不发请求。
-/// 定时器用它判断"有欠账要补"，所以同步失败不会一直躺着没人管。
-pub fn has_pending_upload(backups: &Path) -> bool {
+/// 本地还欠云端多少东西（没传的包 + 没传的附件密文）。纯本地比对，不发请求。
+pub fn pending_count(backups: &Path) -> usize {
     let record = load_state(backups);
     let (packages, attachments) = local_inventory(backups);
-    packages.iter().any(|n| !record.packages.contains(n))
-        || attachments.iter().any(|n| !record.attachments.contains(n))
+    packages.iter().filter(|n| !record.packages.contains(n)).count()
+        + attachments.iter().filter(|n| !record.attachments.contains(n)).count()
+}
+
+/// 本地和云端还没对齐 —— 定时器用它决定"这轮要不要跑"，所以同步失败不会一直躺着没人管。
+/// 两种情况都算：有还没传上去的；或者全传完了、本地却还堆着超出兜底份数的旧包等着清理。
+pub fn has_backlog(backups: &Path) -> bool {
+    if pending_count(backups) > 0 {
+        return true;
+    }
+    crate::backup::list_packages(backups).len() > crate::backup::LOCAL_FLOOR
+}
+
+/// 云端凭据在不在。手动「立即备份」看这条：配了云就该传，跟自动开关无关
+pub fn configured(db: &Database) -> bool {
+    db.get_meta(META_CFG).ok().flatten().map(|v| !v.is_empty()).unwrap_or(false)
+}
+
+/// 用户有没有把"自动备份到云"打开、并且真配了云端。只看 meta 在不在，不解密凭据，
+/// 所以持锁时也能调。定时器整轮的总闸就在这：没开就连本地包都不打。
+pub fn enabled(db: &Database) -> bool {
+    db.get_meta(META_AUTO).ok().flatten().as_deref() == Some("true") && configured(db)
 }
 
 /// 云端轮转后收敛同步记录：只留下本地还认得的名字。
 ///
-/// 被云端轮转删掉的那些**仍然要算"已经传过"**：它们在本地还留着（本地保留份数通常比
-/// 云端多），要是从记录里抹掉，下一轮 `has_pending_upload` 就把它们当新东西再传一遍，
+/// 被云端轮转删掉的那些**仍然要算"已经传过"**：云端保留份数配得比本地兜底份数还少时，
+/// 它们在本地还留着，要是从记录里抹掉，下一轮 `has_backlog` 就把它们当新东西再传一遍，
 /// 传完又被轮转删掉 —— 每轮往坚果云推同一批旧包，正好违背做增量的初衷。
 fn pruned(uploaded: &[String], known: &[String]) -> Vec<String> {
     uploaded
@@ -397,9 +416,42 @@ mod tests {
     #[test]
     fn pending_upload_is_compared_locally() {
         let root = fake_backups("inv");
-        assert!(has_pending_upload(&root), "一条记录都没有，当然有欠账");
+        assert_eq!(pending_count(&root), 2, "一个包 + 一个附件密文都没传");
+        assert!(has_backlog(&root), "一条记录都没有，当然有欠账");
         write_state(&root, &full_record()).unwrap();
-        assert!(!has_pending_upload(&root), "全传过了就不该再有欠账");
+        assert_eq!(pending_count(&root), 0);
+        assert!(!has_backlog(&root), "全传过了、也没超出兜底份数，就不该再有欠账");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 全传上云了、本地却还堆着超出兜底份数的旧包：也算欠账，好让下一轮去清理。
+    /// 不然"数据没变就什么都不做"会让中转区永远排不空。
+    #[test]
+    fn a_full_local_spool_counts_as_backlog() {
+        let root = fake_backups("spool");
+        let names: Vec<String> = (0..crate::backup::LOCAL_FLOOR + 2)
+            .map(|i| format!("desko-20260921-12000{}.dsbk", i))
+            .collect();
+        for n in &names {
+            std::fs::write(root.join(n), b"pkg").unwrap();
+        }
+        std::fs::remove_file(root.join("desko-20260921-120000.dsbk")).unwrap();
+        let mut all = names.clone();
+        all.remove(0);
+        write_state(
+            &root,
+            &SyncState {
+                packages: all.clone(),
+                attachments: vec!["a__x.png".to_string()],
+                last_sync_at: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(pending_count(&root), 0, "都在记录里");
+        assert!(has_backlog(&root), "本地还堆着 {} 份，等着清理", all.len());
+        crate::backup::prune(&root, &all);
+        assert!(!has_backlog(&root), "清完就该安静下来");
+        assert_eq!(crate::backup::list_packages(&root).len(), crate::backup::LOCAL_FLOOR);
         let _ = std::fs::remove_dir_all(&root);
     }
 

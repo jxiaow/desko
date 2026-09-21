@@ -1,9 +1,32 @@
 import { test, expect } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, openSettings, settingsTab, visiblePane, E2E_PASSWORD } from '../helpers'
+import type { Locator, Page } from '@playwright/test'
+import { bootUnlocked, e2e, expectToast, openSettings, settingsTab, visiblePane, waitForToastGone, E2E_PASSWORD } from '../helpers'
 import { AuthPage } from '../pages/auth-page'
 
 const SEED = {
   settings: { auto_lock_timeout: '10', lock_on_close: 'false' },
+}
+
+/** 备份密码弹窗走成功路径 */
+async function setBackupPwd(page: Page, pane: Locator) {
+  await pane.locator('.setting-item', { hasText: '备份密码' }).locator('button.action-btn').click()
+  const pwdDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '设置备份密码' }) })
+  await pwdDialog.locator('input[type="password"]').first().fill('backup-pass-1')
+  await pwdDialog.locator('input[type="password"]').nth(1).fill('backup-pass-1')
+  await pwdDialog.locator('.dialog-footer button.btn-primary').click()
+  await expectToast(page, '备份密码已设置')
+  await waitForToastGone(page)
+}
+
+/** 坚果云配置弹窗走成功路径（备份的一切前提） */
+async function connectCloud(page: Page, pane: Locator) {
+  await pane.locator('.setting-item', { hasText: '连接' }).locator('button.action-btn', { hasText: '配置' }).click()
+  const modal = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '连接坚果云' }) })
+  await modal.locator('input[placeholder="坚果云登录邮箱"]').fill('me@example.com')
+  await modal.locator('input[type="password"]').fill('app-pass')
+  await modal.locator('.dialog-footer button.btn-primary').click()
+  await expectToast(page, '已连接坚果云')
+  await waitForToastGone(page)
 }
 
 test.describe('Settings 设置', () => {
@@ -89,7 +112,7 @@ test.describe('Settings 设置', () => {
     expect((await e2e.snapshot(page)).settings.lock_on_close).toBe('true')
   })
 
-  test('导出 SQL 入口已移除，数据与备份页取代', async ({ page }) => {
+  test('导出 SQL 入口已移除，未连云端时备份入口也只有连接', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
@@ -97,28 +120,36 @@ test.describe('Settings 设置', () => {
     // 旧的 SQL 导出入口没了；现在的「导出」是单文件迁移包
     await expect(dialog.locator('button', { hasText: /SQL/i })).toHaveCount(0)
     await expect(pane.locator('.section-label', { hasText: '数据' })).toBeVisible()
-    await expect(pane.locator('.section-label', { hasText: '本地备份' })).toBeVisible()
+    await expect(pane.locator('.section-label', { hasText: '云端备份' })).toBeVisible()
     await expect(pane.locator('.section-label', { hasText: '迁移' })).toBeVisible()
-    await expect(pane.locator('.section-label', { hasText: '云端同步' })).toBeVisible()
-    // 备份文件段带目录路径 + 打开文件夹动作
-    await expect(pane.locator('.label-path')).toContainText('backups')
-    await expect(pane.locator('.section-head button.row-btn', { hasText: '打开文件夹' })).toBeVisible()
+    // 备份只服务于云同步：没连云端时除了密码和连接，一行都不给
+    await expect(pane.locator('.setting-item')).toHaveCount(6)
+    await expect(pane.locator('.setting-item', { hasText: '立即备份' })).toHaveCount(0)
+    await expect(pane.locator('.setting-item', { hasText: '定时备份' })).toHaveCount(0)
+    await expect(pane.locator('button', { hasText: '云端列表' })).toHaveCount(0)
+    // 本地包降级成中转副本：不再列文件、不再让用户配保留份数
+    await expect(pane.locator('.file-row')).toHaveCount(0)
+    await expect(pane.locator('.setting-item', { hasText: '本地保留份数' })).toHaveCount(0)
+    await expect(pane.locator('button', { hasText: '打开文件夹' })).toHaveCount(0)
   })
 
-  test('定时备份与停笔即备：设置改动落盘', async ({ page }) => {
+  test('定时备份与停笔即备：连上云端才出现，改动落盘', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
     const select = pane.locator('.setting-item', { hasText: '定时备份' }).locator('select.select-input')
-    // 与立即备份同一道闸：没设备份密码时调度无从谈起
-    await expect(select).toBeDisabled()
+    // 没连云端：这几行根本不存在
+    await expect(select).toHaveCount(0)
 
-    await pane.locator('.setting-item', { hasText: '备份密码' }).locator('button.action-btn').click()
-    const pwdDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '设置备份密码' }) })
-    await pwdDialog.locator('input[type="password"]').first().fill('backup-pass-1')
-    await pwdDialog.locator('input[type="password"]').nth(1).fill('backup-pass-1')
-    await pwdDialog.locator('.dialog-footer button.btn-primary').click()
-    await expectToast(page, '备份密码已设置')
+    await setBackupPwd(page, pane)
+    await connectCloud(page, pane)
+
+    // 总闸（自动备份到云）没开时，定时与停笔都无从谈起
+    await expect(select).toBeDisabled()
+    const auto = pane.locator('.setting-item', { hasText: '自动备份到云' })
+    await auto.locator('label.switch').click()
+    expect((await e2e.snapshot(page))).toMatchObject({ settings: { auto_cloud_sync: 'true' } })
+    await expect(select).toBeEnabled()
 
     // 默认按 5 分钟显示（Rust 侧默认值，seed 未写）
     await expect(select).toHaveValue('5')
@@ -167,37 +198,63 @@ test.describe('Settings 设置', () => {
     await expect(dialog).toBeVisible()
   })
 
-  test('备份 → 列表出现 → 恢复要输备份密码', async ({ page }) => {
+  test('未连云端没有备份入口；连上之后一轮打完随即上传', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
+    await setBackupPwd(page, pane)
+    // 密码只是前置，没云端这个动作毫无意义
+    await expect(pane.locator('.setting-item', { hasText: '立即备份' })).toHaveCount(0)
 
-    // 未设密码时备份按钮直接禁用，不会点了静默失败
-    await expect(pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn')).toBeDisabled()
+    await connectCloud(page, pane)
+    const row = pane.locator('.setting-item', { hasText: '立即备份' })
+    await expect(row.locator('.setting-desc')).toHaveText('尚无备份')
 
-    // 设密码
-    await pane.locator('.setting-item', { hasText: '备份密码' }).locator('button.action-btn').click()
-    const pwdDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '设置备份密码' }) })
-    await pwdDialog.locator('input[type="password"]').first().fill('backup-pass-1')
-    await pwdDialog.locator('input[type="password"]').nth(1).fill('backup-pass-1')
-    await pwdDialog.locator('.dialog-footer button.btn-primary').click()
-    await expectToast(page, '备份密码已设置')
+    // 行内进度条一闪而过，别去断言它，只看结果
+    await row.locator('button.action-btn').click()
+    await expectToast(page, '已传云端')
+    await expect(row.locator('.setting-desc')).toContainText('最近一轮：')
+    await expect(row.locator('.setting-desc')).toContainText('已全部上传')
+    const state = await e2e.snapshot(page)
+    expect(state.backup.files).toHaveLength(1)
+    expect(state.cloud.packages).toHaveLength(1)
+  })
 
-    // 备份：进度走行内条，完成后列表出现一行
-    await pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn').click()
-    await expect(pane.locator('.row-progress')).toBeVisible()
-    await expect(pane.locator('.file-row')).toHaveCount(1, { timeout: 10_000 })
-    await expectToast(page, '备份完成')
+  test('传上云的包本地随即清掉，只留兜底几份', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const dialog = await openSettings(page, 'backup')
+    const pane = dialog.locator('.backup-pane')
+    await setBackupPwd(page, pane)
+    await connectCloud(page, pane)
 
-    // 恢复：先弹密码框，空密码被拦
-    await pane.locator('.file-row button.row-btn', { hasText: '恢复' }).click()
-    const restoreDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '恢复备份' }) })
+    // 连打 5 轮，每轮都传上云：云端 5 份都在，本地只剩最近 3 份兜底
+    const row = pane.locator('.setting-item', { hasText: '立即备份' })
+    for (let i = 0; i < 5; i++) {
+      await row.locator('button.action-btn').click()
+      await expectToast(page, '已传云端')
+      await waitForToastGone(page)
+    }
+    const state = await e2e.snapshot(page)
+    expect(state.cloud.packages).toHaveLength(5)
+    expect(state.backup.files).toHaveLength(3)
+    expect(state.backup.files.map((f: { name: string }) => f.name)).toEqual(
+      state.cloud.packages.slice(0, 3).map((f: { name: string }) => f.name),
+      '留下的必须是最新的三份',
+    )
+    await expect(row.locator('.setting-desc')).toContainText('已全部上传')
+
+    // 云端列表里 5 份都能恢复，恢复入口只剩这一条 + 「从文件恢复」
+    await pane.locator('button.action-btn', { hasText: '云端列表' }).click()
+    const listDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '云端备份' }) })
+    await expect(listDialog.locator('.file-row')).toHaveCount(5)
+    await listDialog.locator('.file-row button.row-btn', { hasText: '恢复' }).first().click()
+    const restoreDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '从云端恢复' }) })
     await restoreDialog.locator('.dialog-footer button.btn-primary').click()
     await expect(restoreDialog.locator('.modal-error')).toHaveText('请输入备份密码')
     await restoreDialog.locator('input[type="password"]').fill('backup-pass-1')
     await restoreDialog.locator('.dialog-footer button.btn-primary').click()
     await expectToast(page, '恢复完成')
-    expect((await e2e.snapshot(page)).backup.files).toHaveLength(1)
+    expect((await e2e.snapshot(page)).cloud.packages).toHaveLength(5)
   })
 
   test('迁移：导出单文件包 → 从任意路径的文件恢复', async ({ page }) => {
@@ -218,7 +275,7 @@ test.describe('Settings 设置', () => {
     await pwdDialog.locator('.dialog-footer button.btn-primary').click()
     await expectToast(page, '备份密码已设置')
 
-    // 导出：保存对话框给的路径原样传给 backup_export，且不进本地备份列表
+    // 导出：保存对话框给的路径原样传给 backup_export，且不进本地那几份中转副本
     const dest = 'C:/Users/e2e/Desktop/desko-迁移-20260921-1011.dsbk'
     await e2e.queueDialog(page, dest)
     await exportBtn.click()
@@ -226,7 +283,9 @@ test.describe('Settings 设置', () => {
     expect((await invocations()).filter((c: { cmd: string }) => c.cmd === 'backup_export')).toEqual([
       { cmd: 'backup_export', args: { path: dest } },
     ])
-    await expect(pane.locator('.file-row')).toHaveCount(0)
+    const afterExport = await e2e.snapshot(page)
+    expect(afterExport.backup.files).toHaveLength(0)
+    expect(afterExport.backup.exports).toEqual([dest])
 
     // 取消保存对话框：不该发起导出，也不该报错
     await e2e.queueDialog(page, null)
@@ -275,13 +334,14 @@ test.describe('Settings 设置', () => {
       .toEqual(['C:/e2e/attachments/kept__b.png'])
   })
 
-  test('云同步：配置校验 → 保存 → 同步进度 → 状态汇总', async ({ page }) => {
+  test('云端连接：配置校验 → 保存 → 打完即传 → 断开收起整档', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
-    await expect(pane.locator('button.action-btn', { hasText: '云端列表' })).toBeDisabled()
+    const connRow = pane.locator('.setting-item', { hasText: '连接' })
+    await expect(connRow.locator('.setting-desc')).toContainText('未配置')
 
-    await pane.locator('.setting-item', { hasText: '连接' }).locator('button.action-btn', { hasText: '配置' }).click()
+    await connRow.locator('button.action-btn', { hasText: '配置' }).click()
     const modal = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '连接坚果云' }) })
     await modal.locator('.dialog-footer button.btn-secondary', { hasText: '测试连接' }).click()
     await expect(modal.locator('.modal-error')).toContainText('账号与应用密码')
@@ -292,18 +352,34 @@ test.describe('Settings 设置', () => {
     await expect(modal.locator('.modal-ok')).toHaveText('连接成功')
     await modal.locator('.dialog-footer button.btn-primary').click()
     await expectToast(page, '已连接坚果云')
-    await expect(pane.locator('.setting-desc', { hasText: '已连接' })).toBeVisible()
+    await waitForToastGone(page)
+    await expect(connRow.locator('.setting-desc')).toContainText('已连接 · dav.jianguoyun.com/dav（me@example.com）')
+    await expect(connRow.locator('.setting-desc')).toContainText('还没传过东西')
 
-    await pane.locator('button.action-btn', { hasText: '同步' }).click()
-    await expect(pane.locator('.row-progress')).toBeVisible()
-    await expectToast(page, '同步完成')
-    await expect(pane.locator('.setting-desc', { hasText: '已传 2 附件' })).toBeVisible()
-
-    // 本地还没有备份包时，云端列表是空态
+    await setBackupPwd(page, pane)
+    // 云端还没有包时，列表是空态
     await pane.locator('button.action-btn', { hasText: '云端列表' }).click()
     const listDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '云端备份' }) })
     await expect(listDialog.locator('.empty-line')).toContainText('云端还没有备份')
     await listDialog.locator('.dialog-header button.dialog-close').click()
+
+    // 一轮打完即传，连接行跟着报上次上传的时刻
+    await pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn').click()
+    await expectToast(page, '已传云端')
+    await expect(connRow.locator('.setting-desc')).toContainText('上次上传')
+    expect((await e2e.snapshot(page)).cloud.packages).toHaveLength(1)
+
+    // 断开 = 这一档整体收起，只留密码和连接
+    await connRow.locator('button.action-btn', { hasText: '断开' }).click()
+    const confirm = page.locator('.confirm-dialog')
+    await expect(confirm).toBeVisible()
+    await confirm.locator('.btn-danger').click()
+    await expectToast(page, '已断开')
+    await expect(pane.locator('.setting-item', { hasText: '立即备份' })).toHaveCount(0)
+    // 断开 = 同步记录一起清掉（重连时全量重传），本地那一份没人家的份数规则可管，原样留着
+    const off = await e2e.snapshot(page)
+    expect(off.cloud.packages).toHaveLength(0)
+    expect(off.backup.files).toHaveLength(1)
   })
 
   test('修改主密码：校验与成功路径，新口令生效', async ({ page }) => {

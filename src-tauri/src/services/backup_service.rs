@@ -1,7 +1,7 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::Serialize;
 
-use crate::backup::{self, container::Wrap, PackageInfo};
+use crate::backup::{self, container::Wrap};
 use crate::crypto::{self, EncryptedData};
 use crate::db::Database;
 use crate::error::AppError;
@@ -11,7 +11,6 @@ use crate::error::AppError;
 pub const META_WRAP: &str = "backup_wrap";
 /// 数据密钥 DEK，用主密钥封存（退出自动备份要靠它，无需输密码）
 pub const META_KEY: &str = "backup_key";
-pub const META_KEEP: &str = "keep_local";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,8 +20,10 @@ pub struct BackupStatus {
     pub interval_min: i64,
     /// 实时备份：写入平息 8 秒后补一轮
     pub realtime: bool,
-    pub keep_local: i64,
-    pub files: Vec<PackageInfo>,
+    /// 还没传上云的份数（包 + 附件密文）
+    pub pending: usize,
+    /// 最近一轮打包的时刻，0 = 还没有
+    pub last_round_at: i64,
 }
 
 fn read_wrap(db: &Database) -> Result<Option<Wrap>, AppError> {
@@ -80,37 +81,17 @@ pub fn set_backup_password(
     Ok((dek, wrap, changed))
 }
 
-fn read_keep_local(db: &Database) -> i64 {
-    db.get_meta(META_KEEP)
-        .ok()
-        .flatten()
-        .and_then(|v| v.parse::<i64>().ok())
-        .filter(|v| (1..=100).contains(v))
-        .unwrap_or(10)
-}
-
-pub fn status(db: &Database, dek: Option<&[u8]>, app_data_dir: &std::path::Path) -> Result<BackupStatus, AppError> {
+pub fn status(db: &Database, app_data_dir: &std::path::Path) -> Result<BackupStatus, AppError> {
     let backups = backup::backups_dir(app_data_dir);
-    let files = backup::list_packages(&backups)
-        .into_iter()
-        .map(|(name, path, time, size)| {
-            let attachments = dek
-                .and_then(|k| backup::container::read_manifest(&path, k).ok())
-                .map(|m| m.counts.attachments);
-            PackageInfo { name, time, size, attachments }
-        })
-        .collect();
+    let packages = backup::list_packages(&backups);
     Ok(BackupStatus {
         has_password: read_wrap(db).ok().flatten().is_some(),
         interval_min: super::auto_backup::interval_min(db),
         realtime: super::auto_backup::realtime_on(db),
-        keep_local: read_keep_local(db),
-        files,
+        pending: super::cloud_service::pending_count(&backups),
+        // 包名自带时间戳、mtime 就是写完那一刻，最新那个包即最近一轮
+        last_round_at: packages.first().map(|p| p.2).unwrap_or(0),
     })
-}
-
-pub fn keep_local(db: &Database) -> i64 {
-    read_keep_local(db)
 }
 
 #[cfg(test)]

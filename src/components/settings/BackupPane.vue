@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { backupApi, errText } from '../../services/api/backup'
-import type { BackupPackage, BackupStatus } from '../../services/api/backup'
+import type { BackupPackage, BackupRunResult, BackupStatus } from '../../services/api/backup'
 import { cloudApi } from '../../services/api/cloud'
 import type { CloudStatus, RemotePackage } from '../../services/api/cloud'
 import { dataApi } from '../../services/api/data'
@@ -23,7 +23,6 @@ const cloud = ref<CloudStatus>({
   keepRemote: 20, lastSyncAt: 0, syncedPackages: 0, syncedAttachments: 0,
 })
 const dbPath = ref('')
-const backupsDir = ref('')
 const busy = ref<{ op: string; text: string; pct: number } | null>(null)
 const testing = ref(false)
 const orphans = ref<OrphanFile[]>([])
@@ -33,8 +32,8 @@ const st = computed(() => ({
   hasPassword: status.value?.hasPassword ?? false,
   intervalMin: status.value?.intervalMin ?? 5,
   realtime: status.value?.realtime ?? false,
-  keepLocal: status.value?.keepLocal ?? 10,
-  files: status.value?.files ?? [],
+  pending: status.value?.pending ?? 0,
+  lastRoundAt: status.value?.lastRoundAt ?? 0,
   cloud: cloud.value,
 }))
 
@@ -59,11 +58,6 @@ onMounted(async () => {
     dbPath.value = await dataApi.getDbPath()
   } catch {
     dbPath.value = '未知'
-  }
-  try {
-    backupsDir.value = await backupApi.dir()
-  } catch {
-    backupsDir.value = ''
   }
   const unlisten = await backupApi.onProgress((p) => {
     if (busy.value && busy.value.op === p.op) busy.value = { ...p }
@@ -113,21 +107,31 @@ const fmtTime = (ts: number | null) => {
 
 const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/\/+$/, '')
 
-const lastBackup = computed<BackupPackage | null>(() => st.value.files[0] ?? null)
-const lastSyncText = computed(() =>
-  cloud.value.lastSyncAt
-    ? `${fmtTime(cloud.value.lastSyncAt)} · 已传 ${cloud.value.syncedAttachments} 附件 · ${cloud.value.syncedPackages} 份包`
-    : '尚未同步'
-)
+const connText = computed(() => {
+  if (!cloud.value.configured) return '未配置 · 需开启 WebDAV 并使用应用密码'
+  const base = `已连接 · ${hostOf(cloud.value.server)}（${cloud.value.account}）`
+  return cloud.value.lastSyncAt ? `${base} · 上次上传 ${fmtTime(cloud.value.lastSyncAt)}` : `${base} · 还没传过东西`
+})
 
-/** 真实命令的进度走事件，这里只兜住起止；云端 mock 用回调喂 */
-async function run(op: string, task: () => Promise<unknown>, doneMsg: string): Promise<unknown> {
+/** 本地那份只是等上传的中转副本，报"最近一轮 + 还欠多少"就够，不必列文件 */
+const roundText = computed(() => {
+  if (!st.value.lastRoundAt) return '尚无备份'
+  const base = `最近一轮：${fmtTime(st.value.lastRoundAt)}`
+  return st.value.pending ? `${base} · ${st.value.pending} 份待传` : `${base} · 已全部上传`
+})
+
+/** 真实命令的进度走事件，这里只兜住起止；done 给人话 */
+async function run(
+  op: string,
+  task: () => Promise<unknown>,
+  done: string | ((res: unknown) => string),
+): Promise<unknown> {
   if (busy.value) return
   busy.value = { op, text: '准备中…', pct: 0 }
   let res: unknown
   try {
     res = await task()
-    toastStore.showToast(doneMsg)
+    toastStore.showToast(typeof done === 'function' ? done(res) : done)
   } catch (e) {
     toastStore.showToast(errText(e), 'error')
   } finally {
@@ -156,7 +160,7 @@ const submitPwd = async () => {
   closePwd()
 }
 
-/* ---------- 本地备份 ---------- */
+/* ---------- 备份节奏（都只在连上云端之后才有意义） ---------- */
 const INTERVAL_OPTIONS = [
   { value: 0, label: '关闭' },
   { value: 1, label: '每 1 分钟' },
@@ -166,7 +170,10 @@ const INTERVAL_OPTIONS = [
   { value: 60, label: '每小时' },
 ]
 
-const doBackup = () => run('backup', () => backupApi.run(), '备份完成')
+const doBackup = () => run('backup', () => backupApi.run(), (res) => {
+  const r = res as BackupRunResult
+  return r.uploaded ? '备份完成，已传云端' : `包已打好，传云端失败：${r.error ?? '未知原因'}`
+})
 
 /** 改设置本身就算一次数据变更，下一轮判定会跟着补一次备份，这是对的 */
 const saveInterval = async (v: number) => {
@@ -188,21 +195,11 @@ const saveRealtime = async (v: boolean) => {
   refresh()
 }
 
-const saveKeepLocal = async (v: number) => {
-  const n = Math.max(1, Math.min(50, v || 1))
-  try {
-    await settingsApi.setSetting('keep_local', String(n))
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-  }
-  refresh()
-}
-
-/* ---------- 恢复（需要备份密码，本地/云端/迁移文件共用一个弹窗） ---------- */
-type RestoreMode = 'local' | 'cloud' | 'file'
+/* ---------- 恢复（需要备份密码，云端/迁移文件共用一个弹窗） ---------- */
+type RestoreMode = 'cloud' | 'file'
 const showRestore = ref(false)
 const restoreTarget = ref<BackupPackage | null>(null)
-const restoreMode = ref<RestoreMode>('local')
+const restoreMode = ref<RestoreMode>('cloud')
 const restorePw = ref('')
 const restoreErr = ref('')
 const closeRestore = () => { showRestore.value = false; restorePw.value = ''; restoreErr.value = '' }
@@ -226,8 +223,7 @@ const submitRestore = async () => {
   busy.value = { op: 'restore', text: '准备中…', pct: 0 }
   try {
     if (mode === 'cloud') await cloudApi.restore(name, pw)
-    else if (mode === 'file') await backupApi.restoreFile(name, pw)
-    else await backupApi.restore(name, pw)
+    else await backupApi.restoreFile(name, pw)
     toastStore.showToast('恢复完成，请用备份当时的主密码重新解锁')
     emit('restored')
   } catch (e) {
@@ -236,18 +232,6 @@ const submitRestore = async () => {
     busy.value = null
     await refresh()
   }
-}
-
-const doDelete = (f: BackupPackage) => {
-  confirmStore.showConfirm('删除备份', `确定删除 ${f.name} 吗？此操作不可撤销。`, async () => {
-    try {
-      await backupApi.remove(f.name)
-      refresh()
-      toastStore.showToast('已删除')
-    } catch (e) {
-      toastStore.showToast(errText(e), 'error')
-    }
-  })
 }
 
 /* ---------- 云端配置（坚果云 WebDAV） ---------- */
@@ -310,7 +294,7 @@ const saveCloud = async () => {
 }
 
 const doDisconnect = () => {
-  confirmStore.showConfirm('断开云端', '断开后不再上传备份，云端已有文件保持不动（可在坚果云网页端删除）。', async () => {
+  confirmStore.showConfirm('断开云端', '断开后自动备份整轮停摆：不再打包、不再上传。云端已有文件保持不动（可在坚果云网页端删除）。想换机请用「迁移」里的导出。', async () => {
     try {
       await cloudApi.disconnect()
       await refresh()
@@ -339,8 +323,6 @@ const saveKeepRemote = async (v: number) => {
   }
   refresh()
 }
-
-const doSync = () => run('sync', () => cloudApi.sync(), '同步完成')
 
 /* ---------- 云端列表 / 从云端恢复 ---------- */
 const showRemote = ref(false)
@@ -427,9 +409,18 @@ const doRestoreFile = async () => {
           <span class="setting-desc">{{ dbPath }}</span>
         </div>
       </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-name">未引用附件</span>
+          <span class="setting-desc">{{ orphanText }}</span>
+        </div>
+        <div class="setting-actions">
+          <button class="action-btn" :disabled="!orphans.length || !!busy" @click="doCleanOrphans">清理</button>
+        </div>
+      </div>
     </div>
 
-    <h4 class="section-label">本地备份</h4>
+    <h4 class="section-label">云端备份<span class="label-tag">坚果云 WebDAV</span></h4>
     <div class="group-content">
       <div class="setting-item">
         <div class="setting-info">
@@ -444,98 +435,100 @@ const doRestoreFile = async () => {
       </div>
       <div class="setting-item">
         <div class="setting-info">
-          <span class="setting-name">立即备份</span>
-          <span v-if="busy?.op === 'backup'" class="row-progress">
-            <span class="rp-text">{{ busy.text }}</span>
-            <span class="rp-bar"><span class="rp-bar-in" :style="{ width: busy.pct + '%' }" /></span>
-            <span class="rp-pct">{{ busy.pct }}%</span>
-          </span>
-          <span v-else class="setting-desc">
-            {{ lastBackup ? `最近：${lastBackup.name} · ${fmtSize(lastBackup.size)} · ${fmtTime(lastBackup.time)}` : '尚无备份' }}
-          </span>
+          <span class="setting-name">连接</span>
+          <span class="setting-desc">{{ connText }}</span>
         </div>
         <div class="setting-actions">
-          <button class="action-btn" :disabled="!!busy || !st.hasPassword" @click="doBackup">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-            </svg>
-            备份
-          </button>
+          <button class="action-btn" @click="openCloud">配置</button>
+          <button v-if="st.cloud.configured" class="action-btn" @click="doDisconnect">断开</button>
         </div>
       </div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-name">定时备份</span>
-          <span class="setting-desc">到点先看数据变没变：没变这一轮什么都不做，变了就打包并传坚果云</span>
+
+      <template v-if="st.cloud.configured">
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-name">立即备份</span>
+            <span v-if="busy?.op === 'backup'" class="row-progress">
+              <span class="rp-text">{{ busy.text }}</span>
+              <span class="rp-bar"><span class="rp-bar-in" :style="{ width: busy.pct + '%' }" /></span>
+              <span class="rp-pct">{{ busy.pct }}%</span>
+            </span>
+            <span v-else class="setting-desc">{{ roundText }}</span>
+          </div>
+          <div class="setting-actions">
+            <button class="action-btn" :disabled="!!busy || !st.hasPassword" @click="doBackup">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              备份
+            </button>
+          </div>
         </div>
-        <div class="setting-control">
-          <select
-            class="select-input" :value="st.intervalMin" :disabled="!st.hasPassword"
-            @change="saveInterval(parseInt(($event.target as HTMLSelectElement).value))"
-          >
-            <option v-for="c in INTERVAL_OPTIONS" :key="c.value" :value="c.value">{{ c.label }}</option>
-          </select>
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-name">自动备份到云</span>
+            <span class="setting-desc">总闸：关掉之后自动那一档整个停摆，只剩手动「备份」按钮</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" :checked="st.cloud.autoSync" @change="saveCloudEnabled(($event.target as HTMLInputElement).checked)" />
+            <span class="switch-slider"></span>
+          </label>
         </div>
-      </div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-name">停笔即备</span>
-          <span class="setting-desc">最后一次写入平息 8 秒就提前跑同一轮（最快 1 分钟一轮），不等定时器</span>
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-name">定时备份</span>
+            <span class="setting-desc">到点先看数据变没变：没变一轮什么都不做，变了才打包并上传</span>
+          </div>
+          <div class="setting-control">
+            <select
+              class="select-input" :value="st.intervalMin" :disabled="!st.hasPassword || !st.cloud.autoSync"
+              @change="saveInterval(parseInt(($event.target as HTMLSelectElement).value))"
+            >
+              <option v-for="c in INTERVAL_OPTIONS" :key="c.value" :value="c.value">{{ c.label }}</option>
+            </select>
+          </div>
         </div>
-        <label class="switch" :class="{ off: !st.hasPassword }">
-          <input type="checkbox" :checked="st.realtime" :disabled="!st.hasPassword" @change="saveRealtime(($event.target as HTMLInputElement).checked)" />
-          <span class="switch-slider"></span>
-        </label>
-      </div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-name">本地保留份数</span>
-          <span class="setting-desc">超出后自动删除最旧的备份</span>
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-name">停笔即备</span>
+            <span class="setting-desc">最后一次写入平息 8 秒就提前跑同一轮（最快 1 分钟一轮），不等定时器</span>
+          </div>
+          <label class="switch" :class="{ off: !st.cloud.autoSync }">
+            <input type="checkbox" :checked="st.realtime" :disabled="!st.hasPassword || !st.cloud.autoSync" @change="saveRealtime(($event.target as HTMLInputElement).checked)" />
+            <span class="switch-slider"></span>
+          </label>
         </div>
-        <div class="setting-control">
-          <input
-            type="number" class="number-input" min="1" max="50" :value="st.keepLocal"
-            @change="saveKeepLocal(parseInt(($event.target as HTMLInputElement).value))"
-          />
-          <span class="unit">份</span>
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-name">云端保留份数</span>
+            <span class="setting-desc">只轮转库包；云端附件密文永不删除</span>
+          </div>
+          <div class="setting-control">
+            <input
+              type="number" class="number-input" min="1" max="100" :value="st.cloud.keepRemote"
+              @change="saveKeepRemote(parseInt(($event.target as HTMLInputElement).value))"
+            />
+            <span class="unit">份</span>
+          </div>
         </div>
-      </div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-name">未引用附件</span>
-          <span class="setting-desc">{{ orphanText }}</span>
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-name">从云端恢复</span>
+            <span class="setting-desc">下载远端备份包，整机覆盖当前数据</span>
+          </div>
+          <div class="setting-actions">
+            <button class="action-btn" @click="openRemote">云端列表</button>
+          </div>
         </div>
-        <div class="setting-actions">
-          <button class="action-btn" :disabled="!orphans.length || !!busy" @click="doCleanOrphans">清理</button>
-        </div>
-      </div>
+      </template>
     </div>
 
-    <div class="section-head">
-      <h4 class="section-label">备份文件<span v-if="st.files.length" class="label-count">{{ st.files.length }}</span></h4>
-      <span v-if="backupsDir" class="label-path" :title="backupsDir">{{ backupsDir }}</span>
-      <button v-if="backupsDir" class="row-btn" @click="backupApi.openPath(backupsDir)">打开文件夹</button>
-    </div>
-    <div class="group-content">
-      <div v-if="!st.files.length" class="empty-line">还没有备份。设置备份密码后，点「立即备份」生成第一份。</div>
-      <div v-for="f in st.files" :key="f.name" class="file-row">
-        <span class="file-name">{{ f.name }}</span>
-        <span v-if="busy?.op === 'restore' && restoreTarget?.name === f.name" class="file-meta rp-inline">{{ busy.text }} {{ busy.pct }}%</span>
-        <span v-else class="file-meta">{{ fmtTime(f.time) }} · {{ fmtSize(f.size) }}<template v-if="f.attachments != null"> · 附件 {{ f.attachments }}</template></span>
-        <span class="file-actions">
-          <button class="row-btn" :disabled="!!busy" @click="openRestore(f.name, 'local')">恢复</button>
-          <button class="row-btn danger" :disabled="!!busy" @click="doDelete(f)">删除</button>
-        </span>
-      </div>
-    </div>
-
-    <h4 class="section-label">迁移</h4>
+    <h4 class="section-label">迁移<span class="label-tag">不依赖云端</span></h4>
     <div class="group-content">
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">导出迁移包</span>
-          <span class="setting-desc">附件本体一起装进这一个 .dsbk，不配坚果云也能换机</span>
+          <span class="setting-desc">附件本体一起装进这一个 .dsbk，拷到另一台机器就能恢复</span>
         </div>
         <div class="setting-actions">
           <button v-if="busy?.op === 'export'" class="action-btn" disabled>{{ busy.text }} {{ busy.pct }}%</button>
@@ -553,69 +546,7 @@ const doRestoreFile = async () => {
       </div>
     </div>
 
-    <h4 class="section-label">云端同步<span class="label-tag">坚果云 WebDAV</span></h4>
-    <div class="group-content">
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-name">连接</span>
-          <span class="setting-desc">
-            {{ st.cloud.configured ? `已连接 · ${hostOf(st.cloud.server)}（${st.cloud.account}）` : '未配置 · 需开启 WebDAV 并使用应用密码' }}
-          </span>
-        </div>
-        <div class="setting-actions">
-          <button class="action-btn" @click="openCloud">配置</button>
-          <button v-if="st.cloud.configured" class="action-btn" @click="doDisconnect">断开</button>
-        </div>
-      </div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-name">上传备份</span>
-          <span v-if="busy?.op === 'sync'" class="row-progress">
-            <span class="rp-text">{{ busy.text }}</span>
-            <span class="rp-bar"><span class="rp-bar-in" :style="{ width: busy.pct + '%' }" /></span>
-            <span class="rp-pct">{{ busy.pct }}%</span>
-          </span>
-          <span v-else class="setting-desc">最近同步：{{ lastSyncText }}</span>
-        </div>
-        <div class="setting-control">
-          <button class="action-btn" :disabled="!st.cloud.configured || !!busy" @click="doSync">同步</button>
-        </div>
-      </div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-name">备份后自动同步</span>
-          <span class="setting-desc">每轮打完本地包就把新增的包和附件密文传上去，没新增不发请求；关掉只留本地</span>
-        </div>
-        <label class="switch" :class="{ off: !st.cloud.configured }">
-          <input type="checkbox" :checked="st.cloud.autoSync" :disabled="!st.cloud.configured" @change="saveCloudEnabled(($event.target as HTMLInputElement).checked)" />
-          <span class="switch-slider"></span>
-        </label>
-      </div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-name">云端保留份数</span>
-          <span class="setting-desc">只轮转库包；云端附件密文永不删除</span>
-        </div>
-        <div class="setting-control">
-          <input
-            type="number" class="number-input" min="1" max="100" :value="st.cloud.keepRemote"
-            @change="saveKeepRemote(parseInt(($event.target as HTMLInputElement).value))"
-          />
-          <span class="unit">份</span>
-        </div>
-      </div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-name">从云端恢复</span>
-          <span class="setting-desc">下载远端备份包，整机覆盖本地</span>
-        </div>
-        <div class="setting-actions">
-          <button class="action-btn" :disabled="!st.cloud.configured" @click="openRemote">云端列表</button>
-        </div>
-      </div>
-    </div>
-
-    <p class="pane-note">一轮 = 打一个库快照包（.dsbk，几百 KB）+ 把新增的附件密文增量传坚果云；数据没变过就一整轮都不动，云端零请求。数据用随机密钥 AES-256-GCM 加密，备份密码只负责把这把钥匙包起来（PBKDF2 60 万次派生），坚果云只见密文。不想走云就在「迁移」里导出单文件包，拷到另一台机器直接恢复。</p>
+    <p class="pane-note">备份 = 打一个库快照包（.dsbk，几十 KB）+ 把新增的附件密文增量传坚果云；数据没变过就一整轮都不动，云端零请求。本地那几份只是等着上传的中转：传上云就删，只留最近 3 份兜底，所以恢复从「云端列表」或「从文件恢复」下手。没连坚果云时这一栏什么都不做，换机请走「迁移」里的单文件包。数据用随机密钥 AES-256-GCM 加密，备份密码只负责把这把钥匙包起来（PBKDF2 60 万次派生），坚果云只见密文。</p>
 
     <!-- 备份密码弹窗 -->
     <Transition name="dialog">
@@ -652,7 +583,7 @@ const doRestoreFile = async () => {
       <div v-if="showRestore" class="dialog-overlay pane-overlay">
         <div class="dialog dialog-sm">
           <div class="dialog-header">
-            <h3>{{ restoreMode === 'cloud' ? '从云端恢复' : restoreMode === 'file' ? '从文件恢复' : '恢复备份' }}</h3>
+            <h3>{{ restoreMode === 'cloud' ? '从云端恢复' : '从文件恢复' }}</h3>
             <button class="dialog-close" title="关闭" @click="closeRestore">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
@@ -729,7 +660,7 @@ const doRestoreFile = async () => {
           </div>
           <div class="dialog-body dialog-body-tight">
             <div v-if="remoteLoading" class="empty-line">正在列出云端备份…</div>
-            <div v-else-if="!remoteFiles.length" class="empty-line">云端还没有备份，先点「同步」上传一次。</div>
+            <div v-else-if="!remoteFiles.length" class="empty-line">云端还没有备份，先点一次「备份」。</div>
             <div v-for="f in remoteFiles" :key="f.name" class="file-row">
               <span class="file-name">{{ f.name }}</span>
               <span class="file-meta">{{ fmtSize(f.size) }}</span>
@@ -761,24 +692,6 @@ const doRestoreFile = async () => {
   letter-spacing: 0.4px;
   color: var(--text-muted);
 }
-/* 备份文件段：标题 + 目录路径 + 打开动作排成一行 */
-.section-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: var(--space-2) 0 0;
-}
-.section-head .section-label { margin: 0; flex-shrink: 0; }
-.label-path {
-  flex: 1;
-  min-width: 0;
-  font-size: 10.5px;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.label-count,
 .label-tag {
   font-weight: 500;
   font-size: 10.5px;
@@ -818,7 +731,6 @@ const doRestoreFile = async () => {
   transition: width 0.2s;
 }
 .rp-pct { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.rp-inline { color: var(--accent); }
 
 .select-input {
   padding: 5px 8px;
@@ -970,7 +882,6 @@ const doRestoreFile = async () => {
   transition: all 0.15s;
 }
 .row-btn:hover:not(:disabled) { background: var(--hover); color: var(--accent); }
-.row-btn.danger:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft, var(--hover)); }
 .row-btn:disabled { opacity: 0.45; cursor: default; }
 
 .empty-line {

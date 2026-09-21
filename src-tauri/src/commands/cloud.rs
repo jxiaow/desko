@@ -74,33 +74,6 @@ pub fn cloud_disconnect(state: State<AppState>, app: AppHandle) -> Result<(), Ap
 }
 
 #[tauri::command]
-pub async fn cloud_sync(app: AppHandle, state: State<'_, AppState>) -> Result<(), AppError> {
-    let master = master_key(&state)?;
-    let data_dir = app_data_dir(&app)?;
-    let backups = crate::backup::backups_dir(&data_dir);
-    let (creds, record, keep) = {
-        let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-        let creds = cloud_service::load_cfg(&db, &master)?
-            .ok_or_else(|| AppError::Backup("尚未配置坚果云".to_string()))?;
-        (creds, cloud_service::load_state(&backups), cloud_service::keep_remote(&db))
-    };
-
-    let handle = app.clone();
-    let backups_for_sync = backups.clone();
-    let new_state = tauri::async_runtime::spawn_blocking(move || {
-        cloud_service::sync_core(&creds, &record, keep, &backups_for_sync, &|text, pct| {
-            emit_progress(&handle, "sync", text, pct)
-        })
-    })
-    .await
-    .map_err(|e| AppError::Backup(format!("同步任务失败: {}", e)))??;
-
-    // 同步记录是 sidecar，不占库锁；写它也不会改动 data.db 的指纹，
-    // 所以定时器不会把"同步成功"误读成"用户改了数据"
-    cloud_service::write_state(&backups, &new_state)
-}
-
-#[tauri::command]
 pub async fn cloud_list(state: State<'_, AppState>) -> Result<Vec<DavEntry>, AppError> {
     let master = master_key(&state)?;
     let creds = {

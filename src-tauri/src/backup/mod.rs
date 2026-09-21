@@ -85,11 +85,61 @@ pub fn list_packages(dir: &Path) -> Vec<(String, PathBuf, i64, i64)> {
     out
 }
 
-pub fn rotate(dir: &Path, keep: usize) {
-    let packages = list_packages(dir);
-    for (_, path, _, _) in packages.iter().skip(keep.max(1)) {
-        let _ = std::fs::remove_file(path);
+/// 本地只是"还没传上云的中转区"，传成功的包当轮就删，只留最近这么几份兜底
+/// （云端那份被误删、账号没了，还能往回退几步）
+pub const LOCAL_FLOOR: usize = 3;
+
+/// 收拾本地备份包。`uploaded` = 同步记录里确认已在云端的那些包名。
+///
+/// 不在记录里的一份都不动 —— 那是唯一副本，删了就真没了。超出兜底份数、
+/// 又已经躺在云端的，才是可以删的。
+pub fn prune(dir: &Path, uploaded: &[String]) {
+    for (i, (name, path, _, _)) in list_packages(dir).iter().enumerate() {
+        if i < LOCAL_FLOOR {
+            continue;
+        }
+        if uploaded.iter().any(|n| n == name) {
+            let _ = std::fs::remove_file(path);
+        }
     }
+}
+
+/// 回收没人要的附件密文：明文已经被清理掉、又没有任何留在本地的包引用它，
+/// 那这几十 MB 就是纯死重量。
+///
+/// `uploaded` = 同步记录里已上传的附件名。还没传上去的不能删 —— 云端那份包
+/// 恢复时要按清单来取密文，删了就缺一块。返回删掉的个数。
+pub fn reclaim_enc(backups: &Path, attachments_dir: &Path, dek: &[u8], uploaded: &[String]) -> usize {
+    let enc_dir = backups.join("attachments");
+    // 还留在本地的包引用了哪些附件。包只有几 KB，逐个解头部读清单很便宜
+    let mut referenced: Vec<String> = Vec::new();
+    for (_, path, _, _) in list_packages(backups) {
+        if let Ok(m) = container::read_manifest(&path, dek) {
+            referenced.extend(m.files.into_iter().map(|f| f.name));
+        }
+    }
+    let mut removed = 0;
+    if let Ok(rd) = std::fs::read_dir(&enc_dir) {
+        for e in rd.flatten() {
+            let path = e.path();
+            let file = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            // 目录里还住着 .hash-cache.json 之类的 sidecar，只认 .enc
+            let Some(name) = file.strip_suffix(".enc") else { continue };
+            if attachments_dir.join(name).exists() {
+                continue; // 明文还在，下一轮备份还要用它
+            }
+            if referenced.iter().any(|n| n == name) {
+                continue;
+            }
+            if !uploaded.iter().any(|n| n == name) {
+                continue;
+            }
+            if std::fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
 }
 
 /// 换备份密码后，把磁盘上所有包和附件密文的头部换成新包裹。
@@ -593,7 +643,7 @@ mod tests {
 
 
     #[test]
-    fn snapshot_create_list_rotate_restore_flow_on_temp_dirs() {
+    fn snapshot_create_list_restore_flow_on_temp_dirs() {
         let root = std::env::temp_dir().join(format!("desko_bk_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let db_path = root.join("data.db");
@@ -643,13 +693,6 @@ mod tests {
             .unwrap();
         assert_eq!(n, 2);
         drop(conn);
-
-        // 轮转：保留 1，再做一个（改名保证时间戳不同）
-        std::thread::sleep(std::time::Duration::from_millis(1100));
-        create_package(db_path.to_str().unwrap(), &att, &backups, &dek, &wrap, "test", &|_, _| {})
-            .unwrap();
-        rotate(&backups, 1);
-        assert_eq!(list_packages(&backups).len(), 1);
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -723,6 +766,95 @@ mod tests {
         assert!(container::derive_dek(&pkg, "new-pw").is_ok());
         assert!(container::derive_dek(&enc, "new-pw").is_ok(), "附件换头后新密码要能取出 DEK");
         assert!(container::derive_dek(&enc, "old-pw").is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 建一个最小现场：库 + 附件目录。返回 (根目录, 库路径, 附件目录, DEK, 包裹块)
+    fn site(tag: &str, files: &[(&str, &[u8])]) -> (PathBuf, PathBuf, PathBuf, Vec<u8>, container::Wrap) {
+        let root = std::env::temp_dir().join(format!("desko_{}_{}", tag, uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("data.db");
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE notes(id TEXT); CREATE TABLE entries(id TEXT); CREATE TABLE note_attachments(id TEXT);",
+            )
+            .unwrap();
+        }
+        let att = root.join("attachments");
+        std::fs::create_dir_all(&att).unwrap();
+        for (name, bytes) in files {
+            std::fs::write(att.join(name), bytes).unwrap();
+        }
+        let dek = crate::crypto::random_bytes(container::DEK_LEN);
+        let wrap = container::Wrap::seal(&dek, "pw").unwrap();
+        (root, db_path, att, dek, wrap)
+    }
+
+    fn pack_n(db_path: &str, att: &Path, backups: &Path, dek: &[u8], wrap: &container::Wrap, n: usize) -> Vec<String> {
+        (0..n)
+            .map(|_| create_package(db_path, att, backups, dek, wrap, "t", &|_, _| {}).unwrap().name)
+            .collect() // 旧→新
+    }
+
+    /// 本地只是中转区：上了云的当轮就删，只留最近几份兜底；没上云的一份都不许动
+    #[test]
+    fn prune_only_deletes_what_the_cloud_already_has() {
+        let (root, db_path, att, dek, wrap) = site("prune", &[]);
+        let backups = backups_dir(&root);
+        let made = pack_n(db_path.to_str().unwrap(), &att, &backups, &dek, &wrap, 5);
+
+        // 全都没传上去：一个都不能删，哪怕超出兜底份数
+        prune(&backups, &[]);
+        assert_eq!(list_packages(&backups).len(), 5);
+
+        // 只有最新两份上了云：它们在兜底份数之内，超出的那几份没确认，还是不动
+        prune(&backups, &made[3..]);
+        assert_eq!(list_packages(&backups).len(), 5);
+
+        // 全都上了云：超出兜底的删掉，留最近 3 份
+        prune(&backups, &made);
+        let left: Vec<String> = list_packages(&backups).into_iter().map(|(n, _, _, _)| n).collect();
+        assert_eq!(left, vec![made[4].clone(), made[3].clone(), made[2].clone()]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 附件密文回收：明文没了、也没人引用才删；还没传上云的坚决不删
+    #[test]
+    fn reclaim_enc_only_drops_ciphertext_nobody_can_use() {
+        let (root, db_path, att, dek, wrap) = site(
+            "reclaim",
+            &[("u1__keep.png", b"one"), ("u2__gone.png", b"two")],
+        );
+        let backups = backups_dir(&root);
+        let enc = backups.join("attachments");
+        let p1 = pack_n(db_path.to_str().unwrap(), &att, &backups, &dek, &wrap, 1).remove(0);
+        assert!(enc.join("u2__gone.png.enc").exists());
+
+        // 明文都还在：下一轮备份还要用
+        assert_eq!(reclaim_enc(&backups, &att, &dek, &[]), 0);
+
+        // 明文被清理了，但本地还有包指着它 —— 删了那个包就恢复不出附件
+        std::fs::remove_file(att.join("u2__gone.png")).unwrap();
+        let u2 = vec!["u2__gone.png".to_string()];
+        assert_eq!(reclaim_enc(&backups, &att, &dek, &u2), 0);
+        assert!(enc.join("u2__gone.png.enc").exists());
+
+        // 包也传上云被清掉了：这才是死重量
+        std::fs::remove_file(backups.join(&p1)).unwrap();
+        assert_eq!(reclaim_enc(&backups, &att, &dek, &u2), 1);
+        assert!(!enc.join("u2__gone.png.enc").exists());
+        assert!(enc.join("u1__keep.png.enc").exists(), "明文还在的不许动");
+        assert!(enc.join(".hash-cache.json").exists(), "sidecar 不是密文");
+
+        // 还没上云的密文不能删：云端那份包恢复时要按清单来取
+        std::fs::write(att.join("u3__pending.png"), b"three").unwrap();
+        let p2 = pack_n(db_path.to_str().unwrap(), &att, &backups, &dek, &wrap, 1).remove(0);
+        std::fs::remove_file(att.join("u3__pending.png")).unwrap();
+        std::fs::remove_file(backups.join(&p2)).unwrap();
+        assert_eq!(reclaim_enc(&backups, &att, &dek, &[]), 0);
+        let u3 = vec!["u3__pending.png".to_string()];
+        assert_eq!(reclaim_enc(&backups, &att, &dek, &u3), 1);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

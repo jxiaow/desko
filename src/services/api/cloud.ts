@@ -23,7 +23,6 @@ export const cloudApi = {
   saveConfig: (server: string, account: string, appPassword: string) =>
     invoke<void>('cloud_save_config', { server, account, appPassword }),
   disconnect: () => invoke<void>('cloud_disconnect'),
-  sync: () => invoke<void>('cloud_sync'),
   list: () => invoke<RemotePackage[]>('cloud_list'),
   restore: (name: string, password: string) => invoke<void>('cloud_restore', { name, password }),
 }
