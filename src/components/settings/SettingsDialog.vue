@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import BrandLogo from '../shared/BrandLogo.vue'
 import BackupPane from './BackupPane.vue'
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { settingsApi } from '../../services/api/settings'
 import { THEMES, chooseTheme, readTheme } from '../../services/theme'
 import type { ThemeId } from '../../services/theme'
+import { TERMINALS, readTerminal, saveTerminal } from '../../services/terminal'
+import type { TerminalId } from '../../services/terminal'
+import { readMfaFeature, saveMfaFeature } from '../../services/mfaFeature'
 import { useToastStore } from '../../stores/toast'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 
@@ -18,21 +22,31 @@ const emit = defineEmits<{
 
 const show = ref(true)
 const TAB_LABELS = {
+  general: '通用',
   appearance: '外观',
   backup: '数据与备份',
   security: '安全',
   about: '关于',
 } as const
 type TabId = keyof typeof TAB_LABELS
-const tab = ref<TabId>('appearance')
+const tab = ref<TabId>('general')
 // 存 0 表示不开自动锁定，useAutoLock 读到 0 直接跳过这一轮
 const autoLockEnabled = ref(false)
 const autoLockTimeout = ref(5)
 const lockOnClose = ref(false)
 const theme = ref<ThemeId>('cool')
+const terminal = ref<TerminalId>('auto')
+const mfaOn = ref(false)
+const route = useRoute()
+const router = useRouter()
+const terminalDesc = computed(
+  () => TERMINALS.find((t) => t.id === terminal.value)?.desc ?? ''
+)
 
 const loadSettings = async () => {
   theme.value = await readTheme()
+  terminal.value = await readTerminal()
+  mfaOn.value = await readMfaFeature()
   try {
     const timeout = await settingsApi.getSetting('auto_lock_timeout')
     const minutes = parseInt(timeout)
@@ -76,6 +90,24 @@ const pickTheme = async (id: ThemeId) => {
   toastStore.showToast(saved ? '已切换主题' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
 }
 
+const saveTerminalPref = async (id: TerminalId) => {
+  if (id === terminal.value) return
+  terminal.value = id
+  const saved = await saveTerminal(id)
+  toastStore.showToast(saved ? '已保存终端偏好' : '已设置，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
+}
+
+const saveMfaFeaturePref = async () => {
+  try {
+    await saveMfaFeature(mfaOn.value)
+    // 正停在验证码页时关掉，得把人带回去，不然留着一个没有入口的页面
+    if (!mfaOn.value && route.path === '/mfa') await router.replace('/entries')
+    toastStore.showToast('设置已保存')
+  } catch (e: any) {
+    toastStore.showToast('保存失败: ' + e.message, 'error')
+  }
+}
+
 const close = () => {
   show.value = false
   emit('close')
@@ -95,6 +127,15 @@ onMounted(() => { loadSettings() })
             <BrandLogo />
             <h2>设置</h2>
           </div>
+          <button class="nav-tab" :class="{ on: tab === 'general' }" @click="tab = 'general'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+              <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+              <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
+            </svg>
+            <span>{{ TAB_LABELS.general }}</span>
+          </button>
           <button class="nav-tab" :class="{ on: tab === 'appearance' }" @click="tab = 'appearance'">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="13.5" cy="6.5" r=".5"/>
@@ -140,6 +181,37 @@ onMounted(() => { loadSettings() })
               </svg>
             </button>
           </header>
+
+          <!-- 通用 -->
+          <section v-show="tab === 'general'" class="settings-pane">
+            <div class="group-content">
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">在终端中打开</span>
+                  <span class="setting-desc">{{ terminalDesc }}</span>
+                </div>
+                <div class="setting-control">
+                  <select
+                    class="select"
+                    :value="terminal"
+                    @change="saveTerminalPref(($event.target as HTMLSelectElement).value as TerminalId)"
+                  >
+                    <option v-for="t in TERMINALS" :key="t.id" :value="t.id">{{ t.name }}</option>
+                  </select>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">验证码模块</span>
+                  <span class="setting-desc">开启后侧栏出现「验证码」页，管理 TOTP 动态码</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" v-model="mfaOn" @change="saveMfaFeaturePref" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
+          </section>
 
           <!-- 外观 -->
           <section v-show="tab === 'appearance'" class="settings-pane">
@@ -618,6 +690,23 @@ onMounted(() => { loadSettings() })
 .tp-body.narrow { top: 67%; width: 38%; }
 
 .theme-chip-name { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.3; }
+
+/* 通用页的终端下拉，沿用 setting-item 那一行的排布，控件本身补一份精简 select 样式。 */
+.select {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.select:focus { border-color: var(--accent); }
 
 /* 关于面板只有三行内容，居中排成一块，比顶格加一屏空白更像介绍页。 */
 .settings-about {

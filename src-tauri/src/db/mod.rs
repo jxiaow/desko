@@ -5,6 +5,7 @@ pub mod note_repo;
 pub mod url_path_repo;
 pub mod file_repo;
 pub mod attachment_repo;
+pub mod mfa_repo;
 
 pub use models::*;
 

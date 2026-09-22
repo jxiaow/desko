@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { mfaEnabled, readMfaFeature } from '../../services/mfaFeature'
 
 defineProps<{
   collapsed: boolean
@@ -10,6 +12,9 @@ defineEmits<{
 }>()
 
 const route = useRoute()
+
+// 侧栏只在解锁态挂载，这里读一次正好跟上锁/解锁的重挂节奏
+onMounted(() => { readMfaFeature() })
 </script>
 
 <template>
@@ -32,6 +37,12 @@ const route = useRoute()
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
         </div>
         <span v-if="!collapsed" class="nav-text">文件快捷</span>
+      </router-link>
+      <router-link v-if="mfaEnabled" to="/mfa" class="nav-item" :class="{ active: route.path === '/mfa' }">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9.5 11.5l2 2 3.5-3.5"/></svg>
+        </div>
+        <span v-if="!collapsed" class="nav-text">验证码</span>
       </router-link>
     </div>
   </div>

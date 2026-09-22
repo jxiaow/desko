@@ -31,6 +31,14 @@ export interface E2EUrlPathSeed {
   notes?: string
 }
 
+export interface E2EMfaSeed {
+  issuer?: string
+  label: string
+  secret?: string
+  digits?: number
+  period?: number
+}
+
 export interface E2EConfig {
   /** true 时视为已初始化（设置过主密码），默认 true */
   initialized?: boolean
@@ -39,6 +47,7 @@ export interface E2EConfig {
   notes?: E2ENoteSeed[]
   fileShortcuts?: E2EFileShortcutSeed[]
   urlPaths?: E2EUrlPathSeed[]
+  mfaTokens?: E2EMfaSeed[]
   settings?: Record<string, string>
   /** 附件目录里"已落盘"的文件名，用来演未引用扫描 */
   staged?: string[]
@@ -94,6 +103,17 @@ interface AttachmentRecord {
   created_at: number
 }
 
+interface MfaRecord {
+  id: string
+  issuer: string
+  label: string
+  secret: string
+  algorithm: string
+  digits: number
+  period: number
+  createdAt: number
+}
+
 export interface Invocation {
   cmd: string
   args: Record<string, unknown>
@@ -115,6 +135,7 @@ interface BackendState {
   notes: NoteRecord[]
   urlPaths: UrlPathRecord[]
   fileShortcuts: FileShortcutRecord[]
+  mfa: MfaRecord[]
   attachments: AttachmentRecord[]
   /** 附件目录里"已落盘"的文件，用来演未引用扫描 */
   staged: { file_path: string; file_size: number }[]
@@ -143,7 +164,7 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'mfa_enabled']
 
 /** 与 Rust 端 backup::LOCAL_FLOOR 对齐：传上云的包本地只留这么几份兜底 */
 const LOCAL_FLOOR = 3
@@ -208,6 +229,7 @@ class MockBackend {
       notes: [],
       urlPaths: [],
       fileShortcuts: [],
+      mfa: [],
       attachments: [],
       staged: (config.staged ?? []).map((n) => ({
         // 与真实后端一致：库里只存附件目录下的文件名，绝对路径不进数据
@@ -256,6 +278,18 @@ class MockBackend {
         created_at: now - (config.fileShortcuts!.length - i) * 1000,
       })
     })
+    ;(config.mfaTokens ?? []).forEach((t, i) => {
+      state.mfa.push({
+        id: nextId(),
+        issuer: t.issuer ?? '',
+        label: t.label,
+        secret: t.secret ?? 'JBSWY3DPEHPK3PXP',
+        algorithm: 'SHA1',
+        digits: t.digits ?? 6,
+        period: t.period ?? 30,
+        createdAt: now - (config.mfaTokens!.length - i) * 1000,
+      })
+    })
     ;(config.urlPaths ?? []).forEach((p) => {
       const entry = state.entries[p.entry_index]
       if (!entry) return
@@ -293,6 +327,7 @@ class MockBackend {
         merged.notes = [...merged.notes, ...this.state.notes]
         merged.urlPaths = [...merged.urlPaths, ...this.state.urlPaths]
         merged.fileShortcuts = [...merged.fileShortcuts, ...this.state.fileShortcuts]
+        merged.mfa = [...merged.mfa, ...this.state.mfa]
         merged.settings = { ...this.state.settings, ...merged.settings }
         this.state = merged
       },
@@ -385,6 +420,92 @@ class MockBackend {
     const p = this.state.urlPaths.find((x) => x.id === id)
     if (!p) throw ERR_DB
     return p
+  }
+
+  // ---- MFA：otpauth 解析逻辑与 mfa_service.rs 同形 ----
+  private normalizeB32(raw: string): string {
+    return raw.replace(/[\s-=]/g, '').toUpperCase()
+  }
+
+  private checkB32(s: string) {
+    if (!s) throw '密钥不能为空'
+    if (!/^[A-Z2-7]+$/.test(s)) throw '密钥不是有效的 Base32 字符串'
+  }
+
+  private mfaAddFromUri(uri: string) {
+    const trimmed = uri.trim()
+    if (!trimmed.startsWith('otpauth://totp/')) throw '只支持 TOTP 链接（otpauth://totp/…）'
+    const tail = trimmed.slice('otpauth://totp/'.length)
+    const qIdx = tail.indexOf('?')
+    const labelPart = qIdx >= 0 ? tail.slice(0, qIdx) : tail
+    const params = new Map<string, string>()
+    if (qIdx >= 0) {
+      for (const pair of tail.slice(qIdx + 1).split('&').filter(Boolean)) {
+        const eq = pair.indexOf('=')
+        const k = (eq >= 0 ? pair.slice(0, eq) : pair).toLowerCase()
+        const v = eq >= 0 ? pair.slice(eq + 1) : ''
+        params.set(k, this.pctDecode(v))
+      }
+    }
+    const decoded = this.pctDecode(labelPart)
+    const colon = decoded.lastIndexOf(':')
+    let issuer = colon >= 0 ? decoded.slice(0, colon).trim() : ''
+    let label = colon >= 0 ? decoded.slice(colon + 1).trim() : decoded.trim()
+    const issParam = (params.get('issuer') ?? '').trim()
+    if (issParam) issuer = issParam
+    if (!label) label = issuer
+    if (!label) throw '链接里既没有账号名也没有站点名'
+    const secret = this.normalizeB32(params.get('secret') ?? '')
+    this.checkB32(secret)
+    let digits = 6
+    if (params.has('digits')) {
+      const d = params.get('digits')!
+      if (d !== '6' && d !== '7' && d !== '8') throw 'digits 只支持 6/7/8'
+      digits = Number(d)
+    }
+    let period = 30
+    if (params.has('period')) {
+      period = Number(params.get('period'))
+      if (!Number.isInteger(period) || period < 1 || period > 300) throw 'period 超出合理范围（1~300 秒）'
+    }
+    let algorithm = 'SHA1'
+    if (params.has('algorithm')) {
+      algorithm = params.get('algorithm')!.toUpperCase()
+      if (!['SHA1', 'SHA256', 'SHA512'].includes(algorithm)) throw 'algorithm 只支持 SHA1/SHA256/SHA512'
+    }
+    return this.mfaPush(label, issuer, secret, algorithm, digits, period)
+  }
+
+  private pctDecode(s: string): string {
+    try {
+      return decodeURIComponent(s.replace(/\+/g, ' '))
+    } catch {
+      return s
+    }
+  }
+
+  /** 入库并返回 MfaTokenInfo（camelCase，与 Rust serde 一致） */
+  private mfaPush(label: string, issuer: string, secret: string, algorithm: string, digits: number, period: number) {
+    const rec: MfaRecord = {
+      id: nextId(),
+      issuer,
+      label,
+      secret,
+      algorithm,
+      digits,
+      period,
+      createdAt: Date.now(),
+    }
+    this.state.mfa.push(rec)
+    return {
+      id: rec.id,
+      issuer: rec.issuer,
+      label: rec.label,
+      algorithm: rec.algorithm,
+      digits: rec.digits,
+      period: rec.period,
+      createdAt: rec.createdAt,
+    }
   }
 
   /**
@@ -807,8 +928,8 @@ class MockBackend {
       this.requireUnlocked()
       await sleep(80)
       if (!/^https:\/\/.+/.test(String(server ?? ''))) throw '服务器地址需为 https 开头'
-      if (!account) throw '账号与应用密码不能为空（应用密码在坚果云网页端「安全选项」生成）'
-      if (!appPassword && !this.state.cloud.configured) throw '账号与应用密码不能为空（应用密码在坚果云网页端「安全选项」生成）'
+      if (!account) throw '账号与应用密码不能为空'
+      if (!appPassword && !this.state.cloud.configured) throw '账号与应用密码不能为空'
     },
 
     cloud_save_config: async ({ server, account, appPassword }) => {
@@ -922,6 +1043,54 @@ class MockBackend {
     open_terminal: ({ path }) => {
       // 真实实现拉起终端进程；mock 仅记录
       void path
+    },
+
+    // ===== mfa.rs（错误文案与 services/mfa_service.rs 对齐）=====
+    mfa_add_uri: ({ uri }) => {
+      this.requireUnlocked()
+      return this.mfaAddFromUri(String(uri ?? ''))
+    },
+
+    mfa_add_manual: ({ label, secret, issuer }) => {
+      this.requireUnlocked()
+      const norm = this.normalizeB32(String(secret ?? ''))
+      this.checkB32(norm)
+      const lab = String(label ?? '').trim()
+      if (!lab) throw '账号名不能为空'
+      return this.mfaPush(lab, String(issuer ?? '').trim(), norm, 'SHA1', 6, 30)
+    },
+
+    mfa_codes: () => {
+      this.requireUnlocked()
+      const now = Math.floor(Date.now() / 1000)
+      return this.state.mfa
+        .slice()
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map((t) => ({
+          id: t.id,
+          issuer: t.issuer,
+          label: t.label,
+          // mock 不做真 TOTP 计算，码只按位数给固定样式
+          code: '12345678'.slice(0, t.digits),
+          digits: t.digits,
+          period: t.period,
+          remaining: t.period - (now % t.period),
+        }))
+    },
+
+    mfa_remove: ({ id }) => {
+      this.requireUnlocked()
+      const before = this.state.mfa.length
+      this.state.mfa = this.state.mfa.filter((t) => t.id !== id)
+      if (this.state.mfa.length === before) throw '账号已不存在'
+    },
+
+    mfa_read_image: ({ path }) => {
+      this.requireUnlocked()
+      const p = String(path ?? '').toLowerCase()
+      if (!/\.(png|jpe?g|webp|bmp)$/.test(p)) throw '不支持的图片格式，请选择 png / jpg / jpeg / webp / bmp'
+      // 真实后端回文件字节 base64；mock 回 3 个零字节，前端解析必然失败（测试只断言调用）
+      return 'AAAA'
     },
   }
 }

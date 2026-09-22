@@ -6,6 +6,7 @@ pub mod attachment_service;
 pub mod backup_service;
 pub mod auto_backup;
 pub mod cloud_service;
+pub mod mfa_service;
 
 use crate::error::AppError;
 use crate::AppState;

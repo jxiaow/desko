@@ -12,6 +12,7 @@ test.describe('导航与布局', () => {
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(0)
 
     await tipButton(page, '切换侧边栏').click()
+    // 验证码模块默认关着，侧栏只有三个常驻入口
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(3)
     // 侧栏只剩导航：版本/加密说明页脚已去掉
     await expect(page.locator('.sidebar > *')).toHaveCount(1)

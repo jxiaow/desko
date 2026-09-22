@@ -179,7 +179,10 @@ test.describe('Notes 小记', () => {
     await target.locator('button.ib[title="收藏"]').click()
     await expect(tipButton(target, '取消收藏')).toHaveClass(/on warn/)
     // 悬停时状态标让位（opacity 归零），否则同一行出现两个星
-    expect(await target.locator('.memo-state').evaluate((el) => getComputedStyle(el).opacity)).toBe('0')
+    // opacity 带过渡动画，单次采样会读到中间值，轮询到收敛
+    await expect
+      .poll(() => target.locator('.memo-state').evaluate((el) => getComputedStyle(el).opacity))
+      .toBe('0')
     await page.mouse.move(4, 4)
     await expect(target.locator('.state-star')).toBeVisible()
     expect((await e2e.snapshot(page)).notes.find((n: any) => n.content_html.includes('第三条')).starred).toBe(true)

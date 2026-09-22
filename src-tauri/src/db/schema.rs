@@ -53,6 +53,17 @@ pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
             created_at INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_file_shortcuts_name ON file_shortcuts(name);
+
+        CREATE TABLE IF NOT EXISTS mfa_tokens (
+            id TEXT PRIMARY KEY,
+            issuer TEXT NOT NULL DEFAULT '',
+            label TEXT NOT NULL DEFAULT '',
+            secret_enc TEXT NOT NULL,
+            algorithm TEXT NOT NULL DEFAULT 'SHA1',
+            digits INTEGER NOT NULL DEFAULT 6,
+            period INTEGER NOT NULL DEFAULT 30,
+            created_at INTEGER NOT NULL
+        );
     ")?;
 
     // 迁移：为 notes 表添加 pinned 和 starred 字段（如果不存在）

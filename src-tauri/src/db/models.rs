@@ -150,3 +150,29 @@ pub struct UpdateUrlPathInput {
     pub label: Option<String>,
     pub notes: Option<String>,
 }
+
+/// 一条 MFA 账号的对外形态：密钥刻意不在其中，只出码不出密
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MfaTokenInfo {
+    pub id: String,
+    pub issuer: String,
+    pub label: String,
+    pub algorithm: String,
+    pub digits: i64,
+    pub period: i64,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MfaCode {
+    pub id: String,
+    pub issuer: String,
+    pub label: String,
+    pub code: String,
+    pub digits: i64,
+    pub period: i64,
+    /// 当前这步还剩几秒换码
+    pub remaining: i64,
+}

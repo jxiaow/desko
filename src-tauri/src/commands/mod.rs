@@ -7,3 +7,4 @@ pub mod settings;
 pub mod data;
 pub mod backup;
 pub mod cloud;
+pub mod mfa;

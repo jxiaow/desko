@@ -24,6 +24,7 @@
     "@tiptap/starter-kit": "^3.31.3",
     "@tiptap/vue-3": "^3.31.3",
     "@types/turndown": "^5.0.6",
+    "jsqr": "^1.4.0",
     "lowlight": "^3.3.0",
     "pinia": "^4.0.3",
     "turndown": "^7.2.4",

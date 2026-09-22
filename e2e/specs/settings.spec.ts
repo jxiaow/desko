@@ -46,6 +46,19 @@ test.describe('Settings 设置', () => {
     expect(await e2e.count(page, 'get_setting')).toBeGreaterThanOrEqual(2)
   })
 
+  test('终端偏好：通用页可选，改动落盘', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const dialog = await openSettings(page, 'general')
+    const pane = visiblePane(dialog)
+    const select = pane.locator('.setting-item select.select')
+    await expect(select).toHaveCount(1)
+    await expect(select).toHaveValue('auto')
+    const before = await e2e.count(page, 'set_setting')
+    await select.selectOption('cmd')
+    await expectToast(page, '已保存终端偏好')
+    await expect.poll(() => e2e.count(page, 'set_setting')).toBeGreaterThan(before)
+  })
+
   test('点遮罩不关窗，Esc 只关最上面那层', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'security')
@@ -356,7 +369,7 @@ test.describe('Settings 设置', () => {
     await expectToast(page, '已连接坚果云')
     await waitForToastGone(page)
     await expect(connRow.locator('.setting-desc')).toContainText('已连接 · dav.jianguoyun.com/dav（me@example.com）')
-    await expect(connRow.locator('.setting-desc')).toContainText('还没传过东西')
+    await expect(connRow.locator('.setting-desc')).toContainText('尚未上传')
 
     await setBackupPwd(page, pane)
     // 云端还没有包时，列表是空态
@@ -382,6 +395,20 @@ test.describe('Settings 设置', () => {
     const off = await e2e.snapshot(page)
     expect(off.cloud.packages).toHaveLength(0)
     expect(off.backup.files).toHaveLength(1)
+  })
+
+  test('已连接后重开配置弹窗：应用密码留空点测试走已存密码，不误报', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const dialog = await openSettings(page, 'backup')
+    const pane = dialog.locator('.backup-pane')
+    await connectCloud(page, pane)
+    // 密码不回显：重开必是空框，此时「测试连接」应复用库里已存的
+    await pane.locator('.setting-item', { hasText: '连接' }).locator('button.action-btn', { hasText: '配置' }).click()
+    const modal = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '连接坚果云' }) })
+    await expect(modal.locator('input[type="password"]')).toHaveValue('')
+    await modal.locator('.dialog-footer button.btn-secondary', { hasText: '测试连接' }).click()
+    await expect(modal.locator('.modal-ok')).toHaveText('连接成功')
+    await expect(modal.locator('.modal-error')).toHaveCount(0)
   })
 
   test('修改主密码：校验与成功路径，新口令生效', async ({ page }) => {

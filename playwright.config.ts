@@ -17,7 +17,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { channel: 'chrome' },
+      use: { channel: process.env.PW_CHANNEL || 'chrome' },
     },
   ],
   webServer: {
