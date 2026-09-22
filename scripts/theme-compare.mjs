@@ -5,10 +5,10 @@ import { readdirSync } from 'node:fs'
 
 const OUT = 'design/theme-shots'
 const THEMES = [
-  { id: 'cool', name: '冷灰' },
-  { id: 'white', name: '素白' },
-  { id: 'dark', name: '夜墨' },
-  { id: 'classic', name: '经典' },
+  { id: 'light-cool', name: '冷灰' },
+  { id: 'light-warm', name: '暖纸墨' },
+  { id: 'linear-dark', name: 'Linear 深空' },
+  { id: 'jetbrains-dark', name: 'JetBrains 炭黑' },
 ]
 
 const screens = [...new Set(readdirSync(OUT).filter((f) => f.endsWith('.png') && !f.startsWith('compare-')))];
@@ -31,7 +31,7 @@ ${keys
   .join('')}
 `
 
-const browser = await chromium.launch({ channel: 'chrome' })
+const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome' })
 const page = await browser.newPage({ viewport: { width: 2560, height: 1200 }, deviceScaleFactor: 1 })
 // 相对路径要靠 file:// 的目录基准才能解析，setContent 的 about:blank 不行
 const { writeFileSync } = await import('node:fs')

@@ -4,7 +4,7 @@ import BackupPane from './BackupPane.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { settingsApi } from '../../services/api/settings'
-import { THEMES, chooseTheme, readTheme } from '../../services/theme'
+import { THEMES, DEFAULT_THEME, chooseTheme, readTheme } from '../../services/theme'
 import type { ThemeId } from '../../services/theme'
 import { TERMINALS, readTerminal, saveTerminal } from '../../services/terminal'
 import type { TerminalId } from '../../services/terminal'
@@ -34,7 +34,7 @@ const tab = ref<TabId>('general')
 const autoLockEnabled = ref(false)
 const autoLockTimeout = ref(5)
 const lockOnClose = ref(false)
-const theme = ref<ThemeId>('cool')
+const theme = ref<ThemeId>(DEFAULT_THEME)
 const terminal = ref<TerminalId>('auto')
 const mfaOn = ref(false)
 const route = useRoute()
@@ -225,13 +225,25 @@ onMounted(() => { loadSettings() })
                 @click="pickTheme(t.id)"
               >
                 <span class="theme-prev" :style="{ background: t.prev.page, borderColor: t.prev.edge }">
-                  <span class="tp-rail" :style="{ background: t.prev.card, borderColor: t.prev.edge }" />
-                  <span class="tp-dot" :style="{ background: t.prev.accent }" />
-                  <span class="tp-line" :style="{ background: t.prev.ink }" />
-                  <span class="tp-line short" :style="{ background: t.prev.ink }" />
-                  <span class="tp-body" :style="{ background: t.prev.ink }" />
-                  <span class="tp-body mid" :style="{ background: t.prev.ink }" />
-                  <span class="tp-body narrow" :style="{ background: t.prev.ink }" />
+                  <span class="tp-rail" :style="{ background: t.prev.sidebar, borderColor: t.prev.edge }">
+                    <span class="tp-rail-dot" :style="{ background: t.prev.accent }" />
+                    <span class="tp-rail-line" :style="{ background: t.prev.ink }" />
+                    <span class="tp-rail-line short" :style="{ background: t.prev.ink }" />
+                  </span>
+                  <span class="tp-rows">
+                    <span class="tp-row" :style="{ background: t.prev.card, borderColor: t.prev.edge }">
+                      <span class="tp-row-ink" :style="{ background: t.prev.ink }" />
+                      <span class="tp-row-tag" :style="{ background: t.prev.accent }" />
+                    </span>
+                    <span class="tp-row" :style="{ background: t.prev.rowHover, borderColor: t.prev.edge }">
+                      <span class="tp-row-ink" :style="{ background: t.prev.ink }" />
+                      <span class="tp-row-tag" :style="{ background: t.prev.accent }" />
+                    </span>
+                    <span class="tp-row" :style="{ background: t.prev.card, borderColor: t.prev.edge }">
+                      <span class="tp-row-ink" :style="{ background: t.prev.ink }" />
+                      <span class="tp-row-tag" :style="{ background: t.prev.accent }" />
+                    </span>
+                  </span>
                 </span>
                 <span class="theme-chip-name">{{ t.name }}</span>
               </button>
@@ -319,8 +331,8 @@ onMounted(() => { loadSettings() })
   display: flex;
   background: var(--panel-bg);
   border-radius: var(--radius-lg);
-  width: min(720px, 92vw);
-  height: min(540px, 84vh);
+  width: min(640px, 92vw);
+  height: min(480px, 84vh);
   overflow: hidden;
   box-shadow: var(--shadow-pop);
   border: 1px solid var(--border);
@@ -452,174 +464,14 @@ onMounted(() => { loadSettings() })
   flex-direction: column;
 }
 
-.group-content {
-  background: var(--bg);
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.setting-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  min-height: 60px;
-  padding: 12px var(--space-4);
-  border-bottom: 1px solid var(--border);
-  transition: background var(--transition);
-}
-
-.setting-item:last-child {
-  border-bottom: none;
-}
-
-.setting-item.clickable {
-  cursor: pointer;
-}
-
-.setting-item.clickable:hover {
-  background: var(--hover);
-}
-
-.setting-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.setting-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.setting-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.setting-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: inherit;
-}
-
-.action-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.setting-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.number-input {
-  width: 56px;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  font-size: 12px;
-  text-align: right;
-  outline: none;
-  background: var(--panel-bg);
-  color: var(--text);
-  transition: border-color 0.15s;
-  font-family: inherit;
-}
-
-.number-input:focus {
-  border-color: var(--accent);
-}
-
-.number-input:disabled {
-  color: var(--text-muted);
-  background: transparent;
-  border-color: transparent;
-}
-
-.unit {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 36px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.switch-slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background-color: var(--border);
-  transition: 0.2s;
-  border-radius: 20px;
-}
-
-.switch-slider:before {
-  position: absolute;
-  content: "";
-  height: 16px;
-  width: 16px;
-  left: 2px;
-  bottom: 2px;
-  background-color: var(--panel-bg);
-  transition: 0.2s;
-  border-radius: 50%;
-  box-shadow: var(--shadow-xs);
-}
-
-.switch input:checked + .switch-slider {
-  background-color: var(--accent);
-}
-
-.switch input:checked + .switch-slider:before {
-  transform: translateX(16px);
-}
-
 .arrow-icon {
   color: var(--text-muted);
   flex-shrink: 0;
 }
 
-/* 主题选择：四块迷你预览，点一下整套色就换。
-   预览里的色直接取自该主题的令牌，所见即所得，不再配文字解释。
-   三套浅色在小图里几乎看不出差别，所以放大到两列。 */
+/* 主题选择：每块卡里画一个等比缩小的微缩界面——侧栏、三行行卡
+   （中间一行是悬浮态底色）、行尾一枚强调色小块。所见即所得，不配文字解释。
+   边框固定 2px 占位，选中只换颜色，切换时不跳布局。 */
 .theme-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -631,16 +483,20 @@ onMounted(() => { loadSettings() })
   flex-direction: column;
   gap: 6px;
   padding: var(--space-2);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   background: var(--panel-bg);
   border-radius: var(--radius-md);
   cursor: pointer;
   text-align: left;
   font-family: inherit;
-  transition: all var(--transition);
+  transition: border-color var(--transition-slow), box-shadow var(--transition-slow), background var(--transition);
 }
 .theme-chip:hover { border-color: var(--border-strong); background: var(--hover); }
-.theme-chip.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); }
+.theme-chip.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  background: var(--panel-bg);
+}
 
 .theme-prev {
   position: relative;
@@ -650,6 +506,7 @@ onMounted(() => { loadSettings() })
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
+/* 侧栏：占左边 30%，顶部一枚 accent 圆点当 logo，下面两条导航字条 */
 .tp-rail {
   position: absolute;
   left: 0;
@@ -658,7 +515,7 @@ onMounted(() => { loadSettings() })
   width: 30%;
   border-right: 1px solid;
 }
-.tp-dot {
+.tp-rail-dot {
   position: absolute;
   left: 5px;
   top: 5px;
@@ -666,47 +523,51 @@ onMounted(() => { loadSettings() })
   height: 7px;
   border-radius: 2px;
 }
-.tp-line {
+.tp-rail-line {
+  position: absolute;
+  left: 5px;
+  top: 22px;
+  width: 58%;
+  height: 3px;
+  border-radius: 2px;
+  opacity: 0.55;
+}
+.tp-rail-line.short { top: 32px; width: 42%; opacity: 0.3; }
+/* 内容区：三行行卡，行距 1px 靠描边色分离，中间一行呈悬浮态底色 */
+.tp-rows {
   position: absolute;
   left: calc(30% + 7px);
-  top: 11%;
+  right: 6px;
+  top: 6px;
+  bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+.tp-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 14px;
+  padding: 0 5px;
+  border: 1px solid;
+  border-radius: 3px;
+}
+.tp-row-ink {
   width: 46%;
   height: 3px;
   border-radius: 2px;
-  opacity: 0.85;
+  opacity: 0.75;
+  position: relative;
 }
-.tp-line.short { top: 21%; width: 30%; opacity: 0.35; }
-/* 页头两条 + 正文三行的假文档，用百分比排，预览块尺寸变了也不会挤成一坨 */
-.tp-body {
-  position: absolute;
-  left: calc(30% + 7px);
-  top: 39%;
-  width: 56%;
-  height: 3px;
-  border-radius: 2px;
-  opacity: 0.2;
+.tp-row-tag {
+  margin-left: auto;
+  width: 9px;
+  height: 5px;
+  border-radius: 99px;
 }
-.tp-body.mid { top: 53%; width: 50%; }
-.tp-body.narrow { top: 67%; width: 38%; }
-
 .theme-chip-name { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.3; }
-
-/* 通用页的终端下拉，沿用 setting-item 那一行的排布，控件本身补一份精简 select 样式。 */
-.select {
-  flex-shrink: 0;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-family: inherit;
-  color: var(--text);
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.select:focus { border-color: var(--accent); }
 
 /* 关于面板只有三行内容，居中排成一块，比顶格加一屏空白更像介绍页。 */
 .settings-about {

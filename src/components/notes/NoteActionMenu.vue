@@ -10,7 +10,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   fullscreen: []
-  copy: []
   delete: []
   close: []
 }>()
@@ -21,10 +20,6 @@ const emit = defineEmits<{
     <button v-if="props.showFullscreen !== false" class="pop-item" type="button" @click="emit('fullscreen')">
       <AppIcon name="max" :size="14" />
       全屏编辑
-    </button>
-    <button class="pop-item" type="button" @click="emit('copy')">
-      <AppIcon name="doc" :size="14" />
-      复制文本
     </button>
     <div class="pop-sep" />
     <button class="pop-item danger" type="button" @click="emit('delete')">

@@ -37,6 +37,15 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('[aria-label="展开侧栏"]')).toBeVisible()
   })
 
+  test('一键复制正文：快捷按钮出纯文本', async ({ page }) => {
+    await gotoNotes(page)
+    const m = memo(page, '第一条小记')
+    await m.hover()
+    await tipButton(m, '复制正文').click()
+    await expectToast(page, '小记已复制')
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('第一条小记：周会纪要与待办')
+  })
+
   test('composer 发布新小记', async ({ page }) => {
     await gotoNotes(page)
     const publish = page.locator('.composer button.btn-primary')
@@ -214,6 +223,12 @@ test.describe('Notes 小记', () => {
     await memo(page, '第二条小记').click()
     await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
     await expect(memo(page, '第一条小记')).toHaveClass(/is-sel/)
+    // 选中态：浸润底 + 1px 全包裹微环
+    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(91, 87, 217) 0px 0px 0px 1px, rgba(26, 27, 32, 0.05) 0px 1px 2px 0px')
+    // 上下键换焦点，微环跟着走
+    await page.locator('.memo').first().focus()
+    await page.keyboard.press('ArrowDown')
+    await expect(page.locator('.memo').nth(1)).toBeFocused()
 
     await page.locator('button.dock-btn:text-is("删除")').click()
     const confirm = page.locator('.confirm-dialog')

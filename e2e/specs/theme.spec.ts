@@ -6,13 +6,20 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const ANCHORS = {
-  cool:    { bg: 'rgb(248, 248, 250)', text: 'rgb(27, 27, 32)',    accent: '#5b57d9' },
-  classic: { bg: 'rgb(250, 251, 252)', text: 'rgb(17, 24, 39)',    accent: '#6366f1' },
-  white:   { bg: 'rgb(255, 255, 255)', text: 'rgb(24, 24, 27)',    accent: '#4b47c4' },
-  dark:    { bg: 'rgb(12, 12, 15)',    text: 'rgb(238, 238, 243)', accent: '#7b77f0' },
+  'light-cool':   { bg: 'rgb(248, 248, 250)', text: 'rgb(27, 27, 32)',   accent: '#5b57d9' },
+  'light-warm':   { bg: 'rgb(245, 242, 235)', text: 'rgb(46, 41, 37)',    accent: '#d97706' },
+  'linear-dark':    { bg: 'rgb(9, 10, 15)',   text: 'rgb(232, 234, 242)', accent: '#5e6ad2' },
+  'jetbrains-dark': { bg: 'rgb(25, 26, 28)',  text: 'rgb(227, 230, 234)', accent: '#3574f0' },
 } as const
 
 type ThemeId = keyof typeof ANCHORS
+
+const THEME_NAMES: Record<ThemeId, string> = {
+  'light-cool': '冷灰',
+  'light-warm': '暖纸墨',
+  'linear-dark': 'Linear 深空',
+  'jetbrains-dark': 'JetBrains 炭黑',
+}
 
 const readAnchors = (page: import('@playwright/test').Page) =>
   page.evaluate(() => {
@@ -30,16 +37,32 @@ test.describe('主题', () => {
   test('没存过主题时用默认的冷灰', async ({ page }) => {
     await bootUnlocked(page)
     const got = await readAnchors(page)
-    expect(got.attr).toBe('cool')
-    expect(got.bg).toBe(ANCHORS.cool.bg)
-    expect(got.text).toBe(ANCHORS.cool.text)
+    expect(got.attr).toBe('light-cool')
+    expect(got.bg).toBe(ANCHORS['light-cool'].bg)
+    expect(got.text).toBe(ANCHORS['light-cool'].text)
   })
 
   test('已存的主题在首屏之前就挂上，不走默认色', async ({ page }) => {
-    await bootUnlocked(page, { settings: { theme: 'dark' } })
-    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('dark')
+    await bootUnlocked(page, { settings: { theme: 'linear-dark' } })
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('linear-dark')
     // 挂载前就 await 过 get_setting，所以这一次读取发生在 createApp 之前
     expect(await e2e.count(page, 'get_setting')).toBeGreaterThanOrEqual(1)
+  })
+
+  test('库里存着的旧主题 ID 在读取时迁移，不闪默认色', async ({ page }) => {
+    for (const legacy of ['dark', 'dark-carbon', 'cyber-hacker']) {
+      await bootUnlocked(page, { settings: { theme: legacy } })
+      const got = await readAnchors(page)
+      expect(got.attr, legacy).toBe('linear-dark')
+      expect(got.bg, legacy).toBe(ANCHORS['linear-dark'].bg)
+    }
+  })
+
+  test('退役的三套浅色旧值统一落到冷灰', async ({ page }) => {
+    for (const legacy of ['cool', 'white', 'classic']) {
+      await bootUnlocked(page, { settings: { theme: legacy } })
+      expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), legacy).toBe('light-cool')
+    }
   })
 
   test('设置里四张主题卡，点一张立刻换色并落盘', async ({ page }) => {
@@ -48,14 +71,14 @@ test.describe('主题', () => {
     await expect(dialog.locator('.theme-chip')).toHaveCount(4)
     await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('冷灰')
 
-    await dialog.locator('.theme-chip', { hasText: '夜墨' }).click()
+    await dialog.locator('.theme-chip', { hasText: 'Linear 深空' }).click()
     await expectToast(page, '已切换主题')
-    expect((await e2e.snapshot(page)).settings.theme).toBe('dark')
-    const got = await readAnchors(page)
-    expect(got.attr).toBe('dark')
-    expect(got.bg).toBe(ANCHORS.dark.bg)
-    expect(got.text).toBe(ANCHORS.dark.text)
-    await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('夜墨')
+    expect((await e2e.snapshot(page)).settings.theme).toBe('linear-dark')
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('linear-dark')
+    // 切换有 0.2s 底色补间（theme-anim），computed style 要等过渡结束才是终值
+    await expect(page.locator('body')).toHaveCSS('background-color', ANCHORS['linear-dark'].bg)
+    await expect(page.locator('body')).toHaveCSS('color', ANCHORS['linear-dark'].text)
+    await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('Linear 深空')
     await waitForToastGone(page)
   })
 
@@ -64,8 +87,7 @@ test.describe('主题', () => {
     const dialog = await openSettings(page)
     const seen: Record<string, string> = {}
     for (const id of Object.keys(ANCHORS) as ThemeId[]) {
-      const name = { cool: '冷灰', classic: '经典', white: '素白', dark: '夜墨' }[id]
-      await dialog.locator('.theme-chip', { hasText: name }).click()
+      await dialog.locator('.theme-chip', { hasText: THEME_NAMES[id] }).click()
       await waitForToastGone(page)
       const got = await readAnchors(page)
       expect(got.attr, id).toBe(id)
@@ -78,14 +100,14 @@ test.describe('主题', () => {
   })
 
   test('刷新后仍是选的那套', async ({ page }) => {
-    await bootUnlocked(page, { settings: { theme: 'white' } })
+    await bootUnlocked(page, { settings: { theme: 'light-warm' } })
     const dialog = await openSettings(page)
-    await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('素白')
+    await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('暖纸墨')
   })
 
   test('toast 跟着主题翻面：深色下是亮底暗字', async ({ page }) => {
     // 自动锁定行要有值才可用，否则数字框跟着开关一起禁用
-    await bootUnlocked(page, { settings: { theme: 'dark', auto_lock_timeout: '5' } })
+    await bootUnlocked(page, { settings: { theme: 'linear-dark', auto_lock_timeout: '5' } })
     const dialog = await openSettings(page, 'security')
 
     // 改自动锁定并失焦提交，这是成本最低的"必出一条 toast"的路径。
@@ -103,7 +125,7 @@ test.describe('主题', () => {
       return style
     }
 
-    expect(await probeToast('7')).toEqual({ bg: 'rgb(240, 240, 245)', color: 'rgb(31, 122, 88)' })
+    expect(await probeToast('7')).toEqual({ bg: 'rgb(241, 242, 246)', color: 'rgb(31, 122, 88)' })
 
     await settingsTab(dialog, 'appearance')
     await dialog.locator('.theme-chip', { hasText: '冷灰' }).click()
@@ -113,7 +135,7 @@ test.describe('主题', () => {
   })
 
   test('品牌标渐变读主题令牌，多实例的 id 互不相同', async ({ page }) => {
-    await bootUnlocked(page, { settings: { theme: 'dark' } })
+    await bootUnlocked(page, { settings: { theme: 'linear-dark' } })
     // 打开设置后同屏有三个 logo（应用侧栏 + 菜单抬头 + 关于区），正是 id 撞车会暴露的场合
     const dialog = await openSettings(page, 'about')
     await expect(dialog.locator('.about-logo .brand-logo')).toBeVisible()
@@ -121,7 +143,7 @@ test.describe('主题', () => {
       [...document.querySelectorAll('.brand-logo stop')].map((s) => getComputedStyle(s).stopColor),
     )
     expect(stops.length).toBeGreaterThanOrEqual(6)
-    expect(new Set(stops)).toEqual(new Set(['rgb(143, 138, 255)', 'rgb(111, 106, 228)', 'rgb(74, 69, 184)']))
+    expect(new Set(stops)).toEqual(new Set(['rgb(139, 149, 246)', 'rgb(94, 106, 210)', 'rgb(61, 70, 148)']))
     // 重复 id 会让第二个 logo 静默套用第一个的渐变：不报错，只是颜色不对
     const ids = await page.evaluate(() =>
       [...document.querySelectorAll('.brand-logo linearGradient')].map((g) => g.id),

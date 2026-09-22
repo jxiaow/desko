@@ -183,6 +183,18 @@ const addImageToNote = async (noteId: string) => {
   else cardRefs.value?.find((c) => c.noteId === noteId)?.insertImage(src)
 }
 
+/** 上下键只搬焦点：焦点落到哪张卡，:focus-visible 的微环就长在哪张卡上 */
+const onStreamKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+  const from = event.target instanceof HTMLElement ? event.target : null
+  if (!from || from.closest('input, textarea, [contenteditable="true"]')) return
+  const cards = Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('.memo:not(.editing)'))
+  const at = cards.indexOf(from.closest('.memo') as HTMLElement)
+  if (at < 0) return
+  event.preventDefault()
+  cards[at + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+}
+
 /** 新小记配图：文件只收进附件目录（stage），发布时才按正文补附件记录——纯图小记也发得出去 */
 const addImageToDraft = async () => {
   const path = await pickImagePath()
@@ -248,7 +260,7 @@ onBeforeUnmount(() => {
 <template>
   <div ref="pageEl" class="notes-page">
     <div class="stream">
-      <div class="stream-inner">
+      <div class="stream-inner" @keydown="onStreamKeydown">
         <div class="stream-bar">
           <div class="search-box">
             <span class="search-icon"><AppIcon name="search" :size="15" /></span>

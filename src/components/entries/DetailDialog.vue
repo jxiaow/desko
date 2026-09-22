@@ -81,7 +81,7 @@ useEscapeClose(() => emit('close'))
           <div v-if="hasCredential" class="detail-section">
             <div class="detail-label">凭证</div>
             <div v-if="entry.username" class="detail-field">
-              <span class="detail-value">{{ entry.username }}</span>
+              <span class="detail-value detail-username">{{ entry.username }}</span>
               <button class="mini" type="button" title="复制用户名" @click="emit('copyText', entry.username!, '用户名')">
                 <AppIcon name="copy" :size="12" />复制
               </button>
@@ -141,7 +141,7 @@ useEscapeClose(() => emit('close'))
 </template>
 
 <style scoped>
-.detail-dialog { width: 520px; }
+.detail-dialog { width: 480px; }
 
 .detail-head { gap: var(--space-3); }
 .detail-head .card-avatar { width: 34px; height: 34px; font-size: 14px; }
@@ -149,9 +149,9 @@ useEscapeClose(() => emit('close'))
 .detail-head-id h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .detail-sub { display: block; margin-top: 1px; font-size: 11.5px; color: var(--text-muted); }
 
-.detail-body { padding: var(--space-2) var(--space-5) var(--space-4); }
-.detail-section { padding: var(--space-3) 0; }
-.detail-section + .detail-section { border-top: 1px solid var(--border-subtle); }
+.detail-body { padding: var(--space-3) var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+/* 分组名值对内嵌盒：底色吃 --sunken，与弹窗外壳拉开一层深度 */
+.detail-section { padding: var(--space-2) var(--space-3) var(--space-3); background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius); }
 .detail-label {
   font-size: 11px;
   font-weight: 600;
@@ -163,11 +163,12 @@ useEscapeClose(() => emit('close'))
 .detail-field { display: flex; align-items: center; gap: var(--space-2); }
 .detail-field + .detail-field { margin-top: var(--space-2); }
 .detail-value { flex: 1; min-width: 0; font-size: 13.5px; color: var(--text); word-break: break-all; }
-.detail-value.mono { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; letter-spacing: 0.08em; color: var(--text-secondary); }
+.detail-value.mono { font-family: var(--font-mono); letter-spacing: 0.08em; color: var(--text-secondary); }
 .detail-empty { color: var(--text-muted); }
-.detail-link { color: var(--accent); cursor: pointer; text-decoration: none; }
+.detail-link { color: var(--accent); cursor: pointer; text-decoration: none; font-family: var(--font-mono); font-size: 12.5px; word-break: break-all; }
 .detail-link:hover { text-decoration: underline; }
-.detail-notes { color: var(--text-secondary); line-height: 1.65; white-space: pre-wrap; }
+.detail-username { font-family: var(--font-mono); font-size: 12.5px; }
+.detail-notes { color: var(--text-secondary); line-height: 1.5; white-space: pre-wrap; }
 
 .detail-paths { display: flex; flex-wrap: wrap; gap: 6px; }
 .detail-path {
@@ -175,6 +176,7 @@ useEscapeClose(() => emit('close'))
   align-items: center;
   padding: 3px 9px;
   border-radius: 6px;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   font-weight: 500;
   color: var(--accent);

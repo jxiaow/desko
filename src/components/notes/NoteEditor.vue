@@ -517,6 +517,7 @@ defineExpose({ focusEnd, insertText, insertImage })
   line-height: 1.7;
   min-height: 22px;
   max-height: 46vh;
+  scrollbar-gutter: stable;
   overflow-y: auto;
   transition: min-height var(--transition-slow);
 }
@@ -532,6 +533,7 @@ defineExpose({ focusEnd, insertText, insertImage })
   line-height: 1.6;
   min-height: 72px;
   max-height: 46vh;
+  scrollbar-gutter: stable;
   overflow-y: auto;
 }
 

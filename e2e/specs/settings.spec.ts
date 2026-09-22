@@ -46,6 +46,40 @@ test.describe('Settings 设置', () => {
     expect(await e2e.count(page, 'get_setting')).toBeGreaterThanOrEqual(2)
   })
 
+  test('设置行组：内嵌凹槽 + 28px 控制轴 + 动作分三级', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const dialog = await openSettings(page)
+    await settingsTab(dialog, 'backup')
+    const pane = visiblePane(dialog)
+
+    // 行组吃内嵌凹槽底色，条目之间只留 1px 细线
+    await expect(pane.locator('.group-content').first()).toHaveCSS('background-color', 'rgb(234, 234, 240)')
+    // 控制轴一档高：按钮与输入件同 28px，右缘成线
+    await expect(pane.locator('.setting-item', { hasText: '数据库路径' }).locator('button.action-btn')).toHaveCSS('height', '28px')
+    await expect(pane.locator('.setting-item', { hasText: '云端保留份数' }).locator('.number-input')).toHaveCSS('height', '28px')
+
+    // 路径走等宽体，并且能一键复制
+    expect(await pane.locator('.db-path').evaluate((el) => getComputedStyle(el).fontFamily)).toContain('Consolas')
+    await pane.locator('.setting-item', { hasText: '数据库路径' }).locator('button.action-btn').click()
+    await expectToast(page, '路径已复制')
+    await waitForToastGone(page)
+
+    // 未连接：指示灯灰、不呼吸；连上后转绿，断开键显形走幽灵红
+    const conn = pane.locator('.setting-item', { hasText: '连接' })
+    await expect(conn.locator('.live-dot.idle')).toHaveCount(1)
+    await connectCloud(page, pane)
+    await expect(conn.locator('.live-dot')).not.toHaveClass(/idle/)
+    const danger = conn.locator('button.action-btn.danger')
+    await expect(danger).toHaveCount(1)
+    await expect(danger).toHaveCSS('color', 'rgb(204, 71, 64)')
+    await expect(danger).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+
+    // 关键主操作品牌实底，一栏只这一颗
+    const backup = pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn.primary')
+    await expect(backup).toHaveCSS('background-color', 'rgb(91, 87, 217)')
+    await expect(backup).toHaveCSS('color', 'rgb(255, 255, 255)')
+  })
+
   test('终端偏好：通用页可选，改动落盘', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'general')

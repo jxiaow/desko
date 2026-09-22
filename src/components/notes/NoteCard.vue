@@ -231,6 +231,9 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         >
           <AppIcon name="star" :size="13" :filled="props.note.starred" />
         </button>
+        <button  class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
+          <AppIcon name="copy" :size="13" />
+        </button>
         <button  class="ib" type="button" title="更多" aria-label="更多操作" @click.stop="menuAnchor = $event.currentTarget as HTMLElement">
           <AppIcon name="dots" :size="13" />
         </button>
@@ -241,7 +244,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       v-if="menuAnchor"
       :anchor="menuAnchor"
       @fullscreen="menuAnchor = null; emit('fullscreen')"
-      @copy="emit('copy'); menuAnchor = null"
       @delete="emit('delete'); menuAnchor = null"
       @close="menuAnchor = null"
     />
@@ -285,7 +287,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   border-radius: var(--radius-lg);
   padding: var(--space-2) var(--space-4);
   box-shadow: var(--shadow-xs);
-  transition: box-shadow var(--transition), border-color var(--transition), transform var(--transition);
+  transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition), transform var(--transition);
 }
 .memo:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
 .memo.pinned { border-color: var(--accent-light); }
@@ -375,7 +377,15 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 }
 .memo-check:hover { border-color: var(--accent); }
 .memo-check.checked { background: var(--accent); border-color: var(--accent); }
-.memo.is-sel { border-color: var(--accent); background: var(--accent-soft); }
+.memo.is-sel {
+  /* 浸润底 + 1px 实环把整张卡包一圈，和 .entry-card.selected 同一套选中语言 */
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-sm);
+  transform: translateY(-1px);
+}
+/* 小记没有独立的标题节点，正文首块就是标题行，选中时跟着上主色 */
+.memo.is-sel .memo-body :deep(> :first-child) { color: var(--text-brand); }
 
 .edit-atts { margin-top: var(--space-3); }
 .edit-bar {

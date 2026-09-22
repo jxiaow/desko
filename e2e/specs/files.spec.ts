@@ -103,6 +103,19 @@ test.describe('Files 文件快捷', () => {
     await expect(dialog.locator('button.type-btn.active')).toHaveText('文件夹')
   })
 
+  test('从剪贴板粘贴路径并自动判型', async ({ page }) => {
+    await gotoFiles(page)
+    await page.locator('.page-bar button.btn-primary').click()
+    const dialog = page.locator('.dialog-overlay .dialog')
+
+    await page.evaluate(() => navigator.clipboard.writeText('C:/e2e/pasted/archive'))
+    await tipButton(dialog, '从剪贴板粘贴').click()
+    await expect(dialog.locator('input[placeholder="粘贴文件/文件夹路径，或点击右侧浏览"]')).toHaveValue('C:/e2e/pasted/archive')
+    // 无扩展名 → 自动判为文件夹；分段控制器选中态滑到「文件夹」
+    await expect(dialog.locator('button.type-btn.active')).toHaveText('文件夹')
+    await expect(dialog.locator('.seg-thumb')).toHaveClass(/right/)
+  })
+
   test('新增快捷方式', async ({ page }) => {
     await gotoFiles(page)
     await page.locator('.page-bar button.btn-primary').click()

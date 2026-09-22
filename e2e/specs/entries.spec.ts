@@ -120,7 +120,9 @@ test.describe('Entries 网址收藏', () => {
 
   test('单条删除走确认对话框', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    await cardAction(page, '钉钉', '删除')
+    const card = entryCard(page, '钉钉')
+    await card.hover()
+    await tipButton(card, '删除').click()
     await confirmDialog(page, '确定删除「钉钉」？')
     await expectToast(page, '已删除')
     await expect(page.locator('.entry-card')).toHaveCount(2)
@@ -154,6 +156,29 @@ test.describe('Entries 网址收藏', () => {
     await expect(page.locator('.batch-dock')).toHaveCount(0)
     await expect(page.locator('.entry-card')).toHaveCount(1)
     await expect(entryCard(page, '钉钉')).toBeVisible()
+  })
+
+  test('选中态浸润微环，上下键在行间搬焦点', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    await tipButton(page, '批量选择').click()
+    const gh = entryCard(page, 'GitHub')
+    await gh.click()
+
+    // 全包裹：1px 实环压在边框外沿，底色吃满整张卡
+    await expect(gh).toHaveCSS('box-shadow', 'rgb(91, 87, 217) 0px 0px 0px 1px, rgba(26, 27, 32, 0.08) 0px 2px 6px -1px')
+    await expect(gh).toHaveCSS('background-color', 'rgb(238, 237, 251)')
+    await expect(gh.locator('.ec-name')).toHaveCSS('color', 'rgb(79, 74, 192)')
+
+    // 列表渲染顺序不保证等于 seed 顺序，所以先量出当前行的位置再断言位移
+    const cards = page.locator('.entry-card')
+    await gh.focus()
+    const at = await cards.evaluateAll((els) => els.indexOf(document.activeElement as any))
+    expect(at).toBeGreaterThanOrEqual(0)
+    const dir = at === 0 ? 1 : -1
+    await page.keyboard.press(dir === 1 ? 'ArrowDown' : 'ArrowUp')
+    await expect(cards.nth(at + dir)).toBeFocused()
+    await page.keyboard.press(dir === 1 ? 'ArrowUp' : 'ArrowDown')
+    await expect(gh).toBeFocused()
   })
 
   test('复制卡片并查看/复制密码', async ({ page }) => {

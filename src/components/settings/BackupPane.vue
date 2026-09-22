@@ -11,9 +11,11 @@ import type { OrphanFile } from '../../services/api/notes'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { useClipboard } from '../../composables/useClipboard'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
+const { copyToClipboard } = useClipboard()
 
 const emit = defineEmits<{ restored: [] }>()
 
@@ -406,7 +408,10 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">数据库路径</span>
-          <span class="setting-desc">{{ dbPath }}</span>
+          <span class="setting-desc db-path" :title="dbPath">{{ dbPath }}</span>
+        </div>
+        <div class="setting-actions">
+          <button class="action-btn" :disabled="dbPath === '未知'" @click="copyToClipboard(dbPath, '路径')">复制路径</button>
         </div>
       </div>
       <div class="setting-item">
@@ -435,12 +440,15 @@ const doRestoreFile = async () => {
       </div>
       <div class="setting-item">
         <div class="setting-info">
-          <span class="setting-name">连接</span>
+          <span class="setting-name conn-name">
+            <span class="live-dot" :class="{ idle: !st.cloud.configured }" :aria-label="st.cloud.configured ? '云端已连接' : '云端未连接'" />
+            连接
+          </span>
           <span class="setting-desc">{{ connText }}</span>
         </div>
         <div class="setting-actions">
           <button class="action-btn" @click="openCloud">配置</button>
-          <button v-if="st.cloud.configured" class="action-btn" @click="doDisconnect">断开</button>
+          <button v-if="st.cloud.configured" class="action-btn danger" @click="doDisconnect">断开</button>
         </div>
       </div>
 
@@ -455,7 +463,7 @@ const doRestoreFile = async () => {
           <span v-else class="setting-desc">{{ cloudReady ? roundText : '未配置云端 · 请先配置上方' }}</span>
         </div>
         <div class="setting-actions">
-          <button class="action-btn" :disabled="!!busy || !schedulable" @click="doBackup">
+          <button class="action-btn primary" :disabled="!!busy || !schedulable" @click="doBackup">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
@@ -693,6 +701,10 @@ const doRestoreFile = async () => {
   color: var(--text-muted);
 }
 
+/* 路径是给人抄的，不是给人猜的：等宽体让 \ 与 l、0 与 O 分得开 */
+.db-path { font-family: var(--font-mono); font-size: 11.5px; }
+.conn-name { display: inline-flex; align-items: center; gap: 7px; }
+
 /* 行内进度：替换所在行的说明行，不撑高、不挪布局 */
 .row-progress {
   display: flex;
@@ -723,121 +735,6 @@ const doRestoreFile = async () => {
   transition: width 0.2s;
 }
 .rp-pct { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-
-.select-input {
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  font-size: 12px;
-  outline: none;
-  background: var(--panel-bg);
-  color: var(--text);
-  font-family: inherit;
-  transition: border-color 0.15s;
-}
-.select-input:focus { border-color: var(--accent); }
-.select-input:disabled { color: var(--text-muted); opacity: 0.6; }
-
-.group-content {
-  background: var(--bg);
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.setting-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  min-height: 52px;
-  padding: 10px var(--space-4);
-  border-bottom: 1px solid var(--border);
-}
-.setting-item:last-child { border-bottom: none; }
-
-.setting-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.setting-name { font-size: 13px; font-weight: 500; color: var(--text); }
-.setting-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.setting-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.setting-control { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: inherit;
-}
-.action-btn:hover:not(:disabled) {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.action-btn:disabled { opacity: 0.45; cursor: default; }
-
-.number-input {
-  width: 56px;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  font-size: 12px;
-  text-align: right;
-  outline: none;
-  background: var(--panel-bg);
-  color: var(--text);
-  transition: border-color 0.15s;
-  font-family: inherit;
-}
-.number-input:focus { border-color: var(--accent); }
-.unit { font-size: 11px; color: var(--text-muted); }
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 36px;
-  height: 20px;
-  flex-shrink: 0;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.switch-slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background-color: var(--border);
-  transition: 0.2s;
-  border-radius: 20px;
-}
-.switch-slider:before {
-  position: absolute;
-  content: "";
-  height: 16px;
-  width: 16px;
-  left: 2px;
-  bottom: 2px;
-  background-color: var(--panel-bg);
-  transition: 0.2s;
-  border-radius: 50%;
-  box-shadow: var(--shadow-xs);
-}
-.switch input:checked + .switch-slider { background-color: var(--accent); }
-.switch input:checked + .switch-slider:before { transform: translateX(16px); }
-.switch.off { opacity: 0.45; }
 
 .file-row {
   display: flex;

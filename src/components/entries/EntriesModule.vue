@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { Entry, Tab } from '../../types'
-import { avatarClass } from '../../utils/avatar'
 import { formatUrlDisplay } from '../../utils/format'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
@@ -38,12 +37,35 @@ const emit = defineEmits<{
   duplicateEntry: [entry: Entry]
 }>()
 
-const tabsExpanded = ref(false)
-const tabsOverflow = ref(false)
-const tabsRef = ref<HTMLElement | null>(null)
+/* ── Ctrl/Cmd+K 聚焦搜索：与小记页同一条快捷键，各自只在本页挂载期间监听 ── */
+const searchRef = ref<HTMLInputElement | null>(null)
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
+const kbdHint = computed(() => (isMac ? '⌘K' : 'Ctrl K'))
 
-let tabsObserver: ResizeObserver | null = null
+const onGlobalKey = (e: KeyboardEvent) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    searchRef.value?.focus()
+    searchRef.value?.select()
+  }
+}
 
+/** 首字母块取词首两枚（LX/WQ 式），中文取前两字 */
+const initials = (name: string) => {
+  const words = name.trim().split(/[\s._\-/]+/).filter(Boolean)
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  return name.trim().slice(0, 2).toUpperCase()
+}
+
+/** 分类名哈希到四组既有语义令牌，同分类恒定同色；不引入任何硬编码色值 */
+const tileTone = (cat?: string | null) => {
+  if (!cat) return 'tone-accent'
+  let h = 0
+  for (let i = 0; i < cat.length; i++) h = (h * 31 + cat.charCodeAt(i)) | 0
+  return ['tone-accent', 'tone-warm', 'tone-cool', 'tone-neutral'][Math.abs(h) % 4] as string
+}
+
+/* ── 行内路径区按可用宽度截断，溢出的收进「+N」浮层 ── */
 const pathVisibleCount = ref<Map<string, number>>(new Map())
 const pathContainers = ref<Map<string, HTMLElement>>(new Map())
 let pathObserver: ResizeObserver | null = null
@@ -100,7 +122,7 @@ const registerPathContainer = (entryId: string, el: HTMLElement | null) => {
   }
 }
 
-/** 一次只开一张卡片的动作菜单 */
+/** 一次只开一张行的动作菜单 */
 const menuAnchor = ref<HTMLElement | null>(null)
 const menuEntry = ref<Entry | null>(null)
 
@@ -138,10 +160,23 @@ const closePathsMenu = () => {
   pathsEntry.value = null
 }
 
-/** 批量态下整张卡就是选择热区，非批量态才落到详情 */
-const onCardClick = (item: Entry, isBatchMode: boolean) => {
+/** 批量态下整行就是选择热区，非批量态才落到详情 */
+const onRowClick = (item: Entry, isBatchMode: boolean) => {
   if (isBatchMode) emit('toggleSelect', item.id)
   else emit('openDetail', item)
+}
+
+/** 上下键只搬焦点：焦点落到哪一行，:focus-visible 的微环就长在哪一行上 */
+const onListKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+  const from = event.target instanceof HTMLElement ? event.target : null
+  if (!from || from.closest('input, textarea, [contenteditable="true"]')) return
+  const cards = Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('.entry-card'))
+  const current = from.closest('.entry-card')
+  const at = cards.indexOf(current as HTMLElement)
+  if (at < 0) return
+  event.preventDefault()
+  cards[at + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
 }
 
 const openPath = (entry: Entry, path: string) => {
@@ -150,35 +185,39 @@ const openPath = (entry: Entry, path: string) => {
     : path)
 }
 
-onMounted(() => {
-  if (tabsRef.value) {
-    tabsObserver = new ResizeObserver(() => {
-      if (tabsRef.value) {
-        tabsOverflow.value = tabsRef.value.scrollHeight > 40
-      }
-    })
-    tabsObserver.observe(tabsRef.value)
-  }
-})
-
+onMounted(() => { window.addEventListener('keydown', onGlobalKey) })
 onUnmounted(() => {
-  if (tabsObserver) tabsObserver.disconnect()
+  window.removeEventListener('keydown', onGlobalKey)
   if (pathObserver) pathObserver.disconnect()
 })
 </script>
 
 <template>
   <div class="content-inner">
+    <!-- 一块工具栏装下搜索、分类、计数和两个动作；分类超出宽度改为横向滚动 -->
     <div class="page-bar">
       <div class="search-box">
         <span class="search-icon">
           <AppIcon name="search" :size="15" />
         </span>
-        <input :value="searchKeyword" placeholder="搜索名称或网址…" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" />
+        <input ref="searchRef" :value="searchKeyword" placeholder="搜索名称或网址…" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" />
+        <kbd v-if="!searchKeyword" class="search-kbd">{{ kbdHint }}</kbd>
         <button v-if="searchKeyword" class="search-clear" @click="emit('update:searchKeyword', '')" title="清除搜索">
           <AppIcon name="x" :size="13" />
         </button>
       </div>
+      <nav class="tabs">
+        <div
+          v-for="t in tabs"
+          :key="t.id"
+          class="tab"
+          :class="{ active: activeTab === t.id }"
+          @click="emit('update:activeTab', t.id)"
+        >
+          {{ t.name }}
+          <span class="tab-count">{{ t.count }}</span>
+        </div>
+      </nav>
       <span class="bar-count">{{ filteredEntries.length }} / {{ tabs.find(t => t.id === 'all')?.count ?? 0 }}</span>
       <button
         class="bar-btn"
@@ -194,44 +233,18 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div class="tabs" :class="{ expanded: tabsExpanded }" ref="tabsRef">
-      <div
-        v-for="t in tabs"
-        :key="t.id"
-        class="tab"
-        :class="{ active: activeTab === t.id }"
-        @click="emit('update:activeTab', t.id)"
-      >
-        {{ t.name }}
-        <span class="tab-count">{{ t.count }}</span>
-      </div>
-      <button v-if="tabsOverflow" class="tabs-toggle" @click="tabsExpanded = !tabsExpanded">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline v-if="!tabsExpanded" points="6 9 12 15 18 9"/>
-          <polyline v-else points="18 15 12 9 6 15"/>
-        </svg>
-        {{ tabsExpanded ? '收起' : '展开' }}
-      </button>
-    </div>
-
     <div v-if="loading" class="loading">
-      <div class="skeleton-grid">
-        <div class="skeleton-card" v-for="n in 6" :key="n">
-          <div class="skeleton-header">
-            <div class="skeleton-avatar"></div>
-            <div class="skeleton-title-area">
-              <div class="skeleton-line short"></div>
-              <div class="skeleton-line shorter"></div>
-            </div>
-          </div>
-          <div class="skeleton-body">
-            <div class="skeleton-line"></div>
-            <div class="skeleton-line"></div>
-          </div>
+      <div class="skeleton-row" v-for="n in 8" :key="n">
+        <div class="skeleton-avatar"></div>
+        <div class="skeleton-id">
+          <div class="skeleton-line name"></div>
+          <div class="skeleton-line note"></div>
         </div>
+        <div class="skeleton-line url"></div>
+        <div class="skeleton-line tag"></div>
       </div>
     </div>
-    <div v-else-if="filteredEntries.length" class="cards-grid">
+    <div v-else-if="filteredEntries.length" class="entry-list" @keydown="onListKeydown">
       <article
         v-for="item in filteredEntries"
         :key="item.id"
@@ -240,47 +253,31 @@ onUnmounted(() => {
         tabindex="0"
         role="button"
         :aria-label="`条目：${item.name}`"
-        @click="onCardClick(item, isBatchMode)"
-        @keydown.enter.prevent="onCardClick(item, isBatchMode)"
+        @click="onRowClick(item, isBatchMode)"
+        @keydown.enter.prevent="onRowClick(item, isBatchMode)"
       >
         <span v-if="isBatchMode" class="card-check" :class="{ checked: selectedIds.has(item.id) }" aria-hidden="true">
           <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="11" />
         </span>
 
-        <div class="ec-top">
-          <div class="card-avatar" :class="avatarClass(item.category)">{{ item.name.charAt(0) }}</div>
-          <div class="ec-id">
-            <div class="ec-name-row">
-              <span class="ec-name">{{ item.name }}</span>
-              <span class="ec-cat">{{ item.category || '未分类' }}</span>
-            </div>
-            <a
-              v-if="item.url"
-              class="ec-domain"
-              :title="item.url"
-              @click.prevent.stop="emit('openUrl', item.url!)"
-              @contextmenu.prevent="emit('copyText', item.url!, '网址')"
-            >{{ formatUrlDisplay(item.url) }}</a>
+        <!-- 第一段：实体信息。渐变首字母块 + 标题/备注两行 -->
+        <div class="ec-id">
+          <span class="ec-tile" :class="tileTone(item.category)" aria-hidden="true">{{ initials(item.name) }}</span>
+          <div class="ec-text">
+            <span class="ec-name">{{ item.name }}</span>
+            <span v-if="item.notes" class="ec-note" :title="item.notes">{{ item.notes }}</span>
           </div>
-          <button
-            class="ib ec-more"
-            type="button"
-            title="更多操作"
-            aria-label="更多操作"
-            @click.stop="openMenu($event.currentTarget as HTMLElement, item)"
-          >
-            <AppIcon name="dots" :size="14" />
-          </button>
         </div>
 
-        <p v-if="item.notes" class="ec-note" :title="item.notes">{{ item.notes }}</p>
-
-        <!-- 底栏整条留给多路径快捷访问，分类不占这里。没有路径也占一行，网格才只有一种卡高 -->
-        <div class="ec-foot">
-          <span v-if="item.username || passwordCache[item.id]?.value" class="ec-cred" title="已存登录凭证">
-            <AppIcon name="lock" :size="11" />
-            凭证
-          </span>
+        <!-- 第二段：目标地址。URL 等宽截断，路径药丸溢出时另起一行 -->
+        <div class="ec-target">
+          <a
+            v-if="item.url"
+            class="ec-domain"
+            :title="item.url"
+            @click.prevent.stop="emit('openUrl', item.url!)"
+            @contextmenu.prevent="emit('copyText', item.url!, '网址')"
+          >{{ formatUrlDisplay(item.url) }}</a>
           <div
             v-if="item.paths && item.paths.length"
             class="ec-paths"
@@ -302,6 +299,39 @@ onUnmounted(() => {
             >+{{ item.paths.length - (pathVisibleCount.get(item.id) ?? item.paths.length) }}</button>
           </div>
         </div>
+
+        <!-- 第三段：分类与凭证标识 -->
+        <div class="ec-tags">
+          <span v-if="item.username || passwordCache[item.id]?.value" class="ec-cred" title="已存登录凭证">
+            <AppIcon name="lock" :size="11" />
+          </span>
+          <span class="ec-cat">{{ item.category || '未分类' }}</span>
+        </div>
+
+        <!-- 高频四件套平时藏起，行被指针或键盘点亮时淡入；低频项仍在 ⋯ 里 -->
+        <span class="ec-actions">
+          <button v-if="item.url" class="ib ec-act" type="button" title="复制网址" @click.stop="emit('copyText', item.url!, '网址')">
+            <AppIcon name="copy" :size="14" />
+          </button>
+          <button v-if="item.url" class="ib ec-act" type="button" title="在浏览器打开" @click.stop="emit('openUrl', item.url!)">
+            <AppIcon name="external" :size="14" />
+          </button>
+          <button class="ib ec-act" type="button" title="编辑" @click.stop="emit('openEdit', item)">
+            <AppIcon name="edit" :size="14" />
+          </button>
+          <button class="ib ec-act danger" type="button" title="删除" @click.stop="emit('delete', item)">
+            <AppIcon name="trash" :size="14" />
+          </button>
+          <button
+            class="ib ec-act ec-more"
+            type="button"
+            title="更多操作"
+            aria-label="更多操作"
+            @click.stop="openMenu($event.currentTarget as HTMLElement, item)"
+          >
+            <AppIcon name="dots" :size="14" />
+          </button>
+        </span>
 
         <PopoverMenu
           v-if="pathsEntry?.id === item.id && pathsAnchor"
@@ -329,12 +359,8 @@ onUnmounted(() => {
         <EntryActionMenu
           v-if="menuEntry?.id === item.id"
           :anchor="menuAnchor"
-          :entry="item"
           @detail="closeMenu(); emit('openDetail', item)"
-          @edit="closeMenu(); emit('openEdit', item)"
           @duplicate="closeMenu(); emit('duplicateEntry', item)"
-          @open-url="closeMenu(); emit('openUrl', $event)"
-          @delete="closeMenu(); emit('delete', item)"
           @close="closeMenu"
         />
       </article>
@@ -367,134 +393,193 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* 底部留 96px：批量底栏浮在它上面，不压住最后一行卡片。
+/* 底部留 96px：批量底栏浮在它上面，不压住最后一行。
    顶部不留内边距：滚动容器带 padding-top 时 sticky 的 top:0 会贴在它下面，露出一条能看见内容的缝 */
-.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) 96px; }
+.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-4) 96px; }
 
-/* 与小记页同一条工具条：粘顶、无分隔线，靠底色遮住滚动内容 */
+/* 粘顶工具栏：搜索 + 分类 + 计数 + 动作排成一行，靠底色遮住滚动内容 */
 .page-bar {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--bg);
+  background: var(--bg-app);
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: calc(var(--space-5) + var(--space-1)) 0 var(--space-3);
 }
-.page-bar .search-box { flex: 1; min-width: 80px; max-width: 440px; }
+.page-bar .search-box { flex: 0 1 300px; min-width: 140px; margin-right: var(--space-2); }
+.search-kbd {
+  flex-shrink: 0;
+  margin-right: 2px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--sunken);
+}
 
-.tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-4); max-height: 36px; overflow: hidden; transition: max-height var(--transition-slow); align-items: center; }
-.tabs.expanded { max-height: 200px; }
+/* 分类在行内横向滚动，不换行：换行会把工具栏顶出第二种高度 */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+.tabs::-webkit-scrollbar { display: none; }
 .tab-count { display: inline-block; background: var(--hover); color: var(--text-muted); font-size: 10px; padding: 0 var(--space-1); border-radius: 4px; margin-left: var(--space-1); font-weight: 600; line-height: 14px; }
 .tab.active .tab-count { background: var(--accent-soft); color: var(--accent); }
-.tabs-toggle { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); font-size: 11px; font-weight: 500; color: var(--text-muted); background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; transition: all var(--transition); font-family: inherit; }
-.tabs-toggle:hover { color: var(--text-secondary); border-color: var(--border-strong); background: var(--hover); }
 
-.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--space-3); }
+/* 单列行卡列表：行间 8px，每行是一张独立卡片，hover 才浮起；首行与吸顶栏拉开一点距离 */
+.entry-list { display: flex; flex-direction: column; gap: 9px; padding-top: var(--space-2); }
 
 .entry-card {
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  box-shadow: var(--shadow-xs);
-  transition: all var(--transition);
-  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 60px;
+  padding: 13px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   cursor: pointer;
+  position: relative;
+  transition: all var(--transition);
 }
-.entry-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-2px); }
-.entry-card:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-.entry-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); background: var(--accent-soft); }
-/* 批量态整张卡变成选择热区，动作入口先让位 */
-.entry-card.batching { padding-left: calc(var(--space-8) + var(--space-3)); }
-.entry-card.batching .ec-more { display: none; }
+.entry-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+.entry-card:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
+/* 选中态：浸润底吃掉整卡，1px 实环贴在边框外沿把"选中"包成一圈，
+   左侧贴粗线的做法会在圆角处断开，整体感不够 */
+.entry-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow);
+  transform: translateY(-1px);
+}
+.entry-card.selected .ec-name { color: var(--text-brand); }
+.entry-card.selected .ec-cat { color: var(--text-brand); background: var(--accent-light); border-color: var(--accent); }
+.entry-card.selected .ec-cred { background: var(--accent-light); border-color: var(--accent); }
 
 .card-check {
-  position: absolute;
-  left: var(--space-3);
-  top: var(--space-4);
   width: 16px;
   height: 16px;
   border: 1.5px solid var(--border-strong);
   border-radius: 4px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--accent-on);
+  flex-shrink: 0;
   transition: all var(--transition);
 }
 .card-check:hover { border-color: var(--accent); }
 .card-check.checked { background: var(--accent); border-color: var(--accent); }
 
-.ec-top { display: flex; align-items: center; gap: var(--space-3); }
-.card-avatar { width: 36px; height: 36px; border-radius: 9px; font-size: 14px; }
-.ec-id { flex: 1; min-width: 0; }
-.ec-name-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+/* 第一段：实体信息。首字母块取两枚（LX/WQ 式），渐变底只吃 accent 族。
+   不可伸缩：跨行列宽一致，URL 起点才在一条竖线上 */
+.ec-id { display: flex; align-items: center; gap: 10px; flex: 0 0 290px; }
+.ec-tile {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--accent-soft), var(--accent-light));
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+/* 分类哈希分桶：四组都是既有语义令牌，主题切换自动跟色 */
+.ec-tile.tone-warm { background: var(--warning-soft); color: var(--warning); }
+.ec-tile.tone-cool { background: var(--success-soft); color: var(--success); }
+.ec-tile.tone-neutral { background: var(--badge-cat-bg); color: var(--badge-cat-text); border-color: var(--badge-cat-border); }
+.ec-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ec-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-  line-height: 1.35;
+  font-size: 13.5px;
+  /* 600 在 YaHei 上落到真 Bold，中文笔画会在深色底上糊连；500 取常规字重才清晰 */
+  font-weight: 500;
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--transition);
+}
+.ec-note {
+  font-size: 12px;
+  color: var(--text-muted);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ec-cat { font-size: 11px; font-weight: 500; color: var(--text-muted); background: var(--fill); padding: 1px 7px; border-radius: 99px; flex-shrink: 0; }
+
+/* 第二段：目标地址。URL 是 inline-block：空白区留在段容器里，点击仍归"行"。
+   align-items 必须 flex-start：默认的 stretch 会把 <a> 拉满整段，行中心点击会误触 openUrl */
+.ec-target { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; }
 .ec-domain {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--text-muted);
+  display: inline-block;
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-url);
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+  transition: color var(--transition);
 }
 .ec-domain:hover { color: var(--accent); }
-/* 动作收进一个 ⋯：四个并排的 hover 按钮把卡片顶成一排工具 */
-.ec-more { opacity: 0; pointer-events: none; transition: opacity var(--transition); flex-shrink: 0; }
-.entry-card:hover .ec-more, .entry-card:focus-within .ec-more { opacity: 1; pointer-events: auto; }
-html.hover-suppressed .entry-card:hover .ec-more { opacity: 0; pointer-events: none; }
 
-/* 备注只占一行：两行会让同一网格出现两种卡高，空白从中间挪到卡片末尾 */
-.ec-note {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* 第三段：分类与凭证标识，右靠齐。定宽让四段栅格跨行对齐 */
+.ec-tags { flex: 0 0 180px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.ec-cat {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--badge-cat-text);
+  background: var(--badge-cat-bg);
+  border: 1px solid var(--badge-cat-border);
+  padding: 1px 7px;
+  border-radius: 99px;
+  flex-shrink: 0;
   white-space: nowrap;
+  transition: color var(--transition), background-color var(--transition), border-color var(--transition);
 }
 
-/* 不换行：路径药丸本来就按可用宽度截断，换行会把卡片顶出第二种高度 */
-.ec-foot { display: flex; align-items: center; gap: var(--space-2); margin-top: auto; min-width: 0; min-height: 23px; }
 .ec-cred {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 var(--space-2);
+  padding: 1px 6px;
+  color: var(--badge-ver-text);
+  background: var(--badge-ver-bg);
+  border: 1px solid var(--accent-soft);
   border-radius: 99px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--accent);
-  background: var(--accent-soft);
   flex-shrink: 0;
+  transition: background-color var(--transition), border-color var(--transition);
 }
-/* 弹性项是路径区本身，不是占位符：否则容器被挤到几十像素，药丸全塌成 +N */
-.ec-paths { display: flex; align-items: center; gap: var(--space-1); flex: 1; min-width: 0; overflow: hidden; }
+
+/* 路径区在 URL 下方按可用宽度重新截断药丸；stretch 占满段宽，窄了才会出 +N */
+.ec-paths { display: flex; align-items: center; gap: var(--space-1); align-self: stretch; min-width: 0; overflow: hidden; }
 .card-path-link {
   display: inline-flex;
   align-items: center;
-  padding: 3px 9px;
+  padding: 2px 8px;
   font-size: 11.5px;
   font-weight: 500;
   color: var(--accent);
@@ -511,7 +596,7 @@ html.hover-suppressed .entry-card:hover .ec-more { opacity: 0; pointer-events: n
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 3px 8px;
+  padding: 2px 8px;
   font-size: 11.5px;
   font-weight: 600;
   font-family: inherit;
@@ -525,9 +610,34 @@ html.hover-suppressed .entry-card:hover .ec-more { opacity: 0; pointer-events: n
 }
 .card-paths-more:hover, .card-paths-more[aria-expanded] { background: var(--accent); color: var(--accent-on); }
 
+/* 渐进披露：操作栏平时完全不可见，指针或键盘点亮该行才淡入 */
+.ec-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  /* 五枚 28px 动作钮 + 间隙：定宽到能装下最满的一档，跨行右缘才对齐 */
+  flex: 0 0 148px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+.entry-card:hover .ec-actions,
+.entry-card:focus-within .ec-actions { opacity: 1; pointer-events: auto; }
+html.hover-suppressed .entry-card:hover .ec-actions { opacity: 0; pointer-events: none; }
+/* 批量态整行是选择热区，动作入口先让位 */
+.entry-card.batching .ec-actions { display: none; }
+.ib.ec-act { width: 28px; height: 28px; }
+/* 删除是唯一的破坏性动作：hover 给红底红框的警戒反馈 */
+.ib.ec-act.danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger-border);
+}
+
 .pop-path-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pop-path-value {
-  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--text-muted);
   margin-left: auto;
@@ -537,20 +647,30 @@ html.hover-suppressed .entry-card:hover .ec-more { opacity: 0; pointer-events: n
 }
 
 .empty-state { text-align: center; padding: var(--space-12) var(--space-5); color: var(--text-muted); }
-.empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: var(--radius-lg); background: var(--panel-bg); border: 1px solid var(--border); color: var(--text-muted); opacity: 0.4; margin-bottom: var(--space-4); }
+.empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: var(--radius-lg); background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-muted); opacity: 0.4; margin-bottom: var(--space-4); }
 .empty-icon svg { width: 24px; height: 24px; }
 .empty-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: var(--space-1); }
 .empty-desc { font-size: 13px; color: var(--text-muted); }
 
-.loading { padding: var(--space-4) 0; }
-.skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--space-3); }
-.skeleton-card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-3); animation: skeleton-pulse 1.5s ease-in-out infinite; }
-.skeleton-header { display: flex; gap: var(--space-3); margin-bottom: var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
-.skeleton-avatar { width: 36px; height: 36px; border-radius: 9px; background: var(--hover); flex-shrink: 0; }
-.skeleton-title-area { flex: 1; display: flex; flex-direction: column; gap: var(--space-1); }
-.skeleton-line { height: 8px; background: var(--hover); border-radius: 4px; width: 100%; }
-.skeleton-line.short { width: 55%; }
-.skeleton-line.shorter { width: 35%; }
-.skeleton-body { display: flex; flex-direction: column; gap: var(--space-2); }
+/* 骨架屏与行卡同形：34px 首字母块 + 两行文字 + URL + Pill */
+.loading { padding: var(--space-2) 0; }
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 60px;
+  padding: 13px 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.skeleton-avatar { width: 34px; height: 34px; border-radius: var(--radius); background: var(--hover); flex-shrink: 0; }
+.skeleton-id { flex: 0 1 290px; min-width: 150px; display: flex; flex-direction: column; gap: 6px; }
+.skeleton-line { height: 8px; background: var(--hover); border-radius: 4px; }
+.skeleton-line.name { width: 120px; }
+.skeleton-line.note { width: 84px; height: 6px; }
+.skeleton-line.url { flex: 1; max-width: 320px; }
+.skeleton-line.tag { width: 44px; flex-shrink: 0; margin-left: auto; }
 @keyframes skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 </style>

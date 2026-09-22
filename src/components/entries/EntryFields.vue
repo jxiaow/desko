@@ -221,7 +221,7 @@ defineExpose({ save })
     </div>
     <div class="form-group">
       <label>网址</label>
-      <input v-model="form.url" placeholder="https://..." />
+      <input v-model="form.url" class="url-mono" placeholder="https://..." />
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -247,7 +247,7 @@ defineExpose({ save })
       <div class="path-list">
         <div v-for="(path, index) in activePaths" :key="path.id" class="path-row">
           <input v-model="path.path" class="path-input path-mono" placeholder="路径，如 /dashboard" />
-          <input v-model="path.label" class="path-input" placeholder="标签" />
+          <input v-model="path.label" class="path-input path-label" placeholder="标签" />
           <button class="ib danger" type="button" title="删除路径" @click="removePath(index)">
             <AppIcon name="x" :size="13" />
           </button>
@@ -263,6 +263,12 @@ defineExpose({ save })
 </template>
 
 <style scoped>
+/* 紧凑控件：只收进条目表单，不动全局 .form-group */
+.entry-fields input,
+.entry-fields textarea { padding: 7px 10px; font-size: 13.5px; }
+.entry-fields textarea { resize: none; height: 56px; min-height: 56px; }
+.url-mono { font-family: var(--font-mono); }
+
 .paths-section { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); }
 .paths-header { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); margin-bottom: var(--space-3); }
 .paths-header label { margin-bottom: 0; }
@@ -272,7 +278,9 @@ defineExpose({ save })
 .path-row { display: flex; align-items: center; gap: var(--space-2); padding: 6px 6px 6px 10px; background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .path-input { flex: 1; min-width: 0; padding: 6px 9px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; outline: none; background: var(--bg); font-family: inherit; color: var(--text); }
 .path-input:focus { border-color: var(--accent); }
-.path-mono { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; flex: 1.6; }
+/* 路径段吃剩余宽度，标签段定宽 100px；两者都靠等宽栈对齐 */
+.path-mono { font-family: var(--font-mono); flex: 1.6; }
+.path-label { flex: 0 0 100px; }
 
 .btn-add-path {
   display: inline-flex; align-items: center; gap: 6px;

@@ -426,7 +426,7 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--input-bg, var(--panel-bg));
+  background: var(--panel-bg);
   color: var(--text);
   font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
   font-size: 12.5px;

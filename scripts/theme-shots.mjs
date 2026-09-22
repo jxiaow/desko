@@ -55,14 +55,14 @@ const SEED = {
 }
 
 const THEMES = [
-  { id: 'cool', name: '冷灰' },
-  { id: 'white', name: '素白' },
-  { id: 'dark', name: '夜墨' },
-  { id: 'classic', name: '经典' },
+  { id: 'light-cool', name: '冷灰' },
+  { id: 'light-warm', name: '暖纸墨' },
+  { id: 'linear-dark', name: 'Linear 深空' },
+  { id: 'jetbrains-dark', name: 'JetBrains 炭黑' },
 ]
 
 const only = process.argv[2]
-const browser = await chromium.launch({ channel: 'chrome' })
+const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome' })
 
 for (const t of THEMES) {
   if (only && only !== t.id) continue
@@ -92,13 +92,14 @@ for (const t of THEMES) {
 
   const card = page.locator('.entry-card').first()
   await card.hover()
-  await card.locator('button[title="查看详情"], button[data-tip="查看详情"]').click()
+  // 行卡没有独立的"查看详情"钮：点名字区即开详情（整行热区）
+  await card.locator('.ec-name').click()
   await page.waitForSelector('.detail-dialog')
   await shot('3-detail')
   await page.keyboard.press('Escape')
   await page.locator('.detail-dialog').waitFor({ state: 'detached' }).catch(() => {})
 
-  await page.locator('.toolbar-actions button.btn-primary').click()
+  await page.locator('.page-bar button.btn-primary').click()
   await page.waitForSelector('.dialog-overlay .dialog')
   await shot('4-form')
   await page.locator('.dialog-footer button.btn-secondary').click()
@@ -116,7 +117,7 @@ for (const t of THEMES) {
   await page.waitForTimeout(300)
 
   await page.locator('a.nav-item[href="/files"]').click()
-  await page.waitForSelector('.shortcut-card')
+  await page.waitForSelector('.shortcut-row')
   await page.waitForTimeout(400)
   await shot('7-files')
 
@@ -125,7 +126,7 @@ for (const t of THEMES) {
   // 设置弹窗是左菜单右内容，四个面板各拍一张
   for (const [id, label, slug] of [
     ['8a', '外观', 'appearance'],
-    ['8b', '数据存储', 'data'],
+    ['8b', '数据与备份', 'backup'],
     ['8c', '安全', 'security'],
     ['8d', '关于', 'about'],
   ]) {

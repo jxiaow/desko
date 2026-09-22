@@ -85,6 +85,20 @@ const onPathInput = () => {
   }
 }
 
+const pastePath = async () => {
+  try {
+    const text = (await navigator.clipboard.readText()).trim()
+    if (!text) {
+      toastStore.showToast('剪贴板为空')
+      return
+    }
+    addForm.value.path = text
+    onPathInput()
+  } catch {
+    toastStore.showToast('读取剪贴板失败', 'error')
+  }
+}
+
 const isEditing = () => editingId.value !== null
 
 const openEdit = (shortcut: FileShortcut) => {
@@ -261,12 +275,6 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else-if="filteredShortcuts.length > 0" class="shortcut-list">
-      <div class="list-head">
-        <span>名称</span>
-        <span>类型</span>
-        <span>路径</span>
-        <span>添加时间</span>
-      </div>
       <div
         v-for="shortcut in filteredShortcuts"
         :key="shortcut.id"
@@ -278,16 +286,25 @@ onBeforeUnmount(() => {
         @keydown.enter.prevent="openShortcut(shortcut)"
         @contextmenu="onContextMenu($event, shortcut)"
       >
+        <!-- 第一段：图标 + 名称 -->
         <div class="cell-name">
           <span v-if="shortcut.shortcut_type === 'folder'" class="ft-ico folder" aria-hidden="true">
-            <AppIcon name="folder" :size="14" />
+            <AppIcon name="folder" :size="15" />
           </span>
           <span v-else class="ft-ico" :style="{ color: extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
           <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
         </div>
-        <span class="cell-type">{{ typeLabel(shortcut) }}</span>
+
+        <!-- 第二段：等宽路径，整行点亮时加深 -->
         <span class="cell-path" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span>
-        <span class="cell-time">{{ formatRelativeTime(shortcut.created_at) }}</span>
+
+        <!-- 第三段：类型胶囊 + 添加时间 -->
+        <div class="fs-tags">
+          <span class="cell-type">{{ typeLabel(shortcut) }}</span>
+          <span class="cell-time">{{ formatRelativeTime(shortcut.created_at) }}</span>
+        </div>
+
+        <!-- 动作栏常驻占位，行点亮才淡入 -->
         <div class="row-acts">
           <button class="ib" type="button" title="打开所在目录" @click.stop="openContainingFolder(shortcut)">
             <AppIcon name="folder" :size="13" />
@@ -319,7 +336,7 @@ onBeforeUnmount(() => {
     <!-- Add/Edit Dialog -->
     <Transition name="dialog">
       <div v-if="showAddDialog" class="dialog-overlay">
-        <div class="dialog">
+        <div class="dialog shortcut-dialog">
           <div class="dialog-header">
             <div class="dialog-header-left">
               <h3>{{ isEditing() ? '编辑快捷方式' : '添加快捷方式' }}</h3>
@@ -333,14 +350,17 @@ onBeforeUnmount(() => {
               <label>路径</label>
               <div class="path-input-row">
                 <input v-model="addForm.path" placeholder="粘贴文件/文件夹路径，或点击右侧浏览" @blur="onPathInput" />
-                <div class="path-browse-btns">
-                  <button  class="browse-btn" @click="pickFile" title="选择文件">
+                <span class="path-acts">
+                  <button class="path-act" type="button" title="从剪贴板粘贴" @click="pastePath">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                  </button>
+                  <button  class="path-act" @click="pickFile" title="选择文件">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   </button>
-                  <button  class="browse-btn" @click="pickFolder" title="选择文件夹">
+                  <button  class="path-act" @click="pickFolder" title="选择文件夹">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
                   </button>
-                </div>
+                </span>
               </div>
             </div>
             <div class="form-group">
@@ -349,7 +369,8 @@ onBeforeUnmount(() => {
             </div>
             <div class="form-group">
               <label>类型</label>
-              <div class="type-toggle">
+              <div class="type-seg">
+                <span class="seg-thumb" :class="{ right: addForm.type === 'folder' }" aria-hidden="true"></span>
                 <button class="type-btn" :class="{ active: addForm.type === 'file' }" @click="addForm.type = 'file'">文件</button>
                 <button class="type-btn" :class="{ active: addForm.type === 'folder' }" @click="addForm.type = 'folder'">文件夹</button>
               </div>
@@ -406,81 +427,185 @@ onBeforeUnmount(() => {
 }
 .page-bar .search-box { flex: 1; min-width: 80px; max-width: 440px; }
 
-/* 高密度行列表：一屏能看十几条，比原来的卡片网格密一倍 */
-.shortcut-list { border-top: 1px solid var(--border-subtle); }
-.list-head,
-.shortcut-row {
-  display: grid;
-  /* 最后一列给行内动作常驻留位，hover 时才切换显示，行内容不会左右跳动。
-     两个文字列下限到 0：窗口再窄也只是名字截省略，动作列不会被顶出可视区 */
-  grid-template-columns: minmax(0, 1.5fr) 78px minmax(0, 1fr) 96px 124px;
-  gap: var(--space-3);
-  align-items: center;
-}
-.list-head {
-  padding: var(--space-2) var(--space-3);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.shortcut-row {
-  position: relative;
-  padding: 7px var(--space-3);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background var(--transition), box-shadow var(--transition);
-}
-.shortcut-row:hover { background: var(--panel-bg); box-shadow: inset 0 0 0 1px var(--border); }
-.shortcut-row:focus-visible { background: var(--panel-bg); box-shadow: inset 0 0 0 2px var(--accent-ring); }
+/* 与收藏页同款单列行卡流：行间 9px，每张卡独立圆角边框 */
+.shortcut-list { display: flex; flex-direction: column; gap: 9px; padding-top: var(--space-2); }
 
-.cell-name { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 60px;
+  padding: 13px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--transition);
+}
+.shortcut-row:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+.shortcut-row:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* 四段定基宽：收缩权重与内容无关，跨行列线才稳。窄窗时只有名称段收缩 */
+.cell-name { display: flex; align-items: center; gap: 10px; flex: 0 1 260px; min-width: 140px; }
 .ft-ico {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   background: var(--fill);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: -0.02em;
 }
 .ft-ico.folder { background: var(--warning-soft); color: var(--warning); }
-.row-name { font-size: 13px; font-weight: 500; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cell-type,
-.cell-path,
-.cell-time { font-size: 11.5px; color: var(--text-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cell-path { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; }
-.cell-time { font-variant-numeric: tabular-nums; }
+.row-name { font-size: 13.5px; font-weight: 500; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.row-acts { display: flex; gap: 1px; justify-content: flex-end; opacity: 0; pointer-events: none; transition: opacity var(--transition); }
+.cell-path {
+  flex: 1 1 0;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-url);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--transition);
+}
+.shortcut-row:hover .cell-path { color: var(--text-secondary); }
+
+.fs-tags { flex: 0 0 150px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.cell-type {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--badge-cat-text);
+  background: var(--badge-cat-bg);
+  border: 1px solid var(--badge-cat-border);
+  padding: 1px 7px;
+  border-radius: 99px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.cell-time { font-size: 11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 五枚 28px 动作钮：定宽占位，淡入淡出不挤列线 */
+.row-acts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  flex: 0 0 148px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+.row-acts .ib { width: 28px; height: 28px; }
+.row-acts .ib.danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger-border);
+}
 .shortcut-row:hover .row-acts, .shortcut-row:focus-within .row-acts { opacity: 1; pointer-events: auto; }
 html.hover-suppressed .shortcut-row:hover .row-acts { opacity: 0; pointer-events: none; }
 
 /* Loading skeleton */
-.loading-list { display: flex; flex-direction: column; gap: var(--space-1); }
-.skeleton-row { display: flex; align-items: center; gap: var(--space-3); padding: 9px var(--space-3); }
-.skeleton-icon { width: 26px; height: 26px; border-radius: 7px; background: var(--hover); flex-shrink: 0; }
+.loading-list { display: flex; flex-direction: column; gap: 9px; padding-top: var(--space-2); }
+.skeleton-row { display: flex; align-items: center; gap: var(--space-3); min-height: 60px; padding: 13px 20px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); }
+.skeleton-icon { width: 34px; height: 34px; border-radius: var(--radius); background: var(--hover); flex-shrink: 0; }
 .skeleton-line { height: 10px; border-radius: 4px; background: var(--hover); }
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w24 { width: 24%; margin-left: auto; }
 
-/* Add dialog（输入框本体用 global.css 的 .form-group） */
-.path-input-row { display: flex; gap: var(--space-1); align-items: stretch; }
-.path-input-row input { flex: 1; font-size: 13px; }
-.path-browse-btns { display: flex; gap: var(--space-1); }
-.browse-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-bg); cursor: pointer; color: var(--text-muted); transition: all var(--transition); flex-shrink: 0; }
-.browse-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+/* Add dialog：440px 紧凑壳，底部操作区用 sidebar-bg 分一层 */
+.shortcut-dialog { width: 440px; }
+.shortcut-dialog .dialog-footer { background: var(--sidebar-bg); }
 
-.type-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
-.type-btn { flex: 1; padding: 7px 13px; font-size: 13px; font-weight: 500; border: none; background: var(--panel-bg); color: var(--text-muted); cursor: pointer; transition: all var(--transition); font-family: inherit; }
-.type-btn:not(:last-child) { border-right: 1px solid var(--border); }
-.type-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.type-btn:hover:not(.active) { background: var(--hover); color: var(--text-secondary); }
+/* 输入组：外框归容器，:focus-within 点亮 accent；路径文本等宽 */
+.path-input-row {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-bg);
+  overflow: hidden;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.path-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.path-input-row input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 7px 10px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+  box-shadow: none; /* 高亮环归容器（:focus-within），别在输入框本体上再画一圈 */
+}
+.path-input-row input:focus { background: transparent; border: none; box-shadow: none; }
+.path-acts { display: flex; flex-shrink: 0; border-left: 1px solid var(--border); }
+.path-act {
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--sidebar-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.path-act + .path-act { border-left: 1px solid var(--border); }
+.path-act:hover { color: var(--accent); background: var(--accent-soft); }
+
+/* 分段控制器：sidebar-bg 轨道 + 绝对定位滑块滑到选中项下 */
+.type-seg {
+  position: relative;
+  display: flex;
+  padding: 2px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.seg-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: var(--shadow);
+  transition: transform var(--transition);
+}
+.seg-thumb.right { transform: translateX(100%); }
+.type-btn {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition);
+  font-family: inherit;
+}
+.type-btn.active { color: var(--text); font-weight: 600; }
+.type-btn:hover:not(.active) { color: var(--text-secondary); }
 
 </style>

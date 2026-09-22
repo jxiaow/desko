@@ -44,11 +44,14 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   第 2 层 · 主题 —— 只有颜色。
+   第 2 层 · 主题 —— 颜色，外加唯一一个字体槽。
 
-   四套主题必须交出**完全相同**的槽位名。少填一个，切过去那个位置
+   四套主题（light-cool / dark-carbon / light-warm / cyber-hacker）
+   必须交出**完全相同**的槽位名。少填一个，切过去那个位置
    就留着上一套主题的值，变成一块切换后不动的颜色。
    改槽位时跑 scripts/check-theme-coverage.mjs，它会比对四套的键集。
+
+   --font-ui / --font-mono 是非颜色槽，四套主题各自填写。
 
    槽位分两类：
    · 语义角色（面 / 文字 / 描边 / 状态 / 浮层）—— 每套主题一套值
@@ -56,9 +59,9 @@
      用几个色相、什么决定它，是全局定死的；主题只负责给它填 hex。
      所以切主题时头像会换色，但"这个色块代表工作分类"这件事不变。
 
-   :root 上挂的是 cool 的值，作为 data-theme 缺失时的兜底。
+   :root 上挂的是 light-cool 的值，作为 data-theme 缺失时的兜底。
    ═══════════════════════════════════════════════════════════════════ */
-:root, [data-theme="cool"] {
+:root, [data-theme="light-cool"] {
   /* 品牌：单一紫蓝，从 public/app-icon.svg 收敛而来 */
   --accent: #5b57d9;
   --accent-hover: #4c48c6;
@@ -90,6 +93,15 @@
   --border: #e3e3ea;
   --border-strong: #c9c9d3;
   --border-subtle: #efeff3;
+  --border-hover: #c9c9d3;
+
+  /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
+  --text-url: #4a4d57;
+  --badge-cat-bg: #f1f1f5;
+  --badge-cat-border: #e3e3ea;
+  --badge-cat-text: #5e5e68;
+  --badge-ver-bg: #eeedfb;
+  --badge-ver-text: #4f4ac0;
 
   /* 阴影 */
   --shadow-xs: 0 1px 2px 0 rgba(26, 27, 32, 0.07);
@@ -176,323 +188,373 @@
   --code-com: #b4b6c0;
   --code-tag: #6a5a99;
   --code-pun: #8b8d98;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
 }
 
-/* ---------- classic：改版前的原样，留作回退档 ---------- */
-[data-theme="classic"] {
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --accent-active: #4338ca;
+/* ---------- light-warm：暖灰纸墨，为小记/长文阅读调的低彩度暖底 ---------- */
+[data-theme="light-warm"] {
+  /* 品牌：琥珀。warning 与 accent 同族，靠饱和度拉开：warning 更枯、accent 更油亮 */
+  --accent: #d97706;
+  --accent-hover: #b45309;
+  --accent-active: #92400e;
   --accent-on: #ffffff;
-  --accent-soft: #eef2ff;
-  --accent-light: #e0e7ff;
-  --accent-ring: rgba(99, 102, 241, 0.12);
-  --text-brand: #6366f1;
+  --accent-soft: #fbf0e1;
+  --accent-light: #f5e0c2;
+  --accent-ring: rgba(217, 119, 6, 0.16);
+  --text-brand: #a15c06;
 
-  --bg: #fafbfc;
-  --panel-bg: #ffffff;
-  --chrome-bg: #ffffff;
-  --sunken: #f9fafb;
-  --fill: #f9fafb;
-  --hover: #f9fafb;
-  --active: #eef2ff;
-  --overlay: rgba(0, 0, 0, 0.4);
+  /* 面：米纸五档。相邻档差一档色温，不做条纹 */
+  --bg: #f5f2eb;
+  --panel-bg: #faf8f5;
+  --chrome-bg: #efeae0;
+  --sunken: #ede7db;
+  --fill: #e9e2d5;
+  --hover: #f0eae0;
+  --active: #f3ead9;
+  --overlay: rgba(46, 41, 37, 0.42);
 
-  --text: #111827;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
-  --text-faint: #b6bcc6;
+  --text: #2e2925;
+  --text-secondary: #6b6157;
+  --text-muted: #94897d;
+  --text-faint: #b6ac9f;
 
-  --border: #e5e7eb;
-  --border-strong: #d1d5db;
-  --border-subtle: #f0f1f3;
+  --border: #e3ddd2;
+  --border-strong: #cfc6b6;
+  --border-subtle: #ece7dd;
+  --border-hover: #cfc6b6;
 
-  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  --shadow-pop: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  --text-url: #55483d;
+  --badge-cat-bg: #efeae0;
+  --badge-cat-border: #e3ddd2;
+  --badge-cat-text: #6b6157;
+  --badge-ver-bg: #fbf0e1;
+  --badge-ver-text: #a15c06;
 
-  --danger: #e42323;
+  /* 投影带暖褐，纯灰投影在米底上会显脏 */
+  --shadow-xs: 0 1px 2px 0 rgba(93, 72, 45, 0.07);
+  --shadow-sm: 0 1px 2px 0 rgba(93, 72, 45, 0.05);
+  --shadow: 0 2px 6px -1px rgba(93, 72, 45, 0.08);
+  --shadow-md: 0 6px 16px -6px rgba(93, 72, 45, 0.14), 0 1px 3px rgba(93, 72, 45, 0.06);
+  --shadow-lg: 0 12px 28px -8px rgba(93, 72, 45, 0.18);
+  --shadow-pop: 0 20px 44px -12px rgba(93, 72, 45, 0.24), 0 2px 8px rgba(93, 72, 45, 0.08);
+
+  --danger: #b3413a;
   --danger-on: #ffffff;
-  --danger-hover: #d11a1a;
-  --danger-soft: #f8ecec;
-  --danger-border: #ecc5c5;
-  --success: #10845f;
-  --success-soft: #ecf8f4;
-  --warning: #a16812;
-  --warning-soft: #f9f4ec;
+  --danger-hover: #a5352f;
+  --danger-soft: #f6eae8;
+  --danger-border: #e3c9c4;
+  --success: #4a6a15;
+  --success-soft: #eff3e3;
+  --warning: #a16207;
+  --warning-soft: #f7f0df;
 
-  --sidebar-bg: #f8fafc;
-  --sidebar-hover: #f3f4f6;
+  --sidebar-bg: #efeae0;
+  --sidebar-hover: #e6dfd2;
 
-  --brand-g1: #6366f1;
-  --brand-g2: #4f46e5;
-  --brand-g3: #4338ca;
+  --brand-g1: #f59e0b;
+  --brand-g2: #d97706;
+  --brand-g3: #92400e;
   --brand-knob: #ffffff;
 
-  --lock-wash-a: #fafbfc;
-  --lock-wash-b: #f3f4f6;
-  --lock-orb-1: rgba(99, 102, 241, 0.08);
-  --lock-orb-2: rgba(139, 92, 246, 0.06);
+  --lock-wash-a: #f5f2eb;
+  --lock-wash-b: #eae3d6;
+  --lock-orb-1: rgba(217, 119, 6, 0.08);
+  --lock-orb-2: rgba(217, 119, 6, 0.05);
 
-  --frost-bg: rgba(255, 255, 255, 0.9);
-  --frost-border: #e5e7eb;
+  --frost-bg: rgba(250, 248, 245, 0.88);
+  --frost-border: #e3ddd2;
 
-  --tip-bg: #111827;
-  --tip-fg: #fafbfc;
-  --toast-bg: #0f172a;
-  --toast-ok: #4ade80;
-  --toast-err: #f87171;
-  --toast-info: #60a5fa;
+  --tip-bg: #2e2925;
+  --tip-fg: #f5f2eb;
+  --toast-bg: #2e2925;
+  --toast-ok: #a8cf8e;
+  --toast-err: #f09b93;
+  --toast-info: #e8c483;
 
-  --scrollbar: rgba(0, 0, 0, 0.15);
-  --scrollbar-hover: rgba(0, 0, 0, 0.25);
-  --selection: rgba(99, 102, 241, 0.18);
+  --scrollbar: rgba(46, 41, 37, 0.16);
+  --scrollbar-hover: rgba(46, 41, 37, 0.28);
+  --selection: rgba(217, 119, 6, 0.18);
 
-  /* 现状的六色是按 id 哈希的彩虹；策略已改成按分类，色值保留原样 */
-  --cat-1: #6366f1;
-  --cat-2: #8b5cf6;
-  --cat-3: #ec4899;
-  --cat-4: #f59e0b;
-  --cat-5: #10b981;
-  --cat-6: #06b6d4;
+  /* 头像：暖土六相（陶土/橄榄/酒红/芥末/墨青/梅子），同 L* 同彩度 */
+  --cat-1: #b0653e;
+  --cat-2: #7a8a3f;
+  --cat-3: #9c4f5e;
+  --cat-4: #b08a3a;
+  --cat-5: #4f8378;
+  --cat-6: #81598a;
   --cat-text: #ffffff;
 
-  --ft-pdf: #dc2626;
-  --ft-doc: #2563eb;
-  --ft-sheet: #16a34a;
-  --ft-deck: #ea580c;
-  --ft-arch: #7c3aed;
-  --ft-code: #ca8a04;
-  --ft-mark: #64748b;
-  --ft-img: #db2777;
-  --ft-unk: #94a3b8;
+  /* 文件类型：pdf红/doc蓝/xls绿 的认知保留，统一降饱和加暖 */
+  --ft-pdf: #b04a42;
+  --ft-doc: #4a6a94;
+  --ft-sheet: #55764a;
+  --ft-deck: #a05f2e;
+  --ft-arch: #77608f;
+  --ft-code: #87702e;
+  --ft-mark: #6b675e;
+  --ft-img: #97566b;
+  --ft-unk: #857d70;
 
-  --code-fg: #111827;
-  --code-kw: #d20f39;
-  --code-str: #40a02b;
-  --code-num: #fe640b;
-  --code-type: #df8e1d;
-  --code-fn: #1e66f5;
-  --code-var: #e64553;
-  --code-com: #9ca0b0;
-  --code-tag: #8839ef;
-  --code-pun: #6c6f85;
+  --code-fg: #2e2925;
+  --code-kw: #a04a5e;
+  --code-str: #4a7043;
+  --code-num: #96603a;
+  --code-type: #87702e;
+  --code-fn: #4a6a94;
+  --code-var: #7d4f4f;
+  --code-com: #b6ac9f;
+  --code-tag: #77608f;
+  --code-pun: #6f6a5e;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
 }
 
-/* ---------- white：满版纯白，层次靠描边和排版，不靠底色 ---------- */
-[data-theme="white"] {
-  --accent: #4b47c4;
-  --accent-hover: #3e3aab;
-  --accent-active: #33308d;
+/* ---------- linear-dark：曜石深空，电光紫蓝主色，边界靠实体描边不靠投影 ---------- */
+[data-theme="linear-dark"] {
+  --accent: #5e6ad2;
+  --accent-hover: #717de3;
+  --accent-active: #4c56b8;
   --accent-on: #ffffff;
-  --accent-soft: #f0f0fb;
-  --accent-light: #deddf6;
-  --accent-ring: rgba(75, 71, 196, 0.13);
-  --text-brand: #3f3bb8;
+  --accent-soft: rgba(94, 106, 210, 0.16);
+  --accent-light: rgba(94, 106, 210, 0.3);
+  --accent-ring: rgba(94, 106, 210, 0.35);
+  --text-brand: #8b95f6;
 
-  --bg: #ffffff;
-  --panel-bg: #ffffff;
-  --chrome-bg: #ffffff;
-  --sunken: #fafafa;
-  --fill: #f5f5f6;
-  --hover: #f4f4f5;
-  --active: #eeeefb;
-  --overlay: rgba(20, 20, 24, 0.35);
+  --bg: #090a0f;
+  --panel-bg: #141721;
+  --chrome-bg: #0e1017;
+  --sunken: #06070b;
+  --fill: #1a1f2c;
+  --hover: #1c202e;
+  --active: #232838;
+  --overlay: rgba(4, 5, 10, 0.66);
 
-  --text: #18181b;
-  --text-secondary: #6f6f76;
-  --text-muted: #9b9ba1;
-  --text-faint: #c4c4c9;
+  --text: #e8eaf2;
+  --text-secondary: #c3cad8;
+  --text-muted: #9aa3b4;
+  --text-faint: #5d6577;
 
-  --border: #ebebeb;
-  --border-strong: #d9d9dc;
-  --border-subtle: #f3f3f4;
+  --border: #222738;
+  --border-strong: #38405b;
+  --border-subtle: #1a1e2b;
+  --border-hover: #38405b;
 
-  --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow: 0 1px 3px rgba(24, 24, 27, 0.05);
-  --shadow-md: 0 1px 3px rgba(24, 24, 27, 0.07);
-  --shadow-lg: 0 4px 12px rgba(24, 24, 27, 0.08);
-  --shadow-pop: 0 16px 40px -10px rgba(24, 24, 27, 0.18), 0 2px 6px rgba(24, 24, 27, 0.06);
+  /* URL 走浅灰蓝：等宽小字在近黑底上要一眼可读，又不抢标题 */
+  --text-url: #cbd5e1;
+  --badge-cat-bg: #1a1f2c;
+  --badge-cat-border: #2c344a;
+  --badge-cat-text: #bac4d6;
+  --badge-ver-bg: rgba(94, 106, 210, 0.18);
+  --badge-ver-text: #8b95f6;
 
-  --danger: #ca4944;
-  --danger-on: #ffffff;
-  --danger-hover: #bb3935;
-  --danger-soft: #f7eeee;
-  --danger-border: #e7cccb;
-  --success: #258367;
-  --success-soft: #eef7f4;
-  --warning: #936e25;
-  --warning-soft: #f7f4ee;
-
-  --sidebar-bg: #fbfbfc;
-  --sidebar-hover: #f1f1f3;
-
-  --brand-g1: #6a63ff;
-  --brand-g2: #4b47c4;
-  --brand-g3: #2f2c86;
-  --brand-knob: #ffffff;
-
-  --lock-wash-a: #ffffff;
-  --lock-wash-b: #fafafb;
-  --lock-orb-1: rgba(75, 71, 196, 0.045);
-  --lock-orb-2: rgba(75, 71, 196, 0.03);
-
-  --frost-bg: rgba(255, 255, 255, 0.9);
-  --frost-border: #ececee;
-
-  --tip-bg: #18181b;
-  --tip-fg: #ffffff;
-  --toast-bg: #18181b;
-  --toast-ok: #84d6b4;
-  --toast-err: #f09994;
-  --toast-info: #a3a0f5;
-
-  --scrollbar: rgba(24, 24, 27, 0.14);
-  --scrollbar-hover: rgba(24, 24, 27, 0.24);
-  --selection: rgba(75, 71, 196, 0.16);
-
-  --cat-1: #585bb0;
-  --cat-2: #7358a8;
-  --cat-3: #a05575;
-  --cat-4: #a07a48;
-  --cat-5: #448269;
-  --cat-6: #448290;
-  --cat-text: #ffffff;
-
-  --ft-pdf: #b05049;
-  --ft-doc: #43658f;
-  --ft-sheet: #397055;
-  --ft-deck: #965936;
-  --ft-arch: #625390;
-  --ft-code: #82703a;
-  --ft-mark: #5e6672;
-  --ft-img: #92536c;
-  --ft-unk: #83878f;
-
-  --code-fg: #18181b;
-  --code-kw: #a05575;
-  --code-str: #397055;
-  --code-num: #965936;
-  --code-type: #82703a;
-  --code-fn: #43658f;
-  --code-var: #5e6672;
-  --code-com: #c4c4c9;
-  --code-tag: #625390;
-  --code-pun: #6f6f76;
-}
-
-/* ---------- dark：近黑底，分层靠 1px 高光描边不靠投影 ---------- */
-[data-theme="dark"] {
-  --accent: #7b77f0;
-  --accent-hover: #8d89f5;
-  --accent-active: #6a66d8;
-  --accent-on: #0c0c12;
-  --accent-soft: #22213a;
-  --accent-light: #312f55;
-  --accent-ring: rgba(123, 119, 240, 0.3);
-  --text-brand: #a5a1ff;
-
-  --bg: #0c0c0f;
-  --panel-bg: #151519;
-  --chrome-bg: #101014;
-  --sunken: #0a0a0d;
-  --fill: #1e1e24;
-  --hover: #1c1c22;
-  --active: #23223a;
-  --overlay: rgba(0, 0, 0, 0.62);
-
-  --text: #eeeef3;
-  --text-secondary: #a0a0ad;
-  --text-muted: #75757f;
-  --text-faint: #4f4f58;
-
-  --border: #26262e;
-  --border-strong: #373742;
-  --border-subtle: #1d1d24;
-
-  /* 深色下投影看不见，分层改用顶部 1px 高光 */
-  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.055);
-  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  /* 深色下投影看不见，分层靠顶部 1px 高光 */
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-md: 0 10px 26px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --shadow-lg: 0 16px 34px -10px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --shadow-pop: 0 26px 60px -14px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.07);
 
-  --danger: #e56a62;
-  --danger-on: #0c0c12;
-  --danger-hover: #f07f78;
-  --danger-soft: #281715;
-  --danger-border: #522b28;
-  --success: #2ec996;
-  --success-soft: #152822;
-  --warning: #d69a33;
-  --warning-soft: #282115;
+  --danger: #f26d6d;
+  --danger-on: #0b0c12;
+  --danger-hover: #ff8585;
+  --danger-soft: #2a1618;
+  --danger-border: #552b30;
+  --success: #3fb950;
+  --success-soft: #132a1c;
+  --warning: #d6a028;
+  --warning-soft: #2a2214;
 
-  --sidebar-bg: #101014;
-  --sidebar-hover: #1a1a20;
+  --sidebar-bg: #0e1017;
+  --sidebar-hover: #171b26;
 
-  --brand-g1: #8f8aff;
-  --brand-g2: #6f6ae4;
-  --brand-g3: #4a45b8;
-  --brand-knob: #0c0c12;
+  --brand-g1: #8b95f6;
+  --brand-g2: #5e6ad2;
+  --brand-g3: #3d4694;
+  --brand-knob: #0e1017;
 
-  --lock-wash-a: #0c0c0f;
-  --lock-wash-b: #131318;
-  --lock-orb-1: rgba(123, 119, 240, 0.14);
-  --lock-orb-2: rgba(123, 119, 240, 0.08);
+  --lock-wash-a: #090a0f;
+  --lock-wash-b: #10131e;
+  --lock-orb-1: rgba(94, 106, 210, 0.16);
+  --lock-orb-2: rgba(94, 106, 210, 0.08);
 
-  --frost-bg: rgba(21, 21, 25, 0.82);
-  --frost-border: #2a2a33;
+  --frost-bg: rgba(20, 23, 33, 0.85);
+  --frost-border: #262c3e;
 
   /* 深色界面的浮层反过来：亮底暗字 */
-  --tip-bg: #f0f0f5;
-  --tip-fg: #101014;
-  --toast-bg: #f0f0f5;
+  --tip-bg: #f1f2f6;
+  --tip-fg: #12141c;
+  --toast-bg: #f1f2f6;
   --toast-ok: #1f7a58;
   --toast-err: #b23c37;
-  --toast-info: #4b47b8;
+  --toast-info: #4c56b8;
 
   --scrollbar: rgba(255, 255, 255, 0.14);
   --scrollbar-hover: rgba(255, 255, 255, 0.24);
-  --selection: rgba(123, 119, 240, 0.32);
+  --selection: rgba(94, 106, 210, 0.32);
 
   /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
-  --cat-1: #7a7ec9;
-  --cat-2: #9a7ec7;
-  --cat-3: #c97e9c;
-  --cat-4: #c9a06e;
-  --cat-5: #6eb898;
-  --cat-6: #6eb8c4;
-  --cat-text: #0c0c12;
+  --cat-1: #7c86e0;
+  --cat-2: #a98be8;
+  --cat-3: #e08bb8;
+  --cat-4: #e0b072;
+  --cat-5: #6fd0a8;
+  --cat-6: #6fc4dc;
+  --cat-text: #0b0c12;
 
-  --ft-pdf: #d97d77;
-  --ft-doc: #7ea6e0;
-  --ft-sheet: #6eb898;
-  --ft-deck: #d99a6e;
-  --ft-arch: #a08ed0;
-  --ft-code: #cbb878;
-  --ft-mark: #9a9daa;
-  --ft-img: #d08cb0;
-  --ft-unk: #6f7280;
+  --ft-pdf: #f0716b;
+  --ft-doc: #7aa2f7;
+  --ft-sheet: #3fb950;
+  --ft-deck: #e0a45c;
+  --ft-arch: #a98be8;
+  --ft-code: #e0c060;
+  --ft-mark: #8c94a6;
+  --ft-img: #e08bb8;
+  --ft-unk: #6b7280;
 
-  --code-fg: #e8e8ee;
-  --code-kw: #e0809c;
-  --code-str: #78c9a4;
-  --code-num: #e0a870;
-  --code-type: #d0bc78;
-  --code-fn: #7ea6e0;
-  --code-var: #d08c90;
-  --code-com: #6f7280;
-  --code-tag: #b28ae0;
-  --code-pun: #a0a3b2;
+  --code-fg: #dce0ea;
+  --code-kw: #8b95f6;
+  --code-str: #6fd0a8;
+  --code-num: #e0a45c;
+  --code-type: #e0c060;
+  --code-fn: #7aa2f7;
+  --code-var: #dce0ea;
+  --code-com: #5a6274;
+  --code-tag: #c792ea;
+  --code-pun: #8c94a6;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, 'Cascadia Code', monospace;
 }
 
+
+/* ---------- jetbrains-dark：炭黑 IDE 底，标志蓝主色，语法色取 Darcula 原族 ---------- */
+[data-theme="jetbrains-dark"] {
+  --accent: #3574f0;
+  --accent-hover: #4682f7;
+  --accent-active: #2a5fcc;
+  --accent-on: #ffffff;
+  --accent-soft: rgba(53, 116, 240, 0.18);
+  --accent-light: rgba(53, 116, 240, 0.3);
+  --accent-ring: rgba(53, 116, 240, 0.35);
+  --text-brand: #6c9be8;
+
+  --bg: #191a1c;
+  --panel-bg: #2b2d30;
+  --chrome-bg: #1e1f22;
+  --sunken: #131415;
+  --fill: #313338;
+  --hover: #35373b;
+  --active: #3d4045;
+  --overlay: rgba(0, 0, 0, 0.6);
+
+  --text: #e3e6ea;
+  --text-secondary: #b8bcc4;
+  --text-muted: #8f939c;
+  --text-faint: #6a6d73;
+
+  --border: #393b40;
+  --border-strong: #4e5157;
+  --border-subtle: #2e3033;
+  --border-hover: #4e5157;
+
+  /* URL 用语法高亮蓝：炭黑底上"可点击"要一眼看出来 */
+  --text-url: #6c9be8;
+  --badge-cat-bg: #1e1f22;
+  --badge-cat-border: #393b40;
+  --badge-cat-text: #bcbec4;
+  --badge-ver-bg: rgba(53, 116, 240, 0.15);
+  --badge-ver-text: #6c9be8;
+
+  /* 底本身比 linear 亮一档，顶部高光收弱，分层主要靠面板浮起 */
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-md: 0 10px 26px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  --shadow-lg: 0 16px 34px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  --shadow-pop: 0 26px 60px -14px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+
+  --danger: #e05c5c;
+  --danger-on: #1a1b1d;
+  --danger-hover: #ee7575;
+  --danger-soft: #3a262a;
+  --danger-border: #5c3a40;
+  --success: #4fb477;
+  --success-soft: #26332a;
+  --warning: #f0a73c;
+  --warning-soft: #3a2f1c;
+
+  --sidebar-bg: #1e1f22;
+  --sidebar-hover: #2b2d30;
+
+  --brand-g1: #6c9be8;
+  --brand-g2: #3574f0;
+  --brand-g3: #2a5fcc;
+  --brand-knob: #1e1f22;
+
+  --lock-wash-a: #191a1c;
+  --lock-wash-b: #22242a;
+  --lock-orb-1: rgba(53, 116, 240, 0.14);
+  --lock-orb-2: rgba(53, 116, 240, 0.07);
+
+  --frost-bg: rgba(43, 45, 48, 0.85);
+  --frost-border: #393b40;
+
+  /* 深色界面的浮层反过来：亮底暗字 */
+  --tip-bg: #dfe1e5;
+  --tip-fg: #1e1f22;
+  --toast-bg: #dfe1e5;
+  --toast-ok: #2f7d4f;
+  --toast-err: #b23c37;
+  --toast-info: #2a5fcc;
+
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(53, 116, 240, 0.32);
+
+  /* 炭黑底比曜石亮，六相彩度收一档才不刺眼 */
+  --cat-1: #6c9be8;
+  --cat-2: #a98be8;
+  --cat-3: #e08bb8;
+  --cat-4: #f0a73c;
+  --cat-5: #4fb477;
+  --cat-6: #4fb4c8;
+  --cat-text: #1a1b1d;
+
+  --ft-pdf: #e05c5c;
+  --ft-doc: #6c9be8;
+  --ft-sheet: #4fb477;
+  --ft-deck: #f0a73c;
+  --ft-arch: #a98be8;
+  --ft-code: #e0c060;
+  --ft-mark: #9da0a8;
+  --ft-img: #e08bb8;
+  --ft-unk: #787b82;
+
+  --code-fg: #dfe1e5;
+  --code-kw: #d9822b;
+  --code-str: #6aab52;
+  --code-num: #6897bb;
+  --code-type: #a9b7c6;
+  --code-fn: #ffc66d;
+  --code-var: #b3b7bd;
+  --code-com: #787b82;
+  --code-tag: #9876aa;
+  --code-pun: #a9b7c6;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
+}
+
+
 /* ---------- 别名槽位：不填 hex，只指向别的槽，所以四套主题不必各写一遍。
-     放在主题块之后、同一条 :root 上，切换主题时自动跟着源头走。 ---------- */
+     放在主题块之后、同一条 :root 上，切换主题时自动跟着源头走。
+
+     --bg-app 等八个是对外推荐的语义名（背景面 / 描边 / 文字三层），
+     源头仍是上面各主题填的物理槽；新代码优先用语义名。 ---------- */
 :root {
   --sidebar-border: var(--border);
   --sidebar-active: var(--accent-soft);
@@ -501,6 +563,21 @@
   --ft-bg: var(--fill);
   --code-bg: var(--sunken);
   --code-bd: var(--border);
+
+  --bg-app: var(--bg);
+  --bg-surface: var(--panel-bg);
+  --bg-surface-hover: var(--hover);
+  --bg-surface-active: var(--active);
+  --bg-sidebar: var(--sidebar-bg);
+  --border-focus: var(--accent);
+  --text-primary: var(--text);
+}
+
+/* 切主题时挂一次性过渡类（services/theme.ts 负责摘除）：
+   只在"切换的那一刻"有颜色补间，冷启动首绘不经过它，不会闪。 */
+html.theme-anim,
+html.theme-anim * {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease, fill 0.2s ease;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -509,7 +586,7 @@ html, body { height: 100%; }
 
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.5;
   letter-spacing: -0.01em;
@@ -622,6 +699,7 @@ body {
 
 .dialog {
   background: var(--panel-bg);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   width: 500px;
   max-height: 85vh;
@@ -801,6 +879,138 @@ body {
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: var(--space-3); }
 .form-row .form-group { margin-bottom: 0; }
 
+/* ---------- 设置弹窗的行组（Inset Grouped Rows）：一组功能收进一块内嵌凹槽，
+   条目之间只靠 1px 细线断句，不再往凹槽里塞第二层圆角框。
+   原先这套在 SettingsDialog 与 BackupPane 里各抄了一份 scoped 副本，
+   两份漂成了 32px 和无定高两种控件高度——同一栏里自然高低不齐。 ---------- */
+.group-content {
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 52px;
+  padding: 10px var(--space-4);
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+.setting-item:last-child { border-bottom: none; }
+.setting-item.clickable { cursor: pointer; }
+.setting-item.clickable:hover { background: var(--hover); }
+
+.setting-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.setting-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.setting-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-actions,
+.setting-control { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* 右侧控制轴：按钮与输入件一律 28px 高一档、12px 字，跨行右缘才落在同一条竖线上 */
+.action-btn,
+.select,
+.select-input,
+.number-input {
+  height: 28px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: all var(--transition);
+}
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.select,
+.select-input { padding: 0 10px; color: var(--text); cursor: pointer; flex-shrink: 0; }
+.number-input { width: 56px; padding: 0 8px; text-align: right; color: var(--text); }
+
+.action-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.select:hover:not(:disabled),
+.select-input:hover:not(:disabled),
+.select:focus,
+.select-input:focus,
+.number-input:focus { border-color: var(--accent); }
+.action-btn:disabled,
+.select:disabled,
+.select-input:disabled { opacity: 0.45; cursor: default; }
+/* 关掉自动锁定时这一栏没有数值可填，描边撤掉、只留灰字，别摆出一副能输入的样子 */
+.number-input:disabled { color: var(--text-muted); background: transparent; border-color: transparent; }
+
+/* 关键主操作：品牌实底，一栏里只许一颗，其余都走描边 */
+.action-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+.action-btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-on); }
+.action-btn.primary:active:not(:disabled) { background: var(--accent-active); }
+
+/* 危险操作：平时只是红字（无底无框，不给它实底的重量），悬停才透出红底 */
+.action-btn.danger { color: var(--danger); background: transparent; border-color: transparent; }
+.action-btn.danger:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); border-color: var(--danger); }
+
+.unit { font-size: 11px; color: var(--text-muted); }
+
+.switch { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--border);
+  transition: 0.2s;
+  border-radius: 20px;
+}
+.switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: var(--panel-bg);
+  transition: 0.2s;
+  border-radius: 50%;
+  box-shadow: var(--shadow-xs);
+}
+.switch input:checked + .switch-slider { background-color: var(--accent); }
+.switch input:checked + .switch-slider:before { transform: translateX(16px); }
+.switch.off { opacity: 0.45; }
+
+/* 连接态指示灯：8px 实心点带一圈同色微光，呼吸只在"确实连着"时走 */
+.live-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+  animation: live-breathe 2.4s ease-in-out infinite;
+}
+.live-dot.idle { background: var(--text-faint); box-shadow: 0 0 0 3px var(--hover); animation: none; }
+@keyframes live-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+
 /* 标签页 */
 .tab {
   padding: var(--space-1) var(--space-3);
@@ -842,6 +1052,11 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; transition: background var(--transition); }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+/* 竖向滚动容器一律预留 6px 槽位：滚动条出现/消失不再让内容横跳 */
+.content-inner, .stream, .rail, .sidebar-nav, .dialog-body, .settings-pane, .remote-list, .fs-scroll {
+  scrollbar-gutter: stable;
+}
 
 /* 弹性布局里的撑开项 */
 .spacer { flex: 1; }
