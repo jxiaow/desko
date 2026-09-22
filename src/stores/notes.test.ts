@@ -124,34 +124,50 @@ describe('Notes Store', () => {
         expect.objectContaining({ content_html: '<p>更新</p>' }))
     })
 
-    /** 正文里的图片 src 是整条路径 encode 后的单段（与 attachmentSrc 的形态一致） */
-    const bodyWithImg = (p: string) => `<img src="asset://localhost/${encodeURIComponent(p)}">`
+    /** 正文里的图片 src 只有相对形态：换机器、换账号都不会让图片失效 */
+    const bodyWithImg = (name: string) => `<img src="attachments/${name}">`
 
     it('编辑时新贴的图片会补登记，不然文件没人认领', async () => {
       const store = useNotesStore()
-      const img = 'C:\\Users\\x\\desko\\attachments\\u9__a.png'
       store.notes = [mockNote({ id: '1', content_html: '<p>旧</p>' })]
       vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
       vi.mocked(notesApi.bindAttachments).mockResolvedValue([])
 
-      store.saveNoteContent('1', bodyWithImg(img))
+      store.saveNoteContent('1', bodyWithImg('u9__a.png'))
       await store.flushNoteSave()
 
       expect(notesApi.bindAttachments).toHaveBeenCalledTimes(1)
-      expect(notesApi.bindAttachments).toHaveBeenCalledWith('1', [img])
+      expect(notesApi.bindAttachments).toHaveBeenCalledWith('1', ['u9__a.png'])
+    })
+
+    /** 库里还没归一的旧数据（绝对路径 encode 成 URL）也要认，且落库时洗成相对 */
+    it('旧机器的绝对路径 src 洗成相对形态再落库', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote({ id: '1', content_html: '<p>旧</p>' })]
+      vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
+      vi.mocked(notesApi.bindAttachments).mockResolvedValue([])
+      const abs = 'C:\\Users\\jiang\\AppData\\Roaming\\desko\\attachments\\u9__a.png'
+      const legacy = `<img src="http://asset.localhost/${encodeURIComponent(abs)}">`
+
+      store.saveNoteContent('1', legacy)
+      await store.flushNoteSave()
+
+      expect(vi.mocked(notesApi.updateNote).mock.calls[0][1]).toMatchObject({
+        content_html: bodyWithImg('u9__a.png'),
+      })
+      expect(notesApi.bindAttachments).toHaveBeenCalledWith('1', ['u9__a.png'])
     })
 
     it('已登记过的图片不重复补登记', async () => {
       const store = useNotesStore()
-      const img = 'C:\\Users\\x\\desko\\attachments\\u9__a.png'
-      store.notes = [mockNote({ id: '1', content_html: bodyWithImg(img) })]
+      store.notes = [mockNote({ id: '1', content_html: bodyWithImg('u9__a.png') })]
       store.noteAttachments['1'] = [{
-        id: 'a1', note_id: '1', file_name: 'u9__a.png', file_path: img,
+        id: 'a1', note_id: '1', file_name: 'a.png', file_path: 'u9__a.png',
         file_size: 1, mime_type: 'image/png', created_at: 1,
       } as any]
       vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
 
-      store.saveNoteContent('1', bodyWithImg(img) + '<p>加行字</p>')
+      store.saveNoteContent('1', bodyWithImg('u9__a.png') + '<p>加行字</p>')
       await store.flushNoteSave()
 
       expect(notesApi.bindAttachments).not.toHaveBeenCalled()

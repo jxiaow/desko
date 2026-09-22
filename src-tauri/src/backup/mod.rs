@@ -415,7 +415,8 @@ pub fn export_package(
         name: file_name,
         time: ts,
         size,
-        attachments: Some(manifest.counts.attachments),
+        // 报真数：库里登记的行数不等于真装进包的文件数（有人手动删过文件）
+        attachments: Some(manifest.files.len() as i64),
     })
 }
 

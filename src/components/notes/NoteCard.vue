@@ -6,7 +6,7 @@ import NoteAttachments from './NoteAttachments.vue'
 import NoteActionMenu from './NoteActionMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatRelativeTime, highlightTagsInHtml } from '../../utils/format'
-import { unreferencedAttachments } from '../../services/attachmentSrc'
+import { resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import type { NoteSaveState } from '../../stores/notes'
 
@@ -84,7 +84,8 @@ watch(() => props.editing, (on) => {
   if (on) draft.value = props.note.content_html
 })
 
-const bodyHtml = computed(() => highlightTagsInHtml(props.note.content_html))
+// 库里存的是 attachments/<名>，只显示层临时换成本机 asset URL
+const bodyHtml = computed(() => resolveAssetHtml(highlightTagsInHtml(props.note.content_html)))
 
 /** 正文已引用的图片不再进附件条；编辑中按草稿过滤，保存前就不该闪出第二个 */
 const visibleAtts = computed(() =>

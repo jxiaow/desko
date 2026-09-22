@@ -173,6 +173,7 @@ fn main() {
             commands::entries::batch_delete_entries,
             commands::entries::get_password,
             commands::data::get_db_path,
+            commands::data::get_attachment_dir,
             commands::backup::backup_status,
             commands::backup::backup_set_password,
             commands::backup::backup_run,

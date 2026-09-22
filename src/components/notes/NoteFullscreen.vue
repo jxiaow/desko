@@ -6,7 +6,7 @@ import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatAbsTime, htmlToText, wordCount } from '../../utils/format'
-import { collectAttachmentPaths, unreferencedAttachments } from '../../services/attachmentSrc'
+import { collectAttachmentNames, unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import type { NoteSaveState } from '../../stores/notes'
 
@@ -37,7 +37,7 @@ const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
 
 const text = computed(() => htmlToText(html.value))
 // 只有图的小记也算有内容：正文引用了附件就不空
-const empty = computed(() => !text.value.trim() && !collectAttachmentPaths(html.value).length)
+const empty = computed(() => !text.value.trim() && !collectAttachmentNames(html.value).length)
 const visibleAtts = computed(() => unreferencedAttachments(html.value, props.attachments))
 const saveText = { '': '', saving: '保存中…', saved: '已保存' } as const
 

@@ -311,7 +311,7 @@ test.describe('Settings 设置', () => {
     await bootUnlocked(page, {
       ...SEED,
       staged: ['junk__a.png', 'kept__b.png'],
-      notes: [{ title: '带图', content_html: '<img src="asset://localhost/kept__b.png">' }],
+      notes: [{ title: '带图', content_html: '<img src="attachments/kept__b.png">' }],
     })
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
@@ -332,8 +332,8 @@ test.describe('Settings 设置', () => {
     await expect(row.locator('.setting-desc')).toHaveText('没有未被引用的附件')
     await expect(btn).toBeDisabled()
     const state = await e2e.snapshot(page)
-    expect(state.staged.map((f: { file_path: string }) => f.file_path))
-      .toEqual(['C:/e2e/attachments/kept__b.png'])
+    // 库里存的就是附件目录下的文件名，不带任何本机绝对路径
+    expect(state.staged.map((f: { file_path: string }) => f.file_path)).toEqual(['kept__b.png'])
   })
 
   test('云端连接：配置校验 → 保存 → 打完即传 → 断开重新置灰', async ({ page }) => {

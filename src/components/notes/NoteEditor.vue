@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
+import { normalizeAssetHtml, resolveAssetHtml } from '../../services/attachmentSrc'
 import { useEditor, EditorContent, VueNodeViewRenderer } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -212,7 +213,8 @@ const isBlankContent = (html: string | undefined): boolean => {
 }
 
 const editor = useEditor({
-  content: props.initialContent || '',
+  // 库里存的是 attachments/<名>，编辑器里要看到真图；存回去时再洗回相对形态
+  content: resolveAssetHtml(props.initialContent || ''),
   // 胶囊输入不抢焦点：它默认收成一行，抢了焦点就等于永远是展开的，折叠态白做。
   // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
   autofocus: props.variant === 'composer' ? false : (isBlankContent(props.initialContent) ? 'start' : 'end'),
@@ -230,7 +232,7 @@ const editor = useEditor({
     NoteImage,
   ],
   onUpdate: ({ editor }) => {
-    emit('update', editor.getHTML())
+    emit('update', normalizeAssetHtml(editor.getHTML()))
     checkSlashMenu(editor)
   },
 })
@@ -256,8 +258,10 @@ const relocateCaret = (e: Event) => {
 }
 
 watch(() => props.initialContent, (val) => {
-  if (editor.value && val !== editor.value.getHTML()) {
-    editor.value.commands.setContent(val || '')
+  // 两边要在同一个空间里比：库里是相对形态，编辑器里是 asset URL
+  const shown = resolveAssetHtml(val || '')
+  if (editor.value && shown !== editor.value.getHTML()) {
+    editor.value.commands.setContent(shown)
   }
 })
 

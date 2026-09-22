@@ -10,7 +10,7 @@ import NoteFullscreen from './NoteFullscreen.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { htmlToText } from '../../utils/format'
-import { attachmentSrc, collectAttachmentPaths } from '../../services/attachmentSrc'
+import { attachmentSrc, collectAttachmentNames } from '../../services/attachmentSrc'
 import type { IconName } from '../../utils/icons'
 import type { Note } from '../../types'
 import type { NoteSort, NoteView } from '../../stores/notes'
@@ -80,7 +80,7 @@ watch(railRoom, (room) => {
 })
 
 const draftText = computed(() => htmlToText(draftHtml.value))
-const draftEmpty = computed(() => !draftText.value.trim() && !collectAttachmentPaths(draftHtml.value).length)
+const draftEmpty = computed(() => !draftText.value.trim() && !collectAttachmentNames(draftHtml.value).length)
 const fsNote = computed(() =>
   typeof fsTarget.value === 'string' ? findNote(fsTarget.value) : null)
 const sortLabel = computed(() =>

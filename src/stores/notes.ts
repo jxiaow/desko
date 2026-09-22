@@ -4,7 +4,7 @@ import { notesApi as api } from '../services/api/notes'
 import { useToastStore } from './toast'
 import { useConfirmStore } from './confirm'
 import { extractTags, getDateGroupLabel, deriveTitleFromHtml, htmlToText } from '../utils/format'
-import { collectAttachmentPaths } from '../services/attachmentSrc'
+import { collectAttachmentNames, ensureAttachmentBase, nameOf, normalizeAssetHtml } from '../services/attachmentSrc'
 import type { Note, Attachment } from '../types'
 
 export type NoteView = 'all' | 'pinned' | 'starred'
@@ -140,6 +140,8 @@ export const useNotesStore = defineStore('notes', () => {
   const fetchNotes = async () => {
     notesLoading.value = true
     try {
+      // 图片 src 存的是相对形态，渲染要先有本机附件目录
+      await ensureAttachmentBase()
       notes.value = await api.listNotes()
     } catch (e: any) {
       toastStore.showToast('加载小记失败: ' + e.message, 'error')
@@ -149,9 +151,11 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   /** 发布一条小记；正文既无文字也无图片时不做任何事，返回新记录供调用方接续操作 */
-  const publishNote = async (html: string): Promise<Note | null> => {
-    const imagePaths = collectAttachmentPaths(html)
-    if (!noteMeta(html).text.trim() && !imagePaths.length) return null
+  const publishNote = async (rawHtml: string): Promise<Note | null> => {
+    // 编辑器给的是能直接显示的形态，落库前洗回相对写法
+    const html = normalizeAssetHtml(rawHtml)
+    const imageNames = collectAttachmentNames(html)
+    if (!noteMeta(html).text.trim() && !imageNames.length) return null
     const category = noteMeta(html).tags[0]
     try {
       const note = await api.createNote({
@@ -160,9 +164,9 @@ export const useNotesStore = defineStore('notes', () => {
         category,
       })
       // 正文引用的 staged 图片此刻才登记成附件，删小记才能连带清文件
-      if (imagePaths.length) {
+      if (imageNames.length) {
         try {
-          const bound = await api.bindAttachments(note.id, imagePaths)
+          const bound = await api.bindAttachments(note.id, imageNames)
           noteAttachments.value[note.id] = [...bound, ...(noteAttachments.value[note.id] ?? [])]
         } catch (e: any) {
           toastStore.showToast('附件登记失败：' + e.message, 'error')
@@ -192,10 +196,10 @@ export const useNotesStore = defineStore('notes', () => {
         category: note.category ?? undefined,
       })
       // 编辑态新贴的图也要登记，否则文件没人认领（发布路径做了，保存路径漏了）
-      const paths = collectAttachmentPaths(note.content_html)
-      if (paths.length) {
-        const known = new Set((noteAttachments.value[note.id] ?? []).map(a => a.file_path))
-        const fresh = paths.filter(p => !known.has(p))
+      const names = collectAttachmentNames(note.content_html)
+      if (names.length) {
+        const known = new Set((noteAttachments.value[note.id] ?? []).map(a => nameOf(a.file_path)))
+        const fresh = names.filter(n => !known.has(n))
         if (fresh.length) {
           try {
             const bound = await api.bindAttachments(note.id, fresh)
@@ -217,9 +221,11 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   /** 正文改动立即写回列表（保持列表与书写面一致），再防抖落盘 */
-  const saveNoteContent = (id: string, html: string) => {
+  const saveNoteContent = (id: string, rawHtml: string) => {
     const idx = notes.value.findIndex(n => n.id === id)
     if (idx < 0) return
+    // 落库的永远是相对形态
+    const html = normalizeAssetHtml(rawHtml)
     const meta = noteMeta(html)
     notes.value[idx] = {
       ...notes.value[idx],

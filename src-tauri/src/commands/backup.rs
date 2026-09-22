@@ -226,10 +226,10 @@ pub async fn backup_export(
         .ok_or_else(|| AppError::Backup("已有备份任务在进行中".to_string()))?;
     let job = auto_backup::Job::prepare(&app, &state)?
         .ok_or_else(|| AppError::Backup("尚未设置备份密码".to_string()))?;
-    // 只装这份库真认领的附件，不连附件目录里堆的无引用历史文件一起带走
+    // 只装这份库真认领、且确实还在附件目录里的文件，不连无引用历史文件一起带走
     let names = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-        attachment_service::claimed_names(&db, &job.attachments)?
+        attachment_service::export_names(&db, &job.attachments)?
     };
     let dest = std::path::PathBuf::from(&path);
     let handle = app.clone();

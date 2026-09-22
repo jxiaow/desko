@@ -156,6 +156,9 @@ const ERR_NOT_UNLOCKED = '应用已锁定'
 const ERR_ENTRY_NOT_FOUND = '记录不存在'
 const ERR_DB = '操作失败'
 
+/** 与 src/services/attachmentSrc.ts 的 nameOf 同形：任何写法都归成附件目录下的文件名 */
+const nameOf = (p: unknown) => String(p).split(/[\\/]/).pop() || String(p)
+
 /** 与 Rust attachment_service::mime_of 同表 */
 function mimeOf(fileName: string): string {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? ''
@@ -207,7 +210,8 @@ class MockBackend {
       fileShortcuts: [],
       attachments: [],
       staged: (config.staged ?? []).map((n) => ({
-        file_path: `C:/e2e/attachments/${n}`,
+        // 与真实后端一致：库里只存附件目录下的文件名，绝对路径不进数据
+        file_path: n,
         file_size: 2048,
       })),
       settings: { ...(config.settings ?? {}) },
@@ -621,12 +625,13 @@ class MockBackend {
     upload_attachment: ({ noteId, filePath }) => {
       this.requireUnlocked()
       this.findNote(noteId)
+      // 真实后端把文件收进附件目录，库里只留目录下的文件名
       const fileName = String(filePath).split(/[\\/]/).pop() || String(filePath)
       const att: AttachmentRecord = {
         id: nextId(),
         note_id: noteId,
         file_name: fileName,
-        file_path: filePath,
+        file_path: fileName,
         file_size: 0,
         mime_type: mimeOf(fileName),
         created_at: Date.now(),
@@ -640,18 +645,17 @@ class MockBackend {
       this.state.attachments = this.state.attachments.filter((a) => a.id !== id)
     },
 
-    // 真实后端会把文件拷进附件目录；mock 只换个目录前缀，够前端反解出落盘路径
+    // 真实后端会把文件拷进附件目录；mock 只记下文件名（库里存的就是它）
     stage_attachment: ({ filePath }) => {
       this.requireUnlocked()
       const p = String(filePath)
       const fileName = p.split(/[\\/]/).pop() || p
-      const stagedPath = `C:/e2e/attachments/${fileName}`
-      this.state.staged.push({ file_path: stagedPath, file_size: 2048 })
+      this.state.staged.push({ file_path: fileName, file_size: 2048 })
       return {
         id: nextId(),
         note_id: '',
         file_name: fileName,
-        file_path: stagedPath,
+        file_path: fileName,
         file_size: 0,
         mime_type: 'image/png',
         created_at: Date.now(),
@@ -661,24 +665,24 @@ class MockBackend {
     // 无存活登记、也不被任何正文引用的落盘文件
     attachment_orphans: () => {
       this.requireUnlocked()
-      const live = new Set(this.state.attachments.map((a) => a.file_path))
+      const live = new Set(this.state.attachments.map((a) => nameOf(a.file_path)))
       const html = this.state.notes.map((n) => String(n.content_html || '')).join(' ')
       for (const f of this.state.staged) {
-        const name = f.file_path.split('/').pop() as string
-        // 正文里的 src 是整条路径 percent-encode 后的结果，两种形态都算引用
-        if (name && (html.includes(name) || html.includes(encodeURIComponent(name)))) live.add(f.file_path)
+        const name = nameOf(f.file_path)
+        // 规范形态是 attachments/<名>；老数据里那张整条路径 encode 的 src 也认
+        if (name && (html.includes(name) || html.includes(encodeURIComponent(name)))) live.add(name)
       }
       return this.state.staged
-        .filter((f) => !live.has(f.file_path))
-        .map((f) => ({ name: f.file_path.split('/').pop() as string, size: f.file_size }))
+        .filter((f) => !live.has(nameOf(f.file_path)))
+        .map((f) => ({ name: nameOf(f.file_path), size: f.file_size }))
     },
 
     attachment_cleanup: ({ names }) => {
       this.requireUnlocked()
       const want = new Set(names as string[])
       const before = this.state.staged.length
-      this.state.staged = this.state.staged.filter((f) => !want.has(f.file_path.split('/').pop() as string))
-      this.state.attachments = this.state.attachments.filter((a) => !want.has(a.file_name))
+      this.state.staged = this.state.staged.filter((f) => !want.has(nameOf(f.file_path)))
+      this.state.attachments = this.state.attachments.filter((a) => !want.has(nameOf(a.file_path)))
       return before - this.state.staged.length
     },
 
@@ -687,12 +691,13 @@ class MockBackend {
       this.findNote(noteId)
       const bound: AttachmentRecord[] = []
       for (const raw of paths as string[]) {
-        if (this.state.attachments.some((a) => a.file_path === raw)) continue
+        const name = nameOf(String(raw))
+        if (this.state.attachments.some((a) => nameOf(a.file_path) === name)) continue
         const att: AttachmentRecord = {
           id: nextId(),
           note_id: noteId,
-          file_name: String(raw).split(/[\\/]/).pop() || String(raw),
-          file_path: raw,
+          file_name: name,
+          file_path: name,
           file_size: 0,
           mime_type: 'image/png',
           created_at: Date.now(),
@@ -836,6 +841,9 @@ class MockBackend {
     },
 
     get_db_path: () => 'C:/Users/e2e/AppData/Roaming/desko/desko.db',
+
+    // 前端渲染图片时用来把 attachments/<名> 拼成 asset URL；库里永远不存它
+    get_attachment_dir: () => 'C:/e2e/attachments',
 
     // ===== url_paths.rs =====
     list_url_paths: ({ entryId }) => {
