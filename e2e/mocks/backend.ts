@@ -528,6 +528,8 @@ class MockBackend {
     }
     await sleep(40)
     this.emit('backup-progress', { op, text: '云端轮转', pct: 92 })
+    await sleep(40)
+    this.emit('backup-progress', { op, text: '完成', pct: 100 })
     // 远端只增不减（除了轮转）：本地清掉的那几份在云上还在
     const keepRemote = parseInt(this.state.settings.keep_remote || '20') || 20
     this.state.cloud.packages = [...pend, ...this.state.cloud.packages]
@@ -847,6 +849,9 @@ class MockBackend {
         realtime: this.state.settings.auto_backup_realtime === 'true',
         pending: files.filter((f) => !this.state.cloud.packages.some((p) => p.name === f.name)).length,
         lastRoundAt: files[0]?.time ?? 0,
+        cloudConfigured: this.state.cloud.configured,
+        // mock 的命令是同步跑的，没有后台线程这一档
+        busy: false,
       }
     },
 
@@ -866,7 +871,7 @@ class MockBackend {
       if (!this.state.backup.hasPassword) throw '请先设置备份密码'
       for (const [text, pct] of [['导出库快照', 8], ['镜像附件 3/3', 60], ['打包并加密（AES-256-GCM）', 88], ['完成', 100]] as const) {
         await sleep(40)
-        this.emit('backup-progress', { op: 'backup', text, pct })
+        this.emit('backup-progress', { op: 'pack', text, pct })
       }
       const now = Date.now()
       // 包名只到秒：连点两次会撞名，往后挪一秒（真实后端同样处理）
@@ -880,7 +885,7 @@ class MockBackend {
       }
       this.state.backup.files.unshift(file)
       // 手动这一档不看自动开关：配了云端就传（force）
-      await this.uploadAndSettle('backup')
+      await this.uploadAndSettle('upload')
       return { package: { ...file }, uploaded: true, error: null }
     },
 

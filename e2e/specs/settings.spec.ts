@@ -235,6 +235,26 @@ test.describe('Settings 设置', () => {
     expect(state.cloud.packages).toHaveLength(1)
   })
 
+  test('标题栏备份徽标：配齐才现身，一轮打完回到静默态', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const badge = page.locator('.backup-badge')
+    // 没设备份密码、没连云端：标题栏不带它
+    await expect(badge).toHaveCount(0)
+
+    const dialog = await openSettings(page, 'backup')
+    const pane = dialog.locator('.backup-pane')
+    await setBackupPwd(page, pane)
+    await connectCloud(page, pane)
+    const row = pane.locator('.setting-item', { hasText: '立即备份' })
+    await row.locator('button.action-btn').click()
+    await expectToast(page, '已传云端')
+
+    // 上传收尾的进度事件会顺手拉一次状态，徽标不必等 30 秒轮询
+    await expect(badge).toBeVisible({ timeout: 10_000 })
+    await expect(badge).toHaveAttribute('title', /云端备份已开启 · 最近一轮/)
+    await expect(badge.locator('.bb-text')).toHaveCount(0)
+  })
+
   test('传上云的包本地随即清掉，只留兜底几份', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')

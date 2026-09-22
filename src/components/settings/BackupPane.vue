@@ -60,7 +60,12 @@ onMounted(async () => {
     dbPath.value = '未知'
   }
   const unlisten = await backupApi.onProgress((p) => {
-    if (busy.value && busy.value.op === p.op) busy.value = { ...p }
+    const b = busy.value
+    if (!b) return
+    // 一轮备份在后端分 pack/upload 两段播报，本地这一栏都算进 'backup' 的进度
+    if (b.op === p.op || (b.op === 'backup' && (p.op === 'pack' || p.op === 'upload'))) {
+      busy.value = { op: b.op, text: p.text, pct: p.pct }
+    }
   })
   unlistenProgress = unlisten
 })
@@ -529,7 +534,11 @@ const doRestoreFile = async () => {
       </div>
     </div>
 
-    <p class="pane-note">云端备份是持续增量：定期把库快照与新增附件密文传坚果云，用于日常灾备，本地只留最近的待传中转。迁移导出是一次性全量：库和全部附件装进单个 .dsbk，换机不依赖云端。两者都在本机加密（AES-256-GCM，密钥由备份密码派生包裹），云端只存密文。</p>
+    <p class="pane-note">
+      云端备份：持续增量，日常灾备。<br />
+      迁移导出：一次性全量，换机即用。<br />
+      全部数据在本机加密（AES-256-GCM）后才存出，云端只见密文。
+    </p>
 
     <!-- 备份密码弹窗 -->
     <Transition name="dialog">

@@ -6,6 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::backup::{self, container::Wrap, PackageInfo};
+use crate::commands::backup::emit_progress;
 use crate::db::Database;
 use crate::error::AppError;
 use crate::services::{attachment_service, backup_service, cloud_service};
@@ -370,10 +371,12 @@ fn run_round(app: &AppHandle, package: bool) -> Result<bool, AppError> {
         return Ok(false);
     };
     if package {
-        let info = job.package(&|_, _| {})?;
+        let info = job.package(&|t: &str, p: u8| emit_progress(app, "pack", t, p))?;
         let _ = app.emit("auto-backup", info);
     }
-    if let SyncOutcome::Failed(err) = sync_and_settle(app, &job, &|_, _| {}, false) {
+    if let SyncOutcome::Failed(err) =
+        sync_and_settle(app, &job, &|t: &str, p: u8| emit_progress(app, "upload", t, p), false)
+    {
         // 释放版没有控制台，光 eprintln 等于把失败吞了：抛给界面，下一轮还会补传
         eprintln!("auto cloud sync failed: {}", err);
         let _ = app.emit("auto-backup-note", err);

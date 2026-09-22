@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { suppressHover } from '../../utils/hoverGuard'
 import BrandLogo from '../shared/BrandLogo.vue'
+import BackupBadge from './BackupBadge.vue'
 
 defineProps<{
   isLocked?: boolean
@@ -89,6 +90,7 @@ onUnmounted(() => {
       <div class="titlebar-brand" @mousedown="startDrag" @dblclick="toggleMaximize">
         <span class="brand-slot"><BrandLogo /></span>
         <span class="titlebar-crumb">{{ crumb }}</span>
+        <BackupBadge />
       </div>
     </div>
 

@@ -27,8 +27,9 @@ fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
 
 #[tauri::command]
 pub fn backup_status(app: AppHandle, state: State<AppState>) -> Result<backup_service::BackupStatus, AppError> {
+    let busy = state.backup_busy.load(std::sync::atomic::Ordering::SeqCst);
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    backup_service::status(&db, &app_data_dir(&app)?)
+    backup_service::status(&db, &app_data_dir(&app)?, busy)
 }
 
 #[tauri::command]
@@ -83,12 +84,18 @@ pub async fn backup_run(app: AppHandle, state: State<'_, AppState>) -> Result<Ru
         .ok_or_else(|| AppError::Backup("尚未设置备份密码".to_string()))?;
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // 和定时器跑的是同一轮：打包 → 上云 → 收拾本地
-        let progress = |text: &str, pct: u8| emit_progress(&handle, "backup", text, pct);
-        let package = job.package(&progress)?;
-        let (uploaded, error) = match auto_backup::sync_and_settle(&handle, &job, &progress, true) {
+        // 和定时器跑的是同一轮：打包 → 上云 → 收拾本地。
+        // op 分 pack/upload 两段，标题栏徽标靠它判定"这轮真结束了"（打包末尾也有一个 100）
+        let pack = |text: &str, pct: u8| emit_progress(&handle, "pack", text, pct);
+        let upload = |text: &str, pct: u8| emit_progress(&handle, "upload", text, pct);
+        let package = job.package(&pack)?;
+        let (uploaded, error) = match auto_backup::sync_and_settle(&handle, &job, &upload, true) {
             auto_backup::SyncOutcome::Done(_) => (true, None),
-            auto_backup::SyncOutcome::Failed(e) => (false, Some(e)),
+            auto_backup::SyncOutcome::Failed(e) => {
+                // 和定时那一档同一入口：失败抛给标题栏徽标，本地那份下一轮还会补传
+                let _ = handle.emit("auto-backup-note", e.clone());
+                (false, Some(e))
+            }
         };
         Ok::<RunResult, AppError>(RunResult { package, uploaded, error })
     })

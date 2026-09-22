@@ -58,10 +58,34 @@ fn try_spawn_wt(dir: &std::path::Path) -> bool {
         if cand != "wt.exe" && !std::path::Path::new(&cand).is_file() {
             continue;
         }
-        if std::process::Command::new(&cand).arg("-d").arg(dir).spawn().is_ok() {
-            return true;
+        match std::process::Command::new(&cand).arg("-d").arg(dir).spawn() {
+            Ok(_) => return true,
+            Err(e) => {
+                // ERROR_ELEVATION_REQUIRED(740)：目标被标成需要提权运行
+                // （UAC manifest 或 RUNASADMIN 兼容性标记），CreateProcess 直启
+                // 会被拒。改走 ShellExecute（cmd start），由系统决定是否弹 UAC。
+                if e.raw_os_error() == Some(740) && spawn_wt_via_start(&cand, dir) {
+                    return true;
+                }
+            }
         }
     }
+    false
+}
+
+#[cfg(windows)]
+fn spawn_wt_via_start(exe: &str, dir: &std::path::Path) -> bool {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new("cmd.exe");
+    // 路径里不可能有引号字符，包进带引号参数是安全的
+    cmd.args(["/c", "start", "", exe, "-d"])
+        .arg(dir)
+        .creation_flags(0x0800_0000); // CREATE_NO_WINDOW：别闪出控制台
+    cmd.spawn().is_ok()
+}
+
+#[cfg(not(windows))]
+fn spawn_wt_via_start(_exe: &str, _dir: &std::path::Path) -> bool {
     false
 }
 

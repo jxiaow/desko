@@ -24,6 +24,10 @@ pub struct BackupStatus {
     pub pending: usize,
     /// 最近一轮打包的时刻，0 = 还没有
     pub last_round_at: i64,
+    /// 云端已配置 —— 标题栏备份徽标的显示前提
+    pub cloud_configured: bool,
+    /// 是否正有一轮备份在跑（手动或定时共用同一把闸）
+    pub busy: bool,
 }
 
 fn read_wrap(db: &Database) -> Result<Option<Wrap>, AppError> {
@@ -81,7 +85,7 @@ pub fn set_backup_password(
     Ok((dek, wrap, changed))
 }
 
-pub fn status(db: &Database, app_data_dir: &std::path::Path) -> Result<BackupStatus, AppError> {
+pub fn status(db: &Database, app_data_dir: &std::path::Path, busy: bool) -> Result<BackupStatus, AppError> {
     let backups = backup::backups_dir(app_data_dir);
     let packages = backup::list_packages(&backups);
     Ok(BackupStatus {
@@ -91,6 +95,8 @@ pub fn status(db: &Database, app_data_dir: &std::path::Path) -> Result<BackupSta
         pending: super::cloud_service::pending_count(&backups),
         // 包名自带时间戳、mtime 就是写完那一刻，最新那个包即最近一轮
         last_round_at: packages.first().map(|p| p.2).unwrap_or(0),
+        cloud_configured: super::cloud_service::configured(db),
+        busy,
     })
 }
 

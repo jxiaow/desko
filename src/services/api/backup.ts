@@ -18,6 +18,10 @@ export interface BackupStatus {
   pending: number
   /** 最近一轮打包的时刻，0 = 还没有 */
   lastRoundAt: number
+  /** 云端已配置 —— 标题栏备份徽标的显示前提 */
+  cloudConfigured: boolean
+  /** 是否正有一轮备份在跑 */
+  busy: boolean
 }
 
 /** 手动一轮的回报：包 + 有没有真的传上去 */
@@ -51,4 +55,10 @@ export const backupApi = {
   restoreFile: (path: string, password: string) => invoke<void>('backup_restore_file', { path, password }),
   onProgress: (cb: (p: BackupProgress) => void): Promise<UnlistenFn> =>
     listen<BackupProgress>('backup-progress', (e) => cb(e.payload)),
+  /** 上云失败的人话原因（徽标展示，下一轮自动补传） */
+  onSyncNote: (cb: (msg: string) => void): Promise<UnlistenFn> =>
+    listen<string>('auto-backup-note', (e) => cb(e.payload)),
+  /** 定时轮打完本地包、正要上云的时刻（徽标借它把状态拉新） */
+  onAutoRound: (cb: () => void): Promise<UnlistenFn> =>
+    listen('auto-backup', () => cb()),
 }

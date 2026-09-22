@@ -1,7 +1,7 @@
 /* 终端偏好：决定快捷方式「在终端中打开」拉起哪个控制台。
  * 明文 meta 存 auto / wt / cmd；识别不了的一律回落 auto。
- * 真正的分叉在 Rust 端 open_terminal：auto 与 wt 都优先 Windows Terminal、
- * 失败回退 cmd，cmd 则固定经典控制台。 */
+ * 真正的分叉在 Rust 端 open_terminal：auto 优先 Windows Terminal、起不来回退 cmd；
+ * wt 只认 Windows Terminal，缺失明确报错；cmd 则固定经典控制台。 */
 import { settingsApi } from './api/settings'
 
 export type TerminalId = 'auto' | 'wt' | 'cmd'
@@ -14,7 +14,7 @@ export interface TerminalInfo {
 
 export const TERMINALS: TerminalInfo[] = [
   { id: 'auto', name: '自动', desc: '优先 Windows Terminal，未安装则用命令提示符' },
-  { id: 'wt', name: 'Windows Terminal', desc: '固定用 Windows Terminal，缺失时回退命令提示符' },
+  { id: 'wt', name: 'Windows Terminal', desc: '只用 Windows Terminal，未安装则报错提示' },
   { id: 'cmd', name: '命令提示符', desc: '固定用经典 cmd 控制台' },
 ]
 
