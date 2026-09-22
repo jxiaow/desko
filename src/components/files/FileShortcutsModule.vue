@@ -175,8 +175,9 @@ const openContainingFolder = async (shortcut: FileShortcut) => {
 const openInTerminal = async (shortcut: FileShortcut) => {
   try {
     await api.openTerminal(shortcut.path)
-  } catch {
-    toastStore.showToast('无法打开终端', 'error')
+  } catch (e: any) {
+    const msg = typeof e === 'string' ? e : e?.message
+    toastStore.showToast(msg || '无法打开终端', 'error')
   }
 }
 
@@ -247,7 +248,7 @@ onBeforeUnmount(() => {
       <span class="bar-count">{{ filteredShortcuts.length }} 项</span>
       <button class="btn-primary" @click="showAddDialog = true">
         <AppIcon name="plus" :size="14" />
-        添加快捷方式
+        新增条目
       </button>
     </div>
 
@@ -312,7 +313,7 @@ onBeforeUnmount(() => {
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'folder'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无快捷方式' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「添加快捷方式」开始' }}</div>
+      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」开始' }}</div>
     </div>
 
     <!-- Add/Edit Dialog -->
