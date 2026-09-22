@@ -112,9 +112,9 @@ const cloudReady = computed(() => cloud.value.configured)
 const schedulable = computed(() => cloudReady.value && st.value.hasPassword)
 
 const connText = computed(() => {
-  if (!cloud.value.configured) return '未配置 · 需开启 WebDAV 并使用应用密码'
+  if (!cloud.value.configured) return '未配置 · 点右侧「配置」连接坚果云'
   const base = `已连接 · ${hostOf(cloud.value.server)}（${cloud.value.account}）`
-  return cloud.value.lastSyncAt ? `${base} · 上次上传 ${fmtTime(cloud.value.lastSyncAt)}` : `${base} · 还没传过东西`
+  return cloud.value.lastSyncAt ? `${base} · 上次上传 ${fmtTime(cloud.value.lastSyncAt)}` : `${base} · 尚未上传`
 })
 
 /** 本地那份只是等上传的中转副本，报"最近一轮 + 还欠多少"就够，不必列文件 */
@@ -154,7 +154,7 @@ useEscapeClose(closePwd, () => showPwd.value)
 
 const submitPwd = async () => {
   pwdErr.value = ''
-  if ([...pwd.value.pw].length < 8) { pwdErr.value = '备份密码至少 8 位，建议用一句只有你懂的长短语'; return }
+  if ([...pwd.value.pw].length < 8) { pwdErr.value = '备份密码至少 8 位'; return }
   if (pwd.value.pw !== pwd.value.pw2) { pwdErr.value = '两次输入不一致'; return }
   const had = st.value.hasPassword
   const skipped = await run('pwd', () => backupApi.setPassword(pwd.value.pw), had ? '备份密码已更新' : '备份密码已设置') as string[] | undefined
@@ -298,7 +298,7 @@ const saveCloud = async () => {
 }
 
 const doDisconnect = () => {
-  confirmStore.showConfirm('断开云端', '断开后自动备份整轮停摆：不再打包、不再上传。云端已有文件保持不动（可在坚果云网页端删除）。想换机请用「迁移」里的导出。', async () => {
+  confirmStore.showConfirm('断开云端', '断开后不再打包上传，自动备份随之暂停；云端已有文件不受影响（可在坚果云网页端删除）。', async () => {
     try {
       await cloudApi.disconnect()
       await refresh()
@@ -447,7 +447,7 @@ const doRestoreFile = async () => {
             <span class="rp-bar"><span class="rp-bar-in" :style="{ width: busy.pct + '%' }" /></span>
             <span class="rp-pct">{{ busy.pct }}%</span>
           </span>
-          <span v-else class="setting-desc">{{ cloudReady ? roundText : '打完包就得传上去 · 请先配置上方那行' }}</span>
+          <span v-else class="setting-desc">{{ cloudReady ? roundText : '未配置云端 · 请先配置上方' }}</span>
         </div>
         <div class="setting-actions">
           <button class="action-btn" :disabled="!!busy || !schedulable" @click="doBackup">
@@ -461,7 +461,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">自动备份</span>
-          <span class="setting-desc">到点先看数据变没变：没变一轮什么都不做；选「关闭」就只剩手动</span>
+          <span class="setting-desc">到点自动打包上传；数据无变化则跳过本轮</span>
         </div>
         <div class="setting-control">
           <select
@@ -475,7 +475,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">停笔即备</span>
-          <span class="setting-desc">最后一次写入平息 8 秒就提前跑同一轮（最快 1 分钟一轮），不等定时器</span>
+          <span class="setting-desc">写入停止 8 秒即补跑一轮，不等定时器</span>
         </div>
         <label class="switch" :class="{ off: !schedulable }">
           <input type="checkbox" :checked="st.realtime" :disabled="!schedulable" @change="saveRealtime(($event.target as HTMLInputElement).checked)" />
@@ -511,7 +511,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">导出迁移包</span>
-          <span class="setting-desc">附件本体一起装进这一个 .dsbk，拷到另一台机器就能恢复</span>
+          <span class="setting-desc">库 + 全部附件打包为单个 .dsbk，换机拷贝这一个文件即可恢复</span>
         </div>
         <div class="setting-actions">
           <button v-if="busy?.op === 'export'" class="action-btn" disabled>{{ busy.text }} {{ busy.pct }}%</button>
@@ -521,7 +521,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">从文件恢复</span>
-          <span class="setting-desc">选 U 盘或网盘里的一份备份，整机覆盖当前数据</span>
+          <span class="setting-desc">选本机或网盘里的 .dsbk，整机覆盖当前数据</span>
         </div>
         <div class="setting-actions">
           <button class="action-btn" :disabled="!!busy" @click="doRestoreFile">选文件</button>
@@ -529,7 +529,7 @@ const doRestoreFile = async () => {
       </div>
     </div>
 
-    <p class="pane-note">备份 = 打一个库快照包（.dsbk，几十 KB）+ 把新增的附件密文增量传坚果云；数据没变过就一整轮都不动，云端零请求。本地那几份只是等着上传的中转：传上云就删，只留最近 3 份兜底，所以恢复从「云端列表」或「从文件恢复」下手。没连坚果云时这一栏什么都不做，换机请走「迁移」里的单文件包。数据用随机密钥 AES-256-GCM 加密，备份密码只负责把这把钥匙包起来（PBKDF2 60 万次派生），坚果云只见密文。</p>
+    <p class="pane-note">云端备份是持续增量：定期把库快照与新增附件密文传坚果云，用于日常灾备，本地只留最近的待传中转。迁移导出是一次性全量：库和全部附件装进单个 .dsbk，换机不依赖云端。两者都在本机加密（AES-256-GCM，密钥由备份密码派生包裹），云端只存密文。</p>
 
     <!-- 备份密码弹窗 -->
     <Transition name="dialog">
@@ -542,7 +542,7 @@ const doRestoreFile = async () => {
             </button>
           </div>
           <div class="dialog-body">
-            <p class="modal-help">备份密码独立于主密码，丢失它，所有备份文件将无法解密。修改密码只是重新包裹数据密钥，已有备份照样能恢复，不必重做。</p>
+            <p class="modal-help">备份密码独立于主密码，丢失后备份无法解密。修改密码只重新包裹数据密钥，已有备份不必重做。</p>
             <div class="form-group">
               <label>备份密码</label>
               <input v-model="pwd.pw" type="password" placeholder="至少 8 位，建议长短语" />
@@ -574,7 +574,7 @@ const doRestoreFile = async () => {
           <div class="dialog-body">
             <p class="modal-help">
               将用 <b style="word-break: break-all">{{ restoreTarget?.name }}</b> 整机覆盖当前数据（库 + 附件）。
-              覆盖前会自动先备份现有数据，出问题可再换回来；换库后会要求用备份当时的主密码重新解锁。
+              覆盖前自动备份现有数据，可回退；完成后需用备份当时的主密码重新解锁。
             </p>
             <div class="form-group">
               <label>备份密码</label>
@@ -614,8 +614,8 @@ const doRestoreFile = async () => {
               <label>应用密码</label>
               <input v-model="cloudCfg.appPassword" type="password" :placeholder="st.cloud.configured ? '留空保持不变' : '不是你的登录密码'" />
               <p class="modal-help">
-                填你在坚果云「账户信息 → 安全选项 → 添加应用」里生成的应用密码，<b>不是登录密码</b>；开了二步验证同样只能用它。
-                <a class="help-link" href="#" @click.prevent="openHelp">看官方说明</a>。备份内容在本机加密后才上传。
+                用坚果云「账户信息 → 安全选项 → 添加应用」生成的应用密码，<b>不是登录密码</b>。
+                <a class="help-link" href="#" @click.prevent="openHelp">看官方说明</a>
               </p>
             </div>
             <p v-if="cloudErr" class="modal-error">{{ cloudErr }}</p>
@@ -641,7 +641,7 @@ const doRestoreFile = async () => {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
-          <div class="dialog-body dialog-body-tight">
+          <div class="dialog-body dialog-body-tight remote-list">
             <div v-if="remoteLoading" class="empty-line">正在列出云端备份…</div>
             <div v-else-if="!remoteFiles.length" class="empty-line">云端还没有备份，先点一次「备份」。</div>
             <div v-for="f in remoteFiles" :key="f.name" class="file-row">
@@ -884,6 +884,8 @@ const doRestoreFile = async () => {
 .pane-overlay { z-index: 1100; }
 .dialog-sm { width: 420px; }
 .dialog-body-tight { padding-top: var(--space-2); padding-bottom: var(--space-2); }
+/* 预留列表高度：loading 一行 → 列表撑开会跳，固定住再滚动 */
+.remote-list { min-height: 240px; overflow-y: auto; }
 
 .modal-help {
   margin: 0 0 var(--space-3);

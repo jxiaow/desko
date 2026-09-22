@@ -161,7 +161,7 @@ pub fn test_connection(cfg: &CloudCreds) -> Result<(), AppError> {
         return Err(AppError::Backup("服务器地址需为 https 开头".to_string()));
     }
     if cfg.account.is_empty() || cfg.app_password.is_empty() {
-        return Err(AppError::Backup("账号与应用密码不能为空（应用密码在坚果云网页端「安全选项」生成）".to_string()));
+        return Err(AppError::Backup("账号与应用密码不能为空".to_string()));
     }
     // 只看根目录通不通：desko/ 是首次同步时才建的，拿它探活必然 404
     match Client::new(&server, &cfg.account, &cfg.app_password).propfind_opt("")? {

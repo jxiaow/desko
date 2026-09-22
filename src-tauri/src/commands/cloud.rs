@@ -23,12 +23,27 @@ pub fn cloud_status(state: State<AppState>, app: AppHandle) -> Result<cloud_serv
     cloud_service::status(&db, &master, &backups)
 }
 
+/// 密码不回显，弹窗里留空 = 保持库里旧值；测试和保存必须走同一套解释，
+/// 否则已配置（含迁移导入）后点「测试连接」必误报密码为空。
+fn resolve_app_password(state: &AppState, input: String) -> Result<String, AppError> {
+    if !input.is_empty() {
+        return Ok(input);
+    }
+    let master = master_key(state)?;
+    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    Ok(cloud_service::load_cfg(&db, &master)?
+        .map(|o| o.app_password)
+        .unwrap_or_default())
+}
+
 #[tauri::command]
 pub async fn cloud_test_config(
+    state: State<'_, AppState>,
     server: String,
     account: String,
     app_password: String,
 ) -> Result<(), AppError> {
+    let app_password = resolve_app_password(&state, app_password)?;
     let creds = cloud_service::CloudCreds { server, account, app_password };
     tauri::async_runtime::spawn_blocking(move || cloud_service::test_connection(&creds))
         .await
@@ -43,16 +58,7 @@ pub async fn cloud_save_config(
     app_password: String,
 ) -> Result<(), AppError> {
     let master = master_key(&state)?;
-    // 已配置时允许留空应用密码 = 保持旧值不变（密码不回显）
-    let old = {
-        let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-        cloud_service::load_cfg(&db, &master)?
-    };
-    let app_password = if app_password.is_empty() {
-        old.map(|o| o.app_password).unwrap_or_default()
-    } else {
-        app_password
-    };
+    let app_password = resolve_app_password(&state, app_password)?;
     let creds = cloud_service::CloudCreds {
         server: cloud_service::normalize_server(&server)?,
         account,
