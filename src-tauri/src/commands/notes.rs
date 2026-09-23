@@ -25,11 +25,12 @@ pub fn update_note(state: State<AppState>, id: String, input: UpdateNoteInput) -
     let _key = services::get_master_key(&state)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     if db.get_note_lock(&id)?.is_some() {
-        // 加密行：明文只进密文，普通列一个字节都不落
+        // 加密行：明文只进密文，正文与分类一个字节都不落；标题按新正文重新算
         let dek = crate::commands::note_lock::get_dek(&state, &id)?;
         let enc = crate::crypto::encrypt_password(&input.content_html, &dek)?;
+        let title = note_service::heading_title(&input.content_html);
         let now = chrono::Utc::now().timestamp_millis();
-        return db.update_note_cipher(&id, &enc.ciphertext, &enc.iv, now);
+        return db.update_note_cipher(&id, &enc.ciphertext, &enc.iv, &title, now);
     }
     note_service::update_note(&db, &id, input)
 }

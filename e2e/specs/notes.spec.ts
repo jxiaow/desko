@@ -292,7 +292,7 @@ test.describe('Notes 小记', () => {
     await bootUnlocked(page, {
       notes: [
         { title: '机密事', content_html: '<p>要加密的正文</p>' },
-        { title: '封存', content_html: '<p>封存的正文</p>', encrypted: true },
+        { title: '封存', content_html: '<h2>封存</h2><p>封存的正文</p>', encrypted: true },
       ],
     }, '/notes')
     const cards = page.locator('.memo')
@@ -302,6 +302,8 @@ test.describe('Notes 小记', () => {
     // 锁着的正文根本不进 DOM
     await expect(page.locator('.memo-body')).not.toContainText('封存的正文')
     await expect(page.locator('.memo-locked')).toHaveCount(1)
+    // 真标题（h1–h3）留了明文，锁着也认得出是哪条
+    await expect(sealed.locator('.memo-locked')).toContainText('封存')
     // 动作全平铺：⋯ 入口彻底没了
     await expect(page.locator('.memo-acts button[title="更多"], .memo-acts button[data-tip="更多"]')).toHaveCount(0)
 
@@ -320,15 +322,21 @@ test.describe('Notes 小记', () => {
     // 一把口令开全库：seed 里那条锁着的也跟着见了光
     await expect(sealed.locator('.memo-body')).toContainText('封存的正文')
     await expect(page.locator('.memo-locked')).toHaveCount(0)
-    await expect(plain.locator('.state-enc')).toBeVisible()
+    // 解锁后不挂角标：移出鼠标不该再亮一把闭锁让人以为又锁上了
+    await page.mouse.move(4, 4)
+    await expect(plain.locator('.memo-state')).toBeEmpty()
+    await expect(sealed.locator('.memo-state')).toBeEmpty()
 
-    // 悬停时状态徽标淡出，锁由动作排补上：加密过的那条 hover 必须有「重新锁定」
+    // 悬停时才由动作排说明加密状态：加密过的那条 hover 必须有「重新锁定」
     await plain.hover()
     await expect(tipButton(plain, '重新锁定')).toHaveCount(1)
     await tipButton(plain, '重新锁定').click()
     await expectToast(page, '已重新锁定')
     // 只收回这一条：另一条明文还在手
     await expect(page.locator('.memo-locked')).toHaveCount(1)
+    // 没有真标题的加密小记锁回后只剩提示语
+    await expect(plain.locator('.locked-title')).toHaveCount(0)
+    await expect(plain.locator('.memo-locked')).toContainText('已加密 · 单击解锁')
     // 锁回的正文不进搜索
     await page.locator('.stream-bar .search-box input').fill('要加密的正文')
     await expect(page.locator('.memo')).toHaveCount(0)

@@ -106,28 +106,30 @@ impl Database {
         }
     }
 
-    /// 上锁：密文入库，明文列（title/content_html/category）当场清空。
-    /// wrap_pass 存的是域密钥封好的 DEK；pass_salt / wrap_master 是旧逐条模型的遗留列，置空
+    /// 上锁：密文入库，正文与分类清空；title 由调用方给出「可露出的标题」，
+    /// 没有真标题时传空串。wrap_pass 存的是域密钥封好的 DEK；
+    /// pass_salt / wrap_master 是旧逐条模型的遗留列，置空
     pub fn set_note_lock(
         &self,
         id: &str,
         cipher: &str,
         cipher_iv: &str,
         wrap_pass: &str,
+        title: &str,
         updated_at: i64,
     ) -> Result<(), AppError> {
         self.conn.execute(
-            "UPDATE notes SET enc = 1, cipher = ?2, cipher_iv = ?3, wrap_pass = ?4, pass_salt = '', wrap_master = '', title = '', content_html = '', category = '', updated_at = ?5 WHERE id = ?1",
-            params![id, cipher, cipher_iv, wrap_pass, updated_at],
+            "UPDATE notes SET enc = 1, cipher = ?2, cipher_iv = ?3, wrap_pass = ?4, pass_salt = '', wrap_master = '', title = ?6, content_html = '', category = '', updated_at = ?5 WHERE id = ?1",
+            params![id, cipher, cipher_iv, wrap_pass, updated_at, title],
         )?;
         Ok(())
     }
 
-    /// 编辑已加密小记：只换密文，明文列保持清空
-    pub fn update_note_cipher(&self, id: &str, cipher: &str, cipher_iv: &str, updated_at: i64) -> Result<(), AppError> {
+    /// 编辑已加密小记：只换密文和露出的标题，正文与分类保持清空
+    pub fn update_note_cipher(&self, id: &str, cipher: &str, cipher_iv: &str, title: &str, updated_at: i64) -> Result<(), AppError> {
         self.conn.execute(
-            "UPDATE notes SET cipher = ?2, cipher_iv = ?3, updated_at = ?4 WHERE id = ?1 AND enc = 1",
-            params![id, cipher, cipher_iv, updated_at],
+            "UPDATE notes SET cipher = ?2, cipher_iv = ?3, title = ?5, updated_at = ?4 WHERE id = ?1 AND enc = 1",
+            params![id, cipher, cipher_iv, updated_at, title],
         )?;
         Ok(())
     }
@@ -161,17 +163,17 @@ impl Database {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    /// 域密钥落库：三条 meta 加逐行改封，一个事务里走完，不留半迁移状态
+    /// 域密钥落库：三条 meta 加逐行改封（连带补露出的标题），一个事务里走完，不留半迁移状态
     pub fn apply_note_domain(
         &self,
         meta: &[(&str, &str)],
-        resealed: &[(String, String)],
+        resealed: &[(String, String, String)],
     ) -> Result<(), AppError> {
         let tx = self.conn.unchecked_transaction()?;
-        for (id, wrap_pass) in resealed {
+        for (id, wrap_pass, title) in resealed {
             tx.execute(
-                "UPDATE notes SET wrap_pass=?2, pass_salt='', wrap_master='' WHERE id=?1 AND enc=1",
-                params![id, wrap_pass],
+                "UPDATE notes SET wrap_pass=?2, pass_salt='', wrap_master='', title=?3 WHERE id=?1 AND enc=1",
+                params![id, wrap_pass, title],
             )?;
         }
         for (key, value) in meta {
@@ -237,7 +239,7 @@ mod tests {
     /// 旧逐条模型留下的行：wrap_master/pass_salt 有值，域化改封后必须清空
     fn legacy_locked(db: &super::super::Database, id: &str) {
         db.create_note(&note(id)).unwrap();
-        db.set_note_lock(id, "ct", "iv", "wrap-old", 2).unwrap();
+        db.set_note_lock(id, "ct", "iv", "wrap-old", "", 2).unwrap();
         db.conn
             .execute(
                 "UPDATE notes SET pass_salt='salt-old', wrap_master='wrap-m' WHERE id=?1",
@@ -255,7 +257,10 @@ mod tests {
 
         db.apply_note_domain(
             &[("note_salt", "s"), ("note_key_wrap", "w")],
-            &[("n1".to_string(), "wrap-new".to_string()), ("plain".to_string(), "wrap-x".to_string())],
+            &[
+                ("n1".to_string(), "wrap-new".to_string(), "标题甲".to_string()),
+                ("plain".to_string(), "wrap-x".to_string(), String::new()),
+            ],
         )
         .unwrap();
 
@@ -270,6 +275,8 @@ mod tests {
         // 未加密的行不在 UPDATE 的 AND enc=1 里，一条都不会被改封
         assert!(wrap_of("plain").is_none());
         assert_eq!(wrap_of("n2").unwrap().wrap_pass, "wrap-old", "不在 resealed 里就该原样");
+        assert_eq!(db.get_note("n1").unwrap().unwrap().title, "标题甲", "改封时补上露出的标题");
+        assert!(db.get_note("n2").unwrap().unwrap().title.is_empty(), "没算出标题就还是空");
         assert!(!db.get_note("plain").unwrap().unwrap().encrypted);
         assert_eq!(db.get_meta("note_key_wrap").unwrap().unwrap(), "w");
         cleanup(&path);
@@ -279,14 +286,30 @@ mod tests {
     fn set_note_lock_writes_domain_shape() {
         let (db, path) = setup_test_db();
         db.create_note(&note("n1")).unwrap();
-        db.set_note_lock("n1", "ct", "iv", "wrap-new", 9).unwrap();
+        db.set_note_lock("n1", "ct", "iv", "wrap-new", "标题行", 9).unwrap();
 
         let row = db.get_note_lock("n1").unwrap().unwrap();
         assert_eq!((row.cipher.as_str(), row.cipher_iv.as_str()), ("ct", "iv"));
         assert_eq!(row.wrap_pass, "wrap-new");
         assert!(row.pass_salt.is_empty() && row.wrap_master.is_empty());
         let n = db.get_note("n1").unwrap().unwrap();
-        assert!(n.encrypted && n.title.is_empty() && n.content_html.is_empty(), "明文当场清掉");
+        assert!(n.encrypted && n.content_html.is_empty(), "正文当场清掉");
+        assert_eq!(n.title, "标题行", "锁着也能认出是哪条");
+        cleanup(&path);
+    }
+
+    #[test]
+    fn update_note_cipher_refreshes_title_only_for_locked_rows() {
+        let (db, path) = setup_test_db();
+        db.create_note(&note("n1")).unwrap();
+        db.set_note_lock("n1", "ct", "iv", "wrap-new", "旧标题", 9).unwrap();
+        db.create_note(&note("plain")).unwrap();
+
+        db.update_note_cipher("n1", "ct2", "iv2", "新标题", 12).unwrap();
+        let n = db.get_note("n1").unwrap().unwrap();
+        assert_eq!((n.title.as_str(), n.content_html.as_str()), ("新标题", ""));
+        // 未加密的行不在这条 UPDATE 的 AND enc=1 里
+        assert_eq!(db.get_note("plain").unwrap().unwrap().title, "t");
         cleanup(&path);
     }
 }

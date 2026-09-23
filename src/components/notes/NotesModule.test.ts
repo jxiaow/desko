@@ -235,9 +235,9 @@ describe('NotesModule', () => {
     expect(notesApi.noteKeySetup).toHaveBeenCalledWith('note-pw-1234')
     expect(notesApi.lockNote).toHaveBeenCalledWith('a')
     expect(wrapper.findComponent(NoteLockDialog).exists()).toBe(false)
-    // 锁完本会话仍可读：有加密标、没有锁卡
-    expect(wrapper.find('.state-enc').exists()).toBe(true)
+    // 锁完本会话仍可读：没有锁卡，也没有多余的角标（移出鼠标后不再亮一把闭锁）
     expect(wrapper.find('.memo-locked').exists()).toBe(false)
+    expect(wrapper.find('.memo-state').text()).toBe('')
 
     // 单条重锁：卡片退化成锁标识，正文从 DOM 消失
     wrapper.findComponent(NoteCard).vm.$emit('relock')
@@ -287,6 +287,22 @@ describe('NotesModule', () => {
     expect(notesApi.noteKeyRecover).toHaveBeenCalledTimes(1)
     expect(wrapper.findComponent(NoteLockDialog).exists()).toBe(false)
     expect(wrapper.find('.memo-body').text()).toContain('甲内容')
+    wrapper.unmount()
+  })
+
+  it('锁着的加密小记：真标题露出来认条，没标题只留提示', async () => {
+    stageNotes([
+      makeNote({ id: 'a', encrypted: true, title: '三月调档', content_html: '' }),
+      makeNote({ id: 'b', encrypted: true, title: '', content_html: '' }),
+    ])
+    const wrapper = await mountModule()
+    const cards = wrapper.findAllComponents(NoteCard)
+
+    // 标题是 Rust 在锁的时候留下的明文（正文首行不外泄），锁卡上照样认得出是哪条
+    expect(cards[0].find('.memo-locked').text()).toContain('三月调档')
+    expect(cards[0].find('.memo-body').exists()).toBe(false)
+    expect(cards[1].find('.locked-title').exists()).toBe(false)
+    expect(cards[1].find('.memo-locked').text()).toContain('已加密 · 单击解锁')
     wrapper.unmount()
   })
 

@@ -106,7 +106,7 @@ fn read_domain(db: &crate::db::Database) -> Result<(String, String, String), App
 pub(crate) struct DomainSetup {
     pub ndk: Vec<u8>,
     pub meta: Vec<(&'static str, String)>,
-    pub resealed: Vec<(String, String)>,
+    pub resealed: Vec<(String, String, String)>,
     pub deks: Vec<(String, Vec<u8>)>,
     pub plains: Vec<NotePlain>,
 }
@@ -138,16 +138,19 @@ pub(crate) fn build_domain(
     let salt = crypto::generate_salt();
     let kpass = crypto::derive_key(passphrase, &salt);
 
-    let mut resealed: Vec<(String, String)> = Vec::with_capacity(rows.len());
+    let mut resealed: Vec<(String, String, String)> = Vec::with_capacity(rows.len());
     let mut deks: Vec<(String, Vec<u8>)> = Vec::with_capacity(rows.len());
     let mut plains: Vec<NotePlain> = Vec::with_capacity(rows.len());
     for (id, lock) in rows {
         let dek = open_wrap(&lock.wrap_master, &crypto::note_wrap_key(master_key, id)).map_err(|_| {
             AppError::Database(format!("小记 {} 的旧封条解不开，先解除它的加密再设口令", id))
         })?;
-        resealed.push((id.clone(), seal(&dek, &ndk)?));
+        let html = read_cipher(lock, &dek)?;
+        // 改封顺手补上露出标题：旧模型锁着的时候标题被清了，现在能从明文重新认出来
+        let title = note_service::heading_title(&html);
+        resealed.push((id.clone(), seal(&dek, &ndk)?, title));
         deks.push((id.clone(), dek.clone()));
-        plains.push(NotePlain { id: id.clone(), html: read_cipher(lock, &dek)? });
+        plains.push(NotePlain { id: id.clone(), html });
     }
 
     let meta = vec![
@@ -271,8 +274,9 @@ pub fn lock_note(state: State<AppState>, id: String) -> Result<(), AppError> {
 
     let dek = crypto::random_bytes(crypto::KEY_LENGTH);
     let enc = crypto::encrypt_password(&note.content_html, &dek)?;
+    let title = note_service::heading_title(&note.content_html);
     let now = chrono::Utc::now().timestamp_millis();
-    db.set_note_lock(&id, &enc.ciphertext, &enc.iv, &seal(&dek, &ndk)?, now)?;
+    db.set_note_lock(&id, &enc.ciphertext, &enc.iv, &seal(&dek, &ndk)?, &title, now)?;
     drop(db);
     put_dek(&state, &id, dek)?; // 刚锁完让人继续看，重锁走 relock_note
     Ok(())
@@ -358,7 +362,7 @@ mod tests {
     /// 改封落库后的行：域封条在 wrap_pass，遗留列清空（对齐 apply_note_domain 的写法）
     fn resealed_row(row: &(String, NoteLockRow), plan: &DomainSetup) -> (String, NoteLockRow) {
         let (id, base) = row;
-        let (_, wrap_pass) = plan.resealed.iter().find(|(rid, _)| rid == id).unwrap();
+        let (_, wrap_pass, _) = plan.resealed.iter().find(|(rid, _, _)| rid == id).unwrap();
         (
             id.clone(),
             NoteLockRow {
@@ -379,13 +383,16 @@ mod tests {
     fn domain_migration_unlocks_every_legacy_note() {
         let mk = crypto::random_bytes(crypto::KEY_LENGTH);
         let rows = vec![
-            legacy_row("n1", &mk, "<p>第一条</p>"),
+            legacy_row("n1", &mk, "<h2>三月调档</h2><p>第一条正文</p>"),
             legacy_row("n2", &mk, "<p>第二条</p>"),
         ];
         let plan = build_domain(&rows, &mk, "note-pw-1234").unwrap();
         assert_eq!(plan.plains.len(), 2);
-        assert_eq!(plan.plains[0].html, "<p>第一条</p>");
+        assert_eq!(plan.plains[0].html, "<h2>三月调档</h2><p>第一条正文</p>");
         assert!(!meta_of(&plan, META_SALT).is_empty());
+        // 改封时补露出标题：真标题留明文，正文首行不外泄
+        assert_eq!(plan.resealed[0].2, "三月调档");
+        assert_eq!(plan.resealed[1].2, "");
 
         // 日常解锁：口令 → NDK → 全库明文
         let salt = BASE64.decode(meta_of(&plan, META_SALT)).unwrap();
@@ -396,7 +403,7 @@ mod tests {
         assert_eq!(deks.len(), 2);
         assert_eq!(
             plains.iter().map(|p| p.html.clone()).collect::<Vec<_>>(),
-            vec!["<p>第一条</p>", "<p>第二条</p>"]
+            vec!["<h2>三月调档</h2><p>第一条正文</p>", "<p>第二条</p>"]
         );
 
         // 兜底解锁：主密钥封条取回同一把 NDK

@@ -10,7 +10,7 @@ mkdirSync(OUT, { recursive: true })
 const PASS = 'note-pw-1234'
 const NOTES = [
   { title: '周会纪要', content_html: '<p>尺度层不动，主题层只管颜色。</p>', category: '工作', pinned: true },
-  { title: '薪酬沟通', content_html: '<p>三月调档与期权行权窗口。</p>', encrypted: true },
+  { title: '薪酬沟通', content_html: '<h2>薪酬沟通</h2><p>三月调档与期权行权窗口。</p>', encrypted: true },
   { title: '私人备忘', content_html: '<p>体检结论复查安排 #健康</p>', encrypted: true },
 ]
 
@@ -42,7 +42,7 @@ async function open(name, config) {
   return { page, shot, tip, memo }
 }
 
-// 1. 口令没解锁：两条锁卡，工具栏上是「解锁全部加密小记」
+// 1. 口令没解锁：两条锁卡，有真标题的那条露出标题，没有的只剩提示语
 {
   const { page, shot } = await open('1-locked', { notePassphrase: PASS })
   await shot('list')
@@ -50,11 +50,11 @@ async function open(name, config) {
   await shot('unlock-dialog')
   await page.locator('.note-lock-dialog input[type="password"]').fill(PASS)
   await page.locator('.note-lock-dialog button.btn-primary').click()
-  // 2. 一把口令开全库：两条同时回来，行上带加密标
+  // 2. 一把口令开全库：两条同时回来，解锁后不挂角标
   await shot('2-open')
 }
 
-// 3. 悬停已解锁的加密条：状态位的锁淡出，动作排补出「重新锁定」「解除加密」
+// 3. 悬停已解锁的加密条：动作排补出「重新锁定」「解除加密」（后者是划掉的锁）
 {
   const { shot, tip, memo } = await open('3-hover', { notePassphrase: PASS, noteOpen: true })
   const enc = memo('三月调档')

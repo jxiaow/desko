@@ -217,6 +217,26 @@ function nextId(): string {  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.repla
   })
 }
 
+/** 镜像 Rust 的 note_service::heading_title：锁着也只露真标题（h1–h3），正文首行不外泄 */
+const HTML_ENTITY: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" }
+
+function headingTitle(html: string): string {
+  const rest = html.replace(/^\s+/, '')
+  const lower = rest.toLowerCase()
+  const tag = ['h1', 'h2', 'h3'].find((t) => lower.startsWith(`<${t}`))
+  if (!tag) return ''
+  const openEnd = lower.indexOf('>')
+  if (openEnd < 0) return ''
+  const closeAt = lower.slice(openEnd).indexOf(`</${tag}>`)
+  if (closeAt < 0) return ''
+  const inner = rest.slice(openEnd + 1, openEnd + closeAt)
+  return inner
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(amp|lt|gt|quot|#39);/g, (m, k: string) => HTML_ENTITY[k] ?? m)
+    .trim()
+    .slice(0, 20)
+}
+
 class MockBackend {
   private state: BackendState
   readonly invocations: Invocation[] = []
@@ -292,7 +312,7 @@ class MockBackend {
       const enc = !!n.encrypted
       const rec: NoteRecord = {
         id: nextId(),
-        title: enc ? '' : n.title,
+        title: enc ? headingTitle(n.content_html) : n.title,
         content_html: enc ? '' : n.content_html,
         category: enc ? null : (n.category ?? null),
         pinned: n.pinned ?? false,
@@ -722,11 +742,11 @@ class MockBackend {
     // ===== notes.rs =====
     list_notes: () => {
       this.requireUnlocked()
-      // 加密行只出锁标识：明文与标题一律不外泄
+      // 加密行只出密文：正文与分类不外泄，标题按 Rust 的规则单独留明文（无真标题则为空）
       return this.state.notes
         .slice()
         .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.created_at - a.created_at)
-        .map((n) => (n.encrypted ? { ...n, title: '', content_html: '', category: null } : { ...n }))
+        .map((n) => (n.encrypted ? { ...n, content_html: '', category: null } : { ...n }))
     },
 
     create_note: ({ input }) => {
@@ -752,9 +772,10 @@ class MockBackend {
       this.requireUnlocked()
       const note = this.findNote(id)
       if (note.encrypted) {
-        // 加密行：没有会话解锁就不许改；改的只进密文，明文列保持空
+        // 加密行：没有会话解锁就不许改；改的只进密文，正文列保持空，标题按新正文重算
         if (!this.noteUnlocked.has(id)) throw '小记未解锁'
         note.cipher = input.content_html
+        note.title = headingTitle(input.content_html)
         note.updated_at = Date.now()
         return
       }
@@ -847,7 +868,7 @@ class MockBackend {
       if (!note.content_html) throw '空内容不用加密'
       note.encrypted = true
       note.cipher = note.content_html
-      note.title = ''
+      note.title = headingTitle(note.content_html)
       note.content_html = ''
       note.category = null
       note.updated_at = Date.now()

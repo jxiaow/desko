@@ -165,7 +165,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected, newborn: props.justPublished }"
     tabindex="0"
     role="button"
-    :aria-label="locked ? `已加密小记（${formatRelativeTime(props.note.created_at)}，单击解锁）` : `小记：${props.note.title}（单击展开全文，悬停或 Enter 编辑）`"
+    :aria-label="locked ? `已加密小记${props.note.title ? '：' + props.note.title : ''}（${formatRelativeTime(props.note.created_at)}，单击解锁）` : `小记：${props.note.title}（单击展开全文，悬停或 Enter 编辑）`"
     @click="onBodyClick"
     @keydown="onKeydown"
   >
@@ -175,7 +175,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 
     <div v-if="locked" class="memo-locked">
       <AppIcon name="lock" :size="13" />
-      <span>已加密 · 单击解锁</span>
+      <span v-if="props.note.title" class="locked-title">{{ props.note.title }}</span>
+      <span class="locked-hint">{{ props.note.title ? '· 单击解锁' : '已加密 · 单击解锁' }}</span>
     </div>
     <div v-else ref="bodyEl" class="memo-body" :class="{ clipping: clipped && !expanded, expanded }" v-html="bodyHtml" />
 
@@ -188,7 +189,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       <span class="spacer"></span>
       <span class="memo-state">
         <span v-if="props.note.starred"  class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
-        <span v-if="props.note.encrypted && !locked" class="state-enc" title="加密小记，本会话已解锁"><AppIcon name="lock" :size="11" /></span>
       </span>
       <span class="memo-acts">
         <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
@@ -232,7 +232,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           <AppIcon name="lock" :size="13" />
         </button>
         <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="解除加密" aria-label="解除加密" @click.stop="emit('removeLock')">
-          <AppIcon name="unlock" :size="13" />
+          <AppIcon name="lockOff" :size="13" />
         </button>
         <button class="ib danger" type="button" title="删除" aria-label="删除" @click.stop="emit('delete')">
           <AppIcon name="trash" :size="13" />
@@ -312,7 +312,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   user-select: none;
 }
 .memo-locked svg { color: var(--warning); flex-shrink: 0; }
-.state-enc { color: var(--text-faint); display: inline-flex; }
+/* 锁着也认得出是哪条：只有真标题（h1–h3）会留明文，其余只剩提示语 */
+.locked-title { color: var(--text); font-weight: 500; }
 /* 只给正文顶层块加间距，理由同 NoteEditor：* + * 会把任务项的正文压到勾选框下面 */
 .memo-body :deep(> * + *) { margin-top: var(--space-2); }
 .memo-body :deep(* + h1), .memo-body :deep(* + h2), .memo-body :deep(* + h3) { margin-top: var(--space-4); }
