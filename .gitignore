@@ -29,6 +29,8 @@ npm-debug.log*
 
 # Tauri
 src-tauri/WixTools/
+# 服务进程二进制由 sync-fileshare-server.mjs 构建产出
+src-tauri/binaries/
 
 # Playwright
 test-results/

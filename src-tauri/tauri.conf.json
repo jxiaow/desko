@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.desko.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "node scripts/sync-fileshare-server.mjs && npm run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "node scripts/sync-fileshare-server.mjs --release && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -35,6 +35,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "externalBin": ["binaries/desko-fileshare"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

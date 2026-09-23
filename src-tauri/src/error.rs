@@ -29,6 +29,9 @@ pub enum AppError {
 
     #[error("Backup error: {0}")]
     Backup(String),
+
+    #[error("FileShare error: {0}")]
+    FileShare(String),
 }
 
 impl AppError {
@@ -44,6 +47,8 @@ impl AppError {
             AppError::Io(_) => "文件操作失败".to_string(),
             // 备份的错误信息本身就是给人看的（含校验失败原因），原样透出
             AppError::Backup(msg) => msg.clone(),
+            // 局域网传输同理：端口占用、目录创建失败等原因要让用户看见
+            AppError::FileShare(msg) => msg.clone(),
         }
     }
 }

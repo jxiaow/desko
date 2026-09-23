@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>局域网文件传输 · Desko</title>
+  <style>
+    :root {
+      --bg: #f8f8fa; --panel: #ffffff; --fill: #f1f1f4;
+      --border: #e3e3ea; --border-strong: #c9c9d3; --border-subtle: #efeff3;
+      --text: #1b1b20; --text2: #5e5e68; --muted: #8d8d98; --faint: #b6b6c0;
+      --accent: #5b57d9; --accent-hover: #4c48c6; --accent-soft: #eeedfb; --accent-light: #dcd9f6;
+      --accent-ring: rgba(91, 87, 217, 0.15);
+      --success: #238366; --danger: #c2413e;
+      --r-sm: 6px; --r: 8px; --r-md: 10px; --r-lg: 12px;
+      --sh: 0 1px 2px rgba(27, 27, 32, 0.04);
+      --sh-md: 0 6px 24px rgba(27, 27, 32, 0.08);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+      --mono: "Cascadia Code", "SF Mono", Consolas, "Courier New", monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { min-height: 100vh; font: 14px/1.5 var(--font); background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; }
+
+    .hdr { background: var(--panel); border-bottom: 1px solid var(--border); padding: 0 28px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+    .hdr-l { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .hdr-logo { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; color: #fff; font: 800 14px/1 var(--mono); flex-shrink: 0; }
+    .hdr-t { font: 600 15px/1 var(--font); letter-spacing: -.01em; white-space: nowrap; }
+    .hdr-url { font: 11px/1 var(--mono); color: var(--muted); padding: 5px 10px; background: var(--fill); border-radius: var(--r-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hdr-set { font-size: 13px; font-weight: 500; color: var(--text2); padding: 6px 14px; border-radius: var(--r); border: 1px solid var(--border); background: var(--panel); cursor: pointer; transition: all .15s; }
+    .hdr-set:hover { color: var(--accent); border-color: var(--accent-light); background: var(--accent-soft); }
+
+    .main { max-width: 880px; margin: 0 auto; padding: 24px 24px 88px; }
+
+    .toast { position: fixed; top: 68px; right: 20px; z-index: 200; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--r-md); background: var(--panel); border: 1px solid var(--border); box-shadow: var(--sh-md); font-size: 13px; font-weight: 600; color: var(--success); animation: ti .25s ease; }
+    .toast::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+    @keyframes ti { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .search { position: relative; margin-bottom: 16px; }
+    .search input { width: 100%; padding: 10px 14px 10px 38px; border: 1px solid var(--border); border-radius: var(--r-md); font: 14px/1.4 var(--font); background: var(--panel); color: var(--text); transition: border-color .15s, box-shadow .15s; box-shadow: var(--sh); }
+    .search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+    .search input::placeholder { color: var(--faint); }
+    .search-ico { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; }
+
+    .fl { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh); }
+    .fl-head { display: flex; align-items: center; justify-content: space-between; padding: 13px 18px; border-bottom: 1px solid var(--border-subtle); }
+    .fl-title { font: 600 13px/1 var(--font); color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .fl-title svg { color: var(--muted); }
+    .fl-badge { font: 500 11px/1 var(--mono); color: var(--muted); padding: 4px 9px; background: var(--fill); border-radius: 99px; }
+    .fl-cols { display: grid; grid-template-columns: 34px 1fr 76px 132px 30px; gap: 12px; padding: 8px 18px; font: 500 11px/1 var(--font); color: var(--faint); border-bottom: 1px solid var(--border-subtle); }
+    .fl-row { display: grid; grid-template-columns: 34px 1fr 76px 132px 30px; gap: 12px; align-items: center; padding: 9px 18px; border-bottom: 1px solid var(--border-subtle); transition: background .12s; }
+    .fl-row:last-child { border-bottom: none; }
+    .fl-row:hover { background: var(--fill); }
+    .fl-ico { width: 34px; height: 34px; border-radius: var(--r); display: grid; place-items: center; flex-shrink: 0; }
+    .fl-ico.doc { background: #e8edfb; color: #4a68c8; } .fl-ico.img { background: #fbf0e1; color: #d97706; }
+    .fl-ico.zip { background: var(--accent-soft); color: var(--accent); } .fl-ico.vid { background: #fbe9ee; color: #c2557b; }
+    .fl-ico.code { background: #eef7f4; color: var(--success); } .fl-ico.default { background: var(--fill); color: var(--muted); }
+    .fl-name { min-width: 0; }
+    .fl-name b { font-size: 13.5px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+    .fl-name s { font: 11px/1.4 var(--mono); color: var(--faint); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+    .fl-sz { font: 12px/1 var(--mono); color: var(--text2); white-space: nowrap; text-align: right; }
+    .fl-dt { font: 12px/1 var(--mono); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .fl-act { display: grid; place-items: center; opacity: 0; transition: opacity .12s; }
+    .fl-row:hover .fl-act { opacity: 1; }
+    .fl-act svg { color: var(--faint); } .fl-row:hover .fl-act svg { color: var(--accent); }
+
+    .empty { text-align: center; padding: 52px 20px; }
+    .empty-ico { width: 46px; height: 46px; border-radius: 50%; background: var(--fill); color: var(--faint); display: grid; place-items: center; margin: 0 auto 12px; }
+    .empty-t { font: 600 14px/1.4 var(--font); color: var(--text2); margin-bottom: 2px; }
+    .empty-d { font-size: 12.5px; color: var(--faint); }
+
+    .pg-wrap { padding: 12px 16px; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .pg-info { font: 11px/1 var(--mono); color: var(--faint); margin-right: 6px; }
+    .pg { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--text2); font: 500 12px/1 var(--font); transition: all .12s; }
+    .pg:hover { background: var(--fill); color: var(--text); }
+    .pg.on { background: var(--accent); color: #fff; pointer-events: none; }
+    .pg-gap { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; color: var(--faint); font-size: 12px; }
+
+    .fab { position: fixed; bottom: 28px; right: 28px; z-index: 100; height: 46px; padding: 0 22px; border-radius: 99px; background: var(--accent); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 20px var(--accent-ring), var(--sh-md); transition: all .18s; }
+    .fab:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .fab svg { flex-shrink: 0; }
+
+    .modal-bg { position: fixed; inset: 0; z-index: 150; background: rgba(27,27,32,.35); display: none; place-items: center; }
+    .modal-bg.on { display: grid; }
+    .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--sh-md); width: 460px; max-width: 92vw; padding: 24px; animation: modalIn .22s cubic-bezier(.16,1,.3,1); position: relative; }
+    @keyframes modalIn { from { opacity: 0; transform: scale(.97) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+    .modal-close { position: absolute; top: 14px; right: 14px; width: 28px; height: 28px; border: none; border-radius: var(--r-sm); background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; transition: all .15s; }
+    .modal-close:hover { background: var(--fill); color: var(--text); }
+    .modal-title { font: 600 16px/1.3 var(--font); margin-bottom: 18px; display: flex; align-items: center; gap: 9px; color: var(--text); }
+    .modal-title svg { color: var(--accent); }
+
+    .drop { border: 1.5px dashed var(--border-strong); border-radius: var(--r-md); padding: 30px 20px; text-align: center; cursor: pointer; transition: all .18s; margin-bottom: 14px; background: var(--bg); }
+    .drop:hover, .drop.ov { border-color: var(--accent); background: var(--accent-soft); }
+    .drop-ico { width: 42px; height: 42px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin: 0 auto 10px; }
+    .drop.ov .drop-ico { background: var(--accent-light); }
+    .drop-t { font-size: 13px; color: var(--text2); }
+    .drop-t b { color: var(--accent); }
+    .drop-sub { font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+
+    .modal-sep { display: flex; align-items: center; gap: 10px; font: 500 11px/1 var(--font); color: var(--faint); margin: 16px 0 12px; }
+    .modal-sep::before, .modal-sep::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
+    .modal-input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); font: 13px/1.4 var(--font); background: var(--panel); color: var(--text); margin-bottom: 8px; transition: border-color .15s, box-shadow .15s; }
+    .modal-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+    .modal-input::placeholder, .modal-ta::placeholder { color: var(--faint); }
+    .modal-ta { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); font: 13px/1.5 var(--font); background: var(--panel); color: var(--text); min-height: 72px; resize: vertical; margin-bottom: 12px; transition: border-color .15s, box-shadow .15s; }
+    .modal-ta:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+    .modal-btn { width: 100%; padding: 10px; border: none; border-radius: var(--r); background: var(--accent); color: #fff; font: 600 13.5px/1.4 var(--font); cursor: pointer; transition: background .15s; margin-bottom: 8px; }
+    .modal-btn:hover { background: var(--accent-hover); }
+    .modal-btn.sec { background: var(--fill); color: var(--text2); border: 1px solid var(--border); }
+    .modal-btn.sec:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-light); }
+    .modal-st { font-size: 12px; color: var(--muted); text-align: center; min-height: 16px; }
+    .modal-st.ok { color: var(--success); } .modal-st.er { color: var(--danger); }
+    .modal-pg { height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 8px; overflow: hidden; display: none; }
+    .modal-pg.on { display: block; }
+    .modal-pg i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .15s; }
+
+    .drag-overlay { position: fixed; inset: 0; z-index: 300; background: rgba(91,87,217,.06); border: 2px dashed var(--accent); display: none; place-items: center; pointer-events: none; }
+
+    .dir-list { display: grid; gap: 6px; margin-bottom: 14px; }
+    .dir-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--fill); border-radius: var(--r); font: 12px/1.4 var(--mono); color: var(--text2); word-break: break-all; }
+    .dir-ico { width: 24px; height: 24px; border-radius: var(--r-sm); flex-shrink: 0; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+    .st-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+    .st-ta { min-height: 120px; font: 12.5px/1.6 var(--mono); scrollbar-gutter: stable; }
+    .drag-overlay.on { display: grid; }
+    .drag-overlay-t { font: 700 18px/1 var(--font); color: var(--accent); padding: 18px 30px; background: var(--panel); border-radius: var(--r-lg); box-shadow: var(--sh-md); }
+
+    @media (max-width: 640px) {
+      .hdr { padding: 0 14px; }
+      .hdr-url { display: none; }
+      .main { padding: 14px 12px 88px; }
+      .fl-row { grid-template-columns: 30px 1fr 28px; gap: 10px; padding: 10px 14px; }
+      .fl-sz, .fl-dt, .fl-cols { display: none; }
+      .fl-ico { width: 30px; height: 30px; }
+      .fab { right: 16px; bottom: 20px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <header class="hdr">
+    <div class="hdr-l">
+      <div class="hdr-logo">D</div>
+      <span class="hdr-t">局域网文件传输</span>
+      <a class="hdr-url" href="%%LAN_URL%%">%%LAN_URL%%</a>
+    </div>
+    <button class="hdr-set" id="btn-settings" type="button">设置</button>
+  </header>
+
+  <div class="main">
+    %%TOAST%%
+
+    <div class="search">
+      <span class="search-ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+      <input type="text" placeholder="搜索文件名…" id="file-search" value="%%SEARCH_Q%%">
+    </div>
+
+    <div class="fl">
+      <div class="fl-head">
+        <span class="fl-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>文件列表</span>
+        <span class="fl-badge" id="file-count">%%COUNT%%</span>
+      </div>
+      <div class="fl-cols"><span></span><span>名称</span><span style="text-align:right">大小</span><span>修改时间</span><span></span></div>
+      <div class="file-list" id="file-list">
+%%ROWS%%
+      </div>
+%%PAGINATION%%
+    </div>
+  </div>
+
+  <button class="fab" id="fab">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    上传
+  </button>
+
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal">
+      <button class="modal-close" id="modal-close" title="关闭">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="modal-title">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        上传文件
+      </div>
+      <form id="upl-form" action="/upload?share=%%SHARE_INDEX%%" method="post" enctype="multipart/form-data">
+        <input id="upl" type="file" name="files" multiple hidden>
+        <div class="drop" id="drop">
+          <div class="drop-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+          <div class="drop-t" id="drop-t">拖放文件到这里，或<b>点击选择</b></div>
+          <div class="drop-sub">支持多文件同时上传，存入第一个共享目录</div>
+        </div>
+        <div class="modal-pg" id="upl-pg"><i id="upl-fill"></i></div>
+        <div class="modal-st" id="upl-st"></div>
+        <button class="modal-btn" type="submit">上传</button>
+      </form>
+
+      <div class="modal-sep">或保存为文本文件</div>
+      <form id="txt-form" action="/save-text?share=%%SHARE_INDEX%%" method="post">
+        <input class="modal-input" name="filename" type="text" placeholder="文件名（自动补 .txt）">
+        <textarea class="modal-ta" name="content" placeholder="粘贴或输入要传过去的文本…"></textarea>
+        <div class="modal-st" id="txt-st"></div>
+        <button class="modal-btn sec" type="submit">保存文本</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="settings-bg">
+    <div class="modal">
+      <button class="modal-close" id="settings-close" title="关闭">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="modal-title">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        共享目录设置
+      </div>
+      <div class="st-label">当前共 %%DIR_COUNT%% 个目录</div>
+      <div class="dir-list">
+%%DIR_ITEMS%%
+      </div>
+      <form id="set-form" action="/settings" method="post">
+        <div class="st-label">每行一个目录路径，保存后立即生效，无需重启服务</div>
+        <textarea class="modal-ta st-ta" name="share_dirs" placeholder="例如：&#10;D:\share\docs&#10;/srv/share/media">%%DIRS_TEXTAREA%%</textarea>
+        <div class="modal-st" id="set-st"></div>
+        <button class="modal-btn" type="submit">保存设置</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="drag-overlay" id="drag-overlay">
+    <div class="drag-overlay-t">释放以上传文件</div>
+  </div>
+
+  <script>
+    (function(){
+      var toast = document.querySelector('.toast');
+      if (toast) setTimeout(function(){ toast.remove(); }, 3000);
+
+      var fab = document.getElementById('fab');
+      var modalBg = document.getElementById('modal-bg');
+      var modalClose = document.getElementById('modal-close');
+      fab.addEventListener('click', function(){ modalBg.classList.add('on'); });
+      modalClose.addEventListener('click', function(){ modalBg.classList.remove('on'); });
+
+      var setBg = document.getElementById('settings-bg');
+      document.getElementById('btn-settings').addEventListener('click', function(){ setBg.classList.add('on'); });
+      document.getElementById('settings-close').addEventListener('click', function(){ setBg.classList.remove('on'); });
+
+      var setForm = document.getElementById('set-form');
+      var setSt = document.getElementById('set-st');
+      setForm.addEventListener('submit', function(e){
+        e.preventDefault();
+        var btn = setForm.querySelector('button'), orig = btn.innerHTML;
+        btn.disabled = true; btn.textContent = '保存中...';
+        setSt.className = 'modal-st'; setSt.textContent = '保存中...';
+        var x = new XMLHttpRequest();
+        x.addEventListener('load', function(){
+          btn.disabled = false; btn.innerHTML = orig;
+          if (x.status >= 200 && x.status < 400) { location.href = x.responseURL || '/'; }
+          else {
+            setSt.className = 'modal-st er';
+            var msg = (x.responseText || '').trim();
+            setSt.textContent = (msg && msg.charAt(0) !== '<' ? msg.slice(0, 120) : '保存失败');
+          }
+        });
+        x.addEventListener('error', function(){ btn.disabled = false; btn.innerHTML = orig; setSt.className = 'modal-st er'; setSt.textContent = '网络异常'; });
+        x.open('POST', setForm.action);
+        x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8');
+        x.send(new URLSearchParams(new FormData(setForm)).toString());
+      });
+
+      var uplForm = document.getElementById('upl-form');
+      var uplInput = document.getElementById('upl');
+      var drop = document.getElementById('drop');
+      var dropT = document.getElementById('drop-t');
+      var uplPg = document.getElementById('upl-pg');
+      var uplFill = document.getElementById('upl-fill');
+      var uplSt = document.getElementById('upl-st');
+
+      drop.addEventListener('click', function(){ uplInput.click(); });
+      ['dragenter','dragover'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('ov'); }); });
+      ['dragleave','drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('ov'); }); });
+      uplInput.addEventListener('change', function(){
+        if (uplInput.files.length) {
+          var n=[]; for(var i=0;i<uplInput.files.length;i++) n.push(uplInput.files[i].name);
+          dropT.innerHTML = '已选择: <b>' + n.join(', ') + '</b>';
+        }
+      });
+      function doUpload(){
+        if (!uplInput.files.length) return;
+        uplSt.className = 'modal-st'; uplSt.textContent = '上传中...';
+        uplPg.classList.add('on'); uplFill.style.width = '0';
+        var x = new XMLHttpRequest();
+        x.upload.addEventListener('progress', function(e){ if(e.lengthComputable) uplFill.style.width = Math.round(e.loaded*100/e.total)+'%'; });
+        x.addEventListener('load', function(){
+          uplPg.classList.remove('on');
+          if (x.status >= 200 && x.status < 400) { uplSt.className = 'modal-st ok'; uplSt.textContent = '上传完成'; setTimeout(function(){ location.reload(); }, 600); }
+          else { uplSt.className = 'modal-st er'; uplSt.textContent = '上传失败'; }
+        });
+        x.addEventListener('error', function(){ uplPg.classList.remove('on'); uplSt.className = 'modal-st er'; uplSt.textContent = '网络异常'; });
+        x.open('POST', uplForm.action);
+        x.send(new FormData(uplForm));
+      }
+      uplForm.addEventListener('submit', function(e){ e.preventDefault(); doUpload(); });
+
+      var txtForm = document.getElementById('txt-form');
+      var txtSt = document.getElementById('txt-st');
+      txtForm.addEventListener('submit', function(e){
+        e.preventDefault();
+        var btn = txtForm.querySelector('button'), orig = btn.innerHTML;
+        btn.disabled = true; btn.innerHTML = '保存中...';
+        txtSt.className = 'modal-st'; txtSt.textContent = '保存中...';
+        var d = new URLSearchParams(new FormData(txtForm)).toString();
+        var x = new XMLHttpRequest();
+        x.addEventListener('load', function(){
+          btn.disabled = false; btn.innerHTML = orig;
+          if (x.status >= 200 && x.status < 400) { txtSt.className = 'modal-st ok'; txtSt.textContent = '已保存'; setTimeout(function(){ location.reload(); }, 600); }
+          else { txtSt.className = 'modal-st er'; txtSt.textContent = '保存失败'; }
+        });
+        x.addEventListener('error', function(){ btn.disabled = false; btn.innerHTML = orig; txtSt.className = 'modal-st er'; txtSt.textContent = '网络异常'; });
+        x.open('POST', txtForm.action);
+        x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8');
+        x.send(d);
+      });
+
+      var overlay = document.getElementById('drag-overlay');
+      var dragCount = 0;
+      document.addEventListener('dragenter', function(e){ e.preventDefault(); dragCount++; overlay.classList.add('on'); });
+      document.addEventListener('dragleave', function(e){ e.preventDefault(); dragCount--; if(dragCount<=0){ dragCount=0; overlay.classList.remove('on'); }});
+      document.addEventListener('dragover', function(e){ e.preventDefault(); });
+      document.addEventListener('drop', function(e){
+        e.preventDefault(); dragCount=0; overlay.classList.remove('on');
+        if (e.dataTransfer.files.length) {
+          uplInput.files = e.dataTransfer.files;
+          var n=[]; for(var i=0;i<e.dataTransfer.files.length;i++) n.push(e.dataTransfer.files[i].name);
+          dropT.innerHTML = '已选择: <b>' + n.join(', ') + '</b>';
+          modalBg.classList.add('on');
+          doUpload();
+        }
+      });
+
+      var searchInput = document.getElementById('file-search');
+      var fileList = document.getElementById('file-list');
+      var fileCount = document.getElementById('file-count');
+      var timer = null;
+      function fetchList(q) {
+        var p = new URLSearchParams();
+        if (q) p.set('q', q);
+        p.set('partial', '1');
+        var x = new XMLHttpRequest();
+        x.open('GET', '/?' + p);
+        x.onload = function() {
+          if (x.status < 200 || x.status >= 400) return;
+          var t = x.responseText, sep = t.indexOf('\n---PARTIAL---\n');
+          if (sep < 0) return;
+          var cnt = t.substring(0, sep), html = t.substring(sep + 15);
+          var d = document.createElement('div'); d.innerHTML = html;
+          var nl = d.querySelector('#file-list'); if (nl) fileList.innerHTML = nl.innerHTML;
+          if (fileCount) fileCount.textContent = cnt;
+          var op = document.querySelector('.pg-wrap'), np = d.querySelector('.pg-wrap');
+          if (op && np) op.outerHTML = np.outerHTML;
+          else if (!op && np) { var c = document.querySelector('.fl'); if (c) c.appendChild(np); }
+          else if (op && !np) op.remove();
+        };
+        x.send();
+      }
+      if (searchInput) searchInput.addEventListener('input', function(){ clearTimeout(timer); var q=this.value; timer=setTimeout(function(){ fetchList(q); }, 300); });
+    })();
+  </script>
+</body>
+</html>

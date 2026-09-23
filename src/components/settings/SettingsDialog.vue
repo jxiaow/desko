@@ -9,6 +9,7 @@ import type { ThemeId } from '../../services/theme'
 import { TERMINALS, readTerminal, saveTerminal } from '../../services/terminal'
 import type { TerminalId } from '../../services/terminal'
 import { readMfaFeature, saveMfaFeature } from '../../services/mfaFeature'
+import { fileshareEnabled, readFileshareFeature, saveFileshareFeature } from '../../services/fileshareFeature'
 import { useToastStore } from '../../stores/toast'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 
@@ -37,6 +38,7 @@ const lockOnClose = ref(false)
 const theme = ref<ThemeId>(DEFAULT_THEME)
 const terminal = ref<TerminalId>('auto')
 const mfaOn = ref(false)
+const fileshareOn = ref(false)
 const route = useRoute()
 const router = useRouter()
 const terminalDesc = computed(
@@ -47,6 +49,7 @@ const loadSettings = async () => {
   theme.value = await readTheme()
   terminal.value = await readTerminal()
   mfaOn.value = await readMfaFeature()
+  fileshareOn.value = await readFileshareFeature()
   try {
     const timeout = await settingsApi.getSetting('auto_lock_timeout')
     const minutes = parseInt(timeout)
@@ -105,6 +108,18 @@ const saveMfaFeaturePref = async () => {
     toastStore.showToast('设置已保存')
   } catch (e: any) {
     toastStore.showToast('保存失败: ' + e.message, 'error')
+  }
+}
+
+const saveFileshareFeaturePref = async () => {
+  try {
+    await saveFileshareFeature(fileshareOn.value)
+    if (!fileshareOn.value && route.path === '/fileshare') await router.replace('/entries')
+    toastStore.showToast(fileshareOn.value ? '局域网传输已开启' : '设置已保存')
+  } catch (e: any) {
+    // saveFileshareFeature 内部已回滚单例，界面按单例扳回（开、关两个方向都可能失败）
+    fileshareOn.value = fileshareEnabled.value
+    toastStore.showToast((fileshareOn.value ? '关闭失败: ' : '开启失败: ') + e.message, 'error')
   }
 }
 
@@ -207,6 +222,16 @@ onMounted(() => { loadSettings() })
                 </div>
                 <label class="switch">
                   <input type="checkbox" v-model="mfaOn" @change="saveMfaFeaturePref" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">局域网文件传输</span>
+                  <span class="setting-desc">开启后侧栏出现「局域网传输」页，同网段设备用浏览器互传文件</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" v-model="fileshareOn" @change="saveFileshareFeaturePref" />
                   <span class="switch-slider"></span>
                 </label>
               </div>

@@ -51,6 +51,7 @@ export interface E2EConfig {
   settings?: Record<string, string>
   /** 附件目录里"已落盘"的文件名，用来演未引用扫描 */
   staged?: string[]
+  fileshare?: { port?: number; shareDirs?: string[]; localOnly?: boolean; running?: boolean; boundPort?: number }
 }
 
 interface EntryRecord {
@@ -142,6 +143,7 @@ interface BackendState {
   settings: Record<string, string>
   backup: { hasPassword: boolean; files: BackupPackageRecord[]; exports: string[] }
   cloud: { configured: boolean; server: string; account: string; lastSyncAt: number; packages: BackupPackageRecord[]; attachments: string[] }
+  fileshare: { running: boolean; port: number; boundPort: number | null; shareDirs: string[]; localOnly: boolean; hasPassword: boolean }
 }
 
 declare global {
@@ -164,7 +166,7 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'mfa_enabled']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'mfa_enabled', 'fileshare_enabled']
 
 /** 与 Rust 端 backup::LOCAL_FLOOR 对齐：传上云的包本地只留这么几份兜底 */
 const LOCAL_FLOOR = 3
@@ -239,6 +241,16 @@ class MockBackend {
       settings: { ...(config.settings ?? {}) },
       backup: { hasPassword: false, files: [], exports: [] },
       cloud: { configured: false, server: '', account: '', lastSyncAt: 0, packages: [], attachments: [] },
+      fileshare: { running: false, port: 8000, boundPort: null, shareDirs: [], localOnly: false, hasPassword: false },
+    }
+    if (config.fileshare) {
+      if (config.fileshare.port) state.fileshare.port = config.fileshare.port
+      if (config.fileshare.shareDirs) state.fileshare.shareDirs = config.fileshare.shareDirs.slice()
+      state.fileshare.localOnly = config.fileshare.localOnly ?? false
+      if (config.fileshare.running) {
+        state.fileshare.running = true
+        state.fileshare.boundPort = config.fileshare.boundPort ?? state.fileshare.port
+      }
     }
 
     // seed 数据按倒序时间戳，保证列表顺序确定（最新在前）
@@ -1088,6 +1100,60 @@ class MockBackend {
       const before = this.state.mfa.length
       this.state.mfa = this.state.mfa.filter((t) => t.id !== id)
       if (this.state.mfa.length === before) throw '账号已不存在'
+    },
+
+    // ===== fileshare.rs（端口 9999 专演"全部被占用"的失败路径）=====
+    fileshare_status: () => {
+      const f = this.state.fileshare
+      const port = f.boundPort ?? f.port
+      return {
+        running: f.running,
+        configuredPort: f.port,
+        boundPort: f.running ? port : null,
+        localUrl: `http://127.0.0.1:${port}`,
+        lanUrl: f.localOnly ? `http://127.0.0.1:${port}` : `http://10.0.0.9:${port}`,
+        shareCount: f.shareDirs.length,
+        localOnly: f.localOnly,
+      }
+    },
+
+    fileshare_start: () => {
+      const f = this.state.fileshare
+      if (!f.running && !f.shareDirs.length) f.shareDirs = ['C:\desko-e2e\shared']
+      if (f.port === 9999) throw '端口 9999 起连续 11 个都被占用：Address already in use'
+      f.running = true
+      f.boundPort = f.port
+      return this.commands!.fileshare_status()
+    },
+
+    fileshare_stop: () => {
+      this.state.fileshare.running = false
+      this.state.fileshare.boundPort = null
+    },
+
+    fileshare_get_config: () => {
+      const f = this.state.fileshare
+      return { port: f.port, shareDirs: f.shareDirs.slice(), localOnly: f.localOnly, hasPassword: f.hasPassword }
+    },
+
+    fileshare_save_config: ({ port, shareDirs, localOnly }) => {
+      const f = this.state.fileshare
+      const dirs = (shareDirs as string[] ?? []).map((d) => String(d).trim()).filter((d) => d)
+      if (!dirs.length) throw '请至少添加一个共享目录'
+      const p = Number(port)
+      if (!Number.isInteger(p) || p < 1 || p > 65535) throw '端口要在 1-65535 之间'
+      // 9999 演"端口全被占"：抛错必须发生在改状态之前，与真实命令层语义一致
+      if (p === 9999) throw '端口 9999 起连续 11 个都被占用：Address already in use'
+      const wasRunning = f.running
+      f.port = p
+      f.shareDirs = dirs
+      f.localOnly = !!localOnly
+      f.boundPort = wasRunning ? p : null
+      return this.commands!.fileshare_status()
+    },
+
+    fileshare_set_password: ({ password }) => {
+      this.state.fileshare.hasPassword = !!String(password ?? '')
     },
 
     mfa_read_image: ({ path }) => {

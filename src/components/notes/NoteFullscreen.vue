@@ -5,8 +5,8 @@ import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
 import AppIcon from '../shared/AppIcon.vue'
-import { formatAbsTime, htmlToText, wordCount } from '../../utils/format'
-import { collectAttachmentNames, unreferencedAttachments } from '../../services/attachmentSrc'
+import { formatAbsTime, highlightTagsInHtml, htmlToText, wordCount } from '../../utils/format'
+import { collectAttachmentNames, resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import type { NoteSaveState } from '../../stores/notes'
 
@@ -16,15 +16,19 @@ const props = withDefaults(defineProps<{
   initialHtml: string
   attachments?: Attachment[]
   saveState?: NoteSaveState
+  /** view = 只读浏览已存的小记；edit = 书写面 */
+  mode?: 'edit' | 'view'
 }>(), {
   attachments: () => [],
   saveState: '',
+  mode: 'edit',
 })
 
 const emit = defineEmits<{
   update: [html: string]
   close: []
   publish: []
+  edit: []
   addImage: []
   togglePin: []
   toggleStar: []
@@ -35,10 +39,16 @@ const emit = defineEmits<{
 const html = ref(props.initialHtml)
 const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
 
-const text = computed(() => htmlToText(html.value))
+const viewMode = computed(() => props.mode === 'view')
+/** 查看态直接跟库里的正文走，不走编辑草稿的本地快照 */
+const contentHtml = computed(() =>
+  viewMode.value ? props.note?.content_html ?? '' : html.value)
+const displayHtml = computed(() => resolveAssetHtml(highlightTagsInHtml(contentHtml.value)))
+
+const text = computed(() => htmlToText(contentHtml.value))
 // 只有图的小记也算有内容：正文引用了附件就不空
-const empty = computed(() => !text.value.trim() && !collectAttachmentNames(html.value).length)
-const visibleAtts = computed(() => unreferencedAttachments(html.value, props.attachments))
+const empty = computed(() => !text.value.trim() && !collectAttachmentNames(contentHtml.value).length)
+const visibleAtts = computed(() => unreferencedAttachments(contentHtml.value, props.attachments))
 const saveText = { '': '', saving: '保存中…', saved: '已保存' } as const
 
 const onUpdate = (value: string) => {
@@ -71,7 +81,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 </script>
 
 <template>
-  <section class="fs" role="dialog" aria-modal="true" :aria-label="props.note ? '全屏编辑小记' : '写一条小记'">
+  <section class="fs" role="dialog" aria-modal="true" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'">
     <header class="fs-head" @mousedown="startDrag">
       <button class="fs-exit" type="button" @click="emit('close')">
         <AppIcon name="min" :size="13" />
@@ -80,7 +90,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
       </button>
       <span class="spacer"></span>
       <span class="save-hint" :class="props.saveState">
-        {{ saveText[props.saveState] || (props.note ? '自动保存' : '草稿不会丢') }}
+        {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '草稿不会丢') }}
       </span>
     </header>
 
@@ -92,7 +102,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
           <span>{{ wordCount(text) }} 字</span>
         </div>
 
+        <div v-if="viewMode" class="fs-view" v-html="displayHtml" />
         <NoteEditor
+          v-else
           ref="editorRef"
           variant="full"
           :initial-content="html"
@@ -108,7 +120,34 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
     </div>
 
     <footer class="fs-foot">
-      <NoteToolbar
+      <template v-if="viewMode && props.note">
+        <button
+          class="eb"
+          type="button"
+          :class="{ on: props.note.pinned }"
+          :title="props.note.pinned ? '取消置顶' : '置顶'"
+          @click="emit('togglePin')"
+        >
+          <AppIcon name="pin" :size="12" />{{ props.note.pinned ? '已置顶' : '置顶' }}
+        </button>
+        <button
+          class="eb"
+          type="button"
+          :class="{ on: props.note.starred, warn: props.note.starred }"
+          :title="props.note.starred ? '取消收藏' : '收藏'"
+          @click="emit('toggleStar')"
+        >
+          <AppIcon name="star" :size="12" :filled="props.note.starred" />{{ props.note.starred ? '已收藏' : '收藏' }}
+        </button>
+        <span class="spacer"></span>
+        <button class="eb danger" type="button" title="删除这条小记" @click="emit('delete')">
+          <AppIcon name="trash" :size="12" />删除
+        </button>
+        <button class="eb primary" type="button" title="进入全屏编辑" @click="emit('edit')">
+          <AppIcon name="edit" :size="12" />编辑
+        </button>
+      </template>
+      <NoteToolbar v-else
         :note="props.note"
         :save-state="props.saveState"
         :primary-label="props.note ? '完成' : '发布'"
@@ -195,6 +234,35 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 @keyframes fs-rise { from { opacity: 0; } }
 
 .fs-atts { margin-top: var(--space-5); }
+
+/* 只读正文：排版语言与列表卡片同源，字号行距按全屏阅读放大 */
+.fs-view {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--text);
+  word-break: break-word;
+}
+.fs-view :deep(> * + *) { margin-top: var(--space-3); }
+.fs-view :deep(* + h1), .fs-view :deep(* + h2), .fs-view :deep(* + h3) { margin-top: var(--space-5); }
+.fs-view :deep(h1) { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
+.fs-view :deep(h2) { font-size: 17.5px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.5; }
+.fs-view :deep(h3) { font-size: 15.5px; font-weight: 600; line-height: 1.5; }
+.fs-view :deep(strong) { font-weight: 600; color: var(--text); }
+.fs-view :deep(ul), .fs-view :deep(ol) { padding-left: var(--space-5); }
+.fs-view :deep(li) { margin: 3px 0; }
+.fs-view :deep(li::marker) { color: var(--text-faint); }
+.fs-view :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-4); color: var(--text-secondary); }
+.fs-view :deep(code) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 13px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
+.fs-view :deep(pre) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 13px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-3) var(--space-4); overflow-x: auto; }
+.fs-view :deep(pre code) { background: none; border: none; padding: 0; color: inherit; }
+.fs-view :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 5px; }
+.fs-view :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
+.fs-view :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
+.fs-view :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 7px; }
+/* 只读层里的勾选框不接操作，别让人点了以为改了状态 */
+.fs-view :deep(input[type='checkbox']) { pointer-events: none; }
+.fs-view :deep(hr) { border: none; border-top: 1px solid var(--border); }
+.fs-view :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 56vh; object-fit: contain; border-radius: var(--radius); }
 
 .fs-foot {
   flex-shrink: 0;

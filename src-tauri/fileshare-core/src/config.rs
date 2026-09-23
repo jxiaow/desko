@@ -1,0 +1,236 @@
+//! 共享配置：以 JSON 文件为唯一真相（主程序写、服务进程读）。
+//! 服务进程按 mtime+size 签名轮询热加载，改目录/口令不重启即生效——原 ftp 版
+//! app_config.json 的语义在这里回归，只是写入方从"用户编辑"换成了 desko 主程序。
+
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+pub const DEFAULT_PORT: u16 = 8000;
+pub const PORT_PROBE_SPAN: u16 = 10;
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ShareConfig {
+    #[serde(default)]
+    pub port: u16,
+    #[serde(default)]
+    pub local_only: bool,
+    #[serde(default)]
+    pub share_dirs: Vec<PathBuf>,
+    /// sha256(口令) 小写十六进制；None = 不启用访问口令。
+    /// 注意：明文存在 app data 的 JSON 里（不进 SQLite 加密库），只挡君子——
+    /// 局域网便利型门槛，能离线爆破弱口令，别拿它当强鉴权用。
+    #[serde(default)]
+    pub password_sha256: Option<String>,
+}
+
+impl ShareConfig {
+    /// 空端口字段按 0 处理，读侧统一走这个
+    pub fn effective_port(&self) -> u16 {
+        if self.port == 0 {
+            DEFAULT_PORT
+        } else {
+            self.port
+        }
+    }
+}
+
+/// 展开 `~`、去空、去重（Windows 大小写不敏感）、相对路径钉到 base_dir。
+/// 对齐 ftp 版 normalize_share_dirs + expanduser + resolve。
+pub fn normalize_share_dirs(raw: &[String], base_dir: &Path) -> Vec<PathBuf> {
+    let mut seen = Vec::<String>::new();
+    let mut out = Vec::new();
+    for item in raw {
+        let text = item.trim();
+        if text.is_empty() {
+            continue;
+        }
+        let expanded = expand_tilde(text);
+        let path = PathBuf::from(&expanded);
+        let abs = if path.is_absolute() {
+            path
+        } else {
+            base_dir.join(path)
+        };
+        let key = strip_verbatim(&abs).to_lowercase();
+        if !seen.contains(&key) {
+            seen.push(key);
+            out.push(abs);
+        }
+    }
+    out
+}
+
+/// \\?\ 前缀（canonicalize 产物）不参与去重键
+fn strip_verbatim(p: &Path) -> String {
+    let s = p.to_string_lossy().into_owned();
+    s.trim_start_matches(r"\\?\").to_string()
+}
+
+fn expand_tilde(text: &str) -> String {
+    if text == "~" || text.starts_with("~/") || text.starts_with("~\\") {
+        let home = std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .unwrap_or_default();
+        if !home.is_empty() {
+            return format!("{}{}", home, &text[1..]);
+        }
+    }
+    text.to_string()
+}
+
+pub fn ensure_dirs_exist(dirs: &[PathBuf]) -> Result<(), String> {
+    for dir in dirs {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("无法创建共享目录 {}: {}", dir.display(), e))?;
+    }
+    Ok(())
+}
+
+/// 读取配置文件；不存在返回默认值。损坏时抛错，由调用方决定"沿用上一次成功配置"。
+pub fn load_file(path: &Path) -> Result<Option<ShareConfig>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let text = std::fs::read_to_string(path).map_err(|e| format!("读取配置失败: {}", e))?;
+    let mut cfg: ShareConfig =
+        serde_json::from_str(&text).map_err(|e| format!("配置 JSON 损坏: {}", e))?;
+    let base = base_from_config_path(path);
+    cfg.share_dirs = normalize_share_strings(&cfg.share_dirs, &base);
+    Ok(Some(cfg))
+}
+
+fn normalize_share_strings(raw: &[PathBuf], base: &Path) -> Vec<PathBuf> {
+    let owned: Vec<String> = raw.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    normalize_share_dirs(&owned, base)
+}
+
+/// 相对目录的落点：配置文件的父目录（即 app data）
+fn base_from_config_path(path: &Path) -> PathBuf {
+    path.parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+}
+
+/// 原子写：临时文件 + rename
+pub fn save_file(path: &Path, cfg: &ShareConfig) -> Result<(), String> {
+    let tmp = path.with_extension("json.tmp");
+    let text = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
+    std::fs::write(&tmp, text).map_err(|e| format!("写配置失败: {}", e))?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("替换配置失败: {}", e))?;
+    Ok(())
+}
+
+/// 读-改-写合一：写前紧贴 rename 重读现盘，mutate 只动自己负责的字段。
+/// 主程序与网页 /settings 都会写这份文件，整对象盲写会互相吞字段。
+/// 文件不存在时用 fallback 兜底。返回落盘后的最终配置。
+pub fn update_file<F>(path: &Path, fallback: &ShareConfig, mutate: F) -> Result<ShareConfig, String>
+where
+    F: FnOnce(&mut ShareConfig),
+{
+    let mut cfg = match load_file(path)? {
+        Some(c) => c,
+        None => fallback.clone(),
+    };
+    mutate(&mut cfg);
+    save_file(path, &cfg)?;
+    Ok(cfg)
+}
+
+/// 配置签名：mtime+size，与原 ftp 版热加载判据一致
+pub fn file_signature(path: &Path) -> Option<(i64, u64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64)?;
+    Some((mtime, meta.len()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_config(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("desko-cfg-{}-{}.json", tag, uuid::Uuid::new_v4()))
+    }
+
+    #[test]
+    fn normalize_trims_dedups_and_expands() {
+        let base = PathBuf::from("/base");
+        let raw = vec![
+            "  /srv/a  ".to_string(),
+            "".to_string(),
+            "   ".to_string(),
+            "/srv/a".to_string(),
+            "rel".to_string(),
+        ];
+        let out = normalize_share_dirs(&raw, &base);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0], PathBuf::from("/srv/a"));
+        assert_eq!(out[1], PathBuf::from("/base/rel"));
+    }
+
+    #[test]
+    fn normalize_dedups_case_insensitive() {
+        let base = PathBuf::from("/base");
+        let raw = vec!["C:\\Share".to_string(), "c:\\share".to_string()];
+        assert_eq!(normalize_share_dirs(&raw, &base).len(), 1);
+    }
+
+    #[test]
+    fn effective_port_falls_back_to_default() {
+        assert_eq!(ShareConfig::default().effective_port(), DEFAULT_PORT);
+        assert_eq!(ShareConfig { port: 9000, ..Default::default() }.effective_port(), 9000);
+    }
+
+    #[test]
+    fn expand_tilde_passthrough() {
+        assert_eq!(expand_tilde("/plain/path"), "/plain/path");
+        assert_eq!(expand_tilde(""), "");
+        let out = expand_tilde("~/docs");
+        assert!(!out.starts_with('~') || std::env::var("USERPROFILE").is_err());
+    }
+
+    #[test]
+    fn file_roundtrip_with_relative_resolution() {
+        let p = tmp_config("round");
+        let mut cfg = ShareConfig {
+            port: 8123,
+            local_only: true,
+            share_dirs: vec![PathBuf::from("sub")],
+            password_sha256: Some("deadbeef".to_string()),
+        };
+        save_file(&p, &cfg).unwrap();
+        let loaded = load_file(&p).unwrap().unwrap();
+        assert_eq!(loaded.port, 8123);
+        assert!(loaded.local_only);
+        assert_eq!(loaded.password_sha256.as_deref(), Some("deadbeef"));
+        assert!(loaded.share_dirs[0].is_absolute());
+        assert_eq!(
+            loaded.share_dirs[0],
+            p.parent().unwrap().join("sub")
+        );
+        std::fs::remove_file(&p).ok();
+        cfg.port = 1;
+        save_file(&p, &cfg).unwrap();
+        assert!(file_signature(&p).is_some());
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn corrupt_json_is_reported() {
+        let p = tmp_config("corrupt");
+        std::fs::write(&p, "{ not json").unwrap();
+        assert!(load_file(&p).is_err());
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn missing_file_is_none() {
+        let p = tmp_config("absent");
+        assert!(load_file(&p).unwrap().is_none());
+    }
+}

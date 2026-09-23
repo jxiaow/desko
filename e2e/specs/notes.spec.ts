@@ -257,6 +257,28 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.memo')).toHaveCount(4)
   })
 
+  test('全屏查看：只读渲染、转编辑、Esc 关闭', async ({ page }) => {
+    await gotoNotes(page)
+    const m = memo(page, '第一条小记')
+    await m.hover()
+    await tipButton(m, '全屏查看').click()
+    const fs = page.locator('section.fs')
+    await expect(fs).toBeVisible()
+    await expect(fs.locator('.fs-view')).toContainText('第一条小记：周会纪要与待办')
+    // 只读层没有编辑器，底栏换成「编辑」主按钮
+    await expect(fs.locator('.ProseMirror')).toHaveCount(0)
+    await expect(fs.locator('.save-hint')).toHaveText('只读浏览')
+    await expect(fs.locator('.fs-hint')).toHaveCount(0)
+
+    // 查看转编辑：书写面接管同一条正文
+    await fs.locator('.fs-foot button.eb.primary').click()
+    await expect(fs.locator('.fs-view')).toHaveCount(0)
+    await expect(fs.locator('.ProseMirror')).toContainText('第一条小记')
+
+    await page.keyboard.press('Escape')
+    await expect(fs).toHaveCount(0)
+  })
+
   test('卡片上勾选任务项：改动落库，进编辑态不弹回', async ({ page }) => {
     await bootUnlocked(page, { notes: [{ title: '清单', content_html: TODO_HTML }] }, '/notes')
     const boxes = page.locator('.memo .memo-body input[type=checkbox]')

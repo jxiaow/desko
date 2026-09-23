@@ -1,0 +1,839 @@
+//! 路由处理：/ 列表、/download、/upload、/save-text、/settings（仅 POST，首页弹窗提交）、/login。
+//! 行为基准 ftp/server.py 的 FileTransferHandler，逐分支对照移植。
+
+use std::io::{BufReader, Cursor, Read};
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use tiny_http::{Header, Request, Response, StatusCode};
+
+use crate::auth::{sanitize_next, SESSION_COOKIE};
+use crate::config::{ensure_dirs_exist, normalize_share_dirs, ShareConfig};
+use crate::files::{
+    claim_available_name, format_size, list_files, resolve_file_in_share, sanitize_upload_name, FileEntry,
+};
+use crate::http_util::{
+    content_type_of, cookie_get, pair_get, parse_cookie, parse_pairs, percent_decode, split_lines, url_encode,
+};
+use crate::multipart;
+use crate::pages::{self, HomePage, RowData};
+
+const PAGE_SIZE: usize = 10;
+const MAX_FORM_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_LOGIN_BYTES: u64 = 8 * 1024;
+/// 单次上传请求的合计字节上限：挡误操作与恶意灌盘，正常局域网传文件够用
+const MAX_UPLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+const SESSION_TTL_COOKIE_SECS: u64 = 7 * 24 * 3600;
+
+/// 服务运行期共享状态：请求线程与 Tauri 命令共用一份。
+pub struct RuntimeState {
+    pub config: std::sync::RwLock<ShareConfig>,
+    pub sessions: Arc<crate::auth::SessionStore>,
+    /// 网页端改共享目录后写回 meta（SQLite 只能在命令侧摸，这里注入回调）
+    pub persist_dirs: Arc<dyn Fn(&[PathBuf]) -> Result<(), String> + Send + Sync>,
+    pub bound_port: u16,
+    pub lan_ip: String,
+    /// 相对目录的落点（配置文件所在目录），由服务进程注入
+    pub base_dir: std::path::PathBuf,
+}
+
+impl RuntimeState {
+    pub fn snapshot(&self) -> ShareConfig {
+        match self.config.read() {
+            Ok(g) => g.clone(),
+            Err(_) => ShareConfig::default(),
+        }
+    }
+}
+
+/// 每请求取一次配置快照，改目录/口令下一个请求即生效（"热加载"等价物）
+pub fn handle(request: Request, state: Arc<RuntimeState>) {
+    let cfg = state.snapshot();
+    let url = request.url().to_string();
+    let method = request.method().as_str().to_string();
+    let content_type = header_of(&request, "content-type");
+    let cookie_header = header_of(&request, "cookie");
+    let (path, query_raw) = match url.split_once('?') {
+        Some((p, q)) => (percent_decode(p), q.to_string()),
+        None => (url.clone(), String::new()),
+    };
+    let query = parse_pairs(&query_raw);
+
+    // 边界防串：Host 只认 IP/localhost（挡 DNS 重绑——rebind 后 Host 是攻击者域名）；
+    // POST 再查 Origin 同源与 Sec-Fetch-Site（挡跨站表单 CSRF，无口令态没有 cookie 可挡）
+    let host = url_host(&header_of(&request, "host"));
+    if !host_trusted(&host, &state.lan_ip) {
+        if let Err(e) = fail(request, text_resp(StatusCode(403), "Forbidden host")) {
+            eprintln!("desko fileshare: 回复失败: {}", e);
+        }
+        return;
+    }
+    if method == "POST" {
+        let sfs = header_of(&request, "sec-fetch-site");
+        let origin = url_host(&header_of(&request, "origin"));
+        let cross = sfs.eq_ignore_ascii_case("cross-site")
+            || (!origin.is_empty() && !origin.eq_ignore_ascii_case(&host));
+        if cross {
+            if let Err(e) = fail(request, text_resp(StatusCode(403), "Cross-site request rejected")) {
+                eprintln!("desko fileshare: 回复失败: {}", e);
+            }
+            return;
+        }
+    }
+
+    // respond 失败基本都是客户端断连，request 已被消耗，没有补救动作，只留痕
+    if let Err(e) = dispatch(request, &state, &cfg, &method, &path, &query, &content_type, &cookie_header) {
+        eprintln!("desko fileshare: 回复失败: {}", e);
+    }
+}
+
+/// 从 Host/Origin 头取裸主机名：去 scheme、去端口、拆 IPv6 方括号
+fn url_host(value: &str) -> String {
+    let mut s = match value.split_once("://") {
+        Some((_, rest)) => rest,
+        None => value,
+    };
+    if let Some((before, _)) = s.split_once('/') {
+        s = before;
+    }
+    if let Some(rest) = s.strip_prefix('[') {
+        return rest.split_once(']').map(|(h, _)| h.to_string()).unwrap_or_default();
+    }
+    match s.rsplit_once(':') {
+        Some((h, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => h.to_string(),
+        _ => s.to_string(),
+    }
+}
+
+fn host_trusted(host: &str, lan_ip: &str) -> bool {
+    !host.is_empty()
+        && (host.eq_ignore_ascii_case("localhost") || host == lan_ip || host.parse::<std::net::IpAddr>().is_ok())
+}
+
+type Handled = Result<(), std::io::Error>;
+
+fn dispatch(
+    request: Request,
+    state: &Arc<RuntimeState>,
+    cfg: &ShareConfig,
+    method: &str,
+    path: &str,
+    query: &[(String, String)],
+    content_type: &str,
+    cookie_header: &str,
+) -> Handled {
+    // 口令门：/login 之外一律先验会话
+    if cfg.password_sha256.is_some() && path != "/login" {
+        let cookies = parse_cookie(cookie_header);
+        let authed = cookie_get(&cookies, SESSION_COOKIE)
+            .map(|t| state.sessions.validate(t))
+            .unwrap_or(false);
+        if !authed {
+            let next = original_target(method, path, query);
+            return if method == "GET" {
+                ok_respond(request, redirect_resp(&format!("/login?next={}", url_encode(&next)), None))
+            } else {
+                ok_respond(request, html_resp(StatusCode(401), &pages::login_page(false, &next), None))
+            };
+        }
+    }
+
+    match (method, path) {
+        ("GET", "/") => handle_index(request, state, cfg, query),
+        ("GET", "/download") => handle_download(request, state, cfg, query),
+        ("POST", "/settings") => handle_settings_post(request, state),
+        ("POST", "/upload") => handle_upload(request, state, cfg, query, content_type),
+        ("POST", "/save-text") => handle_save_text(request, state, cfg, query),
+        ("GET", "/login") => {
+            let next = sanitize_next(pair_get(query, "next").unwrap_or(""));
+            ok_respond(request, html_resp(StatusCode(200), &pages::login_page(false, &next), None))
+        }
+        ("POST", "/login") => handle_login(request, state, cfg),
+        _ => ok_respond(request, text_resp(StatusCode(404), "Not Found")),
+    }
+}
+
+fn original_target(method: &str, path: &str, query: &[(String, String)]) -> String {
+    if method != "GET" {
+        return "/".to_string();
+    }
+    if query.is_empty() {
+        path.to_string()
+    } else {
+        let q = query
+            .iter()
+            .map(|(k, v)| format!("{}={}", url_encode(k), url_encode(v)))
+            .collect::<Vec<_>>()
+            .join("&");
+        format!("{}?{}", path, q)
+    }
+}
+
+// ── 首页 / 列表 ──────────────────────────────────────────────
+
+fn handle_index(
+    request: Request,
+    state: &Arc<RuntimeState>,
+    cfg: &ShareConfig,
+    query: &[(String, String)],
+) -> Handled {
+    let message = pair_get(query, "message").unwrap_or("").to_string();
+    let page: usize = pair_get(query, "page").and_then(|s| s.parse().ok()).unwrap_or(1);
+    let search = pair_get(query, "q").unwrap_or("").to_string();
+    let is_partial = pair_get(query, "partial") == Some("1");
+
+    // 无筛选无排序开关：全目录合并，固定按修改时间倒序
+    let (rows, count, total_pages, current) = page_entries(cfg, &search, page);
+    let count_text = format!("{} 个文件", count);
+    let share_index = 0usize;
+
+    if is_partial {
+        let body = pages::partial_response(
+            &count_text,
+            &pages::render_rows(&rows),
+            &pages::render_pagination(total_pages, current, &search),
+        );
+        return ok_respond(request, html_resp(StatusCode(200), &body, None));
+    }
+
+    let dirs: Vec<String> = cfg.share_dirs.iter().map(|d| d.display().to_string()).collect();
+    let html = pages::home_page(&HomePage {
+        lan_url: &format!("http://{}:{}", state.lan_ip, state.bound_port),
+        toast: if message.is_empty() { None } else { Some(&message) },
+        search_q: &search,
+        count_text,
+        rows_html: pages::render_rows(&rows),
+        pagination_html: pages::render_pagination(total_pages, current, &search),
+        share_index,
+        share_dirs: &dirs,
+    });
+    ok_respond(request, html_resp(StatusCode(200), &html, None))
+}
+
+fn page_entries(
+    cfg: &ShareConfig,
+    search: &str,
+    page: usize,
+) -> (Vec<RowData>, usize, usize, usize) {
+    let mut all: Vec<(usize, FileEntry)> = Vec::new();
+    for (i, dir) in cfg.share_dirs.iter().enumerate() {
+        for entry in list_files(dir) {
+            all.push((i, entry));
+        }
+    }
+    if !search.is_empty() {
+        let needle = search.to_lowercase();
+        all.retain(|(_, e)| e.name.to_lowercase().contains(&needle));
+    }
+    // 新的在前；同秒按名升序保证分页稳定
+    all.sort_by(|a, b| b.1.mtime.cmp(&a.1.mtime).then(a.1.name.cmp(&b.1.name)));
+    let count = all.len();
+    let total_pages = ((count + PAGE_SIZE - 1) / PAGE_SIZE).max(1);
+    let current = page.clamp(1, total_pages);
+    let start = (current - 1) * PAGE_SIZE;
+    let end = (start + PAGE_SIZE).min(count);
+    let rows = all[start..end]
+        .iter()
+        .map(|(i, e)| RowData {
+            name: e.name.clone(),
+            share_index: *i,
+            size: format_size(e.size),
+            modified: e.modified.clone(),
+            share_dir: cfg.share_dirs[*i].display().to_string(),
+        })
+        .collect();
+    (rows, count, total_pages, current)
+}
+
+// ── 下载 ────────────────────────────────────────────────────
+
+fn handle_download(
+    request: Request,
+    _state: &Arc<RuntimeState>,
+    cfg: &ShareConfig,
+    query: &[(String, String)],
+) -> Handled {
+    let share: Option<usize> = pair_get(query, "share")
+        .and_then(|s| s.parse().ok())
+        .filter(|i| *i < cfg.share_dirs.len());
+    let Some(share_index) = share else {
+        return fail(request, text_resp(StatusCode(400), "Invalid share index"));
+    };
+    let Some(raw_name) = pair_get(query, "name") else {
+        return fail(request, text_resp(StatusCode(400), "Invalid filename"));
+    };
+    let dir = cfg.share_dirs[share_index].clone();
+    let Some(target) = resolve_file_in_share(&dir, raw_name) else {
+        return fail(request, text_resp(StatusCode(400), "Invalid filename"));
+    };
+    let Ok(meta) = std::fs::metadata(&target) else {
+        return fail(request, text_resp(StatusCode(404), "File not found"));
+    };
+    if !meta.is_file() {
+        return fail(request, text_resp(StatusCode(404), "File not found"));
+    }
+    let Ok(file) = std::fs::File::open(&target) else {
+        return fail(request, text_resp(StatusCode(404), "File not found"));
+    };
+
+    // data_length=None → tiny_http 走 chunked，大文件不进内存
+    let response = Response::new(
+        StatusCode(200),
+        download_headers(&target),
+        BufReader::new(file),
+        None,
+        None,
+    );
+    ok_respond(request, response)
+}
+
+/// 文件名纯 ASCII 可打印就直接放，否则 RFC 5987 filename*=UTF-8''（同 ftp 版策略）。
+/// 不带 Content-Length——长度交给 chunked。
+pub fn download_headers(path: &std::path::Path) -> Vec<Header> {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let disposition = if !name.is_empty()
+        && name.chars().all(|c| (c as u32) >= 0x20 && (c as u32) < 0x7f)
+        && !name.contains('"')
+    {
+        format!("attachment; filename=\"{}\"", name)
+    } else {
+        format!("attachment; filename*=UTF-8''{}", url_encode(&name).replace('+', "%20"))
+    };
+    let mut headers = build_headers(vec![
+        ("Content-Type", content_type_of(&name)),
+        ("Cache-Control", "no-store"),
+    ]);
+    headers.extend(Header::from_bytes("Content-Disposition", disposition).ok());
+    headers
+}
+
+// ── 上传 ────────────────────────────────────────────────────
+
+fn handle_upload(
+    mut request: Request,
+    _state: &Arc<RuntimeState>,
+    cfg: &ShareConfig,
+    query: &[(String, String)],
+    content_type: &str,
+) -> Handled {
+    let share: Option<usize> = pair_get(query, "share")
+        .and_then(|s| s.parse().ok())
+        .filter(|i| *i < cfg.share_dirs.len());
+    let Some(share_index) = share else {
+        drain_body(&mut request);
+        return fail(request, text_resp(StatusCode(400), "Invalid share index"));
+    };
+    let Some(boundary) = multipart::boundary_from_content_type(content_type) else {
+        drain_body(&mut request);
+        return fail(request, text_resp(StatusCode(400), "Expected multipart form upload"));
+    };
+    let dir = cfg.share_dirs[share_index].clone();
+    let saved_result = multipart::read_multipart(request.as_reader(), &boundary, &dir, MAX_UPLOAD_BYTES);
+    let saved = match saved_result {
+        Ok(v) => v,
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => {
+            return fail(request, text_resp(StatusCode(413), "Upload too large"))
+        }
+        Err(_) => return fail(request, text_resp(StatusCode(400), "Malformed upload")),
+    };
+    if saved.is_empty() {
+        return fail(request, text_resp(StatusCode(400), "No files uploaded"));
+    }
+    let target = with_message("/".to_string(), "上传完成");
+    ok_respond(request, redirect_resp(&target, None))
+}
+
+// ── 文本保存 ────────────────────────────────────────────────
+
+fn handle_save_text(
+    mut request: Request,
+    _state: &Arc<RuntimeState>,
+    cfg: &ShareConfig,
+    query: &[(String, String)],
+) -> Handled {
+    let share: Option<usize> = pair_get(query, "share")
+        .and_then(|s| s.parse().ok())
+        .filter(|i| *i < cfg.share_dirs.len());
+    let Some(share_index) = share else {
+        drain_body(&mut request);
+        return fail(request, text_resp(StatusCode(400), "Invalid share index"));
+    };
+    let body_result = multipart::read_limited(request.as_reader(), MAX_FORM_BYTES);
+    let body = match body_result {
+        Ok(b) => b,
+        Err(_) => return fail(request, text_resp(StatusCode(413), "Body too large")),
+    };
+    let pairs = parse_pairs(&String::from_utf8_lossy(&body));
+    let filename = pair_get(&pairs, "filename").unwrap_or("").trim().to_string();
+    let content = pair_get(&pairs, "content").unwrap_or("").to_string();
+    if filename.is_empty() || content.trim().is_empty() {
+        return fail(request, text_resp(StatusCode(400), "Missing filename or content"));
+    }
+    let name = if filename.to_ascii_lowercase().ends_with(".txt") {
+        filename
+    } else {
+        format!("{}.txt", filename)
+    };
+    let Some(name) = sanitize_upload_name(&name) else {
+        return fail(request, text_resp(StatusCode(400), "Invalid filename"));
+    };
+    let dir = cfg.share_dirs[share_index].clone();
+    let target = match claim_available_name(&dir, &name) {
+        Ok(t) => t,
+        Err(_) => return fail(request, text_resp(StatusCode(500), "Write failed")),
+    };
+    if std::fs::write(&target, content.as_bytes()).is_err() {
+        let _ = std::fs::remove_file(&target);
+        return fail(request, text_resp(StatusCode(500), "Write failed"));
+    }
+    let redirect = with_message("/".to_string(), "文本已保存");
+    ok_respond(request, redirect_resp(&redirect, None))
+}
+
+// ── 共享目录设置（首页弹窗 → POST /settings）─────────────────
+
+fn handle_settings_post(request: Request, state: &Arc<RuntimeState>) -> Handled {
+    let (request, body) = match read_body(request, MAX_FORM_BYTES) {
+        Ok(pair) => pair,
+        Err((request, ())) => return fail(request, text_resp(StatusCode(413), "内容过长，请减少目录数量")),
+    };
+    let pairs = parse_pairs(&String::from_utf8_lossy(&body));
+    let text = pair_get(&pairs, "share_dirs").unwrap_or("");
+    let new_dirs = normalize_share_dirs(&split_lines(text), &state.base_dir);
+    if new_dirs.is_empty() {
+        return fail(request, text_resp(StatusCode(400), "请输入共享目录"));
+    }
+    if let Err(e) = ensure_dirs_exist(&new_dirs) {
+        let msg = e.to_string();
+        return fail(request, text_resp(StatusCode(400), &msg));
+    }
+    if let Err(msg) = (state.persist_dirs)(&new_dirs) {
+        let toast = format!("保存失败：{}", msg);
+        return fail(request, text_resp(StatusCode(500), &toast));
+    }
+    if let Ok(mut guard) = state.config.write() {
+        guard.share_dirs = new_dirs;
+    }
+    ok_respond(request, redirect_resp(&with_message("/".to_string(), "设置已保存"), None))
+}
+
+// ── 登录 ────────────────────────────────────────────────────
+
+fn handle_login(request: Request, state: &Arc<RuntimeState>, cfg: &ShareConfig) -> Handled {
+    let (request, body) = match read_body(request, MAX_LOGIN_BYTES) {
+        Ok(pair) => pair,
+        Err((request, ())) => return fail(request, text_resp(StatusCode(400), "Body too large")),
+    };
+    let pairs = parse_pairs(&String::from_utf8_lossy(&body));
+    let next = sanitize_next(pair_get(&pairs, "next").unwrap_or("/"));
+    let password = pair_get(&pairs, "password").unwrap_or("").to_string();
+    let Some(stored) = &cfg.password_sha256 else {
+        // 口令已被关掉：直接放行
+        return ok_respond(request, redirect_resp(&next, None));
+    };
+    if !crate::auth::verify_password(&password, stored) {
+        return ok_respond(request, html_resp(StatusCode(401), &pages::login_page(true, &next), None));
+    }
+    let token = state.sessions.issue();
+    let cookie = format!(
+        "{}={}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
+        SESSION_COOKIE, token, SESSION_TTL_COOKIE_SECS
+    );
+    ok_respond(request, redirect_resp(&next, Some(cookie)))
+}
+
+// ── 响应小工具 ───────────────────────────────────────────────
+
+fn with_message(base_url: String, message: &str) -> String {
+    let sep = if base_url.contains('?') { "&" } else { "?" };
+    format!("{}{}message={}", base_url, sep, url_encode(message))
+}
+
+fn header_of(request: &Request, name: &str) -> String {
+    request
+        .headers()
+        .iter()
+        .find(|h| h.field.as_str().as_str().eq_ignore_ascii_case(name))
+        .map(|h| h.value.to_string())
+        .unwrap_or_default()
+}
+
+/// 丢弃式读完 body，让连接能干净复用/关闭；设 64MB 上限防 pathological 输入撑爆内存
+fn drain_body(request: &mut Request) {
+    let mut buf = [0u8; 64 * 1024];
+    let mut left: u64 = 64 * 1024 * 1024;
+    loop {
+        if left == 0 {
+            return;
+        }
+        match request.as_reader().read(&mut buf) {
+            Ok(0) => return,
+            Ok(n) => left -= n as u64,
+            Err(_) => return,
+        }
+    }
+}
+
+fn read_body(request: Request, limit: u64) -> Result<(Request, Vec<u8>), (Request, ())> {
+    let mut request = request;
+    let result = multipart::read_limited(request.as_reader(), limit);
+    match result {
+        Ok(body) => Ok((request, body)),
+        Err(_) => Err((request, ())),
+    }
+}
+
+/// respond 消耗 self；失败只可能是连接已断，无从补救，把错误交给上层留痕
+fn ok_respond<R: Read + Send + 'static>(request: Request, response: Response<R>) -> Handled {
+    request.respond(response)
+}
+
+fn fail<R: Read + Send + 'static>(request: Request, response: Response<R>) -> Handled {
+    ok_respond(request, response)
+}
+
+fn build_headers(pairs: Vec<(&str, &str)>) -> Vec<Header> {
+    pairs
+        .into_iter()
+        .filter_map(|(k, v)| Header::from_bytes(k, v).ok())
+        .collect()
+}
+
+fn redirect_resp(location: &str, set_cookie: Option<String>) -> Response<std::io::Empty> {
+    let mut headers = build_headers(vec![("Location", location)]);
+    if let Some(c) = set_cookie {
+        headers.extend(Header::from_bytes("Set-Cookie", c).ok());
+    }
+    Response::new(StatusCode(302), headers, std::io::empty(), Some(0), None)
+}
+
+fn html_resp(status: StatusCode, body: &str, set_cookie: Option<String>) -> Response<Cursor<Vec<u8>>> {
+    let data = body.as_bytes().to_vec();
+    let len = data.len();
+    let mut headers = build_headers(vec![("Content-Type", "text/html; charset=utf-8")]);
+    if let Some(c) = set_cookie {
+        headers.extend(Header::from_bytes("Set-Cookie", c).ok());
+    }
+    Response::new(status, headers, Cursor::new(data), Some(len), None)
+}
+
+fn text_resp(status: StatusCode, body: &str) -> Response<Cursor<Vec<u8>>> {
+    let data = body.as_bytes().to_vec();
+    let len = data.len();
+    Response::new(
+        status,
+        build_headers(vec![("Content-Type", "text/plain; charset=utf-8")]),
+        Cursor::new(data),
+        Some(len),
+        None,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn home_url_message_append() {
+        assert_eq!(
+            with_message("/".to_string(), "上传完成"),
+            "/?message=%E4%B8%8A%E4%BC%A0%E5%AE%8C%E6%88%90"
+        );
+        assert_eq!(with_message("/?share=1".to_string(), "x"), "/?share=1&message=x");
+    }
+
+    #[test]
+    fn original_target_roundtrip() {
+        let q = parse_pairs("share=1&q=a%20b");
+        assert_eq!(original_target("GET", "/", &q), "/?share=1&q=a+b");
+        assert_eq!(original_target("POST", "/upload", &q), "/");
+        assert_eq!(original_target("GET", "/settings", &[]), "/settings");
+    }
+
+    #[test]
+    fn url_host_extraction() {
+        assert_eq!(url_host("127.0.0.1:8000"), "127.0.0.1");
+        assert_eq!(url_host("http://192.168.1.5:8000/settings"), "192.168.1.5");
+        assert_eq!(url_host("[::1]:8000"), "::1");
+        assert_eq!(url_host("http://[::1]:8000/"), "::1");
+        assert_eq!(url_host("localhost"), "localhost");
+        assert_eq!(url_host("attacker.example"), "attacker.example");
+        assert_eq!(url_host(""), "");
+    }
+
+    #[test]
+    fn host_trusted_only_ips_and_lan() {
+        assert!(host_trusted("127.0.0.1", "172.33.0.7"));
+        assert!(host_trusted("172.33.0.7", "172.33.0.7"));
+        assert!(host_trusted("Localhost", "172.33.0.7"));
+        assert!(host_trusted("192.168.1.9", "172.33.0.7")); // 任意 IP 字面量放行（多网卡）
+        assert!(!host_trusted("attacker.example", "172.33.0.7")); // DNS 重绑的 Host 是域名
+        assert!(!host_trusted("", "172.33.0.7"));
+    }
+
+    #[test]
+    fn content_disposition_ascii_vs_rfc5987() {
+        let h = download_headers(std::path::Path::new(r"C:\s\report.pdf"));
+        let disp = h.iter().find(|x| x.field.equiv("Content-Disposition")).unwrap();
+        assert!(disp.value.as_str().contains("filename=\"report.pdf\""));
+        assert!(!h.iter().any(|x| x.field.equiv("Content-Length")));
+
+        let h = download_headers(std::path::Path::new(r"C:\s\中文.txt"));
+        let disp = h.iter().find(|x| x.field.equiv("Content-Disposition")).unwrap();
+        assert!(disp.value.as_str().contains("filename*=UTF-8''%E4%B8%AD%E6%96%87.txt"));
+
+        let h = download_headers(std::path::Path::new(r#"C:\s\a\"b.txt"#));
+        let disp = h.iter().find(|x| x.field.equiv("Content-Disposition")).unwrap();
+        assert!(disp.value.as_str().contains("filename*=UTF-8''"));
+    }
+
+    #[test]
+    fn page_windowing_clamps_and_slices() {
+        let cfg = ShareConfig::default(); // 无目录
+        let (rows, count, total, current) = page_entries(&cfg, "", 999);
+        assert_eq!((rows.len(), count, total, current), (0, 0, 1, 1));
+    }
+
+    fn test_state(dirs: Vec<PathBuf>) -> Arc<RuntimeState> {
+        Arc::new(RuntimeState {
+            config: std::sync::RwLock::new(ShareConfig {
+                port: 8000,
+                local_only: true,
+                share_dirs: dirs,
+                password_sha256: None,
+            }),
+            sessions: Arc::new(crate::auth::SessionStore::new()),
+            persist_dirs: Arc::new(|_| Ok(())),
+            bound_port: 8000,
+            lan_ip: "127.0.0.1".to_string(),
+            base_dir: std::env::temp_dir(),
+        })
+    }
+
+    fn no_redirect_agent() -> ureq::Agent {
+        ureq::AgentBuilder::new().redirects(0).build()
+    }
+
+    // 端到端冒烟：真实 socket 走一遍 index/download/upload/save-text
+    #[test]
+    fn http_roundtrip_smoke() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("desko-http-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("小文件.txt"), "hello 世界".as_bytes()).unwrap();
+
+        let state = test_state(vec![dir.clone()]);
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop2 = stop.clone();
+        let st = state.clone();
+        std::thread::spawn(move || {
+            crate::server::accept_loop(server, st, stop2);
+        });
+        let base = format!("http://127.0.0.1:{}", port);
+
+        // 首页
+        let resp = ureq::get(&format!("{}/", base)).call().unwrap();
+        let body = resp.into_string().unwrap();
+        assert!(body.contains("小文件.txt") || body.contains("&#23567;"));
+        assert!(body.contains("1 个文件"));
+
+        // partial
+        let resp = ureq::get(&format!("{}/?partial=1", base)).call().unwrap();
+        let body = resp.into_string().unwrap();
+        assert!(body.starts_with("1 个文件\n---PARTIAL---\n"));
+
+        // 搜索未命中
+        let resp = ureq::get(&format!("{}/?q=zzzz", base)).call().unwrap();
+        let body = resp.into_string().unwrap();
+        assert!(body.contains("0 个文件"));
+
+        // 下载：中文名走 RFC5987
+        let resp = ureq::get(&format!("{}/download?share=0&name={}", base, url_encode("小文件.txt")))
+            .call()
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let disp = resp.header("Content-Disposition").unwrap_or("");
+        assert!(disp.contains("filename*=UTF-8''"), "disp={}", disp);
+        let bytes: Vec<u8> = Vec::new();
+        let mut buf = bytes;
+        use std::io::Read as _;
+        resp.into_reader().take(1024).read_to_end(&mut buf).unwrap();
+        assert_eq!(buf, "hello 世界".as_bytes());
+
+        // 路径穿越拒绝
+        let err = ureq::get(&format!("{}/download?share=0&name=..%2Fetc%2Fpasswd", base)).call().unwrap_err();
+        assert!(matches!(err, ureq::Error::Status(400, _)), "err={:?}", err);
+
+        // 越界 share
+        let err = ureq::get(&format!("{}/download?share=99&name=a", base)).call().unwrap_err();
+        assert!(matches!(err, ureq::Error::Status(400, _)), "err={:?}", err);
+
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn upload_and_save_text_roundtrip() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("desko-up-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let state = test_state(vec![dir.clone()]);
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop2 = stop.clone();
+        let st = state.clone();
+        std::thread::spawn(move || crate::server::accept_loop(server, st, stop2));
+        let base = format!("http://127.0.0.1:{}", port);
+
+        // multipart 上传（手工拼 body）
+        let boundary = "DESKOTEST";
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{}\r\nContent-Disposition: form-data; name=\"files\"; filename=\"上 传.txt\"\r\nContent-Type: text/plain\r\n\r\n", boundary).as_bytes());
+        body.extend_from_slice(b"payload-data");
+        body.extend_from_slice(b"\r\n");
+        body.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
+        let agent = no_redirect_agent();
+        let resp = agent
+            .post(&format!("{}/upload?share=0", base))
+            .set("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
+            .send_bytes(&body)
+            .unwrap();
+        // 302 → 不自动跟随
+        assert_eq!(resp.status() as u16, 302);
+        assert!(resp.header("Location").unwrap_or("").contains("message="));
+        assert_eq!(fs::read(dir.join("上 传.txt")).unwrap(), b"payload-data");
+
+        // 同名再传 → (1)
+        let agent = no_redirect_agent();
+        let resp = agent
+            .post(&format!("{}/upload?share=0", base))
+            .set("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
+            .send_bytes(&body)
+            .unwrap();
+        assert_eq!(resp.status() as u16, 302);
+        assert!(dir.join("上 传 (1).txt").exists());
+
+        // save-text
+        let form = format!("filename=笔记&content={}", url_encode("line1\nline2"));
+        let resp = agent
+            .post(&format!("{}/save-text?share=0", base))
+            .set("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+            .send_string(&form)
+            .unwrap();
+        assert_eq!(resp.status() as u16, 302);
+        assert!(dir.join("笔记.txt").exists());
+        assert_eq!(fs::read_to_string(dir.join("笔记.txt")).unwrap(), "line1\nline2");
+
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn settings_post_saves_and_get_is_gone() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("desko-set-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let state = test_state(vec![dir.clone()]);
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop2 = stop.clone();
+        let st = state.clone();
+        std::thread::spawn(move || crate::server::accept_loop(server, st, stop2));
+        let base = format!("http://127.0.0.1:{}", port);
+        let agent = no_redirect_agent();
+
+        // 首页带出设置弹窗（目录进 textarea，按钮不再跳独立页）
+        let body = ureq::get(&format!("{}/", base)).call().unwrap().into_string().unwrap();
+        assert!(body.contains("id=\"set-form\""));
+        assert!(body.contains(&crate::http_util::html_escape(&dir.display().to_string())));
+
+        // GET 独立页已移除
+        let err = agent.get(&format!("{}/settings", base)).call().unwrap_err();
+        assert!(matches!(err, ureq::Error::Status(404, _)), "err={:?}", err);
+
+        // 空目录 → 400 中文提示
+        let err = agent
+            .post(&format!("{}/settings", base))
+            .set("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+            .send_string("share_dirs=")
+            .unwrap_err();
+        assert!(matches!(err, ureq::Error::Status(400, _)), "err={:?}", err);
+
+        // 合法目录 → 302 回首页带 message，配置热更新
+        let form = format!("share_dirs={}", url_encode(&dir.display().to_string()));
+        let resp = agent
+            .post(&format!("{}/settings", base))
+            .set("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+            .send_string(&form)
+            .unwrap();
+        assert_eq!(resp.status() as u16, 302);
+        let loc = resp.header("Location").unwrap_or("").to_string();
+        assert!(loc.starts_with("/?message="), "loc={}", loc);
+        assert_eq!(state.snapshot().share_dirs, vec![dir.clone()]);
+
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn password_gate_blocks_and_login_clears() {
+        use std::fs;
+        let dir = std::env::temp_dir().join(format!("desko-gate-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let state = test_state(vec![dir.clone()]);
+        {
+            let mut cfg = state.config.write().unwrap();
+            cfg.password_sha256 = Some(crate::auth::sha256_hex("sesame"));
+        }
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop2 = stop.clone();
+        let st = state.clone();
+        std::thread::spawn(move || crate::server::accept_loop(server, st, stop2));
+        let base = format!("http://127.0.0.1:{}", port);
+        let agent = no_redirect_agent();
+
+        // 未登录 GET / → 302 到 /login
+        let resp = agent.get(&format!("{}/", base)).call().unwrap();
+        assert_eq!(resp.status() as u16, 302);
+        assert!(resp.header("Location").unwrap_or("").starts_with("/login?next="));
+
+        // 错误口令 → 401
+        let err = agent
+            .post(&format!("{}/login", base))
+            .set("Content-Type", "application/x-www-form-urlencoded")
+            .send_string("next=%2F&password=wrong")
+            .unwrap_err();
+        let resp = match err {
+            ureq::Error::Status(_code, resp) => resp,
+            other => panic!("not a status error: {:?}", other),
+        };
+        assert_eq!(resp.status() as u16, 401);
+
+        // 正确口令 → 302 + Set-Cookie
+        let resp = agent
+            .post(&format!("{}/login", base))
+            .set("Content-Type", "application/x-www-form-urlencoded")
+            .send_string("next=%2F&password=sesame")
+            .unwrap();
+        assert_eq!(resp.status() as u16, 302);
+        let cookie = resp.header("Set-Cookie").unwrap_or("");
+        assert!(cookie.starts_with("fsid=") && cookie.contains("HttpOnly"), "cookie={}", cookie);
+        let token = cookie.split(';').next().unwrap();
+
+        // 带 cookie 可看首页
+        let resp = agent.get(&format!("{}/", base)).set("Cookie", token).call().unwrap();
+        assert_eq!(resp.status() as u16, 200);
+
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+}

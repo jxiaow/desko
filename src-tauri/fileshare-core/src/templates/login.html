@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>访问验证 · Desko</title>
+  <style>
+    :root {
+      --bg: #f8f8fa; --panel: #ffffff; --fill: #f1f1f4;
+      --border: #e3e3ea; --text: #1b1b20; --text2: #5e5e68; --muted: #8d8d98; --faint: #b6b6c0;
+      --accent: #5b57d9; --accent-hover: #4c48c6; --accent-ring: rgba(91, 87, 217, 0.15);
+      --danger: #c2413e;
+      --r-sm: 6px; --r-md: 10px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { min-height: 100vh; font: 14px/1.5 var(--font); background: var(--bg); color: var(--text); display: grid; place-items: center; -webkit-font-smoothing: antialiased; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 6px 24px rgba(27,27,32,.08); width: 360px; max-width: 92vw; padding: 30px 26px; }
+    .logo { width: 44px; height: 44px; border-radius: 12px; background: var(--accent); display: grid; place-items: center; color: #fff; margin: 0 auto 14px; }
+    h1 { font: 600 17px/1.3 var(--font); text-align: center; margin-bottom: 4px; }
+    p { font-size: 12.5px; color: var(--muted); text-align: center; margin-bottom: 22px; }
+    input { width: 100%; padding: 10px 13px; border: 1px solid var(--border); border-radius: var(--r-md); font: 14px/1.4 var(--font); background: var(--fill); color: var(--text); margin-bottom: 10px; transition: border-color .15s, box-shadow .15s, background .15s; }
+    input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel); }
+    input::placeholder { color: var(--faint); }
+    button { width: 100%; padding: 10px; border: none; border-radius: var(--r-md); background: var(--accent); color: #fff; font: 600 14px/1.4 var(--font); cursor: pointer; transition: background .15s; }
+    button:hover { background: var(--accent-hover); }
+    .err { font-size: 12px; color: var(--danger); text-align: center; min-height: 16px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+    <h1>局域网文件传输</h1>
+    <p>该服务已开启访问口令，请输入口令继续</p>
+    %%ERROR%%
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="%%NEXT%%">
+      <input type="password" name="password" placeholder="访问口令" autofocus required>
+      <button type="submit">进入</button>
+    </form>
+  </div>
+</body>
+</html>

@@ -50,10 +50,11 @@ const composerRef = ref<InstanceType<typeof NoteComposer> | null>(null)
 const fsRef = ref<InstanceType<typeof NoteFullscreen> | null>(null)
 const cardRefs = ref<InstanceType<typeof NoteCard>[]>([])
 
-/** 任何时刻只有一个书写面：草稿正文、就地展开的 note id、全屏层目标 */
+/** 任何时刻只有一个书写面：草稿正文、就地展开的 note id、全屏层目标与其模式 */
 const draftHtml = ref('')
 const editingId = ref<string | null>(null)
 const fsTarget = ref<'new' | string | null>(null)
+const fsMode = ref<'edit' | 'view'>('edit')
 const newbornId = ref<string | null>(null)
 
 const railRoom = ref(true)
@@ -134,12 +135,13 @@ const closeCard = async () => {
   editingId.value = null
 }
 
-const openFullscreen = async (target: 'new' | string) => {
+const openFullscreen = async (target: 'new' | string, mode: 'edit' | 'view' = 'edit') => {
   await flushNoteSave()
   if (target !== 'new') loadAttachments(target)
   editingId.value = null
   filterAnchor.value = null
   sortAnchor.value = null
+  fsMode.value = mode
   fsTarget.value = target
 }
 const closeFullscreen = async () => {
@@ -372,6 +374,7 @@ onBeforeUnmount(() => {
                 @update="saveNoteContent(note.id, $event)"
                 @close="closeCard"
                 @fullscreen="openFullscreen(note.id)"
+                @view="openFullscreen(note.id, 'view')"
                 @add-image="addImageToNote(note.id)"
                 @toggle-pin="togglePin(note)"
                 @toggle-star="toggleStar(note)"
@@ -466,15 +469,17 @@ onBeforeUnmount(() => {
 
     <NoteFullscreen
       v-if="fsTarget"
-      :key="fsTarget"
+      :key="`${fsTarget}:${fsMode}`"
       ref="fsRef"
       :note="fsNote"
+      :mode="fsMode"
       :initial-html="fsTarget === 'new' ? draftHtml : fsNote?.content_html ?? ''"
       :attachments="fsNote ? noteAttachments[fsNote.id] ?? [] : []"
       :save-state="fsNote ? noteSaveState : ''"
       @update="onFsUpdate"
       @close="closeFullscreen"
       @publish="publishDraft"
+      @edit="fsMode = 'edit'"
       @add-image="fsNote ? addImageToNote(fsNote.id) : addImageToDraft()"
       @toggle-pin="fsNote && togglePin(fsNote)"
       @toggle-star="fsNote && toggleStar(fsNote)"

@@ -27,6 +27,8 @@ pub struct AppState {
     pub backup_key: Mutex<Option<Vec<u8>>>,
     /// 同一时刻只跑一个备份任务（手动、退出、定时共用一把闸）
     pub backup_busy: AtomicBool,
+    /// 局域网文件传输服务子进程（默认关，开关在通用设置里）
+    pub fileshare: commands::fileshare::ProcState,
 }
 
 fn main() {
@@ -61,6 +63,7 @@ fn main() {
                 unlock_attempts: Mutex::new(0),
                 backup_key: Mutex::new(None),
                 backup_busy: AtomicBool::new(false),
+                fileshare: commands::fileshare::ProcState::default(),
             });
 
             // 正文里的图片走 asset: 协议读附件目录，只放行那一个目录
@@ -122,6 +125,9 @@ fn main() {
 
             // 自动备份线程：定时/实时两档，都在后台判变更指纹，锁屏或没设备份密码就空转
             services::auto_backup::spawn(app.handle().clone());
+
+            // 局域网文件传输：开关开着就恢复监听（默认关时无感）
+            commands::fileshare::restore_on_startup(app.handle());
 
             // Handle window close - minimize to tray instead
             if let Some(window) = app.get_webview_window("main") {
@@ -205,6 +211,12 @@ fn main() {
             commands::mfa::mfa_codes,
             commands::mfa::mfa_remove,
             commands::mfa::mfa_read_image,
+            commands::fileshare::fileshare_status,
+            commands::fileshare::fileshare_start,
+            commands::fileshare::fileshare_stop,
+            commands::fileshare::fileshare_get_config,
+            commands::fileshare::fileshare_save_config,
+            commands::fileshare::fileshare_set_password,
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::url_paths::list_url_paths,
@@ -220,9 +232,13 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, _event| {
+        .run(|app_handle, event| {
             // 退出不做事：这是个托盘常驻应用，真「退出」几周才一回，而崩溃、断电、
             // 强杀都不走这个钩子，护不住东西却每次关闭都堵一次磁盘和网络 IO。
             // 及时备份交给 auto_backup 的定时/停笔即备两档。
+            // 例外：局域网传输在收上传请求，拔监听要快过任何落盘动作。
+            if let tauri::RunEvent::Exit { .. } = event {
+                commands::fileshare::stop_for_exit(app_handle);
+            }
         });
 }

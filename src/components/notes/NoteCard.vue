@@ -32,6 +32,7 @@ const emit = defineEmits<{
   update: [html: string]
   close: []
   fullscreen: []
+  view: []
   addImage: []
   togglePin: []
   toggleStar: []
@@ -208,6 +209,9 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         <span v-if="props.note.starred"  class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
       </span>
       <span class="memo-acts">
+        <button  class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
+          <AppIcon name="eye" :size="13" />
+        </button>
         <button  class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
           <AppIcon name="edit" :size="13" />
         </button>

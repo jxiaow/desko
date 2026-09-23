@@ -8,3 +8,4 @@ pub mod data;
 pub mod backup;
 pub mod cloud;
 pub mod mfa;
+pub mod fileshare;
