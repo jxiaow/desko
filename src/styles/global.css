@@ -16,11 +16,35 @@
   --space-12: 48px;
 
   /* 圆角系统 */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius: 8px;
   --radius-md: 10px;
   --radius-lg: 12px;
   --radius-xl: 16px;
+  --radius-pill: 99px;
+
+  /* 字号阶梯：所有 UI 文本走这五档，不再用 10.5/11.5/12.5/13.5/14.5/17.5 这种半像素。
+     编辑器/列表/标题等组件用一档；需要略大或略小时优先调字重，不挤字号档。
+     body 的 14px 走 --text-md。 */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+
+  /* AppIcon :size 走这几档，不再 10/11/12/13/14/15/16/18/24 全谱散布。
+     组件传 :size 时按数值用，CSS 写 width/height 时引用 px 形式。 */
+  --icon-xs-px: 11px;
+  --icon-sm-px: 13px;
+  --icon-md-px: 14px;
+  --icon-lg-px: 18px;
+  --icon-xl-px: 24px;
+
+  /* 批量浮底栏占位高度：所有列表容器底部要让出这块空间，避免最后一行被遮 */
+  --dock-clearance: 96px;
 
   /* 过渡 */
   --transition-fast: 0.1s cubic-bezier(0.4, 0, 0.2, 1);
@@ -46,10 +70,10 @@
 /* ═══════════════════════════════════════════════════════════════════
    第 2 层 · 主题 —— 颜色，外加唯一一个字体槽。
 
-   四套主题（light-cool / dark-carbon / light-warm / cyber-hacker）
+   五套主题（light-cool / light-warm / light-celadon / linear-dark / jetbrains-dark）
    必须交出**完全相同**的槽位名。少填一个，切过去那个位置
    就留着上一套主题的值，变成一块切换后不动的颜色。
-   改槽位时跑 scripts/check-theme-coverage.mjs，它会比对四套的键集。
+   改槽位时跑 scripts/check-theme-coverage.mjs，它会比对各套的键集。
 
    --font-ui / --font-mono 是非颜色槽，四套主题各自填写。
 
@@ -62,54 +86,54 @@
    :root 上挂的是 light-cool 的值，作为 data-theme 缺失时的兜底。
    ═══════════════════════════════════════════════════════════════════ */
 :root, [data-theme="light-cool"] {
-  /* 品牌：单一紫蓝，从 public/app-icon.svg 收敛而来 */
-  --accent: #5b57d9;
-  --accent-hover: #4c48c6;
-  --accent-active: #3e3aa4;
+  /* 品牌：钢蓝，沉稳不扎眼。从紫蓝 #5b57d9 转向中性蓝，长时间阅读不疲劳 */
+  --accent: #4a6fa5;
+  --accent-hover: #3d5e8f;
+  --accent-active: #314d76;
   --accent-on: #ffffff;
-  --accent-soft: #eeedfb;
-  --accent-light: #dcd9f6;
-  --accent-ring: rgba(91, 87, 217, 0.15);
-  --text-brand: #4f4ac0;
+  --accent-soft: #e6ecf3;
+  --accent-light: #cfdbe8;
+  --accent-ring: rgba(74, 111, 165, 0.16);
+  --text-brand: #3d5e8f;
 
-  /* 面：四级灰阶，相邻 L* 差 ≥2，看得见但不成条纹。
-     --sunken 是静态凹陷（代码块、键帽），--hover 是指针反馈，两者不共用。 */
-  --bg: #f8f8fa;
+  /* 面：四级冷中性灰阶。底色 #f4f5f7 比原本 #f8f8fa 略压一档亮度，
+     白底刺眼的问题主要来自亮度，不来自色相。 */
+  --bg: #f4f5f7;
   --panel-bg: #ffffff;
-  --chrome-bg: #f1f1f5;
-  --sunken: #eaeaf0;
-  --fill: #e6e6ee;
-  --hover: #f0f0f4;
-  --active: #ececfb;
-  --overlay: rgba(18, 18, 26, 0.42);
+  --chrome-bg: #eceef2;
+  --sunken: #e6e9ed;
+  --fill: #dfe3e9;
+  --hover: #ebedf1;
+  --active: #dfe6ef;
+  --overlay: rgba(28, 32, 42, 0.42);
 
   /* 文字 */
-  --text: #1b1b20;
-  --text-secondary: #5e5e68;
-  --text-muted: #8d8d98;
-  --text-faint: #b6b6c0;
+  --text: #1c2028;
+  --text-secondary: #5a606e;
+  --text-muted: #858c99;
+  --text-faint: #a8b0bc;
 
-  /* 描边 */
-  --border: #e3e3ea;
-  --border-strong: #c9c9d3;
-  --border-subtle: #efeff3;
-  --border-hover: #c9c9d3;
+  /* 描边：层级靠边框，不靠色块。原 #e3e3ea 收到 #dde0e5，更利落 */
+  --border: #dde0e5;
+  --border-strong: #c4c9d3;
+  --border-subtle: #e8eaee;
+  --border-hover: #c4c9d3;
 
   /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
-  --text-url: #4a4d57;
-  --badge-cat-bg: #f1f1f5;
-  --badge-cat-border: #e3e3ea;
-  --badge-cat-text: #5e5e68;
-  --badge-ver-bg: #eeedfb;
-  --badge-ver-text: #4f4ac0;
+  --text-url: #454d5c;
+  --badge-cat-bg: #eceef2;
+  --badge-cat-border: #dde0e5;
+  --badge-cat-text: #5a606e;
+  --badge-ver-bg: #e6ecf3;
+  --badge-ver-text: #3d5e8f;
 
   /* 阴影 */
-  --shadow-xs: 0 1px 2px 0 rgba(26, 27, 32, 0.07);
-  --shadow-sm: 0 1px 2px 0 rgba(26, 27, 32, 0.05);
-  --shadow: 0 2px 6px -1px rgba(26, 27, 32, 0.08);
-  --shadow-md: 0 6px 16px -6px rgba(26, 27, 32, 0.14), 0 1px 3px rgba(26, 27, 32, 0.06);
-  --shadow-lg: 0 12px 28px -8px rgba(26, 27, 32, 0.18);
-  --shadow-pop: 0 20px 44px -12px rgba(26, 27, 32, 0.24), 0 2px 8px rgba(26, 27, 32, 0.08);
+  --shadow-xs: 0 1px 2px 0 rgba(28, 32, 42, 0.07);
+  --shadow-sm: 0 1px 2px 0 rgba(28, 32, 42, 0.05);
+  --shadow: 0 2px 6px -1px rgba(28, 32, 42, 0.08);
+  --shadow-md: 0 6px 16px -6px rgba(28, 32, 42, 0.14), 0 1px 3px rgba(28, 32, 42, 0.06);
+  --shadow-lg: 0 12px 28px -8px rgba(28, 32, 42, 0.18);
+  --shadow-pop: 0 20px 44px -12px rgba(28, 32, 42, 0.24), 0 2px 8px rgba(28, 32, 42, 0.08);
 
   /* 状态色：一个语义一档强度。--danger-on 是危险按钮上的文字色。
      三个状态色按"同一档可读写对比度"配平（浅色主题 ≥4.6:1，深色 ≥5.7:1），
@@ -125,37 +149,37 @@
   --warning-soft: #f7f4ed;
 
   /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
-  --sidebar-bg: #f1f1f5;
-  --sidebar-hover: #e7e7ee;
+  --sidebar-bg: #eceef2;
+  --sidebar-hover: #dfe3ea;
 
   /* 品牌标渐变 */
-  --brand-g1: #6a63ff;
-  --brand-g2: #5b57d9;
-  --brand-g3: #3e3aa4;
+  --brand-g1: #5e88c0;
+  --brand-g2: #4a6fa5;
+  --brand-g3: #314d76;
   --brand-knob: #ffffff;
 
   /* 锁屏 */
-  --lock-wash-a: #f8f8fa;
-  --lock-wash-b: #eaeaf0;
-  --lock-orb-1: rgba(91, 87, 217, 0.07);
-  --lock-orb-2: rgba(91, 87, 217, 0.045);
+  --lock-wash-a: #f4f5f7;
+  --lock-wash-b: #e6e9ed;
+  --lock-orb-1: rgba(74, 111, 165, 0.07);
+  --lock-orb-2: rgba(74, 111, 165, 0.045);
 
   /* 毛玻璃底栏 */
   --frost-bg: rgba(255, 255, 255, 0.86);
-  --frost-border: #e2e2e8;
+  --frost-border: #dce0e6;
 
   /* 深色面：气泡与 toast */
-  --tip-bg: #1b1b20;
-  --tip-fg: #f4f4f7;
-  --toast-bg: #1b1b20;
+  --tip-bg: #1c2028;
+  --tip-fg: #f4f5f7;
+  --toast-bg: #1c2028;
   --toast-ok: #7fd3ae;
   --toast-err: #f0938e;
-  --toast-info: #9d99f2;
+  --toast-info: #8ba9cc;
 
   /* 滚动条与选区 */
-  --scrollbar: rgba(27, 27, 32, 0.16);
-  --scrollbar-hover: rgba(27, 27, 32, 0.28);
-  --selection: rgba(91, 87, 217, 0.18);
+  --scrollbar: rgba(28, 32, 42, 0.16);
+  --scrollbar-hover: rgba(28, 32, 42, 0.28);
+  --selection: rgba(74, 111, 165, 0.18);
 
   /* 头像：按分类取色，六档同明度同彩度 */
   --cat-1: #5f62b8;
@@ -312,7 +336,8 @@
   --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
 }
 
-/* ---------- linear-dark：曜石深空，电光紫蓝主色，边界靠实体描边不靠投影 ---------- */
+/* ---------- linear-dark：曜石深空，电光紫蓝主色，边界靠实体描边不靠投影。
+   底色 #16181d 而非近黑，让长时间阅读时 CJK 小字不渗光。 ---------- */
 [data-theme="linear-dark"] {
   --accent: #5e6ad2;
   --accent-hover: #717de3;
@@ -323,30 +348,32 @@
   --accent-ring: rgba(94, 106, 210, 0.35);
   --text-brand: #8b95f6;
 
-  --bg: #090a0f;
-  --panel-bg: #141721;
-  --chrome-bg: #0e1017;
-  --sunken: #06070b;
-  --fill: #1a1f2c;
-  --hover: #1c202e;
-  --active: #232838;
-  --overlay: rgba(4, 5, 10, 0.66);
+  --bg: #16181d;
+  --panel-bg: #1c202a;
+  --chrome-bg: #13151a;
+  --sunken: #0e1015;
+  --fill: #232838;
+  --hover: #252a38;
+  --active: #2c3247;
+  --overlay: rgba(10, 11, 15, 0.66);
 
-  --text: #e8eaf2;
-  --text-secondary: #c3cad8;
-  --text-muted: #9aa3b4;
-  --text-faint: #5d6577;
+  /* 文字：暖白 #e8e6e3。深色下纯白或冷白会让 CJK 小字渗光，
+     向暖一档把这种"扎"压下去，但仍是中性偏冷，与 Linear 蓝主色不冲突。 */
+  --text: #e8e6e3;
+  --text-secondary: #c4c2bd;
+  --text-muted: #9c988f;
+  --text-faint: #6c6962;
 
-  --border: #222738;
-  --border-strong: #38405b;
-  --border-subtle: #1a1e2b;
-  --border-hover: #38405b;
+  --border: #2c3140;
+  --border-strong: #434b66;
+  --border-subtle: #1f222a;
+  --border-hover: #434b66;
 
   /* URL 走浅灰蓝：等宽小字在近黑底上要一眼可读，又不抢标题 */
-  --text-url: #cbd5e1;
-  --badge-cat-bg: #1a1f2c;
-  --badge-cat-border: #2c344a;
-  --badge-cat-text: #bac4d6;
+  --text-url: #d6dde6;
+  --badge-cat-bg: #1f222a;
+  --badge-cat-border: #2c3140;
+  --badge-cat-text: #c4c2bd;
   --badge-ver-bg: rgba(94, 106, 210, 0.18);
   --badge-ver-text: #8b95f6;
 
@@ -368,21 +395,21 @@
   --warning: #d6a028;
   --warning-soft: #2a2214;
 
-  --sidebar-bg: #0e1017;
-  --sidebar-hover: #171b26;
+  --sidebar-bg: #13151a;
+  --sidebar-hover: #1c202a;
 
   --brand-g1: #8b95f6;
   --brand-g2: #5e6ad2;
   --brand-g3: #3d4694;
-  --brand-knob: #0e1017;
+  --brand-knob: #13151a;
 
-  --lock-wash-a: #090a0f;
-  --lock-wash-b: #10131e;
+  --lock-wash-a: #16181d;
+  --lock-wash-b: #1c202a;
   --lock-orb-1: rgba(94, 106, 210, 0.16);
   --lock-orb-2: rgba(94, 106, 210, 0.08);
 
-  --frost-bg: rgba(20, 23, 33, 0.85);
-  --frost-border: #262c3e;
+  --frost-bg: rgba(28, 32, 42, 0.85);
+  --frost-border: #2c3140;
 
   /* 深色界面的浮层反过来：亮底暗字 */
   --tip-bg: #f1f2f6;
@@ -550,6 +577,130 @@
 }
 
 
+/* ---------- light-celadon：青瓷米灰底，苔绿主色，为长时间阅读调的低彩度冷中性调。
+   现有四套的色相轴是 紫蓝→暖橙→深蓝→蓝，缺一个低饱和自然绿，这套补它。 ---------- */
+[data-theme="light-celadon"] {
+  /* 品牌：苔绿。warning 留土黄与 accent 拉开，避免「一切绿」难分辨 */
+  --accent: #4d7c5f;
+  --accent-hover: #3e6850;
+  --accent-active: #2f5240;
+  --accent-on: #ffffff;
+  --accent-soft: #e8f0e9;
+  --accent-light: #d2e0d3;
+  --accent-ring: rgba(77, 124, 95, 0.16);
+  --text-brand: #3e6850;
+
+  /* 面：青瓷五档，相邻档带一丝绿、不成条纹 */
+  --bg: #f4f5f1;
+  --panel-bg: #ffffff;
+  --chrome-bg: #eaeee6;
+  --sunken: #dfe5da;
+  --fill: #dae1d4;
+  --hover: #e8ede2;
+  --active: #dfe8d8;
+  --overlay: rgba(37, 42, 36, 0.42);
+
+  /* 文字：warm charcoal 偏绿一档，与底同色温 */
+  --text: #252a24;
+  --text-secondary: #596459;
+  --text-muted: #859081;
+  --text-faint: #aab3a3;
+
+  --border: #d8dfd2;
+  --border-strong: #b8c4b3;
+  --border-subtle: #e5eae0;
+  --border-hover: #b8c4b3;
+
+  --text-url: #4d5750;
+  --badge-cat-bg: #eaeee6;
+  --badge-cat-border: #d8dfd2;
+  --badge-cat-text: #596459;
+  --badge-ver-bg: #e8f0e9;
+  --badge-ver-text: #3e6850;
+
+  /* 投影带一丝绿褐，纯灰投影在米底上会发木 */
+  --shadow-xs: 0 1px 2px 0 rgba(60, 75, 60, 0.07);
+  --shadow-sm: 0 1px 2px 0 rgba(60, 75, 60, 0.05);
+  --shadow: 0 2px 6px -1px rgba(60, 75, 60, 0.08);
+  --shadow-md: 0 6px 16px -6px rgba(60, 75, 60, 0.14), 0 1px 3px rgba(60, 75, 60, 0.06);
+  --shadow-lg: 0 12px 28px -8px rgba(60, 75, 60, 0.18);
+  --shadow-pop: 0 20px 44px -12px rgba(60, 75, 60, 0.24), 0 2px 8px rgba(60, 75, 60, 0.08);
+
+  --danger: #cc4740;
+  --danger-on: #ffffff;
+  --danger-hover: #bd3932;
+  --danger-soft: #f7eeee;
+  --danger-border: #e7ccca;
+  --success: #2e7d52;
+  --success-soft: #e9f2ec;
+  --warning: #96702a;
+  --warning-soft: #f6f1e4;
+
+  --sidebar-bg: #eaeee6;
+  --sidebar-hover: #dde5d7;
+
+  --brand-g1: #6fa382;
+  --brand-g2: #4d7c5f;
+  --brand-g3: #2f5240;
+  --brand-knob: #ffffff;
+
+  --lock-wash-a: #f4f5f1;
+  --lock-wash-b: #e0e5da;
+  --lock-orb-1: rgba(77, 124, 95, 0.08);
+  --lock-orb-2: rgba(77, 124, 95, 0.05);
+
+  --frost-bg: rgba(255, 255, 255, 0.86);
+  --frost-border: #d8dfd2;
+
+  --tip-bg: #252a24;
+  --tip-fg: #f4f5f1;
+  --toast-bg: #252a24;
+  --toast-ok: #95d4ab;
+  --toast-err: #f0938e;
+  --toast-info: #82b896;
+
+  --scrollbar: rgba(37, 42, 36, 0.16);
+  --scrollbar-hover: rgba(37, 42, 36, 0.28);
+  --selection: rgba(77, 124, 95, 0.18);
+
+  /* 头像：青瓷六相——苔绿/远黛/梅青/栗黄/烟紫/湖蓝。
+     同 L* 同彩度，走"自然矿物颜料"语汇呼应主题。 */
+  --cat-1: #4d7c5f;
+  --cat-2: #5b6c8a;
+  --cat-3: #884f5c;
+  --cat-4: #9c7540;
+  --cat-5: #6a4f8a;
+  --cat-6: #4f8088;
+  --cat-text: #ffffff;
+
+  /* 文件类型：和 light-cool 同谱系（pdf红/doc蓝/xls绿 认知保留），统一微暖一档 */
+  --ft-pdf: #b8564f;
+  --ft-doc: #4a6f8a;
+  --ft-sheet: #3f7a5e;
+  --ft-deck: #a0603a;
+  --ft-arch: #6f5e92;
+  --ft-code: #8a7534;
+  --ft-mark: #5e6672;
+  --ft-img: #9a5a72;
+  --ft-unk: #76807a;
+
+  /* 代码块：和界面同色温，关键词与 --accent 同族 */
+  --code-fg: #252a24;
+  --code-kw: #884f5c;
+  --code-str: #3f7a5e;
+  --code-num: #9c7540;
+  --code-type: #6a4f8a;
+  --code-fn: #4a6f8a;
+  --code-var: #5e6672;
+  --code-com: #aab3a3;
+  --code-tag: #6f5e92;
+  --code-pun: #859081;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
+}
+
+
 /* ---------- 别名槽位：不填 hex，只指向别的槽，所以四套主题不必各写一遍。
      放在主题块之后、同一条 :root 上，切换主题时自动跟着源头走。
 
@@ -606,6 +757,73 @@ body {
 .app-layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 .main-area { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); height: 100%; }
 .main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); min-height: 0; }
+
+/* 路由切换补间：fade + 极轻 translateY，0.18s 内完成。
+   mode="out-in" 让旧页先退、新页再进，避免两页同时占位。
+   App.vue 用 <Transition name="page"> 包 <router-view/>，这里挂四态类。 */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity var(--transition-slow), transform var(--transition-slow);
+}
+.page-enter-from { opacity: 0; transform: translateY(6px); }
+.page-leave-to   { opacity: 0; transform: translateY(-3px); }
+
+/* 侧栏折叠时文字淡出而不是消失。Sidebar.vue 用 <Transition name="nav-text"> 包 v-if。 */
+.nav-text-enter-active,
+.nav-text-leave-active {
+  transition: opacity var(--transition-fast);
+}
+.nav-text-enter-from,
+.nav-text-leave-to { opacity: 0; }
+
+/* 用户偏好减少动效时，所有动画/过渡/补间一律压到几乎为 0；
+   保留 transform/opacity 的瞬时值，不动功能可见性。
+   写在所有具体 transition 规则之后，靠 !important 覆盖。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 列表进出场（TransitionGroup name="list"）：
+   EntriesModule / NotesModule / FileShortcutsModule 的列表共用，
+   删除一条时余下的元素靠 .list-move 补间归位，不再"啪"地跳一下。 */
+.list-enter-active,
+.list-leave-active,
+.list-move {
+  transition: transform var(--transition-slow), opacity var(--transition-slow);
+}
+.list-enter-from { opacity: 0; transform: translateY(8px); }
+.list-leave-to   { opacity: 0; transform: translateY(-4px); }
+
+/* 骨架呼吸：所有模块的 .skeleton-line / .skeleton-icon / .memo-skeleton 共用，
+   由使用方在自己的 scoped 规则里写 `animation: skeleton-pulse 1.4s ease-in-out infinite`。 */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* 加载失败的状态：和 .empty-state 共用容器排版，差异只在配色和重试按钮 */
+.error-state {
+  text-align: center;
+  padding: var(--space-12) var(--space-5);
+  color: var(--text-muted);
+}
+.error-state .empty-icon { color: var(--danger); }
+.error-state .empty-title { color: var(--text); }
+.error-state .empty-desc {
+  margin-bottom: var(--space-4);
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+  word-break: break-word;
+}
+.error-state .retry-btn { margin: 0 auto; }
 
 /* 按钮系统 */
 .btn-primary {

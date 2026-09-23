@@ -6,6 +6,10 @@ import type { Entry, CreateEntryInput, UpdateEntryInput, Tab } from '../types'
 export const useEntriesStore = defineStore('entries', () => {
   const entries = ref<Entry[]>([])
   const loading = ref(false)
+  /** 最近一次 fetchEntries 的失败原因；null 表示成功或未尝试。
+   *  视图层用它把"加载失败"和"真的没数据"区分开——之前两者共用空态，
+   *  解密或网络故障时用户会以为列表被清空了。 */
+  const loadError = ref<string | null>(null)
   const searchKeyword = ref('')
   const activeTab = ref('all')
 
@@ -45,8 +49,10 @@ export const useEntriesStore = defineStore('entries', () => {
     loading.value = true
     try {
       entries.value = await api.listEntriesWithPaths()
+      loadError.value = null
     } catch (e: any) {
       console.error('Failed to fetch entries:', e)
+      loadError.value = e?.message || '加载数据失败'
       if (onError) {
         onError(e.message || '加载数据失败')
       }
@@ -77,6 +83,7 @@ export const useEntriesStore = defineStore('entries', () => {
   return {
     entries,
     loading,
+    loadError,
     searchKeyword,
     activeTab,
     tabs,

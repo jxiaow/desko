@@ -659,7 +659,7 @@ onMounted(() => { loadSettings() })
   font-size: 11px;
   font-weight: 500;
   padding: 1px 8px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   color: var(--text-muted);
 }
@@ -677,7 +677,7 @@ onMounted(() => { loadSettings() })
   font-size: 12px;
   font-family: inherit;
 }
-.fs-pw-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); }
+.fs-pw-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 
 /* 面板用 v-show 而非 v-if：切页时 number-input 不卸载，@change 才不会被切页吞掉。
    弹窗定高，各页同高，切页不跳。 */
@@ -792,7 +792,7 @@ onMounted(() => { loadSettings() })
   margin-left: auto;
   width: 9px;
   height: 5px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
 }
 .theme-chip-name { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.3; }
 

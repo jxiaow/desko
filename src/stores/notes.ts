@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { notesApi as api } from '../services/api/notes'
 import { useToastStore } from './toast'
 import { useConfirmStore } from './confirm'
-import { extractTags, getDateGroupLabel, deriveTitleFromHtml, htmlToText } from '../utils/format'
+import { extractTags, getDateGroupLabel, deriveTitleFromHtml, headingTitle, htmlToText } from '../utils/format'
 import { collectAttachmentNames, ensureAttachmentBase, nameOf, normalizeAssetHtml } from '../services/attachmentSrc'
 import type { Note, Attachment } from '../types'
 import type { NoteKeyStatus, NotePlain } from '../services/api/notes'
@@ -42,6 +42,8 @@ export const useNotesStore = defineStore('notes', () => {
 
   const notes = ref<Note[]>([])
   const notesLoading = ref(false)
+  /** 上一次 fetchNotes 的失败原因；视图据此把"加载失败"和"还没有小记"分开 */
+  const notesLoadError = ref<string | null>(null)
 
   // 筛选状态
   const noteSearchKeyword = ref('')
@@ -144,10 +146,11 @@ export const useNotesStore = defineStore('notes', () => {
 
   const findNote = (id: string) => notes.value.find(n => n.id === id) ?? null
 
+  /** 只换正文：title 一律用库里的值（加密行存的是 Rust 按真标题规则算出来的那份），锁回时不必再清 */
   const withPlain = (n: Note): Note => {
     const plain = notePlains.value[n.id]
     if (!n.encrypted || plain == null) return n
-    return { ...n, content_html: plain, title: deriveTitleFromHtml(plain) }
+    return { ...n, content_html: plain }
   }
 
   const fetchNotes = async () => {
@@ -166,7 +169,9 @@ export const useNotesStore = defineStore('notes', () => {
         }
       }
       notes.value = rows.map(withPlain)
+      notesLoadError.value = null
     } catch (e: any) {
+      notesLoadError.value = e?.message || '加载小记失败'
       toastStore.showToast('加载小记失败: ' + e.message, 'error')
     } finally {
       notesLoading.value = false
@@ -396,7 +401,11 @@ export const useNotesStore = defineStore('notes', () => {
     try {
       await api.lockNote(id)
       notePlains.value[id] = notes.value[idx].content_html
-      notes.value[idx] = { ...notes.value[idx], encrypted: true }
+      notes.value[idx] = {
+        ...notes.value[idx],
+        encrypted: true,
+        title: headingTitle(notes.value[idx].content_html),
+      }
       toastStore.showToast('已加密，本会话内仍可读')
       return null
     } catch (e: any) {
@@ -428,9 +437,14 @@ export const useNotesStore = defineStore('notes', () => {
       toastStore.showToast('操作失败：' + e.message, 'error')
       return
     }
+    const plain = notePlains.value[id]
     delete notePlains.value[id]
     const idx = notes.value.findIndex(n => n.id === id)
-    if (idx >= 0) notes.value[idx] = { ...notes.value[idx], content_html: '', title: '' }
+    if (idx >= 0) notes.value[idx] = {
+      ...notes.value[idx],
+      content_html: '',
+      title: plain == null ? notes.value[idx].title : headingTitle(plain),
+    }
     toastStore.showToast('已重新锁定')
   }
 
@@ -443,13 +457,17 @@ export const useNotesStore = defineStore('notes', () => {
       clearSaveTimer()
       pendingSaveId = null
       await api.removeNoteLock(id, {
-        title: note.title,
+        title: deriveTitleFromHtml(plain),
         content_html: plain,
         category: note.category ?? undefined,
       })
       delete notePlains.value[id]
       const idx = notes.value.findIndex(n => n.id === id)
-      if (idx >= 0) notes.value[idx] = { ...notes.value[idx], encrypted: false }
+      if (idx >= 0) notes.value[idx] = {
+        ...notes.value[idx],
+        encrypted: false,
+        title: deriveTitleFromHtml(plain),
+      }
       toastStore.showToast('已解除加密')
       return null
     } catch (e: any) {
@@ -459,9 +477,13 @@ export const useNotesStore = defineStore('notes', () => {
 
   /** 会话明文一律收回，加密小记回到锁上状态（库里的密文不动） */
   const hideAllPlains = () => {
+    const plains = notePlains.value
     notePlains.value = {}
-    notes.value = notes.value.map(n =>
-      n.encrypted ? { ...n, content_html: '', title: '' } : n)
+    notes.value = notes.value.map(n => {
+      if (!n.encrypted) return n
+      const plain = plains[n.id]
+      return { ...n, content_html: '', title: plain == null ? n.title : headingTitle(plain) }
+    })
   }
 
   /** 应用锁定：口令解出来的东西一律收回，加密小记重新锁上 */
@@ -579,7 +601,7 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   return {
-    notes, notesLoading,
+    notes, notesLoading, notesLoadError,
     noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
     noteRailCollapsed,
     isBatchMode, selectedNoteIds,

@@ -33,7 +33,7 @@ const notesStore = useNotesStore()
 const toastStore = useToastStore()
 const { copyToClipboard } = useClipboard()
 const {
-  notes, notesLoading, noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
+  notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
   noteRailCollapsed,
   isBatchMode, selectedNoteIds, noteAttachments, noteSaveState, notePlains, noteKey,
   tagCounts, viewCounts, filteredNotes, groupedNotes,
@@ -415,7 +415,7 @@ onBeforeUnmount(() => {
               {{ group.label }}
               <span class="day-count">· {{ group.notes.length }}</span>
             </div>
-            <div class="day-list">
+            <TransitionGroup tag="div" name="list" class="day-list">
               <NoteCard
                 v-for="note in group.notes"
                 :key="note.id"
@@ -446,10 +446,19 @@ onBeforeUnmount(() => {
                 @tag-click="toggleTagFilter($event)"
                 @remove-attachment="deleteAttachment(note.id, $event)"
               />
-            </div>
+            </TransitionGroup>
           </div>
 
-          <div v-if="!filteredNotes.length" class="empty-state">
+          <div v-if="!filteredNotes.length && notesLoadError" class="error-state">
+            <div class="empty-icon">
+              <AppIcon name="alert" :size="24" />
+            </div>
+            <div class="empty-title">加载失败</div>
+            <div class="empty-desc">{{ notesLoadError }}</div>
+            <button class="btn-secondary retry-btn" @click="fetchNotes()">重试</button>
+          </div>
+
+          <div v-else-if="!filteredNotes.length" class="empty-state">
             <div class="empty-icon">
               <AppIcon :name="hasActiveFilters ? 'searchEmpty' : 'doc'" :size="24" />
             </div>
@@ -628,7 +637,7 @@ onBeforeUnmount(() => {
   width: 100%;
   max-width: var(--stream-max);
   margin-inline: auto;
-  padding: var(--space-5) var(--space-5) 96px;
+  padding: var(--space-5) var(--space-5) var(--dock-clearance);
 }
 
 /* ---------- 顶部工具条：整页唯一一条 chrome ---------- */

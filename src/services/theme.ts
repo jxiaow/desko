@@ -9,7 +9,7 @@
  * 迁移只在读取时查一次表完成，不回写——用户下次切主题时自然落为新 ID。 */
 import { settingsApi } from './api/settings'
 
-export type ThemeId = 'light-cool' | 'light-warm' | 'linear-dark' | 'jetbrains-dark'
+export type ThemeId = 'light-cool' | 'light-warm' | 'light-celadon' | 'linear-dark' | 'jetbrains-dark'
 
 /** 主题退役后留在库里的旧值 → 现在最接近的一套。必须是同步查表：
  *  main.ts 在首绘前 await readTheme，这里多一次 IO 就多一帧闪烁。 */
@@ -40,9 +40,10 @@ export interface ThemeInfo {
 }
 
 export const THEMES: ThemeInfo[] = [
-  { id: 'light-cool', name: '冷灰', prev: { page: '#f8f8fa', sidebar: '#f1f1f5', card: '#ffffff', rowHover: '#f0f0f4', edge: '#e3e3ea', accent: '#5b57d9', ink: '#1a1b20' } },
+  { id: 'light-cool', name: '冷灰', prev: { page: '#f4f5f7', sidebar: '#eceef2', card: '#ffffff', rowHover: '#ebedf1', edge: '#dde0e5', accent: '#4a6fa5', ink: '#1c2028' } },
   { id: 'light-warm', name: '暖纸墨', prev: { page: '#f5f2eb', sidebar: '#efeae0', card: '#faf8f5', rowHover: '#f0eae0', edge: '#e3ddd2', accent: '#d97706', ink: '#2e2925' } },
-  { id: 'linear-dark', name: 'Linear 深空', prev: { page: '#090a0f', sidebar: '#0e1017', card: '#141721', rowHover: '#1c202e', edge: '#222738', accent: '#5e6ad2', ink: '#e8eaf2' } },
+  { id: 'light-celadon', name: '青瓷', prev: { page: '#f4f5f1', sidebar: '#eaeee6', card: '#ffffff', rowHover: '#e8ede2', edge: '#d8dfd2', accent: '#4d7c5f', ink: '#252a24' } },
+  { id: 'linear-dark', name: 'Linear 深空', prev: { page: '#16181d', sidebar: '#13151a', card: '#1c202a', rowHover: '#252a38', edge: '#2c3140', accent: '#5e6ad2', ink: '#e8e6e3' } },
   { id: 'jetbrains-dark', name: 'JetBrains 炭黑', prev: { page: '#191a1c', sidebar: '#1e1f22', card: '#2b2d30', rowHover: '#35373b', edge: '#393b40', accent: '#3574f0', ink: '#e3e6ea' } },
 ]
 

@@ -319,7 +319,7 @@ const onPaste = async (e: ClipboardEvent) => {
 </template>
 
 <style scoped>
-.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) 96px; }
+.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) var(--dock-clearance); }
 
 .page-bar {
   position: sticky;
@@ -348,7 +348,7 @@ const onPaste = async (e: ClipboardEvent) => {
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 .mfa-card:hover { border-color: var(--accent); }
-.mfa-card:focus-visible { box-shadow: 0 0 0 2px var(--accent-ring); }
+.mfa-card:focus-visible { box-shadow: 0 0 0 3px var(--accent-ring); }
 
 .card-top { display: flex; align-items: center; gap: var(--space-2); }
 .card-issuer {
@@ -376,7 +376,7 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 
 .card-code {
   margin-top: var(--space-2);
-  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 27px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -393,7 +393,7 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 
 /* 加载骨架 */
 .mfa-card.skeleton { cursor: default; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
-.skeleton-line { height: 12px; border-radius: 5px; background: var(--hover); }
+.skeleton-line { height: 12px; border-radius: 5px; background: var(--hover); animation: skeleton-pulse 1.5s ease-in-out infinite; }
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w70 { width: 70%; }
 .skeleton-line.tall { height: 26px; }
@@ -428,7 +428,7 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
   border-radius: var(--radius-sm);
   background: var(--panel-bg);
   color: var(--text);
-  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px;
   padding: var(--space-2) var(--space-3);
   resize: vertical;

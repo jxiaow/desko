@@ -19,7 +19,7 @@ import { join, relative } from 'node:path'
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const CSS_PATH = join(ROOT, 'src', 'styles', 'global.css')
 
-const THEMES = ['light-cool', 'linear-dark', 'light-warm', 'jetbrains-dark']
+const THEMES = ['light-cool', 'linear-dark', 'light-warm', 'jetbrains-dark', 'light-celadon']
 const BASELINE = 'light-cool'
 
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '')

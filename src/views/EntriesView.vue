@@ -15,7 +15,7 @@ import { useConfirmStore } from '../stores/confirm'
 const entriesStore = useEntriesStore()
 const toastStore = useToastStore()
 const passwordStore = usePasswordStore()
-const { entries, searchKeyword, activeTab, tabs, loading, filteredEntries } = storeToRefs(entriesStore)
+const { entries, searchKeyword, activeTab, tabs, loading, loadError, filteredEntries } = storeToRefs(entriesStore)
 const { visiblePasswords, passwordCache } = storeToRefs(passwordStore)
 const { togglePassword } = passwordStore
 const { fetchEntries } = entriesStore
@@ -109,6 +109,7 @@ const duplicateEntry = async (entry: Entry) => {
     :tabs="tabs"
     :active-tab="activeTab"
     :loading="loading"
+    :load-error="loadError"
     :filtered-entries="filteredEntries"
     :is-batch-mode="isBatchMode"
     :selected-ids="selectedIds"
@@ -130,6 +131,7 @@ const duplicateEntry = async (entry: Entry) => {
     @copy-text="copyToClipboard"
     @open-url="openUrl"
     @duplicate-entry="duplicateEntry"
+    @retry-load="fetchEntries((msg) => toastStore.showToast(msg, 'error'))"
   />
 
   <EntryFormDialog

@@ -6,10 +6,11 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const ANCHORS = {
-  'light-cool':   { bg: 'rgb(248, 248, 250)', text: 'rgb(27, 27, 32)',   accent: '#5b57d9' },
-  'light-warm':   { bg: 'rgb(245, 242, 235)', text: 'rgb(46, 41, 37)',    accent: '#d97706' },
-  'linear-dark':    { bg: 'rgb(9, 10, 15)',   text: 'rgb(232, 234, 242)', accent: '#5e6ad2' },
-  'jetbrains-dark': { bg: 'rgb(25, 26, 28)',  text: 'rgb(227, 230, 234)', accent: '#3574f0' },
+  'light-cool':     { bg: 'rgb(244, 245, 247)', text: 'rgb(28, 32, 40)',   accent: '#4a6fa5' },
+  'light-warm':     { bg: 'rgb(245, 242, 235)', text: 'rgb(46, 41, 37)',    accent: '#d97706' },
+  'light-celadon':  { bg: 'rgb(244, 245, 241)', text: 'rgb(37, 42, 36)',    accent: '#4d7c5f' },
+  'linear-dark':    { bg: 'rgb(22, 24, 29)',    text: 'rgb(232, 230, 227)', accent: '#5e6ad2' },
+  'jetbrains-dark': { bg: 'rgb(25, 26, 28)',    text: 'rgb(227, 230, 234)', accent: '#3574f0' },
 } as const
 
 type ThemeId = keyof typeof ANCHORS
@@ -17,6 +18,7 @@ type ThemeId = keyof typeof ANCHORS
 const THEME_NAMES: Record<ThemeId, string> = {
   'light-cool': '冷灰',
   'light-warm': '暖纸墨',
+  'light-celadon': '青瓷',
   'linear-dark': 'Linear 深空',
   'jetbrains-dark': 'JetBrains 炭黑',
 }
@@ -65,10 +67,10 @@ test.describe('主题', () => {
     }
   })
 
-  test('设置里四张主题卡，点一张立刻换色并落盘', async ({ page }) => {
+  test('设置里五张主题卡，点一张立刻换色并落盘', async ({ page }) => {
     await bootUnlocked(page)
     const dialog = await openSettings(page)
-    await expect(dialog.locator('.theme-chip')).toHaveCount(4)
+    await expect(dialog.locator('.theme-chip')).toHaveCount(5)
     await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('冷灰')
 
     await dialog.locator('.theme-chip', { hasText: 'Linear 深空' }).click()
@@ -82,7 +84,7 @@ test.describe('主题', () => {
     await waitForToastGone(page)
   })
 
-  test('四套主题轮换，三个锚点色各不相同', async ({ page }) => {
+  test('五套主题轮换，三个锚点色各不相同', async ({ page }) => {
     await bootUnlocked(page)
     const dialog = await openSettings(page)
     const seen: Record<string, string> = {}
@@ -96,7 +98,7 @@ test.describe('主题', () => {
       expect(got.accent, `${id} 主色`).toBe(ANCHORS[id].accent)
       seen[id] = got.bg
     }
-    expect(new Set(Object.values(seen)).size).toBe(4)
+    expect(new Set(Object.values(seen)).size).toBe(5)
   })
 
   test('刷新后仍是选的那套', async ({ page }) => {
@@ -131,7 +133,7 @@ test.describe('主题', () => {
     await dialog.locator('.theme-chip', { hasText: '冷灰' }).click()
     await waitForToastGone(page)
     await settingsTab(dialog, 'security')
-    expect(await probeToast('8')).toEqual({ bg: 'rgb(27, 27, 32)', color: 'rgb(127, 211, 174)' })
+    expect(await probeToast('8')).toEqual({ bg: 'rgb(28, 32, 40)', color: 'rgb(127, 211, 174)' })
   })
 
   test('品牌标渐变读主题令牌，多实例的 id 互不相同', async ({ page }) => {

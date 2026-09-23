@@ -575,8 +575,8 @@ defineExpose({ focusEnd, insertText, insertImage })
 .note-editor :deep(li::marker) { color: var(--text-faint); }
 .note-editor :deep(strong) { font-weight: 600; color: var(--text); }
 .note-editor :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
-.note-editor :deep(code) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
-.note-editor :deep(pre) { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.note-editor :deep(code) { font-family: var(--font-mono); font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
+.note-editor :deep(pre) { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .note-editor :deep(pre code) { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
 .note-editor :deep(hr) { border: none; border-top: 1px solid var(--border); margin: var(--space-3) 0; }
 .note-editor :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -635,7 +635,7 @@ defineExpose({ focusEnd, insertText, insertImage })
 .sm-label { flex: 1; min-width: 0; font-size: 13px; }
 
 .sm-hint {
-  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-faint);
   white-space: nowrap;

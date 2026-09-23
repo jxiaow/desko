@@ -214,9 +214,9 @@ onMounted(async () => {
 
 <style scoped>
 /* Cascadia Code 的斜杠零和写意字形在 12px 小字下发斜扎眼，本页等宽一律 Consolas 优先 */
-.content-inner { --font-mono: Consolas, 'Segoe UI Mono', 'Cascadia Mono', monospace; }
+.content-inner { --font-mono: Consolas, 'Cascadia Mono', monospace; }
 
-.content-inner { flex: 1; overflow-y: auto; scrollbar-gutter: stable; padding: 0 var(--space-5) 96px; }
+.content-inner { flex: 1; overflow-y: auto; scrollbar-gutter: stable; padding: 0 var(--space-5) var(--dock-clearance); }
 
 .mono { font-family: var(--font-mono); }
 
@@ -237,7 +237,7 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 600;
   padding: 4px 11px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background: var(--fill);
   color: var(--text-secondary);
   /* 全局 .bar-count 带 margin-right:auto，会把后面的元素顶散 */
@@ -342,7 +342,7 @@ onMounted(async () => {
   color: var(--text-secondary);
   background: var(--fill);
   padding: 2px 9px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
 }
 .url-row code {
   flex: 1;
@@ -426,5 +426,5 @@ html.hover-suppressed .dir-row:hover .dir-del { opacity: 0; }
   font-family: inherit;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
-.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); }
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 </style>

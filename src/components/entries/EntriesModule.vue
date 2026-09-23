@@ -11,6 +11,8 @@ defineProps<{
   tabs: Tab[]
   activeTab: string
   loading: boolean
+  /** 上一次加载的失败原因；非空时优先显示「加载失败 · 重试」而不是空态 */
+  loadError?: string | null
   filteredEntries: Entry[]
   isBatchMode: boolean
   selectedIds: Set<string>
@@ -33,6 +35,7 @@ const emit = defineEmits<{
   togglePassword: [id: string]
   copyPassword: [id: string]
   copyText: [text: string, label: string]
+  retryLoad: []
   openUrl: [url: string]
   duplicateEntry: [entry: Entry]
 }>()
@@ -244,7 +247,7 @@ onUnmounted(() => {
         <div class="skeleton-line tag"></div>
       </div>
     </div>
-    <div v-else-if="filteredEntries.length" class="entry-list" @keydown="onListKeydown">
+    <TransitionGroup v-else-if="filteredEntries.length" tag="div" name="list" class="entry-list" @keydown="onListKeydown">
       <article
         v-for="item in filteredEntries"
         :key="item.id"
@@ -364,6 +367,14 @@ onUnmounted(() => {
           @close="closeMenu"
         />
       </article>
+    </TransitionGroup>
+    <div v-else-if="loadError" class="error-state">
+      <div class="empty-icon">
+        <AppIcon name="alert" :size="24" />
+      </div>
+      <div class="empty-title">加载失败</div>
+      <div class="empty-desc">{{ loadError }}</div>
+      <button class="btn-secondary retry-btn" @click="emit('retryLoad')">重试</button>
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon">
@@ -393,9 +404,9 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* 底部留 96px：批量底栏浮在它上面，不压住最后一行。
+/* 底部留 --dock-clearance：批量底栏浮在它上面，不压住最后一行。
    顶部不留内边距：滚动容器带 padding-top 时 sticky 的 top:0 会贴在它下面，露出一条能看见内容的缝 */
-.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-4) 96px; }
+.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-4) var(--dock-clearance); }
 
 /* 粘顶工具栏：搜索 + 分类 + 计数 + 动作排成一行，靠底色遮住滚动内容 */
 .page-bar {
@@ -437,14 +448,14 @@ onUnmounted(() => {
 .tab.active .tab-count { background: var(--accent-soft); color: var(--accent); }
 
 /* 单列行卡列表：行间 8px，每行是一张独立卡片，hover 才浮起；首行与吸顶栏拉开一点距离 */
-.entry-list { display: flex; flex-direction: column; gap: 9px; padding-top: var(--space-2); }
+.entry-list { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
 
 .entry-card {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-height: 60px;
-  padding: 13px 20px;
+  padding: var(--space-3) var(--space-5);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -556,7 +567,7 @@ onUnmounted(() => {
   background: var(--badge-cat-bg);
   border: 1px solid var(--badge-cat-border);
   padding: 1px 7px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   flex-shrink: 0;
   white-space: nowrap;
   transition: color var(--transition), background-color var(--transition), border-color var(--transition);
@@ -569,7 +580,7 @@ onUnmounted(() => {
   color: var(--badge-ver-text);
   background: var(--badge-ver-bg);
   border: 1px solid var(--accent-soft);
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   flex-shrink: 0;
   transition: background-color var(--transition), border-color var(--transition);
 }
@@ -646,11 +657,8 @@ html.hover-suppressed .entry-card:hover .ec-actions { opacity: 0; pointer-events
   text-overflow: ellipsis;
 }
 
-.empty-state { text-align: center; padding: var(--space-12) var(--space-5); color: var(--text-muted); }
-.empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: var(--radius-lg); background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-muted); opacity: 0.4; margin-bottom: var(--space-4); }
-.empty-icon svg { width: 24px; height: 24px; }
-.empty-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: var(--space-1); }
-.empty-desc { font-size: 13px; color: var(--text-muted); }
+/* .empty-state/.empty-icon/.empty-title/.empty-desc 走 global.css 的统一规范，
+   此处不再重复声明，避免局部副本和全局定义漂移 */
 
 /* 骨架屏与行卡同形：34px 首字母块 + 两行文字 + URL + Pill */
 .loading { padding: var(--space-2) 0; }
@@ -659,7 +667,7 @@ html.hover-suppressed .entry-card:hover .ec-actions { opacity: 0; pointer-events
   align-items: center;
   gap: var(--space-3);
   min-height: 60px;
-  padding: 13px 20px;
+  padding: var(--space-3) var(--space-5);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-surface);

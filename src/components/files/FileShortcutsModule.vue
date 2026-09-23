@@ -12,6 +12,8 @@ import { formatRelativeTime } from '../../utils/format'
 defineProps<{
   searchKeyword: string
   loading: boolean
+  /** 上一次加载的失败原因；非空时显示「加载失败 · 重试」而不是空态 */
+  loadError?: string | null
   filteredShortcuts: FileShortcut[]
 }>()
 
@@ -23,6 +25,7 @@ const emit = defineEmits<{
   addShortcut: [name: string, path: string, type: 'file' | 'folder']
   updateShortcut: [id: string, name: string, path: string, type: 'file' | 'folder']
   removeShortcut: [id: string]
+  retryLoad: []
 }>()
 
 const showAddDialog = ref(false)
@@ -274,7 +277,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-else-if="filteredShortcuts.length > 0" class="shortcut-list">
+    <TransitionGroup v-else-if="filteredShortcuts.length > 0" tag="div" name="list" class="shortcut-list">
       <div
         v-for="shortcut in filteredShortcuts"
         :key="shortcut.id"
@@ -323,6 +326,15 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
+    </TransitionGroup>
+
+    <div v-else-if="loadError" class="error-state">
+      <div class="empty-icon">
+        <AppIcon name="alert" :size="24" />
+      </div>
+      <div class="empty-title">加载失败</div>
+      <div class="empty-desc">{{ loadError }}</div>
+      <button class="btn-secondary retry-btn" @click="emit('retryLoad')">重试</button>
     </div>
 
     <div v-else class="empty-state">
@@ -412,7 +424,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* 顶部不留内边距：滚动容器带 padding-top 时 sticky 的 top:0 会贴在它下面，露出一条能看见内容的缝 */
-.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) 96px; }
+.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) var(--dock-clearance); }
 
 /* 与小记页同一条工具条 */
 .page-bar {
@@ -428,14 +440,14 @@ onBeforeUnmount(() => {
 .page-bar .search-box { flex: 1; min-width: 80px; max-width: 440px; }
 
 /* 与收藏页同款单列行卡流：行间 9px，每张卡独立圆角边框 */
-.shortcut-list { display: flex; flex-direction: column; gap: 9px; padding-top: var(--space-2); }
+.shortcut-list { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
 
 .shortcut-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-height: 60px;
-  padding: 13px 20px;
+  padding: var(--space-3) var(--space-5);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -492,7 +504,7 @@ onBeforeUnmount(() => {
   background: var(--badge-cat-bg);
   border: 1px solid var(--badge-cat-border);
   padding: 1px 7px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -519,8 +531,8 @@ onBeforeUnmount(() => {
 html.hover-suppressed .shortcut-row:hover .row-acts { opacity: 0; pointer-events: none; }
 
 /* Loading skeleton */
-.loading-list { display: flex; flex-direction: column; gap: 9px; padding-top: var(--space-2); }
-.skeleton-row { display: flex; align-items: center; gap: var(--space-3); min-height: 60px; padding: 13px 20px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); }
+.loading-list { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
+.skeleton-row { display: flex; align-items: center; gap: var(--space-3); min-height: 60px; padding: var(--space-3) var(--space-5); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); animation: skeleton-pulse 1.5s ease-in-out infinite; }
 .skeleton-icon { width: 34px; height: 34px; border-radius: var(--radius); background: var(--hover); flex-shrink: 0; }
 .skeleton-line { height: 10px; border-radius: 4px; background: var(--hover); }
 .skeleton-line.w40 { width: 40%; }

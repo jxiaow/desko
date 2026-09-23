@@ -5,6 +5,8 @@ import type { FileShortcut } from '../types'
 
 const shortcuts = ref<FileShortcut[]>([])
 const loading = ref(false)
+/** 上一次 fetchShortcuts 的失败原因；视图层据此把"加载失败"和"空列表"分开 */
+const loadError = ref<string | null>(null)
 const searchKeyword = ref('')
 
 export const useFileShortcutsStore = defineStore('fileShortcuts', () => {
@@ -20,8 +22,10 @@ export const useFileShortcutsStore = defineStore('fileShortcuts', () => {
     loading.value = true
     try {
       shortcuts.value = await api.listFileShortcuts()
-    } catch (e) {
+      loadError.value = null
+    } catch (e: any) {
       console.error('Failed to fetch file shortcuts:', e)
+      loadError.value = e?.message || '加载快捷方式失败'
     } finally {
       loading.value = false
     }
@@ -49,6 +53,7 @@ export const useFileShortcutsStore = defineStore('fileShortcuts', () => {
   return {
     shortcuts,
     loading,
+    loadError,
     searchKeyword,
     filteredShortcuts,
     fetchShortcuts,
