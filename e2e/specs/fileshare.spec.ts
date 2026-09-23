@@ -89,7 +89,7 @@ test.describe('局域网文件传输', () => {
     await expect(pwItem.locator('.fs-tag')).toHaveText('未启用')
     await pwItem.locator('button', { hasText: '设置口令' }).click()
     await pwItem.locator('.fs-pw-input').fill('sesame')
-    await pwItem.locator('.fs-pw-row .btn-primary').click()
+    await pwItem.locator('.fs-pw-row .action-btn.primary').click()
     await expectToast(page, '访问口令已更新')
     await expect(pwItem.locator('.fs-tag')).toHaveText('已启用')
     await dialog.locator('.close-btn').click()

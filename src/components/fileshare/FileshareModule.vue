@@ -405,9 +405,16 @@ html.hover-suppressed .dir-row:hover .dir-del { opacity: 0; }
   box-shadow: inset 0 0 0 1px var(--danger-border);
 }
 
-.dir-add-row { gap: var(--space-2); }
-.dir-add { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12.5px; }
-.add-btn { flex-shrink: 0; }
+.dir-add-row { gap: var(--space-2); align-items: center; }
+.dir-add { flex: 1; min-width: 0; height: 34px; font-family: var(--font-mono); font-size: 12.5px; }
+.add-btn {
+  flex-shrink: 0;
+  /* 与 .dir-add 同高同圆角；btn-secondary 默认的 36px/8px 圆角比输入框大一圈 */
+  height: 34px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
 
 .input {
   background: var(--panel-bg);

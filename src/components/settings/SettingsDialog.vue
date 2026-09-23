@@ -367,10 +367,10 @@ onMounted(() => { loadSettings() })
                 </div>
                 <div class="fs-pw-ctl">
                   <span class="fs-tag" :class="{ on: fsHasPassword }">{{ fsHasPassword ? '已启用' : '未启用' }}</span>
-                  <button v-if="!fsShowPwInput" class="btn-secondary" @click="fsShowPwInput = true">
+                  <button v-if="!fsShowPwInput" class="action-btn" @click="fsShowPwInput = true">
                     {{ fsHasPassword ? '修改口令' : '设置口令' }}
                   </button>
-                  <button v-if="fsHasPassword" class="btn-secondary" :disabled="fsBusy" @click="clearFsPassword">清除口令</button>
+                  <button v-if="fsHasPassword" class="action-btn" :disabled="fsBusy" @click="clearFsPassword">清除口令</button>
                 </div>
                 <div v-if="fsShowPwInput" class="fs-pw-row">
                   <input
@@ -381,8 +381,8 @@ onMounted(() => { loadSettings() })
                     autocomplete="new-password"
                     @keyup.enter="applyFsPassword"
                   />
-                  <button class="btn-primary" :disabled="fsBusy || !fsPasswordInput" @click="applyFsPassword">设置</button>
-                  <button class="btn-secondary" @click="fsShowPwInput = false; fsPasswordInput = ''">取消</button>
+                  <button class="action-btn primary" :disabled="fsBusy || !fsPasswordInput" @click="applyFsPassword">设置</button>
+                  <button class="action-btn" @click="fsShowPwInput = false; fsPasswordInput = ''">取消</button>
                 </div>
               </div>
             </div>
@@ -653,12 +653,13 @@ onMounted(() => { loadSettings() })
 .fs-pw-input {
   flex: 1;
   min-width: 140px;
+  height: 28px;
+  padding: 0 10px;
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
-  padding: 6px 10px;
-  font-size: 13px;
+  font-size: 12px;
   font-family: inherit;
 }
 .fs-pw-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); }
