@@ -14,6 +14,7 @@ pub fn create_note(db: &Database, input: CreateNoteInput) -> Result<Note, AppErr
         updated_at: now,
         pinned: false,
         starred: false,
+        encrypted: false,
     };
 
     db.create_note(&note)?;

@@ -6,6 +6,7 @@ mod crypto;
 mod error;
 mod services;
 mod backup;
+mod session_lock;
 mod webdav;
 
 use db::Database;
@@ -29,6 +30,8 @@ pub struct AppState {
     pub backup_busy: AtomicBool,
     /// 局域网文件传输服务子进程（默认关，开关在通用设置里）
     pub fileshare: commands::fileshare::ProcState,
+    /// 单条加密小记解锁后的 DEK，只驻内存；应用锁定即清
+    pub note_keys: Mutex<std::collections::HashMap<String, Vec<u8>>>,
 }
 
 fn main() {
@@ -64,6 +67,7 @@ fn main() {
                 backup_key: Mutex::new(None),
                 backup_busy: AtomicBool::new(false),
                 fileshare: commands::fileshare::ProcState::default(),
+                note_keys: Mutex::new(std::collections::HashMap::new()),
             });
 
             // 正文里的图片走 asset: 协议读附件目录，只放行那一个目录
@@ -125,6 +129,9 @@ fn main() {
 
             // 自动备份线程：定时/实时两档，都在后台判变更指纹，锁屏或没设备份密码就空转
             services::auto_backup::spawn(app.handle().clone());
+
+            // 系统锁屏联动：收到会话锁屏广播时按设置把应用一并锁定
+            session_lock::spawn(app.handle().clone());
 
             // 局域网文件传输：开关开着就恢复监听（默认关时无感）
             commands::fileshare::restore_on_startup(app.handle());
@@ -200,6 +207,12 @@ fn main() {
             commands::notes::toggle_pin_note,
             commands::notes::toggle_star_note,
             commands::notes::list_attachments,
+            commands::note_lock::lock_note,
+            commands::note_lock::unlock_note,
+            commands::note_lock::unlock_note_by_master,
+            commands::note_lock::relock_note,
+            commands::note_lock::remove_note_lock,
+            commands::note_lock::reveal_note,
             commands::notes::upload_attachment,
             commands::notes::stage_attachment,
             commands::notes::bind_attachments,

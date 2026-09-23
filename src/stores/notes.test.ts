@@ -13,6 +13,12 @@ vi.mock('../services/api/notes', () => ({
     batchDeleteNotes: vi.fn(),
     togglePinNote: vi.fn(),
     toggleStarNote: vi.fn(),
+    lockNote: vi.fn(),
+    unlockNote: vi.fn(),
+    unlockNoteByMaster: vi.fn(),
+    relockNote: vi.fn(),
+    removeNoteLock: vi.fn(),
+    revealNote: vi.fn(),
     listAttachments: vi.fn(),
     uploadAttachment: vi.fn(),
     deleteAttachment: vi.fn(),
@@ -40,6 +46,7 @@ const mockNote = (overrides: Partial<Note> = {}): Note => ({
   updated_at: Date.now(),
   pinned: false,
   starred: false,
+  encrypted: false,
   ...overrides,
 })
 

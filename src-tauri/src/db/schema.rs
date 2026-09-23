@@ -80,6 +80,25 @@ pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
         )?;
     }
 
+    // 迁移：单条加密。正文进 cipher（DEK 加密），明文列清空；
+    // DEK 存两份封条——口令封条供日常解锁，主密钥封条供兜底找回
+    let has_enc: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='enc'",
+        [],
+        |r| r.get(0),
+    ).unwrap_or(0) > 0;
+
+    if !has_enc {
+        conn.execute_batch(
+            "ALTER TABLE notes ADD COLUMN enc INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE notes ADD COLUMN cipher TEXT NOT NULL DEFAULT '';
+             ALTER TABLE notes ADD COLUMN cipher_iv TEXT NOT NULL DEFAULT '';
+             ALTER TABLE notes ADD COLUMN wrap_pass TEXT NOT NULL DEFAULT '';
+             ALTER TABLE notes ADD COLUMN pass_salt TEXT NOT NULL DEFAULT '';
+             ALTER TABLE notes ADD COLUMN wrap_master TEXT NOT NULL DEFAULT '';"
+        )?;
+    }
+
     // 创建 note_attachments 表
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS note_attachments (

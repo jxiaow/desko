@@ -148,6 +148,15 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
     v
 }
 
+/// 小记主密钥封条的域分隔派生：绑死 note id，换条小记、换把主密钥都得重封
+pub fn note_wrap_key(master_key: &[u8], note_id: &str) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(master_key);
+    hasher.update(b"desko-note-lock");
+    hasher.update(note_id.as_bytes());
+    hasher.finalize().to_vec()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

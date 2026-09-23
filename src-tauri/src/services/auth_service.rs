@@ -1,5 +1,5 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use crate::crypto::{decrypt_password, encrypt_password, generate_salt, compute_verify_hash, verify_master_password, derive_key, EncryptedData};
+use crate::crypto::{decrypt_password, encrypt_password, generate_salt, compute_verify_hash, verify_master_password, derive_key, note_wrap_key, EncryptedData};
 use crate::db::Database;
 use crate::error::AppError;
 
@@ -72,7 +72,21 @@ pub fn change_master_password(db: &Database, old_key: &[u8], old_password: &str,
         extra_meta.push((crate::services::backup_service::META_KEY, rewrapped));
     }
     let extra_refs: Vec<(&str, &str)> = extra_meta.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    db.finish_password_change(&updates, now, &new_salt_b64, &new_verify_hash, &extra_refs)?;
+    // 加密小记的主密钥封条跟着换封；个别封条解不开（历史坏数据）就留旧的，不拦改密
+    let mut note_wraps: Vec<(String, String)> = Vec::new();
+    for (id, wrap) in db.list_note_wrap_masters()? {
+        let rewrapped = (|| -> Result<String, crate::error::AppError> {
+            let sealed: EncryptedData = serde_json::from_str(&wrap)
+                .map_err(|e| crate::error::AppError::Crypto(e.to_string()))?;
+            let dek_b64 = decrypt_password(&sealed, &note_wrap_key(old_key, &id))?;
+            let resealed = encrypt_password(&dek_b64, &note_wrap_key(&new_key, &id))?;
+            serde_json::to_string(&resealed).map_err(|e| crate::error::AppError::Crypto(e.to_string()))
+        })();
+        if let Ok(json) = rewrapped {
+            note_wraps.push((id, json));
+        }
+    }
+    db.finish_password_change(&updates, now, &new_salt_b64, &new_verify_hash, &extra_refs, &note_wraps)?;
 
     Ok(new_key)
 }

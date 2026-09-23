@@ -159,6 +159,16 @@ test.describe('Settings 设置', () => {
     expect((await e2e.snapshot(page)).settings.lock_on_close).toBe('true')
   })
 
+  test('系统锁屏后锁定：默认关，打开即落盘', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const dialog = await openSettings(page, 'security')
+    const item = dialog.locator('.setting-item', { hasText: '系统锁屏后锁定' })
+    await expect(item.locator('input[type="checkbox"]')).not.toBeChecked()
+    await item.locator('label.switch').click()
+    await expectToast(page, '设置已保存')
+    expect((await e2e.snapshot(page)).settings.lock_on_system_lock).toBe('true')
+  })
+
   test('导出 SQL 入口已移除，未连云端时整档置灰而不是消失', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')

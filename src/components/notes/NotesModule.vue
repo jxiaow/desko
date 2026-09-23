@@ -7,6 +7,7 @@ import { useClipboard } from '../../composables/useClipboard'
 import NoteCard from './NoteCard.vue'
 import NoteComposer from './NoteComposer.vue'
 import NoteFullscreen from './NoteFullscreen.vue'
+import NoteLockDialog from './NoteLockDialog.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { htmlToText } from '../../utils/format'
@@ -34,12 +35,13 @@ const { copyToClipboard } = useClipboard()
 const {
   notes, notesLoading, noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
   noteRailCollapsed,
-  isBatchMode, selectedNoteIds, noteAttachments, noteSaveState,
+  isBatchMode, selectedNoteIds, noteAttachments, noteSaveState, notePlains,
   tagCounts, viewCounts, filteredNotes, groupedNotes,
 } = storeToRefs(notesStore)
 const {
   fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, clearFilters, toggleTagFilter,
   doDeleteNote, togglePin, toggleStar,
+  relockNote, removeNoteLock,
   toggleBatchMode, toggleSelectNote, selectAllNotes, clearSelection,
   batchDelete, batchSetPinned, batchSetStarred,  loadAttachments, uploadAttachment, deleteAttachment, stageImage,
 } = notesStore
@@ -56,6 +58,13 @@ const editingId = ref<string | null>(null)
 const fsTarget = ref<'new' | string | null>(null)
 const fsMode = ref<'edit' | 'view'>('edit')
 const newbornId = ref<string | null>(null)
+/** 加密口令弹窗：set 上锁，unlock 取回明文 */
+const lockDialog = ref<{ id: string; mode: 'set' | 'unlock' } | null>(null)
+
+const requestRemoveLock = async (id: string) => {
+  const err = await removeNoteLock(id)
+  if (err) toastStore.showToast(err, 'error')
+}
 
 const railRoom = ref(true)
 /** 窄窗口下用户手动叫出来的浮层侧栏。放不下的时候开关也不能消失，否则侧栏就再也回不来了 */
@@ -127,6 +136,8 @@ const publishDraft = async () => {
 
 const openCard = (note: Note) => {
   if (fsTarget.value) return
+  // 锁着的没有明文，编辑无从谈起
+  if (note.encrypted && notePlains.value[note.id] == null) return
   editingId.value = note.id
   loadAttachments(note.id)
 }
@@ -370,11 +381,16 @@ onBeforeUnmount(() => {
                 :just-published="newbornId === note.id"
                 :attachments="noteAttachments[note.id] ?? []"
                 :save-state="editingId === note.id ? noteSaveState : ''"
+                :unlocked="notePlains[note.id] != null"
                 @open="openCard(note)"
                 @update="saveNoteContent(note.id, $event)"
                 @close="closeCard"
                 @fullscreen="openFullscreen(note.id)"
                 @view="openFullscreen(note.id, 'view')"
+                @encrypt="lockDialog = { id: note.id, mode: 'set' }"
+                @unlock="lockDialog = { id: note.id, mode: 'unlock' }"
+                @relock="relockNote(note.id)"
+                @remove-lock="requestRemoveLock(note.id)"
                 @add-image="addImageToNote(note.id)"
                 @toggle-pin="togglePin(note)"
                 @toggle-star="toggleStar(note)"
@@ -485,6 +501,14 @@ onBeforeUnmount(() => {
       @toggle-star="fsNote && toggleStar(fsNote)"
       @delete="fsNote && doDeleteNote(fsNote)"
       @remove-attachment="fsNote && deleteAttachment(fsNote.id, $event)"
+    />
+
+    <NoteLockDialog
+      v-if="lockDialog"
+      :note-id="lockDialog.id"
+      :mode="lockDialog.mode"
+      @close="lockDialog = null"
+      @done="lockDialog = null"
     />
 
     <PopoverMenu v-if="filterAnchor" :anchor="filterAnchor" wide align="end" @close="filterAnchor = null">

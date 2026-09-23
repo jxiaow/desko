@@ -35,6 +35,7 @@ const tab = ref<TabId>('general')
 const autoLockEnabled = ref(false)
 const autoLockTimeout = ref(5)
 const lockOnClose = ref(false)
+const lockOnSystemLock = ref(false)
 const theme = ref<ThemeId>(DEFAULT_THEME)
 const terminal = ref<TerminalId>('auto')
 const mfaOn = ref(false)
@@ -59,6 +60,8 @@ const loadSettings = async () => {
     }
     const lockClose = await settingsApi.getSetting('lock_on_close')
     lockOnClose.value = lockClose === 'true'
+    const lockSession = await settingsApi.getSetting('lock_on_system_lock')
+    lockOnSystemLock.value = lockSession === 'true'
   } catch { /* 读不到就保持默认 */ }
 }
 
@@ -79,6 +82,15 @@ const saveAutoLock = async () => {
 const saveLockOnClose = async () => {
   try {
     await settingsApi.setSetting('lock_on_close', lockOnClose.value.toString())
+    toastStore.showToast('设置已保存')
+  } catch (e: any) {
+    toastStore.showToast('保存失败: ' + e.message, 'error')
+  }
+}
+
+const saveLockOnSystemLock = async () => {
+  try {
+    await settingsApi.setSetting('lock_on_system_lock', lockOnSystemLock.value.toString())
     toastStore.showToast('设置已保存')
   } catch (e: any) {
     toastStore.showToast('保存失败: ' + e.message, 'error')
@@ -318,6 +330,16 @@ onMounted(() => { loadSettings() })
                 </div>
                 <label class="switch">
                   <input type="checkbox" v-model="lockOnClose" @change="saveLockOnClose" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">系统锁屏后锁定</span>
+                  <span class="setting-desc">Windows 锁屏（Win+L）时自动锁定应用</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" v-model="lockOnSystemLock" @change="saveLockOnSystemLock" />
                   <span class="switch-slider"></span>
                 </label>
               </div>

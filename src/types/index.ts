@@ -62,6 +62,8 @@ export interface Note {
   updated_at: number
   pinned: boolean
   starred: boolean
+  /** 单条加密：true 且本会话未解锁时 content_html 恒为空 */
+  encrypted: boolean
 }
 
 export interface Attachment {

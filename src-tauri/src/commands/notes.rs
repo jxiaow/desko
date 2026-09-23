@@ -24,6 +24,13 @@ pub fn create_note(state: State<AppState>, input: CreateNoteInput) -> Result<Not
 pub fn update_note(state: State<AppState>, id: String, input: UpdateNoteInput) -> Result<(), AppError> {
     let _key = services::get_master_key(&state)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    if db.get_note_lock(&id)?.is_some() {
+        // 加密行：明文只进密文，普通列一个字节都不落
+        let dek = crate::commands::note_lock::get_dek(&state, &id)?;
+        let enc = crate::crypto::encrypt_password(&input.content_html, &dek)?;
+        let now = chrono::Utc::now().timestamp_millis();
+        return db.update_note_cipher(&id, &enc.ciphertext, &enc.iv, now);
+    }
     note_service::update_note(&db, &id, input)
 }
 
@@ -34,6 +41,7 @@ pub fn delete_note(state: State<AppState>, id: String) -> Result<(), AppError> {
     let paths = db.attachment_paths_for_notes(std::slice::from_ref(&id))?;
     db.delete_note(&id)?;
     attachment_service::delete_files(&paths);
+    crate::commands::note_lock::drop_dek(&state, &id);
     Ok(())
 }
 
@@ -44,6 +52,9 @@ pub fn batch_delete_notes(state: State<AppState>, ids: Vec<String>) -> Result<us
     let paths = db.attachment_paths_for_notes(&ids)?;
     let n = db.batch_delete_notes(&ids)?;
     attachment_service::delete_files(&paths);
+    for id in &ids {
+        crate::commands::note_lock::drop_dek(&state, id);
+    }
     Ok(n)
 }
 

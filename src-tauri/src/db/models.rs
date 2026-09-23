@@ -93,6 +93,18 @@ pub struct Note {
     pub updated_at: i64,
     pub pinned: bool,
     pub starred: bool,
+    /// 单条加密：true 时 title/content_html 恒为空，正文在 cipher 里
+    pub encrypted: bool,
+}
+
+/// 加密小记的密文与两条 DEK 封条（口令封条 + 主密钥封条）
+#[derive(Debug, Clone)]
+pub struct NoteLockRow {
+    pub cipher: String,
+    pub cipher_iv: String,
+    pub wrap_pass: String,
+    pub pass_salt: String,
+    pub wrap_master: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

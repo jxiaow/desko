@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, tipButton } from '../helpers'
+import { bootUnlocked, e2e, expectToast, tipButton, E2E_PASSWORD } from '../helpers'
 
 const SEED = {
   notes: [
@@ -91,10 +91,14 @@ test.describe('Notes 小记', () => {
     await expect.poll(minHeight, { timeout: 3000 }).toBe('22px')
   })
 
-  test('就地编辑：双击进入、自动保存、完成退出', async ({ page }) => {
+  test('就地编辑：悬停按钮进入、自动保存、完成退出', async ({ page }) => {
     await gotoNotes(page)
     const target = memo(page, '第一条小记')
+    // 双击编辑已移除：手一抖就进编辑，误触太多
     await target.dblclick()
+    await expect(page.locator('.memo.editing')).toHaveCount(0)
+    await target.hover()
+    await tipButton(target, '编辑').click()
     const editor = page.locator('.memo.editing .ProseMirror')
     await expect(editor).toBeVisible()
     await editor.click()
@@ -141,7 +145,9 @@ test.describe('Notes 小记', () => {
 
   test('已有小记配图：上传后图片块插进编辑正文', async ({ page }) => {
     await gotoNotes(page)
-    await memo(page, '第一条小记').dblclick()
+    const target = memo(page, '第一条小记')
+    await target.hover()
+    await tipButton(target, '编辑').click()
     const editor = page.locator('.memo.editing .ProseMirror')
     await expect(editor).toBeVisible()
 
@@ -279,6 +285,60 @@ test.describe('Notes 小记', () => {
     await expect(fs).toHaveCount(0)
   })
 
+  test('单条加密：锁卡藏正文、错口令拦下、主密码兜底', async ({ page }) => {
+    await bootUnlocked(page, {
+      notes: [
+        { title: '机密事', content_html: '<p>要加密的正文</p>' },
+        { title: '封存', content_html: '<p>封存的正文</p>', encrypted: true, passphrase: 'pw-1234' },
+      ],
+    }, '/notes')
+    await expect(page.locator('.memo')).toHaveCount(2)
+    // 锁着的正文根本不进 DOM
+    await expect(page.locator('.memo-body')).not.toContainText('封存的正文')
+    const lockedCard = page.locator('.memo', { hasText: '已加密 · 单击解锁' })
+    await expect(lockedCard).toHaveCount(1)
+
+    // 给第一条上加密：⋯ 菜单 → 弹窗设口令
+    const target = memo(page, '要加密的正文')
+    await target.hover()
+    await tipButton(target, '更多').click()
+    await page.locator('.popover .pop-item', { hasText: '加密' }).click()
+    const dialog = page.locator('.note-lock-dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('button.btn-primary')).toBeDisabled()
+    await dialog.locator('input[type="password"]').first().fill('pw-1234')
+    await dialog.locator('input[type="password"]').nth(1).fill('pw-1234')
+    await dialog.locator('button.btn-primary').click()
+    await expectToast(page, '已加密，本会话内仍可读')
+    await expect(dialog).toHaveCount(0)
+    await expect(memo(page, '要加密的正文').locator('.state-enc')).toBeVisible()
+
+    // 重新锁定：变锁卡，搜索也不命中
+    await target.hover()
+    await tipButton(target, '更多').click()
+    await page.locator('.popover .pop-item', { hasText: '重新锁定' }).click()
+    await expectToast(page, '已重新锁定')
+    await expect(page.locator('.memo-locked')).toHaveCount(2)
+    await page.locator('.search-box input').fill('要加密的正文')
+    await expect(page.locator('.memo')).toHaveCount(0)
+    await page.locator('.search-box input').fill('')
+    await expect(page.locator('.memo')).toHaveCount(2)
+
+    // 解锁：错口令留在弹窗里报
+    await page.locator('.memo-locked').first().click()
+    await expect(dialog).toBeVisible()
+    await dialog.locator('input[type="password"]').fill('错的')
+    await dialog.locator('button.btn-primary').click()
+    await expect(dialog.locator('.lock-error')).toContainText('密码错误')
+
+    // 兜底：忘口令 → 主密码解封（first 是 seed 里更新的「封存」）
+    await dialog.locator('.link-btn').click()
+    await dialog.locator('input[type="password"]').fill(E2E_PASSWORD)
+    await dialog.locator('button.btn-primary').click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page.locator('.memo').first().locator('.memo-body')).toContainText('封存的正文')
+  })
+
   test('卡片上勾选任务项：改动落库，进编辑态不弹回', async ({ page }) => {
     await bootUnlocked(page, { notes: [{ title: '清单', content_html: TODO_HTML }] }, '/notes')
     const boxes = page.locator('.memo .memo-body input[type=checkbox]')
@@ -297,16 +357,16 @@ test.describe('Notes 小记', () => {
     expect(await stored()).toContain('data-checked="false"')
 
     // 连点勾选框是勾了又撤，不该顺手把编辑态拉开
-    await boxes.first().dblclick()
-    await expect(page.locator('.memo.editing')).toHaveCount(0)
     expect(await checked(0)).toBe(false)
 
     await boxes.first().click()
     await expect.poll(() => e2e.count(page, 'update_note')).toBe(3)
     expect(await stored()).toContain('data-checked="true"')
 
-    // 双击正文进编辑态，勾选状态要跟着带进去
-    await page.locator('.memo .memo-body p').first().dblclick()
+    // 进编辑态，勾选状态要跟着带进去
+    const m = memo(page, '清单')
+    await m.hover()
+    await tipButton(m, '编辑').click()
     await expect(page.locator('.memo.editing')).toBeVisible()
     await expect(
       page.locator('.memo.editing .ProseMirror input[type=checkbox]').first(),

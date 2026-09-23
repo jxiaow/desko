@@ -35,3 +35,12 @@ open = "5"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 ureq = "2"
 fileshare-core = { path = "fileshare-core" }
+
+[target.'cfg(windows)'.dependencies]
+# 版本与 tauri 传递依赖对齐（0.61），只给 session_lock 用
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_System_RemoteDesktop",
+    "Win32_UI_WindowsAndMessaging",
+] }

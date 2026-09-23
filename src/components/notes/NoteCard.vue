@@ -18,6 +18,8 @@ const props = withDefaults(defineProps<{
   justPublished?: boolean
   attachments?: Attachment[]
   saveState?: NoteSaveState
+  /** 加密小记在本会话是否已解锁（明文在手） */
+  unlocked?: boolean
 }>(), {
   editing: false,
   isBatchMode: false,
@@ -25,6 +27,7 @@ const props = withDefaults(defineProps<{
   justPublished: false,
   attachments: () => [],
   saveState: '',
+  unlocked: false,
 })
 
 const emit = defineEmits<{
@@ -33,6 +36,10 @@ const emit = defineEmits<{
   close: []
   fullscreen: []
   view: []
+  encrypt: []
+  unlock: []
+  relock: []
+  removeLock: []
   addImage: []
   togglePin: []
   toggleStar: []
@@ -50,18 +57,6 @@ const bodyEl = ref<HTMLElement | null>(null)
 const clipped = ref(false)
 const expanded = ref(false)
 
-/** 浏览器判定双击的间隔上限；单击要等过这么久才生效，否则双击会先被当成展开 */
-const DBLCLICK_MS = 230
-let clickTimer: number | null = null
-let expandedBeforeClick = false
-
-const cancelClick = () => {
-  if (clickTimer !== null) {
-    clearTimeout(clickTimer)
-    clickTimer = null
-  }
-}
-
 /** 上限是视口比例，窗口变化会改变是否溢出，所以量完还要跟着 resize 重算 */
 const measureClipped = async () => {
   await nextTick()
@@ -71,10 +66,7 @@ const measureClipped = async () => {
 }
 
 onMounted(() => window.addEventListener('resize', measureClipped))
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', measureClipped)
-  cancelClick()
-})
+onBeforeUnmount(() => window.removeEventListener('resize', measureClipped))
 
 // 只读正文在编辑态会整个卸掉，回来时是一个新元素，组件本身不会重新挂载
 watch(bodyEl, measureClipped)
@@ -94,10 +86,7 @@ const visibleAtts = computed(() =>
 
 watch(() => props.note.content_html, measureClipped)
 
-const openEditor = () => {
-  cancelClick()
-  emit('open')
-}
+const openEditor = () => emit('open')
 
 /**
  * 只读卡片上的勾选框是真控件，点下去必须落库。
@@ -105,8 +94,6 @@ const openEditor = () => {
  * 状态一律由 content_html 重新渲染出来，否则存不上却已经亮给用户看了。
  */
 const toggleTask = (e: MouseEvent, box: HTMLInputElement) => {
-  cancelClick()
-  // 只拦默认勾选，不拦冒泡：拦了冒泡会让第二次 click 不再派发，双击就再也进不了编辑态
   e.preventDefault()
   const rendered = Array.from(
     bodyEl.value?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]') ?? [],
@@ -127,9 +114,16 @@ const toggleTask = (e: MouseEvent, box: HTMLInputElement) => {
   emit('update', doc.body.innerHTML)
 }
 
+/** 加密且明文不在手：整张卡退化成一个锁标识 */
+const locked = computed(() => props.note.encrypted && !props.unlocked)
+
 const onBodyClick = (e: MouseEvent) => {
   if (props.isBatchMode) {
     emit('select')
+    return
+  }
+  if (locked.value) {
+    emit('unlock')
     return
   }
   const box = (e.target as HTMLElement).closest<HTMLInputElement>('input[type="checkbox"]')
@@ -139,33 +133,19 @@ const onBodyClick = (e: MouseEvent) => {
   }
   const tag = (e.target as HTMLElement).closest<HTMLElement>('.tag-inline')?.dataset.tag
   if (tag) {
-    cancelClick()
     emit('tagClick', tag)
     return
   }
-  // 单击不再直接进编辑：手一抖就改了内容。等过双击窗口，只用来展开/收起被裁掉的正文
-  cancelClick()
-  expandedBeforeClick = expanded.value
-  clickTimer = window.setTimeout(() => {
-    clickTimer = null
-    if (expanded.value) expanded.value = false
-    else if (clipped.value) expanded.value = true
-  }, DBLCLICK_MS)
-}
-
-const onBodyDblClick = () => {
-  if (props.isBatchMode) return
-  // 慢速双击：第一次单击可能已经把正文展开了，回到单击前的样子再进编辑
-  cancelClick()
-  expanded.value = expandedBeforeClick
-  emit('open')
+  // 单击只展开/收起被裁掉的正文；编辑走悬停按钮或 Enter，不再有双击
+  if (expanded.value) expanded.value = false
+  else if (clipped.value) expanded.value = true
 }
 
 const onKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter' && !props.isBatchMode) {
-    e.preventDefault()
-    emit('open')
-  }
+  if (e.key !== 'Enter' || props.isBatchMode) return
+  e.preventDefault()
+  if (locked.value) emit('unlock')
+  else emit('open')
 }
 
 const onUpdate = (value: string) => {
@@ -187,32 +167,39 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected, newborn: props.justPublished }"
     tabindex="0"
     role="button"
-    :aria-label="`小记：${props.note.title}（单击展开全文，双击编辑）`"
+    :aria-label="locked ? `已加密小记（${formatRelativeTime(props.note.created_at)}，单击解锁）` : `小记：${props.note.title}（单击展开全文，悬停或 Enter 编辑）`"
     @click="onBodyClick"
-    @dblclick="onBodyDblClick"
     @keydown="onKeydown"
   >
     <span v-if="props.isBatchMode" class="memo-check" :class="{ checked: props.isSelected }" aria-hidden="true">
       <AppIcon v-if="props.isSelected" name="check" :size="11" />
     </span>
 
-    <div ref="bodyEl" class="memo-body" :class="{ clipping: clipped && !expanded, expanded }" v-html="bodyHtml" />
+    <div v-if="locked" class="memo-locked">
+      <AppIcon name="lock" :size="13" />
+      <span>已加密 · 单击解锁</span>
+    </div>
+    <div v-else ref="bodyEl" class="memo-body" :class="{ clipping: clipped && !expanded, expanded }" v-html="bodyHtml" />
 
     <div class="memo-foot">
       <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
-      <span v-if="visibleAtts.length"  class="memo-att" :title="`${visibleAtts.length} 个附件`">
+      <span v-if="!locked && visibleAtts.length"  class="memo-att" :title="`${visibleAtts.length} 个附件`">
         <AppIcon name="clip" :size="11" />
         {{ visibleAtts.length }}
       </span>
       <span class="spacer"></span>
       <span class="memo-state">
         <span v-if="props.note.starred"  class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
+        <span v-if="props.note.encrypted && !locked" class="state-enc" title="加密小记，本会话已解锁"><AppIcon name="lock" :size="11" /></span>
       </span>
       <span class="memo-acts">
-        <button  class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
+        <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
+          <AppIcon name="unlock" :size="13" />
+        </button>
+        <button v-if="!locked" class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
           <AppIcon name="eye" :size="13" />
         </button>
-        <button  class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
+        <button v-if="!locked" class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
           <AppIcon name="edit" :size="13" />
         </button>
         <button
@@ -235,7 +222,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         >
           <AppIcon name="star" :size="13" :filled="props.note.starred" />
         </button>
-        <button  class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
+        <button v-if="!locked" class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
           <AppIcon name="copy" :size="13" />
         </button>
         <button  class="ib" type="button" title="更多" aria-label="更多操作" @click.stop="menuAnchor = $event.currentTarget as HTMLElement">
@@ -247,7 +234,12 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     <NoteActionMenu
       v-if="menuAnchor"
       :anchor="menuAnchor"
+      :encrypted="props.note.encrypted"
+      :locked="locked"
       @fullscreen="menuAnchor = null; emit('fullscreen')"
+      @encrypt="menuAnchor = null; emit('encrypt')"
+      @relock="menuAnchor = null; emit('relock')"
+      @remove-lock="menuAnchor = null; emit('removeLock')"
       @delete="emit('delete'); menuAnchor = null"
       @close="menuAnchor = null"
     />
@@ -311,6 +303,20 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   cursor: pointer;
 }
 .memo-body.expanded { max-height: none; }
+
+/* 加密锁标识：占掉正文位置，一眼知道这条要看密码 */
+.memo-locked {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.memo-locked svg { color: var(--warning); flex-shrink: 0; }
+.state-enc { color: var(--text-faint); display: inline-flex; }
 /* 只给正文顶层块加间距，理由同 NoteEditor：* + * 会把任务项的正文压到勾选框下面 */
 .memo-body :deep(> * + *) { margin-top: var(--space-2); }
 .memo-body :deep(* + h1), .memo-body :deep(* + h2), .memo-body :deep(* + h3) { margin-top: var(--space-4); }

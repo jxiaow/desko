@@ -16,6 +16,9 @@ export interface E2ENoteSeed {
   category?: string
   pinned?: boolean
   starred?: boolean
+  /** 预置加密小记：passphrase 是它的解锁口令 */
+  encrypted?: boolean
+  passphrase?: string
 }
 
 export interface E2EFileShortcutSeed {
@@ -75,6 +78,10 @@ interface NoteRecord {
   starred: boolean
   created_at: number
   updated_at: number
+  encrypted: boolean
+  /** 假加密：cipher 存原文，pass 存口令明文，只为复刻命令面的行为 */
+  cipher: string
+  pass: string
 }
 
 interface UrlPathRecord {
@@ -166,7 +173,7 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'mfa_enabled', 'fileshare_enabled']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'theme', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'mfa_enabled', 'fileshare_enabled']
 
 /** 与 Rust 端 backup::LOCAL_FLOOR 对齐：传上云的包本地只留这么几份兜底 */
 const LOCAL_FLOOR = 3
@@ -213,6 +220,8 @@ class MockBackend {
   readonly invocations: Invocation[] = []
   private dialogQueue: unknown[] = []
   private eventListeners = new Map<string, Set<(payload: unknown) => void>>()
+  /** 加密小记的会话解锁集：对齐 Rust 侧 AppState.note_keys，应用锁定即清 */
+  private noteUnlocked = new Set<string>()
 
   constructor(config: E2EConfig = {}) {
     this.state = this.freshState(config)
@@ -270,15 +279,19 @@ class MockBackend {
     })
     ;(config.notes ?? []).forEach((n, i) => {
       const ts = now - (config.notes!.length - i) * 1000
+      const enc = !!n.encrypted
       state.notes.push({
         id: nextId(),
-        title: n.title,
-        content_html: n.content_html,
-        category: n.category ?? null,
+        title: enc ? '' : n.title,
+        content_html: enc ? '' : n.content_html,
+        category: enc ? null : (n.category ?? null),
         pinned: n.pinned ?? false,
         starred: n.starred ?? false,
         created_at: ts,
         updated_at: ts,
+        encrypted: enc,
+        cipher: enc ? n.content_html : '',
+        pass: n.passphrase ?? '',
       })
     })
     ;(config.fileShortcuts ?? []).forEach((f, i) => {
@@ -583,6 +596,7 @@ class MockBackend {
     lock: () => {
       this.state.unlocked = false
       this.state.unlockAttempts = 0
+      this.noteUnlocked.clear()
     },
 
     change_master_password: ({ oldPassword, newPassword }) => {
@@ -684,10 +698,11 @@ class MockBackend {
     // ===== notes.rs =====
     list_notes: () => {
       this.requireUnlocked()
+      // 加密行只出锁标识：明文与标题一律不外泄
       return this.state.notes
         .slice()
         .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.created_at - a.created_at)
-        .map((n) => ({ ...n }))
+        .map((n) => (n.encrypted ? { ...n, title: '', content_html: '', category: null } : { ...n }))
     },
 
     create_note: ({ input }) => {
@@ -702,6 +717,9 @@ class MockBackend {
         starred: false,
         created_at: now,
         updated_at: now,
+        encrypted: false,
+        cipher: '',
+        pass: '',
       }
       this.state.notes.push(note)
       return { ...note }
@@ -710,6 +728,13 @@ class MockBackend {
     update_note: ({ id, input }) => {
       this.requireUnlocked()
       const note = this.findNote(id)
+      if (note.encrypted) {
+        // 加密行：没有会话解锁就不许改；改的只进密文，明文列保持空
+        if (!this.noteUnlocked.has(id)) throw '小记未解锁'
+        note.cipher = input.content_html
+        note.updated_at = Date.now()
+        return
+      }
       note.title = input.title
       note.content_html = input.content_html
       note.category = input.category ?? null
@@ -722,6 +747,7 @@ class MockBackend {
       this.state.notes = this.state.notes.filter((n) => n.id !== id)
       this.state.attachments = this.state.attachments.filter((a) => a.note_id !== id)
       this.state.staged = this.state.staged.filter((f) => !paths.includes(f.file_path))
+      this.noteUnlocked.delete(id)
     },
 
     batch_delete_notes: ({ ids }) => {
@@ -732,6 +758,7 @@ class MockBackend {
       this.state.notes = this.state.notes.filter((n) => !set.has(n.id))
       this.state.attachments = this.state.attachments.filter((a) => !set.has(a.note_id))
       this.state.staged = this.state.staged.filter((f) => !paths.includes(f.file_path))
+      ids.forEach((id: string) => this.noteUnlocked.delete(id))
       return before - this.state.notes.length
     },
 
@@ -747,6 +774,66 @@ class MockBackend {
       const note = this.findNote(id)
       note.starred = !note.starred
       return note.starred
+    },
+
+    // ===== note_lock.rs 单条加密（假加密：只复刻命令面行为） =====
+    lock_note: ({ id, passphrase }: { id: string; passphrase: string }) => {
+      this.requireUnlocked()
+      const note = this.findNote(id)
+      if (!passphrase) throw '加密口令不能为空'
+      if (note.encrypted) throw '这条小记已加密'
+      if (!note.content_html) throw '空内容不用加密'
+      note.encrypted = true
+      note.cipher = note.content_html
+      note.pass = passphrase
+      note.title = ''
+      note.content_html = ''
+      note.category = null
+      note.updated_at = Date.now()
+      this.noteUnlocked.add(id)
+    },
+
+    unlock_note: ({ id, passphrase }: { id: string; passphrase: string }) => {
+      this.requireUnlocked()
+      const note = this.findNote(id)
+      if (!note.encrypted) throw '这条小记没有加密'
+      if (passphrase !== note.pass) throw ERR_WRONG_PASSWORD
+      this.noteUnlocked.add(id)
+      return note.cipher
+    },
+
+    unlock_note_by_master: ({ id, masterPassword }: { id: string; masterPassword: string }) => {
+      this.requireUnlocked()
+      const note = this.findNote(id)
+      if (!note.encrypted) throw '这条小记没有加密'
+      if (masterPassword !== this.state.masterPassword) throw ERR_WRONG_PASSWORD
+      this.noteUnlocked.add(id)
+      return note.cipher
+    },
+
+    relock_note: ({ id }: { id: string }) => {
+      this.noteUnlocked.delete(id)
+    },
+
+    remove_note_lock: ({ id, input }: { id: string; input: { title: string; content_html: string; category?: string | null } }) => {
+      this.requireUnlocked()
+      const note = this.findNote(id)
+      if (!this.noteUnlocked.has(id)) throw '小记未解锁'
+      note.encrypted = false
+      note.cipher = ''
+      note.pass = ''
+      note.title = input.title
+      note.content_html = input.content_html
+      note.category = input.category ?? null
+      note.updated_at = Date.now()
+      this.noteUnlocked.delete(id)
+    },
+
+    reveal_note: ({ id }: { id: string }) => {
+      this.requireUnlocked()
+      const note = this.findNote(id)
+      if (!note.encrypted || !this.noteUnlocked.has(id)) throw '小记未解锁'
+      return note.cipher
     },
 
     list_attachments: ({ noteId }) => {

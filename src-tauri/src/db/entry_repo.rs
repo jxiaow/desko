@@ -123,12 +123,19 @@ impl Database {
         salt_b64: &str,
         verify_hash: &str,
         extra_meta: &[(&str, &str)],
+        note_wraps: &[(String, String)],
     ) -> Result<(), AppError> {
         let tx = self.conn.unchecked_transaction()?;
         for (id, encrypted_password) in updates {
             tx.execute(
                 "UPDATE entries SET encrypted_password=?2, updated_at=?3 WHERE id=?1",
                 params![id, encrypted_password, updated_at],
+            )?;
+        }
+        for (id, wrap_master) in note_wraps {
+            tx.execute(
+                "UPDATE notes SET wrap_master=?2 WHERE id=?1",
+                params![id, wrap_master],
             )?;
         }
         tx.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('salt', ?1)", params![salt_b64])?;

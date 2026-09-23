@@ -57,6 +57,10 @@ export const useNotesStore = defineStore('notes', () => {
   // 附件按需在打开小记时加载：12 个命令共用一把锁，列表里逐条取会放大成 N+1
   const noteAttachments = ref<Record<string, Attachment[]>>({})
 
+  /** 本会话已解锁的加密小记明文：唯一一份内存副本，应用锁定即清 */
+  const notePlains = ref<Record<string, string>>({})
+  const isUnlocked = (id: string) => notePlains.value[id] != null
+
   const noteSaveState = ref<NoteSaveState>('')
   let saveTimer: ReturnType<typeof setTimeout> | null = null
   let hintTimer: ReturnType<typeof setTimeout> | null = null
@@ -137,12 +141,25 @@ export const useNotesStore = defineStore('notes', () => {
 
   const findNote = (id: string) => notes.value.find(n => n.id === id) ?? null
 
+  const withPlain = (n: Note): Note => {
+    const plain = notePlains.value[n.id]
+    if (!n.encrypted || plain == null) return n
+    return { ...n, content_html: plain, title: deriveTitleFromHtml(plain) }
+  }
+
   const fetchNotes = async () => {
     notesLoading.value = true
     try {
       // 图片 src 存的是相对形态，渲染要先有本机附件目录
       await ensureAttachmentBase()
-      notes.value = await api.listNotes()
+      let rows = await api.listNotes()
+      // 页面刷新后 Rust 侧 DEK 还在（应用没锁），把已解锁的明文找回来
+      for (const r of rows) {
+        if (r.encrypted && notePlains.value[r.id] == null) {
+          try { notePlains.value[r.id] = await api.revealNote(r.id) } catch { /* 没解锁就是锁着 */ }
+        }
+      }
+      notes.value = rows.map(withPlain)
     } catch (e: any) {
       toastStore.showToast('加载小记失败: ' + e.message, 'error')
     } finally {
@@ -234,6 +251,8 @@ export const useNotesStore = defineStore('notes', () => {
       category: meta.tags[0] ?? null,
       updated_at: Date.now(),
     }
+    // 加密行改的每个字都要跟着明文副本走，落盘时由 Rust 重新封进密文
+    if (notes.value[idx].encrypted) notePlains.value[id] = html
     pendingSaveId = id
     noteSaveState.value = 'saving'
     clearSaveTimer()
@@ -265,6 +284,7 @@ export const useNotesStore = defineStore('notes', () => {
       try {
         await api.deleteNote(note.id)
         notes.value = notes.value.filter(n => n.id !== note.id)
+        delete notePlains.value[note.id]
         selectedNoteIds.value.delete(note.id)
         toastStore.showToast('小记已删除')
       } catch (e: any) {
@@ -291,6 +311,90 @@ export const useNotesStore = defineStore('notes', () => {
     } catch (e: any) {
       toastStore.showToast('操作失败：' + e.message, 'error')
     }
+  }
+
+  /** 上锁：成功后本会话仍可读（DEK 留着），重锁走 relockNote */
+  const lockNote = async (id: string, passphrase: string): Promise<string | null> => {
+    const idx = notes.value.findIndex(n => n.id === id)
+    if (idx < 0) return '小记不存在'
+    try {
+      await api.lockNote(id, passphrase)
+      notePlains.value[id] = notes.value[idx].content_html
+      notes.value[idx] = { ...notes.value[idx], encrypted: true }
+      toastStore.showToast('已加密，本会话内仍可读')
+      return null
+    } catch (e: any) {
+      return String(e.message ?? e)
+    }
+  }
+
+  const unlockNote = async (id: string, passphrase: string): Promise<string | null> => {
+    try {
+      notePlains.value[id] = await api.unlockNote(id, passphrase)
+      syncUnlocked(id)
+      return null
+    } catch (e: any) {
+      return String(e.message ?? e)
+    }
+  }
+
+  const unlockNoteByMaster = async (id: string, masterPassword: string): Promise<string | null> => {
+    try {
+      notePlains.value[id] = await api.unlockNoteByMaster(id, masterPassword)
+      syncUnlocked(id)
+      return null
+    } catch (e: any) {
+      return String(e.message ?? e)
+    }
+  }
+
+  const syncUnlocked = (id: string) => {
+    const idx = notes.value.findIndex(n => n.id === id)
+    if (idx >= 0) notes.value[idx] = withPlain(notes.value[idx])
+  }
+
+  /** 只收回会话明文，库里的密文不动 */
+  const relockNote = async (id: string) => {
+    try {
+      await api.relockNote(id)
+    } catch (e: any) {
+      toastStore.showToast('操作失败：' + e.message, 'error')
+      return
+    }
+    delete notePlains.value[id]
+    const idx = notes.value.findIndex(n => n.id === id)
+    if (idx >= 0) notes.value[idx] = { ...notes.value[idx], content_html: '', title: '' }
+    toastStore.showToast('已重新锁定')
+  }
+
+  /** 解除加密：明文写回普通列，密文与封条抹掉 */
+  const removeNoteLock = async (id: string): Promise<string | null> => {
+    const note = findNote(id)
+    const plain = notePlains.value[id]
+    if (!note || plain == null) return '请先解锁'
+    try {
+      clearSaveTimer()
+      pendingSaveId = null
+      await api.removeNoteLock(id, {
+        title: note.title,
+        content_html: plain,
+        category: note.category ?? undefined,
+      })
+      delete notePlains.value[id]
+      const idx = notes.value.findIndex(n => n.id === id)
+      if (idx >= 0) notes.value[idx] = { ...notes.value[idx], encrypted: false }
+      toastStore.showToast('已解除加密')
+      return null
+    } catch (e: any) {
+      return String(e.message ?? e)
+    }
+  }
+
+  /** 应用锁定：会话明文一律清掉，加密小记回到锁上状态 */
+  const clearUnlockedNotes = () => {
+    notePlains.value = {}
+    notes.value = notes.value.map(n =>
+      n.encrypted ? { ...n, content_html: '', title: '' } : n)
   }
 
   const toggleBatchMode = () => {
@@ -320,6 +424,7 @@ export const useNotesStore = defineStore('notes', () => {
       try {
         await api.batchDeleteNotes(ids)
         notes.value = notes.value.filter(n => !ids.includes(n.id))
+        ids.forEach(id => { delete notePlains.value[id] })
         selectedNoteIds.value = new Set()
         isBatchMode.value = false
         toastStore.showToast(`已删除 ${ids.length} 条小记`)
@@ -406,9 +511,11 @@ export const useNotesStore = defineStore('notes', () => {
     noteRailCollapsed,
     isBatchMode, selectedNoteIds,
     noteAttachments, noteSaveState,
+    notePlains, isUnlocked,
     tagCounts, allTags, viewCounts, filteredNotes, groupedNotes,
     fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, clearFilters, toggleTagFilter,
     doDeleteNote, togglePin, toggleStar,
+    lockNote, unlockNote, unlockNoteByMaster, relockNote, removeNoteLock, clearUnlockedNotes,
     toggleBatchMode, toggleSelectNote, selectAllNotes, clearSelection,
     batchDelete, batchSetPinned, batchSetStarred,
     loadAttachments, uploadAttachment, deleteAttachment, stageImage,

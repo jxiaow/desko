@@ -109,7 +109,9 @@ for (const t of THEMES) {
   await page.waitForTimeout(400) // nav-item 的 active 底色有过渡，不等会拍到上一屏的余晖
   await shot('5-notes')
 
-  await page.locator('.memo').filter({ hasText: '头像色由分类哈希' }).dblclick()
+  const memo = page.locator('.memo').filter({ hasText: '头像色由分类哈希' })
+  await memo.hover()
+  await memo.locator('.memo-edit').click()
   await page.waitForSelector('.memo.editing .ProseMirror')
   await page.waitForTimeout(600)
   await shot('6-editor')

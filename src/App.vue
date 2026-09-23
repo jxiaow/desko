@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import { useEntriesStore } from './stores/entries'
 import { useFileShortcutsStore } from './stores/fileShortcuts'
+import { useNotesStore } from './stores/notes'
 import { useToastStore } from './stores/toast'
 import { useConfirmStore } from './stores/confirm'
 import { usePasswordStore } from './stores/password'
@@ -43,6 +44,8 @@ const showChangePassword = ref(false)
 const doLock = async () => {
   await lock()
   clearSensitiveState()
+  // 加密小记的会话明文跟着锁回去
+  useNotesStore().clearUnlockedNotes()
   try { await navigator.clipboard.writeText('') } catch {}
   entriesStore.searchKeyword = ''
   entriesStore.activeTab = 'all'

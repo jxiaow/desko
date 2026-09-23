@@ -390,6 +390,7 @@ mod orphan_tests {
             updated_at: 1,
             pinned: false,
             starred: false,
+            encrypted: false,
         }
     }
 
