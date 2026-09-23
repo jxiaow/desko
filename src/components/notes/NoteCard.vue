@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
-import NoteActionMenu from './NoteActionMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatRelativeTime, highlightTagsInHtml } from '../../utils/format'
 import { resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
@@ -51,7 +50,6 @@ const emit = defineEmits<{
 }>()
 
 const draft = ref(props.note.content_html)
-const menuAnchor = ref<HTMLElement | null>(null)
 const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
 const bodyEl = ref<HTMLElement | null>(null)
 const clipped = ref(false)
@@ -196,12 +194,14 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
           <AppIcon name="unlock" :size="13" />
         </button>
-        <button v-if="!locked" class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
-          <AppIcon name="eye" :size="13" />
-        </button>
-        <button v-if="!locked" class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
-          <AppIcon name="edit" :size="13" />
-        </button>
+        <template v-if="!locked">
+          <button class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
+            <AppIcon name="eye" :size="13" />
+          </button>
+          <button class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
+            <AppIcon name="edit" :size="13" />
+          </button>
+        </template>
         <button
           class="ib"
           type="button"
@@ -225,24 +225,20 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         <button v-if="!locked" class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
           <AppIcon name="copy" :size="13" />
         </button>
-        <button  class="ib" type="button" title="更多" aria-label="更多操作" @click.stop="menuAnchor = $event.currentTarget as HTMLElement">
-          <AppIcon name="dots" :size="13" />
+        <button v-if="!locked && !props.note.encrypted" class="ib" type="button" title="加密" aria-label="加密" @click.stop="emit('encrypt')">
+          <AppIcon name="lock" :size="13" />
+        </button>
+        <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="重新锁定" aria-label="重新锁定" @click.stop="emit('relock')">
+          <AppIcon name="lock" :size="13" />
+        </button>
+        <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="解除加密" aria-label="解除加密" @click.stop="emit('removeLock')">
+          <AppIcon name="unlock" :size="13" />
+        </button>
+        <button class="ib danger" type="button" title="删除" aria-label="删除" @click.stop="emit('delete')">
+          <AppIcon name="trash" :size="13" />
         </button>
       </span>
     </div>
-
-    <NoteActionMenu
-      v-if="menuAnchor"
-      :anchor="menuAnchor"
-      :encrypted="props.note.encrypted"
-      :locked="locked"
-      @fullscreen="menuAnchor = null; emit('fullscreen')"
-      @encrypt="menuAnchor = null; emit('encrypt')"
-      @relock="menuAnchor = null; emit('relock')"
-      @remove-lock="menuAnchor = null; emit('removeLock')"
-      @delete="emit('delete'); menuAnchor = null"
-      @close="menuAnchor = null"
-    />
   </article>
 
   <article v-else class="memo editing">
@@ -367,6 +363,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .state-star { color: var(--warning); display: inline-flex; }
 .memo-acts { display: flex; gap: 1px; opacity: 0; transition: opacity var(--transition); }
 .memo:hover .memo-acts, .memo:focus-within .memo-acts { opacity: 1; }
+/* 删除和其余动作拉开一格，平铺后它就在排尾，别让人顺手滑过去 */
+.memo-acts .ib.danger { margin-left: var(--space-1); }
 
 .memo.batchable { padding-left: var(--space-8); }
 .memo-check {

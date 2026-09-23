@@ -55,6 +55,7 @@ mod imp {
         if let Ok(mut attempts) = state.unlock_attempts.lock() {
             *attempts = 0;
         }
+        crate::commands::note_lock::close_domain(&state);
         drop(state);
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.emit("tray-lock", ());

@@ -16,13 +16,26 @@ export const notesApi = {
     invoke('toggle_pin_note', { id }),
   toggleStarNote: (id: string): Promise<boolean> =>
     invoke('toggle_star_note', { id }),
-  /** 单条加密：正文进密文，DEK 由口令与主密码各封一条 */
-  lockNote: (id: string, passphrase: string): Promise<void> =>
-    invoke('lock_note', { id, passphrase }),
-  unlockNote: (id: string, passphrase: string): Promise<string> =>
-    invoke('unlock_note', { id, passphrase }),
-  unlockNoteByMaster: (id: string, masterPassword: string): Promise<string> =>
-    invoke('unlock_note_by_master', { id, masterPassword }),
+  /** 小记域口令：全库一把，状态分「设过」与「本会话已解开」 */
+  noteKeyStatus: (): Promise<NoteKeyStatus> =>
+    invoke('note_key_status'),
+  /** 首次设口令，顺带把旧逐条封条改封，返回全部明文 */
+  noteKeySetup: (passphrase: string): Promise<NotePlain[]> =>
+    invoke('note_key_setup', { passphrase }),
+  noteKeyUnlock: (passphrase: string): Promise<NotePlain[]> =>
+    invoke('note_key_unlock', { passphrase }),
+  /** 兜底：会话已解锁时免输入，用主密钥封条取回域密钥 */
+  noteKeyRecover: (): Promise<NotePlain[]> =>
+    invoke('note_key_recover'),
+  noteKeyRelock: (): Promise<void> =>
+    invoke('note_key_relock'),
+  noteKeyChange: (passphrase: string): Promise<void> =>
+    invoke('note_key_change', { passphrase }),
+  /** 单条加密：正文进密文，DEK 由域密钥封住 */
+  lockNote: (id: string): Promise<void> =>
+    invoke('lock_note', { id }),
+  unlockNote: (id: string): Promise<string> =>
+    invoke('unlock_note', { id }),
   relockNote: (id: string): Promise<void> =>
     invoke('relock_note', { id }),
   removeNoteLock: (id: string, input: UpdateNoteInput): Promise<void> =>
@@ -50,4 +63,16 @@ export const notesApi = {
 export interface OrphanFile {
   name: string
   size: number
+}
+
+export interface NoteKeyStatus {
+  /** 全库口令是否设过 */
+  is_set: boolean
+  /** 本会话是否已解开（域密钥在手） */
+  is_open: boolean
+}
+
+export interface NotePlain {
+  id: string
+  html: string
 }

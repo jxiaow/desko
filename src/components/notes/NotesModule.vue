@@ -35,13 +35,13 @@ const { copyToClipboard } = useClipboard()
 const {
   notes, notesLoading, noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
   noteRailCollapsed,
-  isBatchMode, selectedNoteIds, noteAttachments, noteSaveState, notePlains,
+  isBatchMode, selectedNoteIds, noteAttachments, noteSaveState, notePlains, noteKey,
   tagCounts, viewCounts, filteredNotes, groupedNotes,
 } = storeToRefs(notesStore)
 const {
   fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, clearFilters, toggleTagFilter,
   doDeleteNote, togglePin, toggleStar,
-  relockNote, removeNoteLock,
+  lockNote, unlockNote, relockNote, removeNoteLock, relockNoteDomain,
   toggleBatchMode, toggleSelectNote, selectAllNotes, clearSelection,
   batchDelete, batchSetPinned, batchSetStarred,  loadAttachments, uploadAttachment, deleteAttachment, stageImage,
 } = notesStore
@@ -58,12 +58,44 @@ const editingId = ref<string | null>(null)
 const fsTarget = ref<'new' | string | null>(null)
 const fsMode = ref<'edit' | 'view'>('edit')
 const newbornId = ref<string | null>(null)
-/** 加密口令弹窗：set 上锁，unlock 取回明文 */
-const lockDialog = ref<{ id: string; mode: 'set' | 'unlock' } | null>(null)
+/** 全库小记口令弹窗：mode 决定要输什么，thenLock 是口令到手后要补做的那次加密 */
+const keyDialog = ref<{ mode: 'setup' | 'unlock' | 'change'; thenLock?: string } | null>(null)
 
 const requestRemoveLock = async (id: string) => {
   const err = await removeNoteLock(id)
   if (err) toastStore.showToast(err, 'error')
+}
+
+const applyLock = async (id: string) => {
+  const err = await lockNote(id)
+  if (err) toastStore.showToast(err, 'error')
+}
+
+/** 加密一条：口令不在手就先要口令，设好当场把这条补上 */
+const requestEncrypt = (id: string) => {
+  if (noteKey.value.is_open) return applyLock(id)
+  keyDialog.value = { mode: noteKey.value.is_set ? 'unlock' : 'setup', thenLock: id }
+}
+
+/** 打开一条锁着的：整库已开就是单条免密再开，否则先要口令 */
+const requestOpenNote = async (id: string) => {
+  if (!noteKey.value.is_open) {
+    keyDialog.value = { mode: noteKey.value.is_set ? 'unlock' : 'setup' }
+    return
+  }
+  const err = await unlockNote(id)
+  if (err) toastStore.showToast(err, 'error')
+}
+
+const onKeyDialogDone = async () => {
+  const pending = keyDialog.value?.thenLock
+  keyDialog.value = null
+  if (pending) await applyLock(pending)
+}
+
+const toggleNoteDomain = () => {
+  if (noteKey.value.is_open) void relockNoteDomain()
+  else keyDialog.value = { mode: 'unlock' }
 }
 
 const railRoom = ref(true)
@@ -332,6 +364,20 @@ onBeforeUnmount(() => {
           >
             <AppIcon name="checkall" :size="15" />
           </button>
+          <!-- 口令只管加密小记，没加密过就不出现在顶栏 -->
+          <template v-if="noteKey.is_set">
+            <div class="bar-div"></div>
+            <button
+              class="bar-btn"
+              :class="{ active: noteKey.is_open }"
+              type="button"
+              :title="noteKey.is_open ? '锁回全部加密小记' : '解锁全部加密小记'"
+              :aria-label="noteKey.is_open ? '锁回全部加密小记' : '解锁全部加密小记'"
+              @click="toggleNoteDomain"
+            >
+              <AppIcon :name="noteKey.is_open ? 'lock' : 'unlock'" :size="15" />
+            </button>
+          </template>
           <button
             class="bar-btn"
             :class="{ active: railVisible }"
@@ -387,8 +433,8 @@ onBeforeUnmount(() => {
                 @close="closeCard"
                 @fullscreen="openFullscreen(note.id)"
                 @view="openFullscreen(note.id, 'view')"
-                @encrypt="lockDialog = { id: note.id, mode: 'set' }"
-                @unlock="lockDialog = { id: note.id, mode: 'unlock' }"
+                @encrypt="requestEncrypt(note.id)"
+                @unlock="requestOpenNote(note.id)"
                 @relock="relockNote(note.id)"
                 @remove-lock="requestRemoveLock(note.id)"
                 @add-image="addImageToNote(note.id)"
@@ -504,11 +550,10 @@ onBeforeUnmount(() => {
     />
 
     <NoteLockDialog
-      v-if="lockDialog"
-      :note-id="lockDialog.id"
-      :mode="lockDialog.mode"
-      @close="lockDialog = null"
-      @done="lockDialog = null"
+      v-if="keyDialog"
+      :mode="keyDialog.mode"
+      @close="keyDialog = null"
+      @done="onKeyDialogDone"
     />
 
     <PopoverMenu v-if="filterAnchor" :anchor="filterAnchor" wide align="end" @close="filterAnchor = null">

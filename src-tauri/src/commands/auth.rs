@@ -56,10 +56,8 @@ pub fn lock(state: State<AppState>) -> Result<(), AppError> {
     if let Ok(mut attempts) = state.unlock_attempts.lock() {
         *attempts = 0;
     }
-    // 解锁会话到头：加密小记的 DEK 一并收回，重新锁上
-    if let Ok(mut keys) = state.note_keys.lock() {
-        keys.clear();
-    }
+    // 解锁会话到头：小记域密钥连同全部 DEK 一并收回，加密小记重新锁上
+    crate::commands::note_lock::close_domain(&state);
     Ok(())
 }
 

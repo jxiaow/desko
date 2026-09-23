@@ -5,9 +5,8 @@ import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
 
 const props = defineProps<{
-  noteId: string
-  /** set = 给明文小记设口令上锁；unlock = 输口令（或主密码兜底）取回明文 */
-  mode: 'set' | 'unlock'
+  /** setup = 首次设全库口令；unlock = 输口令开全库；change = 换一把口令 */
+  mode: 'setup' | 'unlock' | 'change'
 }>()
 const emit = defineEmits<{ close: []; done: [] }>()
 
@@ -16,24 +15,26 @@ const pw = ref('')
 const pw2 = ref('')
 const err = ref('')
 const busy = ref(false)
-const useMaster = ref(false)
-const masterPw = ref('')
 
+const needsConfirm = props.mode !== 'unlock'
+const MIN_LEN = 8
+
+const title = computed(() =>
+  props.mode === 'unlock' ? '解锁加密小记' : props.mode === 'setup' ? '设置小记口令' : '修改小记口令')
+
+// 长度规矩只管立口令的时候：解锁那一格填的是既有口令，卡位数会把短口令挡在门外
 const canSubmit = computed(() => {
   if (busy.value) return false
-  if (props.mode === 'set') return pw.value.length >= 4 && pw.value === pw2.value
-  return useMaster.value ? masterPw.value.length > 0 : pw.value.length > 0
+  if (props.mode === 'unlock') return pw.value.length > 0
+  return [...pw.value].length >= MIN_LEN && pw.value === pw2.value
 })
 
-const submit = async () => {
-  if (!canSubmit.value) return
+const run = async (fn: () => Promise<string | null>, ignoreField = false) => {
+  if (busy.value) return
+  if (!ignoreField && !canSubmit.value) return
   busy.value = true
   err.value = ''
-  const msg = props.mode === 'set'
-    ? await notesStore.lockNote(props.noteId, pw.value)
-    : useMaster.value
-      ? await notesStore.unlockNoteByMaster(props.noteId, masterPw.value)
-      : await notesStore.unlockNote(props.noteId, pw.value)
+  const msg = await fn()
   busy.value = false
   if (msg) {
     err.value = msg
@@ -42,53 +43,59 @@ const submit = async () => {
   emit('done')
 }
 
+const submit = () => {
+  if (props.mode === 'setup') void run(() => notesStore.setupNoteKey(pw.value))
+  else if (props.mode === 'unlock') void run(() => notesStore.unlockNoteDomain(pw.value))
+  else void run(() => notesStore.changeNoteKey(pw.value))
+}
+
+/** 兜底走主密钥封条：应用本来就开着，不必再输一遍，所以不受口令格子的校验拦 */
+const recover = () => void run(notesStore.recoverNoteDomain, true)
+
 useEscapeClose(() => emit('close'))
 </script>
 
 <template>
   <div class="dialog-overlay" @click.self="emit('close')">
-    <div class="dialog note-lock-dialog" role="dialog" aria-modal="true"
-      :aria-label="props.mode === 'set' ? '加密小记' : '解锁加密小记'">
+    <div class="dialog note-lock-dialog" role="dialog" aria-modal="true" :aria-label="title">
       <div class="dialog-header">
-        <h3>{{ props.mode === 'set' ? '加密这条小记' : '解锁加密小记' }}</h3>
+        <h3>{{ title }}</h3>
         <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
           <AppIcon name="x" :size="16" />
         </button>
       </div>
       <div class="dialog-body" @keyup.enter="submit">
-        <template v-if="props.mode === 'set'">
-          <p class="lock-tip">正文将用独立口令加密，应用一锁就重新锁上。忘了口令可用主密码解封。</p>
-          <div class="form-group">
-            <label>加密口令</label>
-            <input v-model="pw" type="password" placeholder="至少 4 位" />
-          </div>
-          <div class="form-group">
-            <label>确认口令</label>
-            <input v-model="pw2" type="password" placeholder="再次输入" />
-          </div>
-          <p v-if="pw2 && pw !== pw2" class="lock-error">两次口令不一致</p>
-        </template>
-        <template v-else-if="!useMaster">
-          <div class="form-group">
-            <label>小记口令</label>
-            <input v-model="pw" type="password" placeholder="加密这条小记时设的口令" />
-          </div>
-          <button class="link-btn" type="button" @click="useMaster = true; err = ''">忘了口令？用主密码解封</button>
-        </template>
-        <template v-else>
-          <p class="lock-tip">输入应用主密码解封这一条，只解这一条。</p>
-          <div class="form-group">
-            <label>主密码</label>
-            <input v-model="masterPw" type="password" />
-          </div>
-          <button class="link-btn" type="button" @click="useMaster = false; err = ''">返回用小记口令</button>
-        </template>
+        <p v-if="props.mode === 'setup'" class="lock-tip">
+          全库共用这一把口令，设一次就好：以后加密不再逐条问，解锁也是一次开全部。忘了可用主密码兜底。
+        </p>
+        <p v-else-if="props.mode === 'change'" class="lock-tip">
+          换口令只改域密钥的封条，小记密文一条都不用动。
+        </p>
+
+        <div class="form-group">
+          <label>{{ props.mode === 'unlock' ? '小记口令' : '新口令' }}</label>
+          <input
+            v-model="pw"
+            type="password"
+            :placeholder="props.mode === 'unlock' ? '当初设的那把小记口令' : `至少 ${MIN_LEN} 位，建议长短语`"
+            autocomplete="off"
+          />
+        </div>
+        <div v-if="needsConfirm" class="form-group">
+          <label>确认口令</label>
+          <input v-model="pw2" type="password" placeholder="再次输入" autocomplete="off" />
+        </div>
+        <p v-if="needsConfirm && pw2 && pw !== pw2" class="lock-error">两次口令不一致</p>
+
+        <button v-if="props.mode === 'unlock'" class="link-btn" type="button" @click="recover">
+          忘了口令？用主密码解开
+        </button>
         <p v-if="err" class="lock-error">{{ err }}</p>
       </div>
       <div class="dialog-footer">
         <button class="btn-secondary" type="button" @click="emit('close')">取消</button>
         <button class="btn-primary" type="button" :disabled="!canSubmit" @click="submit">
-          {{ props.mode === 'set' ? '加密' : '解锁' }}
+          {{ props.mode === 'unlock' ? '解锁' : props.mode === 'setup' ? '设好口令' : '改好口令' }}
         </button>
       </div>
     </div>
@@ -105,6 +112,7 @@ useEscapeClose(() => emit('close'))
   font-size: 12.5px;
   cursor: pointer;
   padding: 0;
+  margin-top: var(--space-2);
   font-family: inherit;
 }
 .link-btn:hover { text-decoration: underline; }

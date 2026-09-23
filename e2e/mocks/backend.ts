@@ -16,9 +16,8 @@ export interface E2ENoteSeed {
   category?: string
   pinned?: boolean
   starred?: boolean
-  /** 预置加密小记：passphrase 是它的解锁口令 */
+  /** 预置加密小记：口令在全库级（notePassphrase），不再逐条挂 */
   encrypted?: boolean
-  passphrase?: string
 }
 
 export interface E2EFileShortcutSeed {
@@ -52,6 +51,10 @@ export interface E2EConfig {
   urlPaths?: E2EUrlPathSeed[]
   mfaTokens?: E2EMfaSeed[]
   settings?: Record<string, string>
+  /** 全库小记口令：给了就等于口令已设过，加密小记存在但锁着 */
+  notePassphrase?: string
+  /** 配合 notePassphrase：本会话是否已用口令解开 */
+  noteOpen?: boolean
   /** 附件目录里"已落盘"的文件名，用来演未引用扫描 */
   staged?: string[]
   fileshare?: { port?: number; shareDirs?: string[]; localOnly?: boolean; running?: boolean; boundPort?: number }
@@ -79,9 +82,8 @@ interface NoteRecord {
   created_at: number
   updated_at: number
   encrypted: boolean
-  /** 假加密：cipher 存原文，pass 存口令明文，只为复刻命令面的行为 */
+  /** 假加密：cipher 存原文，口令在全库那一份上，只为复刻命令面的行为 */
   cipher: string
-  pass: string
 }
 
 interface UrlPathRecord {
@@ -222,6 +224,9 @@ class MockBackend {
   private eventListeners = new Map<string, Set<(payload: unknown) => void>>()
   /** 加密小记的会话解锁集：对齐 Rust 侧 AppState.note_keys，应用锁定即清 */
   private noteUnlocked = new Set<string>()
+  /** 全库一把小记口令：空串表示还没设过；noteOpen 对齐 AppState.note_key */
+  private notePass = ''
+  private noteOpen = false
 
   constructor(config: E2EConfig = {}) {
     this.state = this.freshState(config)
@@ -230,6 +235,10 @@ class MockBackend {
 
   private freshState(config: E2EConfig): BackendState {
     const now = Date.now()
+    // 域口令跟着 state 一起重建：config 给了口令才算设过，noteOpen 才顺带解开
+    this.noteUnlocked.clear()
+    this.notePass = config.notePassphrase ?? ''
+    this.noteOpen = !!config.noteOpen && !!this.notePass
     const state: BackendState = {
       initialized: config.initialized ?? true,
       masterPassword: config.masterPassword ?? DEFAULT_MASTER_PASSWORD,
@@ -281,7 +290,7 @@ class MockBackend {
     ;(config.notes ?? []).forEach((n, i) => {
       const ts = now - (config.notes!.length - i) * 1000
       const enc = !!n.encrypted
-      state.notes.push({
+      const rec: NoteRecord = {
         id: nextId(),
         title: enc ? '' : n.title,
         content_html: enc ? '' : n.content_html,
@@ -292,8 +301,9 @@ class MockBackend {
         updated_at: ts,
         encrypted: enc,
         cipher: enc ? n.content_html : '',
-        pass: n.passphrase ?? '',
-      })
+      }
+      state.notes.push(rec)
+      if (enc && this.noteOpen) this.noteUnlocked.add(rec.id)
     })
     ;(config.fileShortcuts ?? []).forEach((f, i) => {
       state.fileShortcuts.push({
@@ -428,6 +438,18 @@ class MockBackend {
     const e = this.state.entries.find((x) => x.id === id)
     if (!e) throw ERR_ENTRY_NOT_FOUND
     return e
+  }
+
+  /** 口令到手：整库解开，一次带回全部明文（对齐 note_key_unlock 的返回） */
+  private openNoteDomain() {
+    this.noteOpen = true
+    const plains: { id: string; html: string }[] = []
+    this.state.notes.forEach((n) => {
+      if (!n.encrypted) return
+      this.noteUnlocked.add(n.id)
+      plains.push({ id: n.id, html: n.cipher })
+    })
+    return plains
   }
 
   private findNote(id: string): NoteRecord {
@@ -598,6 +620,7 @@ class MockBackend {
       this.state.unlocked = false
       this.state.unlockAttempts = 0
       this.noteUnlocked.clear()
+      this.noteOpen = false
     },
 
     change_master_password: ({ oldPassword, newPassword }) => {
@@ -720,7 +743,6 @@ class MockBackend {
         updated_at: now,
         encrypted: false,
         cipher: '',
-        pass: '',
       }
       this.state.notes.push(note)
       return { ...note }
@@ -777,16 +799,54 @@ class MockBackend {
       return note.starred
     },
 
-    // ===== note_lock.rs 单条加密（假加密：只复刻命令面行为） =====
-    lock_note: ({ id, passphrase }: { id: string; passphrase: string }) => {
+    // ===== note_lock.rs 全库口令（假加密：只复刻命令面行为） =====
+    note_key_status: () => {
+      this.requireUnlocked()
+      return { is_set: !!this.notePass, is_open: this.noteOpen }
+    },
+
+    note_key_setup: ({ passphrase }: { passphrase: string }) => {
+      this.requireUnlocked()
+      if (!passphrase) throw '小记口令不能为空'
+      if (this.notePass) throw '小记口令已经设过'
+      this.notePass = passphrase
+      return this.openNoteDomain()
+    },
+
+    note_key_unlock: ({ passphrase }: { passphrase: string }) => {
+      this.requireUnlocked()
+      if (!this.notePass) throw '还没设过小记口令'
+      if (passphrase !== this.notePass) throw ERR_WRONG_PASSWORD
+      return this.openNoteDomain()
+    },
+
+    note_key_recover: () => {
+      this.requireUnlocked()
+      if (!this.notePass) throw '还没设过小记口令'
+      return this.openNoteDomain()
+    },
+
+    note_key_relock: () => {
+      this.requireUnlocked()
+      this.noteOpen = false
+      this.noteUnlocked.clear()
+    },
+
+    note_key_change: ({ passphrase }: { passphrase: string }) => {
+      this.requireUnlocked()
+      if (!passphrase) throw '小记口令不能为空'
+      if (!this.noteOpen) throw '请先输入小记口令'
+      this.notePass = passphrase
+    },
+
+    lock_note: ({ id }: { id: string }) => {
       this.requireUnlocked()
       const note = this.findNote(id)
-      if (!passphrase) throw '加密口令不能为空'
+      if (!this.noteOpen) throw '请先输入小记口令'
       if (note.encrypted) throw '这条小记已加密'
       if (!note.content_html) throw '空内容不用加密'
       note.encrypted = true
       note.cipher = note.content_html
-      note.pass = passphrase
       note.title = ''
       note.content_html = ''
       note.category = null
@@ -794,20 +854,11 @@ class MockBackend {
       this.noteUnlocked.add(id)
     },
 
-    unlock_note: ({ id, passphrase }: { id: string; passphrase: string }) => {
+    unlock_note: ({ id }: { id: string }) => {
       this.requireUnlocked()
       const note = this.findNote(id)
       if (!note.encrypted) throw '这条小记没有加密'
-      if (passphrase !== note.pass) throw ERR_WRONG_PASSWORD
-      this.noteUnlocked.add(id)
-      return note.cipher
-    },
-
-    unlock_note_by_master: ({ id, masterPassword }: { id: string; masterPassword: string }) => {
-      this.requireUnlocked()
-      const note = this.findNote(id)
-      if (!note.encrypted) throw '这条小记没有加密'
-      if (masterPassword !== this.state.masterPassword) throw ERR_WRONG_PASSWORD
+      if (!this.noteOpen) throw '请先输入小记口令'
       this.noteUnlocked.add(id)
       return note.cipher
     },
@@ -822,7 +873,6 @@ class MockBackend {
       if (!this.noteUnlocked.has(id)) throw '小记未解锁'
       note.encrypted = false
       note.cipher = ''
-      note.pass = ''
       note.title = input.title
       note.content_html = input.content_html
       note.category = input.category ?? null

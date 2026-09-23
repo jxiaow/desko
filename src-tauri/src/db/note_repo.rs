@@ -106,20 +106,19 @@ impl Database {
         }
     }
 
-    /// 上锁：密文入库，明文列（title/content_html/category）当场清空
+    /// 上锁：密文入库，明文列（title/content_html/category）当场清空。
+    /// wrap_pass 存的是域密钥封好的 DEK；pass_salt / wrap_master 是旧逐条模型的遗留列，置空
     pub fn set_note_lock(
         &self,
         id: &str,
         cipher: &str,
         cipher_iv: &str,
         wrap_pass: &str,
-        pass_salt: &str,
-        wrap_master: &str,
         updated_at: i64,
     ) -> Result<(), AppError> {
         self.conn.execute(
-            "UPDATE notes SET enc = 1, cipher = ?2, cipher_iv = ?3, wrap_pass = ?4, pass_salt = ?5, wrap_master = ?6, title = '', content_html = '', category = '', updated_at = ?7 WHERE id = ?1",
-            params![id, cipher, cipher_iv, wrap_pass, pass_salt, wrap_master, updated_at],
+            "UPDATE notes SET enc = 1, cipher = ?2, cipher_iv = ?3, wrap_pass = ?4, pass_salt = '', wrap_master = '', title = '', content_html = '', category = '', updated_at = ?5 WHERE id = ?1",
+            params![id, cipher, cipher_iv, wrap_pass, updated_at],
         )?;
         Ok(())
     }
@@ -142,11 +141,47 @@ impl Database {
         Ok(())
     }
 
-    /// 改主密码时重封 DEK 用：所有加密行的 (id, wrap_master)
-    pub fn list_note_wrap_masters(&self) -> Result<Vec<(String, String)>, AppError> {
-        let mut stmt = self.conn.prepare("SELECT id, wrap_master FROM notes WHERE enc = 1")?;
-        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+    /// 设口令时一次性改封用：所有加密行的完整封条
+    pub fn list_note_locks(&self) -> Result<Vec<(String, NoteLockRow)>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, cipher, cipher_iv, wrap_pass, pass_salt, wrap_master FROM notes WHERE enc = 1",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                NoteLockRow {
+                    cipher: r.get(1)?,
+                    cipher_iv: r.get(2)?,
+                    wrap_pass: r.get(3)?,
+                    pass_salt: r.get(4)?,
+                    wrap_master: r.get(5)?,
+                },
+            ))
+        })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// 域密钥落库：三条 meta 加逐行改封，一个事务里走完，不留半迁移状态
+    pub fn apply_note_domain(
+        &self,
+        meta: &[(&str, &str)],
+        resealed: &[(String, String)],
+    ) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        for (id, wrap_pass) in resealed {
+            tx.execute(
+                "UPDATE notes SET wrap_pass=?2, pass_salt='', wrap_master='' WHERE id=?1 AND enc=1",
+                params![id, wrap_pass],
+            )?;
+        }
+        for (key, value) in meta {
+            tx.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",
+                params![key, value],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn batch_delete_notes(&self, ids: &[String]) -> Result<usize, AppError> {
@@ -177,5 +212,81 @@ impl Database {
             params![new_starred as i32, id],
         )?;
         Ok(new_starred)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{cleanup, setup_test_db};
+    use super::Note;
+
+    fn note(id: &str) -> Note {
+        Note {
+            id: id.to_string(),
+            title: "t".to_string(),
+            content_html: "<p>正文</p>".to_string(),
+            category: None,
+            created_at: 1,
+            updated_at: 1,
+            pinned: false,
+            starred: false,
+            encrypted: false,
+        }
+    }
+
+    /// 旧逐条模型留下的行：wrap_master/pass_salt 有值，域化改封后必须清空
+    fn legacy_locked(db: &super::super::Database, id: &str) {
+        db.create_note(&note(id)).unwrap();
+        db.set_note_lock(id, "ct", "iv", "wrap-old", 2).unwrap();
+        db.conn
+            .execute(
+                "UPDATE notes SET pass_salt='salt-old', wrap_master='wrap-m' WHERE id=?1",
+                rusqlite::params![id],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn apply_note_domain_reseals_and_clears_legacy_columns() {
+        let (db, path) = setup_test_db();
+        legacy_locked(&db, "n1");
+        legacy_locked(&db, "n2");
+        db.create_note(&note("plain")).unwrap();
+
+        db.apply_note_domain(
+            &[("note_salt", "s"), ("note_key_wrap", "w")],
+            &[("n1".to_string(), "wrap-new".to_string()), ("plain".to_string(), "wrap-x".to_string())],
+        )
+        .unwrap();
+
+        let locks = db.list_note_locks().unwrap();
+        assert_eq!(locks.len(), 2, "只列加密行");
+        let wrap_of = |want: &str| {
+            locks.iter().find(|(id, _)| id == want).map(|(_, l)| l.clone())
+        };
+        let l1 = wrap_of("n1").unwrap();
+        assert_eq!(l1.wrap_pass, "wrap-new");
+        assert!(l1.pass_salt.is_empty() && l1.wrap_master.is_empty(), "旧封条列要抹干净");
+        // 未加密的行不在 UPDATE 的 AND enc=1 里，一条都不会被改封
+        assert!(wrap_of("plain").is_none());
+        assert_eq!(wrap_of("n2").unwrap().wrap_pass, "wrap-old", "不在 resealed 里就该原样");
+        assert!(!db.get_note("plain").unwrap().unwrap().encrypted);
+        assert_eq!(db.get_meta("note_key_wrap").unwrap().unwrap(), "w");
+        cleanup(&path);
+    }
+
+    #[test]
+    fn set_note_lock_writes_domain_shape() {
+        let (db, path) = setup_test_db();
+        db.create_note(&note("n1")).unwrap();
+        db.set_note_lock("n1", "ct", "iv", "wrap-new", 9).unwrap();
+
+        let row = db.get_note_lock("n1").unwrap().unwrap();
+        assert_eq!((row.cipher.as_str(), row.cipher_iv.as_str()), ("ct", "iv"));
+        assert_eq!(row.wrap_pass, "wrap-new");
+        assert!(row.pass_salt.is_empty() && row.wrap_master.is_empty());
+        let n = db.get_note("n1").unwrap().unwrap();
+        assert!(n.encrypted && n.title.is_empty() && n.content_html.is_empty(), "明文当场清掉");
+        cleanup(&path);
     }
 }

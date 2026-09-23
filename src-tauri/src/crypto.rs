@@ -157,6 +157,14 @@ pub fn note_wrap_key(master_key: &[u8], note_id: &str) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+/// 小记域密钥（全库一把口令）的主密钥封条派生：不绑 note id，与旧的逐条封条域分隔
+pub fn note_domain_key(master_key: &[u8]) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(master_key);
+    hasher.update(b"desko-note-domain");
+    hasher.finalize().to_vec()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,6 +195,23 @@ mod tests {
         assert_eq!(key.len(), KEY_LENGTH);
     }
     
+    #[test]
+    fn test_note_wrap_domains_are_isolated() {
+        let mk = random_bytes(KEY_LENGTH);
+        let domain = note_domain_key(&mk);
+        let per_note = note_wrap_key(&mk, "n1");
+        assert_ne!(domain, per_note, "新旧封条同域就会一把钥匙开两代数据");
+        assert_ne!(domain, mk, "派生不能是恒等");
+        assert_ne!(per_note, note_wrap_key(&mk, "n2"));
+
+        // 域密钥封的 DEK，逐条密钥开不了；反过来也一样
+        let dek = random_bytes(KEY_LENGTH);
+        let sealed = encrypt_password(&BASE64.encode(&dek), &domain).unwrap();
+        assert!(decrypt_password(&sealed, &per_note).is_err());
+        let legacy = encrypt_password(&BASE64.encode(&dek), &per_note).unwrap();
+        assert!(decrypt_password(&legacy, &domain).is_err());
+    }
+
     #[test]
     fn test_derive_key_deterministic() {
         let salt = b"fixed_salt_for_test";

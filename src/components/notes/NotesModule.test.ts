@@ -33,9 +33,14 @@ vi.mock('../../services/api/notes', () => ({
     batchDeleteNotes: vi.fn(),
     togglePinNote: vi.fn(),
     toggleStarNote: vi.fn(),
+    noteKeyStatus: vi.fn(),
+    noteKeySetup: vi.fn(),
+    noteKeyUnlock: vi.fn(),
+    noteKeyRecover: vi.fn(),
+    noteKeyRelock: vi.fn(),
+    noteKeyChange: vi.fn(),
     lockNote: vi.fn(),
     unlockNote: vi.fn(),
-    unlockNoteByMaster: vi.fn(),
     relockNote: vi.fn(),
     removeNoteLock: vi.fn(),
     revealNote: vi.fn(),
@@ -76,6 +81,8 @@ const stageNotes = (notes: Note[]) => {
 let observers: Array<{ cb: (entries: any[]) => void }> = []
 
 const mountModule = async () => {
+  // 域口令状态是 fetchNotes 的第一步，缺了就往下传 undefined
+  vi.mocked(notesApi.noteKeyStatus).mockResolvedValue({ is_set: false, is_open: false })
   const wrapper = mount(NotesModule, {
     attachTo: document.createElement('div'),
   })
@@ -197,52 +204,88 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
-  it('单条加密：上锁→重锁变锁卡→错口令拦下→对口令还原', async () => {
+  it('小记口令：只设一次，锁回全部后才再问，错口令拦在弹窗里', async () => {
     stageNotes([makeNote()])
-    const wrapper = await mountModule()
-    vi.mocked(notesApi.lockNote).mockResolvedValue(undefined)
-    vi.mocked(notesApi.unlockNote).mockImplementation(async (_id: string, pass: string) => {
-      if (pass !== 'pw-1234') throw new Error('密码错误')
-      return '<p>甲内容 #工作</p>'
+    vi.mocked(notesApi.noteKeySetup).mockImplementation(async (pass: string) => {
+      if (pass !== 'note-pw-1234') throw new Error('口令太短')
+      return [{ id: 'a', html: '<p>甲内容 #工作</p>' }]
     })
+    vi.mocked(notesApi.noteKeyUnlock).mockImplementation(async (pass: string) => {
+      if (pass !== 'note-pw-1234') throw new Error('密码错误')
+      return [{ id: 'a', html: '<p>甲内容 #工作</p>' }]
+    })
+    vi.mocked(notesApi.noteKeyRelock).mockResolvedValue(undefined)
+    vi.mocked(notesApi.lockNote).mockResolvedValue(undefined)
+    vi.mocked(notesApi.unlockNote).mockResolvedValue('<p>甲内容 #工作</p>')
     vi.mocked(notesApi.relockNote).mockResolvedValue(undefined)
 
-    // ⋯ 菜单发起加密：弹窗里填两遍口令
+    const wrapper = await mountModule()
+
+    // 口令没设过：加密动作先要一把全库口令（设的时候才要确认），设好当场补上这条加密
     wrapper.findComponent(NoteCard).vm.$emit('encrypt')
     await flushPromises()
     let dialog = wrapper.findComponent(NoteLockDialog)
     expect(dialog.exists()).toBe(true)
     const inputs = dialog.findAll('input[type="password"]')
-    await inputs[0].setValue('pw-1234')
-    await inputs[1].setValue('pw-1234')
+    expect(inputs).toHaveLength(2)
+    await inputs[0].setValue('note-pw-1234')
+    await inputs[1].setValue('note-pw-1234')
     await dialog.find('button.btn-primary').trigger('click')
     await flushPromises()
-    expect(notesApi.lockNote).toHaveBeenCalledWith('a', 'pw-1234')
+    expect(notesApi.noteKeySetup).toHaveBeenCalledWith('note-pw-1234')
+    expect(notesApi.lockNote).toHaveBeenCalledWith('a')
     expect(wrapper.findComponent(NoteLockDialog).exists()).toBe(false)
     // 锁完本会话仍可读：有加密标、没有锁卡
     expect(wrapper.find('.state-enc').exists()).toBe(true)
     expect(wrapper.find('.memo-locked').exists()).toBe(false)
 
-    // 重新锁定：卡片退化成锁标识，正文从 DOM 消失
+    // 单条重锁：卡片退化成锁标识，正文从 DOM 消失
     wrapper.findComponent(NoteCard).vm.$emit('relock')
     await flushPromises()
     expect(wrapper.find('.memo-locked').exists()).toBe(true)
     expect(wrapper.find('.memo-body').exists()).toBe(false)
 
-    // 解锁：错口令留在弹窗里报，对口令还原正文
+    // 口令已在手：再开这一条不必再问
+    wrapper.findComponent(NoteCard).vm.$emit('unlock')
+    await flushPromises()
+    expect(wrapper.findComponent(NoteLockDialog).exists()).toBe(false)
+    expect(notesApi.unlockNote).toHaveBeenCalledWith('a')
+    expect(wrapper.find('.memo-body').text()).toContain('甲内容')
+
+    // 锁回全部：整库重新上锁，之后再要口令
+    await wrapper.find('.stream-bar button[aria-label="锁回全部加密小记"]').trigger('click')
+    await flushPromises()
+    expect(notesApi.noteKeyRelock).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('.memo-locked').exists()).toBe(true)
+
     wrapper.findComponent(NoteCard).vm.$emit('unlock')
     await flushPromises()
     dialog = wrapper.findComponent(NoteLockDialog)
+    expect(dialog.exists()).toBe(true)
+    // 一把口令开全库：只有一格输入，没有确认格
+    expect(dialog.findAll('input[type="password"]')).toHaveLength(1)
     await dialog.find('input[type="password"]').setValue('错的')
     await dialog.find('button.btn-primary').trigger('click')
     await flushPromises()
     expect(dialog.find('.lock-error').text()).toContain('密码错误')
 
-    await dialog.find('input[type="password"]').setValue('pw-1234')
+    await dialog.find('input[type="password"]').setValue('note-pw-1234')
     await dialog.find('button.btn-primary').trigger('click')
     await flushPromises()
     expect(wrapper.findComponent(NoteLockDialog).exists()).toBe(false)
-    expect(wrapper.find('.memo-locked').exists()).toBe(false)
+    expect(wrapper.find('.memo-body').text()).toContain('甲内容')
+
+    // 兜底：格子空着也能走「用主密码解开」，一键开全库
+    await wrapper.find('.stream-bar button[aria-label="锁回全部加密小记"]').trigger('click')
+    await flushPromises()
+    wrapper.findComponent(NoteCard).vm.$emit('unlock')
+    await flushPromises()
+    dialog = wrapper.findComponent(NoteLockDialog)
+    vi.mocked(notesApi.noteKeyRecover).mockResolvedValue([{ id: 'a', html: '<p>甲内容 #工作</p>' }])
+    await dialog.find('.link-btn').trigger('click')
+    await flushPromises()
+    expect(notesApi.noteKeyRecover).toHaveBeenCalledTimes(1)
+    expect(wrapper.findComponent(NoteLockDialog).exists()).toBe(false)
     expect(wrapper.find('.memo-body').text()).toContain('甲内容')
     wrapper.unmount()
   })

@@ -17,6 +17,7 @@ import SetupPage from './components/auth/SetupPage.vue'
 import UnlockPage from './components/auth/UnlockPage.vue'
 import SettingsDialog from './components/settings/SettingsDialog.vue'
 import ChangePasswordDialog from './components/settings/ChangePasswordDialog.vue'
+import NoteLockDialog from './components/notes/NoteLockDialog.vue'
 import ToastNotification from './components/shared/ToastNotification.vue'
 import ConfirmDialog from './components/shared/ConfirmDialog.vue'
 
@@ -41,6 +42,21 @@ const isSidebarCollapsed = ref(true)
 const showSettings = ref(false)
 const settingsInitialTab = ref<'general' | 'fileshare'>('general')
 const showChangePassword = ref(false)
+/** 小记口令没在手时，设置页那一步得先解锁再改，mode 就是当前该问哪一句 */
+const noteKeyMode = ref<'unlock' | 'change' | null>(null)
+
+const openChangeNoteKey = () => {
+  const store = useNotesStore()
+  noteKeyMode.value = store.noteKey.is_open ? 'change' : 'unlock'
+}
+
+const onNoteKeyDone = () => {
+  if (noteKeyMode.value === 'unlock') {
+    noteKeyMode.value = 'change'
+    return
+  }
+  noteKeyMode.value = null
+}
 
 const openSettingsGeneral = () => {
   settingsInitialTab.value = 'general'
@@ -120,12 +136,20 @@ onUnmounted(() => {
       :initial-tab="settingsInitialTab"
       @close="showSettings = false"
       @open-change-password="showChangePassword = true"
+      @open-change-note-key="openChangeNoteKey"
       @entries-refreshed="fetchEntries"
     />
 
     <ChangePasswordDialog
       v-if="showChangePassword"
       @close="showChangePassword = false"
+    />
+
+    <NoteLockDialog
+      v-if="noteKeyMode"
+      :mode="noteKeyMode"
+      @close="noteKeyMode = null"
+      @done="onNoteKeyDone"
     />
 
     <ToastNotification :toast="toast" />

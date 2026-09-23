@@ -1,5 +1,5 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use crate::crypto::{decrypt_password, encrypt_password, generate_salt, compute_verify_hash, verify_master_password, derive_key, note_wrap_key, EncryptedData};
+use crate::crypto::{decrypt_password, encrypt_password, generate_salt, compute_verify_hash, verify_master_password, derive_key, note_domain_key, EncryptedData};
 use crate::db::Database;
 use crate::error::AppError;
 
@@ -71,22 +71,56 @@ pub fn change_master_password(db: &Database, old_key: &[u8], old_password: &str,
         rewrapped = serde_json::to_string(&sealed_new).map_err(|e| AppError::Crypto(e.to_string()))?;
         extra_meta.push((crate::services::backup_service::META_KEY, rewrapped));
     }
-    let extra_refs: Vec<(&str, &str)> = extra_meta.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    // 加密小记的主密钥封条跟着换封；个别封条解不开（历史坏数据）就留旧的，不拦改密
-    let mut note_wraps: Vec<(String, String)> = Vec::new();
-    for (id, wrap) in db.list_note_wrap_masters()? {
+    // 小记域密钥的主密钥封条跟着换封；解不开（历史坏数据）就留旧的，不拦改密
+    if let Some(json) = db.get_meta("note_key_master_wrap")? {
         let rewrapped = (|| -> Result<String, crate::error::AppError> {
-            let sealed: EncryptedData = serde_json::from_str(&wrap)
+            let sealed: EncryptedData = serde_json::from_str(&json)
                 .map_err(|e| crate::error::AppError::Crypto(e.to_string()))?;
-            let dek_b64 = decrypt_password(&sealed, &note_wrap_key(old_key, &id))?;
-            let resealed = encrypt_password(&dek_b64, &note_wrap_key(&new_key, &id))?;
+            let ndk_b64 = decrypt_password(&sealed, &note_domain_key(old_key))?;
+            let resealed = encrypt_password(&ndk_b64, &note_domain_key(&new_key))?;
             serde_json::to_string(&resealed).map_err(|e| crate::error::AppError::Crypto(e.to_string()))
         })();
-        if let Ok(json) = rewrapped {
-            note_wraps.push((id, json));
+        if let Ok(value) = rewrapped {
+            extra_meta.push(("note_key_master_wrap", value));
         }
     }
-    db.finish_password_change(&updates, now, &new_salt_b64, &new_verify_hash, &extra_refs, &note_wraps)?;
+    let extra_refs: Vec<(&str, &str)> = extra_meta.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    db.finish_password_change(&updates, now, &new_salt_b64, &new_verify_hash, &extra_refs)?;
 
     Ok(new_key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::random_bytes;
+    use crate::db::{cleanup, setup_test_db};
+
+    fn seal_ndk(ndk: &[u8], key: &[u8]) -> String {
+        let wrapped = encrypt_password(&BASE64.encode(ndk), key).unwrap();
+        serde_json::to_string(&wrapped).unwrap()
+    }
+
+    fn open_ndk(json: &str, key: &[u8]) -> Vec<u8> {
+        let sealed: EncryptedData = serde_json::from_str(json).unwrap();
+        BASE64.decode(decrypt_password(&sealed, key).unwrap()).unwrap()
+    }
+
+    /// 换主密码必须跟着换小记域密钥的主密钥封条，否则之后的「忘口令兜底」再也解不开
+    #[test]
+    fn note_domain_master_wrap_survives_master_password_change() {
+        let (db, path) = setup_test_db();
+        let mut mk = None;
+        setup_master_password(&db, &mut mk, "old-master-1").unwrap();
+        let old_key = mk.unwrap();
+        let ndk = random_bytes(crate::crypto::KEY_LENGTH);
+        db.set_meta("note_key_master_wrap", &seal_ndk(&ndk, &note_domain_key(&old_key))).unwrap();
+
+        let new_key = change_master_password(&db, &old_key, "old-master-1", "new-master-2").unwrap();
+
+        let stored = db.get_meta("note_key_master_wrap").unwrap().unwrap();
+        assert_eq!(open_ndk(&stored, &note_domain_key(&new_key)), ndk, "新主密钥该照样兜得回来");
+        assert!(decrypt_password(&serde_json::from_str(&stored).unwrap(), &note_domain_key(&old_key)).is_err(), "旧主密钥从此解不开");
+        cleanup(&path);
+    }
 }

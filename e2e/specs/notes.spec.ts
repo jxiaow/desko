@@ -1,5 +1,8 @@
 import { test, expect, Page } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, tipButton, E2E_PASSWORD } from '../helpers'
+import { bootUnlocked, e2e, expectToast, tipButton } from '../helpers'
+
+/** 全库一把小记口令：立的时候卡位数，之后解锁照原样填 */
+const NOTE_PASS = 'note-pw-1234'
 
 const SEED = {
   notes: [
@@ -285,58 +288,83 @@ test.describe('Notes 小记', () => {
     await expect(fs).toHaveCount(0)
   })
 
-  test('单条加密：锁卡藏正文、错口令拦下、主密码兜底', async ({ page }) => {
+  test('小记口令：一把开全库，行操作全平铺', async ({ page }) => {
     await bootUnlocked(page, {
       notes: [
         { title: '机密事', content_html: '<p>要加密的正文</p>' },
-        { title: '封存', content_html: '<p>封存的正文</p>', encrypted: true, passphrase: 'pw-1234' },
+        { title: '封存', content_html: '<p>封存的正文</p>', encrypted: true },
       ],
     }, '/notes')
-    await expect(page.locator('.memo')).toHaveCount(2)
+    const cards = page.locator('.memo')
+    await expect(cards).toHaveCount(2)
+    const sealed = cards.nth(0) // seed 里更新的那条，开局就锁着
+    const plain = cards.nth(1)
     // 锁着的正文根本不进 DOM
     await expect(page.locator('.memo-body')).not.toContainText('封存的正文')
-    const lockedCard = page.locator('.memo', { hasText: '已加密 · 单击解锁' })
-    await expect(lockedCard).toHaveCount(1)
+    await expect(page.locator('.memo-locked')).toHaveCount(1)
+    // 动作全平铺：⋯ 入口彻底没了
+    await expect(page.locator('.memo-acts button[title="更多"], .memo-acts button[data-tip="更多"]')).toHaveCount(0)
 
-    // 给第一条上加密：⋯ 菜单 → 弹窗设口令
-    const target = memo(page, '要加密的正文')
-    await target.hover()
-    await tipButton(target, '更多').click()
-    await page.locator('.popover .pop-item', { hasText: '加密' }).click()
+    // 首次加密就是立全库口令，只有这一次要输两格
+    await plain.hover()
+    await tipButton(plain, '加密').click()
     const dialog = page.locator('.note-lock-dialog')
     await expect(dialog).toBeVisible()
+    await expect(dialog.locator('input[type="password"]')).toHaveCount(2)
     await expect(dialog.locator('button.btn-primary')).toBeDisabled()
-    await dialog.locator('input[type="password"]').first().fill('pw-1234')
-    await dialog.locator('input[type="password"]').nth(1).fill('pw-1234')
+    await dialog.locator('input[type="password"]').first().fill(NOTE_PASS)
+    await dialog.locator('input[type="password"]').nth(1).fill(NOTE_PASS)
     await dialog.locator('button.btn-primary').click()
     await expectToast(page, '已加密，本会话内仍可读')
     await expect(dialog).toHaveCount(0)
-    await expect(memo(page, '要加密的正文').locator('.state-enc')).toBeVisible()
+    // 一把口令开全库：seed 里那条锁着的也跟着见了光
+    await expect(sealed.locator('.memo-body')).toContainText('封存的正文')
+    await expect(page.locator('.memo-locked')).toHaveCount(0)
+    await expect(plain.locator('.state-enc')).toBeVisible()
 
-    // 重新锁定：变锁卡，搜索也不命中
-    await target.hover()
-    await tipButton(target, '更多').click()
-    await page.locator('.popover .pop-item', { hasText: '重新锁定' }).click()
+    // 悬停时状态徽标淡出，锁由动作排补上：加密过的那条 hover 必须有「重新锁定」
+    await plain.hover()
+    await expect(tipButton(plain, '重新锁定')).toHaveCount(1)
+    await tipButton(plain, '重新锁定').click()
     await expectToast(page, '已重新锁定')
-    await expect(page.locator('.memo-locked')).toHaveCount(2)
-    await page.locator('.search-box input').fill('要加密的正文')
+    // 只收回这一条：另一条明文还在手
+    await expect(page.locator('.memo-locked')).toHaveCount(1)
+    // 锁回的正文不进搜索
+    await page.locator('.stream-bar .search-box input').fill('要加密的正文')
     await expect(page.locator('.memo')).toHaveCount(0)
-    await page.locator('.search-box input').fill('')
+    await page.locator('.stream-bar .search-box input').fill('')
     await expect(page.locator('.memo')).toHaveCount(2)
 
-    // 解锁：错口令留在弹窗里报
-    await page.locator('.memo-locked').first().click()
+    // 口令还在手：单条再开不再问一次
+    await plain.click()
+    await expect(dialog).toHaveCount(0)
+    await expect(plain.locator('.memo-body')).toContainText('要加密的正文')
+
+    // 整库锁回 → 错口令拦在弹窗里 → 对的一次开全部
+    await page.locator('.stream-bar button[aria-label="锁回全部加密小记"]').click()
+    await expectToast(page, '加密小记已全部锁回')
+    await expect(page.locator('.memo-locked')).toHaveCount(2)
+    await sealed.click()
     await expect(dialog).toBeVisible()
-    await dialog.locator('input[type="password"]').fill('错的')
+    await expect(dialog.locator('input[type="password"]')).toHaveCount(1)
+    await dialog.locator('input[type="password"]').fill('错的口令')
     await dialog.locator('button.btn-primary').click()
     await expect(dialog.locator('.lock-error')).toContainText('密码错误')
-
-    // 兜底：忘口令 → 主密码解封（first 是 seed 里更新的「封存」）
-    await dialog.locator('.link-btn').click()
-    await dialog.locator('input[type="password"]').fill(E2E_PASSWORD)
+    await dialog.locator('input[type="password"]').fill(NOTE_PASS)
     await dialog.locator('button.btn-primary').click()
     await expect(dialog).toHaveCount(0)
-    await expect(page.locator('.memo').first().locator('.memo-body')).toContainText('封存的正文')
+    // 一次解锁 = 全库开：两条锁着的都回来了
+    await expect(memo(page, '封存的正文')).toBeVisible()
+    await expect(memo(page, '要加密的正文')).toBeVisible()
+
+    // 忘口令兜底：应用已解锁，零输入直接开
+    await page.locator('.stream-bar button[aria-label="锁回全部加密小记"]').click()
+    await sealed.click()
+    await dialog.locator('.link-btn').click()
+    await expectToast(page, '已用主密码解开小记')
+    await expect(dialog).toHaveCount(0)
+    await expect(memo(page, '封存的正文')).toBeVisible()
+    expect(await e2e.count(page, 'note_key_recover')).toBe(1)
   })
 
   test('卡片上勾选任务项：改动落库，进编辑态不弹回', async ({ page }) => {

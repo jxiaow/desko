@@ -6,6 +6,7 @@ import { useConfirmStore } from './confirm'
 import { extractTags, getDateGroupLabel, deriveTitleFromHtml, htmlToText } from '../utils/format'
 import { collectAttachmentNames, ensureAttachmentBase, nameOf, normalizeAssetHtml } from '../services/attachmentSrc'
 import type { Note, Attachment } from '../types'
+import type { NoteKeyStatus, NotePlain } from '../services/api/notes'
 
 export type NoteView = 'all' | 'pinned' | 'starred'
 export type NoteSort = 'new' | 'old' | 'updated'
@@ -60,6 +61,8 @@ export const useNotesStore = defineStore('notes', () => {
   /** 本会话已解锁的加密小记明文：唯一一份内存副本，应用锁定即清 */
   const notePlains = ref<Record<string, string>>({})
   const isUnlocked = (id: string) => notePlains.value[id] != null
+  /** 全库一把小记口令的状态：设过没有、本会话解开没有 */
+  const noteKey = ref<NoteKeyStatus>({ is_set: false, is_open: false })
 
   const noteSaveState = ref<NoteSaveState>('')
   let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -152,11 +155,14 @@ export const useNotesStore = defineStore('notes', () => {
     try {
       // 图片 src 存的是相对形态，渲染要先有本机附件目录
       await ensureAttachmentBase()
-      let rows = await api.listNotes()
-      // 页面刷新后 Rust 侧 DEK 还在（应用没锁），把已解锁的明文找回来
-      for (const r of rows) {
-        if (r.encrypted && notePlains.value[r.id] == null) {
-          try { notePlains.value[r.id] = await api.revealNote(r.id) } catch { /* 没解锁就是锁着 */ }
+      noteKey.value = await api.noteKeyStatus()
+      const rows = await api.listNotes()
+      // 页面刷新后 Rust 侧域密钥还在（应用没锁），把已解锁的明文找回来
+      if (noteKey.value.is_open) {
+        for (const r of rows) {
+          if (r.encrypted && notePlains.value[r.id] == null) {
+            try { notePlains.value[r.id] = await api.revealNote(r.id) } catch { /* 单条重锁过就是锁着 */ }
+          }
         }
       }
       notes.value = rows.map(withPlain)
@@ -313,12 +319,82 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
+  /** 口令到手：一次带回的明文全部填进会话，列表跟着换显示 */
+  const applyPlains = (plains: NotePlain[]) => {
+    plains.forEach(p => { notePlains.value[p.id] = p.html })
+    notes.value = notes.value.map(withPlain)
+  }
+
+  /** 设置页在列表之外也要知道口令设过没有 */
+  const refreshNoteKey = async () => {
+    try {
+      noteKey.value = await api.noteKeyStatus()
+    } catch {
+      /* 未解锁时本来就问不到，保持原样 */
+    }
+  }
+
+  const setupNoteKey = async (passphrase: string): Promise<string | null> => {
+    try {
+      applyPlains(await api.noteKeySetup(passphrase))
+      noteKey.value = { is_set: true, is_open: true }
+      toastStore.showToast('小记口令已设好，加密小记全部解锁')
+      return null
+    } catch (e: any) {
+      return String(e.message ?? e)
+    }
+  }
+
+  const unlockNoteDomain = async (passphrase: string): Promise<string | null> => {
+    try {
+      applyPlains(await api.noteKeyUnlock(passphrase))
+      noteKey.value = { ...noteKey.value, is_open: true }
+      return null
+    } catch (e: any) {
+      return String(e.message ?? e)
+    }
+  }
+
+  /** 兜底：应用会话已解锁，域密钥用主密钥封条直接取回，一个字都不用输 */
+  const recoverNoteDomain = async (): Promise<string | null> => {
+    try {
+      applyPlains(await api.noteKeyRecover())
+      noteKey.value = { ...noteKey.value, is_open: true }
+      toastStore.showToast('已用主密码解开小记')
+      return null
+    } catch (e: any) {
+      return String(e.message ?? e)
+    }
+  }
+
+  const relockNoteDomain = async () => {
+    try {
+      await api.noteKeyRelock()
+    } catch (e: any) {
+      toastStore.showToast('操作失败：' + e.message, 'error')
+      return
+    }
+    noteKey.value = { ...noteKey.value, is_open: false }
+    hideAllPlains()
+    toastStore.showToast('加密小记已全部锁回')
+  }
+
+  const changeNoteKey = async (passphrase: string): Promise<string | null> => {
+    try {
+      await api.noteKeyChange(passphrase)
+      toastStore.showToast('小记口令已修改')
+      return null
+    } catch (e: any) {
+      return String(e.message ?? e)
+    }
+  }
+
   /** 上锁：成功后本会话仍可读（DEK 留着），重锁走 relockNote */
-  const lockNote = async (id: string, passphrase: string): Promise<string | null> => {
+  const lockNote = async (id: string): Promise<string | null> => {
     const idx = notes.value.findIndex(n => n.id === id)
     if (idx < 0) return '小记不存在'
     try {
-      await api.lockNote(id, passphrase)
+      await api.lockNote(id)
       notePlains.value[id] = notes.value[idx].content_html
       notes.value[idx] = { ...notes.value[idx], encrypted: true }
       toastStore.showToast('已加密，本会话内仍可读')
@@ -328,19 +404,10 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
-  const unlockNote = async (id: string, passphrase: string): Promise<string | null> => {
+  /** 单条再开：口令已在手就不用再输，只有整库锁着时才要 */
+  const unlockNote = async (id: string): Promise<string | null> => {
     try {
-      notePlains.value[id] = await api.unlockNote(id, passphrase)
-      syncUnlocked(id)
-      return null
-    } catch (e: any) {
-      return String(e.message ?? e)
-    }
-  }
-
-  const unlockNoteByMaster = async (id: string, masterPassword: string): Promise<string | null> => {
-    try {
-      notePlains.value[id] = await api.unlockNoteByMaster(id, masterPassword)
+      notePlains.value[id] = await api.unlockNote(id)
       syncUnlocked(id)
       return null
     } catch (e: any) {
@@ -390,11 +457,17 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
-  /** 应用锁定：会话明文一律清掉，加密小记回到锁上状态 */
-  const clearUnlockedNotes = () => {
+  /** 会话明文一律收回，加密小记回到锁上状态（库里的密文不动） */
+  const hideAllPlains = () => {
     notePlains.value = {}
     notes.value = notes.value.map(n =>
       n.encrypted ? { ...n, content_html: '', title: '' } : n)
+  }
+
+  /** 应用锁定：口令解出来的东西一律收回，加密小记重新锁上 */
+  const clearUnlockedNotes = () => {
+    noteKey.value = { ...noteKey.value, is_open: false }
+    hideAllPlains()
   }
 
   const toggleBatchMode = () => {
@@ -511,11 +584,12 @@ export const useNotesStore = defineStore('notes', () => {
     noteRailCollapsed,
     isBatchMode, selectedNoteIds,
     noteAttachments, noteSaveState,
-    notePlains, isUnlocked,
+    notePlains, isUnlocked, noteKey,
     tagCounts, allTags, viewCounts, filteredNotes, groupedNotes,
     fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, clearFilters, toggleTagFilter,
     doDeleteNote, togglePin, toggleStar,
-    lockNote, unlockNote, unlockNoteByMaster, relockNote, removeNoteLock, clearUnlockedNotes,
+    setupNoteKey, unlockNoteDomain, recoverNoteDomain, relockNoteDomain, changeNoteKey, refreshNoteKey,
+    lockNote, unlockNote, relockNote, removeNoteLock, clearUnlockedNotes,
     toggleBatchMode, toggleSelectNote, selectAllNotes, clearSelection,
     batchDelete, batchSetPinned, batchSetStarred,
     loadAttachments, uploadAttachment, deleteAttachment, stageImage,

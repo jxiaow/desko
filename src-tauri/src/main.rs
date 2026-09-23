@@ -32,6 +32,8 @@ pub struct AppState {
     pub fileshare: commands::fileshare::ProcState,
     /// 单条加密小记解锁后的 DEK，只驻内存；应用锁定即清
     pub note_keys: Mutex<std::collections::HashMap<String, Vec<u8>>>,
+    /// 小记域密钥：全库一把口令解出来的那份，只驻内存；应用锁定即清
+    pub note_key: Mutex<Option<Vec<u8>>>,
 }
 
 fn main() {
@@ -68,6 +70,7 @@ fn main() {
                 backup_busy: AtomicBool::new(false),
                 fileshare: commands::fileshare::ProcState::default(),
                 note_keys: Mutex::new(std::collections::HashMap::new()),
+                note_key: Mutex::new(None),
             });
 
             // 正文里的图片走 asset: 协议读附件目录，只放行那一个目录
@@ -161,6 +164,7 @@ fn main() {
                             if let Ok(mut attempts) = app_state.unlock_attempts.lock() {
                                 *attempts = 0;
                             }
+                            commands::note_lock::close_domain(&app_state);
                             let _ = window_clone.emit("tray-lock", ());
                         }
                         
@@ -206,9 +210,14 @@ fn main() {
             commands::notes::toggle_pin_note,
             commands::notes::toggle_star_note,
             commands::notes::list_attachments,
+            commands::note_lock::note_key_status,
+            commands::note_lock::note_key_setup,
+            commands::note_lock::note_key_unlock,
+            commands::note_lock::note_key_recover,
+            commands::note_lock::note_key_relock,
+            commands::note_lock::note_key_change,
             commands::note_lock::lock_note,
             commands::note_lock::unlock_note,
-            commands::note_lock::unlock_note_by_master,
             commands::note_lock::relock_note,
             commands::note_lock::remove_note_lock,
             commands::note_lock::reveal_note,

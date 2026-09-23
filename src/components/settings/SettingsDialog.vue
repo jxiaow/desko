@@ -3,6 +3,7 @@ import BrandLogo from '../shared/BrandLogo.vue'
 import BackupPane from './BackupPane.vue'
 import OptionSelect from '../shared/OptionSelect.vue'
 import { ref, computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { settingsApi } from '../../services/api/settings'
 import { THEMES, DEFAULT_THEME, chooseTheme, readTheme } from '../../services/theme'
@@ -14,13 +15,19 @@ import { fileshareEnabled, readFileshareFeature, saveFileshareFeature } from '..
 import { fsBusy, fsConfig, fsHasPassword, fsRefresh, fsSaveConfig, fsSetPassword } from '../../services/fileshareSettings'
 import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
+import { useNotesStore } from '../../stores/notes'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 
 const toastStore = useToastStore()
+// 口令行只在设过小记口令时出现；设置页可能先于小记模块打开，自己拉一次状态
+const notesStore = useNotesStore()
+const { noteKey } = storeToRefs(notesStore)
+void notesStore.refreshNoteKey()
 
 const emit = defineEmits<{
   close: []
   openChangePassword: []
+  openChangeNoteKey: []
   entriesRefreshed: []
 }>()
 
@@ -436,6 +443,14 @@ onMounted(() => { loadSettings() })
               <div class="setting-item clickable" @click="emit('openChangePassword')">
                 <div class="setting-info">
                   <span class="setting-name">修改主密码</span>
+                </div>
+                <svg class="arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </div>
+              <div v-if="noteKey.is_set" class="setting-item clickable" @click="emit('openChangeNoteKey')">
+                <div class="setting-info">
+                  <span class="setting-name">修改小记口令</span>
                 </div>
                 <svg class="arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="9 18 15 12 9 6"/>
