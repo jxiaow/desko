@@ -256,6 +256,7 @@ class MockBackend {
       if (config.fileshare.port) state.fileshare.port = config.fileshare.port
       if (config.fileshare.shareDirs) state.fileshare.shareDirs = config.fileshare.shareDirs.slice()
       state.fileshare.localOnly = config.fileshare.localOnly ?? false
+      state.fileshare.hasPassword = config.fileshare.hasPassword ?? false
       if (config.fileshare.running) {
         state.fileshare.running = true
         state.fileshare.boundPort = config.fileshare.boundPort ?? state.fileshare.port

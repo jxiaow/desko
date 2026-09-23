@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BrandLogo from '../shared/BrandLogo.vue'
 import BackupPane from './BackupPane.vue'
+import OptionSelect from '../shared/OptionSelect.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { settingsApi } from '../../services/api/settings'
@@ -10,6 +11,8 @@ import { TERMINALS, readTerminal, saveTerminal } from '../../services/terminal'
 import type { TerminalId } from '../../services/terminal'
 import { readMfaFeature, saveMfaFeature } from '../../services/mfaFeature'
 import { fileshareEnabled, readFileshareFeature, saveFileshareFeature } from '../../services/fileshareFeature'
+import { fsBusy, fsConfig, fsHasPassword, fsRefresh, fsSaveConfig, fsSetPassword } from '../../services/fileshareSettings'
+import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 
@@ -24,13 +27,15 @@ const emit = defineEmits<{
 const show = ref(true)
 const TAB_LABELS = {
   general: '通用',
+  fileshare: '局域网传输',
   appearance: '外观',
   backup: '数据与备份',
   security: '安全',
   about: '关于',
 } as const
 type TabId = keyof typeof TAB_LABELS
-const tab = ref<TabId>('general')
+const props = defineProps<{ initialTab?: TabId }>()
+const tab = ref<TabId>(props.initialTab ?? 'general')
 // 存 0 表示不开自动锁定，useAutoLock 读到 0 直接跳过这一轮
 const autoLockEnabled = ref(false)
 const autoLockTimeout = ref(5)
@@ -40,17 +45,35 @@ const theme = ref<ThemeId>(DEFAULT_THEME)
 const terminal = ref<TerminalId>('auto')
 const mfaOn = ref(false)
 const fileshareOn = ref(false)
+// 局域网传输的服务设置（页签内），状态走 fileshareSettings 单例与模块页共享
+const fsPortInput = ref(8000)
+const fsLocalOnly = ref(false)
+const fsShowPwInput = ref(false)
+const fsPasswordInput = ref('')
+
+const syncFileshareForm = () => {
+  const cfg = fsConfig.value
+  if (!cfg) return
+  fsPortInput.value = cfg.port
+  fsLocalOnly.value = cfg.localOnly
+}
 const route = useRoute()
 const router = useRouter()
 const terminalDesc = computed(
   () => TERMINALS.find((t) => t.id === terminal.value)?.desc ?? ''
 )
+const terminalOptions = TERMINALS.map((t) => ({ value: t.id, label: t.name }))
 
 const loadSettings = async () => {
   theme.value = await readTheme()
   terminal.value = await readTerminal()
   mfaOn.value = await readMfaFeature()
   fileshareOn.value = await readFileshareFeature()
+  if (tab.value === 'fileshare' && !fileshareOn.value) tab.value = 'general'
+  if (fileshareOn.value) {
+    await fsRefresh()
+    syncFileshareForm()
+  }
   try {
     const timeout = await settingsApi.getSetting('auto_lock_timeout')
     const minutes = parseInt(timeout)
@@ -127,11 +150,65 @@ const saveFileshareFeaturePref = async () => {
   try {
     await saveFileshareFeature(fileshareOn.value)
     if (!fileshareOn.value && route.path === '/fileshare') await router.replace('/entries')
+    if (!fileshareOn.value && tab.value === 'fileshare') tab.value = 'general'
     toastStore.showToast(fileshareOn.value ? '局域网传输已开启' : '设置已保存')
   } catch (e: any) {
     // saveFileshareFeature 内部已回滚单例，界面按单例扳回（开、关两个方向都可能失败）
     fileshareOn.value = fileshareEnabled.value
     toastStore.showToast((fileshareOn.value ? '关闭失败: ' : '开启失败: ') + e.message, 'error')
+  }
+}
+
+const applyFsPort = async () => {
+  const cfg = fsConfig.value
+  if (!cfg || fsBusy.value) return
+  const port = Math.max(1, Math.min(65535, fsPortInput.value || cfg.port))
+  fsPortInput.value = port
+  if (port === cfg.port) return
+  try {
+    await fsSaveConfig(cfg.shareDirs, port, cfg.localOnly)
+    toastStore.showToast('端口已更新')
+  } catch (e) {
+    toastStore.showToast(errText(e), 'error')
+  } finally {
+    syncFileshareForm()
+  }
+}
+
+const applyFsLocalOnly = async () => {
+  const cfg = fsConfig.value
+  if (!cfg || fsBusy.value) return
+  const want = fsLocalOnly.value
+  try {
+    await fsSaveConfig(cfg.shareDirs, fsPortInput.value, want)
+    toastStore.showToast(want ? '已切到仅本机访问' : '已对局域网开放')
+  } catch (e) {
+    toastStore.showToast(errText(e), 'error')
+    fsLocalOnly.value = !want
+  } finally {
+    syncFileshareForm()
+  }
+}
+
+const applyFsPassword = async () => {
+  if (fsBusy.value) return
+  try {
+    await fsSetPassword(fsPasswordInput.value)
+    toastStore.showToast('访问口令已更新')
+    fsPasswordInput.value = ''
+    fsShowPwInput.value = false
+  } catch (e) {
+    toastStore.showToast(errText(e), 'error')
+  }
+}
+
+const clearFsPassword = async () => {
+  if (fsBusy.value) return
+  try {
+    await fsSetPassword('')
+    toastStore.showToast('已清除访问口令')
+  } catch (e) {
+    toastStore.showToast(errText(e), 'error')
   }
 }
 
@@ -162,6 +239,13 @@ onMounted(() => { loadSettings() })
               <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
             </svg>
             <span>{{ TAB_LABELS.general }}</span>
+          </button>
+          <button v-if="fileshareOn" class="nav-tab" :class="{ on: tab === 'fileshare' }" @click="tab = 'fileshare'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            <span>{{ TAB_LABELS.fileshare }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'appearance' }" @click="tab = 'appearance'">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -218,13 +302,11 @@ onMounted(() => { loadSettings() })
                   <span class="setting-desc">{{ terminalDesc }}</span>
                 </div>
                 <div class="setting-control">
-                  <select
-                    class="select"
-                    :value="terminal"
-                    @change="saveTerminalPref(($event.target as HTMLSelectElement).value as TerminalId)"
-                  >
-                    <option v-for="t in TERMINALS" :key="t.id" :value="t.id">{{ t.name }}</option>
-                  </select>
+                  <OptionSelect
+                    :model-value="terminal"
+                    :options="terminalOptions"
+                    @update:model-value="saveTerminalPref($event as TerminalId)"
+                  />
                 </div>
               </div>
               <div class="setting-item">
@@ -246,6 +328,62 @@ onMounted(() => { loadSettings() })
                   <input type="checkbox" v-model="fileshareOn" @change="saveFileshareFeaturePref" />
                   <span class="switch-slider"></span>
                 </label>
+              </div>
+            </div>
+          </section>
+
+          <!-- 局域网传输：服务设置（共享目录仍在模块页管理） -->
+          <section v-show="tab === 'fileshare'" class="settings-pane">
+            <div class="group-content">
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">端口</span>
+                  <span class="setting-desc">被占用时自动向后漂移，实际端口见传输页顶部</span>
+                </div>
+                <input
+                  v-model.number="fsPortInput"
+                  class="number-input fs-port-input"
+                  type="number"
+                  min="1"
+                  max="65535"
+                  @change="applyFsPort"
+                  @keyup.enter="applyFsPort"
+                />
+              </div>
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">仅本机访问</span>
+                  <span class="setting-desc">只监听 127.0.0.1，其他设备无法连接</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" v-model="fsLocalOnly" @change="applyFsLocalOnly" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              <div class="setting-item" :class="{ stacked: fsShowPwInput }">
+                <div class="setting-info">
+                  <span class="setting-name">访问口令</span>
+                  <span class="setting-desc">启用后网页端所有页面都要先输口令</span>
+                </div>
+                <div class="fs-pw-ctl">
+                  <span class="fs-tag" :class="{ on: fsHasPassword }">{{ fsHasPassword ? '已启用' : '未启用' }}</span>
+                  <button v-if="!fsShowPwInput" class="btn-secondary" @click="fsShowPwInput = true">
+                    {{ fsHasPassword ? '修改口令' : '设置口令' }}
+                  </button>
+                  <button v-if="fsHasPassword" class="btn-secondary" :disabled="fsBusy" @click="clearFsPassword">清除口令</button>
+                </div>
+                <div v-if="fsShowPwInput" class="fs-pw-row">
+                  <input
+                    v-model="fsPasswordInput"
+                    class="fs-pw-input"
+                    type="password"
+                    placeholder="新口令"
+                    autocomplete="new-password"
+                    @keyup.enter="applyFsPassword"
+                  />
+                  <button class="btn-primary" :disabled="fsBusy || !fsPasswordInput" @click="applyFsPassword">设置</button>
+                  <button class="btn-secondary" @click="fsShowPwInput = false; fsPasswordInput = ''">取消</button>
+                </div>
               </div>
             </div>
           </section>
@@ -498,6 +636,32 @@ onMounted(() => { loadSettings() })
   background: var(--hover);
   color: var(--text);
 }
+
+.stacked { flex-wrap: wrap; }
+.fs-port-input { width: 84px; }
+.fs-pw-ctl { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+.fs-tag {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.fs-tag.on { border-color: var(--success); color: var(--success); }
+.fs-pw-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding-bottom: var(--space-1); }
+.fs-pw-input {
+  flex: 1;
+  min-width: 140px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.fs-pw-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); }
 
 /* 面板用 v-show 而非 v-if：切页时 number-input 不卸载，@change 才不会被切页吞掉。
    弹窗定高，各页同高，切页不跳。 */

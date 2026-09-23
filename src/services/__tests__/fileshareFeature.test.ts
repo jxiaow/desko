@@ -32,18 +32,13 @@ describe('fileshareFeature', () => {
     expect(fileshareEnabled.value).toBe(false)
   })
 
-  it('开启时按顺序写开关再拉起服务', async () => {
+  it('开启只落库开关，不自动拉起服务', async () => {
     mockInvoke.mockResolvedValue('false') // get_setting
-    const { saveFileshareFeature } = await loadFeature()
-    mockInvoke.mockImplementation(async (cmd: string) => {
-      if (cmd === 'fileshare_start') return { running: true }
-      return undefined
-    })
+    const { saveFileshareFeature, fileshareEnabled } = await loadFeature()
     await saveFileshareFeature(true)
     expect(mockInvoke).toHaveBeenCalledWith('set_setting', { key: 'fileshare_enabled', value: 'true' })
-    expect(mockInvoke).toHaveBeenCalledWith('fileshare_start')
-    const seq = mockInvoke.mock.calls.map(([c]) => c)
-    expect(seq.indexOf('set_setting')).toBeLessThan(seq.indexOf('fileshare_start'))
+    expect(mockInvoke).not.toHaveBeenCalledWith('fileshare_start')
+    expect(fileshareEnabled.value).toBe(true)
   })
 
   it('关闭时写 false 并停服', async () => {
@@ -53,20 +48,6 @@ describe('fileshareFeature', () => {
     await saveFileshareFeature(false)
     expect(settingsCalls()).toContainEqual(['fileshare_enabled', 'false'])
     expect(mockInvoke).toHaveBeenCalledWith('fileshare_stop')
-  })
-
-  it('start 失败回滚开关与持久值并把错误抛出', async () => {
-    mockInvoke.mockResolvedValue(undefined)
-    const { saveFileshareFeature, fileshareEnabled } = await loadFeature()
-    mockInvoke.mockImplementation(async (cmd: string) => {
-      if (cmd === 'fileshare_start') throw new Error('端口都被占用')
-      return undefined
-    })
-    await expect(saveFileshareFeature(true)).rejects.toThrow('端口都被占用')
-    expect(fileshareEnabled.value).toBe(false)
-    // 回滚写了第二次 false
-    const writes = settingsCalls().filter(([k]) => k === 'fileshare_enabled')
-    expect(writes).toEqual([['fileshare_enabled', 'true'], ['fileshare_enabled', 'false']])
   })
 
   it('stop 失败不阻塞关闭', async () => {

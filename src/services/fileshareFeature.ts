@@ -17,7 +17,7 @@ export async function readFileshareFeature(): Promise<boolean> {
   return fileshareEnabled.value
 }
 
-/** 开 → 拉起服务，拉不起来回滚开关并抛出原因；关 → 停监听（模块本身保留在设置里） */
+/** 开 → 只出现侧栏入口，服务起不起由模块页按钮定；关 → 停监听（模块本身保留在设置里） */
 export async function saveFileshareFeature(on: boolean): Promise<void> {
   const prev = fileshareEnabled.value
   fileshareEnabled.value = on
@@ -29,17 +29,7 @@ export async function saveFileshareFeature(on: boolean): Promise<void> {
     fileshareEnabled.value = prev
     throw e
   }
-  if (on) {
-    try {
-      await fileshareApi.start()
-    } catch (e) {
-      fileshareEnabled.value = prev
-      try {
-        await settingsApi.setSetting('fileshare_enabled', prev ? 'true' : 'false')
-      } catch { /* 回滚写不回就算了，界面已经是 prev */ }
-      throw e
-    }
-  } else {
+  if (!on) {
     try {
       await fileshareApi.stop()
     } catch {

@@ -86,7 +86,7 @@ export async function hoverCard(page: Page, name: string): Promise<void> {
 /** 设置弹窗是左菜单 / 右内容，非默认面板要先点菜单项才有可见的可交互节点 */
 const SETTINGS_TAB = {
   general: '通用',
-  general: '通用',
+  fileshare: '局域网传输',
   appearance: '外观',
   backup: '数据与备份',
   security: '安全',
@@ -99,7 +99,8 @@ export async function openSettings(
   page: Page,
   tab: SettingsTab = 'appearance',
 ): Promise<Locator> {
-  await page.locator('button[title="设置"]').click()
+  // 全局 tooltip 会把 title 摘成 data-tip：hover 过一次的按钮不能再靠 [title] 命中
+  await page.locator('button[title="设置"], button[data-tip="设置"]').first().click()
   const dialog = page.locator('.settings-dialog')
   await expect(dialog).toBeVisible()
   await settingsTab(dialog, tab)

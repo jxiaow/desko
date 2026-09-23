@@ -12,6 +12,7 @@ import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import { useClipboard } from '../../composables/useClipboard'
+import OptionSelect from '../shared/OptionSelect.vue'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
@@ -477,12 +478,12 @@ const doRestoreFile = async () => {
           <span class="setting-desc">到点自动打包上传；数据无变化则跳过本轮</span>
         </div>
         <div class="setting-control">
-          <select
-            class="select-input" :value="st.intervalMin" :disabled="!schedulable"
-            @change="saveInterval(parseInt(($event.target as HTMLSelectElement).value))"
-          >
-            <option v-for="c in INTERVAL_OPTIONS" :key="c.value" :value="c.value">{{ c.label }}</option>
-          </select>
+          <OptionSelect
+            :model-value="st.intervalMin"
+            :options="INTERVAL_OPTIONS"
+            :disabled="!schedulable"
+            @update:model-value="saveInterval(Number($event))"
+          />
         </div>
       </div>
       <div class="setting-item">

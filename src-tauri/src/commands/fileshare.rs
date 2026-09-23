@@ -191,17 +191,6 @@ fn wait_for_status(app: &AppHandle, expect_pid: u32, timeout_ms: u64) -> Option<
 
 // ── 配置读写与旧数据迁移 ────────────────────────────────────
 
-fn enabled_in_db(app: &AppHandle) -> bool {
-    let state = app.state::<AppState>();
-    state
-        .db
-        .lock()
-        .ok()
-        .and_then(|db| db.get_meta(META_ENABLED).ok().flatten())
-        .map(|v| v == "true")
-        .unwrap_or(false)
-}
-
 fn set_enabled(app: &AppHandle, on: bool) -> Result<(), AppError> {
     let state = app.state::<AppState>();
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
@@ -441,25 +430,8 @@ fn to_dto(cfg: &ShareConfig) -> ConfigDto {
 
 // ── 生命周期钩子（main.rs 调用）─────────────────────────────
 
-/// 启动恢复：上次开着服务则自动拉起。等待子进程回话最多 5s，放后台线程做，
-/// 不拖窗口首帧。状态文件里的 pid 属于上一次会话，start_inner 会先清掉再按新 pid 认件。
-pub fn restore_on_startup(app: &AppHandle) {
-    if !enabled_in_db(app) {
-        return;
-    }
-    if child_running(app) {
-        return;
-    }
-    let handle = app.clone();
-    std::thread::spawn(move || {
-        if let Err(e) = start_inner(&handle) {
-            let _ = set_enabled(&handle, false);
-            eprintln!("[startup] 局域网传输自动启动失败: {}", e.user_message());
-        }
-    });
-}
-
 /// 退出收尾：杀子进程、删状态文件。子进程另有 --parent 看门狗兜底强杀场景。
+/// 开机不再自动恢复监听：服务只由模块页的启动按钮拉起。
 pub fn stop_for_exit(app: &AppHandle) {
     kill_service(app);
 }

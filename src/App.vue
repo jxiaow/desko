@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
@@ -39,7 +39,18 @@ const { evictExpiredPasswords, clearSensitiveState } = passwordStore
 
 const isSidebarCollapsed = ref(true)
 const showSettings = ref(false)
+const settingsInitialTab = ref<'general' | 'fileshare'>('general')
 const showChangePassword = ref(false)
+
+const openSettingsGeneral = () => {
+  settingsInitialTab.value = 'general'
+  showSettings.value = true
+}
+// 模块页摘要行等处请求直达设置弹窗的某个页签
+const onOpenSettingsTab = (e: Event) => {
+  settingsInitialTab.value = ((e as CustomEvent).detail === 'fileshare' ? 'fileshare' : 'general')
+  showSettings.value = true
+}
 
 const doLock = async () => {
   await lock()
@@ -71,6 +82,11 @@ onMounted(async () => {
 
   // WebView 收不到窗口隐藏/最小化时的 mouseleave，:hover 与 tooltip 会残留到下次打开
   installHoverGuard()
+  window.addEventListener('desko:open-settings-tab', onOpenSettingsTab)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('desko:open-settings-tab', onOpenSettingsTab)
 })
 </script>
 
@@ -79,7 +95,7 @@ onMounted(async () => {
     <TitleBar
       :is-locked="appState === 'locked'"
       @toggle-sidebar="isSidebarCollapsed = !isSidebarCollapsed"
-      @open-settings="showSettings = true"
+      @open-settings="openSettingsGeneral"
       @lock="doLock"
     />
 
@@ -101,6 +117,7 @@ onMounted(async () => {
 
     <SettingsDialog
       v-if="showSettings"
+      :initial-tab="settingsInitialTab"
       @close="showSettings = false"
       @open-change-password="showChangePassword = true"
       @entries-refreshed="fetchEntries"

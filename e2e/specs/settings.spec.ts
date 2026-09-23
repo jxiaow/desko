@@ -84,11 +84,12 @@ test.describe('Settings 设置', () => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'general')
     const pane = visiblePane(dialog)
-    const select = pane.locator('.setting-item select.select')
-    await expect(select).toHaveCount(1)
-    await expect(select).toHaveValue('auto')
+    const trigger = pane.locator('.setting-item', { hasText: '在终端中打开' }).locator('button.opt-trigger')
+    await expect(trigger).toHaveCount(1)
+    await expect(trigger).toHaveText('自动')
     const before = await e2e.count(page, 'set_setting')
-    await select.selectOption('cmd')
+    await trigger.click()
+    await page.locator('.popover.modal .opt-item', { hasText: '命令提示符' }).click()
     await expectToast(page, '已保存终端偏好')
     await expect.poll(() => e2e.count(page, 'set_setting')).toBeGreaterThan(before)
   })
@@ -184,7 +185,7 @@ test.describe('Settings 设置', () => {
     await expect(pane.locator('.setting-item', { hasText: '定时备份' })).toHaveCount(0)
     // WebDAV 没配置时，备份这一档每个控件都摆着看但点不动
     await expect(pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn')).toBeDisabled()
-    await expect(pane.locator('.setting-item', { hasText: '自动备份' }).locator('select.select-input')).toBeDisabled()
+    await expect(pane.locator('.setting-item', { hasText: '自动备份' }).locator('button.opt-trigger')).toBeDisabled()
     await expect(pane.locator('.setting-item', { hasText: '停笔即备' }).locator('input[type="checkbox"]')).toBeDisabled()
     await expect(pane.locator('.setting-item', { hasText: '云端保留份数' }).locator('.number-input')).toBeDisabled()
     await expect(pane.locator('button', { hasText: '云端列表' })).toBeDisabled()
@@ -199,23 +200,25 @@ test.describe('Settings 设置', () => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
-    const select = pane.locator('.setting-item', { hasText: '自动备份' }).locator('select.select-input')
-    await expect(select).toBeDisabled()
+    const trigger = pane.locator('.setting-item', { hasText: '自动备份' }).locator('button.opt-trigger')
+    await expect(trigger).toBeDisabled()
 
     await setBackupPwd(page, pane)
     // 光有备份密码不够，没云端照样灰着
-    await expect(select).toBeDisabled()
+    await expect(trigger).toBeDisabled()
     await connectCloud(page, pane)
-    await expect(select).toBeEnabled()
+    await expect(trigger).toBeEnabled()
 
     // 默认按 5 分钟显示（Rust 侧默认值，seed 未写）
-    await expect(select).toHaveValue('5')
-    await select.selectOption('15')
+    await expect(trigger).toHaveText('每 5 分钟')
+    await trigger.click()
+    await page.locator('.popover.modal .opt-item', { hasText: '每 15 分钟' }).click()
     expect((await e2e.snapshot(page))).toMatchObject({
       settings: { auto_backup_interval: '15' },
     })
     // 选「关闭」写 0，不是空串 —— 这一档关掉就等于自动备份全关
-    await select.selectOption('0')
+    await trigger.click()
+    await page.locator('.popover.modal .opt-item', { hasText: '关闭 · 只留手动' }).click()
     expect((await e2e.snapshot(page))).toMatchObject({
       settings: { auto_backup_interval: '0' },
     })

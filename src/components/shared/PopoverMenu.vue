@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useEscapeClose } from '../../composables/useEscapeClose'
 
 const props = defineProps<{
   /** 锚定元素：浮层贴着它摆放，点它本身不触发「点击外部关闭」 */
   anchor: HTMLElement | null
   align?: 'end' | 'start'
   wide?: boolean
+  /** 挂在弹窗（.dialog-overlay z-index 1000）之上时用 */
+  modal?: boolean
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -35,29 +38,25 @@ const onPointerDown = (e: MouseEvent) => {
   emit('close')
 }
 
-const onKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape') {
-    e.stopPropagation()
-    emit('close')
-  }
-}
+// Esc 走全局分层栈：浮层后开、后登记，一次按键只关它，不连带底下的弹窗
+useEscapeClose(() => emit('close'))
 
-// 浮层是 fixed 定位，页面滚动后就会与锚点错位，直接关闭最省事
-const onScroll = () => emit('close')
+// 浮层是 fixed 定位，页面滚动或缩放后跟着锚点重摆。
+// 原先是滚动即关闭，但点击前浏览器补发的 scroll 事件会晚于挂载一帧，
+// 弹窗里刚展开的下拉会被这记延迟 scroll 秒关。
+const onReflow = () => place()
 
 onMounted(() => {
   place()
   document.addEventListener('mousedown', onPointerDown, true)
-  document.addEventListener('keydown', onKeyDown, true)
-  window.addEventListener('resize', onScroll)
-  window.addEventListener('scroll', onScroll, true)
+  window.addEventListener('resize', onReflow)
+  window.addEventListener('scroll', onReflow, true)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onPointerDown, true)
-  document.removeEventListener('keydown', onKeyDown, true)
-  window.removeEventListener('resize', onScroll)
-  window.removeEventListener('scroll', onScroll, true)
+  window.removeEventListener('resize', onReflow)
+  window.removeEventListener('scroll', onReflow, true)
 })
 </script>
 
@@ -66,7 +65,7 @@ onBeforeUnmount(() => {
     <div
       ref="panel"
       class="popover"
-      :class="{ wide: props.wide }"
+      :class="{ wide: props.wide, modal: props.modal }"
       role="menu"
       :style="{ top: pos.top + 'px', left: pos.left + 'px' }"
     >

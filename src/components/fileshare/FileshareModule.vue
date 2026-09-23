@@ -1,84 +1,73 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fileshareApi, type FileShareStatus, type FileShareConfig } from '../../services/api/fileshare'
+import { fileshareApi } from '../../services/api/fileshare'
 import { errText } from '../../services/api/backup'
 import { readFileshareFeature } from '../../services/fileshareFeature'
+import {
+  fsStatus,
+  fsConfig,
+  fsLoaded,
+  fsBusy,
+  fsRunning,
+  fsPortDrifted,
+  fsHasPassword,
+  fsLocalOnly,
+  fsRefresh,
+  fsSaveConfig,
+  requestOpenSettingsTab,
+} from '../../services/fileshareSettings'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
 const router = useRouter()
 
-const status = ref<FileShareStatus | null>(null)
-const config = ref<FileShareConfig | null>(null)
-const portInput = ref(8000)
-const localOnly = ref(false)
 const dirAdd = ref('')
-const passwordInput = ref('')
-const showPwInput = ref(false)
-const busy = ref(false)
-const loaded = ref(false)
 
-const running = computed(() => status.value?.running ?? false)
-const portDrifted = computed(
-  () => running.value && status.value && status.value.boundPort !== status.value.configuredPort
-)
-const hasPassword = computed(() => config.value?.hasPassword ?? false)
+const running = fsRunning
+const status = fsStatus
+const dirs = computed(() => fsConfig.value?.shareDirs ?? [])
 /** 局域网开放且没口令：任何人都能读写共享目录，要提醒一句 */
-const openWarn = computed(() => !localOnly.value && !hasPassword.value)
+const openWarn = computed(() => running.value && !fsLocalOnly.value && !fsHasPassword.value)
 
-async function refresh() {
-  try {
-    const [st, cfg] = await Promise.all([fileshareApi.status(), fileshareApi.getConfig()])
-    status.value = st
-    config.value = cfg
-    portInput.value = cfg.port
-    localOnly.value = cfg.localOnly
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-  } finally {
-    loaded.value = true
-  }
-}
+const summary = computed(() => {
+  const cfg = fsConfig.value
+  if (!cfg) return ''
+  return `端口 ${cfg.port} · ${cfg.localOnly ? '仅本机访问' : '对局域网开放'} · 口令${cfg.hasPassword ? '已设' : '未设'}`
+})
 
 async function toggle() {
-  if (busy.value) return
-  busy.value = true
+  if (fsBusy.value) return
+  fsBusy.value = true
   try {
     if (running.value) {
       await fileshareApi.stop()
-      status.value = await fileshareApi.status()
       toastStore.showToast('已停止监听')
     } else {
-      status.value = await fileshareApi.start()
+      await fileshareApi.start()
       toastStore.showToast('服务已启动')
     }
+    await fsRefresh()
   } catch (e) {
     toastStore.showToast(errText(e), 'error')
   } finally {
-    busy.value = false
+    fsBusy.value = false
   }
 }
 
-/** 一次改动一次落盘：目录/端口/仅本机都走这条即时保存，失败回读还原显示 */
-async function persist(nextDirs: string[], nextPort: number, nextLocal: boolean, okToast: string): Promise<boolean> {
-  if (busy.value) return false
-  busy.value = true
+async function saveDirs(next: string[], okToast: string): Promise<boolean> {
+  const cfg = fsConfig.value
+  if (!cfg) return false
   try {
-    status.value = await fileshareApi.saveConfig(nextPort, nextDirs, nextLocal)
+    await fsSaveConfig(next, cfg.port, cfg.localOnly)
     toastStore.showToast(okToast)
     return true
   } catch (e) {
     toastStore.showToast(errText(e), 'error')
     return false
-  } finally {
-    await refresh()
-    busy.value = false
   }
 }
-
-const dirs = computed(() => config.value?.shareDirs ?? [])
 
 async function addDir() {
   const p = dirAdd.value.trim()
@@ -90,8 +79,7 @@ async function addDir() {
     toastStore.showToast('该目录已在列表里', 'error')
     return
   }
-  const ok = await persist([...dirs.value, p], portInput.value, localOnly.value, '共享目录已更新')
-  if (ok) dirAdd.value = ''
+  if (await saveDirs([...dirs.value, p], '共享目录已更新')) dirAdd.value = ''
 }
 
 async function removeDir(i: number) {
@@ -99,50 +87,7 @@ async function removeDir(i: number) {
     toastStore.showToast('至少保留一个共享目录', 'error')
     return
   }
-  await persist(dirs.value.filter((_, k) => k !== i), portInput.value, localOnly.value, '共享目录已更新')
-}
-
-async function applyPort() {
-  const port = Math.max(1, Math.min(65535, portInput.value || config.value?.port || 8000))
-  portInput.value = port
-  if (port === config.value?.port) return
-  await persist(dirs.value, port, localOnly.value, '端口已更新')
-}
-
-async function applyLocalOnly() {
-  const want = localOnly.value
-  const ok = await persist(dirs.value, portInput.value, want, want ? '已切到仅本机访问' : '已对局域网开放')
-  if (!ok) localOnly.value = !want
-}
-
-async function applyPassword() {
-  if (busy.value) return
-  busy.value = true
-  try {
-    await fileshareApi.setPassword(passwordInput.value)
-    toastStore.showToast('访问口令已更新')
-    passwordInput.value = ''
-    showPwInput.value = false
-    await refresh()
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-  } finally {
-    busy.value = false
-  }
-}
-
-async function clearPassword() {
-  if (busy.value) return
-  busy.value = true
-  try {
-    await fileshareApi.setPassword('')
-    toastStore.showToast('已清除访问口令')
-    await refresh()
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-  } finally {
-    busy.value = false
-  }
+  await saveDirs(dirs.value.filter((_, k) => k !== i), '共享目录已更新')
 }
 
 async function copyUrl(url: string) {
@@ -160,29 +105,26 @@ onMounted(async () => {
     await router.replace('/entries')
     return
   }
-  refresh()
+  fsRefresh()
 })
 </script>
 
 <template>
   <div class="content-inner">
-    <div v-if="!loaded" class="empty-state"><div class="empty-title">加载中…</div></div>
+    <div v-if="!fsLoaded" class="empty-state"><div class="empty-title">加载中…</div></div>
 
     <template v-else>
-      <!-- 顶栏：标题 + 状态胶囊 ｜ 停止服务 -->
+      <!-- 顶栏：标题 + 状态胶囊 ｜ 启停大按钮 -->
       <div class="page-bar">
         <h1 class="page-title">局域网传输</h1>
         <span class="bar-count live-pill" :class="{ on: running }">
           <span class="dot" aria-hidden="true"></span>
           {{ running ? '监听中' : '已停止' }}
-          <template v-if="running && !portDrifted">· <span class="mono">端口 {{ status!.configuredPort }}</span></template>
         </span>
-        <span v-if="running && portDrifted" class="chip-warn mono">端口 {{ status!.boundPort }} · 配置 {{ status!.configuredPort }} 被占</span>
-        <span v-if="localOnly" class="chip-meta">仅本机</span>
         <button
           class="btn-primary toggle-btn"
           :class="{ 'ghost-danger': running }"
-          :disabled="busy"
+          :disabled="fsBusy"
           @click="toggle"
         >
           <AppIcon :name="running ? 'x' : 'upload'" :size="13" />
@@ -190,29 +132,55 @@ onMounted(async () => {
         </button>
       </div>
 
+      <!-- 配置摘要：点击直达设置弹窗的服务设置 -->
+      <button class="cfg-summary" type="button" title="前往设置修改" @click="requestOpenSettingsTab('fileshare')">
+        <AppIcon name="edit" :size="12" />
+        <span class="mono">{{ summary }}</span>
+      </button>
+
       <!-- 分组一：访问地址 -->
       <section class="clean-group-card">
         <div class="group-head">访问地址</div>
-        <div v-if="running && !localOnly" class="group-row url-row lan">
+        <div
+          v-if="running && !fsLocalOnly"
+          class="group-row url-row lan"
+          role="button"
+          tabindex="0"
+          title="点击复制局域网地址"
+          @click="copyUrl(status!.lanUrl)"
+          @keyup.enter="copyUrl(status!.lanUrl)"
+        >
           <span class="ep-label">局域网</span>
-          <code>{{ status!.lanUrl }}</code>
-          <button class="btn-secondary copy-btn" type="button" title="复制局域网地址" @click="copyUrl(status!.lanUrl)">
-            <AppIcon name="copy" :size="13" />
-            复制网址
+          <code class="lan-url">{{ status!.lanUrl }}</code>
+          <button class="icon-btn help" type="button" title="同网段设备打不开时，先在 Windows 防火墙放行本应用的专用网络" @click.stop>?</button>
+          <button class="icon-btn" type="button" title="复制局域网地址" @click.stop="copyUrl(status!.lanUrl)">
+            <AppIcon name="copy" :size="14" />
           </button>
         </div>
-        <div v-if="running" class="group-row url-row local">
+        <div
+          v-if="running"
+          class="group-row url-row local"
+          role="button"
+          tabindex="0"
+          title="点击复制本机地址"
+          @click="copyUrl(status!.localUrl)"
+          @keyup.enter="copyUrl(status!.localUrl)"
+        >
           <span class="ep-label">本机</span>
           <code>{{ status!.localUrl }}</code>
-          <button class="btn-secondary copy-btn" type="button" title="复制本机地址" @click="copyUrl(status!.localUrl)">
-            <AppIcon name="copy" :size="13" />
-            复制网址
+          <button class="icon-btn" type="button" title="复制本机地址" @click.stop="copyUrl(status!.localUrl)">
+            <AppIcon name="copy" :size="14" />
           </button>
         </div>
-        <p v-if="running && !localOnly" class="group-note">局域网打不开时，先在 Windows 防火墙里放行本应用的专用网络。</p>
-        <p v-if="openWarn" class="group-note">
+        <p v-if="!running" class="group-row dim">服务停止中，启动后在这里显示访问地址。</p>
+        <!-- 全页唯一的警告位：一次只说最要紧的一件事 -->
+        <p v-else-if="openWarn" class="group-note chip-warn">
           <AppIcon name="lock" :size="12" />
           未设访问口令，同网段任何人都能浏览、上传这些目录。
+          <button class="link-btn" type="button" @click="requestOpenSettingsTab('fileshare')">去设置</button>
+        </p>
+        <p v-else-if="fsPortDrifted" class="group-note chip-warn mono">
+          端口 {{ status!.boundPort }} · 配置 {{ status!.configuredPort }} 被占
         </p>
       </section>
 
@@ -234,65 +202,10 @@ onMounted(async () => {
             spellcheck="false"
             @keyup.enter="addDir"
           />
-          <button class="btn-secondary add-btn" :disabled="busy || !dirAdd.trim()" @click="addDir">
+          <button class="btn-secondary add-btn" :disabled="fsBusy || !dirAdd.trim()" @click="addDir">
             <AppIcon name="plus" :size="13" />
             添加
           </button>
-        </div>
-      </section>
-
-      <!-- 分组三：服务设置 -->
-      <section class="clean-group-card setting-card">
-        <div class="group-head">服务设置</div>
-        <div class="group-row setting-item">
-          <div class="setting-info">
-            <span class="setting-name">端口</span>
-            <span class="setting-desc">被占用时自动向后漂移，实际端口见顶部</span>
-          </div>
-          <input
-            v-model.number="portInput"
-            class="input port-input"
-            type="number"
-            min="1"
-            max="65535"
-            @change="applyPort"
-            @keyup.enter="applyPort"
-          />
-        </div>
-        <div class="group-row setting-item">
-          <div class="setting-info">
-            <span class="setting-name">仅本机访问</span>
-            <span class="setting-desc">只监听 127.0.0.1，其他设备无法连接</span>
-          </div>
-          <label class="switch">
-            <input type="checkbox" v-model="localOnly" @change="applyLocalOnly" />
-            <span class="switch-slider"></span>
-          </label>
-        </div>
-        <div class="group-row setting-item" :class="{ stacked: showPwInput }">
-          <div class="setting-info">
-            <span class="setting-name">访问口令</span>
-            <span class="setting-desc">启用后网页端所有页面都要先输口令</span>
-          </div>
-          <div class="pw-ctl">
-            <span class="tag" :class="{ on: hasPassword }">{{ hasPassword ? '已启用' : '未启用' }}</span>
-            <button v-if="!showPwInput" class="btn-secondary" @click="showPwInput = true">
-              {{ hasPassword ? '修改口令' : '设置口令' }}
-            </button>
-            <button v-if="hasPassword" class="btn-secondary" :disabled="busy" @click="clearPassword">清除口令</button>
-          </div>
-          <div v-if="showPwInput" class="pw-row">
-            <input
-              v-model="passwordInput"
-              class="input pw-input"
-              type="password"
-              placeholder="新口令"
-              autocomplete="new-password"
-              @keyup.enter="applyPassword"
-            />
-            <button class="btn-primary" :disabled="busy || !passwordInput" @click="applyPassword">设置</button>
-            <button class="btn-secondary" @click="showPwInput = false; passwordInput = ''">取消</button>
-          </div>
         </div>
       </section>
     </template>
@@ -312,7 +225,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: calc(var(--space-5) + var(--space-1)) 0 var(--space-3);
+  padding: calc(var(--space-5) + var(--space-1)) 0 var(--space-2);
 }
 .page-title { font-size: 15px; font-weight: 600; color: var(--text); margin-right: var(--space-2); }
 .toggle-btn { margin-left: auto; }
@@ -342,17 +255,6 @@ onMounted(async () => {
   background: var(--success);
   box-shadow: 0 0 0 3px var(--success-soft), 0 0 8px var(--success);
 }
-.live-pill .mono { font-size: 11.5px; font-weight: 500; }
-
-.chip-meta, .chip-warn {
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 3px 9px;
-  border-radius: 99px;
-  background: var(--fill);
-  color: var(--text-secondary);
-}
-.chip-warn { background: var(--warning-soft); color: var(--warning); }
 
 /* 浅红幽灵态停止按钮：压在 .btn-primary 全局样式之上 */
 .toggle-btn.ghost-danger {
@@ -366,6 +268,23 @@ onMounted(async () => {
   border-color: var(--danger);
   color: var(--danger-hover);
 }
+
+/* 配置摘要行：低调的入口，不是内容 */
+.cfg-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 var(--space-3);
+  padding: 3px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.cfg-summary:hover { color: var(--text-secondary); background: var(--fill); }
+.cfg-summary svg { flex-shrink: 0; }
 
 /* ── 分组卡：一层框，行用细线分隔，不做卡中卡 ──────────── */
 .clean-group-card {
@@ -389,6 +308,7 @@ onMounted(async () => {
   padding: 11px 16px;
 }
 .group-row + .group-row { border-top: 1px solid var(--border); }
+.group-row.dim { color: var(--text-muted); font-size: 12.5px; }
 .group-note {
   display: flex;
   align-items: center;
@@ -399,8 +319,22 @@ onMounted(async () => {
   border-top: 1px solid var(--border);
 }
 .group-note svg { flex-shrink: 0; }
+.group-note.chip-warn { background: var(--warning-soft); color: var(--warning); border-top: none; }
+.group-note.chip-warn:last-child { border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 
-/* 访问地址行：胶囊标签 + 等宽纯文字 + 复制钮 */
+/* 访问地址行：整行可点复制 */
+.url-row { cursor: pointer; }
+.url-row:hover { background: var(--fill); }
 .ep-label {
   flex-shrink: 0;
   font-size: 11.5px;
@@ -422,14 +356,24 @@ onMounted(async () => {
   white-space: nowrap;
   scrollbar-gutter: stable;
 }
-.copy-btn {
+/* 局域网地址是本页的主角 */
+.url-row.lan code.lan-url { font-size: 16px; font-weight: 600; }
+.icon-btn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  padding: 4px 10px;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
 }
+.icon-btn:hover { background: var(--panel-bg); color: var(--text); }
+.icon-btn.help { font-size: 12px; font-weight: 700; }
+.url-row .icon-btn + .icon-btn { margin-left: -4px; }
 
 /* 共享目录行 */
 .ft-ico {
@@ -465,13 +409,6 @@ html.hover-suppressed .dir-row:hover .dir-del { opacity: 0; }
 .dir-add { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12.5px; }
 .add-btn { flex-shrink: 0; }
 
-/* 服务设置行 */
-.setting-item { gap: var(--space-4); }
-.setting-item.stacked { flex-wrap: wrap; }
-.setting-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.setting-name { font-size: 13px; font-weight: 500; color: var(--text); }
-.setting-desc { font-size: 11.5px; color: var(--text-muted); }
-
 .input {
   background: var(--panel-bg);
   border: 1px solid var(--border);
@@ -483,23 +420,4 @@ html.hover-suppressed .dir-row:hover .dir-del { opacity: 0; }
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); }
-.port-input {
-  width: 90px;
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  text-align: center;
-}
-
-.pw-ctl { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
-.tag {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 1px 8px;
-  border-radius: 99px;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-.tag.on { border-color: var(--success); color: var(--success); }
-.pw-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding-bottom: var(--space-1); }
-.pw-input { flex: 1; min-width: 160px; }
 </style>

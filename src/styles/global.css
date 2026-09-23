@@ -1282,6 +1282,8 @@ body {
   animation: pop-in var(--transition-fast) ease both;
 }
 .popover.wide { min-width: 260px; padding: 0; }
+/* 弹窗遮罩是 1000：设置页里的下拉浮层必须压在它上面，和 .app-tip 同一档 */
+.popover.modal { z-index: 1500; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-3px) scale(0.98); } }
 
 /* Teleport 到 body 的分类下拉：脱离组件作用域，样式只能挂全局 */

@@ -133,8 +133,7 @@ fn main() {
             // 系统锁屏联动：收到会话锁屏广播时按设置把应用一并锁定
             session_lock::spawn(app.handle().clone());
 
-            // 局域网文件传输：开关开着就恢复监听（默认关时无感）
-            commands::fileshare::restore_on_startup(app.handle());
+            // 局域网文件传输：开机不自启服务，起听只从模块页按钮来
 
             // Handle window close - minimize to tray instead
             if let Some(window) = app.get_webview_window("main") {
