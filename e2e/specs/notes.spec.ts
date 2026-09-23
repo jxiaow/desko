@@ -291,7 +291,7 @@ test.describe('Notes 小记', () => {
   test('小记口令：一把开全库，行操作全平铺', async ({ page }) => {
     await bootUnlocked(page, {
       notes: [
-        { title: '机密事', content_html: '<p>要加密的正文</p>' },
+        { title: '机密事', content_html: '<h2>机密事</h2><p>要加密的正文</p>' },
         { title: '封存', content_html: '<h2>封存</h2><p>封存的正文</p>', encrypted: true },
       ],
     }, '/notes')
@@ -302,8 +302,8 @@ test.describe('Notes 小记', () => {
     // 锁着的正文根本不进 DOM
     await expect(page.locator('.memo-body')).not.toContainText('封存的正文')
     await expect(page.locator('.memo-locked')).toHaveCount(1)
-    // 真标题（h1–h3）留了明文，锁着也认得出是哪条
-    await expect(sealed.locator('.memo-locked')).toContainText('封存')
+    // 露标题上线前锁的那条：库里 title 是空的，本会话第一次解锁前只剩提示语
+    await expect(sealed.locator('.memo-locked')).toContainText('已加密 · 单击解锁')
     // 动作全平铺：⋯ 入口彻底没了
     await expect(page.locator('.memo-acts button[title="更多"], .memo-acts button[data-tip="更多"]')).toHaveCount(0)
 
@@ -334,9 +334,8 @@ test.describe('Notes 小记', () => {
     await expectToast(page, '已重新锁定')
     // 只收回这一条：另一条明文还在手
     await expect(page.locator('.memo-locked')).toHaveCount(1)
-    // 没有真标题的加密小记锁回后只剩提示语
-    await expect(plain.locator('.locked-title')).toHaveCount(0)
-    await expect(plain.locator('.memo-locked')).toContainText('已加密 · 单击解锁')
+    // 这次加密的小记在锁的时候就留了真标题，锁回照样认得出
+    await expect(plain.locator('.locked-title')).toHaveText('机密事')
     // 锁回的正文不进搜索
     await page.locator('.stream-bar .search-box input').fill('要加密的正文')
     await expect(page.locator('.memo')).toHaveCount(0)
@@ -352,6 +351,11 @@ test.describe('Notes 小记', () => {
     await page.locator('.stream-bar button[aria-label="锁回全部加密小记"]').click()
     await expectToast(page, '加密小记已全部锁回')
     await expect(page.locator('.memo-locked')).toHaveCount(2)
+    // 解锁时回填的标题留了下来：老数据锁回去也认得出是哪条，还搜得着
+    await expect(sealed.locator('.locked-title')).toHaveText('封存')
+    await page.locator('.stream-bar .search-box input').fill('封存')
+    await expect(page.locator('.memo')).toHaveCount(1)
+    await page.locator('.stream-bar .search-box input').fill('')
     await sealed.click()
     await expect(dialog).toBeVisible()
     await expect(dialog.locator('input[type="password"]')).toHaveCount(1)

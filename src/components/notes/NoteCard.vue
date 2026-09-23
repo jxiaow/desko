@@ -173,22 +173,14 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       <AppIcon v-if="props.isSelected" name="check" :size="11" />
     </span>
 
-    <div v-if="locked" class="memo-locked">
-      <AppIcon name="lock" :size="13" />
-      <span v-if="props.note.title" class="locked-title">{{ props.note.title }}</span>
-      <span class="locked-hint">{{ props.note.title ? '· 单击解锁' : '已加密 · 单击解锁' }}</span>
-    </div>
-    <div v-else ref="bodyEl" class="memo-body" :class="{ clipping: clipped && !expanded, expanded }" v-html="bodyHtml" />
-
-    <div class="memo-foot">
+    <div class="memo-head" @click.stop>
       <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
-      <span v-if="!locked && visibleAtts.length"  class="memo-att" :title="`${visibleAtts.length} 个附件`">
+      <span v-if="!locked && visibleAtts.length" class="memo-att" :title="`${visibleAtts.length} 个附件`">
         <AppIcon name="clip" :size="11" />
         {{ visibleAtts.length }}
       </span>
-      <span class="spacer"></span>
       <span class="memo-state">
-        <span v-if="props.note.starred"  class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
+        <span v-if="props.note.starred" class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
       </span>
       <span class="memo-acts">
         <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
@@ -239,6 +231,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         </button>
       </span>
     </div>
+
+    <div v-if="locked" class="memo-locked">
+      <AppIcon name="lock" :size="13" />
+      <span v-if="props.note.title" class="locked-title">{{ props.note.title }}</span>
+      <span class="locked-hint">{{ props.note.title ? '· 单击解锁' : '已加密 · 单击解锁' }}</span>
+    </div>
+    <div v-else ref="bodyEl" class="memo-body" :class="{ clipping: clipped && !expanded, expanded }" v-html="bodyHtml" />
   </article>
 
   <article v-else class="memo editing">
@@ -349,11 +348,12 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   pointer-events: none;
 }
 
-.memo-foot {
+/* 顶部一行：时间 / 附件 / 收藏标 + 操作按钮，正文区零遮挡 */
+.memo-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-top: 3px;
+  margin-bottom: 3px;
   min-height: 20px;
 }
 .memo-time { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
@@ -362,9 +362,11 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
 .memo:hover .memo-state, .memo:focus-within .memo-state { opacity: 0; }
 .state-star { color: var(--warning); display: inline-flex; }
-.memo-acts { display: flex; gap: 1px; opacity: 0; transition: opacity var(--transition); }
+.memo-acts { display: flex; gap: 1px; margin-left: auto; opacity: 0; transition: opacity var(--transition); }
 .memo:hover .memo-acts, .memo:focus-within .memo-acts { opacity: 1; }
-/* 删除和其余动作拉开一格，平铺后它就在排尾，别让人顺手滑过去 */
+.memo-acts .ib { width: 28px; height: 28px; }
+.memo-acts .ib :deep(svg) { width: 15px; height: 15px; }
+/* 删除和其余动作拉开一格，别让人顺手滑过去 */
 .memo-acts .ib.danger { margin-left: var(--space-1); }
 
 .memo.batchable { padding-left: var(--space-8); }
