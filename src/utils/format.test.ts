@@ -6,6 +6,7 @@ import {
   stripHtml,
   htmlToText,
   deriveTitleFromHtml,
+  headingTitle,
   wordCount,
   formatAbsTime,
   highlightTagsInHtml,
@@ -128,6 +129,19 @@ describe('deriveTitleFromHtml', () => {
 
   it('should truncate to 20 characters', () => {
     expect(deriveTitleFromHtml(`<p>${'长'.repeat(40)}</p>`)).toBe('长'.repeat(20))
+  })
+})
+
+describe('headingTitle', () => {
+  it('should keep only a real first heading', () => {
+    expect(headingTitle('<h2>薪酬沟通</h2><p>三月调档</p>')).toBe('薪酬沟通')
+    expect(headingTitle('<p>三月调档</p>')).toBe('')
+    expect(headingTitle('<h4>四级不算标题</h4>')).toBe('')
+  })
+
+  it('should strip tags and cap at 20 characters', () => {
+    expect(headingTitle('<h1><strong>调薪</strong>窗口</h1>')).toBe('调薪窗口')
+    expect(headingTitle(`<h3>${'长'.repeat(30)}</h3>`)).toBe('长'.repeat(20))
   })
 })
 

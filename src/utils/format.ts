@@ -61,6 +61,17 @@ export function deriveTitleFromHtml(html: string): string {
   return firstLine.slice(0, 20) || '小记'
 }
 
+/** 加密行只把真标题留成明文：正文首块必须真是 h1–h3，规则与 Rust note_service::heading_title 一致 */
+const HEADING_FIRST = /^\s*<(h[123])(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i
+
+export function headingTitle(html: string): string {
+  const m = html.match(HEADING_FIRST)
+  if (!m) return ''
+  const div = document.createElement('div')
+  div.innerHTML = m[2]
+  return (div.textContent || '').trim().slice(0, 20)
+}
+
 /** 中日韩逐字计数，拉丁字母按词计数 */
 export function wordCount(text: string): number {
   return (text.match(/[\u4e00-\u9fa5]|[A-Za-z0-9_'’-]+/g) || []).length

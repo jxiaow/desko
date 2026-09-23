@@ -163,6 +163,17 @@ impl Database {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    /// 只补空标题的加密行：露标题这功能上线前锁的小记 title 是空的，靠它在下次解锁时认得出是哪条
+    pub fn backfill_note_titles(&self, titles: &[(String, String)]) -> Result<(), AppError> {
+        for (id, title) in titles {
+            self.conn.execute(
+                "UPDATE notes SET title = ?2 WHERE id = ?1 AND enc = 1 AND title = ''",
+                params![id, title],
+            )?;
+        }
+        Ok(())
+    }
+
     /// 域密钥落库：三条 meta 加逐行改封（连带补露出的标题），一个事务里走完，不留半迁移状态
     pub fn apply_note_domain(
         &self,
@@ -295,6 +306,30 @@ mod tests {
         let n = db.get_note("n1").unwrap().unwrap();
         assert!(n.encrypted && n.content_html.is_empty(), "正文当场清掉");
         assert_eq!(n.title, "标题行", "锁着也能认出是哪条");
+        cleanup(&path);
+    }
+
+    #[test]
+    fn backfill_note_titles_fills_only_empty_locked_rows() {
+        let (db, path) = setup_test_db();
+        db.create_note(&note("n1")).unwrap();
+        db.set_note_lock("n1", "ct", "iv", "wrap-new", "", 9).unwrap();
+        db.create_note(&note("n2")).unwrap();
+        db.set_note_lock("n2", "ct", "iv", "wrap-new", "已有标题", 9).unwrap();
+        db.create_note(&note("plain")).unwrap();
+        db.conn
+            .execute("UPDATE notes SET title='' WHERE id='plain'", [])
+            .unwrap();
+
+        db.backfill_note_titles(&[
+            ("n1".to_string(), "补上的标题".to_string()),
+            ("n2".to_string(), "不该覆盖".to_string()),
+            ("plain".to_string(), "未加密不动".to_string()),
+        ])
+        .unwrap();
+        assert_eq!(db.get_note("n1").unwrap().unwrap().title, "补上的标题");
+        assert_eq!(db.get_note("n2").unwrap().unwrap().title, "已有标题", "只补空标题");
+        assert!(db.get_note("plain").unwrap().unwrap().title.is_empty(), "enc=1 才动");
         cleanup(&path);
     }
 

@@ -42,7 +42,7 @@ async function open(name, config) {
   return { page, shot, tip, memo }
 }
 
-// 1. 口令没解锁：两条锁卡，有真标题的那条露出标题，没有的只剩提示语
+// 1. 口令没解锁：seed 按「露标题上线前锁的」建模，两条开局都只剩提示语
 {
   const { page, shot } = await open('1-locked', { notePassphrase: PASS })
   await shot('list')
@@ -52,6 +52,9 @@ async function open(name, config) {
   await page.locator('.note-lock-dialog button.btn-primary').click()
   // 2. 一把口令开全库：两条同时回来，解锁后不挂角标
   await shot('2-open')
+  // 2b. 解锁这一步顺手把真标题回填进库，再锁回就能认出是哪条
+  await page.locator('.stream-bar button[aria-label="锁回全部加密小记"]').click()
+  await shot('2-relocked')
 }
 
 // 3. 悬停已解锁的加密条：动作排补出「重新锁定」「解除加密」（后者是划掉的锁）

@@ -227,6 +227,16 @@ fn open_into_state(state: &AppState, ndk: &[u8]) -> Result<Vec<NotePlain>, AppEr
         db.list_note_locks()?
     };
     let (deks, plains) = open_seals(&rows, ndk);
+    // 明文在手，顺手给升级前锁的小记补上露出标题：不然它们锁回去还是认不出是哪条
+    let titles: Vec<(String, String)> = plains
+        .iter()
+        .map(|p| (p.id.clone(), note_service::heading_title(&p.html)))
+        .filter(|(_, title)| !title.is_empty())
+        .collect();
+    if !titles.is_empty() {
+        let db = state.db.lock().map_err(lock_err)?;
+        db.backfill_note_titles(&titles)?;
+    }
     for (id, dek) in deks {
         put_dek(state, &id, dek)?;
     }

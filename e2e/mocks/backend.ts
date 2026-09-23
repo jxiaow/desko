@@ -312,7 +312,8 @@ class MockBackend {
       const enc = !!n.encrypted
       const rec: NoteRecord = {
         id: nextId(),
-        title: enc ? headingTitle(n.content_html) : n.title,
+        // seed 的加密行按"露标题上线前锁的"建模：标题要等本会话第一次解锁才回填
+        title: enc ? '' : n.title,
         content_html: enc ? '' : n.content_html,
         category: enc ? null : (n.category ?? null),
         pinned: n.pinned ?? false,
@@ -467,6 +468,8 @@ class MockBackend {
     this.state.notes.forEach((n) => {
       if (!n.encrypted) return
       this.noteUnlocked.add(n.id)
+      // 明文在手，给升级前锁的小记补上露出标题（对齐 Rust 的 backfill_note_titles）
+      if (!n.title) n.title = headingTitle(n.cipher)
       plains.push({ id: n.id, html: n.cipher })
     })
     return plains
