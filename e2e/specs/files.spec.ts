@@ -55,11 +55,11 @@ test.describe('Files 文件快捷', () => {
   })
 
   test('窄窗口 + 展开侧边栏时动作列仍在可视区内', async ({ page }) => {
-    // 800x600 是窗口最小尺寸（tauri.conf minWidth/minHeight），侧边栏展开占 220px，
+    // 800x600 是窗口最小尺寸（tauri.conf minWidth/minHeight），侧边栏展开占 190px，
     // 这是最吃宽度的一档；两个文字列的下限必须是 0，否则动作列被顶出去点不到
     await gotoFiles(page)
     await page.setViewportSize({ width: 800, height: 600 })
-    await tipButton(page.locator('.titlebar'), '切换侧边栏').click()
+    await page.locator('.sidebar-toggle').click()
     await expect(page.locator('.sidebar')).not.toHaveClass(/collapsed/)
 
     const row = shortcutRow(page, '项目资料')
@@ -75,6 +75,7 @@ test.describe('Files 文件快捷', () => {
 
   test('搜索过滤', async ({ page }) => {
     await gotoFiles(page)
+    await expect(page.locator('.shortcut-row')).toHaveCount(2)
     await page.locator('.search-box input').fill('报告')
     await expect(page.locator('.shortcut-row')).toHaveCount(1)
     await page.locator('.search-box input').fill('xxx')
@@ -167,16 +168,5 @@ test.describe('Files 文件快捷', () => {
     await expectToast(page, '已删除')
     await expect(page.locator('.shortcut-row')).toHaveCount(1)
     expect((await e2e.snapshot(page)).fileShortcuts).toHaveLength(1)
-  })
-
-  test('行内删除按钮走同一个确认框', async ({ page }) => {
-    await gotoFiles(page)
-    const row = shortcutRow(page, '月度报告')
-    await row.hover()
-    await tipButton(row, '删除').click()
-    const confirm = page.locator('.confirm-dialog')
-    await expect(confirm.locator('.dialog-body p')).toHaveText('确定删除「月度报告」快捷方式？')
-    await confirm.locator('button.btn-secondary').click()
-    await expect(page.locator('.shortcut-row')).toHaveCount(2)
   })
 })

@@ -8,6 +8,7 @@ const { unlock } = useAuthStore()
 
 const unlockPwd = ref('')
 const unlockErr = ref('')
+const stackEl = ref<HTMLElement | null>(null)
 
 const onUnlockSuccess = () => {
   emit('unlockComplete')
@@ -35,12 +36,28 @@ const rotateQuote = () => {
   currentQuote.value = quotes[quoteIndex.value]
 }
 
+/** 报错时整条内容流 X 轴轻晃（0.35s）；WAAPI 直接驱动，不重建 DOM，输入焦点不丢 */
+const shake = () => {
+  stackEl.value?.animate(
+    [
+      { transform: 'translateX(0)' },
+      { transform: 'translateX(-5px)' },
+      { transform: 'translateX(4px)' },
+      { transform: 'translateX(-3px)' },
+      { transform: 'translateX(2px)' },
+      { transform: 'translateX(0)' },
+    ],
+    { duration: 350, easing: 'ease-out' },
+  )
+}
+
 const doUnlock = async () => {
   unlockErr.value = ''
   try {
     await unlock(unlockPwd.value, onUnlockSuccess)
   } catch (e: any) {
     unlockErr.value = '主密码错误，请重试'
+    shake()
   }
 }
 
@@ -55,37 +72,51 @@ onUnmounted(() => {
 
 <template>
   <div class="unlock-page">
-    <div class="unlock-bg-orbs">
-      <div class="unlock-orb unlock-orb-1"></div>
-      <div class="unlock-orb unlock-orb-2"></div>
-    </div>
-    <div class="unlock-content">
-      <div class="unlock-logo">
-        <BrandLogo />
-      </div>
-      <h1 class="unlock-title">Desko</h1>
-      <div class="unlock-quote-area">
-        <p class="unlock-quote-text" :key="quoteIndex">{{ currentQuote }}</p>
-      </div>
-      <div class="unlock-input-area">
-        <div class="unlock-field">
-          <svg class="unlock-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2.5"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          <input
-            class="unlock-input"
-            type="password"
-            v-model="unlockPwd"
-            placeholder="输入密码解锁"
-            @keyup.enter="doUnlock"
-            autofocus
-          />
-        </div>
-        <p v-if="unlockErr" class="unlock-error">{{ unlockErr }}</p>
-        <button class="unlock-btn" @click="doUnlock">解锁</button>
-      </div>
-    </div>
+    <!-- 微光画布层 -->
+    <div class="unlock-bg" aria-hidden="true"></div>
+
+    <!-- 居中无卡片内容流 -->
+    <main class="unlock-canvas">
+      <section class="lock-stack" ref="stackEl">
+        <div class="lock-tile"><BrandLogo /></div>
+        <h1 class="lock-title">Desko</h1>
+
+        <form class="lock-form" @submit.prevent="doUnlock">
+          <div class="unlock-field">
+            <svg class="unlock-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2.5"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <input
+              class="unlock-input"
+              type="password"
+              v-model="unlockPwd"
+              placeholder="输入主密码解锁"
+              @input="unlockErr = ''"
+              @keyup.enter="doUnlock"
+              autofocus
+            />
+            <button class="unlock-btn" type="submit" title="解锁" aria-label="解锁">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12h14"/>
+                <path d="M13 5l7 7-7 7"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- 防跳动错误槽：20px 定高，只切透明度 -->
+          <div class="unlock-error-slot" :class="{ 'is-active': !!unlockErr }" aria-live="polite">
+            <span class="unlock-error">{{ unlockErr }}</span>
+          </div>
+        </form>
+
+        <footer class="lock-motto">
+          <i class="motto-dot" aria-hidden="true"></i>
+          <p class="motto-text" :key="quoteIndex">{{ currentQuote }}</p>
+          <i class="motto-dot" aria-hidden="true"></i>
+        </footer>
+      </section>
+    </main>
   </div>
 </template>
 
@@ -93,203 +124,191 @@ onUnmounted(() => {
 .unlock-page {
   position: relative;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: transparent;
   overflow: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg);
 }
 
-.unlock-bg-orbs {
+/* ---------- 画布：中心偏上漫反射微光 ---------- */
+.unlock-bg {
   position: absolute;
   inset: 0;
+  z-index: 0;
   pointer-events: none;
-  overflow: hidden;
+  background:
+    radial-gradient(110% 85% at 50% 40%, var(--lock-wash-b) 0%, var(--bg) 65%),
+    var(--bg);
 }
 
-.unlock-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
-  will-change: transform;
-}
-
-.unlock-orb-1 {
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, var(--lock-orb-1) 0%, transparent 70%);
-  top: -20%;
-  right: -15%;
-  animation: unlock-drift-1 20s ease-in-out infinite;
-}
-
-.unlock-orb-2 {
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, var(--lock-orb-2) 0%, transparent 70%);
-  bottom: -20%;
-  left: -15%;
-  animation: unlock-drift-2 25s ease-in-out infinite;
-}
-
-@keyframes unlock-drift-1 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-30px, 20px) scale(1.05); }
-}
-
-@keyframes unlock-drift-2 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(20px, -15px) scale(1.03); }
-}
-
-.unlock-content {
+/* ---------- 居中内容流：无卡片，300px 黄金聚焦宽度，垂直真居中 ---------- */
+.unlock-canvas {
   position: relative;
-  z-index: 1;
-  width: 320px;
-  animation: unlock-content-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes unlock-content-in {
-  from { opacity: 0; transform: translateY(20px); }
-}
-
-.unlock-logo {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto var(--space-4);
-}
-
-.unlock-logo svg {
-  width: 100%;
-  height: 100%;
-}
-
-.unlock-title {
-  text-align: center;
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.02em;
-  margin-bottom: var(--space-4);
-}
-
-.unlock-quote-area {
-  margin-bottom: var(--space-6);
-  min-height: 48px;
+  z-index: 10;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.unlock-quote-text {
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.6;
-  color: var(--text-secondary);
-  margin: 0;
-  text-align: center;
-  animation: quote-fade-in 0.5s ease both;
+.lock-stack {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-@keyframes quote-fade-in {
-  from { opacity: 0; transform: translateY(6px); }
+/* ---------- Logo 徽标底座 ---------- */
+.lock-tile {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
 }
 
-.unlock-input-area {
-  animation: unlock-stagger 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+/* BrandLogo viewBox 自带 ~40% 留白，38px 才能让可见图形达 26px 档 */
+.lock-tile svg { width: 38px; height: 38px; }
+
+/* ---------- 应用标题 ---------- */
+.lock-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin-bottom: 24px;
 }
 
+.lock-form { width: 100%; }
+
+/* ---------- 输入控件组 ---------- */
 .unlock-field {
   position: relative;
   width: 100%;
-  margin-bottom: var(--space-3);
+  height: 40px;
+  display: flex;
+  align-items: center;
 }
 
 .unlock-field-icon {
   position: absolute;
-  left: 14px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
   width: 16px;
   height: 16px;
-  color: var(--text-muted);
+  color: var(--text-faint);
   pointer-events: none;
-  transition: color var(--transition);
-}
-
-.unlock-field:focus-within .unlock-field-icon {
-  color: var(--accent);
 }
 
 .unlock-input {
   width: 100%;
-  padding: 12px 14px 12px 40px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 42px 0 36px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 400;
-  outline: none;
-  transition: all var(--transition);
-  background: var(--panel-bg);
-  color: var(--text);
+  border-radius: var(--radius-md);
+  font-size: 13px;
   font-family: inherit;
+  color: var(--text);
+  background: var(--panel-bg);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
-.unlock-input::placeholder {
-  color: var(--text-muted);
-  font-weight: 400;
-}
+.unlock-input::placeholder { color: var(--text-faint); }
 
+/* 激活态：边框恒 1px 仅换色，外叠 8% 弥散光晕，禁止实心 ring 加粗 */
 .unlock-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .unlock-btn {
-  width: 100%;
-  padding: 12px;
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--accent-on);
-  border: none;
-  border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition);
-  font-family: inherit;
+  transition: background-color var(--transition);
 }
 
-.unlock-btn:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+.unlock-btn svg { width: 13px; height: 13px; }
+
+.unlock-btn:hover { background: var(--accent-hover); }
+
+.unlock-btn:active { background: var(--accent-active); }
+
+/* ---------- 报错占位槽：定高零跳动 ---------- */
+.unlock-error-slot {
+  width: 100%;
+  height: 20px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
 }
 
-.unlock-btn:active {
-  transform: translateY(0);
-  box-shadow: var(--shadow-sm);
+.unlock-error-slot.is-active {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .unlock-error {
+  font-size: 12px;
   color: var(--danger);
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: var(--space-3);
-  animation: unlock-shake 0.4s ease;
+  white-space: nowrap;
 }
 
-@keyframes unlock-stagger {
-  from { opacity: 0; transform: translateY(10px); }
+/* ---------- 座右铭：紧贴内容流，不落窗口底 ---------- */
+.lock-motto {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
 }
 
-@keyframes unlock-shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-5px); }
-  40% { transform: translateX(5px); }
-  60% { transform: translateX(-3px); }
-  80% { transform: translateX(3px); }
+.motto-dot {
+  flex-shrink: 0;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.motto-text {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  animation: motto-fade 0.4s ease both;
+}
+
+@keyframes motto-fade {
+  from { opacity: 0; }
 }
 </style>

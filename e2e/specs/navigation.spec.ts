@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { bootUnlocked, e2e, tipButton } from '../helpers'
+import { bootUnlocked, e2e } from '../helpers'
 test.describe('导航与布局', () => {
   test('默认路由重定向到 /entries', async ({ page }) => {
     await bootUnlocked(page)
@@ -11,11 +11,12 @@ test.describe('导航与布局', () => {
     // 默认收起：导航文字不渲染，只剩图标
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(0)
 
-    await tipButton(page, '切换侧边栏').click()
+    await page.locator('.sidebar-toggle').click()
     // 验证码模块默认关着，侧栏只有三个常驻入口
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(3)
-    // 侧栏只剩导航：版本/加密说明页脚已去掉
-    await expect(page.locator('.sidebar > *')).toHaveCount(1)
+    // 侧栏骨架：顶部品牌行 + 导航两块，别无他物
+    await expect(page.locator('.sidebar > *')).toHaveCount(2)
+    // 标题栏只放模块名（品牌位已移入全高侧栏顶部）
     await expect(page.locator('.titlebar-crumb')).toHaveText('网址收藏')
 
     // 小记
@@ -39,7 +40,7 @@ test.describe('导航与布局', () => {
     await expect(page.locator('.page-bar')).toBeVisible()
 
     // 收起侧栏
-    await tipButton(page, '切换侧边栏').click()
+    await page.locator('.sidebar-toggle').click()
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(0)
   })
 

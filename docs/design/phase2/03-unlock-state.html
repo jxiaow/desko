@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Phase 2 · 03 解锁 = 状态切换</title>
+<style>
+/* 核心改动：把"解锁"从一次页面跳转，改成一次状态过渡。
+   现状：UnlockPage 是独立的一屏（光球背景 + 格言 + 输入框），成功后 v-if 整页换成工作区。
+        用户看到的是两个世界，中间有一次硬切。
+   提案：工作区一直在那里。锁只是盖在它上面的一层膜。
+        · 休眠态 —— 真实内容（顶栏 + 行表）就在下面，但糊着、淡着、行高压紧。
+                     它告诉用户"你的东西没丢，就在这儿"。这比光球+格言更实在。
+        · 输入态 —— 一条光带在休眠内容上缓慢流过，暗示数据已经就位、正在待命。
+        · 解锁态 —— 膜从解锁卡所在的位置向外揭开：模糊退去、颜色回灌、行高舒展。
+        · 失败态 —— 膜不揭开，反而压深一档（更糊），卡抖一下，光带闪红。
+
+   交互：在卡里输任意密码回车 = 成功揭开；输 "x" 回车 = 失败加深。
+   右下角「重新锁定」可反复回放。所有时长/缓动都写在 :root 里，可直接抄进 global.css。 */
+
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --chrome: #eceef2;
+  --border: #dde0e5;
+  --border-subtle: #ebeef2;
+  --text: #1c2028;
+  --text-secondary: #5a606e;
+  --text-muted: #858c99;
+  --text-url: #454d5c;
+  --hover: #f1f3f6;
+  --accent: #4a6fa5;
+  --accent-soft: #e6ecf3;
+  --danger: #b4483f;
+  --radius: 8px;
+  --radius-pill: 99px;
+  --font-mono: Consolas, 'Cascadia Code', monospace;
+
+  /* —— 状态机的四个可调参数，实现时原样搬走 —— */
+  --dormant-blur: 7px;      /* 休眠层的模糊量 */
+  --dormant-sat: 0.25;      /* 休眠层的饱和度：近乎灰，但认得出是自己的数据 */
+  --row-dormant: 30px;      /* 压紧的行高 */
+  --row-live: 44px;         /* 舒展的行高 */
+  --t-unlock: 620ms;        /* 揭开总时长：够看清"是同一屏"，又不至于等 */
+  --t-ease: cubic-bezier(.22, .61, .36, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app { height: 100vh; display: flex; flex-direction: column; position: relative; }
+
+/* ============ 第一层：工作区（一直存在，从不被替换） ============ */
+.stage {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  /* 休眠的三个维度，全部用变量驱动，JS 只改一个 .is-dormant 类 */
+  filter: blur(var(--blur-now, 0px)) saturate(var(--sat-now, 1));
+  transform: scale(var(--scale-now, 1));
+  transform-origin: 50% 42%;
+  transition: filter var(--t-unlock) var(--t-ease), transform var(--t-unlock) var(--t-ease);
+  will-change: filter, transform;
+}
+
+.titlebar {
+  height: 40px; flex-shrink: 0;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 12px; gap: 10px;
+}
+.brand { width: 20px; height: 20px; border-radius: 6px; background: var(--accent);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 10px; }
+.crumb { font-size: 12px; color: var(--text-secondary); }
+
+.tabs { height: 38px; flex-shrink: 0; display: flex; align-items: flex-end; gap: 2px;
+  padding: 0 12px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.tab { padding: 6px 12px 7px; font-size: 12.5px; color: var(--text-muted); border-radius: 7px 7px 0 0; }
+.tab.on { background: var(--panel); color: var(--text); font-weight: 600;
+  border: 1px solid var(--border); border-bottom-color: var(--panel); margin-bottom: -1px; }
+
+.list { flex: 1; overflow: auto; background: var(--panel); padding: 6px 0 40px; }
+.ghead { height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 14px;
+  font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: .04em;
+  background: var(--bg); border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
+
+/* 行：高度是"活过来"最直观的信号 */
+.row {
+  display: flex; align-items: center; gap: 10px; padding: 0 14px;
+  height: var(--h-now, var(--row-live));
+  border-bottom: 1px solid var(--border-subtle);
+  transition: height var(--t-unlock) var(--t-ease), opacity var(--t-unlock) var(--t-ease);
+  overflow: hidden; white-space: nowrap;
+}
+.band { width: 3px; height: 18px; border-radius: 2px; flex-shrink: 0; }
+.tile { width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0; display: flex;
+  align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; }
+.name { font-weight: 550; min-width: 150px; }
+.url { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-url); opacity: .85; flex: 1; }
+.time { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* 光带：输入态在休眠内容上流过的"待命"信号。
+   一条 40% 宽的斜向高光，横扫整屏，2.8s 一轮。 */
+.scan {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: linear-gradient(105deg,
+    transparent 38%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 47%,
+    color-mix(in srgb, #fff 55%, transparent) 50%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 53%,
+    transparent 62%);
+  transition: opacity 260ms ease;
+}
+.stage.scanning .scan { opacity: 1; animation: scan 2800ms linear infinite; }
+.stage.flash-fail .scan { opacity: 1; animation: scan-fail 520ms ease-out 1; }
+@keyframes scan { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes scan-fail {
+  0% { transform: translateX(-100%); opacity: 1;
+       background: linear-gradient(105deg, transparent 42%, color-mix(in srgb, var(--danger) 45%, transparent) 50%, transparent 58%); }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+
+/* ============ 第二层：锁膜（唯一会被"揭开"的东西） ============ */
+.sheet {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(2px);
+  /* 揭开动画用 clip-path 圆形扩散，圆心 = 解锁卡的位置 */
+  clip-path: circle(var(--reveal, 160%) at 50% 42%);
+  transition: clip-path var(--t-unlock) var(--t-ease), opacity calc(var(--t-unlock) * .7) ease;
+}
+.sheet.hidden { pointer-events: none; --reveal: 0%; opacity: 0; }
+.sheet.reveal { --reveal: 220%; opacity: 0; }
+
+.card {
+  width: 328px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(28, 32, 40, .16), 0 2px 6px rgba(28, 32, 40, .06);
+  padding: 26px 26px 22px; text-align: center;
+}
+.card.shake { animation: shake 400ms var(--t-ease); }
+@keyframes shake { 0%,100% { transform: translateX(0) } 20% { transform: translateX(-7px) }
+  40% { transform: translateX(6px) } 60% { transform: translateX(-4px) } 80% { transform: translateX(2px) } }
+
+.mark { width: 40px; height: 40px; margin: 0 auto 14px; border-radius: 11px;
+  background: linear-gradient(140deg, var(--accent), color-mix(in srgb, var(--accent) 62%, #16202e));
+  display: flex; align-items: center; justify-content: center; }
+.mark svg { width: 19px; height: 19px; stroke: #fff; }
+.card h2 { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.hint { font-size: 12px; color: var(--text-muted); margin: 5px 0 20px; line-height: 1.5; }
+
+.field { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 9px; background: var(--bg);
+  transition: border-color 160ms, box-shadow 160ms; }
+.field:focus-within { border-color: var(--accent); background: var(--panel);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.field.bad { border-color: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 15%, transparent); }
+.field input { flex: 1; border: 0; outline: 0; background: transparent; font-size: 13px; color: var(--text); }
+.field svg { width: 15px; height: 15px; stroke: var(--text-muted); flex-shrink: 0; }
+.btn { margin-top: 12px; width: 100%; height: 36px; border: 0; border-radius: 9px;
+  background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+  font-family: inherit; transition: filter 140ms, transform 90ms; }
+.btn:hover { filter: brightness(1.07); }
+.btn:active { transform: scale(.985); }
+.err { height: 15px; margin-top: 8px; font-size: 11.5px; color: var(--danger); }
+
+/* 状态说明条（原型注记，非产品 UI） */
+.note { position: fixed; left: 14px; bottom: 12px; right: 190px; z-index: 9;
+  font-size: 11.5px; color: var(--text-muted); line-height: 1.7; }
+.note b { color: var(--text-secondary); font-weight: 600; }
+.replay { position: fixed; right: 14px; bottom: 12px; z-index: 9; height: 30px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--panel);
+  color: var(--text-secondary); font-size: 12px; cursor: pointer; font-family: inherit; }
+.replay:hover { border-color: var(--accent); color: var(--accent); }
+
+.state { position: absolute; top: 50px; right: 14px; z-index: 8; font-size: 11px;
+  font-family: var(--font-mono); color: var(--text-muted);
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--border);
+  border-radius: var(--radius-pill); padding: 3px 10px; }
+.state b { color: var(--accent); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage.scanning .scan { animation: none; opacity: .35; }
+  .sheet, .stage, .row { transition-duration: 1ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 第一层：工作区。注意它从页面加载起就在渲染真实数据。 -->
+  <div class="stage is-dormant" id="stage">
+    <div class="titlebar">
+      <div class="brand">D</div>
+      <div class="crumb">收藏 · 27 条</div>
+    </div>
+    <div class="tabs">
+      <div class="tab on">全部</div><div class="tab">工作</div><div class="tab">开发</div><div class="tab">设计</div><div class="tab">生活</div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="scan"></div>
+  </div>
+
+  <!-- 第二层：锁膜 -->
+  <div class="sheet" id="sheet">
+    <div class="card" id="card">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 7.9.9"/>
+        </svg>
+      </div>
+      <h2>Desko 已锁定</h2>
+      <p class="hint">你的 27 条收藏、4 条小记都在下面<br>输进口令即可唤醒</p>
+      <div class="field" id="field">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/></svg>
+        <input type="password" id="pwd" placeholder="工作口令" autofocus />
+      </div>
+      <div class="err" id="err"></div>
+      <button class="btn" id="btn">唤醒工作区</button>
+    </div>
+  </div>
+
+  <div class="state">state: <b id="stateLabel">dormant</b></div>
+
+  <div class="note">
+    <b>和现状的差别</b>：UnlockPage 不再是一屏独立背景 + 格言，成功后整页 v-if 硬切。
+    这里工作区从头到尾是同一层 DOM，解锁只是揭掉上面那张膜 —— 模糊退去、颜色回灌、行高从 30 舒展到 44。
+    用户因此能一眼确认"解锁后还是这一屏"，而不是被换到一个新地方。
+    <br><b>试一下</b>：点输入框 → 光带开始扫（待命）；输 <b>x</b> 回车 → 失败，膜压得更深；其他任意密码回车 → 揭开。
+  </div>
+  <button class="replay" id="replay">重新锁定</button>
+</div>
+
+<script>
+const DATA = [
+  ['工作', '#4a6fa5', [['Jira 看板','jira.company.io/board','10:24'],['周报模板','notion.so/weekly','09:58'],['设计走查','figma.com/file/aw2','昨天'],['CI 构建','jenkins.io/job/desko','昨天']]],
+  ['开发', '#6a4f8a', [['GitHub 通知','github.com/notifications','昨天'],['本地文档库','192.168.1.20:5000','周二'],['接口联调','apifox.cn/project/77','周二'],['Stack Overflow','stackoverflow.com/questions','周一']]],
+  ['生活', '#4d7c5f', [['体检报告','hc.cloud/result','周一'],['房贷明细','ccb.com/loan','9/12'],['常去的面馆','dianping.com/shop/33','9/09'],['机场贵宾厅','unionpay/airport','9/03']]],
+];
+
+const list = document.getElementById('list');
+for (const [g, hue, items] of DATA) {
+  const h = document.createElement('div'); h.className = 'ghead';
+  h.innerHTML = `<span style="width:7px;height:7px;border-radius:2px;background:${hue}"></span>${g}`;
+  list.appendChild(h);
+  for (const [n, u, t] of items) {
+    const r = document.createElement('div'); r.className = 'row';
+    r.innerHTML = `<span class="band" style="background:${hue}"></span>
+      <span class="tile" style="background:${hue}22;color:${hue}">${n[0]}</span>
+      <span class="name">${n}</span><span class="url">${u}</span><span class="time">${t}</span>`;
+    list.appendChild(r);
+  }
+}
+
+const stage = document.getElementById('stage'), sheet = document.getElementById('sheet'),
+      card = document.getElementById('card'), field = document.getElementById('field'),
+      pwd = document.getElementById('pwd'), err = document.getElementById('err'),
+      stateLabel = document.getElementById('stateLabel');
+
+/* 休眠参数集中在这里，切换只改这几个变量 —— 对应实现里的一个 class */
+function setDormant(on) {
+  stage.style.setProperty('--blur-now', on ? 'var(--dormant-blur)' : '0px');
+  stage.style.setProperty('--sat-now', on ? 'var(--dormant-sat)' : '1');
+  stage.style.setProperty('--scale-now', on ? '0.985' : '1');
+  stage.style.setProperty('--h-now', on ? 'var(--row-dormant)' : 'var(--row-live)');
+  stage.classList.toggle('is-dormant', on);
+}
+
+function lock() {
+  sheet.classList.remove('reveal');   // 膜回到覆盖位（无动画地复位）
+  sheet.style.transition = 'none'; sheet.classList.add('hidden');
+  void sheet.offsetWidth; sheet.style.transition = '';
+  sheet.classList.remove('hidden');
+  setDormant(true); stage.classList.remove('scanning');
+  pwd.value = ''; err.textContent = ''; field.classList.remove('bad');
+  stateLabel.textContent = 'dormant';
+  setTimeout(() => pwd.focus(), 80);
+}
+
+function unlock() {
+  stage.classList.remove('scanning');
+  sheet.classList.add('reveal');      // 圆形扩散揭开
+  setDormant(false);                  // 同一时刻：模糊/饱和/行高一起回正
+  stateLabel.textContent = 'live';
+}
+
+pwd.addEventListener('focus', () => { if (stage.classList.contains('is-dormant')) stage.classList.add('scanning'); });
+pwd.addEventListener('blur', () => stage.classList.remove('scanning'));
+
+function submit() {
+  if (pwd.value.trim().toLowerCase() === 'x') {
+    stateLabel.textContent = 'rejected';
+    err.textContent = '口令不对，再试一次';
+    field.classList.add('bad');
+    card.classList.add('shake');
+    stage.classList.remove('flash-fail'); void stage.offsetWidth; stage.classList.add('flash-fail');
+    // 失败时膜"压得更深"一档，200ms 后弹回，让否定有物理感
+    stage.style.setProperty('--blur-now', 'calc(var(--dormant-blur) + 3px)');
+    setTimeout(() => { stage.style.setProperty('--blur-now', 'var(--dormant-blur)');
+                       card.classList.remove('shake'); field.classList.remove('bad');
+                       stage.classList.remove('flash-fail'); stateLabel.textContent = 'dormant'; }, 620);
+    pwd.select();
+    return;
+  }
+  unlock();
+}
+
+document.getElementById('btn').addEventListener('click', submit);
+pwd.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+document.getElementById('replay').addEventListener('click', lock);
+
+setDormant(true);
+stateLabel.textContent = 'dormant';
+setTimeout(() => pwd.focus(), 200);
+</script>
+</body>
+</html>

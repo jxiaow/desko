@@ -45,8 +45,16 @@ design/fix-shots/
 design/redesign-shots/
 design/status-shots/
 design/note-lock-shots/
+design/unify-shots/
+design/lock-shots/
 design/proto-*.png
+design/r*-*.png
+shots/
 shots-proto/
+docs/design/**/*.png
+
+# 原型草稿与中间产物，跑完即可弃
+.scratch/
 
 # 实跑校验脚本与中间产物，跑完即可弃
 tmp/

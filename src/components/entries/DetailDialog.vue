@@ -1,35 +1,28 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import type { Entry } from '../../types'
 import { avatarClass } from '../../utils/avatar'
 import { formatAbsTime } from '../../utils/format'
-import EntryFields from './EntryFields.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 
 const props = defineProps<{
   entry: Entry
-  categories: string[]
   visiblePasswords: Record<string, boolean>
   passwordCache: Record<string, { value: string; ts: number }>
-  /** 卡片上的「编辑」直接以编辑态打开：同一个窗，不弹第二个 */
-  initialEditing?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
+  edit: [entry: Entry]
   delete: [entry: Entry]
-  saved: [id: string]
   togglePassword: [id: string]
   copyPassword: [id: string]
   copyText: [text: string, label: string]
   openUrl: [url: string]
 }>()
 
-/** 浏览态与编辑态在同一个弹窗里换体：详情即编辑入口，不再弹第二个窗 */
-const editing = ref(!!props.initialEditing)
-const fields = ref<InstanceType<typeof EntryFields> | null>(null)
-
+/** 详情只管浏览；编辑统一弹新增/编辑同一个表单弹窗 */
 const revealed = computed(() => !!props.visiblePasswords[props.entry.id])
 const cachedPassword = computed(() => props.passwordCache[props.entry.id]?.value || '')
 const hasCredential = computed(() => !!(props.entry.username || cachedPassword.value))
@@ -39,13 +32,6 @@ const subtitle = computed(() =>
 const pathHref = (path: string) => {
   const url = props.entry.url
   return url ? url.replace(/\/$/, '') + (path.startsWith('/') ? path : '/' + path) : path
-}
-
-const startEdit = () => { editing.value = true }
-const cancelEdit = () => { editing.value = false }
-const onSaved = (id: string) => {
-  emit('saved', id)
-  editing.value = false
 }
 
 useEscapeClose(() => emit('close'))
@@ -66,7 +52,7 @@ useEscapeClose(() => emit('close'))
           </button>
         </div>
 
-        <div v-if="!editing" class="dialog-body detail-body">
+        <div class="dialog-body detail-body">
           <div class="detail-section">
             <div class="detail-label">网址</div>
             <div class="detail-field">
@@ -116,24 +102,15 @@ useEscapeClose(() => emit('close'))
           </div>
         </div>
 
-        <div v-else class="dialog-body detail-body">
-          <EntryFields ref="fields" :entry="entry" :categories="categories" @saved="onSaved" />
-        </div>
-
-        <div v-if="!editing" class="dialog-footer">
+        <div class="dialog-footer">
           <button class="btn-secondary danger" type="button" @click="emit('delete', entry)">
             <AppIcon name="trash" :size="13" />删除
           </button>
           <span class="spacer"></span>
-          <button class="btn-secondary" type="button" @click="startEdit">
+          <button class="btn-secondary" type="button" @click="emit('edit', entry)">
             <AppIcon name="edit" :size="13" />编辑
           </button>
           <button v-if="entry.url" class="btn-primary" type="button" @click="emit('openUrl', entry.url!)">在浏览器打开</button>
-        </div>
-        <div v-else class="dialog-footer">
-          <span class="spacer"></span>
-          <button class="btn-secondary" type="button" @click="cancelEdit">取 消</button>
-          <button class="btn-primary" type="button" @click="fields?.save()">保 存</button>
         </div>
       </div>
     </div>

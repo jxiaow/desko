@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, waitForToastGone, cardByName, tipButton, openCardMenu } from '../helpers'
+import { bootUnlocked, e2e, expectToast, cardByName, tipButton, openCardMenu } from '../helpers'
 
 const SEED = {
   entries: [
@@ -57,27 +57,36 @@ test.describe('Entries 网址收藏', () => {
     await expect(page.locator('.entry-card')).toHaveCount(3)
   })
 
-  test('按分类 tab 过滤', async ({ page }) => {
+  test('按分类 tab 过滤：常驻钮直点，收进「更多」的走下拉', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    await page.locator('.tabs .tab', { hasText: '邮箱' }).click()
+    // 分类聚合顺序不保证等于 seed 声明顺序：可见就直点，否则开「更多」面板点
+    const tab = page.locator('.tabs .tab:not(.tab-more)', { hasText: '邮箱' })
+    if (await tab.count()) {
+      await tab.click()
+    } else {
+      await page.locator('.tab-more').click()
+      await page.locator('.popover .pop-item', { hasText: '邮箱' }).click()
+    }
     await expect(page.locator('.entry-card')).toHaveCount(1)
     await expect(entryCard(page, 'Gmail')).toBeVisible()
     await page.locator('.tabs .tab', { hasText: '全部' }).click()
     await expect(page.locator('.entry-card')).toHaveCount(3)
   })
 
-  test('新增条目：校验 + 创建成功', async ({ page }) => {
+  test('新增网址收藏：必填警示 + 创建成功', async ({ page }) => {
     await bootUnlocked(page, SEED)
     await page.locator('.page-bar button.btn-primary').click()
-    const dialog = page.locator('.dialog-overlay .dialog')
-    await expect(dialog.locator('h3')).toHaveText('新增条目')
+    const dialog = page.locator('.dialog.entry-form-dialog')
+    await expect(dialog.locator('h3')).toHaveText('新增网址收藏')
 
-    // 名称为空直接保存 -> toast 名称必填
+    // 名称/分类/主机全空点保存 -> 首个缺项红框警示并聚焦，不再走 toast
+    const nameInput = dialog.locator('input[placeholder="例如：OA系统"]')
     await dialog.locator('.dialog-footer button.btn-primary').click()
-    await expectToast(page, '名称必填')
-    await waitForToastGone(page)
+    await expect(nameInput).toHaveClass(/field-invalid/)
+    await expect(nameInput).toBeFocused()
 
-    await dialog.locator('input[placeholder="例如：OA系统"]').fill('Notion')
+    await nameInput.fill('Notion')
+    await dialog.locator('input[placeholder="选择或输入新分类"]').fill('工具')
     await dialog.locator('input[placeholder="https://..."]').fill('https://www.notion.so')
     await dialog.locator('input[placeholder="登录用户名"]').fill('user@notion.so')
     await dialog.locator('input[placeholder="登录密码"]').fill('No@tion2024')
@@ -86,26 +95,28 @@ test.describe('Entries 网址收藏', () => {
 
     await expectToast(page, '已添加')
     await expect(page.locator('.entry-card')).toHaveCount(4)
-    // 未填分类兜底为未分类，且新条目在最前（created_at 倒序）
-    await expect(entryCard(page, 'Notion').locator('.ec-cat')).toHaveText('未分类')
+    // 分类现为必填：直接吃用户键入值，新条目在最前（created_at 倒序）
+    await expect(entryCard(page, 'Notion').locator('.ec-cat')).toHaveText('工具')
     const snap = await e2e.snapshot(page)
     expect(snap.entries).toHaveLength(4)
     const created = snap.entries.find((e: any) => e.name === 'Notion')
-    // EntryFields 新增时分类缺省填「未分类」
-    expect(created.category).toBe('未分类')
+    expect(created.category).toBe('工具')
     expect(created.url).toBe('https://www.notion.so')
   })
 
-  test('详情弹窗里就地改名，不弹第二个窗', async ({ page }) => {
+  test('详情点编辑：弹统一编辑弹窗改名', async ({ page }) => {
     await bootUnlocked(page, SEED)
     await entryCard(page, 'GitHub').click()
-    const dialog = page.locator('.detail-dialog')
-    await expect(dialog).toBeVisible()
-    await expect(dialog.locator('.detail-head-id h3')).toHaveText('GitHub')
+    const detail = page.locator('.detail-dialog')
+    await expect(detail).toBeVisible()
+    await expect(detail.locator('.detail-head-id h3')).toHaveText('GitHub')
 
-    await dialog.locator('.dialog-footer button.btn-secondary', { hasText: '编辑' }).click()
-    // 同一个弹窗换成编辑体，标题仍是条目名
-    await expect(dialog.locator('.entry-fields')).toBeVisible()
+    await detail.locator('.dialog-footer button.btn-secondary', { hasText: '编辑' }).click()
+    // 详情收起，弹出与新增同款的编辑弹窗，预填原值
+    const dialog = page.locator('.dialog.entry-form-dialog')
+    await expect(dialog.locator('h3')).toHaveText('编辑网址收藏')
+    await expect(detail).toHaveCount(0)
+    await expect(dialog.locator('input[placeholder="例如：OA系统"]')).toHaveValue('GitHub')
     await dialog.locator('input[placeholder="例如：OA系统"]').fill('GitHub-Repo')
     await dialog.locator('.dialog-footer button.btn-primary').click()
 
@@ -118,11 +129,9 @@ test.describe('Entries 网址收藏', () => {
     expect(edited.password).toBe('Gh!tHub2024')
   })
 
-  test('单条删除走确认对话框', async ({ page }) => {
+  test('单条删除收在 ⋯ 菜单里，走确认对话框', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    const card = entryCard(page, '钉钉')
-    await card.hover()
-    await tipButton(card, '删除').click()
+    await cardAction(page, '钉钉', '删除')
     await confirmDialog(page, '确定删除「钉钉」？')
     await expectToast(page, '已删除')
     await expect(page.locator('.entry-card')).toHaveCount(2)
@@ -165,9 +174,9 @@ test.describe('Entries 网址收藏', () => {
     await gh.click()
 
     // 全包裹：1px 实环压在边框外沿，底色吃满整张卡
-    await expect(gh).toHaveCSS('box-shadow', 'rgb(91, 87, 217) 0px 0px 0px 1px, rgba(26, 27, 32, 0.08) 0px 2px 6px -1px')
-    await expect(gh).toHaveCSS('background-color', 'rgb(238, 237, 251)')
-    await expect(gh.locator('.ec-name')).toHaveCSS('color', 'rgb(79, 74, 192)')
+    await expect(gh).toHaveCSS('box-shadow', 'rgb(58, 104, 184) 0px 0px 0px 1px, rgba(17, 24, 39, 0.06) 0px 4px 12px -2px, rgb(203, 210, 222) 0px 0px 0px 1px')
+    await expect(gh).toHaveCSS('background-color', 'rgb(237, 242, 250)')
+    await expect(gh.locator('.ec-name')).toHaveCSS('color', 'rgb(45, 84, 153)')
 
     // 列表渲染顺序不保证等于 seed 顺序，所以先量出当前行的位置再断言位移
     const cards = page.locator('.entry-card')
@@ -184,7 +193,7 @@ test.describe('Entries 网址收藏', () => {
   test('复制卡片并查看/复制密码', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const card = entryCard(page, 'GitHub')
-    await cardAction(page, 'GitHub', '复制卡片')
+    await cardAction(page, 'GitHub', '复制副本')
     await expectToast(page, '已复制卡片')
     await expect(entryCard(page, 'GitHub 副本')).toBeVisible()
     expect((await e2e.snapshot(page)).entries).toHaveLength(4)

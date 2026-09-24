@@ -253,7 +253,7 @@ describe('NotesModule', () => {
     expect(wrapper.find('.memo-body').text()).toContain('甲内容')
 
     // 锁回全部：整库重新上锁，之后再要口令
-    await wrapper.find('.stream-bar button[aria-label="锁回全部加密小记"]').trigger('click')
+    await wrapper.find('.page-bar button[aria-label="锁回全部加密小记"]').trigger('click')
     await flushPromises()
     expect(notesApi.noteKeyRelock).toHaveBeenCalledTimes(1)
     expect(wrapper.find('.memo-locked').exists()).toBe(true)
@@ -276,7 +276,7 @@ describe('NotesModule', () => {
     expect(wrapper.find('.memo-body').text()).toContain('甲内容')
 
     // 兜底：格子空着也能走「用主密码解开」，一键开全库
-    await wrapper.find('.stream-bar button[aria-label="锁回全部加密小记"]').trigger('click')
+    await wrapper.find('.page-bar button[aria-label="锁回全部加密小记"]').trigger('click')
     await flushPromises()
     wrapper.findComponent(NoteCard).vm.$emit('unlock')
     await flushPromises()

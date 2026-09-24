@@ -53,7 +53,7 @@ test.describe('Settings 设置', () => {
     const pane = visiblePane(dialog)
 
     // 行组吃内嵌凹槽底色，条目之间只留 1px 细线
-    await expect(pane.locator('.group-content').first()).toHaveCSS('background-color', 'rgb(234, 234, 240)')
+    await expect(pane.locator('.group-content').first()).toHaveCSS('background-color', 'rgb(234, 240, 247)')
     // 控制轴一档高：按钮与输入件同 28px，右缘成线
     await expect(pane.locator('.setting-item', { hasText: '数据库路径' }).locator('button.action-btn')).toHaveCSS('height', '28px')
     await expect(pane.locator('.setting-item', { hasText: '云端保留份数' }).locator('.number-input')).toHaveCSS('height', '28px')
@@ -71,12 +71,12 @@ test.describe('Settings 设置', () => {
     await expect(conn.locator('.live-dot')).not.toHaveClass(/idle/)
     const danger = conn.locator('button.action-btn.danger')
     await expect(danger).toHaveCount(1)
-    await expect(danger).toHaveCSS('color', 'rgb(204, 71, 64)')
+    await expect(danger).toHaveCSS('color', 'rgb(220, 38, 38)')
     await expect(danger).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 
     // 关键主操作品牌实底，一栏只这一颗
     const backup = pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn.primary')
-    await expect(backup).toHaveCSS('background-color', 'rgb(91, 87, 217)')
+    await expect(backup).toHaveCSS('background-color', 'rgb(58, 104, 184)')
     await expect(backup).toHaveCSS('color', 'rgb(255, 255, 255)')
   })
 

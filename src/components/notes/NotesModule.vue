@@ -128,6 +128,12 @@ const fsNote = computed(() =>
 const sortLabel = computed(() =>
   SORTS.find(s => s.key === noteSort.value)?.label ?? '最新')
 
+/** 侧栏脚注：全库口径，不受筛选影响，和顶栏那条「筛后 / 总数」分开表意 */
+const railSummary = computed(() => {
+  const lockedN = notes.value.filter((n) => n.encrypted).length
+  return `共 ${notes.value.length} 条小记${lockedN ? ` · ${lockedN} 条已加密` : ''}`
+})
+
 const pickFilter = (e: MouseEvent) => {
   const el = e.currentTarget as HTMLElement
   filterAnchor.value = filterAnchor.value === el ? null : el
@@ -306,7 +312,7 @@ onBeforeUnmount(() => {
   <div ref="pageEl" class="notes-page">
     <div class="stream">
       <div class="stream-inner" @keydown="onStreamKeydown">
-        <div class="stream-bar">
+        <div class="page-bar">
           <div class="search-box">
             <span class="search-icon"><AppIcon name="search" :size="15" /></span>
             <input
@@ -326,11 +332,9 @@ onBeforeUnmount(() => {
             >
               <AppIcon name="x" :size="13" />
             </button>
+            <span class="bar-count">{{ filteredNotes.length }} / {{ notes.length }} 条</span>
           </div>
 
-          <span class="bar-count">{{ filteredNotes.length }} / {{ notes.length }} 条</span>
-
-          <div class="bar-div"></div>
           <button
             class="bar-btn"
             :class="{ active: noteSort !== 'new' }"
@@ -479,7 +483,7 @@ onBeforeUnmount(() => {
         type="button"
         @click="noteView = v.key"
       >
-        <AppIcon :name="v.icon" :size="14" />
+        <AppIcon :name="v.icon" :size="15" />
         <span class="nm">{{ v.label }}</span>
         <span class="tab-count">{{ viewCounts[v.key] }}</span>
       </button>
@@ -502,10 +506,12 @@ onBeforeUnmount(() => {
       <template v-if="hasActiveFilters">
         <div class="rail-sep"></div>
         <button class="rail-item danger" type="button" @click="clearFilters">
-          <AppIcon name="x" :size="14" />
+          <AppIcon name="x" :size="15" />
           <span class="nm">清空筛选</span>
         </button>
       </template>
+
+      <div class="rail-foot">{{ railSummary }}</div>
     </aside>
 
     <div v-if="isBatchMode && !fsTarget" class="batch-dock">
@@ -632,27 +638,25 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   scroll-behavior: smooth;
 }
-/* 一行一张：正常窗口铺满，最大化时收在 --stream-max 内居中 */
+/* 一行一张：正常窗口铺满，最大化时收在 --stream-max 内居中。
+   顶部不留内边距：与其余四页同款——顶栏贴顶，滚动行不会从它上面露出来 */
 .stream-inner {
   width: 100%;
   max-width: var(--stream-max);
   margin-inline: auto;
-  padding: var(--space-5) var(--space-5) var(--dock-clearance);
+  padding: 0 var(--space-5) var(--dock-clearance);
 }
+/* 书写框与吸顶栏拉开一档间距（列表页首行同款） */
+.stream-inner .composer { margin-top: var(--space-2); }
 
-/* ---------- 顶部工具条：整页唯一一条 chrome ---------- */
-.stream-bar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--bg);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) 0 var(--space-3);
-  margin-bottom: var(--space-1);
-}
-.stream-bar .search-box { flex: 1; min-width: 80px; max-width: 320px; }
+/* ---------- 顶部工具条：吃 global.css 的 .page-bar 骨架（44px 磨砂吸顶），
+   本页只有两处与全宽页不同：搜索框随流伸缩（上限 320）并顶住左段，
+   靠它的 auto 外边距把动作键推到右端；计数并进框内——它统计的就是
+   这个框筛出来的结果，摆在框外像是整页的总数 ---------- */
+.page-bar .search-box { flex: 1; min-width: 80px; max-width: 320px; margin-right: auto; }
+.page-bar .bar-count { margin-right: 0; padding-left: var(--space-1); font-size: var(--text-sm); }
+/* 右段动作键之间的分组线收成分居的短细线——通高的竖线在 44px 磨砂栏里像表格线 */
+.page-bar .bar-div { align-self: center; height: 16px; opacity: 0.55; }
 
 /* ---------- 日期分组 ---------- */
 .day { margin-bottom: var(--space-4); }
@@ -680,17 +684,16 @@ onBeforeUnmount(() => {
 }
 
 .memo-skeleton {
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
   padding: var(--space-3) var(--space-4);
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 .sl { display: block; height: 11px; border-radius: 4px; background: var(--hover); }
 .sl-1 { width: 72%; }
 .sl-2 { width: 94%; margin-top: var(--space-2); }
 .sl-3 { width: 40%; margin-top: var(--space-3); }
-@keyframes pulse { 50% { opacity: 0.5; } }
 
 /* ---------- 右窄栏：纯导航，不是书写面 ---------- */
 .rail {
@@ -699,7 +702,9 @@ onBeforeUnmount(() => {
   border-left: 1px solid var(--border);
   background: var(--sidebar-bg);
   overflow-y: auto;
-  padding: var(--space-4) var(--space-2) var(--space-5);
+  padding: var(--space-4) var(--space-2) var(--space-4);
+  display: flex;
+  flex-direction: column;
 }
 .rail-title {
   font-size: 11px;
@@ -711,18 +716,20 @@ onBeforeUnmount(() => {
 .rail-item {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 10px;
   width: 100%;
-  padding: 5px var(--space-2);
+  height: 34px;
+  padding: 0 var(--space-2);
   border: none;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   font-size: 13px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition);
   text-align: left;
   font-family: inherit;
+  flex-shrink: 0;
 }
 .rail-item:hover { background: var(--sidebar-hover); color: var(--text); }
 .rail-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
@@ -743,10 +750,22 @@ onBeforeUnmount(() => {
   animation: rail-in var(--transition) ease both;
 }
 @keyframes rail-in { from { opacity: 0; transform: translateX(8px); } }
-.rail-sep { height: 1px; background: var(--border); margin: var(--space-3) var(--space-2); }
+.rail-sep { height: 1px; flex-shrink: 0; background: var(--border); margin: var(--space-3) var(--space-2); }
 .rail-empty { font-size: 12px; color: var(--text-muted); padding: 0 var(--space-2); }
+.rail .tab-count { font-size: var(--text-xs); margin-left: 0; }
 
-/* ---------- 批量底栏的骨架在 global.css，三页共用 ---------- */
+/* 全库摘要压在侧栏末位：上面的列表再短它也守着底，读的是这一栏的口径 */
+.rail-foot {
+  flex-shrink: 0;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding: var(--space-3) var(--space-2) 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ---------- 批量底栏的骨架在 global.css，条目页共用同一套 ---------- */
 
 .pop-sec.tight { padding-top: 0; }
 .tab.danger { color: var(--danger); }

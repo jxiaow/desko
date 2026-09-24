@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Phase 2 · 01 顶栏 + 模块色相锚点</title>
+<style>
+/* 单一原型页：演示 desko 用顶栏 5 模块切换替代 sidebar，
+   每个模块带自己的"色相锚点"，chrome / active pill / 内容标题条都跟着换色。
+   点 5 个模块名体验切换。这是骨架级提案，决定后续密度行/时间河流/解锁态的容器。 */
+
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --chrome: #eceef2;
+  --border: #dde0e5;
+  --text: #1c2028;
+  --text-secondary: #5a606e;
+  --text-muted: #858c99;
+  --hover: #ebedf1;
+  --radius: 8px;
+  --radius-pill: 99px;
+
+  /* 五个模块的色相锚点。每个色都是 desko 主题体系里"已存在"的某档，
+     避免引入新色相造成维护负担：
+     · 网址 = light-cool 钢蓝
+     · 小记 = light-celadon 苔绿
+     · 文件 = light-warm 琥珀
+     · 验证码 = 青瓷的烟紫 cat-5
+     · 传输 = 青瓷的湖蓝 cat-6 */
+  --hue-entries: #4a6fa5;
+  --hue-notes:   #4d7c5f;
+  --hue-files:   #b45309;
+  --hue-mfa:     #6a4f8a;
+  --hue-share:   #4f8088;
+
+  /* 当前模块的色相。切模块时只换这一个变量，所有依赖处自动跟随。 */
+  --active-hue: var(--hue-entries);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ====== 窗口标题栏（Tauri 40px，原样保留） ====== */
+.titlebar {
+  height: 40px;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--radius);
+  gap: var(--radius);
+  flex-shrink: 0;
+}
+.brand {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: linear-gradient(135deg, var(--active-hue), color-mix(in srgb, var(--active-hue) 70%, black));
+  display: inline-flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 11px;
+  transition: background var(--t, 0.25s);
+}
+.crumb { color: var(--text-secondary); font-size: 12px; }
+.crumb b { color: var(--text); font-weight: 600; }
+.spacer { flex: 1; }
+.icon-btn {
+  width: 28px; height: 28px; border-radius: var(--radius);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); cursor: pointer;
+}
+.icon-btn:hover { background: var(--hover); color: var(--text); }
+
+/* ====== 顶栏 5 模块切换条（新骨架，替代 sidebar） ====== */
+.navbar {
+  height: 48px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 16px;
+  background: var(--panel);
+  /* 顶栏用 active hue 的极淡染色作为"我在哪个模块"的余光提示 */
+  background: color-mix(in srgb, var(--active-hue) 4%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--active-hue) 18%, var(--border));
+  transition: background-color 0.25s, border-color 0.25s;
+  flex-shrink: 0;
+}
+.nav-btn {
+  position: relative;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text-secondary);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  border: none; background: transparent;
+  font-family: inherit;
+}
+.nav-btn:hover { color: var(--text); background: var(--hover); }
+.nav-btn .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--hue);
+  opacity: 0.4;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.nav-btn.active {
+  background: color-mix(in srgb, var(--hue) 14%, transparent);
+  color: var(--hue);
+  font-weight: 600;
+}
+.nav-btn.active .dot { opacity: 1; transform: scale(1.4); }
+.nav-btn .count {
+  font-size: 11px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+.nav-btn.active .count { color: var(--hue); opacity: 0.7; }
+
+/* ====== 内容区 ====== */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+  scrollbar-gutter: stable;
+}
+.page-head {
+  display: flex; align-items: baseline; gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--active-hue) 16%, var(--border));
+}
+.page-title {
+  font-size: 18px; font-weight: 600;
+  color: var(--text);
+}
+.page-sub { color: var(--text-muted); font-size: 12px; }
+.page-tag {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 3px 8px; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--active-hue) 12%, transparent);
+  color: var(--active-hue);
+  font-weight: 600;
+}
+
+/* 内容卡片（仅占位，密度行版会另开原型页） */
+.sample-list { display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+.sample {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  display: flex; align-items: center; gap: 12px;
+  font-size: 13px;
+  border-left: 3px solid color-mix(in srgb, var(--active-hue) 70%, transparent);
+}
+.sample .meta { margin-left: auto; color: var(--text-muted); font-size: 11px; }
+
+/* 调试用：色相切换动画的开关 */
+.note {
+  position: fixed; bottom: 16px; right: 16px;
+  font-size: 11px; color: var(--text-muted);
+  background: var(--panel); border: 1px solid var(--border);
+  padding: 6px 10px; border-radius: var(--radius);
+}
+.note b { color: var(--active-hue); }
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="brand">D</div>
+  <div class="crumb">desko · <b id="crumb">网址收藏</b></div>
+  <div class="spacer"></div>
+  <div class="icon-btn" title="备份">⌬</div>
+  <div class="icon-btn" title="设置">⚙</div>
+  <div class="icon-btn" title="锁定">🔒</div>
+</div>
+
+<nav class="navbar" id="navbar">
+  <button class="nav-btn active" data-mod="entries"  style="--hue: var(--hue-entries)">
+    <span class="dot"></span>网址收藏<span class="count">142</span>
+  </button>
+  <button class="nav-btn" data-mod="notes"   style="--hue: var(--hue-notes)">
+    <span class="dot"></span>小记<span class="count">87</span>
+  </button>
+  <button class="nav-btn" data-mod="files"   style="--hue: var(--hue-files)">
+    <span class="dot"></span>文件快捷<span class="count">23</span>
+  </button>
+  <button class="nav-btn" data-mod="mfa"     style="--hue: var(--hue-mfa)">
+    <span class="dot"></span>验证码<span class="count">5</span>
+  </button>
+  <button class="nav-btn" data-mod="share"   style="--hue: var(--hue-share)">
+    <span class="dot"></span>局域网传输
+  </button>
+</nav>
+
+<main class="content">
+  <div class="page-head">
+    <h1 class="page-title" id="title">网址收藏</h1>
+    <span class="page-sub" id="sub">142 条记录 · 最近更新 3 分钟前</span>
+    <span class="page-tag" id="tag">Entries</span>
+  </div>
+
+  <div class="sample-list" id="sample-list"></div>
+</main>
+
+<div class="note">当前模块色相：<b id="hue-label">钢蓝 #4a6fa5</b></div>
+
+<script>
+const DATA = {
+  entries: { title:'网址收藏', sub:'142 条记录 · 最近更新 3 分钟前', tag:'Entries',
+    hue:'钢蓝 #4a6fa5',
+    rows:[
+      ['GitHub · jxiaow', 'github.com', '2 分钟前'],
+      ['公司 Jenkins', 'jenkins.internal', '昨天'],
+      ['Ones · 工作台', 'ones.cn', '3 天前'],
+      ['AWS Console', 'console.aws.amazon.com', '上周'],
+    ]},
+  notes: { title:'小记', sub:'87 篇 · 加密 12 篇', tag:'Notes',
+    hue:'苔绿 #4d7c5f',
+    rows:[
+      ['会议纪要 · 周三架构评审', '今天 14:32'],
+      ['关于 Phase 2 设计的想法', '今天 09:11'],
+      ['🔒 私人笔记 · 体检', '昨天'],
+      ['读书摘录 · 系统之美', '3 天前'],
+    ]},
+  files: { title:'文件快捷', sub:'23 个 · 文件夹 8 / 文件 15', tag:'Files',
+    hue:'琥珀 #b45309',
+    rows:[
+      ['📁 工作文档', 'D:\\work\\docs'],
+      ['📁 Qt 项目', 'C:\\Qt\\projects'],
+      ['📄 报销单-9月.xlsx', 'D:\\files'],
+      ['📄 设计草图.psd', 'D:\\files'],
+    ]},
+  mfa: { title:'验证码', sub:'5 个账号 · 已启用', tag:'MFA',
+    hue:'烟紫 #6a4f8a',
+    rows:[
+      ['GitHub', '6 位 · 30s'],
+      ['Google', '6 位 · 30s'],
+      ['AWS', '6 位 · 30s'],
+      ['公司 VPN', '6 位 · 30s'],
+    ]},
+  share: { title:'局域网传输', sub:'未启动 · 端口 8765', tag:'Fileshare',
+    hue:'湖蓝 #4f8088',
+    rows:[
+      ['启动服务后，同网段设备可访问 http://本机:8765', ''],
+      ['服务不会随应用启动 · 需要手动开启', ''],
+    ]},
+}
+
+const root = document.documentElement
+let current = 'entries'
+
+function render(key) {
+  const d = DATA[key]
+  document.getElementById('title').textContent = d.title
+  document.getElementById('sub').textContent = d.sub
+  document.getElementById('tag').textContent = d.tag
+  document.getElementById('crumb').textContent = d.title
+  document.getElementById('hue-label').textContent = d.hue
+  const list = document.getElementById('sample-list')
+  list.innerHTML = d.rows.map(r => `
+    <div class="sample">
+      <span>${r[0]}</span>
+      <span class="meta">${r[1] || ''}${r[2] ? ' · ' + r[2] : ''}</span>
+    </div>`).join('')
+}
+
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    const mod = btn.dataset.mod
+    current = mod
+    const hueVar = {
+      entries: '--hue-entries', notes: '--hue-notes', files: '--hue-files',
+      mfa: '--hue-mfa', share: '--hue-share',
+    }[mod]
+    root.style.setProperty('--active-hue', `var(${hueVar})`)
+    render(mod)
+  })
+})
+render('entries')
+</script>
+</body>
+</html>

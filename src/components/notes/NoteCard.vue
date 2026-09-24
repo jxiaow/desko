@@ -55,20 +55,44 @@ const bodyEl = ref<HTMLElement | null>(null)
 const clipped = ref(false)
 const expanded = ref(false)
 
-/** 上限是视口比例，窗口变化会改变是否溢出，所以量完还要跟着 resize 重算 */
-const measureClipped = async () => {
+/** 截断容差：只藏掉这么多像素就不算截断，别为一行空隙冒出「展开全文」 */
+const CLAMP_TOL = 8
+
+/**
+ * 整行截断：--memo-max-h 只是预算，真正的上限取最后一个完整子块的下边界，
+ * 砍在 max-height 上的半行没法靠渐隐遮罩藏掉。
+ */
+const applyClamp = async () => {
   await nextTick()
   const el = bodyEl.value
-  // 展开态量不出裁切（clientHeight 就等于 scrollHeight），保留上一次结果，收起时再量
-  if (el && !expanded.value) clipped.value = el.scrollHeight - el.clientHeight > 1
+  if (!el) return
+  // 内联上限一清就回到 CSS 预算，展开态也正是要全露，两种情况都只留这一句
+  el.style.maxHeight = ''
+  // 展开态量不出截断（内容全露），保留上一次结果，收起时再重算
+  if (expanded.value) return
+
+  const style = getComputedStyle(el)
+  const budget = parseFloat(style.maxHeight) || Number.MAX_SAFE_INTEGER
+  const lineH = parseFloat(style.lineHeight) || 23
+  let cut = 0
+  for (const child of Array.from(el.children) as HTMLElement[]) {
+    const bottom = child.offsetTop + child.offsetHeight
+    if (bottom > budget + 1) break
+    cut = bottom
+  }
+  // 首块就超预算时按整行切，至少露得出开头
+  if (cut === 0) cut = Math.max(1, Math.floor(budget / lineH)) * lineH
+
+  clipped.value = el.scrollHeight > cut + CLAMP_TOL
+  if (clipped.value) el.style.maxHeight = `${Math.round(cut)}px`
 }
 
-onMounted(() => window.addEventListener('resize', measureClipped))
-onBeforeUnmount(() => window.removeEventListener('resize', measureClipped))
+onMounted(() => window.addEventListener('resize', applyClamp))
+onBeforeUnmount(() => window.removeEventListener('resize', applyClamp))
 
 // 只读正文在编辑态会整个卸掉，回来时是一个新元素，组件本身不会重新挂载
-watch(bodyEl, measureClipped)
-watch(expanded, measureClipped)
+watch(bodyEl, applyClamp)
+watch(expanded, applyClamp)
 
 // 就地编辑开始的那一刻才取快照：全屏层可能已把这行正文改过并落库
 watch(() => props.editing, (on) => {
@@ -82,7 +106,7 @@ const bodyHtml = computed(() => resolveAssetHtml(highlightTagsInHtml(props.note.
 const visibleAtts = computed(() =>
   unreferencedAttachments(props.editing ? draft.value : props.note.content_html, props.attachments))
 
-watch(() => props.note.content_html, measureClipped)
+watch(() => props.note.content_html, applyClamp)
 
 const openEditor = () => emit('open')
 
@@ -115,6 +139,12 @@ const toggleTask = (e: MouseEvent, box: HTMLInputElement) => {
 /** 加密且明文不在手：整张卡退化成一个锁标识 */
 const locked = computed(() => props.note.encrypted && !props.unlocked)
 
+/* 头部条不吃正文点击（时间/附件/操作按钮区），但批量态下整卡都是选择热区。 */
+const onHeadClick = (e: MouseEvent) => {
+  e.stopPropagation()
+  if (props.isBatchMode) emit('select')
+}
+
 const onBodyClick = (e: MouseEvent) => {
   if (props.isBatchMode) {
     emit('select')
@@ -134,9 +164,7 @@ const onBodyClick = (e: MouseEvent) => {
     emit('tagClick', tag)
     return
   }
-  // 单击只展开/收起被裁掉的正文；编辑走悬停按钮或 Enter，不再有双击
-  if (expanded.value) expanded.value = false
-  else if (clipped.value) expanded.value = true
+  // 展开收起交给正文下的显式按钮：正文单击曾是唯一的展开入口，但它和框选文字冲突
 }
 
 const onKeydown = (e: KeyboardEvent) => {
@@ -165,7 +193,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected, newborn: props.justPublished }"
     tabindex="0"
     role="button"
-    :aria-label="locked ? `已加密小记${props.note.title ? '：' + props.note.title : ''}（${formatRelativeTime(props.note.created_at)}，单击解锁）` : `小记：${props.note.title}（单击展开全文，悬停或 Enter 编辑）`"
+    :aria-label="locked ? `已加密小记${props.note.title ? '：' + props.note.title : ''}（${formatRelativeTime(props.note.created_at)}，单击解锁）` : `小记：${props.note.title}（Enter 或悬停按钮编辑）`"
     @click="onBodyClick"
     @keydown="onKeydown"
   >
@@ -173,7 +201,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       <AppIcon v-if="props.isSelected" name="check" :size="11" />
     </span>
 
-    <div class="memo-head" @click.stop>
+    <div class="memo-head" @click="onHeadClick">
       <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
       <span v-if="!locked && visibleAtts.length" class="memo-att" :title="`${visibleAtts.length} 个附件`">
         <AppIcon name="clip" :size="11" />
@@ -233,11 +261,31 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     </div>
 
     <div v-if="locked" class="memo-locked">
-      <AppIcon name="lock" :size="13" />
-      <span v-if="props.note.title" class="locked-title">{{ props.note.title }}</span>
-      <span class="locked-hint">{{ props.note.title ? '· 单击解锁' : '已加密 · 单击解锁' }}</span>
+      <span class="lock-disc"><AppIcon name="lock" :size="16" /></span>
+      <span class="lock-meta">
+        <span v-if="props.note.title" class="locked-title">{{ props.note.title }}</span>
+        <span class="locked-hint">{{ props.note.title ? '· 单击解锁' : '已加密 · 单击解锁' }}</span>
+      </span>
     </div>
-    <div v-else ref="bodyEl" class="memo-body" :class="{ clipping: clipped && !expanded, expanded }" v-html="bodyHtml" />
+    <template v-else>
+      <div
+        ref="bodyEl"
+        class="memo-body"
+        :class="{ expanded }"
+        v-html="bodyHtml"
+        @load.capture="applyClamp"
+      />
+      <button
+        v-if="clipped"
+        class="memo-unfold"
+        type="button"
+        :aria-expanded="expanded"
+        @click.stop="expanded = !expanded"
+      >
+        <AppIcon name="chevDown" :size="12" :class="{ up: expanded }" />
+        {{ expanded ? '收起' : '展开全文' }}
+      </button>
+    </template>
   </article>
 
   <article v-else class="memo editing">
@@ -273,14 +321,19 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 <style scoped>
 .memo {
   position: relative;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-2) var(--space-4);
-  box-shadow: var(--shadow-xs);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-card);
   transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition), transform var(--transition);
 }
-.memo:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+/* hover 与收藏/文件行卡同一配方：边框提亮 + accent 浸润 + 同档投影 */
+.memo:hover {
+  border-color: var(--border-card-hover);
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-surface));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.025);
+}
 .memo.pinned { border-color: var(--accent-light); }
 .memo.editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }
 .memo:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
@@ -291,41 +344,72 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   position: relative;
   max-height: var(--memo-max-h);
   overflow: hidden;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13.5px;
+  line-height: 23px;
   color: var(--text);
   word-break: break-word;
-  cursor: pointer;
 }
 .memo-body.expanded { max-height: none; }
+
+/* 截断由 JS 收在整行边界，入口就是这一颗，不再靠渐隐暗示 */
+.memo-unfold {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  margin-top: 3px;
+  padding: 0 var(--space-1);
+  margin-left: calc(0px - var(--space-1));
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.memo-unfold:hover { background: var(--accent-soft); }
+.memo-unfold :deep(svg) { transition: transform var(--transition); }
+.memo-unfold :deep(svg.up) { transform: rotate(180deg); }
 
 /* 加密锁标识：占掉正文位置，一眼知道这条要看密码 */
 .memo-locked {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   min-height: 44px;
   font-size: 13px;
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
 }
-.memo-locked svg { color: var(--warning); flex-shrink: 0; }
+.lock-disc {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  background: var(--warning-soft);
+  color: var(--warning);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lock-meta { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
 /* 锁着也认得出是哪条：只有真标题（h1–h3）会留明文，其余只剩提示语 */
-.locked-title { color: var(--text); font-weight: 500; }
+.locked-title { color: var(--text); font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
 /* 只给正文顶层块加间距，理由同 NoteEditor：* + * 会把任务项的正文压到勾选框下面 */
 .memo-body :deep(> * + *) { margin-top: var(--space-2); }
 .memo-body :deep(* + h1), .memo-body :deep(* + h2), .memo-body :deep(* + h3) { margin-top: var(--space-4); }
-.memo-body :deep(h1) { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
-.memo-body :deep(h2) { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.5; }
-.memo-body :deep(h3) { font-size: 14.5px; font-weight: 600; line-height: 1.5; }
+.memo-body :deep(h1) { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 26px; }
+.memo-body :deep(h2) { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 24px; }
+.memo-body :deep(h3) { font-size: 14.5px; font-weight: 600; line-height: 22px; }
 .memo-body :deep(strong) { font-weight: 600; color: var(--text); }
 .memo-body :deep(ul), .memo-body :deep(ol) { padding-left: var(--space-5); }
 .memo-body :deep(li) { margin: 2px 0; }
 .memo-body :deep(li::marker) { color: var(--text-faint); }
 .memo-body :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
 .memo-body :deep(code) { font-family: var(--font-mono); font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
-.memo-body :deep(pre) { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.memo-body :deep(pre) { font-family: var(--font-mono); font-size: 12px; line-height: 20px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .memo-body :deep(pre code) { background: none; border: none; padding: 0; color: inherit; }
 .memo-body :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 3px; }
 .memo-body :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
@@ -333,20 +417,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-body :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 5px; cursor: pointer; }
 .memo-body :deep(hr) { border: none; border-top: 1px solid var(--border); }
 .memo-body :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 34vh; object-fit: contain; border-radius: var(--radius); }
-
-/* 被裁掉时才铺这层渐隐，提示下面还有内容：单击正文就地展开。
-   裁切边界可能正好落在段落之间的空隙上，固定 32px 会糊在空白上看不见，
-   所以按行高给到三行，再被封顶高度的一半收住 */
-.memo-body.clipping::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: min(5.1em, calc(var(--memo-max-h) / 2));
-  background: linear-gradient(to bottom, transparent, var(--panel-bg) 72%);
-  pointer-events: none;
-}
 
 /* 顶部一行：时间 / 附件 / 收藏标 + 操作按钮，正文区零遮挡 */
 .memo-head {

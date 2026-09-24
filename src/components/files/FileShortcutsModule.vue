@@ -15,6 +15,7 @@ defineProps<{
   /** 上一次加载的失败原因；非空时显示「加载失败 · 重试」而不是空态 */
   loadError?: string | null
   filteredShortcuts: FileShortcut[]
+  totalShortcuts: number
 }>()
 
 const toastStore = useToastStore()
@@ -262,7 +263,6 @@ onBeforeUnmount(() => {
           <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <span class="bar-count">{{ filteredShortcuts.length }} 项</span>
       <button class="btn-primary" @click="showAddDialog = true">
         <AppIcon name="plus" :size="14" />
         新增条目
@@ -271,7 +271,7 @@ onBeforeUnmount(() => {
 
     <div v-if="loading" class="loading-list">
       <div class="skeleton-row" v-for="n in 6" :key="n">
-        <span class="skeleton-icon"></span>
+        <span class="skeleton-block"></span>
         <span class="skeleton-line w40"></span>
         <span class="skeleton-line w24"></span>
       </div>
@@ -298,8 +298,8 @@ onBeforeUnmount(() => {
           <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
         </div>
 
-        <!-- 第二段：等宽路径，整行点亮时加深 -->
-        <span class="cell-path" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span>
+        <!-- 第二段：等宽路径底片，整行点亮时加深 -->
+        <span class="cell-path"><span class="path-chip" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span></span>
 
         <!-- 第三段：类型胶囊 + 添加时间 -->
         <div class="fs-tags">
@@ -320,9 +320,6 @@ onBeforeUnmount(() => {
           </button>
           <button class="ib" type="button" title="编辑" @click.stop="openEdit(shortcut)">
             <AppIcon name="edit" :size="13" />
-          </button>
-          <button class="ib danger" type="button" title="删除" @click.stop="confirmDelete(shortcut)">
-            <AppIcon name="trash" :size="13" />
           </button>
         </div>
       </div>
@@ -420,55 +417,45 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+
 </template>
 
 <style scoped>
-/* 顶部不留内边距：滚动容器带 padding-top 时 sticky 的 top:0 会贴在它下面，露出一条能看见内容的缝 */
-.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) var(--dock-clearance); }
+/* .content-inner / .page-bar / 搜索框 / 主按钮 / 骨架行形全部走 global.css 的页面骨架；
+   本页没有分类标签，动作钮顶到右缘 */
+.page-bar .btn-primary { margin-left: auto; }
 
-/* 与小记页同一条工具条 */
-.page-bar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--bg);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: calc(var(--space-5) + var(--space-1)) 0 var(--space-3);
-}
-.page-bar .search-box { flex: 1; min-width: 80px; max-width: 440px; }
-
-/* 与收藏页同款单列行卡流：行间 9px，每张卡独立圆角边框 */
+/* 与收藏页同款单列行卡流：行间 8px，每张卡独立圆角边框 */
 .shortcut-list { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
 
 .shortcut-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: 60px;
-  padding: var(--space-3) var(--space-5);
+  height: 58px;
+  padding: 0 var(--space-3);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
   position: relative;
-  transition: all var(--transition);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 .shortcut-row:hover {
-  border-color: var(--border-hover);
-  box-shadow: var(--shadow);
-  transform: translateY(-1px);
+  border-color: var(--border-card-hover);
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-surface));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.025);
 }
 .shortcut-row:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
 
 /* 四段定基宽：收缩权重与内容无关，跨行列线才稳。窄窗时只有名称段收缩 */
-.cell-name { display: flex; align-items: center; gap: 10px; flex: 0 1 260px; min-width: 140px; }
+.cell-name { display: flex; align-items: center; gap: 12px; flex: 0 1 230px; min-width: 140px; }
 .ft-ico {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-badge);
   background: var(--fill);
   display: flex;
   align-items: center;
@@ -480,61 +467,62 @@ onBeforeUnmount(() => {
   letter-spacing: -0.02em;
 }
 .ft-ico.folder { background: var(--warning-soft); color: var(--warning); }
-.row-name { font-size: 13.5px; font-weight: 500; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-name { font-size: var(--text-base); font-weight: 600; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 路径列保持整列定宽（跨行对齐）；与收藏页 URL 同档：纯文本、不挂底片 */
 .cell-path {
   flex: 1 1 0;
   min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.path-chip {
+  display: inline-block;
+  min-width: 0;
+  max-width: 340px;
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-url);
-  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color var(--transition);
 }
-.shortcut-row:hover .cell-path { color: var(--text-secondary); }
+.shortcut-row:hover .path-chip { color: var(--text-secondary); }
 
 .fs-tags { flex: 0 0 150px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+/* 与收藏页 .ec-cat 同款胶囊：同一档圆角（tag）与内距 */
 .cell-type {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--badge-cat-text);
   background: var(--badge-cat-bg);
   border: 1px solid var(--badge-cat-border);
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
+  padding: 0 8px;
+  border-radius: var(--radius-tag);
   flex-shrink: 0;
   white-space: nowrap;
 }
-.cell-time { font-size: 11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-time { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 五枚 28px 动作钮：定宽占位，淡入淡出不挤列线 */
+/* 四枚 28px 动作钮：定宽占位、平时五成透明常驻，行点亮升到全不透明；删除收进右键菜单 */
 .row-acts {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
-  flex: 0 0 148px;
+  gap: 4px;
+  flex: 0 0 130px;
   opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--transition);
+  transition: opacity 0.15s ease;
 }
 .row-acts .ib { width: 28px; height: 28px; }
-.row-acts .ib.danger:hover {
-  background: var(--danger-soft);
-  color: var(--danger);
-  box-shadow: inset 0 0 0 1px var(--danger-border);
-}
-.shortcut-row:hover .row-acts, .shortcut-row:focus-within .row-acts { opacity: 1; pointer-events: auto; }
-html.hover-suppressed .shortcut-row:hover .row-acts { opacity: 0; pointer-events: none; }
+.shortcut-row:hover .row-acts, .shortcut-row:focus-within .row-acts { opacity: 1; }
 
-/* Loading skeleton */
+/* 骨架行形/方块/呼吸走 global.css，此处只留宽度分配 */
 .loading-list { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
-.skeleton-row { display: flex; align-items: center; gap: var(--space-3); min-height: 60px; padding: var(--space-3) var(--space-5); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); animation: skeleton-pulse 1.5s ease-in-out infinite; }
-.skeleton-icon { width: 34px; height: 34px; border-radius: var(--radius); background: var(--hover); flex-shrink: 0; }
-.skeleton-line { height: 10px; border-radius: 4px; background: var(--hover); }
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w24 { width: 24%; margin-left: auto; }
 

@@ -6,11 +6,13 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const ANCHORS = {
-  'light-cool':     { bg: 'rgb(244, 245, 247)', text: 'rgb(28, 32, 40)',   accent: '#4a6fa5' },
-  'light-warm':     { bg: 'rgb(245, 242, 235)', text: 'rgb(46, 41, 37)',    accent: '#d97706' },
-  'light-celadon':  { bg: 'rgb(244, 245, 241)', text: 'rgb(37, 42, 36)',    accent: '#4d7c5f' },
-  'linear-dark':    { bg: 'rgb(22, 24, 29)',    text: 'rgb(232, 230, 227)', accent: '#5e6ad2' },
-  'jetbrains-dark': { bg: 'rgb(25, 26, 28)',    text: 'rgb(227, 230, 234)', accent: '#3574f0' },
+  'light-cool':       { bg: 'rgb(247, 248, 250)', text: 'rgb(17, 24, 39)',    accent: '#3a68b8' },
+  'light-warm':       { bg: 'rgb(248, 246, 242)', text: 'rgb(36, 30, 25)',    accent: '#b45309' },
+  'light-celadon':    { bg: 'rgb(244, 247, 245)', text: 'rgb(15, 23, 19)',    accent: '#216747' },
+  'aluminum-pro':     { bg: 'rgb(236, 238, 242)', text: 'rgb(10, 13, 18)',    accent: '#2563eb' },
+  'swiss-monochrome': { bg: 'rgb(250, 250, 250)', text: 'rgb(0, 0, 0)',       accent: '#111827' },
+  'linear-dark':      { bg: 'rgb(17, 18, 23)',    text: 'rgb(241, 243, 248)', accent: '#6366f1' },
+  'jetbrains-dark':   { bg: 'rgb(30, 31, 34)',    text: 'rgb(223, 225, 229)', accent: '#3574f0' },
 } as const
 
 type ThemeId = keyof typeof ANCHORS
@@ -19,6 +21,8 @@ const THEME_NAMES: Record<ThemeId, string> = {
   'light-cool': '冷灰',
   'light-warm': '暖纸墨',
   'light-celadon': '青瓷',
+  'aluminum-pro': '冷铝',
+  'swiss-monochrome': '瑞士黑白',
   'linear-dark': 'Linear 深空',
   'jetbrains-dark': 'JetBrains 炭黑',
 }
@@ -60,17 +64,27 @@ test.describe('主题', () => {
     }
   })
 
-  test('退役的三套浅色旧值统一落到冷灰', async ({ page }) => {
-    for (const legacy of ['cool', 'white', 'classic']) {
+  test('退役的旧主题 ID 在读取时落到最近的一套', async ({ page }) => {
+    const retired: Record<string, ThemeId> = {
+      cool: 'light-cool',
+      white: 'light-cool',
+      classic: 'light-cool',
+      'pure-canvas': 'light-cool',
+      'nordic-sage': 'light-celadon',
+      'matte-obsidian': 'linear-dark',
+    }
+    for (const [legacy, target] of Object.entries(retired)) {
       await bootUnlocked(page, { settings: { theme: legacy } })
-      expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme')), legacy).toBe('light-cool')
+      const got = await readAnchors(page)
+      expect(got.attr, legacy).toBe(target)
+      expect(got.bg, legacy).toBe(ANCHORS[target].bg)
     }
   })
 
-  test('设置里五张主题卡，点一张立刻换色并落盘', async ({ page }) => {
+  test('七张主题卡，点一张立刻换色并落盘', async ({ page }) => {
     await bootUnlocked(page)
     const dialog = await openSettings(page)
-    await expect(dialog.locator('.theme-chip')).toHaveCount(5)
+    await expect(dialog.locator('.theme-chip')).toHaveCount(7)
     await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('冷灰')
 
     await dialog.locator('.theme-chip', { hasText: 'Linear 深空' }).click()
@@ -84,7 +98,7 @@ test.describe('主题', () => {
     await waitForToastGone(page)
   })
 
-  test('五套主题轮换，三个锚点色各不相同', async ({ page }) => {
+  test('七套主题轮换，三个锚点色各不相同', async ({ page }) => {
     await bootUnlocked(page)
     const dialog = await openSettings(page)
     const seen: Record<string, string> = {}
@@ -98,7 +112,7 @@ test.describe('主题', () => {
       expect(got.accent, `${id} 主色`).toBe(ANCHORS[id].accent)
       seen[id] = got.bg
     }
-    expect(new Set(Object.values(seen)).size).toBe(5)
+    expect(new Set(Object.values(seen)).size).toBe(7)
   })
 
   test('刷新后仍是选的那套', async ({ page }) => {
@@ -145,7 +159,7 @@ test.describe('主题', () => {
       [...document.querySelectorAll('.brand-logo stop')].map((s) => getComputedStyle(s).stopColor),
     )
     expect(stops.length).toBeGreaterThanOrEqual(6)
-    expect(new Set(stops)).toEqual(new Set(['rgb(139, 149, 246)', 'rgb(94, 106, 210)', 'rgb(61, 70, 148)']))
+    expect(new Set(stops)).toEqual(new Set(['rgb(130, 133, 244)', 'rgb(99, 102, 241)', 'rgb(79, 81, 216)']))
     // 重复 id 会让第二个 logo 静默套用第一个的渐变：不报错，只是颜色不对
     const ids = await page.evaluate(() =>
       [...document.querySelectorAll('.brand-logo linearGradient')].map((g) => g.id),

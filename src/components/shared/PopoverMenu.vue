@@ -9,6 +9,8 @@ const props = defineProps<{
   wide?: boolean
   /** 挂在弹窗（.dialog-overlay z-index 1000）之上时用 */
   modal?: boolean
+  /** 定宽面板：盖掉 .popover 的 148px 下限，给规格化的窄菜单（如 136px 动作单） */
+  width?: number
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -65,9 +67,9 @@ onBeforeUnmount(() => {
     <div
       ref="panel"
       class="popover"
-      :class="{ wide: props.wide, modal: props.modal }"
+      :class="{ wide: props.wide, modal: props.modal, fixed: !!props.width }"
       role="menu"
-      :style="{ top: pos.top + 'px', left: pos.left + 'px' }"
+      :style="{ top: pos.top + 'px', left: pos.left + 'px', width: props.width ? props.width + 'px' : undefined }"
     >
       <slot />
     </div>

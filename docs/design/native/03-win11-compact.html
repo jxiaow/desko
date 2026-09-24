@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<!--
+  desko × Windows 11 Fluent —— 小窗形态原型（1000×700 默认 / 1392×872 宽态）
+  核心叙事：形态跟着尺寸走
+   - 窄窗（默认 1000）：侧栏收 48px 图标轨（NavigationView Compact），列表全宽，
+     选中行"行内展开"承载敏感字段（账号/口令/备注 + 复制/显示），没有第三段。
+   - 宽窗（#wide，≥1240 才可能出现的尺寸）：侧栏自动展开带文字，行内展开收起，
+     右侧长出 300px 预览窗格 → 自然升级成三段。
+  材质规则同 02-win11-fluent（Mica 分层 / 圆角 8-6-4 / 32px 控件 / 3px 指示条 /
+  Segoe UI Variable 字阶 / CommandBar 不浮动）。
+  hash: #wide=宽态三段  #exp=展开第 2 行  #dark=深色
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>desko · Win11 小窗形态</title>
+<style>
+:root {
+  --mica:#f3f3f3; --mica-2:#ededed;
+  --card:#ffffff; --pop:#fbfbfb;
+  --ink:#1a1a1c; --ink-2:#606064; --ink-3:#8a8a8e;
+  --bd:rgba(9,9,11,.055); --bd-strong:rgba(9,9,11,.12);
+  --fill-hover:rgba(0,0,0,.045); --fill-press:rgba(0,0,0,.07);
+  --fill-sel:rgba(0,0,0,.032); --fill-sel-hover:rgba(0,0,0,.055);
+  --accent:#005fb8; --accent-fg:#ffffff;
+  --r-win:8px; --r-ctl:6px; --r-sm:4px;
+  --shadow-card:0 .5px .5px rgba(0,0,0,.10);
+  --t:120ms cubic-bezier(.33,0,.67,1);
+}
+body.dark {
+  --mica:#202020; --mica-2:#1f1f1f;
+  --card:#272727; --pop:#2b2b2b;
+  --ink:#ffffff; --ink-2:#c8c8c8; --ink-3:#9a9a9a;
+  --bd:rgba(255,255,255,.062); --bd-strong:rgba(255,255,255,.12);
+  --fill-hover:rgba(255,255,255,.062); --fill-press:rgba(255,255,255,.04);
+  --fill-sel:rgba(255,255,255,.075); --fill-sel-hover:rgba(255,255,255,.095);
+  --accent:#4cc2ff; --accent-fg:#001b2e;
+  --shadow-card:0 .5px .5px rgba(0,0,0,.4);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { height:100%; }
+body {
+  font-family:'Segoe UI Variable Text','Segoe UI','Microsoft YaHei UI',sans-serif;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+body::before { content:''; position:fixed; inset:0;
+  background:radial-gradient(120% 90% at 20% 10%, #6f7f96, #2f3540 60%, #22262e); }
+
+/* ===== 窗口：默认 1000×700（= 真 app 默认尺寸），#wide 时 1392×872 ===== */
+.win { position:relative; width:1000px; height:700px; border-radius:var(--r-win);
+  overflow:hidden; display:flex; flex-direction:column; border:1px solid var(--bd-strong);
+  box-shadow:0 26px 70px rgba(0,0,0,.5), 0 4px 14px rgba(0,0,0,.34); color:var(--ink);
+  transition:width 260ms cubic-bezier(.33,0,.2,1), height 260ms cubic-bezier(.33,0,.2,1); }
+.win.wide { width:1392px; height:872px; }
+
+/* 标题栏 */
+.titlebar { height:48px; flex-shrink:0; display:flex; align-items:center; padding-left:16px;
+  background:linear-gradient(180deg,var(--mica),var(--mica-2)); position:relative; z-index:8; }
+.tb-brand { width:16px; height:16px; border-radius:3.5px; margin-right:11px;
+  background:linear-gradient(160deg,var(--accent),color-mix(in srgb,var(--accent) 62%,#0a1c2c));
+  display:flex; align-items:center; justify-content:center; }
+.tb-brand svg { width:9px; height:9px; stroke:#fff; fill:none; stroke-width:2.2; }
+.tb-name { font:400 12px/1 'Segoe UI Variable Text','Microsoft YaHei UI'; color:var(--ink-2); }
+.caps { margin-left:auto; display:flex; height:48px; }
+.cap { width:46px; height:32px; margin-top:8px; border:0; background:transparent; cursor:default;
+  display:flex; align-items:center; justify-content:center; color:var(--ink-2); transition:background var(--t),color var(--t); }
+.cap:hover { background:var(--fill-hover); color:var(--ink); }
+.cap.x:hover { background:#c42b1c; color:#fff; }
+.cap svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:1.15; }
+
+/* 命令栏 */
+.cmdbar { height:48px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 12px 0 10px;
+  background:var(--card); border-top:1px solid var(--bd); border-bottom:1px solid var(--bd); }
+.cbtn { height:32px; min-width:32px; padding:0 9px; border:1px solid transparent; border-radius:var(--r-ctl);
+  background:transparent; color:var(--ink); font:400 14px/1 inherit; display:flex; align-items:center; gap:8px;
+  cursor:default; transition:background var(--t); }
+.cbtn:hover { background:var(--fill-hover); }
+.cbtn:active { background:var(--fill-press); color:var(--ink-2); }
+.cbtn svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+.cbtn.primary { background:var(--accent); color:var(--accent-fg); border-color:color-mix(in srgb,var(--accent) 70%,black);
+  box-shadow:0 1px 2px rgba(0,0,0,.18); font-weight:600; }
+.cbtn.primary:hover { filter:brightness(1.06); background:var(--accent); }
+.cdiv { width:1px; height:20px; background:var(--bd-strong); margin:0 5px; }
+.cgap { flex:1; }
+.sbox { display:flex; align-items:center; gap:8px; width:230px; height:32px; padding:0 10px;
+  background:var(--pop); border:1px solid var(--bd-strong); border-radius:var(--r-ctl); box-shadow:var(--shadow-card); }
+.sbox svg { width:14px; height:14px; stroke:var(--ink-3); fill:none; stroke-width:1.6; }
+.sbox span { font:400 14px/1 inherit; color:var(--ink-3); }
+
+/* 主体 */
+.body { flex:1; display:flex; min-height:0; }
+
+/* 侧栏：窄态 = 48px 图标轨；宽态 = 244px 展开 */
+.nav { width:48px; flex-shrink:0; display:flex; flex-direction:column; padding:6px 0;
+  background:linear-gradient(180deg,var(--mica),var(--mica-2)); border-right:1px solid var(--bd);
+  transition:width 220ms cubic-bezier(.33,0,.2,1); }
+.win.wide .nav { width:244px; padding:8px 4px; }
+.nav .grp { display:none; font:600 12px/1 inherit; color:var(--ink-3); padding:10px 16px 8px; }
+.win.wide .nav .grp { display:block; }
+.ni { position:relative; height:40px; margin:1px 6px; border-radius:var(--r-ctl); display:flex; align-items:center;
+  padding:0 9px; cursor:default; color:var(--ink); transition:background var(--t); }
+.win.wide .ni { margin:1px 4px; padding:0 11px; }
+.ni::before { content:''; position:absolute; left:-6px; top:50%; transform:translateY(-50%);
+  width:3px; height:0; border-radius:2px; background:var(--accent); transition:height var(--t); }
+.win.wide .ni::before { left:-4px; }
+.ni:hover { background:var(--fill-hover); }
+.ni.on { background:var(--fill-sel); }
+.ni.on::before { height:20px; }
+.ni svg { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+.ni .lbl { display:none; font:400 14px/1 inherit; margin-left:12px; flex:1; white-space:nowrap; }
+.win.wide .ni .lbl { display:block; }
+.ni .cnt { display:none; font:400 12px/1 inherit; color:var(--ink-3); }
+.win.wide .ni .cnt { display:block; }
+.ni .badge { position:absolute; right:2px; top:5px; min-width:8px; height:8px; border-radius:4px; background:var(--accent); }
+.win.wide .ni .badge { display:none; }
+/* 图标轨 hover 浮出名称（Fluent ToolTip 同款小卡） */
+.ni .tip { position:absolute; left:52px; top:50%; transform:translateY(-50%) translateX(-4px);
+  background:var(--pop); border:1px solid var(--bd-strong); border-radius:var(--r-sm); box-shadow:var(--shadow-card);
+  font:400 12px/1 inherit; color:var(--ink); padding:6px 9px; white-space:nowrap; opacity:0; pointer-events:none;
+  transition:opacity var(--t), transform var(--t); z-index:20; }
+.nav:hover .ni:hover .tip { opacity:1; transform:translateY(-50%) translateX(0); }
+.win.wide .ni .tip { display:none; }
+.nsep { height:1px; background:var(--bd-strong); margin:8px 12px; }
+.win:not(.wide) .nsep { margin:6px 10px; }
+
+/* 列表 */
+.list { flex:1; min-width:0; display:flex; flex-direction:column; background:var(--card); }
+.phead { padding:14px 20px 10px; display:flex; align-items:baseline; gap:10px; flex-shrink:0; }
+.phead h1 { font:600 20px/1.2 'Segoe UI Variable Display','Microsoft YaHei UI'; letter-spacing:.1px; }
+.phead .meta { font:400 12px/1 inherit; color:var(--ink-3); }
+.scroller { flex:1; overflow-y:auto; scrollbar-gutter:stable; padding:0 8px 8px; }
+.lhead { display:flex; align-items:center; gap:7px; padding:12px 12px 6px; font:600 13px/1 inherit; color:var(--ink-2); }
+.lhead .dot { width:7px; height:7px; border-radius:50%; }
+.lhead .n { font-weight:400; color:var(--ink-3); font-size:12px; }
+
+.item { position:relative; }
+.row { position:relative; height:44px; display:flex; align-items:center; gap:12px; padding:0 12px;
+  border-radius:var(--r-ctl); cursor:default; transition:background var(--t); }
+.row::before { content:''; position:absolute; left:0; top:50%; transform:translateY(-50%);
+  width:3px; height:0; border-radius:2px; background:var(--accent); transition:height var(--t); }
+.row:hover { background:var(--fill-hover); }
+.item.sel .row { background:var(--fill-sel); }
+.item.sel .row:hover { background:var(--fill-sel-hover); }
+.item.sel .row::before { height:20px; }
+.tile { width:20px; height:20px; border-radius:var(--r-sm); flex-shrink:0; display:flex; align-items:center;
+  justify-content:center; font:600 8.5px/1 'Segoe UI'; color:#fff; letter-spacing:.2px; }
+.id { width:250px; flex-shrink:0; min-width:0; }
+.id .t { display:block; font:400 14px/1.25 inherit; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.id .s { display:block; font:400 12px/1.25 inherit; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px; }
+.url { flex:1; min-width:0; font:400 13px/1 Consolas,'Courier New',monospace; color:var(--ink-2);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.url b { font-weight:400; color:var(--ink); }
+.lock { width:14px; height:14px; stroke:var(--ink-3); fill:none; stroke-width:1.5; flex-shrink:0; }
+.plus { font:400 11px/1 inherit; color:var(--ink-2); background:var(--fill-sel); border:1px solid var(--bd-strong);
+  border-radius:var(--r-sm); padding:2px 5px; flex-shrink:0; }
+.col { width:52px; flex-shrink:0; font:400 13px/1 inherit; color:var(--ink-2); }
+.time { width:64px; flex-shrink:0; font:400 13px/1 inherit; color:var(--ink-3); text-align:right; }
+
+/* 行内展开（仅窄态）：详情长在行下面 */
+.detail { display:none; margin:0 12px 8px; padding:10px 14px 12px; border:1px solid var(--bd-strong);
+  border-top-color:var(--bd); border-radius:0 0 var(--r-ctl) var(--r-ctl); background:var(--pop); }
+.item.sel.open .detail { display:block; }
+.win.wide .detail { display:none !important; }
+.drow { display:flex; align-items:center; gap:10px; padding:5px 0; }
+.drow + .drow { border-top:1px solid var(--bd); }
+.dlab { width:36px; flex-shrink:0; font:400 12px/1 inherit; color:var(--ink-3); }
+.dval { flex:1; min-width:0; font:400 13px/1.4 Consolas,'Courier New',monospace; color:var(--ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dval.prose { font-family:inherit; color:var(--ink-2); }
+.dact { height:26px; padding:0 9px; border:1px solid var(--bd-strong); border-radius:var(--r-sm); background:var(--card);
+  color:var(--accent); font:600 12px/1 inherit; cursor:default; display:flex; align-items:center; gap:5px; flex-shrink:0; }
+.dact:hover { background:var(--fill-hover); }
+.dact svg { width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.dfoot { display:flex; justify-content:flex-end; gap:8px; padding-top:9px; margin-top:4px; border-top:1px solid var(--bd); }
+.dbtn { height:28px; padding:0 12px; border:1px solid var(--bd-strong); border-radius:var(--r-ctl); background:var(--card);
+  color:var(--ink); font:400 13px/1 inherit; cursor:default; display:flex; align-items:center; gap:7px; box-shadow:var(--shadow-card); }
+.dbtn:hover { background:var(--fill-hover); }
+.dbtn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+
+/* 预览窗格（仅宽态） */
+.pane { display:none; width:300px; flex-shrink:0; flex-direction:column; padding:18px 16px 12px;
+  background:linear-gradient(180deg,var(--mica),var(--mica-2)); border-left:1px solid var(--bd); overflow:hidden; }
+.win.wide .pane { display:flex; }
+.ptile { width:44px; height:44px; border-radius:var(--r-ctl); background:#24292f; color:#fff; display:flex;
+  align-items:center; justify-content:center; font:600 16px/1 'Segoe UI'; margin-bottom:12px; }
+.pt { font:600 15px/1.3 inherit; }
+.ps { font:400 12px/1.4 inherit; color:var(--ink-3); margin-top:3px; }
+.pcard { margin-top:14px; background:var(--pop); border:1px solid var(--bd-strong); border-radius:var(--r-ctl);
+  box-shadow:var(--shadow-card); }
+.prow { display:flex; align-items:center; gap:8px; padding:10px 12px; }
+.prow + .prow { border-top:1px solid var(--bd); }
+.pcol { flex:1; min-width:0; }
+.plab { font:400 11px/1 inherit; color:var(--ink-3); margin-bottom:5px; }
+.pval { font:400 12.5px/1.3 Consolas,monospace; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.plink { font:600 12px/1 inherit; color:var(--accent); cursor:default; flex-shrink:0; }
+.pnote { margin-top:14px; font:400 12.5px/1.65 inherit; color:var(--ink-2); }
+.pfoot { margin-top:auto; display:flex; gap:8px; }
+.pfoot .pbtn { flex:1; height:32px; border:1px solid var(--bd-strong); border-radius:var(--r-ctl); background:var(--card);
+  box-shadow:var(--shadow-card); display:flex; align-items:center; justify-content:center; gap:7px;
+  font:400 13px/1 inherit; color:var(--ink); cursor:default; }
+.pfoot .pbtn:hover { background:var(--fill-hover); }
+.pfoot .pbtn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+
+/* 状态栏 */
+.status { height:27px; flex-shrink:0; display:flex; align-items:center; padding:0 12px; gap:12px;
+  background:var(--card); border-top:1px solid var(--bd); font:400 12px/1 inherit; color:var(--ink-2); }
+.status .sgap { flex:1; }
+.status .sep { width:1px; height:12px; background:var(--bd-strong); }
+.status .ok { width:7px; height:7px; border-radius:50%; background:#107c10; display:inline-block; margin-right:6px; }
+
+/* 演示切换 */
+.tog { position:fixed; right:18px; bottom:18px; z-index:40; display:flex; gap:2px; padding:3px;
+  background:rgba(20,22,28,.82); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,.4); }
+.tog button { border:0; height:26px; padding:0 10px; border-radius:4px; background:transparent; color:#ddd;
+  font:400 12px/1 'Segoe UI Variable Text','Microsoft YaHei UI'; cursor:pointer; }
+.tog button.on { background:#fff; color:#111; font-weight:600; }
+</style>
+</head>
+<body>
+
+<div class="win" id="win">
+  <div class="titlebar">
+    <div class="tb-brand"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div>
+    <div class="tb-name">desko</div>
+    <div class="caps">
+      <button class="cap"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
+      <button class="cap"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" fill="none"/></svg></button>
+      <button class="cap x"><svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg></button>
+    </div>
+  </div>
+
+  <div class="cmdbar">
+    <button class="cbtn primary"><svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg>新增</button>
+    <div class="cdiv"></div>
+    <button class="cbtn"><svg viewBox="0 0 20 20"><path d="M4 6h12M6 10h8M8 14h4"/></svg>排序</button>
+    <button class="cbtn"><svg viewBox="0 0 20 20"><path d="M4 4h12l-4.6 5.6V15L8.6 13V9.6z"/></svg>筛选</button>
+    <div class="cdiv"></div>
+    <button class="cbtn"><svg viewBox="0 0 20 20"><path d="M15.5 8A5.5 5.5 0 1 0 5 10.7M5.5 12A5.5 5.5 0 1 0 15 9.3"/><path d="M15.5 4.5V8H12M4.5 15.5V12H8"/></svg>同步备份</button>
+    <div class="cgap"></div>
+    <div class="sbox"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><span>搜索名称、网址或备注</span></div>
+  </div>
+
+  <div class="body">
+    <div class="nav">
+      <div class="grp">工作台</div>
+      <div class="ni on"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.4 2 3.4 4.6 3.4 7.5s-1 5.5-3.4 7.5c-2.4-2-3.4-4.6-3.4-7.5s1-5.5 3.4-7.5z"/></svg><span class="lbl">网址收藏</span><span class="cnt">142</span><span class="tip">网址收藏 · 142</span></div>
+      <div class="ni"><svg viewBox="0 0 20 20"><path d="M5 3h10v14l-2.5-2-2.5 2-2.5-2L5 17z"/><path d="M7.5 7h5M7.5 10.5h5"/></svg><span class="lbl">小记</span><span class="cnt">87</span><span class="tip">小记 · 87</span></div>
+      <div class="ni"><svg viewBox="0 0 20 20"><path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H8l1.8 2H15.5A1.5 1.5 0 0 1 17 5.5v9A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5z"/></svg><span class="lbl">文件快捷</span><span class="cnt">23</span><span class="tip">文件快捷 · 23</span></div>
+      <div class="ni"><svg viewBox="0 0 20 20"><path d="M10 2.5l6 2.2v4.6c0 3.6-2.4 6.4-6 8.2-3.6-1.8-6-4.6-6-8.2V4.7z"/><path d="M7.5 10l1.8 1.8 3.4-3.6"/></svg><span class="lbl">验证码</span><span class="cnt">5</span><span class="tip">验证码 · 5</span></div>
+      <div class="ni"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.4 2 3.4 4.6 3.4 7.5s-1 5.5-3.4 7.5c-2.4-2-3.4-4.6-3.4-7.5s1-5.5 3.4-7.5z"/><path d="M6 6l8 8"/></svg><span class="lbl">局域网传输</span><span class="tip">局域网传输</span></div>
+      <div class="nsep"></div>
+      <div class="ni"><svg viewBox="0 0 20 20"><rect x="3" y="4.5" width="14" height="11" rx="1.5"/><path d="M3.5 5.5L10 11l6.5-5.5"/></svg><span class="lbl">收件口</span><span class="cnt">2</span><span class="badge"></span><span class="tip">收件口 · 2 项待处理</span></div>
+      <div class="ni"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.8"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M15.3 4.7l-1.6 1.6M6.3 13.7l-1.6 1.6"/></svg><span class="lbl">设置</span><span class="tip">设置</span></div>
+    </div>
+
+    <div class="list">
+      <div class="phead"><h1>网址收藏</h1><span class="meta">142 条 · 最近更新 3 分钟前</span></div>
+      <div class="scroller">
+
+        <div class="lhead"><span class="dot" style="background:#4b7bb5"></span>开发<span class="n">38</span></div>
+
+        <div class="item sel open" id="gh">
+          <div class="row">
+            <span class="tile" style="background:#24292f">GH</span>
+            <span class="id"><span class="t">GitHub · jxiaow</span><span class="s">私有仓库主账号</span></span>
+            <span class="url"><b>github.com</b> /settings/tokens…</span>
+            <svg class="lock" viewBox="0 0 20 20"><rect x="5" y="9" width="10" height="7" rx="1.2"/><path d="M7.5 9V6.8a2.5 2.5 0 0 1 5 0V9"/></svg>
+            <span class="col">开发</span><span class="time">3 分钟前</span>
+          </div>
+          <div class="detail">
+            <div class="drow"><span class="dlab">网址</span><span class="dval">github.com/settings/tokens</span><span class="dact">打开</span></div>
+            <div class="drow"><span class="dlab">账号</span><span class="dval">jxiaow</span><span class="dact"><svg viewBox="0 0 14 14"><rect x="4.5" y="4.5" width="7" height="7" rx="1"/><path d="M9.5 4.5v-2a1 1 0 0 0-1-1h-5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2"/></svg>复制</span></div>
+            <div class="drow"><span class="dlab">口令</span><span class="dval">••••••••••••••</span><span class="dact">显示</span></div>
+            <div class="drow"><span class="dlab">备注</span><span class="dval prose">令牌每月 1 号轮换，另存两个子路径入口。</span></div>
+            <div class="dfoot">
+              <button class="dbtn"><svg viewBox="0 0 16 16"><path d="M8 2.5v7M5 6.5L8 9.5l3-3M3 12.5h10"/></svg>送到手机</button>
+              <button class="dbtn"><svg viewBox="0 0 16 16"><path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z"/></svg>编辑</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#e5568a">FE</span>
+            <span class="id"><span class="t">Figma · 设计稿</span><span class="s">desko 视觉走查</span></span>
+            <span class="url"><b>figma.com</b> /files/desko</span>
+            <span class="col">设计</span><span class="time">昨天</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#3b6ec4">JE</span>
+            <span class="id"><span class="t">Jenkins · 内网</span><span class="s">CI/CD，需 VPN</span></span>
+            <span class="url"><b>jenkins.internal.corp</b> /job/desk…</span>
+            <span class="col">开发</span><span class="time">2 天前</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#6a4f8a">SE</span>
+            <span class="id"><span class="t">Sentry · desko</span><span class="s">崩溃监控</span></span>
+            <span class="url"><b>sentry.io</b> /organizations/desko</span>
+            <span class="col">开发</span><span class="time">1 周前</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#4a5560">SO</span>
+            <span class="id"><span class="t">Stack Overflow</span><span class="s">搜索优先，别乱翻</span></span>
+            <span class="url"><b>stackoverflow.com</b> /questions</span>
+            <span class="col">开发</span><span class="time">2 周前</span>
+          </div>
+        </div>
+
+        <div class="lhead"><span class="dot" style="background:#c07c30"></span>办公<span class="n">24</span></div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#1a73e8">ON</span>
+            <span class="id"><span class="t">ONES · 工作台</span><span class="s">需求 / 缺陷 / Wiki</span></span>
+            <span class="url"><b>ones.cn</b> /dashboard</span><span class="plus">+3</span>
+            <span class="col">办公</span><span class="time">3 天前</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#d64541">MA</span>
+            <span class="id"><span class="t">Gmail · 工作邮箱</span><span class="s">每月 1 号对账</span></span>
+            <span class="url"><b>mail.google.com</b></span><span class="plus">+3</span>
+            <svg class="lock" viewBox="0 0 20 20"><rect x="5" y="9" width="10" height="7" rx="1.2"/><path d="M7.5 9V6.8a2.5 2.5 0 0 1 5 0V9"/></svg>
+            <span class="col">办公</span><span class="time">1 周前</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#b06a2c">HR</span>
+            <span class="id"><span class="t">公司考勤</span><span class="s">&nbsp;</span></span>
+            <span class="url"><b>hr.corp</b> /attendance</span>
+            <span class="col">办公</span><span class="time">1 月前</span>
+          </div>
+        </div>
+
+        <div class="lhead"><span class="dot" style="background:#3a9b57"></span>生活<span class="n">19</span></div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#1f7a4d">银</span>
+            <span class="id"><span class="t">招商银行</span><span class="s">工资卡</span></span>
+            <span class="url"><b>cmbchina.com</b> /personal</span>
+            <svg class="lock" viewBox="0 0 20 20"><rect x="5" y="9" width="10" height="7" rx="1.2"/><path d="M7.5 9V6.8a2.5 2.5 0 0 1 5 0V9"/></svg>
+            <span class="col">金融</span><span class="time">2 周前</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#7d8288">面</span>
+            <span class="id"><span class="t">常去的面馆</span><span class="s">挪到学校西侧了</span></span>
+            <span class="url"><b>dianping.com</b> /shop/33</span>
+            <span class="col">生活</span><span class="time">1 周前</span>
+          </div>
+        </div>
+
+        <div class="lhead"><span class="dot" style="background:#4b7bb5"></span>设备<span class="n">7</span></div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#2e8b8b">路</span>
+            <span class="id"><span class="t">路由器后台</span><span class="s">光猫桥接，改前拍照</span></span>
+            <span class="url"><b>192.168.1.1</b></span>
+            <svg class="lock" viewBox="0 0 20 20"><rect x="5" y="9" width="10" height="7" rx="1.2"/><path d="M7.5 9V6.8a2.5 2.5 0 0 1 5 0V9"/></svg>
+            <span class="col">设备</span><span class="time">1 月前</span>
+          </div>
+        </div>
+        <div class="item">
+          <div class="row">
+            <span class="tile" style="background:#3c7f5c">集</span>
+            <span class="id"><span class="t">NAS · 相册</span><span class="s">只在内网可达</span></span>
+            <span class="url"><b>192.168.1.20:5000</b></span><span class="plus">+1</span>
+            <span class="col">设备</span><span class="time">4 天前</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="pane">
+      <div class="ptile">GH</div>
+      <div class="pt">GitHub · jxiaow</div>
+      <div class="ps">开发 · 3 分钟前使用</div>
+      <div class="pcard">
+        <div class="prow"><div class="pcol"><div class="plab">网址</div><div class="pval">github.com/settings/tokens</div></div><span class="plink">打开</span></div>
+        <div class="prow"><div class="pcol"><div class="plab">账号</div><div class="pval">jxiaow</div></div><span class="plink">复制</span></div>
+        <div class="prow"><div class="pcol"><div class="plab">口令</div><div class="pval">••••••••••••••</div></div><span class="plink">显示</span></div>
+      </div>
+      <div class="pnote">私有仓库主账号。令牌每月 1 号轮换，另存两个子路径入口。</div>
+      <div class="pfoot">
+        <button class="pbtn"><svg viewBox="0 0 16 16"><path d="M8 2.5v7M5 6.5L8 9.5l3-3M3 12.5h10"/></svg>送到手机</button>
+        <button class="pbtn"><svg viewBox="0 0 16 16"><path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3z"/></svg>编辑</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="status">
+    <span>共 142 项</span><span class="sep"></span><span>已选 1 项</span>
+    <span class="sgap"></span>
+    <span>收件口 2 项待处理</span><span class="sep"></span>
+    <span><span class="ok"></span>已解锁 · 12 分钟后自动上锁</span>
+  </div>
+</div>
+
+<div class="tog">
+  <button data-m="compact" class="on">窄态 1000</button>
+  <button data-m="wide">宽态三段</button>
+  <button data-m="dark">深色</button>
+</div>
+
+<script>
+const win = document.getElementById('win');
+const h = new URLSearchParams(location.hash.slice(1));
+let mode = h.has('wide') ? 'wide' : 'compact';
+function setMode(m) {
+  mode = m;
+  win.classList.toggle('wide', m === 'wide');
+  sync();
+}
+function sync() {
+  document.querySelectorAll('.tog button').forEach(b => {
+    if (b.dataset.m === 'dark') b.classList.toggle('on', document.body.classList.contains('dark'));
+    else b.classList.toggle('on', b.dataset.m === mode);
+  });
+}
+if (h.has('dark')) document.body.classList.add('dark');
+setMode(mode);
+for (const b of document.querySelectorAll('.tog button')) b.addEventListener('click', () => {
+  if (b.dataset.m === 'dark') { document.body.classList.toggle('dark'); sync(); return; }
+  setMode(b.dataset.m);
+});
+/* 行点击：窄态换展开行；宽态只换选中 */
+const items = [...document.querySelectorAll('.item')];
+for (const it of items) it.addEventListener('click', () => {
+  for (const o of items) o.classList.remove('sel','open');
+  it.classList.add('sel');
+  if (!win.classList.contains('wide')) it.classList.add('open');
+});
+sync();
+</script>
+</body>
+</html>

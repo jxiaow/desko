@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Desko · 网址收藏</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg-app: #f4f7f5;
+    --bg-surface: #ffffff;
+    --bg-subtle: #ebf0ed;
+    --border-base: #dce3df;
+    --border-card: #e2e8e4;
+    --text-main: #0f1713;
+    --text-muted: #4a5c52;
+    --text-dim: #7d9185;
+    --brand: #216747;
+    --brand-light: #e4efe9;
+    --brand-hover: #195237;
+  }
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    box-sizing: border-box;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+    background: var(--bg-app);
+    color: var(--text-main);
+  }
+  .font-mono, .mono {
+    font-family: Consolas, "Cascadia Mono", "JetBrains Mono", "Courier New", monospace;
+  }
+  /* ---- 侧栏折叠动画：宽度 + 文字 max-width 双过渡，收拢后无残留占位 ---- */
+  #sidebar {
+    width: 176px;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-base);
+    transition: width .2s cubic-bezier(.4,0,.2,1);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  #sidebar.collapsed { width: 52px; }
+  .side-label {
+    opacity: 1;
+    max-width: 200px;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity .15s ease, max-width .2s cubic-bezier(.4,0,.2,1);
+  }
+  #sidebar.collapsed .side-label { opacity: 0; max-width: 0; }
+  .side-row {
+    transition: padding .2s cubic-bezier(.4,0,.2,1), gap .2s cubic-bezier(.4,0,.2,1);
+  }
+  #sidebar.collapsed .side-row {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+    gap: 0;
+  }
+  .select-all { user-select: all; -webkit-user-select: all; }
+  .entry-card { height: 58px; border: 1px solid var(--border-card); background: var(--bg-surface); transition: border-color .12s ease, background-color .12s ease; }
+  .entry-card:hover { border-color: var(--border-base); }
+</style>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          app: 'var(--bg-app)', surface: 'var(--bg-surface)', subtle: 'var(--bg-subtle)',
+          line: 'var(--border-base)', card: 'var(--border-card)',
+          main: 'var(--text-main)', muted: 'var(--text-muted)', dim: 'var(--text-dim)',
+          brand: 'var(--brand)', brandlight: 'var(--brand-light)', brandhover: 'var(--brand-hover)'
+        }
+      }
+    }
+  }
+</script>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col">
+
+  <!-- ===== 一、顶部全局系统栏 40px · 窗口置顶通栏 ===== -->
+  <header class="h-[40px] shrink-0 flex items-center justify-between bg-surface border-b border-line" data-tauri-drag-region>
+    <div class="flex items-center gap-2 pl-3 select-none">
+      <span class="w-[20px] h-[20px] rounded-[5px] bg-brand text-white text-[11px] font-semibold grid place-items-center leading-none">D</span>
+      <span class="text-[14px] font-semibold text-main">Desko</span>
+    </div>
+    <div class="flex items-center h-full">
+      <button class="w-[44px] h-full grid place-items-center text-dim hover:bg-subtle hover:text-main" title="最小化">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 5h8" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button class="w-[44px] h-full grid place-items-center text-dim hover:bg-subtle hover:text-main" title="最大化">
+        <svg width="10" height="10" viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button class="w-[44px] h-full grid place-items-center text-dim hover:bg-subtle hover:text-main" title="关闭">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== 二、垂直分栏工作区 ===== -->
+  <div class="flex-1 min-h-0 flex">
+
+    <!-- 左侧侧边栏：纯导航容器，无 Logo -->
+    <aside id="sidebar" class="flex flex-col">
+      <nav class="flex-1 min-h-0 overflow-y-auto py-2 px-2 flex flex-col gap-1">
+        <a href="#" class="side-row flex items-center gap-2.5 h-[34px] px-2.5 rounded-md bg-brandlight text-brand font-medium text-[13px]">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="shrink-0"><path d="M2 13V3m0 10h12M5 10l3-4 2 2.5L13 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="side-label flex-1 min-w-0">网址收藏</span>
+          <span class="side-label shrink-0 text-[12px] mono px-1.5 rounded-full bg-surface border border-line text-dim leading-[18px]">128</span>
+        </a>
+        <a href="#" class="side-row flex items-center gap-2.5 h-[34px] px-2.5 rounded-md text-muted font-normal text-[13px] hover:bg-subtle hover:text-main">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="shrink-0"><path d="M3 2h10v12l-5-3-5 3V2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+          <span class="side-label flex-1 min-w-0">随手小记</span>
+          <span class="side-label shrink-0 text-[12px] mono px-1.5 rounded-full bg-subtle text-dim leading-[18px]">32</span>
+        </a>
+        <a href="#" class="side-row flex items-center gap-2.5 h-[34px] px-2.5 rounded-md text-muted font-normal text-[13px] hover:bg-subtle hover:text-main">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="shrink-0"><path d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 2h4.5A1.5 1.5 0 0114 6.5v5A1.5 1.5 0 0112.5 13h-9A1.5 1.5 0 012 11.5v-7z" stroke="currentColor" stroke-width="1.4"/></svg>
+          <span class="side-label flex-1 min-w-0">文件快捷</span>
+          <span class="side-label shrink-0 text-[12px] mono px-1.5 rounded-full bg-subtle text-dim leading-[18px]">17</span>
+        </a>
+        <a href="#" class="side-row flex items-center gap-2.5 h-[34px] px-2.5 rounded-md text-muted font-normal text-[13px] hover:bg-subtle hover:text-main">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="shrink-0"><path d="M8 11.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM4.5 9a5 5 0 017 0M2 6.5a8.5 8.5 0 0112 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="side-label flex-1 min-w-0">局域网传</span>
+          <span class="side-label shrink-0 text-[12px] mono px-1.5 rounded-full bg-subtle text-dim leading-[18px]">5</span>
+        </a>
+        <a href="#" class="side-row flex items-center gap-2.5 h-[34px] px-2.5 rounded-md text-muted font-normal text-[13px] hover:bg-subtle hover:text-main">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="shrink-0"><path d="M8 10a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" stroke-width="1.4"/><path d="M13 8c0 .4-.05.7-.13 1l1.03.9-1 1.8-1.37-.4a5 5 0 01-1.7 1L9.5 13.7H7.37l-.3-1.35a5 5 0 01-1.73-1l-1.37.4-1-1.8 1.03-.9A4.6 4.6 0 013.9 8c0-.4.05-.7.1-1L2.97 6.1l1-1.8 1.37.4a5 5 0 011.7-1l.3-1.35h2.13l.3 1.35a5 5 0 011.7 1l1.37-.4 1 1.8-1.1.9c.08.3.13.6.13 1z" stroke="currentColor" stroke-width="1.2"/></svg>
+          <span class="side-label flex-1 min-w-0">设置</span>
+        </a>
+      </nav>
+
+      <!-- 侧栏底部：收折切换按钮 -->
+      <button id="sidebarToggle" onclick="toggleSidebar()"
+        class="side-row shrink-0 flex items-center gap-2 h-[38px] mx-2 mb-2 px-2.5 rounded-md text-dim text-[13px] hover:bg-subtle hover:text-main"
+        title="收起侧栏 (Ctrl+B)">
+        <svg id="toggleIcon" width="16" height="16" viewBox="0 0 16 16" fill="none" class="shrink-0"><path id="togglePath" d="M9.5 4L5.5 8l4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="side-label">收起</span>
+      </button>
+    </aside>
+
+    <!-- 右侧主内容区 -->
+    <main class="flex-1 min-w-0 flex flex-col bg-app">
+
+      <!-- 顶部工具栏 46px -->
+      <div class="h-[46px] shrink-0 flex items-center gap-3 px-3 bg-surface border-b border-line">
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button onclick="toggleSidebar()" class="w-[26px] h-[26px] grid place-items-center rounded-md text-dim hover:bg-subtle hover:text-main" title="切换侧栏">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M2 8h8M2 13h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </button>
+          <h1 class="text-[14px] font-semibold text-main">网址收藏</h1>
+        </div>
+
+        <label class="h-[32px] flex-1 min-w-[140px] max-w-[320px] flex items-center gap-2 px-2.5 rounded-md bg-app border border-line focus-within:border-brand">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" class="shrink-0 text-dim"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L13.5 13.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <input type="text" placeholder="搜索标题、网址…" class="flex-1 min-w-0 bg-transparent outline-none border-0 text-[13px] text-main placeholder:text-dim" />
+          <kbd class="shrink-0 mono text-[10px] leading-none text-dim bg-subtle border border-line rounded px-1 py-[3px]">Ctrl K</kbd>
+        </label>
+
+        <div class="shrink-0 flex items-center gap-1.5">
+          <button class="h-[32px] px-3 rounded-md text-[13px] font-medium bg-brandlight text-brand">全部</button>
+          <button class="h-[32px] px-3 rounded-md text-[13px] text-muted hover:bg-subtle hover:text-main">XYLink App</button>
+          <button class="h-[32px] px-3 rounded-md text-[13px] text-muted hover:bg-subtle hover:text-main">Jenkins</button>
+        </div>
+
+        <div class="shrink-0 ml-auto flex items-center gap-2">
+          <button class="h-[32px] px-3 rounded-md border border-line text-[13px] text-muted hover:bg-subtle hover:text-main">批量编辑</button>
+          <button class="h-[32px] px-3.5 rounded-md bg-brand hover:bg-brandhover text-white text-[13px] font-medium flex items-center gap-1">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            新增条目
+          </button>
+        </div>
+      </div>
+
+      <!-- 卡片列表 -->
+      <section id="list" class="flex-1 min-h-0 overflow-y-auto px-3 py-2.5 flex flex-col gap-1.5"></section>
+
+      <!-- 底部状态栏 -->
+      <footer class="h-[28px] shrink-0 flex items-center justify-between px-3 border-t border-line bg-surface text-[12px] text-dim">
+        <span id="statusLeft">共 8 条 · 当前筛选「全部」</span>
+        <span class="mono">1040 × 670</span>
+      </footer>
+    </main>
+  </div>
+
+<script>
+const ENTRIES = [
+  { badge:'XY', title:'XYLink 管理台',   note:'内部门户 · 日常构建入口',       url:'http://xylink.internal:8080/dashboard', chip:'prod',     cat:'XYLink App' },
+  { badge:'JE', title:'Jenkins 构建',    note:'CI 任务队列与产物下载',         url:'http://jenkins.internal/job/xyapp',     chip:'20260928', cat:'Jenkins' },
+  { badge:'LX', title:'Linux 内核源码',  note:'内核社区邮件列表归档',           url:'https://lore.kernel.org/lkml',          chip:'master',   cat:'开发文档' },
+  { badge:'LA', title:'Lang 文档站',     note:'标准库 API 参考',               url:'https://docs.lang.dev/stdlib',          chip:'v3.2',     cat:'开发文档' },
+  { badge:'WD', title:'Web 调试代理',    note:'本地请求抓包面板',               url:'http://127.0.0.1:9090/requests',        chip:'local',    cat:'工具' },
+  { badge:'GI', title:'Gitee 镜像仓',    note:'内网依赖镜像同步',               url:'https://gitee.com/mirrors/openssl',     chip:'mirror',   cat:'Jenkins' },
+  { badge:'CM', title:'招商银行企业网',  note:'对公网银 · U 盾',               url:'https://bcs.cmbchina.com/login',        chip:'20260921', cat:'金融' },
+  { badge:'RO', title:'路由器后台',      note:'局域网设备管理',                 url:'http://192.168.31.1/admin',             chip:'lan',      cat:'工具' },
+];
+
+const ICON = {
+  copy: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 3.5A1.5 1.5 0 009 2H4a1.5 1.5 0 00-1.5 1.5v5A1.5 1.5 0 004 10" stroke="currentColor" stroke-width="1.3"/></svg>',
+  open: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M9 3h4v4M13 3L7 9M11 9.5V12a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 011 12V5a1.5 1.5 0 011.5-1.5H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  more: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="3.5" cy="8" r="1.1" fill="currentColor"/><circle cx="8" cy="8" r="1.1" fill="currentColor"/><circle cx="12.5" cy="8" r="1.1" fill="currentColor"/></svg>',
+};
+
+function render() {
+  document.getElementById('list').innerHTML = ENTRIES.map(e => `
+  <article class="entry-card group shrink-0 rounded-lg flex items-center gap-3 px-3">
+    <div class="w-[220px] shrink-0 flex items-center gap-2.5 min-w-0">
+      <span class="w-[32px] h-[32px] shrink-0 rounded-lg bg-subtle text-brand text-[12px] font-semibold grid place-items-center mono leading-none">${e.badge}</span>
+      <span class="min-w-0 flex flex-col justify-center">
+        <span class="text-[14px] font-semibold text-main truncate leading-[18px]">${e.title}</span>
+        <span class="text-[12px] text-dim truncate leading-[16px]">${e.note}</span>
+      </span>
+    </div>
+    <div class="flex-1 min-w-0 flex items-center gap-2">
+      <span class="select-all mono text-[12px] text-muted truncate leading-[16px]">${e.url}</span>
+      <span class="shrink-0 text-[12px] mono text-dim bg-subtle rounded px-1.5 leading-[20px]">${e.chip}</span>
+    </div>
+    <div class="w-[100px] shrink-0 flex justify-center">
+      <span class="max-w-full truncate text-[12px] text-brand bg-brandlight rounded-full px-2 leading-[20px]">${e.cat}</span>
+    </div>
+    <div class="w-[80px] shrink-0 flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity duration-100">
+      <button class="w-[22px] h-[22px] grid place-items-center rounded text-dim hover:bg-subtle hover:text-main" title="复制网址">${ICON.copy}</button>
+      <button class="w-[22px] h-[22px] grid place-items-center rounded text-dim hover:bg-subtle hover:text-main" title="外部打开">${ICON.open}</button>
+      <button class="w-[22px] h-[22px] grid place-items-center rounded text-dim hover:bg-subtle hover:text-main" title="更多">${ICON.more}</button>
+    </div>
+  </article>`).join('');
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const collapsed = sb.classList.toggle('collapsed');
+  document.getElementById('togglePath').setAttribute('d', collapsed ? 'M6.5 4l4 4-4 4' : 'M9.5 4L5.5 8l4 4');
+  document.getElementById('sidebarToggle').title = (collapsed ? '展开侧栏' : '收起侧栏') + ' (Ctrl+B)';
+  const lbl = document.querySelector('#sidebarToggle .side-label');
+  if (lbl) lbl.textContent = collapsed ? '' : '收起';
+}
+
+render();
+if (location.hash === '#collapsed') toggleSidebar();
+</script>
+</body>
+</html>

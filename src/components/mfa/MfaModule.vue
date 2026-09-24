@@ -319,36 +319,32 @@ const onPaste = async (e: ClipboardEvent) => {
 </template>
 
 <style scoped>
-.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) var(--dock-clearance); }
-
-.page-bar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--bg);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: calc(var(--space-5) + var(--space-1)) 0 var(--space-3);
-}
+/* .content-inner / .page-bar / 主按钮走 global.css 的页面骨架；本页计数顶左、动作钮顶右 */
 .page-bar .btn-primary { margin-left: auto; }
 
 .mfa-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
   gap: var(--space-3);
+  padding-top: var(--space-2);
 }
 
 .mfa-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--panel-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
   padding: var(--space-3) var(--space-4);
   cursor: pointer;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
 }
-.mfa-card:hover { border-color: var(--accent); }
-.mfa-card:focus-visible { box-shadow: 0 0 0 3px var(--accent-ring); }
+/* hover 与收藏/文件行卡、小记便签同一配方 */
+.mfa-card:hover {
+  border-color: var(--border-card-hover);
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-surface));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.025);
+}
+.mfa-card:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
 
 .card-top { display: flex; align-items: center; gap: var(--space-2); }
 .card-issuer {
@@ -367,7 +363,7 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 
 .card-label {
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -391,11 +387,17 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 .mfa-card.expiring .timer-fill { background: var(--warning); }
 .timer-text { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; min-width: 24px; text-align: right; }
 
-/* 加载骨架 */
-.mfa-card.skeleton { cursor: default; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
-.skeleton-line { height: 12px; border-radius: 5px; background: var(--hover); animation: skeleton-pulse 1.5s ease-in-out infinite; }
-.skeleton-line.w40 { width: 40%; }
-.skeleton-line.w70 { width: 70%; }
+/* 加载骨架：呼吸走在容器上（与行卡页一致），条块只出静态色 */
+.mfa-card.skeleton {
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.mfa-card.skeleton:hover { border-color: var(--border-subtle); background: var(--bg-surface); box-shadow: var(--shadow-card); }
+.skeleton-line { height: 12px; border-radius: 5px; }
 .skeleton-line.tall { height: 26px; }
 
 /* 添加弹窗 */
@@ -429,12 +431,12 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
   background: var(--panel-bg);
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   padding: var(--space-2) var(--space-3);
   resize: vertical;
 }
 .uri-box:focus { outline: none; border-color: var(--accent); }
 
 .qr-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.qr-hint { font-size: 11.5px; color: var(--text-faint); }
+.qr-hint { font-size: var(--text-xs); color: var(--text-faint); }
 </style>

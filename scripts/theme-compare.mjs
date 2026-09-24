@@ -1,4 +1,4 @@
-// 把 scripts/theme-shots.mjs 产出的同屏截图并排成四主题对比图。
+// 把 scripts/theme-shots.mjs 产出的同屏截图并排成多主题对比图。
 // 用法：node scripts/theme-compare.mjs
 import { chromium } from '@playwright/test'
 import { readdirSync } from 'node:fs'
@@ -7,6 +7,9 @@ const OUT = 'design/theme-shots'
 const THEMES = [
   { id: 'light-cool', name: '冷灰' },
   { id: 'light-warm', name: '暖纸墨' },
+  { id: 'light-celadon', name: '青瓷' },
+  { id: 'aluminum-pro', name: '冷铝' },
+  { id: 'swiss-monochrome', name: '瑞士黑白' },
   { id: 'linear-dark', name: 'Linear 深空' },
   { id: 'jetbrains-dark', name: 'JetBrains 炭黑' },
 ]
@@ -17,7 +20,7 @@ const keys = [...new Set(screens.map((f) => f.split('-').slice(1).join('-')))].s
 const html = `<!doctype html><meta charset="utf-8"><style>
 body{margin:0;font:13px system-ui;background:#fff}
 h2{margin:0;padding:10px 14px;background:#1a1b20;color:#fff;font-size:14px}
-.row{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:#888}
+.row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:#888}
 .cell{background:#fff;position:relative}
 .cell b{position:absolute;top:6px;left:6px;padding:3px 8px;background:#000c;color:#fff;font-size:12px;border-radius:4px;z-index:2}
 .cell img{display:block;width:100%}

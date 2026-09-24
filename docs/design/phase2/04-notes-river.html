@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Phase 2 · 04 小记时间河流</title>
+<style>
+/* 把小记列表从"按天分组的卡片堆"改成一条向下流动的河。
+   现状：NotesModule 以 day-group + NoteCard 卡片流呈现，每条小记视觉权重相同，
+        读的时候是在"翻纸"，不是在"看时间"。
+   提案：一条竖线贯穿全部小记 = 时间本身。每条小记是河上的一个停靠点：
+        · 形状编码类型 —— 圆点=普通，方块=加密，菱形=置顶（钉子沉在源头之上）。
+        · 滚动即阅读 —— 离视口中线越近的点越大越亮，其正文自动展开；
+          远离中线的收成一行标题。密度是连续变化的，不是"展开/折叠"两个硬状态。
+        · 天与天之间在河上插一枚日期牌，分组线同时就是河道上的里程碑。
+
+   交互：上下滚动看焦点如何随距离切换；点任意一条可直接跳为焦点。
+   注：色相沿用 01 号原型给小记定的锚点苔绿 #4d7c5f。 */
+
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --chrome: #eceef2;
+  --border: #dde0e5;
+  --border-subtle: #ebeef2;
+  --text: #1c2028;
+  --text-secondary: #5a606e;
+  --text-muted: #858c99;
+  --text-faint: #a8b0bc;
+  --hover: #f1f3f6;
+  --hue: #4d7c5f;                 /* 小记的模块色相 */
+  --hue-soft: #e8efe9;
+  --enc: #6a4f8a;
+  --radius: 8px;
+  --radius-pill: 99px;
+  --rail: 58px;                   /* 河道的宽度 */
+  --pitch: 78px;                  /* 固定行距：展开只在行距内生长，绝不推动其他条目，
+                                     于是焦点完全由几何位置决定，不存在"展开→布局变→焦点飘"的反馈环 */
+  --prose-budget: 42px;           /* 行距内留给正文的高度，约两行 */
+  --band: 48px;                   /* 焦点带半高：与 JS 里的展开半径 OPEN 保持一致（小于半个行距，所以带内永远只有一条） */
+  --font-mono: Consolas, 'Cascadia Code', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  font-size: 13px; color: var(--text); background: var(--bg);
+  height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased;
+}
+
+.app { height: 100vh; display: flex; flex-direction: column; }
+
+.titlebar { height: 40px; flex-shrink: 0; background: var(--chrome); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 12px; gap: 10px; }
+.brand { width: 20px; height: 20px; border-radius: 6px; background: var(--hue); display: flex;
+  align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 10px; }
+.crumb { font-size: 12px; color: var(--text-secondary); }
+.crumb span { color: var(--text-muted); }
+
+.head { flex-shrink: 0; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px 0 0; }
+.composer { margin-left: calc(var(--rail) + 2px); flex: 1; max-width: 560px; height: 32px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--panel);
+  display: flex; align-items: center; padding: 0 14px; color: var(--text-faint); font-size: 12.5px; }
+.chip { font-size: 11.5px; color: var(--text-secondary); border: 1px solid var(--border);
+  background: var(--panel); border-radius: var(--radius-pill); padding: 4px 11px; }
+.chip.on { background: var(--hue-soft); border-color: color-mix(in srgb, var(--hue) 32%, transparent); color: var(--hue); font-weight: 600; }
+
+/* ============ 河流容器 ============ */
+.canvas { flex: 1; position: relative; overflow: hidden; }
+.scroller { position: absolute; inset: 0; overflow-y: auto; scrollbar-width: thin; padding: 8px 0 56vh; }
+
+/* 河道本身：跟着内容长度走的连续渐变线，上端淡入、下端淡出 */
+.river { position: absolute; left: calc(var(--rail) / 2); top: 0; bottom: 0; width: 2px; margin-left: 16px;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--hue) 42%, var(--border)) 6%,
+    color-mix(in srgb, var(--hue) 42%, var(--border)) 94%, transparent); }
+
+/* 焦点带：视口中线附近淡淡的横向高光，告诉用户"在这儿的就是当前在读的" */
+.band { position: absolute; left: 0; right: 0; top: 50%; height: calc(var(--band) * 2);
+  transform: translateY(-50%); pointer-events: none;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--panel) 78%, transparent) 26%,
+    color-mix(in srgb, var(--panel) 78%, transparent) 74%, transparent); }
+
+/* 停靠点 = 一条小记。--grow 必须声明在 .stop 上：它是 JS 写入的目标，
+   若图省事写在 .body 上，会把从 .stop 继承来的值盖掉，正文就永远不展开。 */
+.stop { --grow: 0; position: relative; display: grid; grid-template-columns: var(--rail) 1fr; align-items: start;
+  height: var(--pitch); margin-left: 16px; cursor: pointer; }
+.slot { height: 100%; display: flex; align-items: flex-start; justify-content: center; padding-top: 12px; position: relative; }
+
+/* 节点：形状编码类型，尺寸/亮度由 JS 按离中线的距离连续设定 */
+.node { --s: 1; width: 11px; height: 11px; background: var(--hue);
+  transform: scale(var(--s)); opacity: var(--o, .55);
+  transition: box-shadow 200ms ease; flex-shrink: 0; }
+.node.dot { border-radius: 50%; }
+.node.sq  { border-radius: 3px; background: var(--enc); }
+.node.dia { border-radius: 2px; background: var(--hue); transform: scale(var(--s)) rotate(45deg); }
+.stop.at .node { box-shadow: 0 0 0 4px color-mix(in srgb, var(--hue) 18%, transparent); }
+.stop.at .node.sq { box-shadow: 0 0 0 4px color-mix(in srgb, var(--enc) 18%, transparent); }
+
+.body { padding: 8px 18px 8px 4px; min-width: 0; }
+.line1 { display: flex; align-items: baseline; gap: 8px; }
+.title { font-size: calc(12.5px + 1.5px * var(--grow)); font-weight: calc(500 + 150 * var(--grow));
+  color: color-mix(in srgb, var(--text) calc(52% + 48% * var(--grow)), var(--text-muted));
+  letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: font-size 180ms var(--e, ease), color 180ms linear; }
+.when { font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); flex-shrink: 0; }
+.tag { font-size: 10.5px; color: var(--hue); background: var(--hue-soft); border-radius: 4px; padding: 1px 6px; flex-shrink: 0; }
+.enc-mark { font-size: 10.5px; color: var(--enc); background: color-mix(in srgb, var(--enc) 11%, transparent);
+  border-radius: 4px; padding: 1px 6px; flex-shrink: 0; }
+
+/* 正文：在行距预留的预算内展开，超出部分用渐隐遮罩收掉（而不是硬裁一刀） */
+.prose { font-size: 13px; line-height: 1.75; color: var(--text-secondary);
+  max-height: calc(var(--grow) * var(--prose-budget)); overflow: hidden; opacity: var(--grow);
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent);
+  transition: max-height 220ms var(--e, ease), opacity 200ms linear; }
+.prose p + p { margin-top: 8px; }
+.prose .clip { font-family: var(--font-mono); font-size: 12px; background: var(--hover);
+  border: 1px solid var(--border-subtle); border-radius: 5px; padding: 1px 5px; }
+
+/* 日期牌：骑在河上的里程碑 */
+.flag { position: relative; margin: 18px 0 14px 16px; height: 24px; }
+.flag i { position: absolute; left: calc(var(--rail) / 2 - 3px); top: 6px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--panel); border: 2px solid color-mix(in srgb, var(--hue) 55%, transparent); }
+.flag b { position: absolute; left: calc(var(--rail) + 14px); top: 0; font-size: 11px; font-weight: 650;
+  letter-spacing: .05em; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.flag u { position: absolute; left: calc(var(--rail) + 14px); top: 0; margin-left: 54px; font-size: 11px;
+  color: var(--text-faint); text-decoration: none; }
+
+/* 置顶区：钉子钉在源头之上，不入河 */
+.pinned { margin: 0 0 6px 16px; padding: 0 18px 0 calc(var(--rail) + 4px); }
+.pinned .stop { grid-template-columns: var(--rail) 1fr; height: 44px; }
+
+.legend { position: fixed; left: 14px; bottom: 12px; right: 200px; z-index: 9; font-size: 11.5px;
+  color: var(--text-muted); line-height: 1.7;
+  background: color-mix(in srgb, var(--bg) 92%, transparent); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius); padding: 8px 11px; backdrop-filter: blur(3px); }
+.legend b { color: var(--text-secondary); font-weight: 600; }
+.legend em { font-style: normal; display: inline-block; vertical-align: middle; margin: 0 3px 0 8px; }
+.lg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hue); }
+.lg-sq { width: 8px; height: 8px; border-radius: 2px; background: var(--enc); }
+.lg-dia { width: 8px; height: 8px; background: var(--hue); transform: rotate(45deg); }
+
+.replay { position: fixed; right: 14px; bottom: 12px; z-index: 9; height: 30px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--panel);
+  color: var(--text-secondary); font-size: 12px; cursor: pointer; font-family: inherit; }
+.replay:hover { border-color: var(--hue); color: var(--hue); }
+
+@media (prefers-reduced-motion: reduce) {
+  .prose, .title { transition: none; }
+}
+/* #still：关掉所有过渡，用于截图/逐帧评审，避免拍到展开与收起之间的中间态 */
+body.still * { transition: none !important; animation: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar">
+    <div class="brand">D</div>
+    <div class="crumb">小记 <span>· 41 条 · 全部</span></div>
+  </div>
+  <div class="head">
+    <div class="composer">记点什么…</div>
+    <div class="chip on">河流</div>
+    <div class="chip">卡片</div>
+    <div class="chip">加密 3</div>
+  </div>
+
+  <div class="canvas">
+    <div class="band"></div>
+    <div class="scroller" id="sc">
+      <div class="river"></div>
+
+      <!-- 置顶：菱形节点，钉在源头之上 -->
+      <div class="pinned">
+        <div class="flag" style="margin:6px 0 8px 0"><i></i><b>钉在源头</b></div>
+        <div class="stop pin" data-kind="dia">
+          <div class="slot"><div class="node dia"></div></div>
+          <div class="body"><div class="line1">
+            <div class="title">路由器换回原厂固件的三步，别忘了</div><div class="when">长期</div><div class="tag">待办</div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="flag"><i></i><b>今天</b><u>9/23 周二 · 4 条</u></div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">局域网传输</div><div class="when">10:12</div><div class="tag">工具</div></div>
+          <div class="prose">
+            <p>把手机当第二块硬盘这件事，其实只差一个稳定的局域网入口。刚才试了下：<span class="clip">192.168.1.37:8845</span> 直连可以，走 VPN 就超时。</p>
+            <p>结论是别再折腾 SMB 了，就用自己的小服务，端口固定，防火墙按子网放行。下周把开关做成默认关，免得常驻。</p>
+          </div></div>
+      </div>
+      <div class="stop" data-kind="sq">
+        <div class="slot"><div class="node sq"></div></div>
+        <div class="body"><div class="line1"><div class="title">体检复查要问的三句话</div><div class="when">09:40</div><div class="enc-mark">加密</div></div>
+          <div class="prose">
+            <p>1. 这次指标变化跟上季度比，是否在正常波动范围内；2. 需不需要提前做加强检查；3. 用药和运动哪个优先级更高。</p>
+            <p>（这条上了锁，全库一把口令。）</p>
+          </div></div>
+      </div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">深色主题的小字中文又糊了</div><div class="when">09:06</div><div class="tag">UI</div></div>
+          <div class="prose">
+            <p>font-weight 600 在 YaHei 上会落到真 Bold，12px 以下直接连笔。深色底再叠纯白字，渗光更明显。</p>
+            <p>能做的只有两件事：小字回 500，白字降到 <span class="clip">#e8e6e3</span> 这种偏暖的白。font-smoothing 那条路在这个窗口里无效。</p>
+          </div></div>
+      </div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">周报别写成流水账</div><div class="when">08:51</div></div>
+          <div class="prose"><p>一条一句结论，结论后面才是动作。数字放最前面。</p></div></div>
+      </div>
+
+      <div class="flag"><i></i><b>昨天</b><u>9/22 周一 · 3 条</u></div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">收藏页要做成行还是继续卡片</div><div class="when">21:34</div><div class="tag">UI</div></div>
+          <div class="prose">
+            <p>卡片一屏只放得下 5-6 条，找东西靠眼睛扫。行能到 14 条，代价是操作必须收进 hover。</p>
+            <p>先按行做原型看密度，如果 hover 藏的操作够用，就换。</p>
+          </div></div>
+      </div>
+      <div class="stop" data-kind="sq">
+        <div class="slot"><div class="node sq"></div></div>
+        <div class="body"><div class="line1"><div class="title">家里宽带账号</div><div class="when">20:18</div><div class="enc-mark">加密</div></div>
+          <div class="prose"><p>装在锁后面，这里只是示意：加密条目在河上是方块，收起时看不见内容。</p></div></div>
+      </div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">Cargo 增量编译慢是因为特征开了太多</div><div class="when">19:02</div><div class="tag">编译</div></div>
+          <div class="prose"><p>把 <span class="clip">serde</span> 的 derive 收到需要的那几个类型上，冷编译没变，增量从 9s 掉到 3s。</p></div></div>
+      </div>
+
+      <div class="flag"><i></i><b>9/21</b><u>周日 · 2 条</u></div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">面馆换了位置，招牌还在</div><div class="when">13:26</div><div class="tag">生活</div></div>
+          <div class="prose"><p>从菜场门口挪到了学校西侧，走了七分钟。牛肉面还是加醋。</p></div></div>
+      </div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">滚动条不该让内容横移</div><div class="when">11:04</div><div class="tag">UI</div></div>
+          <div class="prose"><p>所有竖向滚动容器统一 <span class="clip">scrollbar-gutter: stable</span>，一条规则解决一类的抖动。</p></div></div>
+      </div>
+
+      <div class="flag"><i></i><b>9/18</b><u>周四 · 5 条</u></div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">备份包只增不删的代价</div><div class="when">22:40</div><div class="tag">备份</div></div>
+          <div class="prose"><p>云端附件密文永远留着，好处是任何旧包都能完整还原，代价是云端体积单向增长。GC 先不做，等真的疼了再说。</p></div></div>
+      </div>
+      <div class="stop" data-kind="sq">
+        <div class="slot"><div class="node sq"></div></div>
+        <div class="body"><div class="line1"><div class="title">旧的 TOTP 密钥在阿里云备份里</div><div class="when">21:15</div><div class="enc-mark">加密</div></div>
+          <div class="prose"><p>私有加密格式，本机导不出来。只能去站点侧重绑一遍。这条留着是为了记住"哪些还得重绑"。</p></div></div>
+      </div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">双击不能当入口</div><div class="when">18:03</div></div>
+          <div class="prose"><p>误触率太高。移除双击进入的同时，把为它保留的单击延迟也一并删掉，手感立刻变利落。</p></div></div>
+      </div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">新控件要落进宿主的尺寸轴</div><div class="when">15:47</div><div class="tag">UI</div></div>
+          <div class="prose"><p>弹窗里的按钮跟的是 28px 那一档，不是全局的 36px。移植界面时最容易漏的就是这个。</p></div></div>
+      </div>
+      <div class="stop" data-kind="dot">
+        <div class="slot"><div class="node dot"></div></div>
+        <div class="body"><div class="line1"><div class="title">等一把新的机械键盘</div><div class="when">09:22</div><div class="tag">生活</div></div>
+          <div class="prose"><p>旧的空格键开始双击了。先垫着，别一边等货一边改布局。</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <b>和现状的差别</b>：小记现在是按天分组的等大卡片，读感像翻纸。这里时间与内容的从属关系被画出来了 —— 河是时间，点是内容，形状说类型。
+  滚动时近中线的自动展开、远的收成一行，所以"浏览"和"阅读"是同一个动作，不需要点开展开。<br>
+  <b>节点形状</b><em class="lg-dot"></em>普通<em class="lg-sq"></em>加密<em class="lg-dia"></em>置顶（钉在源头之上，不占河道）
+</div>
+<button class="replay" id="top">跳回今天</button>
+
+<script>
+const sc = document.getElementById('sc');
+const stops = [...document.querySelectorAll('.stop')];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function frame() {
+  const rect = sc.getBoundingClientRect();
+  const mid = rect.top + rect.height / 2;   // 必须换算到视口坐标，否则焦点线会整体上移一个头部高度
+  const BAND = 190;   /* 亮度/节点缩放的半径：连续、宽松，营造纵深 */
+  const OPEN = 48;    /* 非焦点条目的展开半径：小于半个行距，所以相邻两条不可能同时开 */
+  const SOLO = 130;   /* 焦点条目自己的开合行程：离中线越近越开，落在空隙里时整条收起 */
+  const cl = v => Math.max(0, Math.min(1, v));
+  const sm = v => v * v * (3 - 2 * v);
+  let best = null, bestD = Infinity;
+  for (const s of stops) {
+    const d = Math.abs(s.getBoundingClientRect().top + 14 - mid);      // 以节点所在的高度对齐中线
+    const gB = sm(cl(1 - d / BAND));
+    s._g = sm(cl(1 - d / OPEN));
+    s._d = d;
+    s.style.setProperty('--o', (0.35 + 0.65 * gB).toFixed(3));
+    s.querySelector('.node').style.setProperty('--s', (0.8 + 0.6 * gB).toFixed(3));
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  for (const s of stops) {
+    const g = s === best ? sm(cl(1 - bestD / SOLO)) : s._g;   // 焦点条目优先，且随距离平滑开合
+    s.style.setProperty('--grow', reduce ? '0' : g.toFixed(3));
+    s.classList.toggle('at', s === best && g > 0.5);
+  }
+}
+
+let raf = 0;
+/* 逐帧测量。行距固定（--pitch）之后，展开只在行距内生长、不会挪动任何条目的节点，
+   所以"展开→布局变→焦点飘"的反馈环从结构上就不存在了，逐帧只是让滚动跟手。
+   （落地到 desko 时可以换回 scroll + requestAnimationFrame 节流，省 CPU。） */
+(function loop() { frame(); raf = requestAnimationFrame(loop); })();
+for (const s of stops) s.addEventListener('click', () => center(s));
+document.getElementById('top').addEventListener('click', () => sc.scrollTo({ top: 0, behavior: 'smooth' }));
+
+addEventListener('resize', frame);
+frame();
+/* 进场就把第一条有正文的小记摆到焦点带上，静态看也能明白"展开"是什么样子 */
+function center(el) {
+  sc.scrollTop = sc.scrollTop + el.getBoundingClientRect().top
+    - sc.getBoundingClientRect().top - sc.clientHeight / 2 + 14;
+  frame();
+}
+/* 进场就把一条有正文的小记摆到焦点带上，静态看也能明白"展开"是什么样子。
+   注意：河的最上面几条滚不进焦点带（scrollTop 不能为负），所以默认选中段。
+   地址栏可用 #s=9 指定焦点条目；加 &still 关闭过渡，便于截图评审。 */
+if (/still/.test(location.hash)) document.body.classList.add('still');
+const m = /#s=(\d+)/.exec(location.hash);
+setTimeout(() => center(stops[m ? Math.min(stops.length - 1, +m[1]) : 5]), 60);
+</script>
+</body>
+</html>

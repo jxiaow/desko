@@ -5,11 +5,15 @@
  *
  * 读取用的是明文 meta 表，锁屏前也能拿到，所以 main.ts 可以在
  * 首次绘制之前 await 一次，避免"先闪 light-cool 再跳到用户主题"。
- * 库里可能还存着旧 ID（cool/white/classic/dark/dark-carbon/cyber-hacker），
+ * 库里可能还存着旧 ID（cool/white/classic/dark/dark-carbon/cyber-hacker，
+ * 以及退役的 pure-canvas/nordic-sage/matte-obsidian），
  * 迁移只在读取时查一次表完成，不回写——用户下次切主题时自然落为新 ID。 */
 import { settingsApi } from './api/settings'
 
-export type ThemeId = 'light-cool' | 'light-warm' | 'light-celadon' | 'linear-dark' | 'jetbrains-dark'
+export type ThemeId =
+  | 'light-cool' | 'light-warm' | 'light-celadon'
+  | 'aluminum-pro' | 'swiss-monochrome'
+  | 'linear-dark' | 'jetbrains-dark'
 
 /** 主题退役后留在库里的旧值 → 现在最接近的一套。必须是同步查表：
  *  main.ts 在首绘前 await readTheme，这里多一次 IO 就多一帧闪烁。 */
@@ -20,6 +24,10 @@ const LEGACY_MAP: Record<string, ThemeId> = {
   dark: 'linear-dark',
   'dark-carbon': 'linear-dark',
   'cyber-hacker': 'linear-dark',
+  // 2026-09 退役：与保留套 ΔE<3.5，肉眼几乎重复
+  'pure-canvas': 'light-cool',
+  'nordic-sage': 'light-celadon',
+  'matte-obsidian': 'linear-dark',
 }
 
 export interface ThemePreview {
@@ -40,11 +48,13 @@ export interface ThemeInfo {
 }
 
 export const THEMES: ThemeInfo[] = [
-  { id: 'light-cool', name: '冷灰', prev: { page: '#f4f5f7', sidebar: '#eceef2', card: '#ffffff', rowHover: '#ebedf1', edge: '#dde0e5', accent: '#4a6fa5', ink: '#1c2028' } },
-  { id: 'light-warm', name: '暖纸墨', prev: { page: '#f5f2eb', sidebar: '#efeae0', card: '#faf8f5', rowHover: '#f0eae0', edge: '#e3ddd2', accent: '#d97706', ink: '#2e2925' } },
-  { id: 'light-celadon', name: '青瓷', prev: { page: '#f4f5f1', sidebar: '#eaeee6', card: '#ffffff', rowHover: '#e8ede2', edge: '#d8dfd2', accent: '#4d7c5f', ink: '#252a24' } },
-  { id: 'linear-dark', name: 'Linear 深空', prev: { page: '#16181d', sidebar: '#13151a', card: '#1c202a', rowHover: '#252a38', edge: '#2c3140', accent: '#5e6ad2', ink: '#e8e6e3' } },
-  { id: 'jetbrains-dark', name: 'JetBrains 炭黑', prev: { page: '#191a1c', sidebar: '#1e1f22', card: '#2b2d30', rowHover: '#35373b', edge: '#393b40', accent: '#3574f0', ink: '#e3e6ea' } },
+  { id: 'light-cool', name: '冷灰', prev: { page: '#f7f8fa', sidebar: '#ffffff', card: '#ffffff', rowHover: '#eff3f8', edge: '#e2e5eb', accent: '#3a68b8', ink: '#111827' } },
+  { id: 'light-warm', name: '暖纸墨', prev: { page: '#f8f6f2', sidebar: '#ffffff', card: '#ffffff', rowHover: '#f5efe6', edge: '#e8e2d8', accent: '#b45309', ink: '#241e19' } },
+  { id: 'light-celadon', name: '青瓷', prev: { page: '#f4f7f5', sidebar: '#ebf0ed', card: '#ffffff', rowHover: '#f0f5f2', edge: '#dce3df', accent: '#216747', ink: '#0f1713' } },
+  { id: 'aluminum-pro', name: '冷铝', prev: { page: '#eceef2', sidebar: '#f4f5f8', card: '#ffffff', rowHover: '#e5e8f0', edge: '#d7dbe2', accent: '#2563eb', ink: '#0a0d12' } },
+  { id: 'swiss-monochrome', name: '瑞士黑白', prev: { page: '#fafafa', sidebar: '#ffffff', card: '#ffffff', rowHover: '#f3f4f6', edge: '#e5e7eb', accent: '#111827', ink: '#000000' } },
+  { id: 'linear-dark', name: 'Linear 深空', prev: { page: '#111217', sidebar: '#14151a', card: '#181920', rowHover: '#22242e', edge: '#252834', accent: '#6366f1', ink: '#f1f3f8' } },
+  { id: 'jetbrains-dark', name: 'JetBrains 炭黑', prev: { page: '#1e1f22', sidebar: '#1a1b1e', card: '#27282c', rowHover: '#313338', edge: '#34363c', accent: '#3574f0', ink: '#dfe1e5' } },
 ]
 
 export const DEFAULT_THEME: ThemeId = 'light-cool'

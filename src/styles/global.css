@@ -53,16 +53,17 @@
   --transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* 布局尺度 */
-  --sidebar-w: 220px;
+  --sidebar-w: 180px;
   /* 全屏书写栏宽度：正文越宽越要收着 */
   --fs-max: 900px;
   /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
   --stream-max: 1200px;
-  /* 小记卡片正文高度上限：短的小记按实际内容，长的裁到这里并渐隐 */
-  --memo-max-h: 24vh;
-  --rail-w: 208px;
-  /* 小记顶栏的实际占位高度：粘性日期行和窄窗口下的浮层侧栏都要从它下面开始 */
-  --stream-bar-h: 52px;
+  /* 小记卡片正文高度上限：短的小记按实际内容，长的由 JS 收在这里之上最近的整行边界 */
+  --memo-max-h: 138px;
+  --rail-w: 248px;
+  /* 小记顶栏的实际占位高度：粘性日期行和窄窗口下的浮层侧栏都要从它下面开始。
+     五页顶栏统一收编为 44px 定高后，这里跟着 .page-bar 走 */
+  --stream-bar-h: 44px;
   /* 容器窄于此值时收起右栏，筛选降级为浮层 */
   --rail-min-room: 900px;
 }
@@ -86,83 +87,84 @@
    :root 上挂的是 light-cool 的值，作为 data-theme 缺失时的兜底。
    ═══════════════════════════════════════════════════════════════════ */
 :root, [data-theme="light-cool"] {
-  /* 品牌：钢蓝，沉稳不扎眼。从紫蓝 #5b57d9 转向中性蓝，长时间阅读不疲劳 */
-  --accent: #4a6fa5;
-  --accent-hover: #3d5e8f;
-  --accent-active: #314d76;
+  /* 品牌：钢蓝，沉稳不扎眼，长时间阅读不疲劳 */
+  --accent: #3a68b8;
+  --accent-hover: #2d5499;
+  --accent-active: #22427a;
   --accent-on: #ffffff;
-  --accent-soft: #e6ecf3;
-  --accent-light: #cfdbe8;
-  --accent-ring: rgba(74, 111, 165, 0.16);
-  --text-brand: #3d5e8f;
+  --accent-soft: #edf2fa;
+  --accent-light: #d6e2f5;
+  --accent-ring: rgba(58, 104, 184, 0.14);
+  --text-brand: #2d5499;
 
-  /* 面：四级冷中性灰阶。底色 #f4f5f7 比原本 #f8f8fa 略压一档亮度，
-     白底刺眼的问题主要来自亮度，不来自色相。 */
-  --bg: #f4f5f7;
+  /* 面：四级冷中性灰阶。白底刺眼的问题主要来自亮度，不来自色相。 */
+  --bg: #f7f8fa;
   --panel-bg: #ffffff;
-  --chrome-bg: #eceef2;
-  --sunken: #e6e9ed;
-  --fill: #dfe3e9;
-  --hover: #ebedf1;
-  --active: #dfe6ef;
-  --overlay: rgba(28, 32, 42, 0.42);
+  --chrome-bg: rgba(238, 241, 246, 0.75);
+  --sunken: #eaf0f7;
+  --fill: #e1e6f0;
+  --hover: #eff3f8;
+  --active: #e3ebf6;
+  --overlay: rgba(17, 24, 39, 0.42);
 
   /* 文字 */
-  --text: #1c2028;
-  --text-secondary: #5a606e;
-  --text-muted: #858c99;
-  --text-faint: #a8b0bc;
+  --text: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
 
-  /* 描边：层级靠边框，不靠色块。原 #e3e3ea 收到 #dde0e5，更利落 */
-  --border: #dde0e5;
-  --border-strong: #c4c9d3;
-  --border-subtle: #e8eaee;
-  --border-hover: #c4c9d3;
+  /* 描边：层级靠边框，不靠色块 */
+  --border: #e2e5eb;
+  --border-strong: #cbd2de;
+  --border-subtle: #edf0f5;
+  --border-hover: #c6cdda;
 
   /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
-  --text-url: #454d5c;
-  --badge-cat-bg: #eceef2;
-  --badge-cat-border: #dde0e5;
-  --badge-cat-text: #5a606e;
-  --badge-ver-bg: #e6ecf3;
-  --badge-ver-text: #3d5e8f;
+  --text-url: #374151;
+  --badge-cat-bg: #eef2f7;
+  --badge-cat-border: #e2e5eb;
+  --badge-cat-text: #4b5563;
+  --badge-ver-bg: #edf2fa;
+  --badge-ver-text: #2d5499;
 
   /* 阴影 */
-  --shadow-xs: 0 1px 2px 0 rgba(28, 32, 42, 0.07);
-  --shadow-sm: 0 1px 2px 0 rgba(28, 32, 42, 0.05);
-  --shadow: 0 2px 6px -1px rgba(28, 32, 42, 0.08);
-  --shadow-md: 0 6px 16px -6px rgba(28, 32, 42, 0.14), 0 1px 3px rgba(28, 32, 42, 0.06);
-  --shadow-lg: 0 12px 28px -8px rgba(28, 32, 42, 0.18);
-  --shadow-pop: 0 20px 44px -12px rgba(28, 32, 42, 0.24), 0 2px 8px rgba(28, 32, 42, 0.08);
+  --shadow-xs: 0 1px 2px 0 rgba(17, 24, 39, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(17, 24, 39, 0.05);
+  --shadow: 0 4px 12px -2px rgba(17, 24, 39, 0.06), 0 0 0 1px #cbd2de;
+  --shadow-md: 0 6px 16px -6px rgba(17, 24, 39, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(17, 24, 39, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(17, 24, 39, 0.12), 0 4px 10px -2px rgba(17, 24, 39, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  /* 批量药丸浮在列表之上，要比任何弹层都高：弥散更深、落点更远，只用当前主题的字色 */
+  --shadow-dock: 0 26px 60px -18px rgba(17, 24, 39, 0.32), 0 6px 18px rgba(17, 24, 39, 0.14);
 
   /* 状态色：一个语义一档强度。--danger-on 是危险按钮上的文字色。
      三个状态色按"同一档可读写对比度"配平（浅色主题 ≥4.6:1，深色 ≥5.7:1），
      所以明度看起来不齐——绿和琥珀的相对亮度天生比红高，等对比度才等重量。 */
-  --danger: #cc4740;
+  --danger: #dc2626;
   --danger-on: #ffffff;
-  --danger-hover: #bd3932;
-  --danger-soft: #f7eeee;
-  --danger-border: #e7ccca;
-  --success: #238366;
-  --success-soft: #eef7f4;
-  --warning: #936f22;
-  --warning-soft: #f7f4ed;
+  --danger-hover: #b91c1c;
+  --danger-soft: #fef2f2;
+  --danger-border: #fecaca;
+  --success: #16a34a;
+  --success-soft: #f0fdf4;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
 
   /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
-  --sidebar-bg: #eceef2;
-  --sidebar-hover: #dfe3ea;
+  --sidebar-bg: #ffffff;
+  --sidebar-hover: #f1f4f9;
 
   /* 品牌标渐变 */
-  --brand-g1: #5e88c0;
-  --brand-g2: #4a6fa5;
-  --brand-g3: #314d76;
+  --brand-g1: #6186c6;
+  --brand-g2: #3a68b8;
+  --brand-g3: #22427a;
   --brand-knob: #ffffff;
 
   /* 锁屏 */
-  --lock-wash-a: #f4f5f7;
-  --lock-wash-b: #e6e9ed;
-  --lock-orb-1: rgba(74, 111, 165, 0.07);
-  --lock-orb-2: rgba(74, 111, 165, 0.045);
+  --lock-wash-a: #f7f8fa;
+  --lock-wash-b: #eaf0f7;
+  --lock-orb-1: rgba(58, 104, 184, 0.07);
+  --lock-orb-2: rgba(58, 104, 184, 0.045);
 
   /* 毛玻璃底栏 */
   --frost-bg: rgba(255, 255, 255, 0.86);
@@ -179,7 +181,7 @@
   /* 滚动条与选区 */
   --scrollbar: rgba(28, 32, 42, 0.16);
   --scrollbar-hover: rgba(28, 32, 42, 0.28);
-  --selection: rgba(74, 111, 165, 0.18);
+  --selection: rgba(58, 104, 184, 0.18);
 
   /* 头像：按分类取色，六档同明度同彩度 */
   --cat-1: #5f62b8;
@@ -219,73 +221,74 @@
 
 /* ---------- light-warm：暖灰纸墨，为小记/长文阅读调的低彩度暖底 ---------- */
 [data-theme="light-warm"] {
-  /* 品牌：琥珀。warning 与 accent 同族，靠饱和度拉开：warning 更枯、accent 更油亮 */
-  --accent: #d97706;
-  --accent-hover: #b45309;
-  --accent-active: #92400e;
+  /* 品牌：琥珀与 warning 同族，靠饱和度拉开：warning 更枯、accent 更油亮 */
+  --accent: #b45309;
+  --accent-hover: #92400e;
+  --accent-active: #78350f;
   --accent-on: #ffffff;
-  --accent-soft: #fbf0e1;
-  --accent-light: #f5e0c2;
-  --accent-ring: rgba(217, 119, 6, 0.16);
-  --text-brand: #a15c06;
+  --accent-soft: #fbf3ea;
+  --accent-light: #f5e4cf;
+  --accent-ring: rgba(180, 83, 9, 0.14);
+  --text-brand: #92400e;
 
   /* 面：米纸五档。相邻档差一档色温，不做条纹 */
-  --bg: #f5f2eb;
-  --panel-bg: #faf8f5;
-  --chrome-bg: #efeae0;
-  --sunken: #ede7db;
-  --fill: #e9e2d5;
-  --hover: #f0eae0;
-  --active: #f3ead9;
-  --overlay: rgba(46, 41, 37, 0.42);
+  --bg: #f8f6f2;
+  --panel-bg: #ffffff;
+  --chrome-bg: rgba(243, 238, 230, 0.75);
+  --sunken: #ede6da;
+  --fill: #e8ded0;
+  --hover: #f5efe6;
+  --active: #ecdfce;
+  --overlay: rgba(36, 30, 25, 0.42);
 
-  --text: #2e2925;
-  --text-secondary: #6b6157;
-  --text-muted: #94897d;
-  --text-faint: #b6ac9f;
+  --text: #241e19;
+  --text-secondary: #5c534a;
+  --text-muted: #8c8074;
+  --text-faint: #b3a79a;
 
-  --border: #e3ddd2;
-  --border-strong: #cfc6b6;
-  --border-subtle: #ece7dd;
-  --border-hover: #cfc6b6;
+  --border: #e8e2d8;
+  --border-strong: #d4ccc0;
+  --border-subtle: #f2eee8;
+  --border-hover: #d4ccc0;
 
-  --text-url: #55483d;
-  --badge-cat-bg: #efeae0;
-  --badge-cat-border: #e3ddd2;
-  --badge-cat-text: #6b6157;
-  --badge-ver-bg: #fbf0e1;
-  --badge-ver-text: #a15c06;
+  --text-url: #4a4137;
+  --badge-cat-bg: #f3ede4;
+  --badge-cat-border: #e8e2d8;
+  --badge-cat-text: #5c534a;
+  --badge-ver-bg: #fbf3ea;
+  --badge-ver-text: #92400e;
 
   /* 投影带暖褐，纯灰投影在米底上会显脏 */
-  --shadow-xs: 0 1px 2px 0 rgba(93, 72, 45, 0.07);
-  --shadow-sm: 0 1px 2px 0 rgba(93, 72, 45, 0.05);
-  --shadow: 0 2px 6px -1px rgba(93, 72, 45, 0.08);
-  --shadow-md: 0 6px 16px -6px rgba(93, 72, 45, 0.14), 0 1px 3px rgba(93, 72, 45, 0.06);
-  --shadow-lg: 0 12px 28px -8px rgba(93, 72, 45, 0.18);
-  --shadow-pop: 0 20px 44px -12px rgba(93, 72, 45, 0.24), 0 2px 8px rgba(93, 72, 45, 0.08);
+  --shadow-xs: 0 1px 2px 0 rgba(36, 30, 25, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(36, 30, 25, 0.05);
+  --shadow: 0 4px 12px -2px rgba(36, 30, 25, 0.06), 0 0 0 1px #d4ccc0;
+  --shadow-md: 0 6px 16px -6px rgba(36, 30, 25, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(36, 30, 25, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(36, 30, 25, 0.12), 0 4px 10px -2px rgba(36, 30, 25, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 26px 60px -18px rgba(36, 30, 25, 0.32), 0 6px 18px rgba(36, 30, 25, 0.14);
 
-  --danger: #b3413a;
+  --danger: #c2410c;
   --danger-on: #ffffff;
-  --danger-hover: #a5352f;
-  --danger-soft: #f6eae8;
-  --danger-border: #e3c9c4;
-  --success: #4a6a15;
-  --success-soft: #eff3e3;
-  --warning: #a16207;
-  --warning-soft: #f7f0df;
+  --danger-hover: #9a3412;
+  --danger-soft: #fff7ed;
+  --danger-border: #ffedd5;
+  --success: #4d7c0f;
+  --success-soft: #f7fee7;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
 
-  --sidebar-bg: #efeae0;
-  --sidebar-hover: #e6dfd2;
+  --sidebar-bg: #ffffff;
+  --sidebar-hover: #f5f0e6;
 
-  --brand-g1: #f59e0b;
-  --brand-g2: #d97706;
-  --brand-g3: #92400e;
+  --brand-g1: #c3753a;
+  --brand-g2: #b45309;
+  --brand-g3: #78350f;
   --brand-knob: #ffffff;
 
-  --lock-wash-a: #f5f2eb;
+  --lock-wash-a: #f8f6f2;
   --lock-wash-b: #eae3d6;
-  --lock-orb-1: rgba(217, 119, 6, 0.08);
-  --lock-orb-2: rgba(217, 119, 6, 0.05);
+  --lock-orb-1: rgba(180, 83, 9, 0.08);
+  --lock-orb-2: rgba(180, 83, 9, 0.05);
 
   --frost-bg: rgba(250, 248, 245, 0.88);
   --frost-border: #e3ddd2;
@@ -299,7 +302,7 @@
 
   --scrollbar: rgba(46, 41, 37, 0.16);
   --scrollbar-hover: rgba(46, 41, 37, 0.28);
-  --selection: rgba(217, 119, 6, 0.18);
+  --selection: rgba(180, 83, 9, 0.18);
 
   /* 头像：暖土六相（陶土/橄榄/酒红/芥末/墨青/梅子），同 L* 同彩度 */
   --cat-1: #b0653e;
@@ -336,79 +339,79 @@
   --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
 }
 
-/* ---------- linear-dark：曜石深空，电光紫蓝主色，边界靠实体描边不靠投影。
-   底色 #16181d 而非近黑，让长时间阅读时 CJK 小字不渗光。 ---------- */
+/* ---------- linear-dark：曜石深空，电光紫蓝主色，边界靠实体描边不靠投影。 ---------- */
 [data-theme="linear-dark"] {
-  --accent: #5e6ad2;
-  --accent-hover: #717de3;
-  --accent-active: #4c56b8;
+  --accent: #6366f1;
+  --accent-hover: #7a7ef7;
+  --accent-active: #4f51d8;
   --accent-on: #ffffff;
-  --accent-soft: rgba(94, 106, 210, 0.16);
-  --accent-light: rgba(94, 106, 210, 0.3);
-  --accent-ring: rgba(94, 106, 210, 0.35);
-  --text-brand: #8b95f6;
+  --accent-soft: rgba(99, 102, 241, 0.16);
+  --accent-light: rgba(99, 102, 241, 0.28);
+  --accent-ring: rgba(99, 102, 241, 0.32);
+  --text-brand: #818cf8;
 
-  --bg: #16181d;
-  --panel-bg: #1c202a;
-  --chrome-bg: #13151a;
-  --sunken: #0e1015;
-  --fill: #232838;
-  --hover: #252a38;
-  --active: #2c3247;
-  --overlay: rgba(10, 11, 15, 0.66);
+  --bg: #111217;
+  --panel-bg: #181920;
+  --chrome-bg: rgba(17, 18, 23, 0.85);
+  --sunken: #0c0d10;
+  --fill: #22242e;
+  --hover: #22242e;
+  --active: #2a2d3a;
+  --overlay: rgba(0, 0, 0, 0.70);
 
-  /* 文字：暖白 #e8e6e3。深色下纯白或冷白会让 CJK 小字渗光，
-     向暖一档把这种"扎"压下去，但仍是中性偏冷，与 Linear 蓝主色不冲突。 */
-  --text: #e8e6e3;
-  --text-secondary: #c4c2bd;
-  --text-muted: #9c988f;
-  --text-faint: #6c6962;
+  /* 文字：冷白主字，四级灰阶随 Linear 原族 */
+  --text: #f1f3f8;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --text-faint: #4b5563;
 
-  --border: #2c3140;
-  --border-strong: #434b66;
-  --border-subtle: #1f222a;
-  --border-hover: #434b66;
+  --border: #252834;
+  --border-strong: #3b4155;
+  --border-subtle: #1c1d25;
+  --border-hover: #3b4155;
 
-  /* URL 走浅灰蓝：等宽小字在近黑底上要一眼可读，又不抢标题 */
-  --text-url: #d6dde6;
-  --badge-cat-bg: #1f222a;
-  --badge-cat-border: #2c3140;
-  --badge-cat-text: #c4c2bd;
-  --badge-ver-bg: rgba(94, 106, 210, 0.18);
-  --badge-ver-text: #8b95f6;
+  /* URL 走浅靛蓝：等宽小字在近黑底上要一眼可读，又不抢标题 */
+  --text-url: #c7d2fe;
+  --badge-cat-bg: #1e2029;
+  --badge-cat-border: #2c303f;
+  --badge-cat-text: #9ca3af;
+  --badge-ver-bg: rgba(99, 102, 241, 0.18);
+  --badge-ver-text: #a5b4fc;
 
-  /* 深色下投影看不见，分层靠顶部 1px 高光 */
-  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --shadow-md: 0 10px 26px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --shadow-lg: 0 16px 34px -10px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --shadow-pop: 0 26px 60px -14px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px #3b4155;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* 深色下纯黑弥散等于没有：药丸靠那圈高光边浮起来 */
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
 
-  --danger: #f26d6d;
-  --danger-on: #0b0c12;
-  --danger-hover: #ff8585;
-  --danger-soft: #2a1618;
-  --danger-border: #552b30;
-  --success: #3fb950;
-  --success-soft: #132a1c;
-  --warning: #d6a028;
-  --warning-soft: #2a2214;
+  --danger: #f87171;
+  --danger-on: #181920;
+  --danger-hover: #fca5a5;
+  --danger-soft: #2d1719;
+  --danger-border: #522327;
+  --success: #4ade80;
+  --success-soft: #12281a;
+  --warning: #fbbf24;
+  --warning-soft: #2d2412;
 
-  --sidebar-bg: #13151a;
-  --sidebar-hover: #1c202a;
+  --sidebar-bg: #14151a;
+  --sidebar-hover: #1e2027;
 
-  --brand-g1: #8b95f6;
-  --brand-g2: #5e6ad2;
-  --brand-g3: #3d4694;
+  --brand-g1: #8285f4;
+  --brand-g2: #6366f1;
+  --brand-g3: #4f51d8;
   --brand-knob: #13151a;
 
-  --lock-wash-a: #16181d;
-  --lock-wash-b: #1c202a;
-  --lock-orb-1: rgba(94, 106, 210, 0.16);
-  --lock-orb-2: rgba(94, 106, 210, 0.08);
+  --lock-wash-a: #111217;
+  --lock-wash-b: #181920;
+  --lock-orb-1: rgba(99, 102, 241, 0.16);
+  --lock-orb-2: rgba(99, 102, 241, 0.08);
 
-  --frost-bg: rgba(28, 32, 42, 0.85);
+  --frost-bg: rgba(24, 25, 32, 0.85);
   --frost-border: #2c3140;
 
   /* 深色界面的浮层反过来：亮底暗字 */
@@ -417,11 +420,11 @@
   --toast-bg: #f1f2f6;
   --toast-ok: #1f7a58;
   --toast-err: #b23c37;
-  --toast-info: #4c56b8;
+  --toast-info: #4f51d8;
 
   --scrollbar: rgba(255, 255, 255, 0.14);
   --scrollbar-hover: rgba(255, 255, 255, 0.24);
-  --selection: rgba(94, 106, 210, 0.32);
+  --selection: rgba(99, 102, 241, 0.32);
 
   /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
   --cat-1: #7c86e0;
@@ -461,74 +464,76 @@
 /* ---------- jetbrains-dark：炭黑 IDE 底，标志蓝主色，语法色取 Darcula 原族 ---------- */
 [data-theme="jetbrains-dark"] {
   --accent: #3574f0;
-  --accent-hover: #4682f7;
-  --accent-active: #2a5fcc;
+  --accent-hover: #4b85f5;
+  --accent-active: #2662d9;
   --accent-on: #ffffff;
-  --accent-soft: rgba(53, 116, 240, 0.18);
-  --accent-light: rgba(53, 116, 240, 0.3);
-  --accent-ring: rgba(53, 116, 240, 0.35);
-  --text-brand: #6c9be8;
+  --accent-soft: rgba(53, 116, 240, 0.16);
+  --accent-light: rgba(53, 116, 240, 0.28);
+  --accent-ring: rgba(53, 116, 240, 0.32);
+  --text-brand: #6ca1ff;
 
-  --bg: #191a1c;
-  --panel-bg: #2b2d30;
-  --chrome-bg: #1e1f22;
-  --sunken: #131415;
+  --bg: #1e1f22;
+  --panel-bg: #27282c;
+  --chrome-bg: rgba(30, 31, 34, 0.88);
+  --sunken: #161719;
   --fill: #313338;
-  --hover: #35373b;
-  --active: #3d4045;
-  --overlay: rgba(0, 0, 0, 0.6);
+  --hover: #313338;
+  --active: #3a3d44;
+  --overlay: rgba(0, 0, 0, 0.65);
 
-  --text: #e3e6ea;
-  --text-secondary: #b8bcc4;
-  --text-muted: #8f939c;
-  --text-faint: #6a6d73;
+  --text: #dfe1e5;
+  --text-secondary: #9ea2ad;
+  --text-muted: #727783;
+  --text-faint: #525660;
 
-  --border: #393b40;
-  --border-strong: #4e5157;
-  --border-subtle: #2e3033;
-  --border-hover: #4e5157;
+  --border: #34363c;
+  --border-strong: #494c54;
+  --border-subtle: #292a2e;
+  --border-hover: #494c54;
 
   /* URL 用语法高亮蓝：炭黑底上"可点击"要一眼看出来 */
-  --text-url: #6c9be8;
-  --badge-cat-bg: #1e1f22;
-  --badge-cat-border: #393b40;
-  --badge-cat-text: #bcbec4;
-  --badge-ver-bg: rgba(53, 116, 240, 0.15);
-  --badge-ver-text: #6c9be8;
+  --text-url: #70a0f5;
+  --badge-cat-bg: #232427;
+  --badge-cat-border: #383a41;
+  --badge-cat-text: #a8abb5;
+  --badge-ver-bg: rgba(53, 116, 240, 0.16);
+  --badge-ver-text: #70a0f5;
 
   /* 底本身比 linear 亮一档，顶部高光收弱，分层主要靠面板浮起 */
-  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  --shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  --shadow-md: 0 10px 26px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.055);
-  --shadow-lg: 0 16px 34px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.055);
-  --shadow-pop: 0 26px 60px -14px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px #494c54;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.65);
+  --shadow-pop: 0 20px 48px -10px rgba(0, 0, 0, 0.80), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  /* 深色下纯黑弥散等于没有：药丸靠那圈高光边浮起来 */
+  --shadow-dock: 0 24px 56px -16px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
 
-  --danger: #e05c5c;
-  --danger-on: #1a1b1d;
-  --danger-hover: #ee7575;
-  --danger-soft: #3a262a;
-  --danger-border: #5c3a40;
-  --success: #4fb477;
-  --success-soft: #26332a;
-  --warning: #f0a73c;
-  --warning-soft: #3a2f1c;
+  --danger: #f87171;
+  --danger-on: #1e1f22;
+  --danger-hover: #fca5a5;
+  --danger-soft: #331f22;
+  --danger-border: #572d32;
+  --success: #4ade80;
+  --success-soft: #182b1e;
+  --warning: #fbbf24;
+  --warning-soft: #302614;
 
-  --sidebar-bg: #1e1f22;
-  --sidebar-hover: #2b2d30;
+  --sidebar-bg: #1a1b1e;
+  --sidebar-hover: #26282c;
 
-  --brand-g1: #6c9be8;
+  --brand-g1: #6ca1ff;
   --brand-g2: #3574f0;
-  --brand-g3: #2a5fcc;
+  --brand-g3: #2662d9;
   --brand-knob: #1e1f22;
 
-  --lock-wash-a: #191a1c;
+  --lock-wash-a: #1e1f22;
   --lock-wash-b: #22242a;
   --lock-orb-1: rgba(53, 116, 240, 0.14);
   --lock-orb-2: rgba(53, 116, 240, 0.07);
 
-  --frost-bg: rgba(43, 45, 48, 0.85);
-  --frost-border: #393b40;
+  --frost-bg: rgba(39, 40, 44, 0.85);
+  --frost-border: #34363c;
 
   /* 深色界面的浮层反过来：亮底暗字 */
   --tip-bg: #dfe1e5;
@@ -536,7 +541,7 @@
   --toast-bg: #dfe1e5;
   --toast-ok: #2f7d4f;
   --toast-err: #b23c37;
-  --toast-info: #2a5fcc;
+  --toast-info: #2662d9;
 
   --scrollbar: rgba(255, 255, 255, 0.16);
   --scrollbar-hover: rgba(255, 255, 255, 0.26);
@@ -580,92 +585,94 @@
 /* ---------- light-celadon：青瓷米灰底，苔绿主色，为长时间阅读调的低彩度冷中性调。
    现有四套的色相轴是 紫蓝→暖橙→深蓝→蓝，缺一个低饱和自然绿，这套补它。 ---------- */
 [data-theme="light-celadon"] {
-  /* 品牌：苔绿。warning 留土黄与 accent 拉开，避免「一切绿」难分辨 */
-  --accent: #4d7c5f;
-  --accent-hover: #3e6850;
-  --accent-active: #2f5240;
+  /* 品牌：青瓷苔绿（第九轮定稿 #216747 母版）。warning 留土黄与 accent 拉开 */
+  --accent: #216747;
+  --accent-hover: #195237;
+  --accent-active: #133f2a;
   --accent-on: #ffffff;
-  --accent-soft: #e8f0e9;
-  --accent-light: #d2e0d3;
-  --accent-ring: rgba(77, 124, 95, 0.16);
-  --text-brand: #3e6850;
+  --accent-soft: #e0ece5;
+  --accent-light: #cde4d7;
+  --accent-ring: rgba(33, 103, 71, 0.14);
+  --text-brand: #195237;
 
-  /* 面：青瓷五档，相邻档带一丝绿、不成条纹 */
-  --bg: #f4f5f1;
+  /* 面：冷青微灰底，顶栏半透明白，侧栏淡青瓷微底与主区形成半阶层级 */
+  --bg: #f4f7f5;
   --panel-bg: #ffffff;
-  --chrome-bg: #eaeee6;
-  --sunken: #dfe5da;
-  --fill: #dae1d4;
-  --hover: #e8ede2;
-  --active: #dfe8d8;
-  --overlay: rgba(37, 42, 36, 0.42);
+  --chrome-bg: rgba(240, 245, 242, 0.75);
+  --sunken: #e6eeea;
+  --fill: #dde8e2;
+  --hover: #f0f5f2;
+  --active: #e2efe8;
+  --overlay: rgba(15, 23, 42, 0.42);
 
-  /* 文字：warm charcoal 偏绿一档，与底同色温 */
-  --text: #252a24;
-  --text-secondary: #596459;
-  --text-muted: #859081;
-  --text-faint: #aab3a3;
+  /* 文字：青瓷字阶——墨绿黑 / 苔灰 / 雾青，与冷灰族的蓝 slate 拉开色温 */
+  --text: #0f1713;
+  --text-secondary: #4a5c52;
+  --text-muted: #7d9185;
+  --text-faint: #9aada2;
 
-  --border: #d8dfd2;
-  --border-strong: #b8c4b3;
-  --border-subtle: #e5eae0;
-  --border-hover: #b8c4b3;
+  --border: #dce3df;
+  --border-strong: #cad6ce;
+  --border-subtle: #e2e8e4;
+  --border-hover: #cfd8d2;
 
-  --text-url: #4d5750;
-  --badge-cat-bg: #eaeee6;
-  --badge-cat-border: #d8dfd2;
-  --badge-cat-text: #596459;
-  --badge-ver-bg: #e8f0e9;
-  --badge-ver-text: #3e6850;
+  --text-url: #4a5c52;
+  --badge-cat-bg: #edf3ef;
+  --badge-cat-border: #dce3df;
+  --badge-cat-text: #4a5c52;
+  --badge-ver-bg: #eef6f2;
+  --badge-ver-text: #195237;
 
-  /* 投影带一丝绿褐，纯灰投影在米底上会发木 */
-  --shadow-xs: 0 1px 2px 0 rgba(60, 75, 60, 0.07);
-  --shadow-sm: 0 1px 2px 0 rgba(60, 75, 60, 0.05);
-  --shadow: 0 2px 6px -1px rgba(60, 75, 60, 0.08);
-  --shadow-md: 0 6px 16px -6px rgba(60, 75, 60, 0.14), 0 1px 3px rgba(60, 75, 60, 0.06);
-  --shadow-lg: 0 12px 28px -8px rgba(60, 75, 60, 0.18);
-  --shadow-pop: 0 20px 44px -12px rgba(60, 75, 60, 0.24), 0 2px 8px rgba(60, 75, 60, 0.08);
+  /* 投影：卡常态 1px 描边环，hover 抬青绿柔影 */
+  --shadow-xs: 0 1px 2px 0 rgba(15, 23, 19, 0.03);
+  --shadow-sm: 0 1px 3px 0 rgba(15, 23, 19, 0.04);
+  --shadow: 0 4px 14px -2px rgba(33, 103, 71, 0.08), 0 0 0 1px #cfd8d2;
+  --shadow-md: 0 6px 16px -6px rgba(15, 23, 19, 0.09);
+  --shadow-lg: 0 12px 28px -8px rgba(15, 23, 19, 0.13);
+  --shadow-pop: 0 16px 36px -8px rgba(15, 23, 19, 0.12), 0 4px 10px -2px rgba(15, 23, 19, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 26px 60px -18px rgba(15, 23, 19, 0.32), 0 6px 18px rgba(15, 23, 19, 0.14);
 
-  --danger: #cc4740;
+  /* 危险：rose 档 */
+  --danger: #e11d48;
   --danger-on: #ffffff;
-  --danger-hover: #bd3932;
-  --danger-soft: #f7eeee;
-  --danger-border: #e7ccca;
-  --success: #2e7d52;
-  --success-soft: #e9f2ec;
-  --warning: #96702a;
-  --warning-soft: #f6f1e4;
+  --danger-hover: #be123c;
+  --danger-soft: #fff1f2;
+  --danger-border: #fecdd3;
+  --success: #15803d;
+  --success-soft: #f0fdf4;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
 
-  --sidebar-bg: #eaeee6;
-  --sidebar-hover: #dde5d7;
+  --sidebar-bg: #ebf0ed;
+  --sidebar-hover: #e2eae5;
 
-  --brand-g1: #6fa382;
-  --brand-g2: #4d7c5f;
-  --brand-g3: #2f5240;
+  --brand-g1: #4f896f;
+  --brand-g2: #216747;
+  --brand-g3: #133f2a;
   --brand-knob: #ffffff;
 
-  --lock-wash-a: #f4f5f1;
-  --lock-wash-b: #e0e5da;
-  --lock-orb-1: rgba(77, 124, 95, 0.08);
-  --lock-orb-2: rgba(77, 124, 95, 0.05);
+  --lock-wash-a: #f4f7f5;
+  --lock-wash-b: #d7e9df;
+  --lock-orb-1: rgba(33, 103, 71, 0.08);
+  --lock-orb-2: rgba(33, 103, 71, 0.05);
 
-  --frost-bg: rgba(255, 255, 255, 0.86);
-  --frost-border: #d8dfd2;
+  --frost-bg: rgba(255, 255, 255, 0.96);
+  --frost-border: #e3e8e5;
 
-  --tip-bg: #252a24;
-  --tip-fg: #f4f5f1;
-  --toast-bg: #252a24;
+  --tip-bg: #0f1713;
+  --tip-fg: #f4f7f5;
+  --toast-bg: #0f1713;
   --toast-ok: #95d4ab;
   --toast-err: #f0938e;
-  --toast-info: #82b896;
+  --toast-info: #8abf9f;
 
-  --scrollbar: rgba(37, 42, 36, 0.16);
-  --scrollbar-hover: rgba(37, 42, 36, 0.28);
-  --selection: rgba(77, 124, 95, 0.18);
+  --scrollbar: rgba(15, 23, 19, 0.14);
+  --scrollbar-hover: rgba(15, 23, 19, 0.26);
+  --selection: rgba(33, 103, 71, 0.18);
 
   /* 头像：青瓷六相——苔绿/远黛/梅青/栗黄/烟紫/湖蓝。
      同 L* 同彩度，走"自然矿物颜料"语汇呼应主题。 */
-  --cat-1: #4d7c5f;
+  --cat-1: #216747;
   --cat-2: #5b6c8a;
   --cat-3: #884f5c;
   --cat-4: #9c7540;
@@ -685,16 +692,251 @@
   --ft-unk: #76807a;
 
   /* 代码块：和界面同色温，关键词与 --accent 同族 */
-  --code-fg: #252a24;
+  --code-fg: #0f1713;
   --code-kw: #884f5c;
   --code-str: #3f7a5e;
   --code-num: #9c7540;
   --code-type: #6a4f8a;
   --code-fn: #4a6f8a;
   --code-var: #5e6672;
-  --code-com: #aab3a3;
+  --code-com: #9aada2;
   --code-tag: #6f5e92;
-  --code-pun: #859081;
+  --code-pun: #7d9185;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', monospace;
+}
+
+
+/* ---------- aluminum-pro：冷铝专业（Apple Pro 质感），正蓝主色，
+     底比冷灰重一档铝灰，面板仍纯白。 ---------- */
+[data-theme="aluminum-pro"] {
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-active: #1e40af;
+  --accent-on: #ffffff;
+  --accent-soft: #eff5ff;
+  --accent-light: #dbeafe;
+  --accent-ring: rgba(37, 99, 235, 0.14);
+  --text-brand: #1d4ed8;
+
+  --bg: #eceef2;
+  --panel-bg: #ffffff;
+  --chrome-bg: rgba(236, 238, 242, 0.85);
+  --sunken: #e0e3ea;
+  --fill: #d5d9e3;
+  --hover: #e5e8f0;
+  --active: #dce1ee;
+  --overlay: rgba(10, 13, 18, 0.5);
+
+  --text: #0a0d12;
+  --text-secondary: #475467;
+  --text-muted: #667085;
+  --text-faint: #98a2b3;
+
+  --border: #d7dbe2;
+  --border-strong: #bfc5d1;
+  --border-subtle: #e5e8ee;
+  --border-hover: #bfc5d1;
+
+  --text-url: #344054;
+  --badge-cat-bg: #e2e5eb;
+  --badge-cat-border: #d7dbe2;
+  --badge-cat-text: #475467;
+  --badge-ver-bg: #eff5ff;
+  --badge-ver-text: #1d4ed8;
+
+  --shadow-xs: 0 1px 2px 0 rgba(10, 13, 18, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(10, 13, 18, 0.05);
+  --shadow: 0 4px 12px -2px rgba(10, 13, 18, 0.06), 0 0 0 1px #bfc5d1;
+  --shadow-md: 0 6px 16px -6px rgba(10, 13, 18, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(10, 13, 18, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(10, 13, 18, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  --shadow-dock: 0 26px 60px -18px rgba(10, 13, 18, 0.30), 0 6px 18px rgba(10, 13, 18, 0.12);
+
+  --danger: #d92d20;
+  --danger-on: #ffffff;
+  --danger-hover: #b42318;
+  --danger-soft: #fef3f2;
+  --danger-border: #fee4e2;
+  --success: #079455;
+  --success-soft: #edfcf2;
+  --warning: #dc6803;
+  --warning-soft: #fffaeb;
+
+  --sidebar-bg: #f4f5f8;
+  --sidebar-hover: #e7eaef;
+
+  --brand-g1: #5b8bef;
+  --brand-g2: #2563eb;
+  --brand-g3: #1e40af;
+  --brand-knob: #ffffff;
+
+  --lock-wash-a: #eceef2;
+  --lock-wash-b: #e0e3ea;
+  --lock-orb-1: rgba(37, 99, 235, 0.07);
+  --lock-orb-2: rgba(37, 99, 235, 0.045);
+
+  --frost-bg: rgba(255, 255, 255, 0.88);
+  --frost-border: #cfd4dc;
+
+  --tip-bg: #12151c;
+  --tip-fg: #f2f4f8;
+  --toast-bg: #12151c;
+  --toast-ok: #7fd3ae;
+  --toast-err: #f0938e;
+  --toast-info: #8fb0e8;
+
+  --scrollbar: rgba(10, 13, 18, 0.16);
+  --scrollbar-hover: rgba(10, 13, 18, 0.28);
+  --selection: rgba(37, 99, 235, 0.18);
+
+  --cat-1: #5f62b8;
+  --cat-2: #7b5fb0;
+  --cat-3: #a85b7d;
+  --cat-4: #a8804b;
+  --cat-5: #4b8a73;
+  --cat-6: #4b8a96;
+  --cat-text: #ffffff;
+
+  --ft-pdf: #b8564f;
+  --ft-doc: #4a6d9c;
+  --ft-sheet: #3f7a5e;
+  --ft-deck: #a0603a;
+  --ft-arch: #6a5a99;
+  --ft-code: #8a7534;
+  --ft-mark: #5e6672;
+  --ft-img: #9a5a72;
+  --ft-unk: #7a7f88;
+
+  --code-fg: #1a1b20;
+  --code-kw: #a85b7d;
+  --code-str: #3f7a5e;
+  --code-num: #a0603a;
+  --code-type: #8a7534;
+  --code-fn: #4a6d9c;
+  --code-var: #5e6672;
+  --code-com: #b4b6c0;
+  --code-tag: #6a5a99;
+  --code-pun: #8b8d98;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
+}
+
+
+/* ---------- swiss-monochrome：瑞士黑白，主色即近黑，彩色只留给
+     危险/文件类型等认知锚点，头像族走灰阶。 ---------- */
+[data-theme="swiss-monochrome"] {
+  --accent: #111827;
+  --accent-hover: #000000;
+  --accent-active: #374151;
+  --accent-on: #ffffff;
+  --accent-soft: #f3f4f6;
+  --accent-light: #e5e7eb;
+  --accent-ring: rgba(17, 24, 39, 0.14);
+  --text-brand: #111827;
+
+  --bg: #fafafa;
+  --panel-bg: #ffffff;
+  --chrome-bg: rgba(250, 250, 250, 0.85);
+  --sunken: #f0f0f0;
+  --fill: #e5e5e5;
+  --hover: #f3f4f6;
+  --active: #e5e7eb;
+  --overlay: rgba(0, 0, 0, 0.5);
+
+  --text: #000000;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+
+  --border: #e5e7eb;
+  --border-strong: #9ca3af;
+  --border-subtle: #f3f4f6;
+  --border-hover: #9ca3af;
+
+  --text-url: #1f2937;
+  --badge-cat-bg: #f3f4f6;
+  --badge-cat-border: #e5e7eb;
+  --badge-cat-text: #374151;
+  --badge-ver-bg: #111827;
+  --badge-ver-text: #ffffff;
+
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+  --shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.06), 0 0 0 1px #9ca3af;
+  --shadow-md: 0 6px 16px -6px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 28px -8px rgba(0, 0, 0, 0.12);
+  --shadow-pop: 0 16px 36px -8px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.30), 0 6px 18px rgba(0, 0, 0, 0.12);
+
+  --danger: #e11d48;
+  --danger-on: #ffffff;
+  --danger-hover: #be123c;
+  --danger-soft: #fff1f2;
+  --danger-border: #fecdd3;
+  --success: #16a34a;
+  --success-soft: #f0fdf4;
+  --warning: #ea580c;
+  --warning-soft: #fff7ed;
+
+  --sidebar-bg: #ffffff;
+  --sidebar-hover: #f3f4f6;
+
+  --brand-g1: #4b5563;
+  --brand-g2: #111827;
+  --brand-g3: #374151;
+  --brand-knob: #ffffff;
+
+  --lock-wash-a: #fafafa;
+  --lock-wash-b: #f0f0f0;
+  --lock-orb-1: rgba(17, 24, 39, 0.06);
+  --lock-orb-2: rgba(17, 24, 39, 0.04);
+
+  --frost-bg: rgba(255, 255, 255, 0.9);
+  --frost-border: #dcdcdc;
+
+  --tip-bg: #000000;
+  --tip-fg: #fafafa;
+  --toast-bg: #000000;
+  --toast-ok: #7fd3ae;
+  --toast-err: #f0938e;
+  --toast-info: #b6bcc8;
+
+  --scrollbar: rgba(0, 0, 0, 0.14);
+  --scrollbar-hover: rgba(0, 0, 0, 0.26);
+  --selection: rgba(17, 24, 39, 0.16);
+
+  /* 头像族走灰阶六档，白字全部可读 */
+  --cat-1: #1f2937;
+  --cat-2: #374151;
+  --cat-3: #4b5563;
+  --cat-4: #52525b;
+  --cat-5: #6b7280;
+  --cat-6: #78716c;
+  --cat-text: #ffffff;
+
+  --ft-pdf: #b8564f;
+  --ft-doc: #4a6d9c;
+  --ft-sheet: #3f7a5e;
+  --ft-deck: #a0603a;
+  --ft-arch: #6a5a99;
+  --ft-code: #8a7534;
+  --ft-mark: #5e6672;
+  --ft-img: #9a5a72;
+  --ft-unk: #7a7f88;
+
+  --code-fg: #1a1b20;
+  --code-kw: #a85b7d;
+  --code-str: #3f7a5e;
+  --code-num: #a0603a;
+  --code-type: #8a7534;
+  --code-fn: #4a6d9c;
+  --code-var: #5e6672;
+  --code-com: #b4b6c0;
+  --code-tag: #6a5a99;
+  --code-pun: #8b8d98;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
@@ -722,6 +964,29 @@
   --bg-sidebar: var(--sidebar-bg);
   --border-focus: var(--accent);
   --text-primary: var(--text);
+
+  /* 主列表页规格引入的语义名，一律 var() 指到既有物理槽，零新增 hex */
+  /* 顶栏底：真半透磨砂（配 .page-bar 的 backdrop-blur 生效），
+     滚动内容从这条 44px 栏下面穿过去时被糊住而不是顶出来 */
+  --bg-toolbar: color-mix(in srgb, var(--panel-bg) 72%, transparent);
+  --bg-popover: var(--panel-bg);
+  --bg-tag-default: var(--badge-cat-bg);
+  --bg-mono-chip: var(--sunken);
+  --bg-statusbar: var(--panel-bg);
+  --border-line: var(--border);
+  --border-card-hover: var(--border-hover);
+  --border-input: var(--border);
+  --border-divider: var(--border-subtle);
+  --text-title: var(--text);
+  --text-body: var(--text-secondary);
+  --shadow-card: var(--shadow-xs);
+  --shadow-card-hover: var(--shadow);
+  --shadow-popover: var(--shadow-pop);
+  --radius-card: var(--radius-lg);
+  --radius-badge: var(--radius);
+  --radius-menu: var(--radius-lg);
+  --radius-tag: var(--radius-sm);
+  --radius-btn: var(--radius);
 }
 
 /* 切主题时挂一次性过渡类（services/theme.ts 负责摘除）：
@@ -752,7 +1017,7 @@ body {
 
 #app { height: 100%; }
 
-.app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; }
 .app-root.locked-bg { background: linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%); }
 .app-layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 .main-area { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); height: 100%; }
@@ -780,8 +1045,8 @@ body {
   }
 }
 
-/* 骨架呼吸：所有模块的 .skeleton-line / .skeleton-icon / .memo-skeleton 共用，
-   由使用方在自己的 scoped 规则里写 `animation: skeleton-pulse 1.4s ease-in-out infinite`。 */
+/* 骨架呼吸：呼吸挂在容器（.skeleton-row / .memo-skeleton / .mfa-card.skeleton）上，
+   容器里的条块只出静态色，不再各页各配一档动画。 */
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
@@ -1014,6 +1279,8 @@ body {
 }
 .search-box input {
   flex: 1;
+  /* 不置 0 时 input 按默认固有宽拒绝收缩，窄容器里会把右侧键帽挤出边框 */
+  min-width: 0;
   border: none;
   background: none;
   padding: 0;
@@ -1217,13 +1484,19 @@ body {
   transition: all var(--transition);
   color: var(--text-muted);
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 .tab:hover { color: var(--text-secondary); background: var(--hover); }
 .tab:active { transform: scale(0.97); }
-.tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.tab.active {
+  background: var(--bg-surface);
+  border-color: var(--border-line);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  color: var(--text-brand);
+  font-weight: 600;
+}
 
 /* 空状态 */
 .empty-state { text-align: center; padding: var(--space-12) var(--space-5); color: var(--text-muted); }
@@ -1341,6 +1614,64 @@ body {
 .mini-btn:active { transform: scale(0.97); }
 .mini-btn.on { color: var(--accent); background: var(--accent-soft); }
 
+/* ---------- 页面骨架：五个模块页共用一份。
+     原先每页各写一份滚动容器 / 顶栏 / 骨架屏：两种磨砂配方、
+     28/32/34/36 四种按钮高度、四种骨架呼吸，同一条流水线看起来像五个应用。
+     以下一份为准，scoped 里的副本一律删除。 ---------- */
+
+/* 滚动容器：顶部不留内边距——sticky 的 top:0 会贴在 padding-top 下面，
+   露出一条能看见内容的缝。底部 22px 是常态呼吸，批量底栏浮起时换回净空 */
+.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) 22px; }
+.content-inner:has(.batch-dock) { padding-bottom: var(--dock-clearance); }
+
+/* 吸顶工具栏：44px 定高 + 半透磨砂 + 1px 下划线，五页同一条。
+   负外边距吃满滚动容器宽度，两侧留白靠内边距，滚动的行不会从边缘露出来 */
+.page-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 44px;
+  margin: 0 calc(var(--space-5) * -1);
+  padding: 0 var(--space-5);
+  background: var(--bg-toolbar);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-line);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* 栏内控件一律 32px 档（全局 36px 是弹窗/表单档，塞进 44px 栏会顶天） */
+.page-bar .search-box { flex: 0 0 220px; min-width: 0; height: 32px; margin-right: var(--space-2); }
+.page-bar .search-box input { font-size: var(--text-sm); }
+.page-bar .btn-primary,
+.page-bar .btn-secondary,
+.page-bar .bar-btn { height: 32px; }
+
+/* 骨架屏：行形与行卡同尺寸（58px 行卡档），呼吸只走在容器上，条块是静的 */
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 58px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-line);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.skeleton-block {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-badge);
+  background: var(--hover);
+  flex-shrink: 0;
+}
+.skeleton-line { height: 8px; border-radius: 4px; background: var(--hover); flex-shrink: 0; }
+.skeleton-line.w24 { width: 24%; }
+.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w70 { width: 70%; }
+
 /* ---------- 页眉工具条：每个页面顶部唯一一条 chrome。
      原先只有小记页有这套，收藏页和文件页各写各的，看起来像三个时代的东西。 ---------- */
 .bar-count {
@@ -1387,44 +1718,47 @@ body {
   z-index: 120;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 2px;
+  height: 50px;
+  max-width: calc(100% - 40px);
   background: var(--panel-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
-  padding: var(--space-2);
+  border-radius: 99px;
+  box-shadow: var(--shadow-dock);
+  padding: 0 var(--space-2) 0 var(--space-4);
   animation: dock-in var(--transition-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes dock-in { from { opacity: 0; transform: translate(-50%, 10px); } }
 .dock-count {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--accent);
-  padding: 0 var(--space-2);
+  padding-right: var(--space-1);
   white-space: nowrap;
 }
-.dock-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 var(--space-1); }
+.dock-sep { width: 1px; height: 20px; background: var(--border); margin: 0 var(--space-1); flex-shrink: 0; }
 .dock-btn {
-  height: 28px;
-  padding: 0 var(--space-2);
-  border: 1px solid transparent;
+  height: 34px;
+  padding: 0 9px;
+  border: none;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: 99px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  transition: all var(--transition);
+  gap: 6px;
+  transition: background-color var(--transition), color var(--transition);
   white-space: nowrap;
   font-family: inherit;
+  flex-shrink: 0;
 }
-.dock-btn:hover { background: var(--hover); border-color: var(--border); color: var(--text); }
+.dock-btn:hover { background: var(--hover); color: var(--text); }
 .dock-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .dock-btn.danger { color: var(--danger); }
-.dock-btn.danger:hover { background: var(--danger-soft); border-color: var(--danger-border); }
+.dock-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
 
 /* 读行里的就地动作：复制 / 显示密码 这类挂在值右侧的小动作。
    比 .mini-btn 多一层底色，否则短值 + 长留白会让它看起来像孤立的文字 */
@@ -1470,7 +1804,9 @@ body {
 .popover {
   position: fixed;
   z-index: 200;
-  background: var(--panel-bg);
+  background: color-mix(in srgb, var(--panel-bg) 96%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-pop);
@@ -1479,6 +1815,8 @@ body {
   animation: pop-in var(--transition-fast) ease both;
 }
 .popover.wide { min-width: 260px; padding: 0; }
+/* 定宽档：盖掉 148px 下限，给规格化的窄菜单（136px 动作单） */
+.popover.fixed { min-width: 0; }
 /* 弹窗遮罩是 1000：设置页里的下拉浮层必须压在它上面，和 .app-tip 同一档 */
 .popover.modal { z-index: 1500; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-3px) scale(0.98); } }
@@ -1534,7 +1872,7 @@ body {
 .pop-item:hover { background: var(--hover); color: var(--text); }
 .pop-item.danger { color: var(--danger); }
 .pop-item.danger:hover { background: var(--danger-soft); }
-.pop-sep { height: 1px; background: var(--border); margin: var(--space-1) var(--space-2); }
+.pop-sep { height: 1px; background: var(--border-divider); margin: var(--space-1) 0; }
 .pop-sec { padding: var(--space-3) var(--space-4); }
 .pop-sec + .pop-sec { border-top: 1px solid var(--border); }
 .pop-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; margin-bottom: var(--space-2); }

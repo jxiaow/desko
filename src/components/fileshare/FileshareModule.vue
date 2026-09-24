@@ -114,9 +114,8 @@ onMounted(async () => {
     <div v-if="!fsLoaded" class="empty-state"><div class="empty-title">加载中…</div></div>
 
     <template v-else>
-      <!-- 顶栏：标题 + 状态胶囊 ｜ 启停大按钮 -->
+      <!-- 顶栏：状态胶囊 ｜ 启停大按钮（标题退役，五页统一无页标题） -->
       <div class="page-bar">
-        <h1 class="page-title">局域网传输</h1>
         <span class="bar-count live-pill" :class="{ on: running }">
           <span class="dot" aria-hidden="true"></span>
           {{ running ? '监听中' : '已停止' }}
@@ -188,7 +187,7 @@ onMounted(async () => {
       <section class="clean-group-card">
         <div class="group-head">共享目录</div>
         <div v-for="(d, i) in dirs" :key="d" class="group-row dir-row">
-          <span class="ft-ico folder" aria-hidden="true"><AppIcon name="folder" :size="15" /></span>
+          <span class="dir-ico folder" aria-hidden="true"><AppIcon name="folder" :size="15" /></span>
           <span class="dir-path" :title="d">{{ d }}</span>
           <button class="ib danger dir-del" type="button" title="移除该目录" @click="removeDir(i)">
             <AppIcon name="trash" :size="14" />
@@ -216,18 +215,9 @@ onMounted(async () => {
 /* Cascadia Code 的斜杠零和写意字形在 12px 小字下发斜扎眼，本页等宽一律 Consolas 优先 */
 .content-inner { --font-mono: Consolas, 'Cascadia Mono', monospace; }
 
-.content-inner { flex: 1; overflow-y: auto; scrollbar-gutter: stable; padding: 0 var(--space-5) var(--dock-clearance); }
-
 .mono { font-family: var(--font-mono); }
 
-/* ── 顶栏 ─────────────────────────────────────────────── */
-.page-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: calc(var(--space-5) + var(--space-1)) 0 var(--space-2);
-}
-.page-title { font-size: 15px; font-weight: 600; color: var(--text); margin-right: var(--space-2); }
+/* ── 顶栏：.page-bar 骨架在 global.css（44px 磨砂吸顶），本页只留状态胶囊和启停钮的皮 ── */
 .toggle-btn { margin-left: auto; }
 
 .live-pill {
@@ -269,12 +259,12 @@ onMounted(async () => {
   color: var(--danger-hover);
 }
 
-/* 配置摘要行：低调的入口，不是内容 */
+/* 配置摘要行：低调的入口，不是内容；与吸顶栏拉开一档间距 */
 .cfg-summary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 var(--space-3);
+  margin: var(--space-2) 0 var(--space-3);
   padding: 3px 8px;
   border: none;
   border-radius: var(--radius-sm);
@@ -308,12 +298,12 @@ onMounted(async () => {
   padding: 11px 16px;
 }
 .group-row + .group-row { border-top: 1px solid var(--border); }
-.group-row.dim { color: var(--text-muted); font-size: 12.5px; }
+.group-row.dim { color: var(--text-muted); font-size: var(--text-base); }
 .group-note {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   padding: 8px 16px;
   border-top: 1px solid var(--border);
@@ -337,7 +327,7 @@ onMounted(async () => {
 .url-row:hover { background: var(--fill); }
 .ep-label {
   flex-shrink: 0;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-secondary);
   background: var(--fill);
@@ -375,8 +365,8 @@ onMounted(async () => {
 .icon-btn.help { font-size: 12px; font-weight: 700; }
 .url-row .icon-btn + .icon-btn { margin-left: -4px; }
 
-/* 共享目录行 */
-.ft-ico {
+/* 共享目录行（.dir-ico 是本页私有，与文件页 32px 的 .ft-ico 不同档，不再同名） */
+.dir-ico {
   width: 26px;
   height: 26px;
   border-radius: var(--radius);
@@ -385,12 +375,12 @@ onMounted(async () => {
   justify-content: center;
   flex-shrink: 0;
 }
-.ft-ico.folder { background: var(--warning-soft); color: var(--warning); }
+.dir-ico.folder { background: var(--warning-soft); color: var(--warning); }
 .dir-path {
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--text-url);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -406,14 +396,14 @@ html.hover-suppressed .dir-row:hover .dir-del { opacity: 0; }
 }
 
 .dir-add-row { gap: var(--space-2); align-items: center; }
-.dir-add { flex: 1; min-width: 0; height: 34px; font-family: var(--font-mono); font-size: 12.5px; }
+.dir-add { flex: 1; min-width: 0; height: 34px; font-family: var(--font-mono); font-size: var(--text-sm); }
 .add-btn {
   flex-shrink: 0;
   /* 与 .dir-add 同高同圆角；btn-secondary 默认的 36px/8px 圆角比输入框大一圈 */
   height: 34px;
   padding: 0 var(--space-3);
   border-radius: var(--radius-sm);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
 }
 
 .input {

@@ -1,4 +1,4 @@
-// 四套主题 × 九个界面实机截图（跑在 e2e 的 mock 后端上，不碰真实数据）。
+// 全部主题 × 九个界面实机截图（跑在 e2e 的 mock 后端上，不碰真实数据）。
 // 用法：先起 vite --mode e2e --port 1430，再 node scripts/theme-shots.mjs [themeId]
 import { chromium } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
@@ -57,6 +57,9 @@ const SEED = {
 const THEMES = [
   { id: 'light-cool', name: '冷灰' },
   { id: 'light-warm', name: '暖纸墨' },
+  { id: 'light-celadon', name: '青瓷' },
+  { id: 'aluminum-pro', name: '冷铝' },
+  { id: 'swiss-monochrome', name: '瑞士黑白' },
   { id: 'linear-dark', name: 'Linear 深空' },
   { id: 'jetbrains-dark', name: 'JetBrains 炭黑' },
 ]
@@ -86,7 +89,7 @@ for (const t of THEMES) {
   await page.locator('.unlock-input').fill('e2e-master-123')
   await page.locator('.unlock-btn').click()
   await page.waitForSelector('.app-layout')
-  await tip('切换侧边栏').click() // 展开侧栏，看 logo 与导航文字
+  await page.locator('.sidebar-toggle').click() // 展开侧栏，看 logo 与导航文字
   await page.waitForTimeout(500) // 侧栏宽度有过渡，不等会拍到半宽
   await shot('2-entries')
 

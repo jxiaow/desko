@@ -7,7 +7,7 @@
  * 切过去就是一块"换了主题但没换颜色"的补丁，很难在满屏里找出来。
  *
  * 这个脚本做三件事：
- *   1. 四套主题的槽位名必须完全一致（以 cool 为基准）
+ *   1. 各套主题的槽位名必须完全一致（以 cool 为基准）
  *   2. 主题块里不许出现 var() 引用（那是别名块的活）
  *   3. 全项目 var(--x) 用到了但没人定义的槽位
  *
@@ -19,7 +19,7 @@ import { join, relative } from 'node:path'
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const CSS_PATH = join(ROOT, 'src', 'styles', 'global.css')
 
-const THEMES = ['light-cool', 'linear-dark', 'light-warm', 'jetbrains-dark', 'light-celadon']
+const THEMES = ['light-cool', 'linear-dark', 'light-warm', 'jetbrains-dark', 'light-celadon', 'aluminum-pro', 'swiss-monochrome']
 const BASELINE = 'light-cool'
 
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '')

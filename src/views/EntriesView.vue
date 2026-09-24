@@ -28,21 +28,25 @@ const {
 } = useBatch()
 
 const showForm = ref(false)
+const formEntry = ref<Entry | null>(null)
 const detailId = ref<string | null>(null)
-const detailEditing = ref(false)
 /** 从 store 取当前对象：编辑保存后弹窗内容跟着刷新，不会停在旧快照上 */
 const detailEntry = computed(() => entries.value.find(e => e.id === detailId.value) ?? null)
 
-const openAdd = () => { showForm.value = true }
+const openAdd = () => {
+  formEntry.value = null
+  showForm.value = true
+}
 
 const openDetail = (entry: Entry) => {
-  detailEditing.value = false
   detailId.value = entry.id
 }
 
+/** 新增/编辑共用同一个表单弹窗；从详情进来时先收起详情，不叠第二层遮罩 */
 const openEdit = (entry: Entry) => {
-  detailEditing.value = true
-  detailId.value = entry.id
+  detailId.value = null
+  formEntry.value = entry
+  showForm.value = true
 }
 
 const closeDetail = () => { detailId.value = null }
@@ -136,7 +140,9 @@ const duplicateEntry = async (entry: Entry) => {
 
   <EntryFormDialog
     v-if="showForm"
+    :key="formEntry?.id ?? 'new'"
     :categories="categoryNames"
+    :entry="formEntry"
     @close="showForm = false"
     @saved="onFormSaved"
   />
@@ -145,13 +151,11 @@ const duplicateEntry = async (entry: Entry) => {
     v-if="detailEntry"
     :key="detailEntry.id"
     :entry="detailEntry"
-    :categories="categoryNames"
-    :initial-editing="detailEditing"
     :visible-passwords="visiblePasswords"
     :password-cache="passwordCache"
     @close="closeDetail"
+    @edit="openEdit"
     @delete="doDelete($event, closeDetail)"
-    @saved="onFormSaved"
     @toggle-password="togglePassword"
     @copy-password="copyPassword"
     @copy-text="copyToClipboard"

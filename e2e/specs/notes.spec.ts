@@ -208,7 +208,7 @@ test.describe('Notes 小记', () => {
 
   test('搜索过滤与 rail 视图筛选', async ({ page }) => {
     await gotoNotes(page)
-    const search = page.locator('.stream-bar .search-box input')
+    const search = page.locator('.page-bar .search-box input')
     await search.fill('采购')
     await expect(page.locator('.memo')).toHaveCount(1)
     await expect(page.locator('.bar-count')).toHaveText('1 / 3 条')
@@ -216,7 +216,7 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.memo')).toHaveCount(3)
 
     // 窄栏默认收起，视图筛选要先展开它
-    await tipButton(page, '展开侧栏').click()
+    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
     await page.locator('.rail button.rail-item', { hasText: '收藏' }).click()
     await expect(page.locator('.empty-title')).toHaveText('未找到匹配的小记')
     await page.locator('.rail button.rail-item.danger', { hasText: '清空筛选' }).click()
@@ -233,7 +233,7 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
     await expect(memo(page, '第一条小记')).toHaveClass(/is-sel/)
     // 选中态：浸润底 + 1px 全包裹微环
-    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(91, 87, 217) 0px 0px 0px 1px, rgba(26, 27, 32, 0.05) 0px 1px 2px 0px')
+    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(58, 104, 184) 0px 0px 0px 1px, rgba(17, 24, 39, 0.05) 0px 1px 3px 0px')
     // 上下键换焦点，微环跟着走
     await page.locator('.memo').first().focus()
     await page.keyboard.press('ArrowDown')
@@ -337,9 +337,9 @@ test.describe('Notes 小记', () => {
     // 这次加密的小记在锁的时候就留了真标题，锁回照样认得出
     await expect(plain.locator('.locked-title')).toHaveText('机密事')
     // 锁回的正文不进搜索
-    await page.locator('.stream-bar .search-box input').fill('要加密的正文')
+    await page.locator('.page-bar .search-box input').fill('要加密的正文')
     await expect(page.locator('.memo')).toHaveCount(0)
-    await page.locator('.stream-bar .search-box input').fill('')
+    await page.locator('.page-bar .search-box input').fill('')
     await expect(page.locator('.memo')).toHaveCount(2)
 
     // 口令还在手：单条再开不再问一次
@@ -348,14 +348,14 @@ test.describe('Notes 小记', () => {
     await expect(plain.locator('.memo-body')).toContainText('要加密的正文')
 
     // 整库锁回 → 错口令拦在弹窗里 → 对的一次开全部
-    await page.locator('.stream-bar button[aria-label="锁回全部加密小记"]').click()
+    await page.locator('.page-bar button[aria-label="锁回全部加密小记"]').click()
     await expectToast(page, '加密小记已全部锁回')
     await expect(page.locator('.memo-locked')).toHaveCount(2)
     // 解锁时回填的标题留了下来：老数据锁回去也认得出是哪条，还搜得着
     await expect(sealed.locator('.locked-title')).toHaveText('封存')
-    await page.locator('.stream-bar .search-box input').fill('封存')
+    await page.locator('.page-bar .search-box input').fill('封存')
     await expect(page.locator('.memo')).toHaveCount(1)
-    await page.locator('.stream-bar .search-box input').fill('')
+    await page.locator('.page-bar .search-box input').fill('')
     await sealed.click()
     await expect(dialog).toBeVisible()
     await expect(dialog.locator('input[type="password"]')).toHaveCount(1)
@@ -370,7 +370,7 @@ test.describe('Notes 小记', () => {
     await expect(memo(page, '要加密的正文')).toBeVisible()
 
     // 忘口令兜底：应用已解锁，零输入直接开
-    await page.locator('.stream-bar button[aria-label="锁回全部加密小记"]').click()
+    await page.locator('.page-bar button[aria-label="锁回全部加密小记"]').click()
     await sealed.click()
     await dialog.locator('.link-btn').click()
     await expectToast(page, '已用主密码解开小记')

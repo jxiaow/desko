@@ -99,18 +99,29 @@ onMounted(async () => {
   // WebView 收不到窗口隐藏/最小化时的 mouseleave，:hover 与 tooltip 会残留到下次打开
   installHoverGuard()
   window.addEventListener('desko:open-settings-tab', onOpenSettingsTab)
+  window.addEventListener('keydown', onGlobalKey)
 })
 
 onUnmounted(() => {
   window.removeEventListener('desko:open-settings-tab', onOpenSettingsTab)
+  window.removeEventListener('keydown', onGlobalKey)
 })
+
+/* Ctrl/Cmd+B 切换侧栏：与浏览器书签栏习惯同键位 */
+function onGlobalKey(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'b') {
+    e.preventDefault()
+    isSidebarCollapsed.value = !isSidebarCollapsed.value
+  }
+}
 </script>
 
 <template>
   <div class="app-root" :class="{ 'locked-bg': appState === 'locked' }">
+    <!-- 锁定/初始化态：顶栏浮在页面上；解锁态：顶栏进右列，侧栏全高贯通 -->
     <TitleBar
+      v-if="appState !== 'unlocked'"
       :is-locked="appState === 'locked'"
-      @toggle-sidebar="isSidebarCollapsed = !isSidebarCollapsed"
       @open-settings="openSettingsGeneral"
       @lock="doLock"
     />
@@ -125,6 +136,11 @@ onUnmounted(() => {
       />
 
       <div class="main-area">
+        <TitleBar
+          @open-settings="openSettingsGeneral"
+          @lock="doLock"
+        />
+
         <div class="main-content">
           <router-view />
         </div>

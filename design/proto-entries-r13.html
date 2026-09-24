@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Desko · 网址收藏 · 原型 r13</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: { extend: { colors: {
+    app: 'var(--bg-app)', surface: 'var(--bg-surface)', sidebg: 'var(--bg-sidebar)',
+    brand: 'var(--brand)', brandhover: 'var(--brand-hover)',
+    linebase: 'var(--border-base)', linecard: 'var(--border-card)', linecardh: 'var(--border-card-hover)',
+    tmain: 'var(--text-main)', tmuted: 'var(--text-muted)', tdim: 'var(--text-dim)',
+  }}}
+}
+</script>
+<style>
+  :root {
+    --bg-app: #f4f7f5;
+    --bg-sidebar: #ebf0ed;
+    --bg-surface: #ffffff;
+    --border-base: #dce3df;
+    --border-card: #e2e8e4;
+    --border-card-hover: #cfd8d2;
+    --text-main: #0f1713;
+    --text-muted: #4a5c52;
+    --text-dim: #7d9185;
+    --brand: #216747;
+    --brand-hover: #195237;
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+    --font-mono: Consolas, "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+  html, body { height: 100%; margin: 0; font-family: var(--font-ui); background: #dfe5e1; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+
+  .app-window {
+    width: 1040px; height: 670px; background: var(--bg-app);
+    border: 1px solid var(--border-base); border-radius: 10px; overflow: hidden;
+    display: flex; box-shadow: 0 18px 48px rgba(15, 23, 19, 0.18);
+  }
+
+  /* ── 全高贯通侧栏 ── */
+  .sidebar {
+    width: 180px; flex-shrink: 0; background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-base);
+    display: flex; flex-direction: column;
+    transition: width 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  .app-window.collapsed .sidebar { width: 56px; }
+
+  /* 顶部折叠行：38px 与右侧系统栏齐平 */
+  .side-top {
+    height: 38px; flex-shrink: 0; border-bottom: 1px solid var(--border-base);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 6px 0 10px; gap: 0;
+  }
+  .app-window.collapsed .side-top { justify-content: center; padding: 0 6px; }
+  .brand-wrap {
+    display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap;
+    max-width: 200px; transition: max-width 0.22s ease, opacity 0.18s ease;
+  }
+  .app-window.collapsed .brand-wrap { max-width: 0; opacity: 0; }
+  .brand-d {
+    width: 22px; height: 22px; border-radius: 5px; background: var(--brand); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; flex-shrink: 0;
+  }
+  .brand-name { font-size: 13.5px; font-weight: 600; color: var(--text-main); transition: opacity 0.18s ease; }
+  .side-toggle {
+    width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    color: var(--text-muted); cursor: pointer;
+  }
+  .side-toggle:hover { background: rgba(0, 0, 0, 0.035); color: var(--text-main); }
+
+  /* 导航：贴顶、等距、无断层 */
+  .side-nav { padding: 6px 8px 0; display: flex; flex-direction: column; gap: 2px; }
+  .app-window.collapsed .side-nav { padding: 6px 8px 0; }
+  .nav-item {
+    position: relative; height: 32px; border-radius: 6px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 8px; padding: 0 8px;
+    color: var(--text-muted); cursor: pointer; white-space: nowrap; overflow: hidden;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .app-window.collapsed .nav-item { padding: 0; justify-content: center; }
+  .nav-item:hover { background: rgba(0, 0, 0, 0.035); color: var(--text-main); }
+  .nav-item.active { background: color-mix(in srgb, var(--brand) 8%, transparent); color: var(--brand); font-weight: 600; }
+  .nav-item.active::before {
+    content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 4px; height: 14px; border-radius: 999px; background: var(--brand);
+  }
+  .nav-icon { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .nav-icon svg { width: 16px; height: 16px; }
+  .nav-label { flex: 1; font-size: 13px; overflow: hidden; transition: max-width 0.22s ease, opacity 0.18s ease; max-width: 120px; }
+  .app-window.collapsed .nav-label { max-width: 0; opacity: 0; }
+  .nav-count {
+    height: 18px; min-width: 18px; padding: 0 5px; border-radius: 999px; font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(15, 23, 19, 0.06); color: var(--text-dim); flex-shrink: 0;
+    transition: max-width 0.22s ease, opacity 0.18s ease; max-width: 40px; overflow: hidden;
+  }
+  .nav-item.active .nav-count { background: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand); }
+  .app-window.collapsed .nav-count { max-width: 0; opacity: 0; padding: 0; }
+
+  /* ── 右列 ── */
+  .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+  /* 系统窗控栏 38px */
+  .win-bar {
+    height: 38px; flex-shrink: 0; display: flex; align-items: center;
+    padding: 0 8px 0 14px; gap: 8px; background: var(--bg-app);
+  }
+  .win-title { font-size: 13.5px; font-weight: 600; color: var(--text-main); }
+  .win-util {
+    width: 28px; height: 26px; border-radius: 6px; border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer;
+  }
+  .win-util:hover { background: rgba(0, 0, 0, 0.05); color: var(--text-main); }
+  .win-ctl { width: 40px; height: 38px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; }
+  .win-ctl:hover { background: rgba(0, 0, 0, 0.05); }
+  .win-ctl.close:hover { background: #c93d3d; color: #fff; }
+
+  /* 模块工具栏 44px，子控件锁 32/28 */
+  .toolbar {
+    height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+    padding: 0 14px; background: var(--bg-app); border-bottom: 1px solid var(--border-base);
+  }
+  .align-center-strict {
+    display: inline-flex; align-items: center; justify-content: center;
+    vertical-align: middle; box-sizing: border-box; line-height: 1;
+  }
+  .search-box {
+    width: 220px; height: 32px; flex-shrink: 0;
+    background: var(--bg-surface); border: 1px solid var(--border-base); border-radius: 8px;
+    display: flex; align-items: center; gap: 7px; padding: 0 8px;
+  }
+  .search-box input { flex: 1; min-width: 0; border: none; outline: none; background: none; font-size: 12.5px; font-family: var(--font-ui); color: var(--text-main); }
+  .search-box input::placeholder { color: var(--text-dim); }
+  .kbd-capsule {
+    font-family: var(--font-mono); font-size: 9.5px; color: var(--text-dim); flex-shrink: 0;
+    border: 1px solid var(--border-base); border-radius: 4px; background: #eef2f0; padding: 2px 5px;
+  }
+  .cat-pill {
+    height: 28px; padding: 0 10px; border-radius: 8px; gap: 6px;
+    font-size: 12.5px; color: var(--text-muted); cursor: pointer; flex-shrink: 0;
+    border: 1px solid transparent; background: transparent;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .cat-pill:hover { background: rgba(0, 0, 0, 0.035); color: var(--text-main); }
+  .cat-pill.active {
+    background: var(--bg-surface); border-color: var(--border-base);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    color: var(--brand); font-weight: 600;
+  }
+  .cat-pill .num { font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .cat-pill.active .num { color: var(--brand); }
+  .btn-add {
+    height: 32px; padding: 0 12px; border-radius: 8px; gap: 6px; border: none; cursor: pointer;
+    background: var(--brand); color: #fff; font-size: 12.5px; font-weight: 600; font-family: var(--font-ui);
+    transition: background 0.15s ease;
+  }
+  .btn-add:hover { background: var(--brand-hover); }
+  .btn-add svg { width: 14px; height: 14px; }
+
+  /* 列表 */
+  .list-area { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 14px 24px; scrollbar-gutter: stable; }
+  .list-area::-webkit-scrollbar { width: 8px; }
+  .list-area::-webkit-scrollbar-thumb { background: rgba(15, 23, 19, 0.16); border-radius: 4px; }
+  .card {
+    height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 12px;
+    padding: 0 12px; margin-bottom: 8px; cursor: pointer;
+    background: var(--bg-surface); border: 1px solid var(--border-card); border-radius: 10px;
+    transition: all 0.15s ease;
+  }
+  .card:hover { border-color: var(--border-card-hover); background: #f6f9f7; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.025); }
+  .c1 { width: 210px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .tile {
+    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em;
+    background: #e9efeb; color: var(--text-muted); border: 1px solid var(--border-base);
+  }
+  .tile.warm { background: #f4ecdb; color: #8a6a1e; border-color: #e5d9bd; }
+  .c1-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; justify-content: center; }
+  .c-title { font-size: 13.5px; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .c-note { font-size: 11.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .c2 { flex: 1; min-width: 0; }
+  .url { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .c3 { width: 90px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .branch {
+    height: 22px; max-width: 90px; padding: 0 8px; border-radius: 6px;
+    display: inline-flex; align-items: center;
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--brand-hover);
+    background: #e7efe9; border: 1px solid #cfddd3;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .c4 { width: 100px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .cat {
+    height: 22px; max-width: 100px; padding: 0 8px; border-radius: 6px;
+    display: inline-flex; align-items: center;
+    font-size: 11.5px; color: var(--text-muted);
+    background: #eef2f0; border: 1px solid var(--border-base);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .c5 { width: 84px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 4px; opacity: 0; transition: opacity 0.15s ease; }
+  .card:hover .c5 { opacity: 1; }
+  .act {
+    width: 28px; height: 28px; border-radius: 6px; border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; flex-shrink: 0;
+  }
+  .act:hover { background: rgba(0, 0, 0, 0.05); color: var(--text-main); }
+  .act svg { width: 14px; height: 14px; }
+
+  .no-anim, .no-anim * { transition: none !important; }
+</style>
+</head>
+<body>
+<div class="app-window" id="win">
+
+  <!-- 全高通顶侧栏 -->
+  <aside class="sidebar">
+    <div class="side-top">
+      <div class="brand-wrap">
+        <div class="brand-d">D</div>
+        <span class="brand-name nav-label">Desko</span>
+      </div>
+      <button class="side-toggle" id="toggleBtn" title="折叠侧栏 (Ctrl+B)">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="10" y1="4" x2="10" y2="20"/></svg>
+      </button>
+    </div>
+    <nav class="side-nav">
+      <div class="nav-item active">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+        <span class="nav-label">网址收藏</span>
+        <span class="nav-count">7</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
+        <span class="nav-label">小记</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span>
+        <span class="nav-label">文件快捷</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg></span>
+        <span class="nav-label">局域网传输</span>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- 右列 -->
+  <div class="main-col">
+    <header class="win-bar">
+      <span class="win-title">网址收藏</span>
+      <span class="flex-1"></span>
+      <button class="win-util" title="设置">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button class="win-util" title="锁定">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </button>
+      <span style="width:1px;height:16px;background:var(--border-base);margin:0 4px;"></span>
+      <div class="win-ctl" title="最小化"><svg width="12" height="12" viewBox="0 0 12 12"><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      <div class="win-ctl" title="最大化"><svg width="11" height="11" viewBox="0 0 11 11"><rect x="0.6" y="0.6" width="9.8" height="9.8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></div>
+      <div class="win-ctl close" title="关闭"><svg width="11" height="11" viewBox="0 0 11 11"><line x1="1" y1="1" x2="10" y2="10" stroke="currentColor" stroke-width="1.2"/><line x1="10" y1="1" x2="1" y2="10" stroke="currentColor" stroke-width="1.2"/></svg></div>
+    </header>
+
+    <div class="toolbar">
+      <div class="search-box align-center-strict" style="justify-content:flex-start;">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#7d9185" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+        <input placeholder="搜索名称或网址…" />
+        <span class="kbd-capsule">Ctrl K</span>
+      </div>
+      <button class="cat-pill active align-center-strict">全部 <span class="num">7</span></button>
+      <button class="cat-pill align-center-strict">XYLink App <span class="num">4</span></button>
+      <button class="cat-pill align-center-strict">Jenkins <span class="num">3</span></button>
+      <span class="flex-1"></span>
+      <button class="btn-add align-center-strict">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="7" y1="1.5" x2="7" y2="12.5"/><line x1="1.5" y1="7" x2="12.5" y2="7"/></svg>
+        新增条目
+      </button>
+    </div>
+
+    <main class="list-area" id="list"></main>
+
+  </div>
+</div>
+
+<script>
+const DATA = [
+  { ini: 'LX', warm: true,  title: 'Linux x64 Private',  note: 'Linux x64 private App', url: '10.0.0.65/builds/private/linux_app_x86_64', branch: '20260928', cat: 'XYLink App' },
+  { ini: 'LA', title: 'Linux Arm64 Private', note: 'Linux Arm64 private', url: '10.0.0.65/builds/private/linux_app_arm64', branch: '20260926', cat: 'XYLink App' },
+  { ini: 'WD', warm: true,  title: 'WinQT Dev',   note: 'WinQT Dev App',  url: '10.0.0.65/builds/dev/winqt_app',  branch: 'master',   cat: 'XYLink App' },
+  { ini: 'WP', title: 'WinQT Private', note: 'WinQT Private', url: '10.0.0.65/builds/private/winqt_app', branch: '20260928', cat: 'XYLink App' },
+  { ini: 'LI', title: 'LinuxX64', note: 'linux x64 job', url: '10.0.0.107:8080/view/linux_x86_64_build/job/linux_app', branch: '', cat: 'Jenkins' },
+  { ini: 'LI', title: 'LinuxArm', note: 'linux arm job', url: '10.0.0.107:8080/view/KP920-kylinV10/job/linux_app', branch: '', cat: 'Jenkins' },
+  { ini: 'WI', title: 'WinQT',   note: 'windows job',   url: '10.0.0.107:8080/view/QD/job/winqt_app', branch: '', cat: 'Jenkins' },
+];
+
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+document.getElementById('list').innerHTML = DATA.map((d) => `
+  <div class="card">
+    <div class="c1">
+      <div class="tile${d.warm ? ' warm' : ''}">${d.ini}</div>
+      <div class="c1-text">
+        <span class="c-title">${esc(d.title)}</span>
+        <span class="c-note">${esc(d.note)}</span>
+      </div>
+    </div>
+    <div class="c2"><span class="url" ondblclick="selectFull(this)">${esc(d.url)}</span></div>
+    <div class="c3">${d.branch ? `<span class="branch">${esc(d.branch)}</span>` : ''}</div>
+    <div class="c4"><span class="cat">${esc(d.cat)}</span></div>
+    <div class="c5">
+      <button class="act align-center-strict" title="复制网址"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+      <button class="act align-center-strict" title="在浏览器打开"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
+      <button class="act align-center-strict" title="更多操作"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+    </div>
+  </div>`).join('');
+
+function selectFull(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+const win = document.getElementById('win');
+const toggle = () => {
+  win.classList.toggle('collapsed');
+  document.getElementById('toggleBtn').title = win.classList.contains('collapsed') ? '展开侧栏 (Ctrl+B)' : '折叠侧栏 (Ctrl+B)';
+};
+document.getElementById('toggleBtn').addEventListener('click', toggle);
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); toggle(); }
+});
+if (location.hash === '#collapsed') { win.classList.add('collapsed', 'no-anim'); }
+</script>
+</body>
+</html>

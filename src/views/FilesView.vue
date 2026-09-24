@@ -5,7 +5,7 @@ import FileShortcutsModule from '../components/files/FileShortcutsModule.vue'
 
 const fileShortcutsStore = useFileShortcutsStore()
 const {
-  loading, loadError, searchKeyword, filteredShortcuts,
+  loading, loadError, searchKeyword, filteredShortcuts, shortcuts,
 } = storeToRefs(fileShortcutsStore)
 const { fetchShortcuts, addShortcut, updateShortcut, removeShortcut } = fileShortcutsStore
 </script>
@@ -16,6 +16,7 @@ const { fetchShortcuts, addShortcut, updateShortcut, removeShortcut } = fileShor
     :loading="loading"
     :load-error="loadError"
     :filtered-shortcuts="filteredShortcuts"
+    :total-shortcuts="shortcuts.length"
     @update:search-keyword="searchKeyword = $event"
     @add-shortcut="addShortcut"
     @update-shortcut="updateShortcut"

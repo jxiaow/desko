@@ -95,7 +95,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
     </header>
 
     <div class="fs-scroll">
-      <div class="fs-inner fs-col">
+      <div class="fs-inner" :class="viewMode ? 'fs-doc' : 'fs-col'">
         <div class="fs-meta">
           <span>{{ props.note ? formatAbsTime(props.note.created_at) : '新小记' }}</span>
           <span class="dotsep"></span>
@@ -230,30 +230,45 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 .fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.5; }
 
 .fs-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+/* 铺了纸就得给纸外留出桌沿，否则 800px 以下的窗口里纸边贴住滚动条 */
+.fs-scroll:has(.fs-doc) { padding-inline: var(--space-5); scrollbar-gutter: stable; }
 .fs-inner { animation: fs-rise 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; padding-block: var(--space-6) var(--space-8); }
 @keyframes fs-rise { from { opacity: 0; } }
+
+/* 只读浏览铺一张纸：书写态是「对着空桌子写」，阅读态是「拿起写好的一页」，
+   底色和投影把这层区分开，阅读宽度也收到 800px（比书写列窄一档） */
+.fs-doc {
+  width: 100%;
+  max-width: 800px;
+  margin: var(--space-5) auto var(--space-8);
+  padding: var(--space-10) var(--space-12) var(--space-10);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
 
 .fs-atts { margin-top: var(--space-5); }
 
 /* 只读正文：排版语言与列表卡片同源，字号行距按全屏阅读放大 */
 .fs-view {
-  font-size: 15px;
-  line-height: 1.75;
+  font-size: 14.5px;
+  line-height: 27px;
   color: var(--text);
   word-break: break-word;
 }
-.fs-view :deep(> * + *) { margin-top: var(--space-3); }
-.fs-view :deep(* + h1), .fs-view :deep(* + h2), .fs-view :deep(* + h3) { margin-top: var(--space-5); }
-.fs-view :deep(h1) { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
-.fs-view :deep(h2) { font-size: 17.5px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.5; }
-.fs-view :deep(h3) { font-size: 15.5px; font-weight: 600; line-height: 1.5; }
+.fs-view :deep(> * + *) { margin-top: var(--space-4); }
+.fs-view :deep(* + h1), .fs-view :deep(* + h2), .fs-view :deep(* + h3) { margin-top: var(--space-6); }
+.fs-view :deep(h1) { font-size: 24px; font-weight: 600; letter-spacing: -0.022em; line-height: 32px; }
+.fs-view :deep(h2) { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; line-height: 26px; }
+.fs-view :deep(h3) { font-size: 16px; font-weight: 600; line-height: 24px; }
 .fs-view :deep(strong) { font-weight: 600; color: var(--text); }
 .fs-view :deep(ul), .fs-view :deep(ol) { padding-left: var(--space-5); }
-.fs-view :deep(li) { margin: 3px 0; }
+.fs-view :deep(li) { margin: 4px 0; }
 .fs-view :deep(li::marker) { color: var(--text-faint); }
 .fs-view :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-4); color: var(--text-secondary); }
 .fs-view :deep(code) { font-family: var(--font-mono); font-size: 13px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
-.fs-view :deep(pre) { font-family: var(--font-mono); font-size: 13px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-3) var(--space-4); overflow-x: auto; }
+.fs-view :deep(pre) { font-family: var(--font-mono); font-size: 13px; line-height: 22px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-3) var(--space-4); overflow-x: auto; }
 .fs-view :deep(pre code) { background: none; border: none; padding: 0; color: inherit; }
 .fs-view :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 5px; }
 .fs-view :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
@@ -269,7 +284,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
+  padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border);
   background: var(--frost-bg);
   backdrop-filter: blur(10px);
