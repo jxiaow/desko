@@ -126,11 +126,7 @@ onUnmounted(() => {
 
       <div class="main-area">
         <div class="main-content">
-          <router-view v-slot="{ Component, route: r }">
-            <Transition name="page" mode="out-in">
-              <component :is="Component" :key="r.path" />
-            </Transition>
-          </router-view>
+          <router-view />
         </div>
       </div>
     </div>

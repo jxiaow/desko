@@ -247,7 +247,7 @@ onUnmounted(() => {
         <div class="skeleton-line tag"></div>
       </div>
     </div>
-    <TransitionGroup v-else-if="filteredEntries.length" tag="div" name="list" class="entry-list" @keydown="onListKeydown">
+    <div v-else-if="filteredEntries.length" class="entry-list" @keydown="onListKeydown">
       <article
         v-for="item in filteredEntries"
         :key="item.id"
@@ -367,7 +367,7 @@ onUnmounted(() => {
           @close="closeMenu"
         />
       </article>
-    </TransitionGroup>
+    </div>
     <div v-else-if="loadError" class="error-state">
       <div class="empty-icon">
         <AppIcon name="alert" :size="24" />

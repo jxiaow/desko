@@ -415,7 +415,7 @@ onBeforeUnmount(() => {
               {{ group.label }}
               <span class="day-count">· {{ group.notes.length }}</span>
             </div>
-            <TransitionGroup tag="div" name="list" class="day-list">
+            <div class="day-list">
               <NoteCard
                 v-for="note in group.notes"
                 :key="note.id"
@@ -446,7 +446,7 @@ onBeforeUnmount(() => {
                 @tag-click="toggleTagFilter($event)"
                 @remove-attachment="deleteAttachment(note.id, $event)"
               />
-            </TransitionGroup>
+            </div>
           </div>
 
           <div v-if="!filteredNotes.length && notesLoadError" class="error-state">

@@ -277,7 +277,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <TransitionGroup v-else-if="filteredShortcuts.length > 0" tag="div" name="list" class="shortcut-list">
+    <div v-else-if="filteredShortcuts.length > 0" class="shortcut-list">
       <div
         v-for="shortcut in filteredShortcuts"
         :key="shortcut.id"
@@ -326,7 +326,7 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
-    </TransitionGroup>
+    </div>
 
     <div v-else-if="loadError" class="error-state">
       <div class="empty-icon">

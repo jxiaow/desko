@@ -758,16 +758,6 @@ body {
 .main-area { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); height: 100%; }
 .main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); min-height: 0; }
 
-/* 路由切换补间：fade + 极轻 translateY，0.18s 内完成。
-   mode="out-in" 让旧页先退、新页再进，避免两页同时占位。
-   App.vue 用 <Transition name="page"> 包 <router-view/>，这里挂四态类。 */
-.page-enter-active,
-.page-leave-active {
-  transition: opacity var(--transition-slow), transform var(--transition-slow);
-}
-.page-enter-from { opacity: 0; transform: translateY(6px); }
-.page-leave-to   { opacity: 0; transform: translateY(-3px); }
-
 /* 侧栏折叠时文字淡出而不是消失。Sidebar.vue 用 <Transition name="nav-text"> 包 v-if。 */
 .nav-text-enter-active,
 .nav-text-leave-active {
@@ -789,17 +779,6 @@ body {
     scroll-behavior: auto !important;
   }
 }
-
-/* 列表进出场（TransitionGroup name="list"）：
-   EntriesModule / NotesModule / FileShortcutsModule 的列表共用，
-   删除一条时余下的元素靠 .list-move 补间归位，不再"啪"地跳一下。 */
-.list-enter-active,
-.list-leave-active,
-.list-move {
-  transition: transform var(--transition-slow), opacity var(--transition-slow);
-}
-.list-enter-from { opacity: 0; transform: translateY(8px); }
-.list-leave-to   { opacity: 0; transform: translateY(-4px); }
 
 /* 骨架呼吸：所有模块的 .skeleton-line / .skeleton-icon / .memo-skeleton 共用，
    由使用方在自己的 scoped 规则里写 `animation: skeleton-pulse 1.4s ease-in-out infinite`。 */
