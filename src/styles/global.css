@@ -68,6 +68,16 @@
   --rail-min-room: 900px;
 }
 
+/* 内置中文正文字体：HarmonyOS Sans SC 可变字重子集（GB2312 常用字，来源与许可见
+   public/fonts/NOTICE.md）。拉丁文仍走 Segoe UI，中文不再落微软雅黑。 */
+@font-face {
+  font-family: 'HarmonyOS Sans SC';
+  src: url('/fonts/harmonyos-sans-sc.woff2') format('woff2-variations');
+  font-weight: 40 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    第 2 层 · 主题 —— 颜色，外加唯一一个字体槽。
 
@@ -216,7 +226,7 @@
   --code-tag: #6a5a99;
   --code-pun: #8b8d98;
 
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
@@ -337,7 +347,7 @@
   --code-tag: #77608f;
   --code-pun: #6f6a5e;
 
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
@@ -459,7 +469,7 @@
   --code-tag: #c792ea;
   --code-pun: #8c94a6;
 
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
@@ -581,7 +591,7 @@
   --code-tag: #9876aa;
   --code-pun: #a9b7c6;
 
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
@@ -708,7 +718,7 @@
   --code-tag: #6f5e92;
   --code-pun: #7d9185;
 
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
@@ -826,7 +836,7 @@
   --code-tag: #6a5a99;
   --code-pun: #8b8d98;
 
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
@@ -945,7 +955,7 @@
   --code-tag: #6a5a99;
   --code-pun: #8b8d98;
 
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 

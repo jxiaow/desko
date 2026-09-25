@@ -61,7 +61,7 @@ const onDragDblclick = (e: MouseEvent) => {
     </div>
 
     <div class="sidebar-nav">
-      <router-link to="/entries" class="nav-item m-ent" :class="{ active: route.path === '/entries' }" title="网址收藏">
+      <router-link to="/entries" class="nav-item m-ent" :class="{ active: route.path === '/entries' }" aria-label="网址收藏">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         </div>
@@ -72,7 +72,7 @@ const onDragDblclick = (e: MouseEvent) => {
           <span v-if="!collapsed && counts['/entries']!.value > 0" class="nav-count">{{ counts['/entries']!.value }}</span>
         </Transition>
       </router-link>
-      <router-link to="/notes" class="nav-item m-not" :class="{ active: route.path === '/notes' }" title="小记">
+      <router-link to="/notes" class="nav-item m-not" :class="{ active: route.path === '/notes' }" aria-label="小记">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         </div>
@@ -83,7 +83,7 @@ const onDragDblclick = (e: MouseEvent) => {
           <span v-if="!collapsed && counts['/notes']!.value > 0" class="nav-count">{{ counts['/notes']!.value }}</span>
         </Transition>
       </router-link>
-      <router-link to="/files" class="nav-item m-fil" :class="{ active: route.path === '/files' }" title="文件快捷">
+      <router-link to="/files" class="nav-item m-fil" :class="{ active: route.path === '/files' }" aria-label="文件快捷">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
         </div>
@@ -94,7 +94,7 @@ const onDragDblclick = (e: MouseEvent) => {
           <span v-if="!collapsed && counts['/files']!.value > 0" class="nav-count">{{ counts['/files']!.value }}</span>
         </Transition>
       </router-link>
-      <router-link v-if="mfaEnabled" to="/mfa" class="nav-item m-mfa" :class="{ active: route.path === '/mfa' }" title="验证码">
+      <router-link v-if="mfaEnabled" to="/mfa" class="nav-item m-mfa" :class="{ active: route.path === '/mfa' }" aria-label="验证码">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9.5 11.5l2 2 3.5-3.5"/></svg>
         </div>
@@ -102,7 +102,7 @@ const onDragDblclick = (e: MouseEvent) => {
           <span v-if="!collapsed" class="nav-text">验证码</span>
         </Transition>
       </router-link>
-      <router-link v-if="fileshareEnabled" to="/fileshare" class="nav-item m-lan" :class="{ active: route.path === '/fileshare' }" title="局域网传输">
+      <router-link v-if="fileshareEnabled" to="/fileshare" class="nav-item m-lan" :class="{ active: route.path === '/fileshare' }" aria-label="局域网传输">
         <div class="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>
         </div>
