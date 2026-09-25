@@ -88,7 +88,20 @@ const applyClamp = async () => {
 }
 
 onMounted(() => window.addEventListener('resize', applyClamp))
-onBeforeUnmount(() => window.removeEventListener('resize', applyClamp))
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', applyClamp)
+  if (copiedTimer) window.clearTimeout(copiedTimer)
+})
+
+/* 复制 morph：钮面短暂翻成对勾做回执（写剪贴板与 toast 在父层） */
+const copied = ref(false)
+let copiedTimer: number | undefined
+const onCopy = () => {
+  emit('copy')
+  copied.value = true
+  if (copiedTimer) window.clearTimeout(copiedTimer)
+  copiedTimer = window.setTimeout(() => { copied.value = false }, 1200)
+}
 
 // 只读正文在编辑态会整个卸掉，回来时是一个新元素，组件本身不会重新挂载
 watch(bodyEl, applyClamp)
@@ -198,13 +211,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     @keydown="onKeydown"
   >
     <span v-if="props.isBatchMode" class="memo-check" :class="{ checked: props.isSelected }" aria-hidden="true">
-      <AppIcon v-if="props.isSelected" name="check" :size="11" />
+      <AppIcon v-if="props.isSelected" name="check" :size="12" />
     </span>
 
     <div class="memo-head" @click="onHeadClick">
       <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
       <span v-if="!locked && visibleAtts.length" class="memo-att" :title="`${visibleAtts.length} 个附件`">
-        <AppIcon name="clip" :size="11" />
+        <AppIcon name="clip" :size="12" />
         {{ visibleAtts.length }}
       </span>
       <span class="memo-state">
@@ -212,14 +225,14 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       </span>
       <span class="memo-acts">
         <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
-          <AppIcon name="unlock" :size="13" />
+          <AppIcon name="unlock" :size="14" />
         </button>
         <template v-if="!locked">
           <button class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
-            <AppIcon name="eye" :size="13" />
+            <AppIcon name="eye" :size="14" />
           </button>
           <button class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
-            <AppIcon name="edit" :size="13" />
+            <AppIcon name="edit" :size="14" />
           </button>
         </template>
         <button
@@ -230,7 +243,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
           @click.stop="emit('togglePin')"
         >
-          <AppIcon name="pin" :size="13" />
+          <AppIcon name="pin" :size="14" />
         </button>
         <button
           class="ib"
@@ -240,22 +253,22 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           :aria-label="props.note.starred ? '取消收藏' : '收藏'"
           @click.stop="emit('toggleStar')"
         >
-          <AppIcon name="star" :size="13" :filled="props.note.starred" />
+          <AppIcon name="star" :size="14" :filled="props.note.starred" />
         </button>
-        <button v-if="!locked" class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
-          <AppIcon name="copy" :size="13" />
+        <button v-if="!locked" class="ib" :class="{ copied }" type="button" :title="copied ? '已复制' : '复制正文'" aria-label="复制正文" @click.stop="onCopy">
+          <AppIcon :name="copied ? 'check' : 'copy'" :size="14" />
         </button>
         <button v-if="!locked && !props.note.encrypted" class="ib" type="button" title="加密" aria-label="加密" @click.stop="emit('encrypt')">
-          <AppIcon name="lock" :size="13" />
+          <AppIcon name="lock" :size="14" />
         </button>
         <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="重新锁定" aria-label="重新锁定" @click.stop="emit('relock')">
-          <AppIcon name="lock" :size="13" />
+          <AppIcon name="lock" :size="14" />
         </button>
         <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="解除加密" aria-label="解除加密" @click.stop="emit('removeLock')">
-          <AppIcon name="lockOff" :size="13" />
+          <AppIcon name="lockOff" :size="14" />
         </button>
         <button class="ib danger" type="button" title="删除" aria-label="删除" @click.stop="emit('delete')">
-          <AppIcon name="trash" :size="13" />
+          <AppIcon name="trash" :size="14" />
         </button>
       </span>
     </div>
@@ -322,17 +335,16 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo {
   position: relative;
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid transparent;
   border-radius: var(--radius-card);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4);
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition), transform var(--transition);
 }
-/* hover 与收藏/文件行卡同一配方：边框提亮 + accent 浸润 + 同档投影 */
+/* hover 与收藏/文件行卡同一配方：描边显色 + 阴影抬升（大方化轮，浸润底退役） */
 .memo:hover {
   border-color: var(--border-card-hover);
-  background: color-mix(in srgb, var(--accent) 4%, var(--bg-surface));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.025);
+  box-shadow: var(--shadow-card-hover);
 }
 .memo.pinned { border-color: var(--accent-light); }
 .memo.editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }
@@ -344,8 +356,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   position: relative;
   max-height: var(--memo-max-h);
   overflow: hidden;
-  font-size: 13.5px;
-  line-height: 23px;
+  font-size: var(--text-base);
+  line-height: 24px;
   color: var(--text);
   word-break: break-word;
 }
@@ -356,7 +368,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 24px;
+  height: 26px;
   margin-top: 3px;
   padding: 0 var(--space-1);
   margin-left: calc(0px - var(--space-1));
@@ -364,7 +376,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--accent);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
 }
@@ -372,16 +384,21 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-unfold :deep(svg) { transition: transform var(--transition); }
 .memo-unfold :deep(svg.up) { transform: rotate(180deg); }
 
-/* 加密锁标识：占掉正文位置，一眼知道这条要看密码 */
+/* 加密锁标识：占掉正文位置，一眼知道这条要看密码。
+   底纹走极淡斜纹——不读字也能扫出"这块是锁着的"，浓到贴纸感就过头 */
 .memo-locked {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-height: 44px;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
+  border-radius: var(--radius);
+  background: repeating-linear-gradient(-45deg,
+    color-mix(in srgb, var(--warning) 5%, transparent) 0 6px,
+    transparent 6px 14px);
 }
 .lock-disc {
   width: 34px;
@@ -396,20 +413,20 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 }
 .lock-meta { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
 /* 锁着也认得出是哪条：只有真标题（h1–h3）会留明文，其余只剩提示语 */
-.locked-title { color: var(--text); font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.locked-title { color: var(--text); font-size: var(--text-md); font-weight: 600; letter-spacing: -0.01em; }
 /* 只给正文顶层块加间距，理由同 NoteEditor：* + * 会把任务项的正文压到勾选框下面 */
 .memo-body :deep(> * + *) { margin-top: var(--space-2); }
 .memo-body :deep(* + h1), .memo-body :deep(* + h2), .memo-body :deep(* + h3) { margin-top: var(--space-4); }
-.memo-body :deep(h1) { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 26px; }
-.memo-body :deep(h2) { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 24px; }
-.memo-body :deep(h3) { font-size: 14.5px; font-weight: 600; line-height: 22px; }
+.memo-body :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.015em; line-height: 28px; }
+.memo-body :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: -0.01em; line-height: 26px; }
+.memo-body :deep(h3) { font-size: var(--text-md); font-weight: 600; line-height: 24px; }
 .memo-body :deep(strong) { font-weight: 600; color: var(--text); }
 .memo-body :deep(ul), .memo-body :deep(ol) { padding-left: var(--space-5); }
 .memo-body :deep(li) { margin: 2px 0; }
 .memo-body :deep(li::marker) { color: var(--text-faint); }
 .memo-body :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
-.memo-body :deep(code) { font-family: var(--font-mono); font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
-.memo-body :deep(pre) { font-family: var(--font-mono); font-size: 12px; line-height: 20px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.memo-body :deep(code) { font-family: var(--font-mono); font-size: var(--text-sm); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
+.memo-body :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 21px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .memo-body :deep(pre code) { background: none; border: none; padding: 0; color: inherit; }
 .memo-body :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 3px; }
 .memo-body :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
@@ -426,8 +443,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   margin-bottom: 3px;
   min-height: 20px;
 }
-.memo-time { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-muted); }
+.memo-time { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); color: var(--text-muted); }
 /* 状态标只在不悬停时出现：悬停后动作排上的同一个图标已带状态，两个并排就是重复 */
 .memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
 .memo:hover .memo-state, .memo:focus-within .memo-state { opacity: 0; }

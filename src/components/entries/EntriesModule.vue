@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Entry, Tab } from '../../types'
 import { formatUrlDisplay } from '../../utils/format'
 import AppIcon from '../shared/AppIcon.vue'
@@ -60,12 +60,12 @@ const initials = (name: string) => {
   return name.trim().slice(0, 2).toUpperCase()
 }
 
-/** 分类名哈希到四组既有语义令牌，同分类恒定同色；不引入任何硬编码色值 */
+/** 模块色相身份：本页图块统一取 cat-1 色相，分类哈希只分浓淡三档，未分类走中性灰 */
 const tileTone = (cat?: string | null) => {
-  if (!cat) return 'tone-accent'
+  if (!cat) return 'tone-neutral'
   let h = 0
   for (let i = 0; i < cat.length; i++) h = (h * 31 + cat.charCodeAt(i)) | 0
-  return ['tone-accent', 'tone-warm', 'tone-cool', 'tone-neutral'][Math.abs(h) % 4] as string
+  return ['tone-1', 'tone-2', 'tone-3'][Math.abs(h) % 3] as string
 }
 
 /* ── 分类标签：全部 + 前 2 枚高频常驻，其余收进「更多」下拉（面板内可搜索） ── */
@@ -94,6 +94,29 @@ const pickTab = (id: string) => {
   emit('update:activeTab', id)
   moreOpen.value = false
 }
+
+/* ── 分类滑轨：一枚浮白滑块跟住当前分类，切换是"滑过去"不是"跳过去"。
+   与 type-seg 分段凹槽同一套语言；「更多」顶出激活态时滑块也滑到触发钮上。 ── */
+const tabsRef = ref<HTMLElement | null>(null)
+const thumb = ref({ left: 0, width: 0, show: false })
+const thumbStyle = computed(() =>
+  thumb.value.show
+    ? { left: `${thumb.value.left}px`, width: `${thumb.value.width}px`, opacity: '1' }
+    : { opacity: '0' })
+const syncThumb = () => {
+  const nav = tabsRef.value
+  const el = nav?.querySelector('.tab.active') as HTMLElement | null
+  if (!nav || !el) { thumb.value = { ...thumb.value, show: false }; return }
+  thumb.value = { left: el.offsetLeft, width: el.offsetWidth, show: true }
+}
+watch(
+  () => [props.activeTab, props.tabs, visibleTabs.value.length] as const,
+  () => { nextTick(syncThumb) }
+)
+onMounted(() => {
+  nextTick(syncThumb)
+  window.addEventListener('resize', syncThumb)
+})
 
 /** 一次只开一张行的动作菜单 */
 const menuAnchor = ref<HTMLElement | null>(null)
@@ -159,7 +182,21 @@ const openPath = (entry: Entry, path: string) => {
 }
 
 onMounted(() => { window.addEventListener('keydown', onGlobalKey) })
-onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
+/* ── 复制 morph：钮面图标短暂翻成对勾做回执，toast 仍由父层统一弹 ── */
+const copiedId = ref<string | null>(null)
+let copiedTimer: number | undefined
+const copyUrl = (item: Entry) => {
+  emit('copyText', item.url!, '网址')
+  copiedId.value = item.id
+  if (copiedTimer) window.clearTimeout(copiedTimer)
+  copiedTimer = window.setTimeout(() => { copiedId.value = null }, 1200)
+}
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onGlobalKey)
+  window.removeEventListener('resize', syncThumb)
+  if (copiedTimer) window.clearTimeout(copiedTimer)
+})
 </script>
 
 <template>
@@ -176,7 +213,8 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
           <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <nav class="tabs">
+      <nav ref="tabsRef" class="tabs">
+        <span class="tab-thumb" :style="thumbStyle" aria-hidden="true"></span>
         <div
           v-for="t in visibleTabs"
           :key="t.id"
@@ -255,62 +293,61 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
         @keydown.enter.prevent="onRowClick(item, isBatchMode)"
       >
         <span v-if="isBatchMode" class="card-check" :class="{ checked: selectedIds.has(item.id) }" aria-hidden="true">
-          <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="11" />
+          <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="12" />
         </span>
 
-        <!-- 第一段：实体信息。渐变首字母块 + 标题/备注两行 -->
+        <!-- 第一段：实体信息靠左聚拢成两行——名字一行，域名/路径/备注并进 meta 行，
+             中间空白被主列吃掉；定宽五栏对齐作废（大方化轮） -->
         <div class="ec-id">
           <span class="ec-tile" :class="tileTone(item.category)" aria-hidden="true">{{ initials(item.name) }}</span>
           <div class="ec-text">
             <span class="ec-name">{{ item.name }}</span>
-            <span v-if="item.notes" class="ec-note" :title="item.notes">{{ item.notes }}</span>
+            <div class="ec-meta">
+              <a
+                v-if="item.url"
+                class="ec-domain"
+                :title="item.url"
+                @click.prevent.stop="emit('openUrl', item.url!)"
+                @contextmenu.prevent="emit('copyText', item.url!, '网址')"
+              >{{ formatUrlDisplay(item.url) }}</a>
+              <template v-if="item.paths && item.paths.length">
+                <span v-if="item.url" class="meta-dot" aria-hidden="true">·</span>
+                <a
+                  class="ec-path"
+                  :title="item.paths[0].label || item.paths[0].path"
+                  @click.stop.prevent="openPath(item, item.paths[0].path)"
+                >{{ item.paths[0].label || item.paths[0].path }}</a>
+                <button
+                  v-if="item.paths.length > 1"
+                  class="card-paths-more"
+                  type="button"
+                  :title="`还有 ${item.paths.length - 1} 个路径`"
+                  @click.stop="openPathsMenu($event.currentTarget as HTMLElement, item)"
+                >+{{ item.paths.length - 1 }} 路径</button>
+              </template>
+              <template v-if="item.notes">
+                <span v-if="item.url || (item.paths && item.paths.length)" class="meta-dot" aria-hidden="true">·</span>
+                <span class="ec-note" :title="item.notes">{{ item.notes }}</span>
+              </template>
+            </div>
           </div>
         </div>
 
-        <!-- 第二段：纯净 URL 列。定宽列拆出后 URL 吃满剩余空间，晚点截断 -->
-        <div class="ec-target">
-          <a
-            v-if="item.url"
-            class="ec-domain"
-            :title="item.url"
-            @click.prevent.stop="emit('openUrl', item.url!)"
-            @contextmenu.prevent="emit('copyText', item.url!, '网址')"
-          >{{ formatUrlDisplay(item.url) }}</a>
-        </div>
-
-        <!-- 第三段：路径/版本独立列——90px 定宽居中，无路径也占位，跨行胶囊一条竖线 -->
-        <div class="ec-branch">
-          <div v-if="item.paths && item.paths.length" class="ec-paths">
-            <a
-              class="card-path-link"
-              :title="item.paths[0].label || item.paths[0].path"
-              @click.stop.prevent="openPath(item, item.paths[0].path)"
-            >{{ item.paths[0].label || item.paths[0].path }}</a>
-            <button
-              v-if="item.paths.length > 1"
-              class="card-paths-more"
-              type="button"
-              :title="`还有 ${item.paths.length - 1} 个路径`"
-              @click.stop="openPathsMenu($event.currentTarget as HTMLElement, item)"
-            >+{{ item.paths.length - 1 }} 路径 ▾</button>
-          </div>
-        </div>
-
-        <!-- 第三段：分类与凭证标识 -->
+        <!-- 第二段：分类与凭证标识 -->
         <div class="ec-tags">
           <span v-if="item.username || passwordCache[item.id]?.value" class="ec-cred" title="已存登录凭证">
-            <AppIcon name="lock" :size="11" />
+            <AppIcon name="lock" :size="12" />
           </span>
           <span class="ec-cat">{{ item.category || '未分类' }}</span>
         </div>
 
         <!-- 常驻只留两枚高频钮；编辑/详情/复制/删除收进 ⋯ 菜单 -->
         <span class="ec-actions">
-          <button v-if="item.url" class="ib ec-act" type="button" title="复制网址" @click.stop="emit('copyText', item.url!, '网址')">
-            <AppIcon name="copy" :size="14" />
+          <button v-if="item.url" class="ib ec-act" :class="{ copied: copiedId === item.id }" type="button" :title="copiedId === item.id ? '已复制' : '复制网址'" @click.stop="copyUrl(item)">
+            <AppIcon :name="copiedId === item.id ? 'check' : 'copy'" :size="16" />
           </button>
           <button v-if="item.url" class="ib ec-act" type="button" title="在浏览器打开" @click.stop="emit('openUrl', item.url!)">
-            <AppIcon name="external" :size="14" />
+            <AppIcon name="external" :size="16" />
           </button>
           <button
             class="ib ec-act ec-more"
@@ -319,7 +356,7 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
             aria-label="更多操作"
             @click.stop="openMenu($event.currentTarget as HTMLElement, item)"
           >
-            <AppIcon name="dots" :size="14" />
+            <AppIcon name="dots" :size="16" />
           </button>
         </span>
 
@@ -332,10 +369,9 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
           <div class="pop-sec path-pop">
             <div class="pop-label">路径 · {{ item.paths?.length ?? 0 }}</div>
             <div v-for="path in item.paths ?? []" :key="path.id" class="path-pop-row">
-              <button class="pop-item" type="button" @click="closePathsMenu(); openPath(item, path.path)">
+              <button class="pop-item" type="button" :title="path.path" @click="closePathsMenu(); openPath(item, path.path)">
                 <AppIcon name="external" :size="13" />
                 <span class="pop-path-label">{{ path.label || path.path }}</span>
-                <span v-if="path.label" class="pop-path-value">{{ path.path }}</span>
               </button>
               <button class="ib path-pop-copy" type="button" title="复制此路径" @click.stop="emit('copyText', path.path, '路径')">
                 <AppIcon name="copy" :size="12" />
@@ -395,20 +431,9 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
 /* .content-inner / .page-bar / 搜索框 / 主按钮 / 骨架行形全部走 global.css 的页面骨架，
    此处只留本页特有的东西 */
 
-.search-kbd {
-  flex-shrink: 0;
-  margin-right: 2px;
-  padding: 1px 5px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  color: var(--text-faint);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--sunken);
-}
-
 /* 分类在行内横向滚动，不换行：换行会把工具栏顶出第二种高度 */
 .tabs {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -419,7 +444,21 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
   padding: 2px 0;
 }
 .tabs::-webkit-scrollbar { display: none; }
-.tabs .tab { height: 32px; display: inline-flex; align-items: center; padding: 0 10px; font-size: var(--text-sm); border-radius: var(--radius-tag); }
+.tabs .tab { position: relative; z-index: 1; height: 34px; display: inline-flex; align-items: center; padding: 0 12px; font-size: var(--text-sm); border-radius: var(--radius-tag); }
+/* 滑块：浮白块压在字下，切换时沿弹簧曲线滑到位；激活 tab 自身让出底色，只留字色/字重 */
+.tab-thumb {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: 34px;
+  border-radius: var(--radius-tag);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
+  opacity: 0;
+  pointer-events: none;
+  transition: left var(--transition-spring), width var(--transition-spring), opacity var(--transition);
+}
+.tabs .tab.active { background: transparent; box-shadow: none; }
 .tab-more { font-family: inherit; font-size: var(--text-sm); }
 .tab-count { display: inline-block; background: var(--hover); color: var(--text-muted); font-size: var(--text-xs); padding: 0 var(--space-1); border-radius: 4px; margin-left: var(--space-1); font-weight: 600; line-height: 14px; }
 .tab.active .tab-count { background: var(--accent-soft); color: var(--accent); }
@@ -445,24 +484,26 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
   padding: 0;
   outline: none;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text);
 }
 .tab-pop-list { max-height: 192px; overflow-y: auto; scrollbar-width: thin; }
 .tab-pop-list .pop-item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.tab-pop-empty { padding: var(--space-2) 8px; font-size: 12px; color: var(--text-faint); text-align: center; }
+.tab-pop-empty { padding: var(--space-2) 8px; font-size: var(--text-sm); color: var(--text-faint); text-align: center; }
 
-/* 单列行卡列表：行间 8px，每行是一张独立卡片，hover 才浮起；首行与吸顶栏拉开一点距离 */
-.entry-list { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
+/* 单列行卡列表：行间 10px，每行是一张独立卡片，hover 才浮起；首行与吸顶栏拉开一点距离 */
+.entry-list { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-2); }
 
 .entry-card {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  height: 58px;
-  padding: 0 var(--space-3);
+  gap: var(--space-4);
+  height: 64px;
+  padding: 0 var(--space-4);
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  /* 发丝线退役：灰底浮白卡靠 --shadow-card 分层，
+     border 留透明位给 focus/selected 的描边通路 */
+  border: 1px solid transparent;
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   cursor: pointer;
@@ -471,8 +512,7 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
 }
 .entry-card:hover {
   border-color: var(--border-card-hover);
-  background: color-mix(in srgb, var(--accent) 4%, var(--bg-surface));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.025);
+  box-shadow: var(--shadow-card-hover);
 }
 .entry-card:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
 /* 选中态：浸润底吃掉整卡，1px 实环贴在边框外沿把"选中"包成一圈，
@@ -487,8 +527,8 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
 .entry-card.selected .ec-cred { background: var(--accent-light); border-color: var(--accent); }
 
 .card-check {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border: 1.5px solid var(--border-strong);
   border-radius: 4px;
   background: var(--bg-surface);
@@ -502,17 +542,18 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
 .card-check:hover { border-color: var(--accent); }
 .card-check.checked { background: var(--accent); border-color: var(--accent); }
 
-/* 第一段：实体信息。首字母块取两枚（LX/WQ 式），渐变底只吃 accent 族。
-   不可伸缩：跨行列宽一致，URL 起点才在一条竖线上 */
-.ec-id { display: flex; align-items: center; gap: 12px; flex: 0 0 210px; }
+/* 第一段：实体信息靠左聚拢。图标块 + 两行文本（名 / meta），
+   主列 flex:1 吃掉原先悬在行中间的 URL/路径空白 */
+.ec-id { display: flex; align-items: center; gap: 14px; flex: 1 1 auto; min-width: 0; }
 .ec-tile {
-  width: 32px;
-  height: 32px;
+  --h: var(--cat-1);
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--border);
   border-radius: var(--radius-badge);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.02em;
   display: flex;
@@ -520,13 +561,14 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
   justify-content: center;
   flex-shrink: 0;
 }
-/* 分类哈希分桶：四组都是既有语义令牌，主题切换自动跟色 */
-.ec-tile.tone-warm { background: var(--warning-soft); color: var(--warning); }
-.ec-tile.tone-cool { background: var(--success-soft); color: var(--success); }
+/* 同页一色、分类分浓淡：色相钉 cat-1 槽，切主题跟各主题的槽走 */
+.ec-tile.tone-1 { background: color-mix(in srgb, var(--h) 8%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 16%, var(--panel-bg)); }
+.ec-tile.tone-2 { background: color-mix(in srgb, var(--h) 15%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 28%, var(--panel-bg)); }
+.ec-tile.tone-3 { background: color-mix(in srgb, var(--h) 26%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 42%, var(--panel-bg)); }
 .ec-tile.tone-neutral { background: var(--badge-cat-bg); color: var(--badge-cat-text); border-color: var(--badge-cat-border); }
-.ec-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ec-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .ec-name {
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
   min-width: 0;
@@ -535,8 +577,18 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
   white-space: nowrap;
   transition: color var(--transition);
 }
+/* meta 行：域名 · 路径 · 备注，一行读完，按宽度依次截断 */
+.ec-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.meta-dot { color: var(--text-faint); opacity: 0.6; flex-shrink: 0; }
 .ec-note {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--text-faint);
   min-width: 0;
   overflow: hidden;
@@ -544,12 +596,8 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
   white-space: nowrap;
 }
 
-/* 第二段：纯净 URL 列（flex-1）。分支/路径胶囊已拆到独立 90px 列，
-   URL 不再挂底片、不再受 340px 上限，吃满剩余空间晚点截断 */
-.ec-target { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; padding-right: 12px; }
 .ec-domain {
-  display: inline-block;
-  /* 按内容收缩：拉满整列会把行卡中心点的点击吃掉（anchor 上挂 stop 的开链动作） */
+  /* 按内容收缩：拉满会把行卡中心点的点击吃掉（anchor 上挂 stop 的开链动作） */
   flex: 0 1 auto;
   min-width: 0;
   font-family: var(--font-mono);
@@ -564,21 +612,18 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
 }
 .ec-domain:hover { color: var(--accent); }
 
-/* 第三段：路径/版本独立列，90px 定宽居中；空条目留空位不破对齐 */
-.ec-branch { flex: 0 0 90px; min-width: 0; display: flex; align-items: center; justify-content: center; }
-
-/* 第三段：分类与凭证标识，右靠齐。定宽让四段栅格跨行对齐 */
-.ec-tags { flex: 0 0 100px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+/* 分类与凭证标识，右靠齐 */
+.ec-tags { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
 .ec-cat {
   display: inline-flex;
   align-items: center;
-  height: 22px;
+  height: 24px;
   font-size: var(--text-xs);
   font-weight: 500;
   color: var(--badge-cat-text);
   background: var(--bg-tag-default);
   border: 1px solid var(--badge-cat-border);
-  padding: 0 8px;
+  padding: 0 10px;
   border-radius: var(--radius-tag);
   flex-shrink: 0;
   white-space: nowrap;
@@ -588,8 +633,8 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
 .ec-cred {
   display: inline-flex;
   align-items: center;
-  height: 22px;
-  padding: 0 6px;
+  height: 24px;
+  padding: 0 7px;
   color: var(--badge-ver-text);
   background: var(--badge-ver-bg);
   border: 1px solid var(--accent-soft);
@@ -598,48 +643,36 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
   transition: background-color var(--transition), border-color var(--transition);
 }
 
-/* 路径区：首枚常驻，其余收进「+N 路径」微胶囊；整组限宽 90px，首枚可截断 */
-.ec-paths { display: flex; align-items: center; gap: var(--space-1); min-width: 0; max-width: 90px; }
-.card-path-link {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 8px;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--border-hover);
-  border-radius: var(--radius-tag);
-  cursor: pointer;
-  text-decoration: none;
-  transition: all var(--transition);
-  white-space: nowrap;
+/* meta 行里的路径：纯文本链接，不再是胶囊 */
+.ec-path {
+  flex: 0 1 auto;
   min-width: 0;
-  flex-shrink: 1;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition);
 }
-.card-path-link:hover { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
+.ec-path:hover { color: var(--accent); }
 .card-paths-more {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 20px;
-  padding: 0 8px;
-  font-size: var(--text-xs);
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 500;
   font-family: inherit;
   color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--border-hover);
-  border-radius: var(--radius-tag);
+  background: none;
+  border: none;
   cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
-  transition: all var(--transition);
+  transition: color var(--transition);
 }
-.card-paths-more:hover, .card-paths-more[aria-expanded] { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
+.card-paths-more:hover, .card-paths-more[aria-expanded] { color: var(--accent-hover); text-decoration: underline; }
 
 /* 渐进披露：动作钮平时以五成透明常驻（位置稳定、可点），行被点亮才升到全不透明 */
 .ec-actions {
@@ -647,8 +680,8 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  /* 三枚钮共 84px：定宽让四段栅格跨行右缘对齐 */
-  flex: 0 0 84px;
+  /* 三枚钮共 98px：定宽让跨行右缘对齐 */
+  flex: 0 0 98px;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -656,7 +689,9 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
 .entry-card:focus-within .ec-actions { opacity: 1; }
 /* 批量态整行是选择热区，动作入口先让位 */
 .entry-card.batching .ec-actions { display: none; }
-.ib.ec-act { width: 28px; height: 28px; flex-shrink: 0; }
+.ib.ec-act { width: 30px; height: 30px; flex-shrink: 0; }
+/* 复制回执态：对勾 + 成功色，1.2s 后转回 */
+.ib.ec-act.copied { color: var(--success); }
 
 /* 路径浮层：208px，每行「跳转钮 + 复制钮」成对 */
 .path-pop { width: 208px; }
@@ -665,25 +700,16 @@ onUnmounted(() => { window.removeEventListener('keydown', onGlobalKey) })
 .path-pop-copy { width: 24px; height: 24px; flex-shrink: 0; color: var(--text-muted); }
 .path-pop-copy:hover { color: var(--accent); }
 
-.pop-path-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.pop-path-value {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-left: auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.pop-path-label { flex: 0 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
 
 /* .empty-state/.empty-icon/.empty-title/.empty-desc 走 global.css 的统一规范，
    此处不再重复声明，避免局部副本和全局定义漂移 */
 
 /* 骨架屏行形/方块/呼吸在 global.css，此处只留本行的宽度分配 */
 .loading { padding: var(--space-2) 0; }
-.skeleton-id { flex: 0 1 240px; min-width: 150px; display: flex; flex-direction: column; gap: 6px; }
-.skeleton-line.name { width: 120px; }
-.skeleton-line.note { width: 84px; height: 6px; }
-.skeleton-line.url { flex: 1; max-width: 320px; }
-.skeleton-line.tag { width: 44px; margin-left: auto; }
+.skeleton-id { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.skeleton-line.name { width: 140px; }
+.skeleton-line.note { width: 220px; height: 6px; }
+.skeleton-line.url { display: none; }
+.skeleton-line.tag { width: 52px; margin-left: auto; }
 </style>

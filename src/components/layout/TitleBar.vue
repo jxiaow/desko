@@ -126,7 +126,7 @@ onUnmounted(() => {
 
 <style scoped>
 .titlebar {
-  height: 38px;
+  height: 42px;
   background: var(--chrome-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);

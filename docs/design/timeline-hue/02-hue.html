@@ -1,0 +1,145 @@
+<!doctype html>
+<!-- 原型 B · 模块色相身份（light-cool，真实默认窗口 1040×670）
+     要点：五模块各钉一个 --cat-* 槽位（零新槽），落点三处——侧栏图标、
+     导航计数、页面行图块；行图块的"四桶"改为模块色的浓淡档，切主题跟槽位走。
+     本页示例：当前页=网址收藏（cat-1 靛），图块四档浓淡对应四个分类。 -->
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<style>
+:root {
+  --accent:#3a68b8; --accent-soft:#edf2fa; --accent-light:#d6e2f5;
+  --bg:#eef1f6; --panel-bg:#fff; --sunken:#eaf0f7; --fill:#e1e6f0; --hover:#eff3f8;
+  --text:#111827; --text-secondary:#4b5563; --text-muted:#6b7280; --text-faint:#9ca3af;
+  --border:#e2e5eb; --border-strong:#cbd2de; --border-subtle:#edf0f5; --border-hover:#c6cdda;
+  --shadow-xs:0 1px 2px 0 rgba(17,24,39,.04);
+  --shadow-card:0 1px 2px rgba(17,24,39,.04), 0 8px 20px -8px rgba(17,24,39,.10);
+  --shadow-pop:0 16px 36px -8px rgba(17,24,39,.12), 0 4px 10px -2px rgba(17,24,39,.04), 0 0 0 1px rgba(0,0,0,.06);
+  --warning:#d97706; --warning-soft:#fffbeb;
+  --cat-1:#5f62b8; --cat-3:#a85b7d; --cat-4:#a8804b; --cat-5:#4b8a73; --cat-6:#4b8a96;
+  --r-card:14px; --r:10px; --r-sm:6px; --r-tag:6px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei UI','PingFang SC','Microsoft YaHei',sans-serif;
+  --mono:Consolas,'JetBrains Mono',monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font); font-size:15px; line-height:1.5; color:var(--text);
+  background:#d8dde6; letter-spacing:-.01em; -webkit-font-smoothing:antialiased; }
+.win { width:1040px; height:670px; margin:0 auto; display:flex; background:var(--bg); overflow:hidden; position:relative;
+  box-shadow:0 20px 60px -20px rgba(0,0,0,.35); }
+.sb { width:180px; flex-shrink:0; background:var(--panel-bg); border-right:1px solid var(--border); }
+.sb-top { height:42px; display:flex; align-items:center; gap:8px; padding:0 4px 0 8px; border-bottom:1px solid var(--border); }
+.logo { width:26px; height:26px; border-radius:var(--r); background:var(--accent-soft); display:flex; align-items:center; justify-content:center; }
+.sb-name { flex:1; font-size:15px; font-weight:600; }
+.nav { padding:6px 8px; }
+.nav-i { display:flex; align-items:center; height:36px; gap:12px; padding:0 8px; margin-bottom:4px;
+  border-radius:var(--r); font-size:14px; font-weight:500; color:var(--text-secondary); position:relative; }
+.nav-i svg { width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+.nav-i .cnt { margin-left:auto; font-size:12px; background:var(--fill); color:var(--text-muted);
+  border-radius:var(--r); padding:0 5px; min-width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; }
+/* 模块色：图标各自取色，计数软底同色 */
+.nav-i.m-ent  { --h:var(--cat-1); } .nav-i.m-not { --h:var(--cat-5); }
+.nav-i.m-fil  { --h:var(--cat-4); } .nav-i.m-mfa { --h:var(--cat-3); }
+.nav-i.m-lan  { --h:var(--cat-6); }
+.nav-i svg { color:var(--h); }
+.nav-i .cnt { background:color-mix(in srgb, var(--h) 10%, var(--fill)); color:color-mix(in srgb, var(--h) 80%, var(--text-muted)); }
+.nav-i.active { background:color-mix(in srgb, var(--h) 8%, transparent); color:var(--h); font-weight:600; }
+.nav-i.active::before { content:''; position:absolute; left:0; top:50%; transform:translateY(-50%);
+  width:4px; height:16px; border-radius:99px; background:var(--h); }
+
+.main { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+.tbar { height:42px; display:flex; align-items:center; justify-content:flex-end; padding:0 8px; color:var(--text-faint); }
+.tbar span { width:40px; height:30px; display:inline-flex; align-items:center; justify-content:center; font-size:13px; }
+.scroll { flex:1; overflow-y:auto; padding:0 20px 22px; }
+.page-bar { position:sticky; top:0; z-index:20; height:48px; margin:0 -20px; padding:0 20px;
+  background:color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter:blur(8px);
+  display:flex; align-items:center; gap:8px; }
+.search { display:flex; align-items:center; gap:8px; flex:0 0 240px; height:34px; background:var(--panel-bg);
+  border:1px solid transparent; border-radius:var(--r); box-shadow:var(--shadow-card); padding:0 12px; }
+.search svg { width:15px; height:15px; stroke:var(--text-muted); fill:none; stroke-width:2; stroke-linecap:round; }
+.search .ph { flex:1; color:var(--text-muted); font-size:13px; }
+.search .kbd { font-family:var(--mono); font-size:12px; color:var(--text-faint); border:1px solid var(--border);
+  border-radius:var(--r-sm); background:var(--sunken); padding:0 6px; }
+.tab { height:34px; display:inline-flex; align-items:center; padding:0 12px; border-radius:var(--r-tag);
+  font-size:13px; font-weight:500; color:var(--text-muted); }
+.tab .tc { background:var(--hover); color:var(--text-muted); font-size:12px; border-radius:4px; padding:0 4px; margin-left:4px; font-weight:600; }
+.tab.active { background:var(--panel-bg); color:color-mix(in srgb, var(--cat-1) 85%, var(--text)); font-weight:600;
+  box-shadow:var(--shadow-card); }
+.tab.active .tc { background:color-mix(in srgb, var(--cat-1) 12%, transparent); color:var(--cat-1); }
+.add { height:34px; margin-left:auto; padding:0 14px; border-radius:var(--r); background:var(--accent); color:#fff;
+  font-size:13px; font-weight:500; display:inline-flex; align-items:center; gap:6px; box-shadow:var(--shadow-xs); }
+.list { display:flex; flex-direction:column; gap:12px; padding-top:8px; }
+.row { display:flex; align-items:center; gap:16px; height:64px; padding:0 16px; background:var(--panel-bg);
+  border:1px solid transparent; border-radius:var(--r-card); box-shadow:var(--shadow-card); }
+.tile { width:36px; height:36px; border-radius:var(--r); border:1px solid; display:flex; align-items:center;
+  justify-content:center; font-size:13px; font-weight:700; letter-spacing:.02em; flex-shrink:0; }
+/* 同模块一色，四档浓淡对应分类——替换原"四桶跨色相"哈希 */
+.t1 { background:color-mix(in srgb, var(--cat-1) 12%, #fff); color:var(--cat-1); border-color:color-mix(in srgb, var(--cat-1) 30%, #fff); }
+.t2 { background:color-mix(in srgb, var(--cat-1) 7%, #fff);  color:color-mix(in srgb, var(--cat-1) 75%, #1b1d2e); border-color:color-mix(in srgb, var(--cat-1) 20%, #fff); }
+.t3 { background:color-mix(in srgb, var(--cat-1) 30%, #fff); color:#fff; border-color:color-mix(in srgb, var(--cat-1) 45%, #fff); }
+.t4 { background:var(--sunken); color:var(--text-secondary); border-color:var(--border); }
+.tx { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.nm { font-size:15px; font-weight:600; }
+.meta { display:flex; gap:6px; align-items:center; font-size:13px; color:var(--text-faint); white-space:nowrap; overflow:hidden; }
+.meta .dom { font-family:var(--mono); color:#374151; }
+.cat { height:24px; display:inline-flex; align-items:center; padding:0 10px; border-radius:var(--r-tag);
+  font-size:12px; font-weight:500; color:var(--text-secondary); background:#eef2f7; border:1px solid var(--border); }
+.lock { color:var(--accent); }
+
+.legend { position:absolute; right:26px; bottom:16px; z-index:99; background:var(--panel-bg); border:1px solid var(--border);
+  box-shadow:var(--shadow-pop); border-radius:var(--r-card); padding:12px 14px; font-size:12px; color:var(--text-secondary); width:230px; }
+.legend h4 { font-size:12px; color:var(--text); margin-bottom:8px; letter-spacing:.02em; }
+.legend .li { display:flex; align-items:center; gap:8px; margin-top:5px; }
+.legend .d { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+.legend .slot { margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--text-faint); }
+.legend .cap { margin-top:9px; padding-top:8px; border-top:1px solid var(--border-subtle); color:var(--text-muted); line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="win">
+  <aside class="sb">
+    <div class="sb-top">
+      <span class="logo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#3a68b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+      <span class="sb-name">Desko</span>
+    </div>
+    <div class="nav">
+      <div class="nav-i m-ent active"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>网址收藏<span class="cnt">13</span></div>
+      <div class="nav-i m-not"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>小记<span class="cnt">12</span></div>
+      <div class="nav-i m-fil"><svg viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>文件快捷<span class="cnt">5</span></div>
+      <div class="nav-i m-mfa"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9.5 11.5l2 2 3.5-3.5"/></svg>验证码</div>
+      <div class="nav-i m-lan"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>局域网传输</div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="tbar"><span>─</span><span>▢</span><span>✕</span></div>
+    <div class="scroll">
+      <div class="page-bar">
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg><span class="ph">搜索名称或网址…</span><span class="kbd">Ctrl K</span></div>
+        <span class="tab active">全部<span class="tc">13</span></span>
+        <span class="tab">开发<span class="tc">2</span></span>
+        <span class="tab">办公<span class="tc">3</span></span>
+        <span class="tab">更多 (5)</span>
+        <span class="add">＋ 新增条目</span>
+      </div>
+      <div class="list">
+        <div class="row"><span class="tile t1">GH</span><div class="tx"><span class="nm">GitHub</span><div class="meta"><span class="dom">github.com</span>·<span>代码托管平台</span></div></div><span class="lock">🔒</span><span class="cat">开发</span></div>
+        <div class="row"><span class="tile t1">CF</span><div class="tx"><span class="nm">Cloudflare</span><div class="meta"><span class="dom">dash.cloudflare.com</span>·<span>DNS 面板</span></div></div><span class="lock">🔒</span><span class="cat">开发</span></div>
+        <div class="row"><span class="tile t2">GM</span><div class="tx"><span class="nm">Gmail</span><div class="meta"><span class="dom">mail.google.com</span>·<span>个人邮箱</span></div></div><span class="lock">🔒</span><span class="cat">邮箱</span></div>
+        <div class="row"><span class="tile t2">FG</span><div class="tx"><span class="nm">Figma</span><div class="meta"><span class="dom">figma.com</span>·<span>设计协作</span></div></div><span class="cat">设计</span></div>
+        <div class="row"><span class="tile t3">DD</span><div class="tx"><span class="nm">钉钉</span><div class="meta"><span class="dom">dingtalk.com</span></div></div><span class="lock">🔒</span><span class="cat">办公</span></div>
+        <div class="row"><span class="tile t3">CW</span><div class="tx"><span class="nm">招商银行</span><div class="meta"><span class="dom">cmbchina.com</span></div></div><span class="lock">🔒</span><span class="cat">金融</span></div>
+        <div class="row"><span class="tile t4">LS</span><div class="tx"><span class="nm">临时站点</span><div class="meta"><span class="dom">example.com</span>·<span>未分类</span></div></div><span class="cat">未分类</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="legend">
+  <h4>模块色相映射（--cat-* 现有槽）</h4>
+  <div class="li"><span class="d" style="background:var(--cat-1)"></span>网址收藏<span class="slot">cat-1</span></div>
+  <div class="li"><span class="d" style="background:var(--cat-5)"></span>小记<span class="slot">cat-5</span></div>
+  <div class="li"><span class="d" style="background:var(--cat-4)"></span>文件快捷<span class="slot">cat-4</span></div>
+  <div class="li"><span class="d" style="background:var(--cat-3)"></span>验证码<span class="slot">cat-3</span></div>
+  <div class="li"><span class="d" style="background:var(--cat-6)"></span>局域网传输<span class="slot">cat-6</span></div>
+  <div class="cap">行图块四档浓淡＝同页一色、分类分深浅（替代四桶跨色相哈希）；切主题时色相跟着各主题的 cat 槽走。</div>
+</div>
+</div>
+</body>
+</html>

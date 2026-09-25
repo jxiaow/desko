@@ -6,11 +6,11 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const ANCHORS = {
-  'light-cool':       { bg: 'rgb(247, 248, 250)', text: 'rgb(17, 24, 39)',    accent: '#3a68b8' },
-  'light-warm':       { bg: 'rgb(248, 246, 242)', text: 'rgb(36, 30, 25)',    accent: '#b45309' },
-  'light-celadon':    { bg: 'rgb(244, 247, 245)', text: 'rgb(15, 23, 19)',    accent: '#216747' },
-  'aluminum-pro':     { bg: 'rgb(236, 238, 242)', text: 'rgb(10, 13, 18)',    accent: '#2563eb' },
-  'swiss-monochrome': { bg: 'rgb(250, 250, 250)', text: 'rgb(0, 0, 0)',       accent: '#111827' },
+  'light-cool':       { bg: 'rgb(238, 241, 246)', text: 'rgb(17, 24, 39)',    accent: '#3a68b8' },
+  'light-warm':       { bg: 'rgb(241, 238, 231)', text: 'rgb(36, 30, 25)',    accent: '#b45309' },
+  'light-celadon':    { bg: 'rgb(233, 239, 235)', text: 'rgb(15, 23, 19)',    accent: '#216747' },
+  'aluminum-pro':     { bg: 'rgb(227, 230, 236)', text: 'rgb(10, 13, 18)',    accent: '#2563eb' },
+  'swiss-monochrome': { bg: 'rgb(240, 240, 241)', text: 'rgb(0, 0, 0)',       accent: '#111827' },
   'linear-dark':      { bg: 'rgb(17, 18, 23)',    text: 'rgb(241, 243, 248)', accent: '#6366f1' },
   'jetbrains-dark':   { bg: 'rgb(30, 31, 34)',    text: 'rgb(223, 225, 229)', accent: '#3574f0' },
 } as const

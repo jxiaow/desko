@@ -30,6 +30,7 @@ const NEWBORN_MS = 400
 const RAIL_FALLBACK_ROOM = 900
 
 const notesStore = useNotesStore()
+
 const toastStore = useToastStore()
 const { copyToClipboard } = useClipboard()
 const {
@@ -314,7 +315,7 @@ onBeforeUnmount(() => {
       <div class="stream-inner" @keydown="onStreamKeydown">
         <div class="page-bar">
           <div class="search-box">
-            <span class="search-icon"><AppIcon name="search" :size="15" /></span>
+            <span class="search-icon"><AppIcon name="search" :size="16" /></span>
             <input
               ref="searchEl"
               v-model="noteSearchKeyword"
@@ -330,7 +331,7 @@ onBeforeUnmount(() => {
               aria-label="清空搜索"
               @click="noteSearchKeyword = ''"
             >
-              <AppIcon name="x" :size="13" />
+              <AppIcon name="x" :size="14" />
             </button>
             <span class="bar-count">{{ filteredNotes.length }} / {{ notes.length }} 条</span>
           </div>
@@ -343,7 +344,7 @@ onBeforeUnmount(() => {
             :aria-label="`排序：${sortLabel}`"
             @click="pickSort"
           >
-            <AppIcon name="clock" :size="15" />
+            <AppIcon name="clock" :size="16" />
           </button>
           <button
             v-if="!railVisible"
@@ -354,7 +355,7 @@ onBeforeUnmount(() => {
             aria-label="筛选视图与标签"
             @click="pickFilter"
           >
-            <AppIcon name="filter" :size="15" />
+            <AppIcon name="filter" :size="16" />
           </button>
 
           <div class="bar-div"></div>
@@ -366,7 +367,7 @@ onBeforeUnmount(() => {
             :aria-label="isBatchMode ? '退出批量' : '批量选择'"
             @click="toggleBatch"
           >
-            <AppIcon name="checkall" :size="15" />
+            <AppIcon name="checkall" :size="16" />
           </button>
           <!-- 口令只管加密小记，没加密过就不出现在顶栏 -->
           <template v-if="noteKey.is_set">
@@ -379,7 +380,7 @@ onBeforeUnmount(() => {
               :aria-label="noteKey.is_open ? '锁回全部加密小记' : '解锁全部加密小记'"
               @click="toggleNoteDomain"
             >
-              <AppIcon :name="noteKey.is_open ? 'lock' : 'unlock'" :size="15" />
+              <AppIcon :name="noteKey.is_open ? 'lock' : 'unlock'" :size="16" />
             </button>
           </template>
           <button
@@ -390,7 +391,7 @@ onBeforeUnmount(() => {
             :aria-label="railVisible ? '收起侧栏' : '展开侧栏'"
             @click="toggleRail"
           >
-            <AppIcon name="panel" :size="15" />
+            <AppIcon name="panel" :size="16" />
           </button>
         </div>
 
@@ -415,7 +416,7 @@ onBeforeUnmount(() => {
         <template v-else>
           <div v-for="group in groupedNotes" :key="group.label" class="day">
             <div class="day-head" :class="{ pinned: group.pinned }">
-              <AppIcon v-if="group.pinned" name="pin" :size="11" />
+              <AppIcon v-if="group.pinned" name="pin" :size="12" />
               {{ group.label }}
               <span class="day-count">· {{ group.notes.length }}</span>
             </div>
@@ -452,7 +453,6 @@ onBeforeUnmount(() => {
               />
             </div>
           </div>
-
           <div v-if="!filteredNotes.length && notesLoadError" class="error-state">
             <div class="empty-icon">
               <AppIcon name="alert" :size="24" />
@@ -483,7 +483,7 @@ onBeforeUnmount(() => {
         type="button"
         @click="noteView = v.key"
       >
-        <AppIcon :name="v.icon" :size="15" />
+        <AppIcon :name="v.icon" :size="16" />
         <span class="nm">{{ v.label }}</span>
         <span class="tab-count">{{ viewCounts[v.key] }}</span>
       </button>
@@ -506,7 +506,7 @@ onBeforeUnmount(() => {
       <template v-if="hasActiveFilters">
         <div class="rail-sep"></div>
         <button class="rail-item danger" type="button" @click="clearFilters">
-          <AppIcon name="x" :size="15" />
+          <AppIcon name="x" :size="16" />
           <span class="nm">清空筛选</span>
         </button>
       </template>
@@ -667,7 +667,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-faint);
   letter-spacing: 0.02em;
@@ -690,7 +690,7 @@ onBeforeUnmount(() => {
   padding: var(--space-3) var(--space-4);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
-.sl { display: block; height: 11px; border-radius: 4px; background: var(--hover); }
+.sl { display: block; height: 12px; border-radius: 4px; background: var(--hover); }
 .sl-1 { width: 72%; }
 .sl-2 { width: 94%; margin-top: var(--space-2); }
 .sl-3 { width: 40%; margin-top: var(--space-3); }
@@ -707,7 +707,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 .rail-title {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.02em;
@@ -723,7 +723,7 @@ onBeforeUnmount(() => {
   border: none;
   background: transparent;
   border-radius: var(--radius);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition);
@@ -751,7 +751,7 @@ onBeforeUnmount(() => {
 }
 @keyframes rail-in { from { opacity: 0; transform: translateX(8px); } }
 .rail-sep { height: 1px; flex-shrink: 0; background: var(--border); margin: var(--space-3) var(--space-2); }
-.rail-empty { font-size: 12px; color: var(--text-muted); padding: 0 var(--space-2); }
+.rail-empty { font-size: var(--text-sm); color: var(--text-muted); padding: 0 var(--space-2); }
 .rail .tab-count { font-size: var(--text-xs); margin-left: 0; }
 
 /* 全库摘要压在侧栏末位：上面的列表再短它也守着底，读的是这一栏的口径 */

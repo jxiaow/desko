@@ -58,3 +58,7 @@ docs/design/**/*.png
 
 # 实跑校验脚本与中间产物，跑完即可弃
 tmp/
+design/rail-check/
+design/dialog-check/
+design/bar-check/
+design/icon-board/

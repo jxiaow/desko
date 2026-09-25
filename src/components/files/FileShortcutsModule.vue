@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
 import { fileShortcutsApi as api } from '../../services/api/fileShortcuts'
 import type { FileShortcut } from '../../types'
@@ -199,10 +199,16 @@ const openInTerminal = async (shortcut: FileShortcut) => {
   }
 }
 
+/* 复制 morph：成功后钮面短暂翻成对勾做回执，toast 照旧 */
+const copiedId = ref<string | null>(null)
+let copiedTimer: number | undefined
 const copyPathToClipboard = async (shortcut: FileShortcut) => {
   try {
     await navigator.clipboard.writeText(shortcut.path)
     toastStore.showToast('地址已复制')
+    copiedId.value = shortcut.id
+    if (copiedTimer) window.clearTimeout(copiedTimer)
+    copiedTimer = window.setTimeout(() => { copiedId.value = null }, 1200)
   } catch {
     toastStore.showToast('复制失败', 'error')
   }
@@ -244,12 +250,27 @@ const pathTail = (path: string) => {
   return `…/${parts.slice(-2).join('/')}`
 }
 
+/* ── Ctrl/Cmd+K 聚焦搜索：与收藏/小记页同一条快捷键，只在本页挂载期间监听 ── */
+const searchRef = ref<HTMLInputElement | null>(null)
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
+const kbdHint = computed(() => (isMac ? '⌘K' : 'Ctrl K'))
+
+const onGlobalKey = (e: KeyboardEvent) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    searchRef.value?.focus()
+    searchRef.value?.select()
+  }
+}
+
 onMounted(() => {
   document.addEventListener('click', closeContextMenu)
+  window.addEventListener('keydown', onGlobalKey)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeContextMenu)
+  window.removeEventListener('keydown', onGlobalKey)
 })
 </script>
 
@@ -258,7 +279,8 @@ onBeforeUnmount(() => {
     <div class="page-bar">
       <div class="search-box">
         <span class="search-icon"><AppIcon name="search" :size="15" /></span>
-        <input :value="searchKeyword" placeholder="搜索快捷方式…" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" />
+        <input ref="searchRef" :value="searchKeyword" placeholder="搜索快捷方式…" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" />
+        <kbd v-if="!searchKeyword" class="search-kbd">{{ kbdHint }}</kbd>
         <button v-if="searchKeyword" class="search-clear" @click="emit('update:searchKeyword', '')" title="清除搜索">
           <AppIcon name="x" :size="13" />
         </button>
@@ -289,19 +311,19 @@ onBeforeUnmount(() => {
         @keydown.enter.prevent="openShortcut(shortcut)"
         @contextmenu="onContextMenu($event, shortcut)"
       >
-        <!-- 第一段：图标 + 名称 -->
+        <!-- 第一段：图标 + 名称/路径两行，靠左聚拢吃掉中间空白（大方化轮） -->
         <div class="cell-name">
           <span v-if="shortcut.shortcut_type === 'folder'" class="ft-ico folder" aria-hidden="true">
-            <AppIcon name="folder" :size="15" />
+            <AppIcon name="folder" :size="18" />
           </span>
-          <span v-else class="ft-ico" :style="{ color: extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
-          <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
+          <span v-else class="ft-ico toned" :style="{ '--ftc': extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
+          <div class="fs-text">
+            <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
+            <span class="cell-path"><span class="path-chip" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span></span>
+          </div>
         </div>
 
-        <!-- 第二段：等宽路径底片，整行点亮时加深 -->
-        <span class="cell-path"><span class="path-chip" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span></span>
-
-        <!-- 第三段：类型胶囊 + 添加时间 -->
+        <!-- 第二段：类型胶囊 + 添加时间 -->
         <div class="fs-tags">
           <span class="cell-type">{{ typeLabel(shortcut) }}</span>
           <span class="cell-time">{{ formatRelativeTime(shortcut.created_at) }}</span>
@@ -310,16 +332,16 @@ onBeforeUnmount(() => {
         <!-- 动作栏常驻占位，行点亮才淡入 -->
         <div class="row-acts">
           <button class="ib" type="button" title="打开所在目录" @click.stop="openContainingFolder(shortcut)">
-            <AppIcon name="folder" :size="13" />
+            <AppIcon name="folder" :size="14" />
           </button>
           <button class="ib" type="button" title="在终端中打开" @click.stop="openInTerminal(shortcut)">
-            <AppIcon name="terminal" :size="13" />
+            <AppIcon name="terminal" :size="14" />
           </button>
-          <button class="ib" type="button" title="复制地址" @click.stop="copyPathToClipboard(shortcut)">
-            <AppIcon name="copy" :size="13" />
+          <button class="ib" :class="{ copied: copiedId === shortcut.id }" type="button" :title="copiedId === shortcut.id ? '已复制' : '复制地址'" @click.stop="copyPathToClipboard(shortcut)">
+            <AppIcon :name="copiedId === shortcut.id ? 'check' : 'copy'" :size="14" />
           </button>
           <button class="ib" type="button" title="编辑" @click.stop="openEdit(shortcut)">
-            <AppIcon name="edit" :size="13" />
+            <AppIcon name="edit" :size="14" />
           </button>
         </div>
       </div>
@@ -425,17 +447,17 @@ onBeforeUnmount(() => {
    本页没有分类标签，动作钮顶到右缘 */
 .page-bar .btn-primary { margin-left: auto; }
 
-/* 与收藏页同款单列行卡流：行间 8px，每张卡独立圆角边框 */
-.shortcut-list { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
+/* 与收藏页同款单列行卡流：行间 10px，灰底浮白卡靠阴影分层 */
+.shortcut-list { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-2); }
 
 .shortcut-row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  height: 58px;
-  padding: 0 var(--space-3);
+  gap: var(--space-4);
+  height: 64px;
+  padding: 0 var(--space-4);
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid transparent;
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   cursor: pointer;
@@ -444,16 +466,16 @@ onBeforeUnmount(() => {
 }
 .shortcut-row:hover {
   border-color: var(--border-card-hover);
-  background: color-mix(in srgb, var(--accent) 4%, var(--bg-surface));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.025);
+  box-shadow: var(--shadow-card-hover);
 }
 .shortcut-row:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
 
-/* 四段定基宽：收缩权重与内容无关，跨行列线才稳。窄窗时只有名称段收缩 */
-.cell-name { display: flex; align-items: center; gap: 12px; flex: 0 1 230px; min-width: 140px; }
+/* 主列靠左聚拢：图标 + 名/路径两行，flex:1 吃掉中间空白 */
+.cell-name { display: flex; align-items: center; gap: 14px; flex: 1 1 auto; min-width: 0; }
+.fs-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .ft-ico {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--border);
   border-radius: var(--radius-badge);
   background: var(--fill);
@@ -461,17 +483,22 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: -0.02em;
 }
 .ft-ico.folder { background: var(--warning-soft); color: var(--warning); }
-.row-name { font-size: var(--text-base); font-weight: 600; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 扩展名色底：字色取 --ft-* 槽，底/描边是同色的淡水洗——类型一眼可辨，又不炸成彩色贴纸 */
+.ft-ico.toned {
+  color: var(--ftc);
+  background: color-mix(in srgb, var(--ftc) 10%, var(--panel-bg));
+  border-color: color-mix(in srgb, var(--ftc) 25%, var(--panel-bg));
+}
+.row-name { font-size: var(--text-md); font-weight: 600; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 路径列保持整列定宽（跨行对齐）；与收藏页 URL 同档：纯文本、不挂底片 */
+/* 路径进 meta 行：等宽小字，与收藏页 URL 同档 */
 .cell-path {
-  flex: 1 1 0;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -479,9 +506,8 @@ onBeforeUnmount(() => {
 .path-chip {
   display: inline-block;
   min-width: 0;
-  max-width: 340px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-url);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -490,35 +516,37 @@ onBeforeUnmount(() => {
 }
 .shortcut-row:hover .path-chip { color: var(--text-secondary); }
 
-.fs-tags { flex: 0 0 150px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.fs-tags { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); min-width: 0; }
 /* 与收藏页 .ec-cat 同款胶囊：同一档圆角（tag）与内距 */
 .cell-type {
   display: inline-flex;
   align-items: center;
-  height: 22px;
+  height: 24px;
   font-size: var(--text-xs);
   font-weight: 500;
   color: var(--badge-cat-text);
   background: var(--badge-cat-bg);
   border: 1px solid var(--badge-cat-border);
-  padding: 0 8px;
+  padding: 0 10px;
   border-radius: var(--radius-tag);
   flex-shrink: 0;
   white-space: nowrap;
 }
 .cell-time { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 四枚 28px 动作钮：定宽占位、平时五成透明常驻，行点亮升到全不透明；删除收进右键菜单 */
+/* 四枚 30px 动作钮：定宽占位、平时五成透明常驻，行点亮升到全不透明；删除收进右键菜单 */
 .row-acts {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  flex: 0 0 130px;
+  flex: 0 0 132px;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
-.row-acts .ib { width: 28px; height: 28px; }
+.row-acts .ib { width: 30px; height: 30px; }
+/* 复制回执态：对勾 + 成功色，1.2s 后转回 */
+.row-acts .ib.copied { color: var(--success); }
 .shortcut-row:hover .row-acts, .shortcut-row:focus-within .row-acts { opacity: 1; }
 
 /* 骨架行形/方块/呼吸走 global.css，此处只留宽度分配 */
@@ -526,30 +554,31 @@ onBeforeUnmount(() => {
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w24 { width: 24%; margin-left: auto; }
 
-/* Add dialog：440px 紧凑壳，底部操作区用 sidebar-bg 分一层 */
+/* Add dialog：440px 紧凑壳；底栏浅底色 + 28px 按钮档走 global.css .dialog-footer */
 .shortcut-dialog { width: 440px; }
-.shortcut-dialog .dialog-footer { background: var(--sidebar-bg); }
 
-/* 输入组：外框归容器，:focus-within 点亮 accent；路径文本等宽 */
+/* 输入组：外框归容器（底色/描边与全局 .form-group input 同皮肤），
+   :focus-within 点亮 accent；路径文本等宽、13px 与收藏弹窗字段档一致 */
 .path-input-row {
   display: flex;
   align-items: stretch;
+  height: 32px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--panel-bg);
+  background: var(--bg);
   overflow: hidden;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
-.path-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.path-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg); }
 .path-input-row input {
   flex: 1;
   min-width: 0;
   border: none;
   outline: none;
   background: transparent;
-  padding: 7px 10px;
+  padding: 0 10px;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--text);
   box-shadow: none; /* 高亮环归容器（:focus-within），别在输入框本体上再画一圈 */
 }
@@ -561,7 +590,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   border: none;
-  background: var(--sidebar-bg);
+  background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition);
@@ -569,25 +598,24 @@ onBeforeUnmount(() => {
 .path-act + .path-act { border-left: 1px solid var(--border); }
 .path-act:hover { color: var(--accent); background: var(--accent-soft); }
 
-/* 分段控制器：sidebar-bg 轨道 + 绝对定位滑块滑到选中项下 */
+/* 分段控制器：凹槽轨道 + 浮白滑块（与页面 .tab / 侧栏同一套浮卡语言，无边框靠阴影） */
 .type-seg {
   position: relative;
   display: flex;
-  padding: 2px;
-  background: var(--sidebar-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  padding: 3px;
+  background: var(--sunken);
+  border-radius: var(--radius);
 }
 .seg-thumb {
   position: absolute;
-  top: 2px;
-  bottom: 2px;
-  left: 2px;
-  width: calc(50% - 2px);
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  box-shadow: var(--shadow);
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  background: var(--bg-surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
   transition: transform var(--transition);
 }
 .seg-thumb.right { transform: translateX(100%); }
@@ -596,7 +624,7 @@ onBeforeUnmount(() => {
   z-index: 1;
   flex: 1;
   padding: 6px 0;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 500;
   border: none;
   background: transparent;

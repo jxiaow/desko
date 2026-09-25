@@ -756,7 +756,7 @@ const doRestoreFile = async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.file-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.file-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .file-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
 .row-btn {

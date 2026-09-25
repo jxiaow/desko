@@ -18,30 +18,30 @@
   /* 圆角系统 */
   --radius-xs: 4px;
   --radius-sm: 6px;
-  --radius: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-pill: 99px;
 
   /* 字号阶梯：所有 UI 文本走这五档，不再用 10.5/11.5/12.5/13.5/14.5/17.5 这种半像素。
      编辑器/列表/标题等组件用一档；需要略大或略小时优先调字重，不挤字号档。
-     body 的 14px 走 --text-md。 */
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-base: 13px;
-  --text-md: 14px;
-  --text-lg: 16px;
-  --text-xl: 18px;
-  --text-2xl: 22px;
+     body 的 15px 走 --text-md。大方化轮整体上抬一档（docs/design/spacious/01-plan.md）。 */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
 
   /* AppIcon :size 走这几档，不再 10/11/12/13/14/15/16/18/24 全谱散布。
      组件传 :size 时按数值用，CSS 写 width/height 时引用 px 形式。 */
-  --icon-xs-px: 11px;
-  --icon-sm-px: 13px;
-  --icon-md-px: 14px;
-  --icon-lg-px: 18px;
-  --icon-xl-px: 24px;
+  --icon-xs-px: 12px;
+  --icon-sm-px: 14px;
+  --icon-md-px: 16px;
+  --icon-lg-px: 20px;
+  --icon-xl-px: 26px;
 
   /* 批量浮底栏占位高度：所有列表容器底部要让出这块空间，避免最后一行被遮 */
   --dock-clearance: 96px;
@@ -59,11 +59,11 @@
   /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
   --stream-max: 1200px;
   /* 小记卡片正文高度上限：短的小记按实际内容，长的由 JS 收在这里之上最近的整行边界 */
-  --memo-max-h: 138px;
+  --memo-max-h: 144px;
   --rail-w: 248px;
   /* 小记顶栏的实际占位高度：粘性日期行和窄窗口下的浮层侧栏都要从它下面开始。
-     五页顶栏统一收编为 44px 定高后，这里跟着 .page-bar 走 */
-  --stream-bar-h: 44px;
+     五页顶栏统一收编为 48px 定高后，这里跟着 .page-bar 走 */
+  --stream-bar-h: 48px;
   /* 容器窄于此值时收起右栏，筛选降级为浮层 */
   --rail-min-room: 900px;
 }
@@ -98,7 +98,7 @@
   --text-brand: #2d5499;
 
   /* 面：四级冷中性灰阶。白底刺眼的问题主要来自亮度，不来自色相。 */
-  --bg: #f7f8fa;
+  --bg: #eef1f6;
   --panel-bg: #ffffff;
   --chrome-bg: rgba(238, 241, 246, 0.75);
   --sunken: #eaf0f7;
@@ -129,6 +129,7 @@
 
   /* 阴影 */
   --shadow-xs: 0 1px 2px 0 rgba(17, 24, 39, 0.04);
+  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.04), 0 8px 20px -8px rgba(17, 24, 39, 0.10);
   --shadow-sm: 0 1px 3px 0 rgba(17, 24, 39, 0.05);
   --shadow: 0 4px 12px -2px rgba(17, 24, 39, 0.06), 0 0 0 1px #cbd2de;
   --shadow-md: 0 6px 16px -6px rgba(17, 24, 39, 0.10);
@@ -216,7 +217,7 @@
   --code-pun: #8b8d98;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
+  --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
 /* ---------- light-warm：暖灰纸墨，为小记/长文阅读调的低彩度暖底 ---------- */
@@ -232,7 +233,7 @@
   --text-brand: #92400e;
 
   /* 面：米纸五档。相邻档差一档色温，不做条纹 */
-  --bg: #f8f6f2;
+  --bg: #f1eee7;
   --panel-bg: #ffffff;
   --chrome-bg: rgba(243, 238, 230, 0.75);
   --sunken: #ede6da;
@@ -260,6 +261,7 @@
 
   /* 投影带暖褐，纯灰投影在米底上会显脏 */
   --shadow-xs: 0 1px 2px 0 rgba(36, 30, 25, 0.04);
+  --shadow-card: 0 1px 2px rgba(36, 30, 25, 0.04), 0 8px 20px -8px rgba(36, 30, 25, 0.10);
   --shadow-sm: 0 1px 3px 0 rgba(36, 30, 25, 0.05);
   --shadow: 0 4px 12px -2px rgba(36, 30, 25, 0.06), 0 0 0 1px #d4ccc0;
   --shadow-md: 0 6px 16px -6px rgba(36, 30, 25, 0.10);
@@ -336,7 +338,7 @@
   --code-pun: #6f6a5e;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
+  --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
 /* ---------- linear-dark：曜石深空，电光紫蓝主色，边界靠实体描边不靠投影。 ---------- */
@@ -380,6 +382,7 @@
 
   /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-card: 0 6px 18px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px #2b3040;
   --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px #3b4155;
   --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
@@ -457,7 +460,7 @@
   --code-pun: #8c94a6;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', Consolas, 'Cascadia Code', monospace;
+  --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
 
@@ -501,6 +504,7 @@
 
   /* 底本身比 linear 亮一档，顶部高光收弱，分层主要靠面板浮起 */
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: 0 6px 18px -8px rgba(0, 0, 0, 0.50), inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 0 1px #3a3e46;
   --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px #494c54;
   --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.55);
@@ -578,7 +582,7 @@
   --code-pun: #a9b7c6;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', Consolas, monospace;
+  --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
 
@@ -596,7 +600,7 @@
   --text-brand: #195237;
 
   /* 面：冷青微灰底，顶栏半透明白，侧栏淡青瓷微底与主区形成半阶层级 */
-  --bg: #f4f7f5;
+  --bg: #e9efeb;
   --panel-bg: #ffffff;
   --chrome-bg: rgba(240, 245, 242, 0.75);
   --sunken: #e6eeea;
@@ -625,6 +629,7 @@
 
   /* 投影：卡常态 1px 描边环，hover 抬青绿柔影 */
   --shadow-xs: 0 1px 2px 0 rgba(15, 23, 19, 0.03);
+  --shadow-card: 0 1px 2px rgba(15, 23, 19, 0.04), 0 8px 20px -8px rgba(15, 23, 19, 0.10);
   --shadow-sm: 0 1px 3px 0 rgba(15, 23, 19, 0.04);
   --shadow: 0 4px 14px -2px rgba(33, 103, 71, 0.08), 0 0 0 1px #cfd8d2;
   --shadow-md: 0 6px 16px -6px rgba(15, 23, 19, 0.09);
@@ -720,7 +725,7 @@
   --accent-ring: rgba(37, 99, 235, 0.14);
   --text-brand: #1d4ed8;
 
-  --bg: #eceef2;
+  --bg: #e3e6ec;
   --panel-bg: #ffffff;
   --chrome-bg: rgba(236, 238, 242, 0.85);
   --sunken: #e0e3ea;
@@ -747,6 +752,7 @@
   --badge-ver-text: #1d4ed8;
 
   --shadow-xs: 0 1px 2px 0 rgba(10, 13, 18, 0.04);
+  --shadow-card: 0 1px 2px rgba(10, 13, 18, 0.04), 0 8px 20px -8px rgba(10, 13, 18, 0.10);
   --shadow-sm: 0 1px 3px 0 rgba(10, 13, 18, 0.05);
   --shadow: 0 4px 12px -2px rgba(10, 13, 18, 0.06), 0 0 0 1px #bfc5d1;
   --shadow-md: 0 6px 16px -6px rgba(10, 13, 18, 0.10);
@@ -821,7 +827,7 @@
   --code-pun: #8b8d98;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
+  --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
 
@@ -837,7 +843,7 @@
   --accent-ring: rgba(17, 24, 39, 0.14);
   --text-brand: #111827;
 
-  --bg: #fafafa;
+  --bg: #f0f0f1;
   --panel-bg: #ffffff;
   --chrome-bg: rgba(250, 250, 250, 0.85);
   --sunken: #f0f0f0;
@@ -864,6 +870,7 @@
   --badge-ver-text: #ffffff;
 
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 20px -8px rgba(0, 0, 0, 0.10);
   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
   --shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.06), 0 0 0 1px #9ca3af;
   --shadow-md: 0 6px 16px -6px rgba(0, 0, 0, 0.08);
@@ -939,7 +946,7 @@
   --code-pun: #8b8d98;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --font-mono: 'Cascadia Code', Consolas, 'JetBrains Mono', monospace;
+  --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
 
@@ -966,9 +973,9 @@
   --text-primary: var(--text);
 
   /* 主列表页规格引入的语义名，一律 var() 指到既有物理槽，零新增 hex */
-  /* 顶栏底：真半透磨砂（配 .page-bar 的 backdrop-blur 生效），
-     滚动内容从这条 44px 栏下面穿过去时被糊住而不是顶出来 */
-  --bg-toolbar: color-mix(in srgb, var(--panel-bg) 72%, transparent);
+  /* 顶栏底：与页面底色同源的半透磨砂（配 .page-bar 的 backdrop-blur 生效）。
+     静止时看不出是一条带；滚动内容从 48px 栏下面穿过去时被糊住而不是顶出来 */
+  --bg-toolbar: color-mix(in srgb, var(--bg) 72%, transparent);
   --bg-popover: var(--panel-bg);
   --bg-tag-default: var(--badge-cat-bg);
   --bg-mono-chip: var(--sunken);
@@ -979,7 +986,8 @@
   --border-divider: var(--border-subtle);
   --text-title: var(--text);
   --text-body: var(--text-secondary);
-  --shadow-card: var(--shadow-xs);
+  /* --shadow-card 已升为主题槽位（大方化轮）：浅色给宽大软影，
+     深色给小投影+高光环，各套主题在主题层各自填 */
   --shadow-card-hover: var(--shadow);
   --shadow-popover: var(--shadow-pop);
   --radius-card: var(--radius-lg);
@@ -1003,7 +1011,7 @@ html, body { height: 100%; }
 
 body {
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.5;
   letter-spacing: -0.01em;
   background: var(--bg);
@@ -1221,13 +1229,25 @@ body {
 .dialog-close:active { transform: scale(0.9); }
 
 .dialog-body { padding: var(--space-4) var(--space-5); overflow-y: auto; flex: 1; }
+/* 弹窗底栏：全站一套 —— 46px 浅底条 + 28px 按钮档（收藏弹窗 r13 原型值上抬为全局），
+   原先只有 EntryFormDialog 自带这套，其余弹窗掉回 36px 全局按钮档，同一 App 两种底栏。 */
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-4) var(--space-4);
+  min-height: 46px;
+  padding: 0 var(--space-5);
+  background: var(--fill);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+}
+.dialog-footer .btn-primary,
+.dialog-footer .btn-secondary,
+.dialog-footer .btn-danger {
+  height: 28px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
 }
 
 /* 卡片元素 */
@@ -1242,14 +1262,14 @@ body {
 }
 
 .card-avatar {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--text-sm);
   flex-shrink: 0;
   color: var(--cat-text);
 }
@@ -1261,21 +1281,23 @@ body {
 .card-avatar.c4 { background: var(--cat-5); }
 .card-avatar.c5 { background: var(--cat-6); }
 
-/* 搜索框 */
+/* 搜索框：与行卡同一套浮卡语言（白底 + 无边框 + 阴影），
+   圆角落 10px 档 = 行卡 14px 下一档，跟 34px 控件尺寸成比例 */
 .search-box {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border: 1px solid transparent;
   border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
   padding: 0 var(--space-3);
   height: 36px;
   transition: all var(--transition);
 }
 .search-box:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-ring);
+  box-shadow: var(--shadow-card), 0 0 0 3px var(--accent-ring);
 }
 .search-box input {
   flex: 1;
@@ -1291,6 +1313,18 @@ body {
   height: 100%;
 }
 .search-box input::placeholder { color: var(--text-muted); }
+/* 搜索框右侧快捷键角标：收藏/文件两页共用，无输入时显示 */
+.search-kbd {
+  flex-shrink: 0;
+  margin-right: 2px;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--sunken);
+}
 .search-icon {
   color: var(--text-muted);
   font-size: 14px;
@@ -1317,17 +1351,31 @@ body {
 .search-clear:hover { background: var(--hover); color: var(--text-secondary); }
 
 /* 表单件：全站共用一套。原先这几条在 EntryFormDialog 和 FileShortcutsModule 里
-   各抄了一份，ChangePasswordDialog 想要却没有，于是它三个输入框是浏览器默认样式。 */
+   各抄了一份，ChangePasswordDialog 想要却没有，于是它三个输入框是浏览器默认样式。
+   字段档对齐收藏弹窗 r13 原型：32px 输入 / 13px 字号 / 12px 标签，
+   原先全局是 36px/14px，同一屏里两种弹窗字段高低不一。 */
 .form-group { margin-bottom: var(--space-3); }
-.form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
+.form-group label { display: block; font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
 .form-group input,
-.form-group textarea,
 .form-group select {
   width: 100%;
-  padding: 8px 11px;
+  height: 32px;
+  padding: 0 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 14px;
+  font-size: var(--text-sm);
+  outline: none;
+  transition: all var(--transition);
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--text);
+}
+.form-group textarea {
+  width: 100%;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
   outline: none;
   transition: all var(--transition);
   font-family: inherit;
@@ -1339,7 +1387,7 @@ body {
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg); }
-.form-group textarea { resize: vertical; min-height: 56px; }
+.form-group textarea { resize: vertical; min-height: 56px; line-height: 17px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: var(--space-3); }
 .form-row .form-group { margin-bottom: 0; }
 
@@ -1478,22 +1526,22 @@ body {
 /* 标签页 */
 .tab {
   padding: var(--space-1) var(--space-3);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition);
   color: var(--text-muted);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   white-space: nowrap;
 }
 .tab:hover { color: var(--text-secondary); background: var(--hover); }
 .tab:active { transform: scale(0.97); }
 .tab.active {
   background: var(--bg-surface);
-  border-color: var(--border-line);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  border-color: transparent;
+  box-shadow: var(--shadow-card);
   color: var(--text-brand);
   font-weight: 600;
 }
@@ -1624,45 +1672,46 @@ body {
 .content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) 22px; }
 .content-inner:has(.batch-dock) { padding-bottom: var(--dock-clearance); }
 
-/* 吸顶工具栏：44px 定高 + 半透磨砂 + 1px 下划线，五页同一条。
-   负外边距吃满滚动容器宽度，两侧留白靠内边距，滚动的行不会从边缘露出来 */
+/* 吸顶工具栏：48px 定高，五页同一条。
+   底色与页面同色（不再另起一条亮带），滚动内容从栏下方穿过时被糊住而不是顶出来；
+   负外边距吃满滚动容器宽度，左右间距与 .content-inner 同为 space-5，栏内控件与行卡左缘对齐 */
 .page-bar {
   position: sticky;
   top: 0;
   z-index: 20;
-  height: 44px;
+  height: 48px;
   margin: 0 calc(var(--space-5) * -1);
   padding: 0 var(--space-5);
   background: var(--bg-toolbar);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--border-line);
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
-/* 栏内控件一律 32px 档（全局 36px 是弹窗/表单档，塞进 44px 栏会顶天） */
-.page-bar .search-box { flex: 0 0 220px; min-width: 0; height: 32px; margin-right: var(--space-2); }
+/* 栏内控件一律 34px 档（全局 36px 是弹窗/表单档，塞进 48px 栏会顶天） */
+.page-bar .search-box { flex: 0 0 240px; min-width: 0; height: 34px; margin-right: var(--space-2); }
 .page-bar .search-box input { font-size: var(--text-sm); }
 .page-bar .btn-primary,
 .page-bar .btn-secondary,
-.page-bar .bar-btn { height: 32px; }
+.page-bar .bar-btn { height: 34px; }
 
-/* 骨架屏：行形与行卡同尺寸（58px 行卡档），呼吸只走在容器上，条块是静的 */
+/* 骨架屏：行形与行卡同尺寸（64px 行卡档），呼吸只走在容器上，条块是静的 */
 .skeleton-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  height: 58px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border-line);
+  height: 64px;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
   border-radius: var(--radius-card);
   background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 .skeleton-block {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-badge);
   background: var(--hover);
   flex-shrink: 0;
@@ -1682,10 +1731,10 @@ body {
   margin-right: auto;
   padding-left: var(--space-1);
 }
-/* 32px 见方、平时无底，靠 hover 才亮 —— 与同一行的主按钮拉开重量但不错成两个框 */
+/* 34px 见方、平时无底，靠 hover 才亮 —— 与同一行的主按钮拉开重量但不错成两个框 */
 .bar-btn {
-  height: 32px;
-  min-width: 32px;
+  height: 34px;
+  min-width: 34px;
   padding: 0 var(--space-2);
   border: 1px solid transparent;
   background: transparent;
@@ -1821,12 +1870,13 @@ body {
 .popover.modal { z-index: 1500; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-3px) scale(0.98); } }
 
-/* Teleport 到 body 的分类下拉：脱离组件作用域，样式只能挂全局 */
-.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); max-height: 168px; overflow-y: auto; }
-.category-dropdown-teleported .category-option { padding: 7px 11px; font-size: 13px; cursor: pointer; transition: background var(--transition-fast); }
-.category-dropdown-teleported .category-option:hover { background: var(--accent-soft); }
+/* Teleport 到 body 的分类下拉：脱离组件作用域，样式只能挂全局。
+   与 .popover 同一套浮层语言（大圆角 + pop 阴影 + 内衬间距），条目落 .pop-item 同档 */
+.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); padding: var(--space-1); max-height: 200px; overflow-y: auto; }
+.category-dropdown-teleported .category-option { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); border-radius: var(--radius-sm); cursor: pointer; transition: background var(--transition-fast); }
+.category-dropdown-teleported .category-option:hover { background: var(--hover); }
 .category-dropdown-teleported .category-option.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
-.category-dropdown-teleported .category-empty { padding: 7px 11px; font-size: 13px; color: var(--text-muted); }
+.category-dropdown-teleported .category-empty { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); color: var(--text-muted); }
 
 /* 全局悬停提示：所有 title 属性自动换成深色气泡，共用挂在 body 上的这一个节点 */
 .app-tip {
@@ -1904,4 +1954,32 @@ input[type="datetime-local"]:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-ring);
+}
+/* 侧栏导航是 router-link（a 标签），不在上面那批按钮类里，单独补一环；
+   只上 ring 不动 border-color，避免洗掉 nav-item 自身的透明边框占位 */
+.nav-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+/* ---------- 弹簧微反馈：只给 transform 换弹性曲线 ----------
+   按下缩放（各控件 :active 已有）在松手时带一点回弹，作为"系统收到这一下"的体感回执；
+   颜色/阴影继续走常规曲线——弹性曲线的过冲用在颜色上会渗色。 */
+.btn-primary,
+.btn-secondary,
+.tab,
+.ib,
+.eb,
+.mini-btn,
+.mini,
+.bar-btn,
+.action-btn,
+.dialog-close {
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    box-shadow var(--transition),
+    opacity var(--transition),
+    transform var(--transition-spring);
 }

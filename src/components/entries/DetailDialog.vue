@@ -73,7 +73,7 @@ useEscapeClose(() => emit('close'))
               </button>
             </div>
             <div v-if="cachedPassword" class="detail-field">
-              <span class="detail-value detail-pwd" :class="{ mono: !revealed }">{{ revealed ? cachedPassword : '••••••••••' }}</span>
+              <span class="detail-value detail-pwd">{{ revealed ? cachedPassword : '••••••••••' }}</span>
               <button class="mini" type="button" :title="revealed ? '隐藏密码' : '显示密码'" @click="emit('togglePassword', entry.id)">
                 <AppIcon :name="revealed ? 'eyeOff' : 'eye'" :size="12" />{{ revealed ? '隐藏' : '显示' }}
               </button>
@@ -139,12 +139,13 @@ useEscapeClose(() => emit('close'))
 }
 .detail-field { display: flex; align-items: center; gap: var(--space-2); }
 .detail-field + .detail-field { margin-top: var(--space-2); }
-.detail-value { flex: 1; min-width: 0; font-size: 13.5px; color: var(--text); word-break: break-all; }
-.detail-value.mono { font-family: var(--font-mono); letter-spacing: 0.08em; color: var(--text-secondary); }
+.detail-value { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text); word-break: break-all; }
+/* 密码是"读一个值"的场景：常显等宽 + 抬一档到 15px，跟验证码的 30px 同一条排印思路 */
+.detail-pwd { font-family: var(--font-mono); font-size: var(--text-md); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
 .detail-empty { color: var(--text-muted); }
-.detail-link { color: var(--accent); cursor: pointer; text-decoration: none; font-family: var(--font-mono); font-size: 12.5px; word-break: break-all; }
+.detail-link { color: var(--accent); cursor: pointer; text-decoration: none; font-family: var(--font-mono); font-size: var(--text-sm); word-break: break-all; }
 .detail-link:hover { text-decoration: underline; }
-.detail-username { font-family: var(--font-mono); font-size: 12.5px; }
+.detail-username { font-family: var(--font-mono); font-size: var(--text-sm); }
 .detail-notes { color: var(--text-secondary); line-height: 1.5; white-space: pre-wrap; }
 
 .detail-paths { display: flex; flex-wrap: wrap; gap: 6px; }

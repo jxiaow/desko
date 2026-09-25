@@ -15,16 +15,49 @@ const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
 const router = useRouter()
 
+/* 发行方首字母块：与收藏行同配方（词首两枚，中文取前两字），色调按发行方名哈希——同发行方恒定同色 */
+const initials = (name: string) => {
+  const words = name.trim().split(/[\s._\-/@]+/).filter(Boolean)
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  return name.trim().slice(0, 2).toUpperCase()
+}
+/** 模块色相身份：本页图块统一取 cat-3 色相，发行方哈希只分浓淡三档 */
+const tileTone = (name: string) => {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0
+  return ['tone-1', 'tone-2', 'tone-3'][Math.abs(h) % 3] as string
+}
+
 const codes = ref<MfaCode[]>([])
 const loading = ref(true)
 let timer: number | undefined
 let refreshing = false
 
+/** 刚复制成功的卡片 id：验证码区短暂翻成「已复制」再转回 */
+const copiedId = ref<string | null>(null)
+let copiedTimer: number | undefined
+/** 本次刷新里码值变了的卡：换码闪光（只在数字真换新时走，不是入场动画） */
+const flashedIds = ref<Set<string>>(new Set())
+let flashTimer: number | undefined
+
 async function refresh() {
   if (refreshing) return
   refreshing = true
+  // 首载（loading 仍为 true）不闪光：那批「变化」只是卡片第一次出现
+  const prev = new Map(codes.value.map((c) => [c.id, c.code]))
+  const firstLoad = loading.value
   try {
     codes.value = await mfaApi.codes()
+    if (!firstLoad) {
+      const changed = new Set(
+        codes.value.filter((c) => prev.get(c.id) !== c.code).map((c) => c.id),
+      )
+      if (changed.size) {
+        flashedIds.value = changed
+        if (flashTimer) window.clearTimeout(flashTimer)
+        flashTimer = window.setTimeout(() => { flashedIds.value = new Set() }, 600)
+      }
+    }
   } catch (e) {
     toastStore.showToast(errText(e), 'error')
   } finally {
@@ -56,6 +89,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (timer !== undefined) window.clearInterval(timer)
+  if (copiedTimer) window.clearTimeout(copiedTimer)
+  if (flashTimer) window.clearTimeout(flashTimer)
 })
 
 /* 6 位按 3+3、8 位按 4+4 分组，读和抄都不容易错 */
@@ -71,6 +106,9 @@ const copyCode = async (c: MfaCode) => {
   try {
     await navigator.clipboard.writeText(c.code)
     toastStore.showToast('验证码已复制')
+    copiedId.value = c.id
+    if (copiedTimer) window.clearTimeout(copiedTimer)
+    copiedTimer = window.setTimeout(() => { copiedId.value = null }, 1200)
   } catch {
     toastStore.showToast('复制失败', 'error')
   }
@@ -225,7 +263,7 @@ const onPaste = async (e: ClipboardEvent) => {
         v-for="c in codes"
         :key="c.id"
         class="mfa-card"
-        :class="{ expiring: c.remaining <= 5 }"
+        :class="{ expiring: c.remaining <= 5, flash: flashedIds.has(c.id) }"
         role="button"
         tabindex="0"
         :aria-label="`复制 ${c.issuer || c.label} 的验证码`"
@@ -234,17 +272,18 @@ const onPaste = async (e: ClipboardEvent) => {
         @keydown.enter.prevent="copyCode(c)"
       >
         <div class="card-top">
+          <span class="mfa-tile" :class="tileTone(c.issuer || c.label)" aria-hidden="true">{{ initials(c.issuer || c.label) }}</span>
           <span class="card-issuer" :title="c.issuer || c.label">{{ c.issuer || c.label }}</span>
           <button class="ib danger" type="button" title="删除" @click.stop="confirmDelete(c)">
-            <AppIcon name="trash" :size="13" />
+            <AppIcon name="trash" :size="14" />
           </button>
         </div>
         <div v-if="c.issuer && c.label" class="card-label" :title="c.label">{{ c.label }}</div>
-        <div class="card-code">{{ grouped(c) }}</div>
-        <div class="card-foot">
-          <div class="timer-bar"><div class="timer-fill" :style="{ width: pct(c) }"></div></div>
+        <div class="card-code-row">
+          <div class="card-code" :class="{ copied: copiedId === c.id }" aria-live="polite">{{ copiedId === c.id ? '已复制' : grouped(c) }}</div>
           <span class="timer-text">{{ Math.max(c.remaining, 0) }}s</span>
         </div>
+        <div class="card-bottom"><div class="card-bottom-fill" :style="{ width: pct(c) }"></div></div>
       </div>
     </div>
 
@@ -324,13 +363,15 @@ const onPaste = async (e: ClipboardEvent) => {
 
 .mfa-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
   padding-top: var(--space-2);
 }
 
 .mfa-card {
-  border: 1px solid var(--border-subtle);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid transparent;
   border-radius: var(--radius-card);
   background: var(--bg-surface);
   box-shadow: var(--shadow-card);
@@ -341,16 +382,36 @@ const onPaste = async (e: ClipboardEvent) => {
 /* hover 与收藏/文件行卡、小记便签同一配方 */
 .mfa-card:hover {
   border-color: var(--border-card-hover);
-  background: color-mix(in srgb, var(--accent) 4%, var(--bg-surface));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.025);
+  box-shadow: var(--shadow-card-hover);
 }
 .mfa-card:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
 
-.card-top { display: flex; align-items: center; gap: var(--space-2); }
+.card-top { display: flex; align-items: center; gap: var(--space-3); }
+/* 36px 图块档：与收藏/文件行的图块同尺寸，同页一色三档浓淡 */
+.mfa-tile {
+  --h: var(--cat-3);
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-badge);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+/* 色相钉 cat-3 槽，切主题跟各主题的槽走 */
+.mfa-tile.tone-1 { background: color-mix(in srgb, var(--h) 8%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 16%, var(--panel-bg)); }
+.mfa-tile.tone-2 { background: color-mix(in srgb, var(--h) 15%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 28%, var(--panel-bg)); }
+.mfa-tile.tone-3 { background: color-mix(in srgb, var(--h) 26%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 42%, var(--panel-bg)); }
 .card-issuer {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
@@ -363,6 +424,8 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 
 .card-label {
   margin-top: 2px;
+  /* 与图块右侧的发行方名左缘对齐 */
+  margin-left: calc(36px + var(--space-3));
   font-size: var(--text-xs);
   color: var(--text-muted);
   overflow: hidden;
@@ -370,22 +433,32 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
   white-space: nowrap;
 }
 
+.card-code-row { display: flex; align-items: baseline; gap: var(--space-2); margin-top: var(--space-2); }
 .card-code {
-  margin-top: var(--space-2);
   font-family: var(--font-mono);
-  font-size: 27px;
+  font-size: 30px;
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-sm);
 }
-.mfa-card.expiring .card-code { color: var(--warning); }
+/* 复制反馈：码区整块翻成「已复制」，1.2s 后转回——回执落在结果本身上 */
+.card-code.copied { font-size: 20px; letter-spacing: 0.02em; color: var(--success); }
+/* 换码闪光：只在数字真换新的一瞬走一遍，是变化回执不是入场装饰 */
+@keyframes code-flash {
+  0% { background: color-mix(in srgb, var(--cat-3) 22%, transparent); }
+  100% { background: transparent; }
+}
+.mfa-card.flash .card-code { animation: code-flash 0.6s ease-out; }
 
-.card-foot { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
-.timer-bar { flex: 1; height: 3px; border-radius: 2px; background: var(--fill); overflow: hidden; }
-.timer-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 1s linear; }
-.mfa-card.expiring .timer-fill { background: var(--warning); }
-.timer-text { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; min-width: 24px; text-align: right; }
+/* 通宽底缘进度线：2px 贴卡底沿，读秒收进码行右侧；剩余≤5s 整卡描边转警示色 */
+.card-bottom { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--fill); }
+.card-bottom-fill { height: 100%; background: var(--accent); transition: width 1s linear; }
+.timer-text { margin-left: auto; font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.mfa-card.expiring { border-color: color-mix(in srgb, var(--warning) 55%, transparent); }
+.mfa-card.expiring .card-code { color: var(--warning); }
+.mfa-card.expiring .card-bottom-fill { background: var(--warning); }
 
 /* 加载骨架：呼吸走在容器上（与行卡页一致），条块只出静态色 */
 .mfa-card.skeleton {
@@ -396,47 +469,59 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
   padding: var(--space-4);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
-.mfa-card.skeleton:hover { border-color: var(--border-subtle); background: var(--bg-surface); box-shadow: var(--shadow-card); }
+.mfa-card.skeleton:hover { border-color: transparent; background: var(--bg-surface); box-shadow: var(--shadow-card); }
 .skeleton-line { height: 12px; border-radius: 5px; }
 .skeleton-line.tall { height: 26px; }
 
-/* 添加弹窗 */
+/* 添加弹窗：分段轨道与快捷方式弹窗 type-seg 同一套浮卡语言（凹槽底 + 浮白选中块） */
 .add-tabs {
   display: flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  padding: 3px;
+  background: var(--sunken);
+  border-radius: var(--radius);
   margin-bottom: var(--space-4);
 }
 .add-tab {
   flex: 1;
-  padding: 7px 13px;
-  font-size: 13px;
+  padding: 6px 14px;
+  font-size: var(--text-sm);
   font-weight: 500;
   border: none;
-  background: var(--panel-bg);
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   font-family: inherit;
   transition: all var(--transition);
 }
-.add-tab:not(:last-child) { border-right: 1px solid var(--border); }
-.add-tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.add-tab:hover:not(.active) { background: var(--hover); }
+.add-tab.active {
+  background: var(--bg-surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+}
+.add-tab:hover:not(.active) { color: var(--text-secondary); }
 
 .uri-box {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--panel-bg);
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-3);
+  padding: 6px 11px;
   resize: vertical;
+  transition: all var(--transition);
 }
-.uri-box:focus { outline: none; border-color: var(--accent); }
+.uri-box:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  background: var(--panel-bg);
+}
 
 .qr-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.qr-row .btn-secondary { height: 32px; } /* 正文动作钮落字段档，别高过底栏主钮 */
 .qr-hint { font-size: var(--text-xs); color: var(--text-faint); }
 </style>

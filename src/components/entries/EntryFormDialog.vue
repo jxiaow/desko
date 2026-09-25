@@ -88,14 +88,9 @@ useEscapeClose(() => emit('close'))
 .entry-form-dialog .dialog-header { height: 42px; padding: 0 20px; }
 .entry-form-dialog .dialog-header h3 { font-size: 14px; }
 
-/* 46px 底栏浅底色分层：左快捷键徽标 + 右 28px 按钮轴 */
-.entry-form-dialog .dialog-footer {
-  height: 46px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  background: var(--fill);
-}
+/* 46px 底栏浅底色 + 28px 按钮档已上抬为全局 .dialog-footer；
+   这里只留本弹窗的布局差量：左侧快捷键徽标把按钮推到右边 */
+.entry-form-dialog .dialog-footer { justify-content: space-between; }
 .footer-hints { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-faint); }
 .footer-hints .kbd {
   padding: 1px 4px; border: 1px solid var(--border); border-radius: 4px;
@@ -104,10 +99,4 @@ useEscapeClose(() => emit('close'))
 }
 .hints-dot { margin: 0 4px; }
 .footer-actions { display: flex; align-items: center; gap: 8px; }
-.entry-form-dialog .dialog-footer .btn-primary,
-.entry-form-dialog .dialog-footer .btn-secondary {
-  height: 28px;
-  padding: 0 12px;
-  font-size: 12.5px;
-}
 </style>

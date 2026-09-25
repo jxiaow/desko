@@ -224,7 +224,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   padding: 4px 11px;
   border-radius: var(--radius-pill);
@@ -269,23 +269,24 @@ onMounted(async () => {
   border: none;
   border-radius: var(--radius-sm);
   background: none;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   cursor: pointer;
 }
 .cfg-summary:hover { color: var(--text-secondary); background: var(--fill); }
 .cfg-summary svg { flex-shrink: 0; }
 
-/* ── 分组卡：一层框，行用细线分隔，不做卡中卡 ──────────── */
+/* ── 分组卡：一层框，行用细线分隔，不做卡中卡；外框吃行卡同款阴影分层 ── */
 .clean-group-card {
   background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   margin-bottom: var(--space-4);
 }
 .group-head {
   padding: 10px 16px 9px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -340,14 +341,14 @@ onMounted(async () => {
   padding: 0;
   background: none;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text);
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-gutter: stable;
 }
 /* 局域网地址是本页的主角 */
-.url-row.lan code.lan-url { font-size: 16px; font-weight: 600; }
+.url-row.lan code.lan-url { font-size: var(--text-lg); font-weight: 600; }
 .icon-btn {
   flex-shrink: 0;
   display: inline-flex;
@@ -362,7 +363,7 @@ onMounted(async () => {
   cursor: pointer;
 }
 .icon-btn:hover { background: var(--panel-bg); color: var(--text); }
-.icon-btn.help { font-size: 12px; font-weight: 700; }
+.icon-btn.help { font-size: var(--text-sm); font-weight: 700; }
 .url-row .icon-btn + .icon-btn { margin-left: -4px; }
 
 /* 共享目录行（.dir-ico 是本页私有，与文件页 32px 的 .ft-ico 不同档，不再同名） */
@@ -412,7 +413,7 @@ html.hover-suppressed .dir-row:hover .dir-del { opacity: 0; }
   border-radius: var(--radius-sm);
   color: var(--text);
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-family: inherit;
   transition: border-color var(--transition), box-shadow var(--transition);
 }

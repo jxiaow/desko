@@ -110,5 +110,5 @@ const onKeydown = (e: KeyboardEvent) => {
   padding: var(--space-2) var(--space-3);
   border-top-color: var(--border);
 }
-.composer-hint { font-size: 11px; color: var(--text-muted); margin-left: var(--space-1); }
+.composer-hint { font-size: var(--text-xs); color: var(--text-muted); margin-left: var(--space-1); }
 </style>
