@@ -40,7 +40,7 @@ useEscapeClose(() => emit('close'))
 <template>
   <Transition name="dialog">
     <div v-if="true" class="dialog-overlay">
-      <div class="dialog detail-dialog">
+      <div class="dialog detail-dialog" role="dialog" aria-modal="true" :aria-label="`条目详情：${entry.name}`">
         <div class="dialog-header detail-head">
           <div class="card-avatar" :class="avatarClass(entry.category)">{{ entry.name.charAt(0) }}</div>
           <div class="detail-head-id">

@@ -232,7 +232,7 @@ onMounted(() => { loadSettings() })
 <template>
   <Transition name="dialog">
     <div v-if="show" class="dialog-overlay">
-      <div class="settings-dialog">
+      <div class="settings-dialog" role="dialog" aria-modal="true" aria-label="设置">
         <aside class="settings-nav">
           <div class="nav-brand">
             <BrandLogo />

@@ -181,7 +181,7 @@ const onBodyClick = (e: MouseEvent) => {
 }
 
 const onKeydown = (e: KeyboardEvent) => {
-  if (e.key !== 'Enter' || props.isBatchMode) return
+  if ((e.key !== 'Enter' && e.key !== ' ') || props.isBatchMode) return
   e.preventDefault()
   if (locked.value) emit('unlock')
   else emit('open')
@@ -442,6 +442,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   gap: var(--space-2);
   margin-bottom: 3px;
   min-height: 20px;
+  cursor: pointer;
 }
 .memo-time { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); color: var(--text-muted); }

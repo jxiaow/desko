@@ -53,8 +53,8 @@ export const THEMES: ThemeInfo[] = [
   { id: 'light-celadon', name: '青瓷', prev: { page: '#f4f7f5', sidebar: '#ebf0ed', card: '#ffffff', rowHover: '#f0f5f2', edge: '#dce3df', accent: '#216747', ink: '#0f1713' } },
   { id: 'aluminum-pro', name: '冷铝', prev: { page: '#eceef2', sidebar: '#f4f5f8', card: '#ffffff', rowHover: '#e5e8f0', edge: '#d7dbe2', accent: '#2563eb', ink: '#0a0d12' } },
   { id: 'swiss-monochrome', name: '瑞士黑白', prev: { page: '#fafafa', sidebar: '#ffffff', card: '#ffffff', rowHover: '#f3f4f6', edge: '#e5e7eb', accent: '#111827', ink: '#000000' } },
-  { id: 'linear-dark', name: 'Linear 深空', prev: { page: '#111217', sidebar: '#14151a', card: '#181920', rowHover: '#22242e', edge: '#252834', accent: '#6366f1', ink: '#f1f3f8' } },
-  { id: 'jetbrains-dark', name: 'JetBrains 炭黑', prev: { page: '#1e1f22', sidebar: '#1a1b1e', card: '#27282c', rowHover: '#313338', edge: '#34363c', accent: '#3574f0', ink: '#dfe1e5' } },
+  { id: 'linear-dark', name: 'Linear 深空', prev: { page: '#111217', sidebar: '#14151a', card: '#181920', rowHover: '#22242e', edge: '#252834', accent: '#5b5ee6', ink: '#f1f3f8' } },
+  { id: 'jetbrains-dark', name: 'JetBrains 炭黑', prev: { page: '#1e1f22', sidebar: '#1a1b1e', card: '#27282c', rowHover: '#313338', edge: '#34363c', accent: '#316dea', ink: '#dfe1e5' } },
 ]
 
 export const DEFAULT_THEME: ThemeId = 'light-cool'

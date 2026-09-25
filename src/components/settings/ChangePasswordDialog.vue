@@ -51,7 +51,7 @@ useEscapeClose(close)
 <template>
   <Transition name="dialog">
     <div v-if="show" class="dialog-overlay">
-    <div class="dialog">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="修改主密码">
       <div class="dialog-header">
         <h3>修改主密码</h3>
         <button  class="dialog-close" @click="close" title="关闭">

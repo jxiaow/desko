@@ -18,7 +18,7 @@ useEscapeClose(() => emit('cancel'), () => props.dialog.show)
 <template>
   <Transition name="dialog">
     <div v-if="dialog.show" class="dialog-overlay">
-    <div class="dialog confirm-dialog">
+    <div class="dialog confirm-dialog" role="dialog" aria-modal="true" :aria-label="dialog.title">
       <div class="dialog-header">
         <h3>{{ dialog.title }}</h3>
         <button  class="dialog-close" @click="emit('cancel')" title="关闭">

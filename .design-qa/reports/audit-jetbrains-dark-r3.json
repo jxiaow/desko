@@ -1,0 +1,53 @@
+{
+  "theme": "jetbrains-dark",
+  "generatedAt": "2026-09-25T12:19:26.601Z",
+  "findings": [
+    {
+      "area": "contrast",
+      "sel": "span.tab-count",
+      "text": "2",
+      "ratio": 1,
+      "need": 4.5,
+      "px": 12,
+      "color": "rgb(49, 109, 234)",
+      "bg": "rgb(49,109,234)"
+    },
+    {
+      "area": "contrast",
+      "sel": "span.meta-dot",
+      "text": "·",
+      "ratio": 2,
+      "need": 4.5,
+      "px": 15,
+      "color": "rgb(82, 86, 96)",
+      "bg": "rgb(39,40,44)"
+    },
+    {
+      "area": "dialog-semantics",
+      "target": "EntryFormDialog",
+      "role": "dialog",
+      "ariaModal": "true",
+      "label": "新增网址收藏",
+      "focusInside": true,
+      "activeTag": "INPUT."
+    },
+    {
+      "area": "dialog-escape",
+      "closed": true
+    },
+    {
+      "area": "row-focusable",
+      "focused": true
+    },
+    {
+      "area": "row-key-activation",
+      "before": 0,
+      "afterSpace": true,
+      "afterEnter": true
+    },
+    {
+      "area": "reduced-motion",
+      "transitionDuration": "1e-05s"
+    }
+  ]
+}

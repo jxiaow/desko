@@ -291,6 +291,7 @@ onUnmounted(() => {
         :aria-label="`条目：${item.name}`"
         @click="onRowClick(item, isBatchMode)"
         @keydown.enter.prevent="onRowClick(item, isBatchMode)"
+        @keydown.space.prevent="onRowClick(item, isBatchMode)"
       >
         <span v-if="isBatchMode" class="card-check" :class="{ checked: selectedIds.has(item.id) }" aria-hidden="true">
           <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="12" />
@@ -589,7 +590,7 @@ onUnmounted(() => {
 .meta-dot { color: var(--text-faint); opacity: 0.6; flex-shrink: 0; }
 .ec-note {
   font-size: var(--text-sm);
-  color: var(--text-faint);
+  color: var(--text-muted);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

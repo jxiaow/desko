@@ -11,8 +11,8 @@ const ANCHORS = {
   'light-celadon':    { bg: 'rgb(233, 239, 235)', text: 'rgb(15, 23, 19)',    accent: '#216747' },
   'aluminum-pro':     { bg: 'rgb(227, 230, 236)', text: 'rgb(10, 13, 18)',    accent: '#2563eb' },
   'swiss-monochrome': { bg: 'rgb(240, 240, 241)', text: 'rgb(0, 0, 0)',       accent: '#111827' },
-  'linear-dark':      { bg: 'rgb(17, 18, 23)',    text: 'rgb(241, 243, 248)', accent: '#6366f1' },
-  'jetbrains-dark':   { bg: 'rgb(30, 31, 34)',    text: 'rgb(223, 225, 229)', accent: '#3574f0' },
+  'linear-dark':      { bg: 'rgb(17, 18, 23)',    text: 'rgb(241, 243, 248)', accent: '#5b5ee6' },
+  'jetbrains-dark':   { bg: 'rgb(30, 31, 34)',    text: 'rgb(223, 225, 229)', accent: '#316dea' },
 } as const
 
 type ThemeId = keyof typeof ANCHORS
@@ -159,7 +159,7 @@ test.describe('主题', () => {
       [...document.querySelectorAll('.brand-logo stop')].map((s) => getComputedStyle(s).stopColor),
     )
     expect(stops.length).toBeGreaterThanOrEqual(6)
-    expect(new Set(stops)).toEqual(new Set(['rgb(130, 133, 244)', 'rgb(99, 102, 241)', 'rgb(79, 81, 216)']))
+    expect(new Set(stops)).toEqual(new Set(['rgb(130, 133, 244)', 'rgb(91, 94, 230)', 'rgb(79, 81, 216)']))
     // 重复 id 会让第二个 logo 静默套用第一个的渐变：不报错，只是颜色不对
     const ids = await page.evaluate(() =>
       [...document.querySelectorAll('.brand-logo linearGradient')].map((g) => g.id),

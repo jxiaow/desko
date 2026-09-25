@@ -552,7 +552,7 @@ const doRestoreFile = async () => {
     <!-- 备份密码弹窗 -->
     <Transition name="dialog">
       <div v-if="showPwd" class="dialog-overlay pane-overlay">
-        <div class="dialog dialog-sm">
+        <div class="dialog dialog-sm" role="dialog" aria-modal="true" :aria-label="st.hasPassword ? '修改备份密码' : '设置备份密码'">
           <div class="dialog-header">
             <h3>{{ st.hasPassword ? '修改备份密码' : '设置备份密码' }}</h3>
             <button class="dialog-close" title="关闭" @click="closePwd">
@@ -582,7 +582,7 @@ const doRestoreFile = async () => {
     <!-- 恢复确认弹窗（要备份密码） -->
     <Transition name="dialog">
       <div v-if="showRestore" class="dialog-overlay pane-overlay">
-        <div class="dialog dialog-sm">
+        <div class="dialog dialog-sm" role="dialog" aria-modal="true" :aria-label="restoreMode === 'cloud' ? '从云端恢复' : '从文件恢复'">
           <div class="dialog-header">
             <h3>{{ restoreMode === 'cloud' ? '从云端恢复' : '从文件恢复' }}</h3>
             <button class="dialog-close" title="关闭" @click="closeRestore">
@@ -611,7 +611,7 @@ const doRestoreFile = async () => {
     <!-- 坚果云连接弹窗 -->
     <Transition name="dialog">
       <div v-if="showCloud" class="dialog-overlay pane-overlay">
-        <div class="dialog dialog-sm">
+        <div class="dialog dialog-sm" role="dialog" aria-modal="true" aria-label="连接坚果云">
           <div class="dialog-header">
             <h3>连接坚果云</h3>
             <button class="dialog-close" title="关闭" @click="closeCloud">
@@ -652,7 +652,7 @@ const doRestoreFile = async () => {
     <!-- 云端备份列表弹窗 -->
     <Transition name="dialog">
       <div v-if="showRemote" class="dialog-overlay pane-overlay">
-        <div class="dialog dialog-sm">
+        <div class="dialog dialog-sm" role="dialog" aria-modal="true" :aria-label="`云端备份 · ${hostOf(st.cloud.server)}`">
           <div class="dialog-header">
             <h3>云端备份 · {{ hostOf(st.cloud.server) }}</h3>
             <button class="dialog-close" title="关闭" @click="closeRemote">

@@ -1,0 +1,73 @@
+{
+  "theme": "linear-dark",
+  "generatedAt": "2026-09-25T11:56:43.014Z",
+  "findings": [
+    {
+      "area": "contrast",
+      "sel": "span.tab-count",
+      "text": "2",
+      "ratio": 1,
+      "need": 4.5,
+      "px": 12,
+      "color": "rgb(91, 94, 230)",
+      "bg": "rgb(91,94,230)"
+    },
+    {
+      "area": "contrast",
+      "sel": "span.tab-count",
+      "text": "1",
+      "ratio": 3.19,
+      "need": 4.5,
+      "px": 12,
+      "color": "rgb(107, 114, 128)",
+      "bg": "rgb(34,36,46)"
+    },
+    {
+      "area": "contrast",
+      "sel": "span.meta-dot",
+      "text": "·",
+      "ratio": 2.32,
+      "need": 4.5,
+      "px": 15,
+      "color": "rgb(75, 85, 99)",
+      "bg": "rgb(24,25,32)"
+    },
+    {
+      "area": "contrast",
+      "sel": "span.ec-note",
+      "text": "代码托管平台",
+      "ratio": 2.32,
+      "need": 4.5,
+      "px": 13,
+      "color": "rgb(75, 85, 99)",
+      "bg": "rgb(24,25,32)"
+    },
+    {
+      "area": "dialog-semantics",
+      "target": "EntryFormDialog",
+      "role": "dialog",
+      "ariaModal": "true",
+      "label": "新增网址收藏",
+      "focusInside": true,
+      "activeTag": "INPUT."
+    },
+    {
+      "area": "dialog-escape",
+      "closed": true
+    },
+    {
+      "area": "row-focusable",
+      "focused": true
+    },
+    {
+      "area": "row-key-activation",
+      "before": 0,
+      "afterSpace": false,
+      "afterEnter": true
+    },
+    {
+      "area": "reduced-motion",
+      "transitionDuration": "1e-05s"
+    }
+  ]
+}

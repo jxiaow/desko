@@ -270,6 +270,7 @@ const onPaste = async (e: ClipboardEvent) => {
         title="点击复制验证码"
         @click="copyCode(c)"
         @keydown.enter.prevent="copyCode(c)"
+        @keydown.space.prevent="copyCode(c)"
       >
         <div class="card-top">
           <span class="mfa-tile" :class="tileTone(c.issuer || c.label)" aria-hidden="true">{{ initials(c.issuer || c.label) }}</span>
@@ -296,7 +297,7 @@ const onPaste = async (e: ClipboardEvent) => {
     <!-- Add Dialog -->
     <Transition name="dialog">
       <div v-if="showAddDialog" class="dialog-overlay">
-        <div class="dialog" @paste="onPaste">
+        <div class="dialog" role="dialog" aria-modal="true" aria-label="添加验证码" @paste="onPaste">
           <div class="dialog-header">
             <div class="dialog-header-left">
               <h3>添加验证码</h3>

@@ -309,6 +309,7 @@ onBeforeUnmount(() => {
         :aria-label="`打开 ${shortcut.name}`"
         @click="openShortcut(shortcut)"
         @keydown.enter.prevent="openShortcut(shortcut)"
+        @keydown.space.prevent="openShortcut(shortcut)"
         @contextmenu="onContextMenu($event, shortcut)"
       >
         <!-- 第一段：图标 + 名称/路径两行，靠左聚拢吃掉中间空白（大方化轮） -->
@@ -367,7 +368,7 @@ onBeforeUnmount(() => {
     <!-- Add/Edit Dialog -->
     <Transition name="dialog">
       <div v-if="showAddDialog" class="dialog-overlay">
-        <div class="dialog shortcut-dialog">
+        <div class="dialog shortcut-dialog" role="dialog" aria-modal="true" :aria-label="isEditing() ? '编辑快捷方式' : '添加快捷方式'">
           <div class="dialog-header">
             <div class="dialog-header-left">
               <h3>{{ isEditing() ? '编辑快捷方式' : '添加快捷方式' }}</h3>

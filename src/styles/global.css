@@ -120,7 +120,7 @@
   /* 文字 */
   --text: #111827;
   --text-secondary: #4b5563;
-  --text-muted: #6b7280;
+  --text-muted: #686e7c;
   --text-faint: #9ca3af;
 
   /* 描边：层级靠边框，不靠色块 */
@@ -198,9 +198,9 @@
   --cat-1: #5f62b8;
   --cat-2: #7b5fb0;
   --cat-3: #a85b7d;
-  --cat-4: #a8804b;
-  --cat-5: #4b8a73;
-  --cat-6: #4b8a96;
+  --cat-4: #937042;
+  --cat-5: #46806b;
+  --cat-6: #457f8a;
   --cat-text: #ffffff;
 
   /* 文件类型：保留 pdf红/doc蓝/xls绿 的通用认知，只降饱和 */
@@ -254,7 +254,7 @@
 
   --text: #241e19;
   --text-secondary: #5c534a;
-  --text-muted: #8c8074;
+  --text-muted: #746a60;
   --text-faint: #b3a79a;
 
   --border: #e8e2d8;
@@ -317,11 +317,11 @@
   --selection: rgba(180, 83, 9, 0.18);
 
   /* 头像：暖土六相（陶土/橄榄/酒红/芥末/墨青/梅子），同 L* 同彩度 */
-  --cat-1: #b0653e;
-  --cat-2: #7a8a3f;
+  --cat-1: #ac633d;
+  --cat-2: #6e7c39;
   --cat-3: #9c4f5e;
-  --cat-4: #b08a3a;
-  --cat-5: #4f8378;
+  --cat-4: #917230;
+  --cat-5: #4d8075;
   --cat-6: #81598a;
   --cat-text: #ffffff;
 
@@ -353,13 +353,13 @@
 
 /* ---------- linear-dark：曜石深空，电光紫蓝主色，边界靠实体描边不靠投影。 ---------- */
 [data-theme="linear-dark"] {
-  --accent: #6366f1;
+  --accent: #5b5ee6;
   --accent-hover: #7a7ef7;
   --accent-active: #4f51d8;
   --accent-on: #ffffff;
-  --accent-soft: rgba(99, 102, 241, 0.16);
-  --accent-light: rgba(99, 102, 241, 0.28);
-  --accent-ring: rgba(99, 102, 241, 0.32);
+  --accent-soft: rgba(91, 94, 230, 0.16);
+  --accent-light: rgba(91, 94, 230, 0.28);
+  --accent-ring: rgba(91, 94, 230, 0.32);
   --text-brand: #818cf8;
 
   --bg: #111217;
@@ -374,7 +374,7 @@
   /* 文字：冷白主字，四级灰阶随 Linear 原族 */
   --text: #f1f3f8;
   --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
+  --text-muted: #858c99;
   --text-faint: #4b5563;
 
   --border: #252834;
@@ -387,7 +387,7 @@
   --badge-cat-bg: #1e2029;
   --badge-cat-border: #2c303f;
   --badge-cat-text: #9ca3af;
-  --badge-ver-bg: rgba(99, 102, 241, 0.18);
+  --badge-ver-bg: rgba(91, 94, 230, 0.18);
   --badge-ver-text: #a5b4fc;
 
   /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
@@ -415,14 +415,14 @@
   --sidebar-hover: #1e2027;
 
   --brand-g1: #8285f4;
-  --brand-g2: #6366f1;
+  --brand-g2: #5b5ee6;
   --brand-g3: #4f51d8;
   --brand-knob: #13151a;
 
   --lock-wash-a: #111217;
   --lock-wash-b: #181920;
-  --lock-orb-1: rgba(99, 102, 241, 0.16);
-  --lock-orb-2: rgba(99, 102, 241, 0.08);
+  --lock-orb-1: rgba(91, 94, 230, 0.16);
+  --lock-orb-2: rgba(91, 94, 230, 0.08);
 
   --frost-bg: rgba(24, 25, 32, 0.85);
   --frost-border: #2c3140;
@@ -437,7 +437,7 @@
 
   --scrollbar: rgba(255, 255, 255, 0.14);
   --scrollbar-hover: rgba(255, 255, 255, 0.24);
-  --selection: rgba(99, 102, 241, 0.32);
+  --selection: rgba(91, 94, 230, 0.32);
 
   /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
   --cat-1: #7c86e0;
@@ -476,13 +476,13 @@
 
 /* ---------- jetbrains-dark：炭黑 IDE 底，标志蓝主色，语法色取 Darcula 原族 ---------- */
 [data-theme="jetbrains-dark"] {
-  --accent: #3574f0;
+  --accent: #316dea;
   --accent-hover: #4b85f5;
   --accent-active: #2662d9;
   --accent-on: #ffffff;
-  --accent-soft: rgba(53, 116, 240, 0.16);
-  --accent-light: rgba(53, 116, 240, 0.28);
-  --accent-ring: rgba(53, 116, 240, 0.32);
+  --accent-soft: rgba(49, 109, 234, 0.16);
+  --accent-light: rgba(49, 109, 234, 0.28);
+  --accent-ring: rgba(49, 109, 234, 0.32);
   --text-brand: #6ca1ff;
 
   --bg: #1e1f22;
@@ -496,7 +496,7 @@
 
   --text: #dfe1e5;
   --text-secondary: #9ea2ad;
-  --text-muted: #727783;
+  --text-muted: #979ba5;
   --text-faint: #525660;
 
   --border: #34363c;
@@ -509,7 +509,7 @@
   --badge-cat-bg: #232427;
   --badge-cat-border: #383a41;
   --badge-cat-text: #a8abb5;
-  --badge-ver-bg: rgba(53, 116, 240, 0.16);
+  --badge-ver-bg: rgba(49, 109, 234, 0.16);
   --badge-ver-text: #70a0f5;
 
   /* 底本身比 linear 亮一档，顶部高光收弱，分层主要靠面板浮起 */
@@ -537,14 +537,14 @@
   --sidebar-hover: #26282c;
 
   --brand-g1: #6ca1ff;
-  --brand-g2: #3574f0;
+  --brand-g2: #316dea;
   --brand-g3: #2662d9;
   --brand-knob: #1e1f22;
 
   --lock-wash-a: #1e1f22;
   --lock-wash-b: #22242a;
-  --lock-orb-1: rgba(53, 116, 240, 0.14);
-  --lock-orb-2: rgba(53, 116, 240, 0.07);
+  --lock-orb-1: rgba(49, 109, 234, 0.14);
+  --lock-orb-2: rgba(49, 109, 234, 0.07);
 
   --frost-bg: rgba(39, 40, 44, 0.85);
   --frost-border: #34363c;
@@ -559,7 +559,7 @@
 
   --scrollbar: rgba(255, 255, 255, 0.16);
   --scrollbar-hover: rgba(255, 255, 255, 0.26);
-  --selection: rgba(53, 116, 240, 0.32);
+  --selection: rgba(49, 109, 234, 0.32);
 
   /* 炭黑底比曜石亮，六相彩度收一档才不刺眼 */
   --cat-1: #6c9be8;
@@ -622,7 +622,7 @@
   /* 文字：青瓷字阶——墨绿黑 / 苔灰 / 雾青，与冷灰族的蓝 slate 拉开色温 */
   --text: #0f1713;
   --text-secondary: #4a5c52;
-  --text-muted: #7d9185;
+  --text-muted: #5e7065;
   --text-faint: #9aada2;
 
   --border: #dce3df;
@@ -690,9 +690,9 @@
   --cat-1: #216747;
   --cat-2: #5b6c8a;
   --cat-3: #884f5c;
-  --cat-4: #9c7540;
+  --cat-4: #95703d;
   --cat-5: #6a4f8a;
-  --cat-6: #4f8088;
+  --cat-6: #4e7e86;
   --cat-text: #ffffff;
 
   /* 文件类型：和 light-cool 同谱系（pdf红/doc蓝/xls绿 认知保留），统一微暖一档 */
@@ -746,7 +746,7 @@
 
   --text: #0a0d12;
   --text-secondary: #475467;
-  --text-muted: #667085;
+  --text-muted: #5d677a;
   --text-faint: #98a2b3;
 
   --border: #d7dbe2;
@@ -810,9 +810,9 @@
   --cat-1: #5f62b8;
   --cat-2: #7b5fb0;
   --cat-3: #a85b7d;
-  --cat-4: #a8804b;
-  --cat-5: #4b8a73;
-  --cat-6: #4b8a96;
+  --cat-4: #937042;
+  --cat-5: #46806b;
+  --cat-6: #457f8a;
   --cat-text: #ffffff;
 
   --ft-pdf: #b8564f;
@@ -864,7 +864,7 @@
 
   --text: #000000;
   --text-secondary: #4b5563;
-  --text-muted: #6b7280;
+  --text-muted: #676e7b;
   --text-faint: #9ca3af;
 
   --border: #e5e7eb;
@@ -1393,7 +1393,7 @@ body {
   color: var(--text);
 }
 .form-group input::placeholder,
-.form-group textarea::placeholder { color: var(--text-faint); }
+.form-group textarea::placeholder { color: var(--text-muted); }
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg); }

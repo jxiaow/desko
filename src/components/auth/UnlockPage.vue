@@ -223,7 +223,7 @@ onUnmounted(() => {
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 
-.unlock-input::placeholder { color: var(--text-faint); }
+.unlock-input::placeholder { color: var(--text-muted); }
 
 /* 激活态：边框恒 1px 仅换色，外叠 8% 弥散光晕，禁止实心 ring 加粗 */
 .unlock-input:focus {

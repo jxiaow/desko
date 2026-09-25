@@ -37,7 +37,7 @@ useEscapeClose(() => emit('close'))
 <template>
   <Transition name="dialog">
     <div v-if="true" class="dialog-overlay form-overlay">
-      <div class="dialog entry-form-dialog">
+      <div class="dialog entry-form-dialog" role="dialog" aria-modal="true" :aria-label="title">
         <div class="dialog-header">
           <h3>{{ title }}</h3>
           <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
