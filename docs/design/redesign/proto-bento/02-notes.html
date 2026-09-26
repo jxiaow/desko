@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>desko v2 · 变革稿 · 小记（精选 + 双列流）</title>
+<style>
+:root{
+  --bg:#f5f4f1; --surface:#ffffff; --rail:#eceae5; --rail-hover:#e3e0d9;
+  --line:#e7e5df; --line-strong:#d4d2ca;
+  --text:#1d1c1a; --text-2:#4f4e48; --text-3:#6e6c64; --text-4:#98968c;
+  --accent:#3d5a80; --accent-soft:#e8eef4;
+  --danger:#a9443c; --danger-soft:#f7ece9; --warning:#8a6a1f; --warning-soft:#f6f0e0; --tint:#f7f6f2;
+  --shadow-pop:0 18px 40px -12px rgba(25,24,18,.3),0 2px 6px rgba(25,24,18,.08);
+  --shadow-win:0 24px 60px -20px rgba(20,20,15,.35);
+  --t:.15s cubic-bezier(.4,0,.2,1);
+  --font:"HarmonyOS Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:Consolas,"SF Mono",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#dcdad3;padding:24px;font:14px/1.6 var(--font);color:var(--text)}
+.win{width:1040px;height:670px;background:var(--bg);border-radius:10px;overflow:hidden;display:flex;box-shadow:var(--shadow-win);position:relative}
+svg{display:block}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+.rail{width:48px;flex:none;background:var(--rail);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:8px 0}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--text);color:#f7f6f2;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.r-item{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--text-3);position:relative}
+.r-item.on{color:var(--accent);background:var(--surface)}
+.r-item.on::before{content:"";position:absolute;left:-4px;top:9px;bottom:9px;width:3px;border-radius:2px;background:var(--accent)}
+.rail .gap{flex:1}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.tbar{height:40px;flex:none;display:flex;align-items:center;padding:0 8px 0 16px;border-bottom:1px solid var(--line)}
+.tbar .mod{font-size:13px;font-weight:600;color:var(--text-2)}
+.wbtns{margin-left:auto;display:flex}
+.wb{width:36px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text-3);border-radius:6px}
+.wb.x:hover{background:var(--danger-soft);color:var(--danger)}
+
+.stream{flex:1;overflow-y:auto;padding:10px 20px 14px;display:flex;flex-direction:column;gap:10px;scrollbar-width:thin}
+.stream > *{flex:none}
+.chips{display:flex;align-items:center;gap:6px}
+.chip{height:26px;display:flex;align-items:center;gap:5px;padding:0 11px;border-radius:13px;font-size:12.5px;color:var(--text-2);background:var(--surface);border:1px solid var(--line)}
+.chip .n{font-size:11px;color:var(--text-4);font-variant-numeric:tabular-nums}
+.chip.on{background:var(--text);color:#f7f6f2;border-color:var(--text);font-weight:600}
+.chip.on .n{color:#c9c7be}
+.chip.tag{color:var(--accent);border-color:var(--accent-soft);background:var(--accent-soft)}
+.chips .dv{width:1px;height:16px;background:var(--line-strong);margin:0 4px}
+.chips .composer-mini{margin-left:auto;display:flex;align-items:center;gap:6px;height:30px;padding:0 6px 0 14px;background:var(--surface);border:1px solid var(--line-strong);border-radius:15px;font-size:12.5px;color:var(--text-4)}
+.chips .composer-mini .pub{height:24px;padding:0 12px;border:none;border-radius:12px;background:var(--text);color:#f7f6f2;font-size:12px;font-weight:600;display:flex;align-items:center}
+
+/* ===== 精选卡：置顶即头版，压成一条 ===== */
+.hero{position:relative;background:var(--surface);border:1px solid var(--line-strong);border-radius:14px;padding:13px 18px 12px;overflow:hidden}
+.hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(var(--accent),var(--accent-soft))}
+.hero .kicker{display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;letter-spacing:.12em;color:var(--accent);margin-bottom:4px}
+.hero .kicker .ico{width:11px;height:11px}
+.hero h2{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:22px}
+.hero p{font-size:12.5px;color:var(--text-2);line-height:19px;max-width:80ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero .foot{display:flex;align-items:center;gap:10px;margin-top:8px}
+.hero .when{font-size:11.5px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.tag-inline{color:var(--accent);font-weight:600}
+.h-acts{margin-left:auto;display:flex;gap:6px}
+.btn{height:26px;padding:0 10px;display:flex;align-items:center;gap:5px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--line-strong);background:var(--surface);color:var(--text-2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn .ico{width:12px;height:12px}
+
+/* ===== 双列 masonry 流 ===== */
+.cols{column-count:2;column-gap:10px}
+.memo{break-inside:avoid;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:10px;transition:border-color var(--t),background var(--t)}
+.memo:hover{border-color:var(--accent);background:var(--tint)}
+.m-top{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.m-time{font-size:11.5px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.m-star{color:var(--warning);display:flex}
+.m-star .ico{width:12px;height:12px}
+.m-att{display:flex;align-items:center;gap:3px;font-size:11.5px;color:var(--text-3)}
+.m-att .ico{width:11px;height:11px}
+.m-acts{margin-left:auto;display:flex;gap:1px;opacity:0;transition:opacity var(--t)}
+.memo:hover .m-acts{opacity:1}
+.ab{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-3)}
+.ab:hover{background:var(--rail-hover);color:var(--text)}
+.ab .ico{width:13px;height:13px}
+.lead{font-weight:600}
+.txt{font-size:13px;color:var(--text);line-height:21px}
+.txt p + p{margin-top:5px}
+.photo{margin-top:7px;height:64px;border-radius:8px;background:linear-gradient(135deg,#dfe3dc,#c8d2cc 55%,#b7c4bd);position:relative}
+.photo span{position:absolute;right:8px;bottom:6px;font:10.5px var(--mono);color:#fff;background:rgba(29,28,26,.55);padding:1px 6px;border-radius:99px}
+.memo.locked{background:repeating-linear-gradient(-45deg,var(--warning-soft) 0 7px,transparent 7px 16px);display:flex;align-items:center;gap:10px;min-height:74px}
+.lock-disc{width:30px;height:30px;flex:none;border-radius:8px;background:var(--warning-soft);border:1px solid #e6d9b8;color:var(--warning);display:flex;align-items:center;justify-content:center}
+.lock-disc .ico{width:14px;height:14px}
+.tasks{list-style:none;display:flex;flex-direction:column;gap:3px;margin-top:4px}
+.tasks li{display:flex;gap:7px;align-items:flex-start}
+.tbox{width:13px;height:13px;margin-top:5px;flex:none;border:1.5px solid var(--line-strong);border-radius:4px}
+.tbox.done{background:var(--accent);border-color:var(--accent)}
+li.done .txt{color:var(--text-3);text-decoration:line-through}
+.code-blk{margin-top:6px;font:11.5px/1.7 var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--text-2)}
+</style>
+</head>
+<body>
+<div class="win">
+  <aside class="rail">
+    <div class="logo">D</div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M10 13.5a5 5 0 0 0 7.1 0l2.8-2.8a5 5 0 0 0-7.1-7.1l-1.2 1.1"/><path d="M14 10.5a5 5 0 0 0-7.1 0l-2.8 2.8a5 5 0 0 0 7.1 7.1l1.2-1.1"/></svg></div>
+    <div class="r-item on"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3.5a2.6 2.6 0 1 1 3.7 3.7L7.5 20.4 2.8 21.6l1.2-4.7Z"/></svg></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2.4h6a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21.5s8-3.6 8-10V6.2L12 2.4 4 6.2v5.3c0 6.4 8 10 8 10Z"/><path d="M9.2 12.2 11.3 14.3l4-4.2"/></svg></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8.5h15M15.5 5 19 8.5 15.5 12M20 15.5H5M8.5 12 5 15.5 8.5 19"/></svg></div>
+    <div class="gap"></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 4.6v4.8M7 14.6v4.8"/><circle cx="15" cy="7" r="2.1"/><circle cx="7" cy="17" r="2.1"/></svg></div>
+  </aside>
+
+  <div class="main">
+    <header class="tbar">
+      <span class="mod">小记</span>
+      <span class="wbtns">
+        <span class="wb"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></span>
+        <span class="wb"><svg class="ico" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/></svg></span>
+        <span class="wb x"><svg class="ico" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></span>
+      </span>
+    </header>
+
+    <div class="stream">
+      <div class="chips">
+        <span class="chip on">全部<span class="n">36</span></span>
+        <span class="chip">收藏<span class="n">8</span></span>
+        <span class="dv"></span>
+        <span class="chip tag"># 装修</span>
+        <span class="chip tag"># 私有云</span>
+        <span class="composer-mini">此刻的想法…<button class="pub">发布</button></span>
+      </div>
+
+      <!-- 置顶 = 头版大卡，不再是列表里的一行 -->
+      <div class="hero">
+        <div class="kicker"><svg class="ico" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6l1 7 2 2H6l2-2 1-7Z"/></svg>置顶 · 书房网络改造</div>
+        <h2>交换机换 managed，NAS 上 SSD 缓存</h2>
+        <p>本周把书房那台旧百兆换掉：VLAN 拆「办公 / IoT / 访客」三段，NAS 顺手上两块 SSD 做缓存。换完记速测数据，对照 <span class="tag-inline">#私有云</span> 里那份基线。</p>
+        <div class="foot">
+          <span class="when">置顶于 2 天前 · 最近编辑 今天 09:12</span>
+          <span class="h-acts">
+            <button class="btn"><svg class="ico" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/></svg>查看</button>
+            <button class="btn pri"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3.5a2.6 2.6 0 1 1 3.7 3.7L7.5 20.4 2.8 21.6l1.2-4.7Z"/></svg>继续写</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="cols">
+        <div class="memo">
+          <div class="m-top">
+            <span class="m-time">今天 14:20</span>
+            <span class="m-star"><svg class="ico" viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><path d="m12 3.2 2.7 5.6 6.1.8-4.5 4.3 1.1 6-5.4-2.9-5.4 2.9 1.1-6L3.2 9.6l6.1-.8Z"/></svg></span>
+            <span class="m-acts"><span class="ab"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3.5a2.6 2.6 0 1 1 3.7 3.7L7.5 20.4 2.8 21.6l1.2-4.7Z"/></svg></span><span class="ab"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></span></span>
+          </div>
+          <div class="txt"><span class="lead">周报素材 · 私有云迁移</span>
+            <p>附件同步改断点续传，压测 2 GB 通过；剩余风险是 HarmonyOS 侧 token 刷新时序。下周把 <span class="tag-inline">#工单</span> 模板沉进知识库。</p></div>
+        </div>
+
+        <div class="memo">
+          <div class="m-top">
+            <span class="m-time">今天 10:05</span>
+            <span class="m-att"><svg class="ico" viewBox="0 0 24 24"><path d="M20 11.5 12.2 19.3a4.6 4.6 0 0 1-6.5-6.5l8.4-8.4a3.1 3.1 0 0 1 4.4 4.4l-8.4 8.4a1.6 1.6 0 0 1-2.2-2.2l7.6-7.5"/></svg>2</span>
+          </div>
+          <div class="txt"><span class="lead">客厅吸顶灯选型</span>
+            <p>倾向雷士那盏 4000K，显色 95+。 <span class="tag-inline">#装修</span></p></div>
+          <div class="photo"><span>2 图</span></div>
+        </div>
+
+        <div class="memo">
+          <div class="m-top"><span class="m-time">昨天 21:33</span></div>
+          <div class="txt"><span class="lead">待办 · 网络改造</span>
+            <ul class="tasks">
+              <li class="done"><span class="tbox done"></span><span class="txt">选型 managed 交换机</span></li>
+              <li><span class="tbox"></span><span class="txt">VLAN 段规划写下来</span></li>
+              <li><span class="tbox"></span><span class="txt">SSD 缓存盘下单</span></li>
+            </ul></div>
+        </div>
+
+        <div class="memo locked">
+          <span class="lock-disc"><svg class="ico" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.2"/><path d="M8.2 10.5V7.8a3.8 3.8 0 0 1 7.6 0v2.7"/></svg></span>
+          <span><span class="lead" style="font-size:13px">宽带账户备忘</span><br><span class="m-time">已加密 · 单击解锁</span></span>
+        </div>
+
+        <div class="memo">
+          <div class="m-top"><span class="m-time">昨天 22:41</span></div>
+          <div class="txt"><span class="lead">HarmonyOS 蓝牙键断连</span>
+            <p>升级 NEXT 后连不上，恢复出厂重配对解决。记一下固件版本差异：</p>
+            <div class="code-blk">5.0.0.122 → 5.0.1.035 · BT stack changed</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

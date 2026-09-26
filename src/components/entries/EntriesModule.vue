@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Entry, Tab } from '../../types'
-import { formatUrlDisplay } from '../../utils/format'
+import { splitUrlDisplay } from '../../utils/format'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import EntryActionMenu from './EntryActionMenu.vue'
@@ -15,6 +15,7 @@ const props = defineProps<{
   loadError?: string | null
   filteredEntries: Entry[]
   isBatchMode: boolean
+  hasSelection: boolean
   selectedIds: Set<string>
   visiblePasswords: Record<string, boolean>
   passwordCache: Record<string, { value: string; ts: number }>
@@ -24,7 +25,8 @@ const emit = defineEmits<{
   'update:searchKeyword': [value: string]
   'update:activeTab': [value: string]
   openAdd: []
-  toggleBatchMode: []
+  togglePick: []
+  exitBatch: []
   selectAll: []
   deselectAll: []
   batchDelete: []
@@ -258,10 +260,12 @@ onUnmounted(() => {
       <button
         class="bar-btn"
         :class="{ active: isBatchMode }"
-        :title="isBatchMode ? '退出批量' : '批量选择'"
-        @click="emit('toggleBatchMode')"
+        type="button"
+        :title="isBatchMode ? '退出选择' : '选择条目'"
+        :aria-label="isBatchMode ? '退出选择' : '选择条目'"
+        @click="emit('togglePick')"
       >
-        <AppIcon name="checkall" :size="14" />
+        <AppIcon name="checkall" :size="16" />
       </button>
       <button class="btn-primary" @click="emit('openAdd')">
         <AppIcon name="plus" :size="14" />
@@ -293,16 +297,23 @@ onUnmounted(() => {
         @keydown.enter.prevent="onRowClick(item, isBatchMode)"
         @keydown.space.prevent="onRowClick(item, isBatchMode)"
       >
-        <span v-if="isBatchMode" class="card-check" :class="{ checked: selectedIds.has(item.id) }" aria-hidden="true">
+        <span class="card-check" :class="{ checked: selectedIds.has(item.id) }" aria-hidden="true"
+          @click.stop="emit('toggleSelect', item.id)">
           <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="12" />
         </span>
 
-        <!-- 第一段：实体信息靠左聚拢成两行——名字一行，域名/路径/备注并进 meta 行，
-             中间空白被主列吃掉；定宽五栏对齐作废（大方化轮） -->
+        <!-- 第一段：实体信息靠左聚拢成两行——名字+分类标识一行，域名/路径/备注并进 meta 行。
+             分类胶囊上移到名字行尾，把右缘整列宽度让给 meta；URL 中段截断保住尾部（区分度在尾部） -->
         <div class="ec-id">
           <span class="ec-tile" :class="tileTone(item.category)" aria-hidden="true">{{ initials(item.name) }}</span>
           <div class="ec-text">
-            <span class="ec-name">{{ item.name }}</span>
+            <div class="ec-name-row">
+              <span class="ec-name">{{ item.name }}</span>
+              <span v-if="item.username || passwordCache[item.id]?.value" class="ec-cred" title="已存登录凭证">
+                <AppIcon name="lock" :size="12" />
+              </span>
+              <span class="ec-cat">{{ item.category || '未分类' }}</span>
+            </div>
             <div class="ec-meta">
               <a
                 v-if="item.url"
@@ -310,7 +321,8 @@ onUnmounted(() => {
                 :title="item.url"
                 @click.prevent.stop="emit('openUrl', item.url!)"
                 @contextmenu.prevent="emit('copyText', item.url!, '网址')"
-              >{{ formatUrlDisplay(item.url) }}</a>
+              ><span class="ud-head">{{ splitUrlDisplay(item.url).head }}</span><span v-if="splitUrlDisplay(item.url).tail"
+                class="ud-tail">{{ splitUrlDisplay(item.url).tail }}</span></a>
               <template v-if="item.paths && item.paths.length">
                 <span v-if="item.url" class="meta-dot" aria-hidden="true">·</span>
                 <a
@@ -332,14 +344,6 @@ onUnmounted(() => {
               </template>
             </div>
           </div>
-        </div>
-
-        <!-- 第二段：分类与凭证标识 -->
-        <div class="ec-tags">
-          <span v-if="item.username || passwordCache[item.id]?.value" class="ec-cred" title="已存登录凭证">
-            <AppIcon name="lock" :size="12" />
-          </span>
-          <span class="ec-cat">{{ item.category || '未分类' }}</span>
         </div>
 
         <!-- 常驻只留两枚高频钮；编辑/详情/复制/删除收进 ⋯ 菜单 -->
@@ -408,7 +412,7 @@ onUnmounted(() => {
       <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」添加' }}</div>
     </div>
 
-    <div v-if="isBatchMode" class="batch-dock">
+    <div v-if="hasSelection" class="batch-dock">
       <span class="dock-count">已选 {{ selectedIds.size }} 项</span>
       <button class="dock-btn" type="button" @click="emit('selectAll')">
         <AppIcon name="checkall" :size="12" />全选
@@ -420,7 +424,7 @@ onUnmounted(() => {
       <button class="dock-btn danger" type="button" :disabled="!selectedIds.size" @click="emit('batchDelete')">
         <AppIcon name="trash" :size="12" />删除选中
       </button>
-      <button class="dock-btn" type="button" @click="emit('toggleBatchMode')">
+      <button class="dock-btn" type="button" @click="emit('exitBatch')">
         <AppIcon name="check" :size="12" />完成
       </button>
     </div>
@@ -509,7 +513,7 @@ onUnmounted(() => {
   box-shadow: var(--shadow-card);
   cursor: pointer;
   position: relative;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease, padding-left 0.15s ease;
 }
 .entry-card:hover {
   border-color: var(--border-card-hover);
@@ -527,21 +531,35 @@ onUnmounted(() => {
 .entry-card.selected .ec-cat { color: var(--text-brand); background: var(--accent-light); border-color: var(--accent); }
 .entry-card.selected .ec-cred { background: var(--accent-light); border-color: var(--accent); }
 
+/* 勾选位不常驻：常态勾选框脱流悬在图标块中心（隐藏时不吃布局，行首无死区），
+   进批量态才让出左栏位。钮随整卡 hover 显形（可见才可点，杜绝隐形吞点击误入批量） */
 .card-check {
+  position: absolute;
+  left: 25px; /* 压住 36px 图标块中心：padding 16 + 36/2 − 18/2 */
+  top: 50%;
+  transform: translateY(-50%);
   width: 18px;
   height: 18px;
   border: 1.5px solid var(--border-strong);
   border-radius: 4px;
   background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--accent-on);
-  flex-shrink: 0;
-  transition: all var(--transition);
+  transition: opacity var(--transition), border-color var(--transition), left var(--transition);
+  opacity: 0;
+  pointer-events: none;
 }
+.entry-card:hover .card-check,
+.entry-card:focus-visible .card-check,
+.entry-card.batching .card-check { opacity: 1; pointer-events: auto; }
 .card-check:hover { border-color: var(--accent); }
 .card-check.checked { background: var(--accent); border-color: var(--accent); }
+/* 批量态：整卡让出 18px + 16px 间隙的左栏位，勾选框从图标块上挪进栏位 */
+.entry-card.batching { padding-left: calc(var(--space-4) * 2 + 18px); }
+.entry-card.batching .card-check { left: var(--space-4); }
 
 /* 第一段：实体信息靠左聚拢。图标块 + 两行文本（名 / meta），
    主列 flex:1 吃掉原先悬在行中间的 URL/路径空白 */
@@ -568,10 +586,13 @@ onUnmounted(() => {
 .ec-tile.tone-3 { background: color-mix(in srgb, var(--h) 26%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 42%, var(--panel-bg)); }
 .ec-tile.tone-neutral { background: var(--badge-cat-bg); color: var(--badge-cat-text); border-color: var(--badge-cat-border); }
 .ec-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* 名字行：名 + 凭证锁 + 分类胶囊，靠左排；胶囊定宽不缩，长名字自己截 */
+.ec-name-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .ec-name {
   font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -601,20 +622,20 @@ onUnmounted(() => {
   /* 按内容收缩：拉满会把行卡中心点的点击吃掉（anchor 上挂 stop 的开链动作） */
   flex: 0 1 auto;
   min-width: 0;
+  display: inline-flex;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--text-url);
   text-decoration: none;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
   transition: color var(--transition);
 }
+/* 中段截断：头部先缩出省略号，尾部（区分段）常驻不截 */
+.ud-head { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ud-tail { flex: 0 0 auto; }
 .ec-domain:hover { color: var(--accent); }
-
-/* 分类与凭证标识，右靠齐 */
-.ec-tags { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
 .ec-cat {
   display: inline-flex;
   align-items: center;

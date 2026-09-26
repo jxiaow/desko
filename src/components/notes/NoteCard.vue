@@ -210,7 +210,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     @click="onBodyClick"
     @keydown="onKeydown"
   >
-    <span v-if="props.isBatchMode" class="memo-check" :class="{ checked: props.isSelected }" aria-hidden="true">
+    <span class="memo-check" :class="{ checked: props.isSelected }" aria-hidden="true" @click.stop="emit('select')">
       <AppIcon v-if="props.isSelected" name="check" :size="12" />
     </span>
 
@@ -302,20 +302,11 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   </article>
 
   <article v-else class="memo editing">
-    <NoteEditor
-      ref="editorRef"
-      variant="card"
-      :initial-content="draft"
-      placeholder="此刻的想法…"
-      @update="onUpdate"
-      @submit="emit('close')"
-    />
-    <div v-if="visibleAtts.length" class="edit-atts">
-      <NoteAttachments :attachments="visibleAtts" @remove="emit('removeAttachment', $event)" />
-    </div>
     <div class="edit-bar">
+      <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
       <NoteToolbar
         dense
+        :show-state-actions="false"
         :note="props.note"
         :save-state="props.saveState"
         primary-label="完成"
@@ -328,6 +319,17 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         @primary="emit('close')"
       />
     </div>
+    <NoteEditor
+      ref="editorRef"
+      variant="card"
+      :initial-content="draft"
+      placeholder="此刻的想法…"
+      @update="onUpdate"
+      @submit="emit('close')"
+    />
+    <div v-if="visibleAtts.length" class="edit-atts">
+      <NoteAttachments :attachments="visibleAtts" @remove="emit('removeAttachment', $event)" />
+    </div>
   </article>
 </template>
 
@@ -337,7 +339,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   background: var(--bg-surface);
   border: 1px solid transparent;
   border-radius: var(--radius-card);
-  padding: var(--space-4);
+  /* 左侧常留勾选位：批量态显形时文字不位移（勾选即进，无布局跳动） */
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-8);
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition), transform var(--transition);
 }
@@ -457,7 +460,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 /* 删除和其余动作拉开一格，别让人顺手滑过去 */
 .memo-acts .ib.danger { margin-left: var(--space-1); }
 
-.memo.batchable { padding-left: var(--space-8); }
 .memo-check {
   position: absolute;
   left: var(--space-3);
@@ -472,8 +474,14 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   justify-content: center;
   cursor: pointer;
   color: var(--accent-on);
-  transition: all var(--transition);
+  transition: background-color var(--transition), border-color var(--transition);
+  /* 勾选即进：位置常留不位移。钮只在光标压到它时瞬时显形（与收藏页同款），
+     逛卡时不见钮，不会隐形吞点击，也不会悬停就一片勾选框像批量态 */
+  opacity: 0;
 }
+.memo-check:hover,
+.memo:focus-visible .memo-check,
+.memo.batchable .memo-check { opacity: 1; }
 .memo-check:hover { border-color: var(--accent); }
 .memo-check.checked { background: var(--accent); border-color: var(--accent); }
 .memo.is-sel {
@@ -487,13 +495,18 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo.is-sel .memo-body :deep(> :first-child) { color: var(--text-brand); }
 
 .edit-atts { margin-top: var(--space-3); }
+/* 动作条挪到卡顶：与只读态右上动作排同一位置语言，分隔线跟着翻成下沿虚线。
+   编辑条只管写作：左=时间+插入工具，右=保存状态+全屏+完成（CSS order 只在卡顶生效） */
 .edit-bar {
   display: flex;
   align-items: center;
   gap: var(--space-1);
   flex-wrap: wrap;
-  margin-top: var(--space-3);
-  padding-top: var(--space-2);
-  border-top: 1px dashed var(--border);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px dashed var(--border);
 }
+.edit-bar :deep(.toolbar-flex) { order: 3; }
+.edit-bar :deep(.tb-fs) { order: 5; }
+.edit-bar :deep(.note-toolbar .primary) { order: 6; }
 </style>

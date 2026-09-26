@@ -7,10 +7,11 @@
 import { chromium } from '@playwright/test'
 
 const BASE = 'http://127.0.0.1:1430'
-const THEME = process.argv[2] || 'light-cool'
+const COMBO = process.argv[2] || 'paper-ink'
+const { theme: THEME, accent: ACCENT } = { theme: COMBO.slice(0, COMBO.indexOf('-')), accent: COMBO.slice(COMBO.indexOf('-') + 1) }
 
 const seed = {
-  settings: { theme: THEME, mfa_enabled: 'true', fileshare_enabled: 'true' },
+  settings: { theme: THEME, accent: ACCENT, mfa_enabled: 'true', fileshare_enabled: 'true' },
   entries: [
     { name: 'GitHub', url: 'https://github.com', username: 'dev@example.com', password: 'Gh!tHub2024', notes: '代码托管平台', category: '开发' },
     { name: 'Gmail', url: 'https://mail.google.com', username: 'user@gmail.com', password: 'Gm@il#Secure', category: '邮箱' },

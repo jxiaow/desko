@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>desko v2 · R1 · 网址收藏（双栏）</title>
+<style>
+/* ============ 纸与墨 · 皮肤令牌（界面灰阶 + 单 accent，分类色退内容侧） ============ */
+:root{
+  --bg:#f5f4f1;            /* 纸 */
+  --surface:#ffffff;       /* 单层卡面 */
+  --rail:#eceae5;
+  --rail-hover:#e3e0d9;
+  --line:#e7e5df;          /* 发丝分隔线 */
+  --line-strong:#d4d2ca;
+  --text:#1d1c1a;
+  --text-2:#4f4e48;
+  --text-3:#6e6c64;        /* 元信息，白底 ≥4.5 */
+  --text-4:#98968c;        /* 仅装饰/占位 */
+  --accent:#3d5a80;        /* 墨蓝（4 档 accent 之一，此处示意） */
+  --accent-h:#31496a;
+  --accent-soft:#e8eef4;
+  --danger:#a9443c;
+  --danger-soft:#f7ece9;
+  --tint:#f7f6f2;          /* hover 底色微变 */
+  --shadow-pop:0 18px 40px -12px rgba(25,24,18,.3),0 2px 6px rgba(25,24,18,.08);
+  --shadow-win:0 24px 60px -20px rgba(20,20,15,.35);
+  --t:.15s cubic-bezier(.4,0,.2,1);
+  --font:"HarmonyOS Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:Consolas,"SF Mono",monospace;
+  /* 内容侧分类色：只出现在徽章圆点，不吃进行卡/导航/工具条 */
+  --cat-work:#4b8a73;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#dcdad3;padding:24px;font:14px/1.55 var(--font);color:var(--text)}
+.win{width:1040px;height:670px;background:var(--bg);border-radius:10px;overflow:hidden;display:flex;box-shadow:var(--shadow-win);position:relative}
+svg{display:block}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+/* ============ 48px 图标 rail ============ */
+.rail{width:48px;flex:none;background:var(--rail);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:8px 0}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--text);color:#f7f6f2;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.r-item{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--text-3);position:relative;transition:background var(--t),color var(--t)}
+.r-item:hover{background:var(--rail-hover);color:var(--text)}
+.r-item.on{color:var(--accent);background:var(--surface)}
+.r-item.on::before{content:"";position:absolute;left:-4px;top:9px;bottom:9px;width:3px;border-radius:2px;background:var(--accent)}
+.rail .gap{flex:1}
+
+/* ============ 窗控栏 40px ============ */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.tbar{height:40px;flex:none;display:flex;align-items:center;padding:0 8px 0 16px;border-bottom:1px solid var(--line)}
+.tbar .mod{font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--text-2)}
+.wbtns{margin-left:auto;display:flex}
+.wb{width:36px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text-3);border-radius:6px;transition:background var(--t),color var(--t)}
+.wb:hover{background:var(--rail-hover);color:var(--text)}
+.wb.x:hover{background:var(--danger-soft);color:var(--danger)}
+
+/* ============ 页面：左 160 分类列 + 右列表 ============ */
+.page{flex:1;display:flex;min-height:0}
+.cats{width:160px;flex:none;padding:14px 8px 12px 12px;display:flex;flex-direction:column;gap:1px;border-right:1px solid var(--line)}
+.cats h3{font-size:12px;font-weight:500;color:var(--text-4);padding:0 8px 6px}
+.cat{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:7px;font-size:13px;color:var(--text-2);transition:background var(--t),color var(--t)}
+.cat .n{margin-left:auto;font-size:12px;color:var(--text-4);font-variant-numeric:tabular-nums}
+.cat:hover{background:var(--tint)}
+.cat.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.cat.on .n{color:var(--accent)}
+.cat .cdot{width:7px;height:7px;border-radius:50%;flex:none}
+.cats .sep{height:1px;background:var(--line);margin:8px 8px}
+
+/* ============ 右列：48px 页条 + 一层卡列表 ============ */
+.listcol{flex:1;display:flex;flex-direction:column;min-width:0;padding:14px 20px 20px 20px;gap:12px}
+.pbar{height:48px;flex:none;display:flex;align-items:center;gap:10px}
+.search{display:flex;align-items:center;gap:8px;width:230px;height:32px;padding:0 10px;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;color:var(--text-4);font-size:13px}
+.search .ico{width:15px;height:15px;stroke-width:1.8}
+.search kbd{margin-left:auto;font:11px var(--mono);color:var(--text-3);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.pbar .seg{display:flex;background:var(--rail);border-radius:8px;padding:2px;gap:2px}
+.pbar .seg span{height:28px;display:flex;align-items:center;padding:0 12px;border-radius:6px;font-size:12px;color:var(--text-3)}
+.pbar .seg .on{background:var(--surface);color:var(--text);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.add{margin-left:auto;height:32px;padding:0 14px;display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border-radius:8px;font-size:13px;font-weight:600;transition:background var(--t)}
+.add:hover{background:var(--accent-h)}
+.add .ico{width:14px;height:14px;stroke-width:2.2}
+
+.card{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.row{height:64px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px 0 12px;position:relative;transition:background var(--t);cursor:pointer}
+.row + .row{border-top:1px solid var(--line)}
+.row:hover{background:var(--tint)}          /* 悬停不抬阴影：底色微变 */
+.row.sel{background:var(--accent-soft)}
+.row.sel::after{content:"";position:absolute;inset:-1px 0;border-top:1px solid var(--accent);border-bottom:1px solid var(--accent);pointer-events:none;opacity:.55}
+.chk{width:16px;height:16px;flex:none;border:1.5px solid var(--line-strong);border-radius:4px;background:var(--surface);display:flex;align-items:center;justify-content:center;color:#fff;opacity:0;transition:opacity var(--t),background var(--t),border-color var(--t)}
+.row:hover .chk{opacity:.7}
+.row.sel .chk{opacity:1;background:var(--accent);border-color:var(--accent)}
+.chk svg{width:11px;height:11px;stroke-width:2.6}
+.tile{width:34px;height:34px;flex:none;border-radius:9px;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text-2)}
+.r-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.r-name{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:600;line-height:20px;white-space:nowrap;overflow:hidden}
+.r-name .bdot{width:6px;height:6px;border-radius:50%;background:var(--cat-work);flex:none}
+.r-meta{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-3);line-height:16px;white-space:nowrap;overflow:hidden}
+.r-meta .url{font-family:var(--mono);font-size:12px}
+.r-meta .dot{color:var(--text-4)}
+.r-side{display:flex;align-items:center;gap:2px}
+.ab{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:var(--text-3);transition:background var(--t),color var(--t)}
+.ab:hover{background:var(--rail-hover);color:var(--text)}
+.ab .ico{width:15px;height:15px}
+.ab.danger:hover{background:var(--danger-soft);color:var(--danger)}
+.acts{display:flex;gap:2px;opacity:0;transition:opacity var(--t)}
+.row:hover .acts{opacity:1}
+/* ⋯ 是常驻次动作入口，比主动作更弱 */
+.r-side .dots{color:var(--text-4)}
+.row:hover .r-side .dots{color:var(--text-3)}
+.star{color:#b0801f}
+
+/* ============ 底部浮出操作条（勾选即出现，清空即收起） ============ */
+.dock{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;height:46px;padding:0 8px 0 16px;background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;box-shadow:var(--shadow-pop)}
+.dock b{font-size:13px;color:var(--accent);margin-right:8px;font-variant-numeric:tabular-nums}
+.dock .dv{width:1px;height:20px;background:var(--line);margin:0 6px}
+.dbtn{height:30px;padding:0 10px;display:flex;align-items:center;gap:5px;border-radius:7px;font-size:12.5px;color:var(--text-2);transition:background var(--t)}
+.dbtn:hover{background:var(--tint)}
+.dbtn.del{color:var(--danger)}
+.dbtn.del:hover{background:var(--danger-soft)}
+.dbtn.cancel{color:var(--text-3);margin-left:4px}
+.dock .ico{width:14px;height:14px}
+</style>
+</head>
+<body>
+<div class="win">
+  <aside class="rail">
+    <div class="logo">D</div>
+    <div class="r-item on" title="网址收藏"><svg class="ico" viewBox="0 0 24 24"><path d="M10 13.5a5 5 0 0 0 7.1 0l2.8-2.8a5 5 0 0 0-7.1-7.1l-1.2 1.1"/><path d="M14 10.5a5 5 0 0 0-7.1 0l-2.8 2.8a5 5 0 0 0 7.1 7.1l1.2-1.1"/></svg></div>
+    <div class="r-item" title="小记"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3.5a2.6 2.6 0 1 1 3.7 3.7L7.5 20.4 2.8 21.6l1.2-4.7Z"/></svg></div>
+    <div class="r-item" title="文件快捷"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2.4h6a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></div>
+    <div class="r-item" title="验证码"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21.5s8-3.6 8-10V6.2L12 2.4 4 6.2v5.3c0 6.4 8 10 8 10Z"/><path d="M9.2 12.2 11.3 14.3l4-4.2"/></svg></div>
+    <div class="r-item" title="局域网传输"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8.5h15M15.5 5 19 8.5 15.5 12M20 15.5H5M8.5 12 5 15.5 8.5 19"/></svg></div>
+    <div class="gap"></div>
+    <div class="r-item" title="设置"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 4.6v4.8M7 14.6v4.8"/><circle cx="15" cy="7" r="2.1"/><circle cx="7" cy="17" r="2.1"/></svg></div>
+  </aside>
+
+  <div class="main">
+    <header class="tbar">
+      <span class="mod">网址收藏</span>
+      <span class="wbtns">
+        <span class="wb"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></span>
+        <span class="wb"><svg class="ico" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/></svg></span>
+        <span class="wb x"><svg class="ico" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></span>
+      </span>
+    </header>
+
+    <div class="page">
+      <nav class="cats">
+        <h3>分类</h3>
+        <div class="cat"><span class="n" style="margin-left:0">全部</span><span class="n">128</span></div>
+        <div class="cat on"><span class="bdot" style="width:6px;height:6px;border-radius:50%;background:var(--cat-work)"></span>工作<span class="n">24</span></div>
+        <div class="cat">开发工具<span class="n">31</span></div>
+        <div class="cat">网络基建<span class="n">12</span></div>
+        <div class="cat">阅读<span class="n">22</span></div>
+        <div class="cat">生活<span class="n">27</span></div>
+        <div class="sep"></div>
+        <div class="cat">收藏<span class="n">15</span></div>
+        <div class="cat">最近添加<span class="n">6</span></div>
+      </nav>
+
+      <section class="listcol">
+        <div class="pbar">
+          <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>搜索收藏…<kbd>Ctrl F</kbd></div>
+          <div class="seg"><span class="on">最近使用</span><span>名称</span><span>添加时间</span></div>
+          <div class="add"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>新增</div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="background:var(--tint)">
+            <span class="chk" style="opacity:.7"></span>
+            <span class="tile">J</span>
+            <span class="r-main">
+              <span class="r-name"><span class="bdot"></span>Jenkins 构建台</span>
+              <span class="r-meta"><span class="url">jenkins.internal.dev</span><span class="dot">·</span>2 小时前<span class="dot">·</span>38 次</span>
+            </span>
+            <span class="r-side">
+              <span class="acts" style="opacity:1">
+                <button class="ab" title="打开"><svg class="ico" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4 10.5 13.5"/><path d="M19 14v5a1.6 1.6 0 0 1-1.6 1.6H5A1.6 1.6 0 0 1 3.4 19V6.6A1.6 1.6 0 0 1 5 5h5"/></svg></button>
+                <button class="ab" title="编辑"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3.5a2.6 2.6 0 1 1 3.7 3.7L7.5 20.4 2.8 21.6l1.2-4.7Z"/></svg></button>
+              </span>
+              <button class="ab dots" title="更多"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></button>
+            </span>
+          </div>
+
+          <div class="row">
+            <span class="chk"></span>
+            <span class="tile">X</span>
+            <span class="r-main">
+              <span class="r-name"><span class="bdot"></span>XYLink 管理后台</span>
+              <span class="r-meta"><span class="url">link.xylink.cn/admin</span><span class="dot">·</span>昨天<span class="dot">·</span>私有云</span>
+            </span>
+            <span class="r-side">
+              <button class="ab star" title="已收藏"><svg class="ico" viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><path d="m12 3.2 2.7 5.6 6.1.8-4.5 4.3 1.1 6-5.4-2.9-5.4 2.9 1.1-6L3.2 9.6l6.1-.8Z"/></svg></button>
+              <button class="ab dots" title="更多"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></button>
+            </span>
+          </div>
+
+          <div class="row sel">
+            <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></svg></span>
+            <span class="tile">路</span>
+            <span class="r-main">
+              <span class="r-name"><span class="bdot"></span>路由器管理</span>
+              <span class="r-meta"><span class="url">192.168.1.1</span><span class="dot">·</span>3 天前</span>
+            </span>
+            <span class="r-side"><button class="ab dots" title="更多"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></button></span>
+          </div>
+
+          <div class="row sel">
+            <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></svg></span>
+            <span class="tile">C</span>
+            <span class="r-main">
+              <span class="r-name"><span class="bdot"></span>Cloudflare DNS</span>
+              <span class="r-meta"><span class="url">dash.cloudflare.com</span><span class="dot">·</span>上周<span class="dot">·</span>解析 3 个域名</span>
+            </span>
+            <span class="r-side"><button class="ab dots" title="更多"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></button></span>
+          </div>
+
+          <div class="row sel">
+            <span class="chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5 10-11"/></svg></span>
+            <span class="tile">N</span>
+            <span class="r-main">
+              <span class="r-name"><span class="bdot"></span>NAS 控制台</span>
+              <span class="r-meta"><span class="url">nas.home:5666</span><span class="dot">·</span>上周</span>
+            </span>
+            <span class="r-side"><button class="ab dots" title="更多"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></button></span>
+          </div>
+
+          <div class="row">
+            <span class="chk"></span>
+            <span class="tile">G</span>
+            <span class="r-main">
+              <span class="r-name"><span class="bdot"></span>Grafana 监控</span>
+              <span class="r-meta"><span class="url">grafana.internal.dev</span><span class="dot">·</span>2 周前<span class="dot">·</span>家庭服务器面板</span>
+            </span>
+            <span class="r-side"><button class="ab dots" title="更多"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></button></span>
+          </div>
+
+          <div class="row">
+            <span class="chk"></span>
+            <span class="tile">语</span>
+            <span class="r-main">
+              <span class="r-name"><span class="bdot"></span>语雀 · 团队空间</span>
+              <span class="r-meta"><span class="url">xylink.yuque.com</span><span class="dot">·</span>9 天前</span>
+            </span>
+            <span class="r-side"><button class="ab dots" title="更多"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></button></span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 勾选 3 行后浮出的操作条 -->
+  <div class="dock">
+    <b>已选 3 项</b><span class="dv"></span>
+    <span class="dbtn"><svg class="ico" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6l1 7 2 2H6l2-2 1-7Z"/></svg>置顶</span>
+    <span class="dbtn"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3.2 2.7 5.6 6.1.8-4.5 4.3 1.1 6-5.4-2.9-5.4 2.9 1.1-6L3.2 9.6l6.1-.8Z"/></svg>收藏</span>
+    <span class="dbtn"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v11M8 10.5 12 14l4-3.5M4 17v2.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V17"/></svg>导出</span>
+    <span class="dbtn del"><svg class="ico" viewBox="0 0 24 24"><path d="M3.5 6h17M8 6V4h8v2M6 6l1 15h10l1-15"/></svg>删除</span>
+    <span class="dbtn cancel">取消</span>
+  </div>
+</div>
+</body>
+</html>

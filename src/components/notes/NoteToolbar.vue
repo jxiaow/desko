@@ -17,6 +17,8 @@ const props = withDefaults(defineProps<{
   showFullscreen?: boolean
   /** 就地展开的底栏：状态类动作交给卡片本体，次要动作退成图标 */
   dense?: boolean
+  /** 编辑态顶栏：置顶/收藏/删除这类状态动作退回只读悬停排，编辑条只管写作 */
+  showStateActions?: boolean
 }>(), {
   saveState: '',
   primaryDisabled: false,
@@ -24,6 +26,7 @@ const props = withDefaults(defineProps<{
   plain: false,
   showFullscreen: true,
   dense: false,
+  showStateActions: true,
 })
 
 const emit = defineEmits<{
@@ -58,7 +61,7 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
       <AppIcon name="tag" :size="iconSize" /><span v-if="!props.dense">标签</span>
     </button>
 
-    <template v-if="props.note">
+    <template v-if="props.note && props.showStateActions">
       <button
         :class="[btnCls, { on: props.note.pinned }]"
         type="button"
@@ -81,7 +84,7 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
 
     <button
       v-if="props.showFullscreen"
-      :class="btnCls"
+      :class="[btnCls, 'tb-fs']"
       type="button"
       title="全屏书写"
       aria-label="全屏书写"
@@ -97,7 +100,7 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
     </span>
 
     <button
-      v-if="props.note"
+      v-if="props.note && props.showStateActions"
       :class="[btnCls, 'danger']"
       type="button"
       title="删除这条小记"

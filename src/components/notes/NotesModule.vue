@@ -36,14 +36,14 @@ const { copyToClipboard } = useClipboard()
 const {
   notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
   noteRailCollapsed,
-  isBatchMode, selectedNoteIds, noteAttachments, noteSaveState, notePlains, noteKey,
+  isBatchMode, hasNoteSelection, selectedNoteIds, noteAttachments, noteSaveState, notePlains, noteKey,
   tagCounts, viewCounts, filteredNotes, groupedNotes,
 } = storeToRefs(notesStore)
 const {
   fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, clearFilters, toggleTagFilter,
   doDeleteNote, togglePin, toggleStar,
   lockNote, unlockNote, relockNote, removeNoteLock, relockNoteDomain,
-  toggleBatchMode, toggleSelectNote, selectAllNotes, clearSelection,
+  toggleSelectNote, selectAllNotes, clearSelection, toggleNotePick, exitNoteBatch,
   batchDelete, batchSetPinned, batchSetStarred,  loadAttachments, uploadAttachment, deleteAttachment, stageImage,
 } = notesStore
 
@@ -260,13 +260,6 @@ const addImageToDraft = async () => {
 
 const copyNote = (note: Note) => copyToClipboard(htmlToText(note.content_html), '小记')
 
-const toggleBatch = async () => {
-  await flushNoteSave()
-  editingId.value = null
-  clearSelection()
-  toggleBatchMode()
-}
-
 const onKeyDown = (e: KeyboardEvent) => {
   if (e.defaultPrevented) return
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -277,7 +270,7 @@ const onKeyDown = (e: KeyboardEvent) => {
   }
   if (e.key !== 'Escape' || fsTarget.value) return
   if (editingId.value) closeCard()
-  else if (isBatchMode.value) toggleBatch()
+  else if (isBatchMode.value) exitNoteBatch()
 }
 
 // 全屏里删掉当前这条之后，书写面要跟着收掉
@@ -357,15 +350,13 @@ onBeforeUnmount(() => {
           >
             <AppIcon name="filter" :size="16" />
           </button>
-
-          <div class="bar-div"></div>
           <button
             class="bar-btn"
             :class="{ active: isBatchMode }"
             type="button"
-            :title="isBatchMode ? '退出批量' : '批量选择'"
-            :aria-label="isBatchMode ? '退出批量' : '批量选择'"
-            @click="toggleBatch"
+            :title="isBatchMode ? '退出选择' : '选择小记'"
+            :aria-label="isBatchMode ? '退出选择' : '选择小记'"
+            @click="toggleNotePick"
           >
             <AppIcon name="checkall" :size="16" />
           </button>
@@ -514,7 +505,7 @@ onBeforeUnmount(() => {
       <div class="rail-foot">{{ railSummary }}</div>
     </aside>
 
-    <div v-if="isBatchMode && !fsTarget" class="batch-dock">
+    <div v-if="hasNoteSelection && !fsTarget" class="batch-dock">
       <span class="dock-count">已选 {{ selectedNoteIds.size }} 条</span>
       <button class="dock-btn" type="button" @click="selectAllNotes">
         <AppIcon name="checkall" :size="12" />全选
@@ -539,7 +530,7 @@ onBeforeUnmount(() => {
       <button class="dock-btn danger" type="button" :disabled="!selectedNoteIds.size" @click="batchDelete">
         <AppIcon name="trash" :size="12" />删除
       </button>
-      <button class="dock-btn" type="button" @click="toggleBatch">
+      <button class="dock-btn" type="button" @click="exitNoteBatch">
         <AppIcon name="check" :size="12" />完成
       </button>
     </div>

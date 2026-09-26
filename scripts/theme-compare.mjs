@@ -4,31 +4,39 @@ import { chromium } from '@playwright/test'
 import { readdirSync } from 'node:fs'
 
 const OUT = 'design/theme-shots'
-const THEMES = [
-  { id: 'light-cool', name: '冷灰' },
-  { id: 'light-warm', name: '暖纸墨' },
-  { id: 'light-celadon', name: '青瓷' },
-  { id: 'aluminum-pro', name: '冷铝' },
-  { id: 'swiss-monochrome', name: '瑞士黑白' },
-  { id: 'linear-dark', name: 'Linear 深空' },
-  { id: 'jetbrains-dark', name: 'JetBrains 炭黑' },
+// v2 双轴：底色 × accent 的 8 组组合（与 theme-shots.mjs 同源）
+const COMBOS = [
+  { id: 'paper-ink', name: '纸·墨蓝' },
+  { id: 'paper-celadon', name: '纸·青瓷' },
+  { id: 'paper-clay', name: '纸·赭石' },
+  { id: 'paper-plum', name: '纸·紫罗' },
+  { id: 'ink-ink', name: '墨·墨蓝' },
+  { id: 'ink-celadon', name: '墨·青瓷' },
+  { id: 'ink-clay', name: '墨·赭石' },
+  { id: 'ink-plum', name: '墨·紫罗' },
 ]
 
 const screens = [...new Set(readdirSync(OUT).filter((f) => f.endsWith('.png') && !f.startsWith('compare-')))];
-const keys = [...new Set(screens.map((f) => f.split('-').slice(1).join('-')))].sort()
+// 组合 id 本身带 '-'，屏名按前缀剥：'paper-celadon-entries.png' -> 'entries.png'
+const keyOf = (f) => {
+  const hit = COMBOS.map((c) => c.id).sort((a, b) => b.length - a.length).find((id) => f.startsWith(`${id}-`))
+  return hit ? f.slice(hit.length + 1) : f.split('-').slice(1).join('-')
+}
+const keys = [...new Set(screens.map(keyOf))].sort()
 
 const html = `<!doctype html><meta charset="utf-8"><style>
 body{margin:0;font:13px system-ui;background:#fff}
 h2{margin:0;padding:10px 14px;background:#1a1b20;color:#fff;font-size:14px}
-.row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:#888}
+.row{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:#888}
 .cell{background:#fff;position:relative}
 .cell b{position:absolute;top:6px;left:6px;padding:3px 8px;background:#000c;color:#fff;font-size:12px;border-radius:4px;z-index:2}
 .cell img{display:block;width:100%}
 </style>
+<script>addEventListener('error',e=>{if(e.target.tagName==='IMG')e.target.style.visibility='hidden'},true)</script>
 ${keys
   .map(
-    (k) => `<h2>${k}</h2><div class="row" id="row-${k.replace('.png', '')}">${THEMES.map(
-      (t) => `<div class="cell"><b>${t.name} ${t.id}</b><img src="${t.id}-${k}"></div>`,
+    (k) => `<h2>${k}</h2><div class="row" id="row-${k.replace('.png', '')}">${COMBOS.map(
+      (t) => `<div class="cell"><b>${t.name}</b><img src="${t.id}-${k}"></div>`,
     ).join('')}</div>`,
   )
   .join('')}

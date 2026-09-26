@@ -225,15 +225,17 @@ test.describe('Notes 小记', () => {
 
   test('批量删除小记', async ({ page }) => {
     await gotoNotes(page)
-    await tipButton(page, '批量选择').click()
+    // 勾选即进：点卡的勾选位即入批量态，不碰工具栏钮
+    const first = memo(page, '第一条小记')
+    await first.hover()
+    await first.locator('.memo-check').click()
     await expect(page.locator('.batch-dock')).toBeVisible()
 
-    await memo(page, '第一条小记').click()
     await memo(page, '第二条小记').click()
     await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
     await expect(memo(page, '第一条小记')).toHaveClass(/is-sel/)
-    // 选中态：浸润底 + 1px 全包裹微环
-    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(58, 104, 184) 0px 0px 0px 1px, rgba(17, 24, 39, 0.05) 0px 1px 3px 0px')
+    // 选中态：浸润底 + 1px 全包裹微环（锚点 = paper 底色 × 墨蓝 accent）
+    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(61, 90, 128) 0px 0px 0px 1px, rgba(29, 28, 26, 0.05) 0px 1px 3px 0px')
     // 上下键换焦点，微环跟着走
     await page.locator('.memo').first().focus()
     await page.keyboard.press('ArrowDown')
@@ -248,6 +250,19 @@ test.describe('Notes 小记', () => {
     // 删除后退出批量模式
     await expect(page.locator('.batch-dock')).toHaveCount(0)
     expect((await e2e.snapshot(page)).notes).toHaveLength(1)
+  })
+
+  test('工具栏「选择」钮：开待选显形勾选框，Esc 整体退出', async ({ page }) => {
+    await gotoNotes(page)
+    await page.locator('.page-bar .bar-btn[aria-label="选择小记"]').click()
+    // 待选态：全部卡显形勾选框，但没选中就没有 dock
+    await expect(page.locator('.memo.batchable')).toHaveCount(3)
+    await expect(page.locator('.batch-dock')).toHaveCount(0)
+    await memo(page, '第一条小记').click()
+    await expect(page.locator('.batch-dock')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.memo.batchable')).toHaveCount(0)
+    await expect(page.locator('.batch-dock')).toHaveCount(0)
   })
 
   test('全屏书写发布', async ({ page }) => {

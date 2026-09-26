@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>desko · R1 原型 × 现版并排对比</title>
+<style>
+body{background:#e8e6df;font:14px/1.6 "HarmonyOS Sans SC","Microsoft YaHei",system-ui,sans-serif;color:#1d1c1a;margin:0;padding:32px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:#6e6c64;font-size:13px;margin-bottom:28px}
+.pair{display:flex;gap:20px;margin-bottom:36px;align-items:flex-start}
+.side{flex:1;min-width:0}
+.side h2{font-size:14px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px}
+.now{background:#d8d5cc;color:#4f4e48}
+.v2{background:#3d5a80;color:#fff}
+.side img{width:100%;border-radius:8px;box-shadow:0 8px 24px -8px rgba(20,20,15,.35);display:block}
+.note{font-size:12px;color:#6e6c64;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>desko 整体重设计 v2 · R1 三屏原型（纸与墨）</h1>
+<div class="sub">左：现版青瓷 ｜ 右：v2 原型 ｜ 均为 1040×670 实尺 ×1.5 截图 ｜ 原型源文件在本目录 ../01~03.html</div>
+
+<div class="pair">
+  <div class="side"><h2>网址收藏 <span class="tag now">现版</span></h2><img src="shots/now-entries.png" alt="现版收藏页"></div>
+  <div class="side"><h2>网址收藏 <span class="tag v2">v2 · 双栏</span></h2><img src="shots/01-entries.png" alt="v2 收藏页">
+    <div class="note">48px 图标 rail · 160px 分类列 · 一层卡+发丝分行（悬停不抬阴影）· 主动作悬停浮出 + ⋯ 常驻 · 勾选 3 行浮出底部操作条</div></div>
+</div>
+
+<div class="pair">
+  <div class="side"><h2>小记 <span class="tag now">现版</span></h2><img src="shots/now-notes.png" alt="现版小记页"></div>
+  <div class="side"><h2>小记 <span class="tag v2">v2 · 单列流</span></h2><img src="shots/02-notes.png" alt="v2 小记页">
+    <div class="note">左 rail 废除 → 顶部 chips（视图+标签统一组件）· 流最大宽 720 居中 · 就地编辑动作条居上保留 · 锁卡斜纹保留 · rail 悬停出 label 已演示</div></div>
+</div>
+
+<div class="pair">
+  <div class="side"><h2>验证码 <span class="tag now">现版</span></h2><img src="shots/now-mfa.png" alt="现版验证码页"></div>
+  <div class="side"><h2>验证码 <span class="tag v2">v2 · 网格</span></h2><img src="shots/03-mfa.png" alt="v2 验证码页">
+    <div class="note">一行 2 张 glance 网格 · 大数字 27px 等宽当主角、issuer 退小字 · 底缘进度线保留（临期切红已演示）· 复制对勾 morph 已演示</div></div>
+</div>
+</body>
+</html>

@@ -2,7 +2,7 @@
 // 专看跨弹窗的底栏/按钮档、分段控制器、输入件皮肤是否同一套语言。
 // 用法：先起 vite --mode e2e --port 1430，再
 //   node scripts/dialog-shots.mjs [themeId|all]
-// 例：node scripts/dialog-shots.mjs linear-dark   |   node scripts/dialog-shots.mjs all
+// 例：node scripts/dialog-shots.mjs ink-plum   |   node scripts/dialog-shots.mjs all
 // 输出：design/dialog-check/<themeId>/
 //   0-lock-screen 锁屏门面 · 1..15 弹窗与浮层（原有 15 张）
 //   16/17 设置通用/关于 · 20..23 四页空状态 · 24/25 窄窗 800/720
@@ -11,15 +11,20 @@ import { mkdirSync } from 'node:fs'
 
 const BASE = 'http://127.0.0.1:1430'
 
-const THEMES = [
-  'light-cool', 'light-warm', 'light-celadon', 'aluminum-pro',
-  'swiss-monochrome', 'linear-dark', 'jetbrains-dark',
+// v2 双轴：2 底色 × 4 accent = 8 组
+const COMBOS = [
+  'paper-ink', 'paper-celadon', 'paper-clay', 'paper-plum',
+  'ink-ink', 'ink-celadon', 'ink-clay', 'ink-plum',
 ]
-const arg = process.argv[2] || 'light-cool'
-const RUN = arg === 'all' ? THEMES : [arg]
+const splitCombo = (c) => {
+  const i = c.indexOf('-')
+  return { theme: c.slice(0, i), accent: c.slice(i + 1) }
+}
+const arg = process.argv[2] || 'paper-ink'
+const RUN = arg === 'all' ? COMBOS : [arg]
 
-const seedFor = (theme, empty = false) => ({
-  settings: { theme, mfa_enabled: 'true', fileshare_enabled: 'true' },
+const seedFor = (combo, empty = false) => ({
+  settings: { ...splitCombo(combo), mfa_enabled: 'true', fileshare_enabled: 'true' },
   entries: empty ? [] : [
     { name: 'GitHub', url: 'https://github.com', username: 'dev@example.com', password: 'Gh!tHub2024', notes: '代码托管平台', category: '开发' },
     { name: 'Gmail', url: 'https://mail.google.com', username: 'user@gmail.com', password: 'Gm@il#Secure', notes: '个人邮箱', category: '邮箱' },
@@ -110,9 +115,11 @@ for (const THEME of RUN) {
   await page.locator('.entry-card', { hasText: 'GitHub' }).first().click()
   await page.locator('.detail-dialog').waitFor(); await shot('14-entry-detail-notes')
   await page.keyboard.press('Escape'); await page.waitForTimeout(250)
-  await page.locator('button[title="批量选择"], button[data-tip="批量选择"]').first().click(); await page.waitForTimeout(250)
-  await page.locator('.entry-card').first().click(); await page.locator('.entry-card').nth(1).click(); await shot('15-entry-batch')
-  await page.locator('button[title="退出批量"], button[data-tip="退出批量"]').first().click(); await page.waitForTimeout(250)
+  // 勾选即进：悬停第一张卡点勾选位入批量态，底坞「完成」清空退出
+  await page.locator('.entry-card').first().hover(); await page.waitForTimeout(200)
+  await page.locator('.entry-card').first().locator('.card-check').click(); await page.waitForTimeout(250)
+  await page.locator('.entry-card').nth(1).click(); await shot('15-entry-batch')
+  await page.locator('.batch-dock .dock-btn', { hasText: '完成' }).click(); await page.waitForTimeout(250)
 
   // 3) 文件：添加快捷方式
   await page.locator('a.nav-item[href="/files"]').click(); await page.waitForTimeout(400)

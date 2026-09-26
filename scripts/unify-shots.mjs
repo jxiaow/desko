@@ -6,12 +6,13 @@ import { chromium } from '@playwright/test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
 const BASE = 'http://127.0.0.1:1430'
-const THEME = process.argv[2] || 'light-cool'
-const OUT = `design/unify-shots/${THEME}`
+const COMBO = process.argv[2] || 'paper-ink'
+const { theme: THEME, accent: ACCENT } = { theme: COMBO.slice(0, COMBO.indexOf('-')), accent: COMBO.slice(COMBO.indexOf('-') + 1) }
+const OUT = `design/unify-shots/${COMBO}`
 mkdirSync(OUT, { recursive: true })
 
 const SEED = {
-  settings: { theme: THEME, mfa_enabled: 'true', fileshare_enabled: 'true' },
+  settings: { theme: THEME, accent: ACCENT, mfa_enabled: 'true', fileshare_enabled: 'true' },
   entries: [
     { name: 'GitHub', url: 'https://github.com', username: 'dev@example.com', password: 'Gh!tHub2024', notes: '代码托管平台', category: '开发' },
     { name: 'Gmail', url: 'https://mail.google.com', username: 'user@gmail.com', password: 'Gm@il#Secure', notes: '个人邮箱', category: '邮箱' },

@@ -141,18 +141,22 @@ test.describe('Entries 网址收藏', () => {
 
   test('批量选择与删除', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    await tipButton(page, '批量选择').click()
+    // 勾选即进：点第一张卡的勾选位即入批量态，不碰工具栏钮
+    await entryCard(page, 'GitHub').hover()
+    await entryCard(page, 'GitHub').locator('.card-check').click()
     await expect(page.locator('.batch-dock')).toBeVisible()
 
     // 批量态下整张卡就是选择热区
-    await entryCard(page, 'GitHub').click()
     await entryCard(page, 'Gmail').click()
     await expect(page.locator('.dock-count')).toHaveText('已选 2 项')
     await expect(entryCard(page, 'GitHub')).toHaveClass(/selected/)
 
     await page.locator('.dock-btn', { hasText: '取消全选' }).click()
-    await expect(page.locator('.dock-count')).toHaveText('已选 0 项')
+    // 清空即收：选中归零，底坞自动退出
+    await expect(page.locator('.batch-dock')).toHaveCount(0)
 
+    await entryCard(page, 'GitHub').hover()
+    await entryCard(page, 'GitHub').locator('.card-check').click() // 二次进入
     await page.locator('.dock-btn:text-is("全选")').click()
     await expect(page.locator('.dock-count')).toHaveText('已选 3 项')
     await entryCard(page, '钉钉').click() // 反选一个
@@ -161,22 +165,45 @@ test.describe('Entries 网址收藏', () => {
     await page.locator('.dock-btn.danger').click()
     await confirmDialog(page, '确定删除选中的 2 条记录吗？')
     await expectToast(page, '已删除 2 条记录')
-    // 删除后自动退出批量模式
+    // 清空即收：删除后选中归零，批量条自动消失
     await expect(page.locator('.batch-dock')).toHaveCount(0)
     await expect(page.locator('.entry-card')).toHaveCount(1)
     await expect(entryCard(page, '钉钉')).toBeVisible()
   })
 
+  test('工具栏「选择」钮：开待选显形勾选框，再点整体退出', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    // title 会被全局 tooltip 机制摘走，锚 aria-label
+    const pickBtn = page.locator('.page-bar .bar-btn[aria-label="选择条目"]')
+    await pickBtn.click()
+    // 待选态：全部行显形勾选框，但没有选中就没有 dock
+    await expect(page.locator('.entry-card.batching')).toHaveCount(3)
+    await expect(page.locator('.batch-dock')).toHaveCount(0)
+    // 待选态下点行即勾选
+    await entryCard(page, 'GitHub').click()
+    await expect(page.locator('.batch-dock')).toBeVisible()
+    await page.locator('.page-bar .bar-btn[aria-label="退出选择"]').click()
+    await expect(page.locator('.entry-card.batching')).toHaveCount(0)
+    await expect(page.locator('.batch-dock')).toHaveCount(0)
+    // Escape 同样整体退出：再开一轮，选一项后按 Esc
+    await pickBtn.click()
+    await entryCard(page, 'GitHub').click()
+    await expect(page.locator('.batch-dock')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.batch-dock')).toHaveCount(0)
+    await expect(page.locator('.entry-card.batching')).toHaveCount(0)
+  })
+
   test('选中态浸润微环，上下键在行间搬焦点', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    await tipButton(page, '批量选择').click()
     const gh = entryCard(page, 'GitHub')
-    await gh.click()
+    await gh.hover()
+    await gh.locator('.card-check').click()
 
-    // 全包裹：1px 实环压在边框外沿，底色吃满整张卡
-    await expect(gh).toHaveCSS('box-shadow', 'rgb(58, 104, 184) 0px 0px 0px 1px, rgba(17, 24, 39, 0.06) 0px 4px 12px -2px, rgb(203, 210, 222) 0px 0px 0px 1px')
-    await expect(gh).toHaveCSS('background-color', 'rgb(237, 242, 250)')
-    await expect(gh.locator('.ec-name')).toHaveCSS('color', 'rgb(45, 84, 153)')
+    // 全包裹：1px 实环压在边框外沿，底色吃满整张卡（锚点 = paper 底色 × 墨蓝 accent）
+    await expect(gh).toHaveCSS('box-shadow', 'rgb(61, 90, 128) 0px 0px 0px 1px, rgba(29, 28, 26, 0.06) 0px 4px 12px -2px, rgb(212, 210, 202) 0px 0px 0px 1px')
+    await expect(gh).toHaveCSS('background-color', 'rgb(232, 238, 244)')
+    await expect(gh.locator('.ec-name')).toHaveCSS('color', 'rgb(49, 73, 106)')
 
     // 列表渲染顺序不保证等于 seed 顺序，所以先量出当前行的位置再断言位移
     const cards = page.locator('.entry-card')

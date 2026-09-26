@@ -227,17 +227,14 @@ const onDragDblclick = (e: MouseEvent) => {
   white-space: nowrap;
   text-decoration: none;
   position: relative;
-  --h: var(--accent);
+  --h: var(--text-muted);
 }
 
-/* 模块色相身份：五模块各钉一枚既有 --cat-* 槽（零新槽），图标/计数/激活态同源取色，切主题跟着各主题槽走 */
-.nav-item.m-ent { --h: var(--cat-1); }
-.nav-item.m-not { --h: var(--cat-5); }
-.nav-item.m-fil { --h: var(--cat-4); }
-.nav-item.m-mfa { --h: var(--cat-3); }
-.nav-item.m-lan { --h: var(--cat-6); }
+/* v2：模块不再各钉色相——导航退到中性灰阶，激活态统一吃 accent。
+   分类色只留在内容侧（头像/徽章/行内色相钉）。 */
+.nav-item.active { --h: var(--accent); }
 
-.nav-icon { color: var(--h); }
+.nav-icon { color: inherit; }
 
 .nav-item:hover {
   background: var(--sidebar-hover);

@@ -6,8 +6,8 @@ import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { settingsApi } from '../../services/api/settings'
-import { THEMES, DEFAULT_THEME, chooseTheme, readTheme } from '../../services/theme'
-import type { ThemeId } from '../../services/theme'
+import { THEMES, ACCENTS, DEFAULT_APPEARANCE, chooseTheme, chooseAccent, readTheme } from '../../services/theme'
+import type { ThemeId, AccentId, ThemeInfo } from '../../services/theme'
 import { TERMINALS, readTerminal, saveTerminal } from '../../services/terminal'
 import type { TerminalId } from '../../services/terminal'
 import { readMfaFeature, saveMfaFeature } from '../../services/mfaFeature'
@@ -48,7 +48,8 @@ const autoLockEnabled = ref(false)
 const autoLockTimeout = ref(5)
 const lockOnClose = ref(false)
 const lockOnSystemLock = ref(false)
-const theme = ref<ThemeId>(DEFAULT_THEME)
+const theme = ref<ThemeId>(DEFAULT_APPEARANCE.theme)
+const accent = ref<AccentId>(DEFAULT_APPEARANCE.accent)
 const terminal = ref<TerminalId>('auto')
 const mfaOn = ref(false)
 const fileshareOn = ref(false)
@@ -72,7 +73,9 @@ const terminalDesc = computed(
 const terminalOptions = TERMINALS.map((t) => ({ value: t.id, label: t.name }))
 
 const loadSettings = async () => {
-  theme.value = await readTheme()
+  const ap = await readTheme()
+  theme.value = ap.theme
+  accent.value = ap.accent
   terminal.value = await readTerminal()
   mfaOn.value = await readMfaFeature()
   fileshareOn.value = await readFileshareFeature()
@@ -133,6 +136,20 @@ const pickTheme = async (id: ThemeId) => {
   // chooseTheme 会先把 data-theme 挂上再落盘，所以这里失败只是"下次回来还是旧的"
   const saved = await chooseTheme(id)
   toastStore.showToast(saved ? '已切换主题' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
+}
+
+const pickAccent = async (id: AccentId) => {
+  if (id === accent.value) return
+  accent.value = id
+  const saved = await chooseAccent(id)
+  toastStore.showToast(saved ? '已切换强调色' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
+}
+
+/** 预览卡里的 accent 色丸跟着当前 accent 档走，纸/墨各取一档 */
+const prevAccent = (t: ThemeInfo) => {
+  const a = ACCENTS.find((x) => x.id === accent.value)
+  if (!a) return t.prev.accent
+  return t.id === 'ink' ? a.dotInk : a.dot
 }
 
 const saveTerminalPref = async (id: TerminalId) => {
@@ -397,6 +414,7 @@ onMounted(() => { loadSettings() })
 
           <!-- 外观 -->
           <section v-show="tab === 'appearance'" class="settings-pane">
+            <div class="pane-label">底色</div>
             <div class="theme-row">
               <button
                 v-for="t in THEMES"
@@ -408,26 +426,43 @@ onMounted(() => { loadSettings() })
               >
                 <span class="theme-prev" :style="{ background: t.prev.page, borderColor: t.prev.edge }">
                   <span class="tp-rail" :style="{ background: t.prev.sidebar, borderColor: t.prev.edge }">
-                    <span class="tp-rail-dot" :style="{ background: t.prev.accent }" />
+                    <span class="tp-rail-dot" :style="{ background: prevAccent(t) }" />
                     <span class="tp-rail-line" :style="{ background: t.prev.ink }" />
                     <span class="tp-rail-line short" :style="{ background: t.prev.ink }" />
                   </span>
                   <span class="tp-rows">
                     <span class="tp-row" :style="{ background: t.prev.card, borderColor: t.prev.edge }">
                       <span class="tp-row-ink" :style="{ background: t.prev.ink }" />
-                      <span class="tp-row-tag" :style="{ background: t.prev.accent }" />
+                      <span class="tp-row-tag" :style="{ background: prevAccent(t) }" />
                     </span>
                     <span class="tp-row" :style="{ background: t.prev.rowHover, borderColor: t.prev.edge }">
                       <span class="tp-row-ink" :style="{ background: t.prev.ink }" />
-                      <span class="tp-row-tag" :style="{ background: t.prev.accent }" />
+                      <span class="tp-row-tag" :style="{ background: prevAccent(t) }" />
                     </span>
                     <span class="tp-row" :style="{ background: t.prev.card, borderColor: t.prev.edge }">
                       <span class="tp-row-ink" :style="{ background: t.prev.ink }" />
-                      <span class="tp-row-tag" :style="{ background: t.prev.accent }" />
+                      <span class="tp-row-tag" :style="{ background: prevAccent(t) }" />
                     </span>
                   </span>
                 </span>
                 <span class="theme-chip-name">{{ t.name }}</span>
+              </button>
+            </div>
+            <div class="pane-label">强调色</div>
+            <div class="accent-row" role="radiogroup" aria-label="强调色">
+              <button
+                v-for="a in ACCENTS"
+                :key="a.id"
+                class="accent-pill"
+                :class="{ on: accent === a.id }"
+                type="button"
+                role="radio"
+                :aria-checked="accent === a.id"
+                :data-accent-id="a.id"
+                @click="pickAccent(a.id)"
+              >
+                <span class="accent-dot" :style="{ background: theme === 'ink' ? a.dotInk : a.dot }" />
+                <span class="accent-name">{{ a.name }}</span>
               </button>
             </div>
           </section>
@@ -699,11 +734,53 @@ onMounted(() => { loadSettings() })
 /* 主题选择：每块卡里画一个等比缩小的微缩界面——侧栏、三行行卡
    （中间一行是悬浮态底色）、行尾一枚强调色小块。所见即所得，不配文字解释。
    边框固定 2px 占位，选中只换颜色，切换时不跳布局。 */
+.pane-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: var(--space-4) 0 var(--space-2);
+}
+.pane-label:first-child { margin-top: 0; }
+
 .theme-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 220px));
   gap: var(--space-2);
 }
+
+/* accent 色丸：一颗色点 + 名字，选中加 ring，尺寸落 28px action-btn 档 */
+.accent-row {
+  display: flex;
+  gap: var(--space-2);
+}
+.accent-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast, 0.15s), background 0.15s;
+}
+.accent-pill:hover { border-color: var(--border-strong); background: var(--hover); }
+.accent-pill.on {
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.accent-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+.accent-name { line-height: 1; }
 
 .theme-chip {
   display: flex;

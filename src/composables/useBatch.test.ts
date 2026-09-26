@@ -50,23 +50,62 @@ describe('useBatch', () => {
     vi.mocked(useConfirmStore).mockReturnValue(mockConfirmStore)
   })
 
-  describe('toggleBatchMode', () => {
-    it('should toggle batch mode on', () => {
-      const { isBatchMode, toggleBatchMode } = useBatch()
+  describe('勾选即进 / 清空即收', () => {
+    it('should enter batch mode on first check without any toggle', () => {
+      const { isBatchMode, selectedIds, toggleSelect } = useBatch()
 
       expect(isBatchMode.value).toBe(false)
-      toggleBatchMode()
+      toggleSelect('1')
       expect(isBatchMode.value).toBe(true)
+      expect(selectedIds.value.size).toBe(1)
     })
 
-    it('should toggle batch mode off and clear selection', () => {
-      const { isBatchMode, selectedIds, toggleBatchMode, toggleSelect } = useBatch()
+    it('should leave batch mode when the last selection is unchecked', () => {
+      const { isBatchMode, selectedIds, toggleSelect } = useBatch()
 
-      toggleBatchMode()
       toggleSelect('1')
-      expect(selectedIds.value.size).toBe(1)
+      toggleSelect('2')
+      toggleSelect('1')
+      expect(isBatchMode.value).toBe(true)
+      toggleSelect('2')
+      expect(isBatchMode.value).toBe(false)
+      expect(selectedIds.value.size).toBe(0)
+    })
 
-      toggleBatchMode()
+    it('should leave batch mode after deselectAll', async () => {
+      const { isBatchMode, toggleSelect, deselectAll } = useBatch()
+
+      toggleSelect('1')
+      deselectAll()
+      await Promise.resolve()
+      expect(isBatchMode.value).toBe(false)
+    })
+  })
+
+  describe('工具栏「选择」钮：待选态开合', () => {
+    it('空选中也能开：钮开待选，dock 不出', () => {
+      const { isBatchMode, hasSelection, togglePick } = useBatch()
+
+      togglePick()
+      expect(isBatchMode.value).toBe(true)
+      expect(hasSelection.value).toBe(false)
+    })
+
+    it('批量中再点一次整体退出并清空', () => {
+      const { isBatchMode, selectedIds, toggleSelect, togglePick } = useBatch()
+
+      toggleSelect('1')
+      togglePick()
+      expect(isBatchMode.value).toBe(false)
+      expect(selectedIds.value.size).toBe(0)
+    })
+
+    it('exitBatch 收待选也清选中', () => {
+      const { isBatchMode, selectedIds, togglePick, toggleSelect, exitBatch } = useBatch()
+
+      togglePick()
+      toggleSelect('1')
+      exitBatch()
       expect(isBatchMode.value).toBe(false)
       expect(selectedIds.value.size).toBe(0)
     })

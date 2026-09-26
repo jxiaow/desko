@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>desko v2 · 变革稿 · 验证码（Hero + 队列）</title>
+<style>
+:root{
+  --bg:#f5f4f1; --surface:#ffffff; --rail:#eceae5; --rail-hover:#e3e0d9;
+  --line:#e7e5df; --line-strong:#d4d2ca;
+  --text:#1d1c1a; --text-2:#4f4e48; --text-3:#6e6c64; --text-4:#98968c;
+  --accent:#3d5a80; --accent-soft:#e8eef4;
+  --danger:#a9443c; --danger-soft:#f7ece9; --tint:#f7f6f2;
+  --shadow-win:0 24px 60px -20px rgba(20,20,15,.35);
+  --t:.15s cubic-bezier(.4,0,.2,1);
+  --font:"HarmonyOS Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:Consolas,"SF Mono",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#dcdad3;padding:24px;font:14px/1.55 var(--font);color:var(--text)}
+.win{width:1040px;height:670px;background:var(--bg);border-radius:10px;overflow:hidden;display:flex;box-shadow:var(--shadow-win);position:relative}
+svg{display:block}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+.rail{width:48px;flex:none;background:var(--rail);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:8px 0}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--text);color:#f7f6f2;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.r-item{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--text-3);position:relative}
+.r-item.on{color:var(--accent);background:var(--surface)}
+.r-item.on::before{content:"";position:absolute;left:-4px;top:9px;bottom:9px;width:3px;border-radius:2px;background:var(--accent)}
+.rail .gap{flex:1}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.tbar{height:40px;flex:none;display:flex;align-items:center;padding:0 8px 0 16px;border-bottom:1px solid var(--line)}
+.tbar .mod{font-size:13px;font-weight:600;color:var(--text-2)}
+.wbtns{margin-left:auto;display:flex}
+.wb{width:36px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text-3);border-radius:6px}
+.wb.x:hover{background:var(--danger-soft);color:var(--danger)}
+
+.page{flex:1;display:flex;flex-direction:column;padding:12px 18px 14px;gap:10px;min-height:0}
+.head{display:flex;align-items:baseline;gap:10px}
+.head h1{font-size:18px;font-weight:600;letter-spacing:-.01em}
+.head .cnt{font-size:12px;color:var(--text-3)}
+.head .add{margin-left:auto;height:28px;padding:0 12px;display:flex;align-items:center;gap:5px;background:var(--accent);color:#fff;border-radius:8px;font-size:12.5px;font-weight:600}
+.head .add .ico{width:13px;height:13px;stroke-width:2.2}
+
+.grid{flex:1;display:flex;gap:10px;min-height:0}
+.left{width:336px;flex:none;display:flex;flex-direction:column;gap:10px;min-height:0}
+
+/* ===== Hero：最常用的码当主角，34px 大数字 + 倒计时环 ===== */
+.hero{flex:none;position:relative;background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;overflow:hidden}
+.h-top{display:flex;align-items:center;gap:9px}
+.mk{width:28px;height:28px;flex:none;border-radius:8px;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-2)}
+.iss{font-size:13.5px;font-weight:600}
+.acc{font:11px var(--mono);color:var(--text-3)}
+.ring{margin-left:auto;position:relative;width:36px;height:36px}
+.ring svg{width:36px;height:36px;transform:rotate(-90deg)}
+.ring .bgc{stroke:var(--line)}
+.ring .fg{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset var(--t)}
+.ring b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:600 11px var(--mono);color:var(--text-2)}
+.code{margin-top:16px;font:700 34px/1 var(--mono);letter-spacing:.03em;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:14px}
+.code i{font-style:normal;width:.5ch}
+.h-sub{margin-top:8px;font-size:11.5px;color:var(--text-3)}
+.h-meta{margin-top:10px;display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--text-3)}
+.h-mono{font-family:var(--mono);color:var(--text-2)}
+.h-acts{margin-top:12px;display:flex;gap:8px}
+.btn{height:28px;padding:0 13px;display:flex;align-items:center;gap:6px;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid var(--line-strong);background:var(--surface);color:var(--text-2);transition:border-color var(--t),background var(--t)}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{background:#31496a}
+.btn .ico{width:14px;height:14px}
+.hero::after{content:"";position:absolute;left:0;bottom:0;height:3px;width:58%;background:var(--accent);opacity:.5}
+
+/* ===== 统计卡：补住 Hero 之下的空洞 ===== */
+.stats{flex:1;min-height:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column}
+.stats h3{font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:10px}
+.s-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-3);margin-bottom:9px}
+.s-row .n{width:62px;flex:none;color:var(--text-2)}
+.s-track{flex:1;height:5px;border-radius:3px;background:var(--bg);overflow:hidden}
+.s-fill{display:block;height:100%;border-radius:3px;background:var(--accent);opacity:.5}
+.s-row b{width:20px;flex:none;text-align:right;font:600 11.5px/1 var(--mono);color:var(--text-2)}
+.stats .days-lbl{margin-top:auto;font-size:11px;color:var(--text-4);margin-bottom:6px}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.d{height:32px;border-radius:7px;background:var(--bg);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;font:10px/1 var(--mono);color:var(--text-4);gap:3px}
+.d b{font-size:11px;color:var(--text-2)}
+.d.l2{background:var(--accent-soft);border-color:transparent}
+.d.l3{background:var(--accent);border-color:transparent}
+.d.l3 b{color:#fff}
+.stats .note{margin-top:9px;font-size:11px;color:var(--text-4)}
+
+/* ===== 队列：其余账号一行一条，点开即换 Hero ===== */
+.queue{flex:1;display:flex;flex-direction:column;min-width:0}
+.qhead{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-3);margin-bottom:6px}
+.qhead b{font-size:12px;font-weight:600;color:var(--text-2)}
+.qhead .ln{flex:1;height:1px;background:var(--line)}
+.qlist{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.q{height:48px;display:flex;align-items:center;gap:10px;padding:0 12px;transition:background var(--t);cursor:pointer;position:relative}
+.q + .q{border-top:1px solid var(--line)}
+.q:hover{background:var(--tint)}
+.q .mk{width:26px;height:26px;font-size:10.5px;border-radius:7px}
+.q .who{min-width:0}
+.q .qname{font-size:13px;font-weight:600;line-height:17px}
+.q .qacc{font:10.5px var(--mono);color:var(--text-3);line-height:14px}
+.q .qcode{margin-left:auto;font:600 14px var(--mono);letter-spacing:.05em;color:var(--text-2);font-variant-numeric:tabular-nums}
+.q .bar{position:absolute;left:0;bottom:0;height:2.5px;background:var(--accent);opacity:.4}
+.q.urgent .qcode{color:var(--text-4)}
+.q.urgent .bar{background:var(--danger);opacity:.7}
+.q .use{font-size:10px;color:var(--text-4);border:1px solid var(--line-strong);border-radius:99px;padding:1px 6px;margin-left:8px}
+.qfoot{height:34px;display:flex;align-items:center;padding:0 12px;font-size:11px;color:var(--text-4);border-top:1px solid var(--line);background:var(--tint)}
+</style>
+</head>
+<body>
+<div class="win">
+  <aside class="rail">
+    <div class="logo">D</div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M10 13.5a5 5 0 0 0 7.1 0l2.8-2.8a5 5 0 0 0-7.1-7.1l-1.2 1.1"/><path d="M14 10.5a5 5 0 0 0-7.1 0l-2.8 2.8a5 5 0 0 0 7.1 7.1l1.2-1.1"/></svg></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3.5a2.6 2.6 0 1 1 3.7 3.7L7.5 20.4 2.8 21.6l1.2-4.7Z"/></svg></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2.4h6a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></div>
+    <div class="r-item on"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21.5s8-3.6 8-10V6.2L12 2.4 4 6.2v5.3c0 6.4 8 10 8 10Z"/><path d="M9.2 12.2 11.3 14.3l4-4.2"/></svg></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8.5h15M15.5 5 19 8.5 15.5 12M20 15.5H5M8.5 12 5 15.5 8.5 19"/></svg></div>
+    <div class="gap"></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 4.6v4.8M7 14.6v4.8"/><circle cx="15" cy="7" r="2.1"/><circle cx="7" cy="17" r="2.1"/></svg></div>
+  </aside>
+
+  <div class="main">
+    <header class="tbar">
+      <span class="mod">验证码</span>
+      <span class="wbtns">
+        <span class="wb"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></span>
+        <span class="wb"><svg class="ico" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/></svg></span>
+        <span class="wb x"><svg class="ico" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></span>
+      </span>
+    </header>
+
+    <div class="page">
+      <div class="head">
+        <h1>验证码</h1><span class="cnt">11 个账号 · 本会话已解锁</span>
+        <div class="add"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>新增</div>
+      </div>
+
+      <div class="grid">
+        <!-- 左列：最近用过的码自动升到 Hero + 用码统计 -->
+        <div class="left">
+        <div class="hero">
+          <div class="h-top">
+            <span class="mk">G</span>
+            <span><div class="iss">GitHub</div><div class="acc">jxiaow</div></span>
+            <span class="ring">
+              <svg viewBox="0 0 44 44">
+                <circle class="bgc" cx="22" cy="22" r="18" fill="none" stroke-width="3.5"/>
+                <circle class="fg" cx="22" cy="22" r="18" fill="none" stroke-width="3.5" stroke-dasharray="113.1" stroke-dashoffset="47"/>
+              </svg><b>18</b>
+            </span>
+          </div>
+          <div class="code"><span>6<i></i>4<i></i>2</span><span>9<i></i>1<i></i>7</span></div>
+          <div class="h-sub">本周用过 7 次 · 点右侧任意账号可换到这里</div>
+          <div class="h-meta">
+            <div style="display:flex;justify-content:space-between"><span>上次使用</span><span class="h-mono">2 分钟前 · 已自动复制</span></div>
+            <div style="display:flex;justify-content:space-between"><span>换码周期</span><span class="h-mono">30 s · SHA-1</span></div>
+          </div>
+          <div class="h-acts">
+            <button class="btn pri"><svg class="ico" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制验证码</button>
+            <button class="btn"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3.5a2.6 2.6 0 1 1 3.7 3.7L7.5 20.4 2.8 21.6l1.2-4.7Z"/></svg>编辑</button>
+            <button class="btn" style="padding:0 11px"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></button>
+          </div>
+        </div>
+
+        <div class="stats">
+          <h3>近 7 天用码</h3>
+          <div class="s-row"><span class="n">GitHub</span><span class="s-track"><span class="s-fill" style="width:100%"></span></span><b>×7</b></div>
+          <div class="s-row"><span class="n">Google</span><span class="s-track"><span class="s-fill" style="width:43%"></span></span><b>×3</b></div>
+          <div class="s-row"><span class="n">阿里云</span><span class="s-track"><span class="s-fill" style="width:29%"></span></span><b>×2</b></div>
+          <div class="s-row"><span class="n">AWS</span><span class="s-track"><span class="s-fill" style="width:14%"></span></span><b>×1</b></div>
+          <div class="s-row"><span class="n">Steam</span><span class="s-track"><span class="s-fill" style="width:14%"></span></span><b>×1</b></div>
+          <div class="days-lbl">按日分布</div>
+          <div class="days">
+            <span class="d">一<b>2</b></span><span class="d l3">二<b>5</b></span><span class="d">三<b>1</b></span><span class="d l2">四<b>2</b></span><span class="d l2">五<b>3</b></span><span class="d">六<b>1</b></span><span class="d">日<b>0</b></span>
+          </div>
+          <div class="note">共 14 次 · 高峰在上午 9–11 点</div>
+        </div>
+        </div>
+
+        <div class="queue">
+          <div class="qhead"><b>其余 10 个</b><span class="ln"></span>单击账号换到左侧主位</div>
+          <div class="qlist">
+            <div class="q">
+              <span class="mk">G</span>
+              <span class="who"><div class="qname">Google 账户</div><div class="qacc">jx.work@gmail.com</div></span>
+              <span class="use">常用</span>
+              <span class="qcode">108 352</span>
+              <span class="bar" style="width:80%"></span>
+            </div>
+            <div class="q">
+              <span class="mk">A</span>
+              <span class="who"><div class="qname">AWS MFA</div><div class="qacc">root/iam-console</div></span>
+              <span class="qcode">736 048</span>
+              <span class="bar" style="width:40%"></span>
+            </div>
+            <div class="q">
+              <span class="mk">阿</span>
+              <span class="who"><div class="qname">阿里云</div><div class="qacc">158****4027</div></span>
+              <span class="qcode">529 163</span>
+              <span class="bar" style="width:70%"></span>
+            </div>
+            <div class="q urgent">
+              <span class="mk">S</span>
+              <span class="who"><div class="qname">Steam</div><div class="qacc">jxiaow · 剩 4 s</div></span>
+              <span class="qcode">074 251</span>
+              <span class="bar" style="width:13%"></span>
+            </div>
+            <div class="q">
+              <span class="mk">1</span>
+              <span class="who"><div class="qname">1Password</div><div class="qacc">agilebits</div></span>
+              <span class="qcode">853 604</span>
+              <span class="bar" style="width:90%"></span>
+            </div>
+            <div class="q">
+              <span class="mk">J</span>
+              <span class="who"><div class="qname">JetBrains</div><div class="qacc">jxiaow@xylink.com</div></span>
+              <span class="qcode">417 296</span>
+              <span class="bar" style="width:55%"></span>
+            </div>
+            <div class="q">
+              <span class="mk">华</span>
+              <span class="who"><div class="qname">华为云</div><div class="qacc">138****771</div></span>
+              <span class="qcode">264 830</span>
+              <span class="bar" style="width:30%"></span>
+            </div>
+            <div class="q">
+              <span class="mk">C</span>
+              <span class="who"><div class="qname">Cloudflare</div><div class="qacc">dash.cloudflare.com</div></span>
+              <span class="qcode">902 158</span>
+              <span class="bar" style="width:75%"></span>
+            </div>
+            <div class="q">
+              <span class="mk">腾</span>
+              <span class="who"><div class="qname">腾讯企业邮</div><div class="qacc">jx@xylink.com</div></span>
+              <span class="qcode">571 046</span>
+              <span class="bar" style="width:18%"></span>
+            </div>
+            <div class="q">
+              <span class="mk">d</span>
+              <span class="who"><div class="qname">Discord</div><div class="qacc">jxiaow</div></span>
+              <span class="qcode">385 712</span>
+              <span class="bar" style="width:64%"></span>
+            </div>
+            <div class="qfoot">拖动行可调整顺序 · 底部「设置 · 安全」管理解锁方式</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -8,7 +8,7 @@ import type { Entry } from '../types'
 import EntriesModule from '../components/entries/EntriesModule.vue'
 import EntryFormDialog from '../components/entries/EntryFormDialog.vue'
 import DetailDialog from '../components/entries/DetailDialog.vue'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useToastStore } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
 
@@ -23,8 +23,8 @@ const { fetchEntries } = entriesStore
 const { copyToClipboard, copyPassword } = useClipboard()
 
 const {
-  isBatchMode, selectedIds,
-  toggleBatchMode, toggleSelect, selectAll, deselectAll, doBatchDelete
+  isBatchMode, hasSelection, selectedIds,
+  toggleSelect, selectAll, deselectAll, togglePick, exitBatch, doBatchDelete
 } = useBatch()
 
 const showForm = ref(false)
@@ -32,6 +32,16 @@ const formEntry = ref<Entry | null>(null)
 const detailId = ref<string | null>(null)
 /** 从 store 取当前对象：编辑保存后弹窗内容跟着刷新，不会停在旧快照上 */
 const detailEntry = computed(() => entries.value.find(e => e.id === detailId.value) ?? null)
+
+/* Escape 退批量：弹窗/确认框开着时不归批量管，让位给它们的 useEscapeClose */
+const confirmStore = useConfirmStore()
+const onEscape = (e: KeyboardEvent) => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return
+  if (showForm.value || detailEntry.value || confirmStore.confirmDialog.show) return
+  if (isBatchMode.value) exitBatch()
+}
+onMounted(() => window.addEventListener('keydown', onEscape))
+onBeforeUnmount(() => window.removeEventListener('keydown', onEscape))
 
 const openAdd = () => {
   formEntry.value = null
@@ -116,13 +126,15 @@ const duplicateEntry = async (entry: Entry) => {
     :load-error="loadError"
     :filtered-entries="filteredEntries"
     :is-batch-mode="isBatchMode"
+    :has-selection="hasSelection"
     :selected-ids="selectedIds"
     :visible-passwords="visiblePasswords"
     :password-cache="passwordCache"
     @update:search-keyword="searchKeyword = $event"
     @update:active-tab="activeTab = $event"
     @open-add="openAdd"
-    @toggle-batch-mode="toggleBatchMode"
+    @toggle-pick="togglePick"
+    @exit-batch="exitBatch"
     @select-all="selectAll"
     @deselect-all="deselectAll"
     @batch-delete="doBatchDelete"

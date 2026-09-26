@@ -381,17 +381,17 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
-  it('runs batch mode: select all, pin, then delete', async () => {
+  it('runs batch mode: 勾选即进, select all, pin, then delete', async () => {
     stageNotes([makeNote(), makeNote({ id: 'b', title: '乙', content_html: '<p>乙</p>' })])
     const wrapper = await mountModule()
     const store = useNotesStore()
 
-    const batchPill = () => wrapper.find('.bar-btn[aria-label="批量选择"]')
-    await batchPill().trigger('click')
+    // 勾选即进：点第一条卡的勾选位即入批量态，没有工具栏开关
+    expect(store.isBatchMode).toBe(false)
+    await wrapper.findAll('.memo-check')[0].trigger('click')
     await flushPromises()
     expect(store.isBatchMode).toBe(true)
     expect(wrapper.find('.batch-dock').exists()).toBe(true)
-    expect(wrapper.find('.bar-btn[aria-label="退出批量"]').exists()).toBe(true)
 
     await wrapper.find('.dock-btn').trigger('click') // 全选
     expect(store.selectedNoteIds.size).toBe(2)
@@ -404,6 +404,8 @@ describe('NotesModule', () => {
     await wrapper.find('.dock-btn.danger').trigger('click')
     await flushPromises()
     expect(store.notes).toHaveLength(0)
+    // 清空即收：删除后选中归零，批量态自动退出
+    expect(store.isBatchMode).toBe(false)
     wrapper.unmount()
   })
 

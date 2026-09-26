@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { entriesApi as api } from '../services/api/entries'
 import { useEntriesStore } from '../stores/entries'
 import { useToastStore } from '../stores/toast'
@@ -9,14 +9,21 @@ export function useBatch() {
   const toastStore = useToastStore()
   const confirmStore = useConfirmStore()
 
-  const isBatchMode = ref(false)
   const selectedIds = ref<Set<string>>(new Set())
+  /** 待选态：工具栏「选择」钮开合。勾选即进仍成立——有选中就等于在批量里。 */
+  const pickMode = ref(false)
+  const hasSelection = computed(() => selectedIds.value.size > 0)
+  const isBatchMode = computed(() => pickMode.value || hasSelection.value)
 
-  const toggleBatchMode = () => {
-    isBatchMode.value = !isBatchMode.value
-    if (!isBatchMode.value) {
-      selectedIds.value.clear()
-    }
+  /** 钮的语义是开/合：批量中（无论怎么进的）再点一次整体退出并清空 */
+  const togglePick = () => {
+    if (isBatchMode.value) exitBatch()
+    else pickMode.value = true
+  }
+
+  const exitBatch = () => {
+    pickMode.value = false
+    selectedIds.value.clear()
   }
 
   const toggleSelect = (id: string) => {
@@ -45,7 +52,6 @@ export function useBatch() {
         const count = await api.batchDeleteEntries(ids)
         await entriesStore.fetchEntries()
         selectedIds.value.clear()
-        isBatchMode.value = false
         toastStore.showToast(`已删除 ${count} 条记录`)
       } catch (e: any) {
         toastStore.showToast('删除失败: ' + e.message, 'error')
@@ -55,11 +61,14 @@ export function useBatch() {
 
   return {
     isBatchMode,
+    hasSelection,
+    pickMode,
     selectedIds,
-    toggleBatchMode,
     toggleSelect,
     selectAll,
     deselectAll,
+    togglePick,
+    exitBatch,
     doBatchDelete,
   }
 }

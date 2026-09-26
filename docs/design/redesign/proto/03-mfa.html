@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>desko v2 · R1 · 验证码（卡片网格）</title>
+<style>
+:root{
+  --bg:#f5f4f1; --surface:#ffffff; --rail:#eceae5; --rail-hover:#e3e0d9;
+  --line:#e7e5df; --line-strong:#d4d2ca;
+  --text:#1d1c1a; --text-2:#4f4e48; --text-3:#6e6c64; --text-4:#98968c;
+  --accent:#3d5a80; --accent-h:#31496a; --accent-soft:#e8eef4;
+  --danger:#a9443c; --danger-soft:#f7ece9; --warning:#8a6a1f;
+  --tint:#f7f6f2;
+  --shadow-win:0 24px 60px -20px rgba(20,20,15,.35);
+  --t:.15s cubic-bezier(.4,0,.2,1);
+  --font:"HarmonyOS Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:Consolas,"SF Mono",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#dcdad3;padding:24px;font:14px/1.55 var(--font);color:var(--text)}
+.win{width:1040px;height:670px;background:var(--bg);border-radius:10px;overflow:hidden;display:flex;box-shadow:var(--shadow-win);position:relative}
+svg{display:block}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+.rail{width:48px;flex:none;background:var(--rail);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:8px 0}
+.logo{width:28px;height:28px;border-radius:8px;background:var(--text);color:#f7f6f2;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.r-item{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--text-3);position:relative}
+.r-item.on{color:var(--accent);background:var(--surface)}
+.r-item.on::before{content:"";position:absolute;left:-4px;top:9px;bottom:9px;width:3px;border-radius:2px;background:var(--accent)}
+.rail .gap{flex:1}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.tbar{height:40px;flex:none;display:flex;align-items:center;padding:0 8px 0 16px;border-bottom:1px solid var(--line)}
+.tbar .mod{font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--text-2)}
+.wbtns{margin-left:auto;display:flex}
+.wb{width:36px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--text-3);border-radius:6px}
+.wb.x:hover{background:var(--danger-soft);color:var(--danger)}
+
+.page{flex:1;display:flex;flex-direction:column;padding:14px 20px 20px;gap:12px;min-height:0}
+.pbar{height:48px;flex:none;display:flex;align-items:center;gap:10px}
+.pbar .sum{font-size:12.5px;color:var(--text-3)}
+.add{margin-left:auto;height:32px;padding:0 14px;display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border-radius:8px;font-size:13px;font-weight:600}
+.add .ico{width:14px;height:14px;stroke-width:2.2}
+
+/* 一行 2 张的 glance 网格：大数字当主角，issuer 退小字 */
+.grid{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:132px;gap:14px;align-content:start}
+.mc{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px;overflow:hidden;transition:border-color var(--t),background var(--t)}
+.mc:hover{border-color:var(--accent);background:var(--tint)}        /* 悬停：描边显色，不抬阴影 */
+.mc.hov{border-color:var(--accent);background:var(--tint)}
+.mc-top{display:flex;align-items:center;gap:9px}
+.tile{width:30px;height:30px;flex:none;border-radius:8px;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-2)}
+.who{min-width:0}
+.iss{font-size:13px;font-weight:600;line-height:17px}
+.acc{font-size:11.5px;color:var(--text-3);line-height:15px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc-top .right{margin-left:auto;display:flex;align-items:center;gap:2px}
+.ab{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:var(--text-3);transition:background var(--t),color var(--t)}
+.ab:hover{background:var(--rail-hover);color:var(--text)}
+.ab .ico{width:15px;height:15px}
+.code{display:flex;align-items:baseline;gap:12px;font:600 27px/1 var(--mono);letter-spacing:.04em;font-variant-numeric:tabular-nums;color:var(--text)}
+.code .grp{display:flex}
+.code .grp i{font-style:normal;width:.55ch}
+.sec{margin-left:auto;font:12px var(--font);color:var(--text-3);font-variant-numeric:tabular-nums}
+/* 已复制回执：对勾 morph 保留 */
+.copied .code{color:var(--accent)}
+.copied .ab.cp{color:var(--accent)}
+/* 底缘进度线（签名交互保留），临期切警告色 */
+.prog{position:absolute;left:0;bottom:0;height:3px;background:var(--accent);border-radius:0 2px 2px 0;transition:width var(--t)}
+.mc.urgent .prog{background:var(--danger)}
+.mc.urgent .sec{color:var(--danger);font-weight:600}
+</style>
+</head>
+<body>
+<div class="win">
+  <aside class="rail">
+    <div class="logo">D</div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M10 13.5a5 5 0 0 0 7.1 0l2.8-2.8a5 5 0 0 0-7.1-7.1l-1.2 1.1"/><path d="M14 10.5a5 5 0 0 0-7.1 0l-2.8 2.8a5 5 0 0 0 7.1 7.1l1.2-1.1"/></svg></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M17 3.5a2.6 2.6 0 1 1 3.7 3.7L7.5 20.4 2.8 21.6l1.2-4.7Z"/></svg></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2.4h6a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></div>
+    <div class="r-item on"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21.5s8-3.6 8-10V6.2L12 2.4 4 6.2v5.3c0 6.4 8 10 8 10Z"/><path d="M9.2 12.2 11.3 14.3l4-4.2"/></svg></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M4 8.5h15M15.5 5 19 8.5 15.5 12M20 15.5H5M8.5 12 5 15.5 8.5 19"/></svg></div>
+    <div class="gap"></div>
+    <div class="r-item"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 4.6v4.8M7 14.6v4.8"/><circle cx="15" cy="7" r="2.1"/><circle cx="7" cy="17" r="2.1"/></svg></div>
+  </aside>
+
+  <div class="main">
+    <header class="tbar">
+      <span class="mod">验证码</span>
+      <span class="wbtns">
+        <span class="wb"><svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></span>
+        <span class="wb"><svg class="ico" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/></svg></span>
+        <span class="wb x"><svg class="ico" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></span>
+      </span>
+    </header>
+
+    <div class="page">
+      <div class="pbar">
+        <span class="sum">6 个验证器 · 本会话已解锁</span>
+        <div class="add"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>新增</div>
+      </div>
+
+      <div class="grid">
+        <!-- 悬停态：复制主动作常驻可见 + ⋯ 次动作 -->
+        <div class="mc hov copied">
+          <div class="mc-top">
+            <span class="tile">G</span>
+            <span class="who"><div class="iss">GitHub</div><div class="acc">jxiaow</div></span>
+            <span class="right">
+              <button class="ab cp" title="已复制"><svg class="ico" viewBox="0 0 24 24" style="stroke-width:2.4"><path d="m4.5 12.5 5 5 10-11"/></svg></button>
+              <button class="ab" style="color:var(--text-4)" title="更多"><svg class="ico" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18.5" cy="12" r="1" fill="currentColor"/></svg></button>
+            </span>
+          </div>
+          <div class="code"><span class="grp">6<i></i>4<i></i>2</span><span class="grp">9<i></i>1<i></i>7</span><span class="sec">剩 18 s</span></div>
+          <div class="prog" style="width:60%"></div>
+        </div>
+
+        <div class="mc">
+          <div class="mc-top">
+            <span class="tile">G</span>
+            <span class="who"><div class="iss">Google 账户</div><div class="acc">jx.work@gmail.com</div></span>
+          </div>
+          <div class="code"><span class="grp">1<i></i>0<i></i>8</span><span class="grp">3<i></i>5<i></i>2</span><span class="sec">剩 24 s</span></div>
+          <div class="prog" style="width:80%"></div>
+        </div>
+
+        <div class="mc">
+          <div class="mc-top">
+            <span class="tile">A</span>
+            <span class="who"><div class="iss">AWS MFA</div><div class="acc">root/iam-console</div></span>
+          </div>
+          <div class="code"><span class="grp">7<i></i>3<i></i>6</span><span class="grp">0<i></i>4<i></i>8</span><span class="sec">剩 12 s</span></div>
+          <div class="prog" style="width:40%"></div>
+        </div>
+
+        <div class="mc">
+          <div class="mc-top">
+            <span class="tile">阿</span>
+            <span class="who"><div class="iss">阿里云</div><div class="acc">158****4027</div></span>
+          </div>
+          <div class="code"><span class="grp">5<i></i>2<i></i>9</span><span class="grp">1<i></i>6<i></i>3</span><span class="sec">剩 21 s</span></div>
+          <div class="prog" style="width:70%"></div>
+        </div>
+
+        <!-- 临期：底缘线与秒数切警告色 -->
+        <div class="mc urgent">
+          <div class="mc-top">
+            <span class="tile">S</span>
+            <span class="who"><div class="iss">Steam</div><div class="acc">jxiaow</div></span>
+          </div>
+          <div class="code" style="color:var(--text-3)"><span class="grp">0<i></i>7<i></i>4</span><span class="grp">2<i></i>5<i></i>1</span><span class="sec">剩 4 s</span></div>
+          <div class="prog" style="width:13%"></div>
+        </div>
+
+        <div class="mc">
+          <div class="mc-top">
+            <span class="tile">1</span>
+            <span class="who"><div class="iss">1Password</div><div class="acc">agilebits</div></span>
+          </div>
+          <div class="code"><span class="grp">8<i></i>5<i></i>3</span><span class="grp">6<i></i>0<i></i>4</span><span class="sec">剩 27 s</span></div>
+          <div class="prog" style="width:90%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

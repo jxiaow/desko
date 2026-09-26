@@ -54,26 +54,28 @@ const SEED = {
   ],
 }
 
-const THEMES = [
-  { id: 'light-cool', name: '冷灰' },
-  { id: 'light-warm', name: '暖纸墨' },
-  { id: 'light-celadon', name: '青瓷' },
-  { id: 'aluminum-pro', name: '冷铝' },
-  { id: 'swiss-monochrome', name: '瑞士黑白' },
-  { id: 'linear-dark', name: 'Linear 深空' },
-  { id: 'jetbrains-dark', name: 'JetBrains 炭黑' },
+// v2 双轴：2 底色 × 4 accent = 8 组配色
+const COMBOS = [
+  { id: 'paper-ink', name: '纸·墨蓝', theme: 'paper', accent: 'ink' },
+  { id: 'paper-celadon', name: '纸·青瓷', theme: 'paper', accent: 'celadon' },
+  { id: 'paper-clay', name: '纸·赭石', theme: 'paper', accent: 'clay' },
+  { id: 'paper-plum', name: '纸·紫罗', theme: 'paper', accent: 'plum' },
+  { id: 'ink-ink', name: '墨·墨蓝', theme: 'ink', accent: 'ink' },
+  { id: 'ink-celadon', name: '墨·青瓷', theme: 'ink', accent: 'celadon' },
+  { id: 'ink-clay', name: '墨·赭石', theme: 'ink', accent: 'clay' },
+  { id: 'ink-plum', name: '墨·紫罗', theme: 'ink', accent: 'plum' },
 ]
 
 const only = process.argv[2]
 const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome' })
 
-for (const t of THEMES) {
-  if (only && only !== t.id) continue
+for (const t of COMBOS) {
+  if (only && only !== t.id && only !== t.theme) continue
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5 })
   page.on('pageerror', (e) => console.log(`[${t.id}] pageerror: ${e.message}`))
   await page.addInitScript((cfg) => {
     window.__E2E_CONFIG__ = cfg
-  }, { ...SEED, settings: { theme: t.id } })
+  }, { ...SEED, settings: { theme: t.theme, accent: t.accent } })
 
   // 弹层与 active 态都带过渡，拍早了会抓到半透明/残留帧
   const shot = async (name) => {

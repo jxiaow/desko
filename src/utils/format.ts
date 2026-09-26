@@ -104,6 +104,18 @@ export function formatUrlDisplay(url: string): string {
   }
 }
 
+/**
+ * 行内 URL 中段截断：同一台服务器的条目头部全同，区分度全在尾部。
+ * 尾部取最后一段路径（≤20 字符整段保住，否则固定保尾 16 字符），头部弹性收缩出省略号。
+ */
+export function splitUrlDisplay(url: string): { head: string; tail: string } {
+  const full = formatUrlDisplay(url)
+  if (full.length <= 28) return { head: full, tail: '' }
+  const idx = full.lastIndexOf('/')
+  const tail = idx > 0 && full.length - idx <= 20 ? full.slice(idx) : full.slice(-16)
+  return { head: full.slice(0, full.length - tail.length), tail }
+}
+
 export function getDateGroupLabel(timestamp: number): string {
   const now = new Date()
   const date = new Date(timestamp)

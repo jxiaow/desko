@@ -53,9 +53,11 @@ export const useNotesStore = defineStore('notes', () => {
   // 右窄栏默认收起，列表占满宽度；顶栏按钮展开后跟着会话走，宽度不够时另有浮层侧栏
   const noteRailCollapsed = ref(true)
 
-  // 批量操作状态
-  const isBatchMode = ref(false)
+  // 批量操作状态：勾选即进、清空即收；工具栏「选择」钮另开一层待选态（显形全部勾选框）
   const selectedNoteIds = ref<Set<string>>(new Set())
+  const notePickMode = ref(false)
+  const hasNoteSelection = computed(() => selectedNoteIds.value.size > 0)
+  const isBatchMode = computed(() => notePickMode.value || hasNoteSelection.value)
 
   // 附件按需在打开小记时加载：12 个命令共用一把锁，列表里逐条取会放大成 N+1
   const noteAttachments = ref<Record<string, Attachment[]>>({})
@@ -492,11 +494,6 @@ export const useNotesStore = defineStore('notes', () => {
     hideAllPlains()
   }
 
-  const toggleBatchMode = () => {
-    isBatchMode.value = !isBatchMode.value
-    if (!isBatchMode.value) selectedNoteIds.value = new Set()
-  }
-
   const toggleSelectNote = (id: string) => {
     const next = new Set(selectedNoteIds.value)
     if (next.has(id)) next.delete(id)
@@ -512,6 +509,17 @@ export const useNotesStore = defineStore('notes', () => {
     selectedNoteIds.value = new Set()
   }
 
+  /** 整体退出批量：收待选态 + 清空选中（钮再点一次 / Escape / dock 完成） */
+  const exitNoteBatch = () => {
+    notePickMode.value = false
+    selectedNoteIds.value = new Set()
+  }
+
+  const toggleNotePick = () => {
+    if (isBatchMode.value) exitNoteBatch()
+    else notePickMode.value = true
+  }
+
   const batchDelete = () => {
     const ids = Array.from(selectedNoteIds.value)
     if (ids.length === 0) return
@@ -521,7 +529,6 @@ export const useNotesStore = defineStore('notes', () => {
         notes.value = notes.value.filter(n => !ids.includes(n.id))
         ids.forEach(id => { delete notePlains.value[id] })
         selectedNoteIds.value = new Set()
-        isBatchMode.value = false
         toastStore.showToast(`已删除 ${ids.length} 条小记`)
       } catch (e: any) {
         toastStore.showToast('删除失败：' + e.message, 'error')
@@ -604,7 +611,7 @@ export const useNotesStore = defineStore('notes', () => {
     notes, notesLoading, notesLoadError,
     noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
     noteRailCollapsed,
-    isBatchMode, selectedNoteIds,
+    isBatchMode, hasNoteSelection, notePickMode, selectedNoteIds,
     noteAttachments, noteSaveState,
     notePlains, isUnlocked, noteKey,
     tagCounts, allTags, viewCounts, filteredNotes, groupedNotes,
@@ -612,7 +619,7 @@ export const useNotesStore = defineStore('notes', () => {
     doDeleteNote, togglePin, toggleStar,
     setupNoteKey, unlockNoteDomain, recoverNoteDomain, relockNoteDomain, changeNoteKey, refreshNoteKey,
     lockNote, unlockNote, relockNote, removeNoteLock, clearUnlockedNotes,
-    toggleBatchMode, toggleSelectNote, selectAllNotes, clearSelection,
+    toggleSelectNote, selectAllNotes, clearSelection, toggleNotePick, exitNoteBatch,
     batchDelete, batchSetPinned, batchSetStarred,
     loadAttachments, uploadAttachment, deleteAttachment, stageImage,
   }
