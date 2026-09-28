@@ -221,8 +221,10 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
 }
 
+/* 顶栏底色本身就比 --hover 更暗（浅色主题 chrome≈#f5f4f1、--hover=#f7f6f2），
+   用 --hover 等于没有反馈；按文字色反推半透填充，深浅两套自适应 */
 .titlebar-btn:hover {
-  background: var(--hover);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
   color: var(--text);
 }
 
