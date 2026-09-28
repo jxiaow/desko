@@ -59,7 +59,7 @@ test.describe('Notes 小记', () => {
     await expectToast(page, '小记已复制')
 
     expect(await page.evaluate(() => navigator.clipboard.readText()))
-      .toBe('看 GitLab 标题 (https://gitlab.test/x)')
+      .toBe('看 https://gitlab.test/x')
 
     const html = await page.evaluate(async () => {
       const item = (await navigator.clipboard.read())[0]

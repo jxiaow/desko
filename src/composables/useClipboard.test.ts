@@ -68,7 +68,7 @@ describe('useClipboard', () => {
 
   describe('copyRichToClipboard', () => {
     const html = '<p><a href="https://a.test/x">标题</a></p>'
-    const text = '标题 (https://a.test/x)'
+    const text = 'https://a.test/x'
 
     it('should write html together with plain text', async () => {
       mockClipboard.write.mockResolvedValue(undefined)

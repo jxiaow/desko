@@ -141,17 +141,17 @@ describe('htmlToText', () => {
 })
 
 describe('htmlToLinkText', () => {
-  it('should append the href after the link text', () => {
-    expect(htmlToLinkText('<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://a.test/x">GitLab 标题</a></p>'))
-      .toBe('GitLab 标题 (https://a.test/x)')
+  it('should keep only the bare url in place of a titled link', () => {
+    expect(htmlToLinkText('<p>看 <a target="_blank" rel="noopener noreferrer nofollow" href="https://a.test/x">GitLab 标题</a></p>'))
+      .toBe('看 https://a.test/x')
   })
 
   it('should keep a bare url bare', () => {
     expect(htmlToLinkText('<p><a href="https://a.test/x">https://a.test/x</a></p>')).toBe('https://a.test/x')
   })
 
-  it('should fall back to the href for an empty link text', () => {
-    expect(htmlToLinkText('<p><a href="https://a.test/x"></a></p>')).toBe('https://a.test/x')
+  it('should fall back to the link text when the href is empty', () => {
+    expect(htmlToLinkText('<p><a href="">占位</a></p>')).toBe('占位')
   })
 
   it('should keep plain text untouched', () => {
@@ -159,9 +159,9 @@ describe('htmlToLinkText', () => {
     expect(htmlToLinkText('')).toBe('')
   })
 
-  it('should escape nothing but keep other blocks', () => {
+  it('should join blocks and drop every title', () => {
     expect(htmlToLinkText('<p>看 <a href="https://a.test/1">一</a></p><p>看 <a href="https://a.test/2">二</a></p>'))
-      .toBe('看 一 (https://a.test/1)\n看 二 (https://a.test/2)')
+      .toBe('看 https://a.test/1\n看 https://a.test/2')
   })
 })
 

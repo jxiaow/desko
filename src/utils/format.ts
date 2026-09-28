@@ -41,14 +41,13 @@ export function htmlToText(html: string): string {
   return containerToText(parseHtmlFragment(html))
 }
 
-/** 复制用纯文本：链接要带上地址，写成「文字 (地址)」；文字与地址相同（或无文字）时只留地址 */
+/** 复制用纯文本轨：链接只留裸地址，标题走 text/html 那一轨；没有地址才退回链接文字 */
 export function htmlToLinkText(html: string): string {
   if (!html) return ''
   const div = parseHtmlFragment(html)
   div.querySelectorAll('a[href]').forEach((a) => {
     const href = a.getAttribute('href') || ''
-    const label = (a.textContent || '').trim()
-    a.replaceWith(label && label !== href ? `${label} (${href})` : href)
+    if (href) a.replaceWith(href)
   })
   return containerToText(div)
 }
