@@ -254,20 +254,20 @@
   --active: #33302b;
   --overlay: rgba(0, 0, 0, 0.62);
 
-  --text: #ecebe6;
-  --text-secondary: #b6b2a8;
-  --text-muted: #98948a;
-  --text-faint: #6e6a61;
+  --text: #e9e8e5;
+  --text-secondary: #b5b4b0;
+  --text-muted: #9d9c97;
+  --text-faint: #7c7b76;
 
   --border: #33302b;
   --border-strong: #47433c;
   --border-subtle: #262420;
   --border-hover: #47433c;
 
-  --text-url: #cfc9ba;
+  --text-url: #c8c7c1;
   --badge-cat-bg: #262420;
   --badge-cat-border: #35322c;
-  --badge-cat-text: #b6b2a8;
+  --badge-cat-text: #b5b4b0;
   --badge-ver-bg: rgba(125, 159, 198, 0.16);
   --badge-ver-text: #a8c3e0;
 
