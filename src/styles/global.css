@@ -1376,6 +1376,8 @@ body {
   font-size: 11.5px;
   line-height: 1.5;
   white-space: pre-wrap;
+  /* 地址这类无空格长串不会在 max-width 处折行，会横向溢出弹窗 */
+  overflow-wrap: anywhere;
   pointer-events: none;
   opacity: 0;
   transform: translateY(2px);

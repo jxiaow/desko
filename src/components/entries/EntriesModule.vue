@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Entry, Tab } from '../../types'
 import { splitUrlDisplay } from '../../utils/format'
+import { joinEntryUrl } from '../../utils/urlPath'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import EntryActionMenu from './EntryActionMenu.vue'
@@ -178,9 +179,7 @@ const onListKeydown = (event: KeyboardEvent) => {
 }
 
 const openPath = (entry: Entry, path: string) => {
-  emit('openUrl', entry.url
-    ? entry.url.replace(/\/$/, '') + (path.startsWith('/') ? path : '/' + path)
-    : path)
+  emit('openUrl', joinEntryUrl(entry.url, path))
 }
 
 onMounted(() => { window.addEventListener('keydown', onGlobalKey) })

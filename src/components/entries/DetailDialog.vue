@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { Entry } from '../../types'
 import { avatarClass } from '../../utils/avatar'
 import { formatAbsTime } from '../../utils/format'
+import { joinEntryUrl } from '../../utils/urlPath'
 import AppIcon from '../shared/AppIcon.vue'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 
@@ -29,10 +30,7 @@ const hasCredential = computed(() => !!(props.entry.username || cachedPassword.v
 const subtitle = computed(() =>
   `${props.entry.category || '未分类'} · ${formatAbsTime(props.entry.created_at)}添加`)
 
-const pathHref = (path: string) => {
-  const url = props.entry.url
-  return url ? url.replace(/\/$/, '') + (path.startsWith('/') ? path : '/' + path) : path
-}
+const pathHref = (path: string) => joinEntryUrl(props.entry.url, path)
 
 useEscapeClose(() => emit('close'))
 </script>

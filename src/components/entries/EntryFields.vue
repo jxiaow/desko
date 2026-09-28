@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { entriesApi } from '../../services/api/entries'
 import { urlPathsApi } from '../../services/api/urlPaths'
+import { normalizeSubPath } from '../../utils/urlPath'
 import type { Entry, CreateEntryInput, UpdateEntryInput } from '../../types'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
@@ -10,8 +11,11 @@ interface LocalPath {
   id: string
   path: string
   label: string
+  notes: string
   isNew: boolean
   isDeleted: boolean
+  /** 库里存的是旧格式（整条地址），保存时改写回库 */
+  dirty: boolean
 }
 
 const props = defineProps<{
@@ -132,13 +136,18 @@ watch(() => props.entry, async (entry) => {
     }
     try {
       const existingPaths = await urlPathsApi.listUrlPaths(entry.id)
-      localPaths.value = existingPaths.map(p => ({
-        id: p.id,
-        path: p.path,
-        label: p.label || '',
-        isNew: false,
-        isDeleted: false,
-      }))
+      localPaths.value = existingPaths.map(p => {
+        const normalized = normalizeSubPath(p.path)
+        return {
+          id: p.id,
+          path: normalized ?? p.path,
+          label: p.label || '',
+          notes: p.notes || '',
+          isNew: false,
+          isDeleted: false,
+          dirty: !!normalized && normalized !== p.path,
+        }
+      })
     } catch {
       localPaths.value = []
     }
@@ -167,13 +176,20 @@ const addPath = () => {
     addPathRef.value?.focus()
     return
   }
-  const path = raw.startsWith('/') ? raw : '/' + raw
+  const path = normalizeSubPath(raw)
+  if (!path) {
+    toastStore.showToast('只需填主机名之后的路径，例如 /builds/linux', 'error')
+    addPathRef.value?.focus()
+    return
+  }
   localPaths.value.push({
     id: generateTempId(),
     path,
     label: draft.value.label.trim(),
+    notes: '',
     isNew: true,
     isDeleted: false,
+    dirty: false,
   })
   draft.value = { label: '', path: '' }
   nextTick(() => {
@@ -242,6 +258,9 @@ const save = async () => {
 
     for (const p of localPaths.value.filter(p => p.isDeleted && !p.isNew)) {
       await urlPathsApi.deleteUrlPath(p.id)
+    }
+    for (const p of localPaths.value.filter(p => p.dirty && !p.isDeleted)) {
+      await urlPathsApi.updateUrlPath(p.id, { path: p.path, label: p.label || undefined, notes: p.notes || undefined })
     }
     for (const p of localPaths.value.filter(p => p.isNew && !p.isDeleted && p.path)) {
       await urlPathsApi.createUrlPath({ entry_id: entryId, path: p.path, label: p.label || undefined })
