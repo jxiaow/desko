@@ -108,11 +108,11 @@ onUnmounted(() => {
       </button>
       <button  class="titlebar-btn" @click="toggleMaximize" :title="isMaximized ? '还原' : '最大化'">
         <svg v-if="!isMaximized" width="12" height="12" viewBox="0 0 12 12">
-          <rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/>
+          <rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
         <svg v-else width="12" height="12" viewBox="0 0 12 12">
-          <rect x="3" y="0.5" width="8.5" height="8.5" fill="none" stroke="currentColor" stroke-width="1"/>
-          <rect x="0.5" y="3" width="8.5" height="8.5" fill="none" stroke="currentColor" stroke-width="1"/>
+          <path d="M4.5 1.5H9.5a1.5 1.5 0 0 1 1.5 1.5V6.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+          <rect x="1.5" y="4" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
       </button>
       <button  class="titlebar-btn titlebar-btn-close" @click="close" title="关闭">
@@ -221,7 +221,7 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
 }
 
-/* 顶栏底色本身就比 --hover 更暗（浅色主题 chrome≈#f5f4f1、--hover=#f7f6f2），
+/* 顶栏底色本身就比 --hover 更暗（浅色主题 chrome≈#f7f6f4、--hover=#faf9f7），
    用 --hover 等于没有反馈；按文字色反推半透填充，深浅两套自适应 */
 .titlebar-btn:hover {
   background: color-mix(in srgb, var(--text) 9%, transparent);

@@ -495,19 +495,18 @@ onUnmounted(() => {
 .tab-pop-list .pop-item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .tab-pop-empty { padding: var(--space-2) 8px; font-size: var(--text-sm); color: var(--text-faint); text-align: center; }
 
-/* 单列行卡列表：行间 10px，每行是一张独立卡片，hover 才浮起；首行与吸顶栏拉开一点距离 */
-.entry-list { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-2); }
+/* 单列行卡列表：行间 16px，每行是一张独立卡片，hover 才描边显色；首行与吸顶栏拉开一点距离 */
+.entry-list { display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-2); }
 
 .entry-card {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  height: 64px;
+  height: 56px;
   padding: 0 var(--space-4);
   background: var(--bg-surface);
-  /* 发丝线退役：灰底浮白卡靠 --shadow-card 分层，
-     border 留透明位给 focus/selected 的描边通路 */
-  border: 1px solid transparent;
+  /* 轻量化轮：发丝描边重新上岗做默认分层，hover 描边显色 + 背景微沉 */
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   cursor: pointer;
@@ -516,7 +515,7 @@ onUnmounted(() => {
 }
 .entry-card:hover {
   border-color: var(--border-card-hover);
-  box-shadow: var(--shadow-card-hover);
+  background: var(--bg-surface-hover);
 }
 .entry-card:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
 /* 选中态：浸润底吃掉整卡，1px 实环贴在边框外沿把"选中"包成一圈，
@@ -588,8 +587,8 @@ onUnmounted(() => {
 /* 名字行：名 + 凭证锁 + 分类胶囊，靠左排；胶囊定宽不缩，长名字自己截 */
 .ec-name-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .ec-name {
-  font-size: var(--text-md);
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: 500;
   color: var(--text-primary);
   flex: 0 1 auto;
   min-width: 0;
@@ -638,13 +637,13 @@ onUnmounted(() => {
 .ec-cat {
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  font-size: var(--text-xs);
+  height: 20px;
+  font-size: 11px;
   font-weight: 500;
-  color: var(--badge-cat-text);
+  color: var(--text-muted);
   background: var(--bg-tag-default);
   border: 1px solid var(--badge-cat-border);
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: var(--radius-tag);
   flex-shrink: 0;
   white-space: nowrap;

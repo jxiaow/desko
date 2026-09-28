@@ -448,17 +448,17 @@ onBeforeUnmount(() => {
    本页没有分类标签，动作钮顶到右缘 */
 .page-bar .btn-primary { margin-left: auto; }
 
-/* 与收藏页同款单列行卡流：行间 10px，灰底浮白卡靠阴影分层 */
-.shortcut-list { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-2); }
+/* 与收藏页同款单列行卡流：行间 16px，发丝描边分层 */
+.shortcut-list { display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-2); }
 
 .shortcut-row {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  height: 64px;
+  height: 56px;
   padding: 0 var(--space-4);
   background: var(--bg-surface);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   cursor: pointer;
@@ -467,7 +467,7 @@ onBeforeUnmount(() => {
 }
 .shortcut-row:hover {
   border-color: var(--border-card-hover);
-  box-shadow: var(--shadow-card-hover);
+  background: var(--bg-surface-hover);
 }
 .shortcut-row:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
 
@@ -496,7 +496,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--ftc) 10%, var(--panel-bg));
   border-color: color-mix(in srgb, var(--ftc) 25%, var(--panel-bg));
 }
-.row-name { font-size: var(--text-md); font-weight: 600; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-name { font-size: var(--text-base); font-weight: 500; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 路径进 meta 行：等宽小字，与收藏页 URL 同档 */
 .cell-path {
@@ -522,13 +522,13 @@ onBeforeUnmount(() => {
 .cell-type {
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  font-size: var(--text-xs);
+  height: 20px;
+  font-size: 11px;
   font-weight: 500;
-  color: var(--badge-cat-text);
+  color: var(--text-muted);
   background: var(--badge-cat-bg);
   border: 1px solid var(--badge-cat-border);
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: var(--radius-tag);
   flex-shrink: 0;
   white-space: nowrap;
@@ -551,7 +551,7 @@ onBeforeUnmount(() => {
 .shortcut-row:hover .row-acts, .shortcut-row:focus-within .row-acts { opacity: 1; }
 
 /* 骨架行形/方块/呼吸走 global.css，此处只留宽度分配 */
-.loading-list { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
+.loading-list { display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-2); }
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w24 { width: 24%; margin-left: auto; }
 

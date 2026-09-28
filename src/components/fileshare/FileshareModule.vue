@@ -131,10 +131,10 @@ onMounted(async () => {
         </button>
       </div>
 
-      <!-- 配置摘要：点击直达设置弹窗的服务设置 -->
+      <!-- 配置摘要：点击直达设置弹窗的服务设置；整句中文走 UI 字体，不套 mono -->
       <button class="cfg-summary" type="button" title="前往设置修改" @click="requestOpenSettingsTab('fileshare')">
         <AppIcon name="edit" :size="12" />
-        <span class="mono">{{ summary }}</span>
+        <span>{{ summary }}</span>
       </button>
 
       <!-- 分组一：访问地址 -->
@@ -178,7 +178,7 @@ onMounted(async () => {
           未设访问口令，同网段任何人都能浏览、上传这些目录。
           <button class="link-btn" type="button" @click="requestOpenSettingsTab('fileshare')">去设置</button>
         </p>
-        <p v-else-if="fsPortDrifted" class="group-note chip-warn mono">
+        <p v-else-if="fsPortDrifted" class="group-note chip-warn">
           端口 {{ status!.boundPort }} · 配置 {{ status!.configuredPort }} 被占
         </p>
       </section>
@@ -276,10 +276,10 @@ onMounted(async () => {
 .cfg-summary:hover { color: var(--text-secondary); background: var(--fill); }
 .cfg-summary svg { flex-shrink: 0; }
 
-/* ── 分组卡：一层框，行用细线分隔，不做卡中卡；外框吃行卡同款阴影分层 ── */
+/* ── 分组卡：一层框，行用细线分隔，不做卡中卡；外框与行卡同套发丝分层 ── */
 .clean-group-card {
   background: var(--panel-bg);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   margin-bottom: var(--space-4);

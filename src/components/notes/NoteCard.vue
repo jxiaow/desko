@@ -337,17 +337,17 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo {
   position: relative;
   background: var(--bg-surface);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   /* 左侧常留勾选位：批量态显形时文字不位移（勾选即进，无布局跳动） */
   padding: var(--space-4) var(--space-4) var(--space-4) var(--space-8);
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition), transform var(--transition);
 }
-/* hover 与收藏/文件行卡同一配方：描边显色 + 阴影抬升（大方化轮，浸润底退役） */
+/* hover 与收藏/文件行卡同一配方：描边显色 + 背景微沉（轻量化轮，抬影退役） */
 .memo:hover {
   border-color: var(--border-card-hover);
-  box-shadow: var(--shadow-card-hover);
+  background: var(--bg-surface-hover);
 }
 .memo.pinned { border-color: var(--accent-light); }
 .memo.editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }

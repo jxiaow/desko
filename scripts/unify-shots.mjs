@@ -32,6 +32,7 @@ const SEED = {
     { title: '会议纪要', content_html: '<h2>周会纪要</h2><p>尺度层不动，<strong>主题层只管颜色</strong>。</p>', category: '工作', pinned: true },
     { title: '代码片段', content_html: '<p>头像色由分类哈希决定：</p><pre><code>const hash = (s) =&gt; 31 * h + s.charCodeAt(i)</code></pre>', category: '开发' },
     { title: '灵感', content_html: '<p>暗色下靠高光描边分层，不靠阴影。</p><blockquote>近黑底要留一档高光边。</blockquote>', category: '设计' },
+    { title: '链接取样', content_html: '<p>正文链接走品牌色：<a href="https://github.com/qoder">Qoder 仓库</a>，长链断行：<a href="https://example.com/a/very/long/path/that/should/wrap/without/breaking/the/card/20260928">example.com/a/very/long/path/that/should/wrap</a>。</p>', category: '工作' },
   ],
   fileShortcuts: [
     { name: '项目资料', path: 'C:/e2e/project', shortcut_type: 'folder' },

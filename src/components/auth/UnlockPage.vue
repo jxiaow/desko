@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BrandLogo from '../shared/BrandLogo.vue'
+import AppIcon from '../shared/AppIcon.vue'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 
@@ -9,6 +10,7 @@ const { unlock } = useAuthStore()
 const unlockPwd = ref('')
 const unlockErr = ref('')
 const stackEl = ref<HTMLElement | null>(null)
+const revealed = ref(false)
 
 const onUnlockSuccess = () => {
   emit('unlockComplete')
@@ -89,13 +91,22 @@ onUnmounted(() => {
             </svg>
             <input
               class="unlock-input"
-              type="password"
+              :type="revealed ? 'text' : 'password'"
               v-model="unlockPwd"
               placeholder="输入主密码解锁"
               @input="unlockErr = ''"
               @keyup.enter="doUnlock"
               autofocus
             />
+            <button
+              class="reveal-btn"
+              type="button"
+              :title="revealed ? '隐藏密码' : '显示密码'"
+              :aria-label="revealed ? '隐藏密码' : '显示密码'"
+              @click="revealed = !revealed"
+            >
+              <AppIcon :name="revealed ? 'eyeOff' : 'eye'" :size="15" />
+            </button>
             <button class="unlock-btn" type="submit" title="解锁" aria-label="解锁">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M5 12h14"/>
@@ -212,7 +223,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  padding: 0 42px 0 36px;
+  padding: 0 62px 0 36px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   font-size: 13px;
@@ -224,6 +235,35 @@ onUnmounted(() => {
 }
 
 .unlock-input::placeholder { color: var(--text-muted); }
+
+/* WebView2 注入的原生显隐/清除按钮：暗黑下几乎不可见，藏掉换自绘 */
+.unlock-input::-ms-reveal,
+.unlock-input::-ms-clear {
+  display: none;
+}
+
+.reveal-btn {
+  position: absolute;
+  right: 33px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition), background-color var(--transition);
+}
+
+.reveal-btn:hover {
+  color: var(--text);
+  background: var(--hover);
+}
 
 /* 激活态：边框恒 1px 仅换色，外叠 8% 弥散光晕，禁止实心 ring 加粗 */
 .unlock-input:focus {

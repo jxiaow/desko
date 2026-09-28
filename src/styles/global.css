@@ -20,8 +20,8 @@
   --radius-sm: 6px;
   --radius: 10px;
   --radius-md: 12px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
   --radius-pill: 99px;
 
   /* 字号阶梯：所有 UI 文本走这五档，不再用 10.5/11.5/12.5/13.5/14.5/17.5 这种半像素。
@@ -111,13 +111,14 @@
   --text-brand: #31496a;
 
   /* 面：暖纸五档。相邻档差一档色温，不做条纹 */
-  --bg: #f5f4f1;
+  /* 轻量化轮：纸色底族提亮减黄（暖米灰→近中性），层间色阶拉开 */
+  --bg: #f7f6f4;
   --panel-bg: #ffffff;
-  --chrome-bg: rgba(245, 244, 241, 0.78);
-  --sunken: #efede8;
-  --fill: #e7e5df;
-  --hover: #f7f6f2;
-  --active: #eceae5;
+  --chrome-bg: rgba(247, 246, 244, 0.78);
+  --sunken: #f0efec;
+  --fill: #e9e8e4;
+  --hover: #faf9f7;
+  --active: #eeede9;
   --overlay: rgba(29, 28, 26, 0.42);
 
   /* 文字：四级暖中性，深字浅底一眼可读 */
@@ -127,24 +128,25 @@
   --text-faint: #98968c;
 
   /* 描边：层级靠边框，不靠色块 */
-  --border: #e7e5df;
-  --border-strong: #d4d2ca;
-  --border-subtle: #efede8;
-  --border-hover: #d4d2ca;
+  --border: #e9e8e4;
+  --border-strong: #d8d6d1;
+  --border-subtle: #f0efec;
+  --border-hover: #d8d6d1;
 
   /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
   --text-url: #4f4e48;
-  --badge-cat-bg: #f1efe9;
-  --badge-cat-border: #e7e5df;
+  --badge-cat-bg: #f2f1ed;
+  --badge-cat-border: #e9e8e4;
   --badge-cat-text: #4f4e48;
   --badge-ver-bg: #e8eef4;
   --badge-ver-text: #31496a;
 
   /* 投影带暖褐，纯灰投影在米底上会显脏 */
   --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
-  --shadow-card: 0 1px 2px rgba(29, 28, 26, 0.04), 0 8px 20px -8px rgba(29, 28, 26, 0.10);
+  /* 轻量化轮：行卡不再靠宽大软影浮起，阴影只留一丝贴地感，分层交还发丝描边 */
+  --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
-  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d4d2ca;
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d8d6d1;
   --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
   --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -164,8 +166,8 @@
   --warning-soft: #f6efdf;
 
   /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
-  --sidebar-bg: #eceae5;
-  --sidebar-hover: #e3e0d9;
+  --sidebar-bg: #eeede9;
+  --sidebar-hover: #e6e4df;
 
   /* 品牌标渐变 */
   --brand-g1: #6c88aa;
@@ -174,14 +176,14 @@
   --brand-knob: #ffffff;
 
   /* 锁屏 */
-  --lock-wash-a: #f7f6f2;
-  --lock-wash-b: #eceae5;
+  --lock-wash-a: #faf9f7;
+  --lock-wash-b: #eeede9;
   --lock-orb-1: rgba(61, 90, 128, 0.07);
   --lock-orb-2: rgba(61, 90, 128, 0.045);
 
   /* 毛玻璃底栏 */
   --frost-bg: rgba(255, 255, 255, 0.86);
-  --frost-border: #e7e5df;
+  --frost-border: #e9e8e4;
 
   /* 深色面：气泡与 toast */
   --tip-bg: #26241f;
@@ -271,7 +273,8 @@
 
   /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --shadow-card: 0 6px 18px -8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 0 1px #3a372f;
+  /* 轻量化轮：墨色行卡去掉 18px 大投影与外圈环，只留顶部高光一丝 */
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #47433c;
   --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
@@ -471,9 +474,8 @@
   --border-divider: var(--border-subtle);
   --text-title: var(--text);
   --text-body: var(--text-secondary);
-  /* --shadow-card 已升为主题槽位（大方化轮）：浅色给宽大软影，
-     深色给小投影+高光环，各套主题在主题层各自填 */
-  --shadow-card-hover: var(--shadow);
+  /* --shadow-card 为主题槽位（轻量化轮起只给贴地一丝）：行卡分层靠发丝描边，
+     阴影抬升档（--shadow-card-hover）已退役，hover 反馈改背景+描边显色 */
   --shadow-popover: var(--shadow-pop);
   --radius-card: var(--radius-lg);
   --radius-badge: var(--radius);
@@ -766,14 +768,14 @@ body {
 .card-avatar.c4 { background: var(--cat-5); }
 .card-avatar.c5 { background: var(--cat-6); }
 
-/* 搜索框：与行卡同一套浮卡语言（白底 + 无边框 + 阴影），
-   圆角落 10px 档 = 行卡 14px 下一档，跟 34px 控件尺寸成比例 */
+/* 搜索框：与行卡同一套扁平语言（白底 + 发丝描边，阴影只留贴地一丝），
+   圆角与行卡同档，跟 34px 控件尺寸成比例 */
 .search-box {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   background: var(--bg-surface);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
   padding: 0 var(--space-3);
@@ -901,10 +903,11 @@ body {
 .setting-item.clickable:hover { background: var(--hover); }
 
 .setting-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.setting-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.setting-name { font-size: var(--text-base); font-weight: 500; color: var(--text); }
 .setting-desc {
-  font-size: 11px;
-  color: var(--text-muted);
+  /* 轻量化轮：11px 是字号上抬前的残档，深色小字发虚；升 12px + secondary 一档 */
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1025,7 +1028,7 @@ body {
 .tab:active { transform: scale(0.97); }
 .tab.active {
   background: var(--bg-surface);
-  border-color: transparent;
+  border-color: var(--border);
   box-shadow: var(--shadow-card);
   color: var(--text-brand);
   font-weight: 600;
@@ -1181,14 +1184,14 @@ body {
 .page-bar .btn-secondary,
 .page-bar .bar-btn { height: 34px; }
 
-/* 骨架屏：行形与行卡同尺寸（64px 行卡档），呼吸只走在容器上，条块是静的 */
+/* 骨架屏：行形与行卡同尺寸（56px 行卡档），呼吸只走在容器上，条块是静的 */
 .skeleton-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  height: 64px;
+  height: 56px;
   padding: 0 var(--space-4);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   background: var(--bg-surface);
   box-shadow: var(--shadow-card);
@@ -1205,6 +1208,23 @@ body {
 .skeleton-line.w24 { width: 24%; }
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w70 { width: 70%; }
+
+/* 正文链接（小记卡片/全屏/编辑器三处同一语言）：浏览器默认纯蓝与暖纸/暖墨
+   色温相冲，落主题品牌色；下划线先压淡，hover 才实，长 URL 允许任意断行 */
+.memo-body a,
+.fs-view a,
+.ProseMirror a {
+  color: var(--text-brand);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+.memo-body a:hover,
+.fs-view a:hover,
+.ProseMirror a:hover {
+  text-decoration-color: currentColor;
+}
 
 /* ---------- 页眉工具条：每个页面顶部唯一一条 chrome。
      原先只有小记页有这套，收藏页和文件页各写各的，看起来像三个时代的东西。 ---------- */

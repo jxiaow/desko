@@ -10,7 +10,7 @@ import { THEMES, ACCENTS, DEFAULT_APPEARANCE, chooseTheme, chooseAccent, readThe
 import type { ThemeId, AccentId, ThemeInfo } from '../../services/theme'
 import { TERMINALS, readTerminal, saveTerminal } from '../../services/terminal'
 import type { TerminalId } from '../../services/terminal'
-import { readMfaFeature, saveMfaFeature } from '../../services/mfaFeature'
+import { mfaEnabled, readMfaFeature, saveMfaFeature } from '../../services/mfaFeature'
 import { fileshareEnabled, readFileshareFeature, saveFileshareFeature } from '../../services/fileshareFeature'
 import { fsBusy, fsConfig, fsHasPassword, fsRefresh, fsSaveConfig, fsSetPassword } from '../../services/fileshareSettings'
 import { errText } from '../../services/api/backup'
@@ -51,8 +51,8 @@ const lockOnSystemLock = ref(false)
 const theme = ref<ThemeId>(DEFAULT_APPEARANCE.theme)
 const accent = ref<AccentId>(DEFAULT_APPEARANCE.accent)
 const terminal = ref<TerminalId>('auto')
-const mfaOn = ref(false)
-const fileshareOn = ref(false)
+const mfaOn = ref(mfaEnabled.value)
+const fileshareOn = ref(fileshareEnabled.value)
 // 局域网传输的服务设置（页签内），状态走 fileshareSettings 单例与模块页共享
 const fsPortInput = ref(8000)
 const fsLocalOnly = ref(false)
@@ -264,13 +264,6 @@ onMounted(() => { loadSettings() })
             </svg>
             <span>{{ TAB_LABELS.general }}</span>
           </button>
-          <button v-if="fileshareOn" class="nav-tab" :class="{ on: tab === 'fileshare' }" @click="tab = 'fileshare'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            </svg>
-            <span>{{ TAB_LABELS.fileshare }}</span>
-          </button>
           <button class="nav-tab" :class="{ on: tab === 'appearance' }" @click="tab = 'appearance'">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="13.5" cy="6.5" r=".5"/>
@@ -280,6 +273,13 @@ onMounted(() => { loadSettings() })
               <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.436-.657-.436-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
             </svg>
             <span>{{ TAB_LABELS.appearance }}</span>
+          </button>
+          <button v-if="fileshareOn" class="nav-tab" :class="{ on: tab === 'fileshare' }" @click="tab = 'fileshare'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            <span>{{ TAB_LABELS.fileshare }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'backup' }" @click="tab = 'backup'">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -616,7 +616,7 @@ onMounted(() => { loadSettings() })
   border-radius: var(--radius-sm);
   background: transparent;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--sidebar-text);
   text-align: left;
   cursor: pointer;

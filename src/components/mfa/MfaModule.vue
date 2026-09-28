@@ -372,7 +372,7 @@ const onPaste = async (e: ClipboardEvent) => {
 .mfa-card {
   position: relative;
   overflow: hidden;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   background: var(--bg-surface);
   box-shadow: var(--shadow-card);
@@ -380,10 +380,10 @@ const onPaste = async (e: ClipboardEvent) => {
   cursor: pointer;
   transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
 }
-/* hover 与收藏/文件行卡、小记便签同一配方 */
+/* hover 与收藏/文件行卡、小记便签同一配方：描边显色 + 背景微沉（轻量化轮，抬影退役） */
 .mfa-card:hover {
   border-color: var(--border-card-hover);
-  box-shadow: var(--shadow-card-hover);
+  background: var(--bg-surface-hover);
 }
 .mfa-card:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
 
@@ -412,8 +412,8 @@ const onPaste = async (e: ClipboardEvent) => {
 .card-issuer {
   flex: 1;
   min-width: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
