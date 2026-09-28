@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<!-- 收藏页排版三变体实尺原型（1040 宽内容区 ≈950px，64px 行卡基线不动）
+     A 行一净化：名行只留名+锁，分类降级为点+纯字；meta 行单字号单色阶
+     B 右缘栏线：分类固定 88px 右对齐纯字列，跨行拉出右缘列线
+     C 双列网格：一行两张卡（≈468px），内容基本吃满不再截断 -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  :root {
+    --bg: #f5f4f1; --panel: #ffffff; --text: #1d1c1a;
+    --brand: #31496a; --muted: #6e6c64; --faint: #98968c;
+    --cat: #5f62b8; --accent: #3d5a80; --soft: #e8eef4;
+    --shadow: 0 1px 2px rgba(29,28,26,.04), 0 8px 20px -8px rgba(29,28,26,.10);
+    --ui: 'HarmonyOS Sans SC','Microsoft YaHei UI','Segoe UI',sans-serif;
+    --mono: Consolas,'JetBrains Mono',monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); font-family: var(--ui); color: var(--text); padding: 20px 44px 40px; }
+  h2 { font-size: 13px; font-weight: 600; color: var(--brand); margin: 26px 0 4px; letter-spacing: .5px; }
+  h2 span { font-weight: 400; color: var(--faint); margin-left: 8px; }
+  .frame { width: 950px; }
+  .list { display: flex; flex-direction: column; gap: 10px; }
+  .card { background: var(--panel); border-radius: 14px; box-shadow: var(--shadow);
+    height: 64px; display: flex; align-items: center; padding: 0 16px; gap: 14px; }
+  .tile { width: 36px; height: 36px; flex: 0 0 auto; border-radius: 10px; border: 1px solid rgba(95,98,184,.25);
+    background: rgba(95,98,184,.08); color: var(--cat); font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; }
+  .txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .r1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lock { width: 18px; height: 14px; border: 1.5px solid var(--cat); border-radius: 3px; position: relative; opacity: .8; flex: 0 0 auto; }
+  .lock::before { content: ''; position: absolute; left: 3px; top: -5px; width: 8px; height: 5px;
+    border: 1.5px solid var(--cat); border-bottom: none; border-radius: 4px 4px 0 0; }
+  .catdot { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--faint); flex: 0 0 auto; }
+  .catdot::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--cat); opacity: .55; }
+  .pill { font-size: 12px; color: var(--muted); background: #efede8; border-radius: 6px; padding: 1px 8px; flex: 0 0 auto; }
+  .r2 { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); min-width: 0; white-space: nowrap; }
+  .url { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+  .note { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+  .sep { color: #c9c7bf; flex: 0 0 auto; }
+  .acts { flex: 0 0 auto; display: flex; gap: 6px; }
+  .abtn { width: 26px; height: 26px; border-radius: 7px; background: #f1efea; display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 12px; }
+
+  /* B：分类右缘定宽列 */
+  .b .catcol { flex: 0 0 88px; text-align: right; font-size: 12px; color: var(--cat); opacity: .8; }
+
+  /* C：双列 */
+  .c .list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+
+<h2>A · 行一净化<span>名行去胶囊（点+纯字），meta 单字阶一路省略号到底</span></h2>
+<div class="frame a">
+  <div class="list">
+    <div class="card"><div class="tile">GI</div><div class="txt">
+      <div class="r1"><span class="name">GitHub</span><span class="catdot">开发</span></div>
+      <div class="r2"><span class="url">github.com/jxiaow/desko</span><span class="sep">·</span><span class="note">代码仓库</span></div>
+    </div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">GM</div><div class="txt">
+      <div class="r1"><span class="name">Gmail</span><span class="lock"></span><span class="catdot">邮箱</span></div>
+      <div class="r2"><span class="url">mail.google.com/mail/u/0/#inbox</span><span class="sep">·</span><span class="note">工作邮箱，归档规则每周五跑一次</span></div>
+    </div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">设</div><div class="txt">
+      <div class="r1"><span class="name">设计资源库</span><span class="catdot">设计</span></div>
+      <div class="r2"><span class="url">figma.com/files/project/837124567/team-library-2026Q4</span><span class="sep">·</span><span class="note">组件库与图标源文件，每月第一周同步一次</span></div>
+    </div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">路</div><div class="txt">
+      <div class="r1"><span class="name">路由器后台</span><span class="lock"></span><span class="catdot">设备</span></div>
+      <div class="r2"><span class="url">192.168.1.1</span><span class="sep">·</span><span class="note">光猫拨号，改过默认密码</span></div>
+    </div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">钉</div><div class="txt">
+      <div class="r1"><span class="name">钉钉</span><span class="catdot">办公</span></div>
+      <div class="r2"><span class="url">dingtalk.com/download</span><span class="sep">·</span><span class="note">内部沟通</span></div>
+    </div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+  </div>
+</div>
+
+<h2>B · 右缘栏线<span>分类定宽 88px 右对齐纯字列，跨行拉出右缘列线（同页一色，只分浓淡）</span></h2>
+<div class="frame b">
+  <div class="list">
+    <div class="card"><div class="tile">GI</div><div class="txt">
+      <div class="r1"><span class="name">GitHub</span></div>
+      <div class="r2"><span class="url">github.com/jxiaow/desko</span><span class="sep">·</span><span class="note">代码仓库</span></div>
+    </div><div class="catcol">开发</div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">GM</div><div class="txt">
+      <div class="r1"><span class="name">Gmail</span><span class="lock"></span></div>
+      <div class="r2"><span class="url">mail.google.com/mail/u/0/#inbox</span><span class="sep">·</span><span class="note">工作邮箱，归档规则每周五跑一次</span></div>
+    </div><div class="catcol">邮箱</div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">设</div><div class="txt">
+      <div class="r1"><span class="name">设计资源库</span></div>
+      <div class="r2"><span class="url">figma.com/files/project/837124567/…</span><span class="sep">·</span><span class="note">组件库与图标源文件</span></div>
+    </div><div class="catcol">设计</div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">路</div><div class="txt">
+      <div class="r1"><span class="name">路由器后台</span><span class="lock"></span></div>
+      <div class="r2"><span class="url">192.168.1.1</span><span class="sep">·</span><span class="note">光猫拨号，改过默认密码</span></div>
+    </div><div class="catcol">设备</div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">钉</div><div class="txt">
+      <div class="r1"><span class="name">钉钉</span></div>
+      <div class="r2"><span class="url">dingtalk.com/download</span><span class="sep">·</span><span class="note">内部沟通</span></div>
+    </div><div class="catcol">办公</div><div class="acts"><div class="abtn">⧉</div><div class="abtn">↗</div><div class="abtn">⋯</div></div></div>
+  </div>
+</div>
+
+<h2>C · 双列网格<span>一行两张 ≈468px 卡，长 URL 中段截尾保住，密度翻倍</span></h2>
+<div class="frame c">
+  <div class="list">
+    <div class="card"><div class="tile">GI</div><div class="txt">
+      <div class="r1"><span class="name">GitHub</span><span class="catdot">开发</span></div>
+      <div class="r2"><span class="url">github.com/jxiaow/desko</span><span class="sep">·</span><span class="note">代码仓库</span></div>
+    </div><div class="acts"><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">GM</div><div class="txt">
+      <div class="r1"><span class="name">Gmail</span><span class="lock"></span><span class="catdot">邮箱</span></div>
+      <div class="r2"><span class="url">mail.google.com/…/u/0/#inbox</span><span class="sep">·</span><span class="note">工作邮箱</span></div>
+    </div><div class="acts"><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">设</div><div class="txt">
+      <div class="r1"><span class="name">设计资源库</span><span class="catdot">设计</span></div>
+      <div class="r2"><span class="url">figma.com/…/team-library-2026Q4</span><span class="sep">·</span><span class="note">组件库与图标源文件</span></div>
+    </div><div class="acts"><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">路</div><div class="txt">
+      <div class="r1"><span class="name">路由器后台</span><span class="lock"></span><span class="catdot">设备</span></div>
+      <div class="r2"><span class="url">192.168.1.1</span><span class="sep">·</span><span class="note">光猫拨号</span></div>
+    </div><div class="acts"><div class="abtn">⋯</div></div></div>
+    <div class="card"><div class="tile">钉</div><div class="txt">
+      <div class="r1"><span class="name">钉钉</span><span class="catdot">办公</span></div>
+      <div class="r2"><span class="url">dingtalk.com/download</span><span class="sep">·</span><span class="note">内部沟通</span></div>
+    </div><div class="acts"><div class="abtn">⋯</div></div></div>
+  </div>
+</div>
+
+</body>
+</html>
