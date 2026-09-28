@@ -5,6 +5,7 @@ import {
   formatDate,
   stripHtml,
   htmlToText,
+  htmlToLinkText,
   deriveTitleFromHtml,
   headingTitle,
   wordCount,
@@ -132,6 +133,35 @@ describe('htmlToText', () => {
 
   it('should skip blank blocks', () => {
     expect(htmlToText('<p></p><p>内容</p><p>   </p>')).toBe('内容')
+  })
+
+  it('should drop the href', () => {
+    expect(htmlToText('<p><a href="https://a.test/x">标题</a></p>')).toBe('标题')
+  })
+})
+
+describe('htmlToLinkText', () => {
+  it('should append the href after the link text', () => {
+    expect(htmlToLinkText('<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://a.test/x">GitLab 标题</a></p>'))
+      .toBe('GitLab 标题 (https://a.test/x)')
+  })
+
+  it('should keep a bare url bare', () => {
+    expect(htmlToLinkText('<p><a href="https://a.test/x">https://a.test/x</a></p>')).toBe('https://a.test/x')
+  })
+
+  it('should fall back to the href for an empty link text', () => {
+    expect(htmlToLinkText('<p><a href="https://a.test/x"></a></p>')).toBe('https://a.test/x')
+  })
+
+  it('should keep plain text untouched', () => {
+    expect(htmlToLinkText('<p>只有文字</p>')).toBe('只有文字')
+    expect(htmlToLinkText('')).toBe('')
+  })
+
+  it('should escape nothing but keep other blocks', () => {
+    expect(htmlToLinkText('<p>看 <a href="https://a.test/1">一</a></p><p>看 <a href="https://a.test/2">二</a></p>'))
+      .toBe('看 一 (https://a.test/1)\n看 二 (https://a.test/2)')
   })
 })
 

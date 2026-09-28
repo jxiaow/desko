@@ -49,6 +49,26 @@ test.describe('Notes 小记', () => {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('第一条小记：周会纪要与待办')
   })
 
+  test('一键复制带链接的小记：地址跟着走，纯文本和 HTML 都在', async ({ page }) => {
+    await bootUnlocked(page, {
+      notes: [{ title: '链接', content_html: '<p>看 <a href="https://gitlab.test/x">GitLab 标题</a></p>' }],
+    }, '/notes')
+    const m = memo(page, 'GitLab 标题')
+    await m.hover()
+    await tipButton(m, '复制正文').click()
+    await expectToast(page, '小记已复制')
+
+    expect(await page.evaluate(() => navigator.clipboard.readText()))
+      .toBe('看 GitLab 标题 (https://gitlab.test/x)')
+
+    const html = await page.evaluate(async () => {
+      const item = (await navigator.clipboard.read())[0]
+      const blob = await item.getType('text/html')
+      return blob.text()
+    })
+    expect(html).toContain('href="https://gitlab.test/x"')
+  })
+
   test('composer 发布新小记', async ({ page }) => {
     await gotoNotes(page)
     const publish = page.locator('.composer button.btn-primary')

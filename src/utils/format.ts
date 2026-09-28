@@ -38,8 +38,28 @@ export function extractTags(content: string): string[] {
 /** 正文转纯文本：块级元素之间补换行，不做长度截断 */
 export function htmlToText(html: string): string {
   if (!html) return ''
+  return containerToText(parseHtmlFragment(html))
+}
+
+/** 复制用纯文本：链接要带上地址，写成「文字 (地址)」；文字与地址相同（或无文字）时只留地址 */
+export function htmlToLinkText(html: string): string {
+  if (!html) return ''
+  const div = parseHtmlFragment(html)
+  div.querySelectorAll('a[href]').forEach((a) => {
+    const href = a.getAttribute('href') || ''
+    const label = (a.textContent || '').trim()
+    a.replaceWith(label && label !== href ? `${label} (${href})` : href)
+  })
+  return containerToText(div)
+}
+
+function parseHtmlFragment(html: string): HTMLDivElement {
   const div = document.createElement('div')
   div.innerHTML = html
+  return div
+}
+
+function containerToText(div: HTMLDivElement): string {
   const blocks = Array.from(div.children)
   if (blocks.length === 0) return (div.textContent || '').trim()
   return blocks

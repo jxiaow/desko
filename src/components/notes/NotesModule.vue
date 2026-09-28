@@ -10,7 +10,7 @@ import NoteFullscreen from './NoteFullscreen.vue'
 import NoteLockDialog from './NoteLockDialog.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
-import { htmlToText } from '../../utils/format'
+import { htmlToLinkText, htmlToText } from '../../utils/format'
 import { attachmentSrc, collectAttachmentNames } from '../../services/attachmentSrc'
 import type { IconName } from '../../utils/icons'
 import type { Note } from '../../types'
@@ -32,7 +32,7 @@ const RAIL_FALLBACK_ROOM = 900
 const notesStore = useNotesStore()
 
 const toastStore = useToastStore()
-const { copyToClipboard } = useClipboard()
+const { copyRichToClipboard } = useClipboard()
 const {
   notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
   noteRailCollapsed,
@@ -258,7 +258,8 @@ const addImageToDraft = async () => {
   else composerRef.value?.insertImage(src)
 }
 
-const copyNote = (note: Note) => copyToClipboard(htmlToText(note.content_html), '小记')
+const copyNote = (note: Note) =>
+  copyRichToClipboard(note.content_html, htmlToLinkText(note.content_html), '小记')
 
 const onKeyDown = (e: KeyboardEvent) => {
   if (e.defaultPrevented) return

@@ -19,6 +19,21 @@ export function useClipboard() {
     }
   }
 
+  /** 富文本复制：先连 HTML 一起写，粘到富文本目标时链接和格式能保住；写不进就退回纯文本 */
+  const copyRichToClipboard = async (html: string, text: string, label: string) => {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+      })])
+      toastStore.showToast(`${label}已复制`)
+      return
+    } catch {
+      // 环境不支持 ClipboardItem（无焦点/无用户激活）时走 writeText
+    }
+    await copyToClipboard(text, label)
+  }
+
   const copyPassword = async (id: string) => {
     try {
       const cached = passwordStore.passwordCache[id]
@@ -47,6 +62,7 @@ export function useClipboard() {
 
   return {
     copyToClipboard,
+    copyRichToClipboard,
     copyPassword,
     clearClipboardTimer,
   }

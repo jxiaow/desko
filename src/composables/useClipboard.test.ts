@@ -7,6 +7,7 @@ import { usePasswordStore } from '../stores/password'
 // Mock navigator.clipboard
 const mockClipboard = {
   writeText: vi.fn(),
+  write: vi.fn(),
 }
 Object.assign(navigator, { clipboard: mockClipboard })
 
@@ -62,6 +63,39 @@ describe('useClipboard', () => {
       await copyToClipboard('test text', '用户名')
 
       expect(mockToastStore.showToast).toHaveBeenCalledWith('复制失败', 'error')
+    })
+  })
+
+  describe('copyRichToClipboard', () => {
+    const html = '<p><a href="https://a.test/x">标题</a></p>'
+    const text = '标题 (https://a.test/x)'
+
+    it('should write html together with plain text', async () => {
+      mockClipboard.write.mockResolvedValue(undefined)
+      ;(globalThis as any).ClipboardItem = class {
+        items: Record<string, Blob>
+        constructor(items: Record<string, Blob>) { this.items = items }
+      }
+
+      const { copyRichToClipboard } = useClipboard()
+      await copyRichToClipboard(html, text, '小记')
+
+      expect(mockClipboard.write).toHaveBeenCalledTimes(1)
+      expect(mockClipboard.writeText).not.toHaveBeenCalled()
+      expect(mockToastStore.showToast).toHaveBeenCalledWith('小记已复制')
+
+      delete (globalThis as any).ClipboardItem
+    })
+
+    it('should fall back to plain text without ClipboardItem', async () => {
+      mockClipboard.write.mockRejectedValue(new Error('unsupported'))
+      mockClipboard.writeText.mockResolvedValue(undefined)
+
+      const { copyRichToClipboard } = useClipboard()
+      await copyRichToClipboard(html, text, '小记')
+
+      expect(mockClipboard.writeText).toHaveBeenCalledWith(text)
+      expect(mockToastStore.showToast).toHaveBeenCalledWith('小记已复制')
     })
   })
 
