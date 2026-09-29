@@ -414,7 +414,7 @@ const onPaste = async (e: ClipboardEvent) => {
   min-width: 0;
   font-size: var(--text-base);
   font-weight: 500;
-  color: var(--text);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

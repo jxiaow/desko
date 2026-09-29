@@ -47,6 +47,10 @@ design/status-shots/
 design/note-lock-shots/
 design/unify-shots/
 design/lock-shots/
+design/nav-shots/
+design/nav-mock/
+design/white-mock/
+design/distinctive/
 design/proto-*.png
 design/r*-*.png
 shots/
@@ -62,3 +66,13 @@ design/rail-check/
 design/dialog-check/
 design/bar-check/
 design/icon-board/
+design/icon-fillet/
+design/fs-density/
+design/round-mock/
+design/round-zoom/
+design/round-vet/
+design/tabler-mock/
+design/icon-style-mock/
+design/star-shot/
+design/name-tone/
+design/name-size/

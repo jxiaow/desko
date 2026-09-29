@@ -718,6 +718,10 @@ class MockBackend {
       return this.findEntry(id).password
     },
 
+    // ===== favicons.rs =====
+    // e2e 不碰网络：恒返回「没抓到」，行首落字母块
+    favicon_get: () => null,
+
     create_test_data: () => {
       this.requireUnlocked()
       const samples: Array<[string, string, string, string, string]> = [

@@ -291,7 +291,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div v-if="loading" class="loading-list">
+    <div v-if="loading" class="loading-list rowlist">
       <div class="skeleton-row" v-for="n in 6" :key="n">
         <span class="skeleton-block"></span>
         <span class="skeleton-line w40"></span>
@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-else-if="filteredShortcuts.length > 0" class="shortcut-list">
+    <div v-else-if="filteredShortcuts.length > 0" class="shortcut-list rowlist">
       <div
         v-for="shortcut in filteredShortcuts"
         :key="shortcut.id"
@@ -374,7 +374,7 @@ onBeforeUnmount(() => {
               <h3>{{ isEditing() ? '编辑快捷方式' : '添加快捷方式' }}</h3>
             </div>
             <button  class="dialog-close" @click="cancelAdd" title="关闭">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <AppIcon name="x" :size="18" />
             </button>
           </div>
           <div class="dialog-body">
@@ -384,13 +384,13 @@ onBeforeUnmount(() => {
                 <input v-model="addForm.path" placeholder="粘贴文件/文件夹路径，或点击右侧浏览" @blur="onPathInput" />
                 <span class="path-acts">
                   <button class="path-act" type="button" title="从剪贴板粘贴" @click="pastePath">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                    <AppIcon name="clipboard" :size="14" />
                   </button>
                   <button  class="path-act" @click="pickFile" title="选择文件">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <AppIcon name="file" :size="14" />
                   </button>
                   <button  class="path-act" @click="pickFolder" title="选择文件夹">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+                    <AppIcon name="folderOpen" :size="14" />
                   </button>
                 </span>
               </div>
@@ -419,11 +419,11 @@ onBeforeUnmount(() => {
     <!-- Context Menu -->
     <div v-if="contextMenu.show" class="popover" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
       <div class="pop-item" @click="editFromMenu">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <AppIcon name="edit" :size="14" />
         编辑
       </div>
       <div class="pop-item" @click="runOnMenu(openContainingFolder)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        <AppIcon name="folderOpen" :size="14" />
         打开所在目录
       </div>
       <div class="pop-item" @click="runOnMenu(openInTerminal)">
@@ -431,11 +431,11 @@ onBeforeUnmount(() => {
         在终端中打开
       </div>
       <div class="pop-item" @click="runOnMenu(copyPathToClipboard)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <AppIcon name="copy" :size="14" />
         复制地址
       </div>
       <div class="pop-item danger" @click="deleteFromMenu">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <AppIcon name="trash" :size="14" />
         删除
       </div>
     </div>
@@ -448,43 +448,36 @@ onBeforeUnmount(() => {
    本页没有分类标签，动作钮顶到右缘 */
 .page-bar .btn-primary { margin-left: auto; }
 
-/* 与收藏页同款单列行卡流：行间 16px，发丝描边分层 */
-.shortcut-list { display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-2); }
-
+/* 拆面轮：与收藏页同款，行直接落画布（global.css .rowlist 只剩发丝分行） */
 .shortcut-row {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  height: 56px;
+  gap: 14px;
+  height: 60px;
   padding: 0 var(--space-4);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
   cursor: pointer;
   position: relative;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
-.shortcut-row:hover {
-  border-color: var(--border-card-hover);
-  background: var(--bg-surface-hover);
-}
-.shortcut-row:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
+.shortcut-row:hover { background: var(--fill); }
+.shortcut-row:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-light); background: var(--fill); }
+/* 骨架行跟本页 60px 行同档，加载完成时行高不跳 */
+.rowlist .skeleton-row { height: 60px; }
 
 /* 主列靠左聚拢：图标 + 名/路径两行，flex:1 吃掉中间空白 */
 .cell-name { display: flex; align-items: center; gap: 14px; flex: 1 1 auto; min-width: 0; }
-.fs-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.fs-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .ft-ico {
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-badge);
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
   background: var(--fill);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: var(--text-xs);
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: -0.02em;
@@ -496,7 +489,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--ftc) 10%, var(--panel-bg));
   border-color: color-mix(in srgb, var(--ftc) 25%, var(--panel-bg));
 }
-.row-name { font-size: var(--text-base); font-weight: 500; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-name { font-size: var(--text-base); font-weight: 500; color: var(--text-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 路径进 meta 行：等宽小字，与收藏页 URL 同档 */
 .cell-path {
@@ -518,18 +511,13 @@ onBeforeUnmount(() => {
 .shortcut-row:hover .path-chip { color: var(--text-secondary); }
 
 .fs-tags { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); min-width: 0; }
-/* 与收藏页 .ec-cat 同款胶囊：同一档圆角（tag）与内距 */
+/* 减重轮：与收藏页 .ec-cat 同款，类型脱胶囊成裸小灰字 */
 .cell-type {
   display: inline-flex;
   align-items: center;
-  height: 20px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
-  color: var(--text-muted);
-  background: var(--badge-cat-bg);
-  border: 1px solid var(--badge-cat-border);
-  padding: 0 8px;
-  border-radius: var(--radius-tag);
+  color: var(--text-faint);
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -551,7 +539,7 @@ onBeforeUnmount(() => {
 .shortcut-row:hover .row-acts, .shortcut-row:focus-within .row-acts { opacity: 1; }
 
 /* 骨架行形/方块/呼吸走 global.css，此处只留宽度分配 */
-.loading-list { display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-2); }
+.loading-list { padding: 0; }
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w24 { width: 24%; margin-left: auto; }
 

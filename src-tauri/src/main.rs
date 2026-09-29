@@ -79,6 +79,11 @@ fn main() {
                 if std::fs::create_dir_all(&dir).is_ok() {
                     let _ = window.asset_protocol_scope().allow_directory(&dir, true);
                 }
+                // favicon 缓存目录：扁平一档图标，不放行子目录
+                let fav_dir = services::favicon_service::favicons_dir();
+                if std::fs::create_dir_all(&fav_dir).is_ok() {
+                    let _ = window.asset_protocol_scope().allow_directory(&fav_dir, false);
+                }
             }
 
             // Setup tray menu
@@ -188,6 +193,7 @@ fn main() {
             commands::entries::delete_entry,
             commands::entries::batch_delete_entries,
             commands::entries::get_password,
+            commands::favicons::favicon_get,
             commands::data::get_db_path,
             commands::data::get_attachment_dir,
             commands::backup::backup_status,

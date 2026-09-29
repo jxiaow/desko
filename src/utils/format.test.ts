@@ -12,24 +12,27 @@ import {
   formatAbsTime,
   highlightTagsInHtml,
   getDateGroupLabel,
-  splitUrlDisplay,
+  splitUrlHostPath,
 } from './format'
 
-describe('splitUrlDisplay', () => {
-  it('短 URL 不拆分', () => {
-    expect(splitUrlDisplay('https://github.com')).toEqual({ head: 'github.com', tail: '' })
+describe('splitUrlHostPath', () => {
+  it('无路径 URL 全部归主机', () => {
+    expect(splitUrlHostPath('https://github.com')).toEqual({ host: 'github.com', path: '' })
   })
 
-  it('长 URL 保住最后一段路径', () => {
-    const { head, tail } = splitUrlDisplay('http://10.0.0.107:8080/view/linux_x86_64_build/job/linux_app_x86_64')
-    expect(tail).toBe('/linux_app_x86_64')
-    expect(head + tail).toBe('10.0.0.107:8080/view/linux_x86_64_build/job/linux_app_x86_64')
+  it('结尾斜杠不算路径', () => {
+    expect(splitUrlHostPath('https://github.com/')).toEqual({ host: 'github.com', path: '' })
   })
 
-  it('尾段过长时固定保尾部 16 字符', () => {
-    const { head, tail } = splitUrlDisplay('http://10.0.0.65/builds/private/some-very-long-artifact-name-20260928.zip')
-    expect(tail.length).toBe(16)
-    expect(head + tail).toBe('10.0.0.65/builds/private/some-very-long-artifact-name-20260928.zip')
+  it('主机与路径分色拆分', () => {
+    expect(splitUrlHostPath('http://10.0.0.107:8080/view/QT/job/winqt_app')).toEqual({
+      host: '10.0.0.107:8080',
+      path: '/view/QT/job/winqt_app',
+    })
+  })
+
+  it('解析失败按首个斜杠拆', () => {
+    expect(splitUrlHostPath('not a url/path')).toEqual({ host: 'not a url', path: '/path' })
   })
 })
 

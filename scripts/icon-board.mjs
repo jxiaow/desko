@@ -1,6 +1,6 @@
 // 图标全家福：把 utils/icons.ts 的全部图标按 AppIcon 的渲染规格
-// （viewBox 24、stroke-width 2、round cap/join）在 14/16/20/24 四档尺寸下排一遍，
-// 每套主题一张图，专查描边粗细、光学尺寸和深色下的可读性。
+// （viewBox 24，实笔恒定 STROKE_PX，按尺寸反算 stroke-width，round cap/join）
+// 在 14/16/20/24 四档尺寸下排一遍，每套主题一张图，专查描边粗细、光学尺寸和深色下的可读性。
 // 用法：node scripts/icon-board.mjs        （不需要起服务器，纯离线渲染）
 // 输出：design/icon-board/<themeId>.png
 import { chromium } from '@playwright/test'
@@ -18,6 +18,9 @@ const COMBOS = [
   { id: 'ink-plum', theme: 'ink', accent: 'plum' },
 ]
 const SIZES = [14, 16, 20, 24]
+// 与 AppIcon.vue 同源：实笔宽按尺寸反算，全窗恒定 1.05px（写死 2 会让小板子和真界面不像）
+const STROKE_PX = 1.05
+const strokeFor = (s) => +(STROKE_PX * 24 / s).toFixed(2)
 
 // 1) 图标注册表
 const iconsSrc = readFileSync('src/utils/icons.ts', 'utf8')
@@ -40,7 +43,7 @@ const blocks = COMBOS.map((c) => ({
 
 const cell = (icon) => `
   <div class="cell">
-    <div class="row">${SIZES.map((s) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon.markup}</svg>`).join('')}</div>
+    <div class="row">${SIZES.map((s) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeFor(s)}" stroke-linecap="round" stroke-linejoin="round">${icon.markup}</svg>`).join('')}</div>
     <div class="nm">${icon.name}</div>
   </div>`
 
@@ -58,16 +61,44 @@ body { margin: 0; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }
 ${COMBOS.map((c) => `
 <div class="theme" data-theme="${c.theme}" data-accent="${c.accent}" id="t-${c.id}">
   <div class="hd">${c.id}</div>
-  <div class="sub">每格从左到右：14 / 16 / 20 / 24 px · 共 ${icons.length} 枚 · 规格同源 AppIcon（stroke-width 2）</div>
+  <div class="sub">每格从左到右：14 / 16 / 20 / 24 px · 共 ${icons.length} 枚 · 规格同源 AppIcon（实笔恒定 ${STROKE_PX}px）</div>
   <div class="grid">${icons.map(cell).join('')}</div>
 </div>`).join('')}`
 
 const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'msedge' })
 const page = await browser.newPage({ viewport: { width: 1320, height: 900 }, deviceScaleFactor: 1.5 })
 await page.setContent(html, { waitUntil: 'load' })
+
+// 几何守护：14px 那档 stroke-width 最大（1.8 单位），按它算含笔宽的紧包围盒。
+// 越出 1–23 就意味着描边会被 viewBox 裁掉一角 —— 肉眼看缩略图看不出来。
+const overflow = await page.evaluate(() => {
+  const bad = []
+  for (const theme of document.querySelectorAll('.theme')) {
+    theme.querySelectorAll('.cell').forEach((cell, i) => {
+      const svg = cell.querySelector('.row svg')
+      // 实心件（*-Filled）在 AppIcon 里走 fill=currentColor / stroke=none，不该按描边量
+      const sw = cell.querySelector('.nm').textContent.endsWith('Filled')
+        ? 0
+        : parseFloat(svg.getAttribute('stroke-width'))
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+      for (const el of svg.querySelectorAll('path,rect,circle,line,polyline')) {
+        const b = el.getBBox()
+        x0 = Math.min(x0, b.x - sw / 2); y0 = Math.min(y0, b.y - sw / 2)
+        x1 = Math.max(x1, b.x + b.width + sw / 2); y1 = Math.max(y1, b.y + b.height + sw / 2)
+      }
+      if (x0 < 1 || y0 < 1 || x1 > 23 || y1 > 23)
+        bad.push(`${cell.querySelector('.nm').textContent}: (${x0.toFixed(1)},${y0.toFixed(1)})–(${x1.toFixed(1)},${y1.toFixed(1)})`)
+    })
+    break
+  }
+  return bad
+})
+for (const line of overflow) console.log(`越界 ${line}`)
+
 mkdirSync('design/icon-board', { recursive: true })
 for (const c of COMBOS) {
   await page.locator(`#t-${c.id}`).screenshot({ path: `design/icon-board/${c.id}.png` })
   console.log(`design/icon-board/${c.id}.png`)
 }
 await browser.close()
+if (overflow.length) { console.log(`${overflow.length} 枚图标描边越出 1–23，会被 viewBox 裁角`); process.exit(1) }

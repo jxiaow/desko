@@ -300,6 +300,8 @@ onMounted(async () => {
 }
 .group-row + .group-row { border-top: 1px solid var(--border); }
 .group-row.dim { color: var(--text-muted); font-size: var(--text-base); }
+/* 行轨与收藏/文件页同档 60px；提示行（dim/note）不受力，仍按内容收口 */
+.url-row, .dir-row, .dir-add-row { height: 60px; }
 .group-note {
   display: flex;
   align-items: center;
@@ -357,7 +359,7 @@ onMounted(async () => {
   width: 26px;
   height: 26px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   background: none;
   color: var(--text-muted);
   cursor: pointer;
@@ -403,7 +405,7 @@ html.hover-suppressed .dir-row:hover .dir-del { opacity: 0; }
   /* 与 .dir-add 同高同圆角；btn-secondary 默认的 36px/8px 圆角比输入框大一圈 */
   height: 34px;
   padding: 0 var(--space-3);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   font-size: var(--text-sm);
 }
 

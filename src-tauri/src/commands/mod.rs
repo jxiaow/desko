@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod entries;
+pub mod favicons;
 pub mod notes;
 pub mod note_lock;
 pub mod url_paths;

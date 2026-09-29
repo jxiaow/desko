@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Entry, Tab } from '../../types'
-import { splitUrlDisplay } from '../../utils/format'
+import { splitUrlHostPath } from '../../utils/format'
 import { joinEntryUrl } from '../../utils/urlPath'
+import { faviconSrcFor } from '../../services/favicon'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import EntryActionMenu from './EntryActionMenu.vue'
@@ -56,20 +57,14 @@ const onGlobalKey = (e: KeyboardEvent) => {
   }
 }
 
-/** 首字母块取词首两枚（LX/WQ 式），中文取前两字 */
-const initials = (name: string) => {
-  const words = name.trim().split(/[\s._\-/]+/).filter(Boolean)
-  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
-  return name.trim().slice(0, 2).toUpperCase()
+/** 行首 24px 档：中性字母块（favicon 抓取失败/未到货时的兜底面），
+    色彩留给图标本身，字母块只吃字色淡染 */
+const favLetter = (cat?: string | null) => {
+  const c = (cat || '').trim()
+  return c ? c[0].toUpperCase() : '#'
 }
-
-/** 模块色相身份：本页图块统一取 cat-1 色相，分类哈希只分浓淡三档，未分类走中性灰 */
-const tileTone = (cat?: string | null) => {
-  if (!cat) return 'tone-neutral'
-  let h = 0
-  for (let i = 0; i < cat.length; i++) h = (h * 31 + cat.charCodeAt(i)) | 0
-  return ['tone-1', 'tone-2', 'tone-3'][Math.abs(h) % 3] as string
-}
+/** 行首档面：host 命中缓存/抓取到货后返回图标 URL，否则 null 走字母块 */
+const favOf = (item: Entry) => faviconSrcFor(item.url)
 
 /* ── 分类标签：全部 + 前 2 枚高频常驻，其余收进「更多」下拉（面板内可搜索） ── */
 const visibleTabs = computed(() => props.tabs.slice(0, 3))
@@ -272,7 +267,7 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div v-if="loading" class="loading">
+    <div v-if="loading" class="loading rowlist">
       <div class="skeleton-row" v-for="n in 8" :key="n">
         <div class="skeleton-block"></div>
         <div class="skeleton-id">
@@ -283,7 +278,7 @@ onUnmounted(() => {
         <div class="skeleton-line tag"></div>
       </div>
     </div>
-    <div v-else-if="filteredEntries.length" class="entry-list" @keydown="onListKeydown">
+    <div v-else-if="filteredEntries.length" class="entry-list rowlist" @keydown="onListKeydown">
       <article
         v-for="item in filteredEntries"
         :key="item.id"
@@ -301,10 +296,13 @@ onUnmounted(() => {
           <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="12" />
         </span>
 
-        <!-- 第一段：实体信息靠左聚拢成两行——名字+分类标识一行，域名/路径/备注并进 meta 行。
-             分类胶囊上移到名字行尾，把右缘整列宽度让给 meta；URL 中段截断保住尾部（区分度在尾部） -->
+        <!-- inset 行：行首 24px 档垂直居中（favicon 到货前/抓不到落字母块），
+             右侧两行——名+凭证 / 主机+路径+备注；分类定住行尾，hover 让位给动作钮列 -->
+        <span class="ec-fav" :class="{ 'ec-fav--icon': !!favOf(item) }" aria-hidden="true">
+          <img v-if="favOf(item)" :src="favOf(item)!" alt="" />
+          <template v-else>{{ favLetter(item.category) }}</template>
+        </span>
         <div class="ec-id">
-          <span class="ec-tile" :class="tileTone(item.category)" aria-hidden="true">{{ initials(item.name) }}</span>
           <div class="ec-text">
             <div class="ec-name-row">
               <span class="ec-name">{{ item.name }}</span>
@@ -320,8 +318,8 @@ onUnmounted(() => {
                 :title="item.url"
                 @click.prevent.stop="emit('openUrl', item.url!)"
                 @contextmenu.prevent="emit('copyText', item.url!, '网址')"
-              ><span class="ud-head">{{ splitUrlDisplay(item.url).head }}</span><span v-if="splitUrlDisplay(item.url).tail"
-                class="ud-tail">{{ splitUrlDisplay(item.url).tail }}</span></a>
+              ><span class="u-host">{{ splitUrlHostPath(item.url).host }}</span><span v-if="splitUrlHostPath(item.url).path"
+                class="u-path">{{ splitUrlHostPath(item.url).path }}</span></a>
               <template v-if="item.paths && item.paths.length">
                 <span v-if="item.url" class="meta-dot" aria-hidden="true">·</span>
                 <a
@@ -409,6 +407,9 @@ onUnmounted(() => {
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无记录' }}</div>
       <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」添加' }}</div>
+      <div v-if="!searchKeyword" class="empty-motto" aria-hidden="true">
+        <span class="d"></span><span class="w">收一处 · 启一窗</span><span class="d mid"></span><span class="w">开一页</span><span class="d"></span>
+      </div>
     </div>
 
     <div v-if="hasSelection" class="batch-dock">
@@ -448,24 +449,23 @@ onUnmounted(() => {
   padding: 2px 0;
 }
 .tabs::-webkit-scrollbar { display: none; }
-.tabs .tab { position: relative; z-index: 1; height: 34px; display: inline-flex; align-items: center; padding: 0 12px; font-size: var(--text-sm); border-radius: var(--radius-tag); }
-/* 滑块：浮白块压在字下，切换时沿弹簧曲线滑到位；激活 tab 自身让出底色，只留字色/字重 */
+.tabs .tab { position: relative; z-index: 1; height: 30px; display: inline-flex; align-items: center; padding: 0 10px; font-size: var(--text-xs); color: var(--text-muted); border-radius: var(--radius-tag); }
+/* 滑块：减重轮起胶囊底，改 2px accent 下划线，切换时仍沿弹簧曲线滑到位 */
 .tab-thumb {
   position: absolute;
-  top: 2px;
+  bottom: 0;
   left: 0;
-  height: 34px;
-  border-radius: var(--radius-tag);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-card);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
   opacity: 0;
   pointer-events: none;
   transition: left var(--transition-spring), width var(--transition-spring), opacity var(--transition);
 }
-.tabs .tab.active { background: transparent; box-shadow: none; }
-.tab-more { font-family: inherit; font-size: var(--text-sm); }
-.tab-count { display: inline-block; background: var(--hover); color: var(--text-muted); font-size: var(--text-xs); padding: 0 var(--space-1); border-radius: 4px; margin-left: var(--space-1); font-weight: 600; line-height: 14px; }
-.tab.active .tab-count { background: var(--accent-soft); color: var(--accent); }
+.tabs .tab.active { background: transparent; box-shadow: none; color: var(--text); font-weight: 600; }
+.tab-more { font-family: inherit; font-size: var(--text-xs); }
+.tab-count { display: inline-block; background: none; color: var(--text-faint); font-size: var(--text-xs); padding: 0; margin-left: 4px; font-weight: 500; line-height: 14px; }
+.tab.active .tab-count { background: none; color: var(--accent); }
 
 /* 「更多」下拉：224px 面板，内置分类搜索，列表最高 192px 再滚动 */
 .tab-pop { width: 224px; display: flex; flex-direction: column; gap: var(--space-1); }
@@ -495,45 +495,36 @@ onUnmounted(() => {
 .tab-pop-list .pop-item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .tab-pop-empty { padding: var(--space-2) 8px; font-size: var(--text-sm); color: var(--text-faint); text-align: center; }
 
-/* 单列行卡列表：行间 16px，每行是一张独立卡片，hover 才描边显色；首行与吸顶栏拉开一点距离 */
-.entry-list { display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-2); }
-
+/* inset 轮：行落在白色面板里（global.css .rowlist），行间发丝线由面板承托；
+   行不再有卡皮，hover/选中只换底色 */
 .entry-card {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  height: 56px;
+  gap: 12px;
+  height: 60px;
   padding: 0 var(--space-4);
-  background: var(--bg-surface);
-  /* 轻量化轮：发丝描边重新上岗做默认分层，hover 描边显色 + 背景微沉 */
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
   cursor: pointer;
   position: relative;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease, padding-left 0.15s ease;
+  transition: background-color 0.15s ease, padding-left 0.15s ease;
 }
-.entry-card:hover {
-  border-color: var(--border-card-hover);
-  background: var(--bg-surface-hover);
-}
-.entry-card:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
-/* 选中态：浸润底吃掉整卡，1px 实环贴在边框外沿把"选中"包成一圈，
-   左侧贴粗线的做法会在圆角处断开，整体感不够 */
+/* 骨架行跟本页 60px 行同档，加载完成时行高不跳 */
+.rowlist .skeleton-row { height: 60px; }
+/* 白面板上的 hover：比画布档轻一色的 sunken，看得见但不抢字 */
+.entry-card:hover { background: var(--sunken); }
+.entry-card:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-light); background: var(--sunken); }
+/* 选中态：浸润底 + 1px 内描边，白卡里不外扩 */
 .entry-card.selected {
-  border-color: var(--accent);
   background: var(--accent-soft);
-  box-shadow: 0 0 0 1px var(--accent), var(--shadow);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .entry-card.selected .ec-name { color: var(--text-brand); }
-.entry-card.selected .ec-cat { color: var(--text-brand); background: var(--accent-light); border-color: var(--accent); }
-.entry-card.selected .ec-cred { background: var(--accent-light); border-color: var(--accent); }
+.entry-card.selected .ec-cat { color: var(--text-brand); }
 
-/* 勾选位不常驻：常态勾选框脱流悬在图标块中心（隐藏时不吃布局，行首无死区），
+/* 勾选位不常驻：hover 时浮到行首圆点上（点让位，钮居点心），
    进批量态才让出左栏位。钮随整卡 hover 显形（可见才可点，杜绝隐形吞点击误入批量） */
 .card-check {
   position: absolute;
-  left: 25px; /* 压住 36px 图标块中心：padding 16 + 36/2 − 18/2 */
+  left: 19px; /* 压住行首 24px 档中心：padding 16 + 24/2 − 18/2 */
   top: 50%;
   transform: translateY(-50%);
   width: 18px;
@@ -559,37 +550,42 @@ onUnmounted(() => {
 .entry-card.batching { padding-left: calc(var(--space-4) * 2 + 18px); }
 .entry-card.batching .card-check { left: var(--space-4); }
 
-/* 第一段：实体信息靠左聚拢。图标块 + 两行文本（名 / meta），
-   主列 flex:1 吃掉原先悬在行中间的 URL/路径空白 */
-.ec-id { display: flex; align-items: center; gap: 14px; flex: 1 1 auto; min-width: 0; }
-.ec-tile {
-  --h: var(--cat-1);
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-badge);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  letter-spacing: 0.02em;
+/* 实体信息主列：两行文本（名+分类 / URL+备注），flex:1 吃满行宽 */
+.ec-id { flex: 1 1 auto; min-width: 0; }
+/* 行首 24px 档：中性字母块（字色 7% 淡染），favicon 到货后换成图标面 */
+.ec-fav {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+  transition: opacity var(--transition);
 }
-/* 同页一色、分类分浓淡：色相钉 cat-1 槽，切主题跟各主题的槽走 */
-.ec-tile.tone-1 { background: color-mix(in srgb, var(--h) 8%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 16%, var(--panel-bg)); }
-.ec-tile.tone-2 { background: color-mix(in srgb, var(--h) 15%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 28%, var(--panel-bg)); }
-.ec-tile.tone-3 { background: color-mix(in srgb, var(--h) 26%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 42%, var(--panel-bg)); }
-.ec-tile.tone-neutral { background: var(--badge-cat-bg); color: var(--badge-cat-text); border-color: var(--badge-cat-border); }
-.ec-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-/* 名字行：名 + 凭证锁 + 分类胶囊，靠左排；胶囊定宽不缩，长名字自己截 */
+.ec-fav img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+}
+/* 深色底上多数 favicon 是深标（GitHub 黑猫），垫一片暖白亮底才不隐身 */
+:root[data-theme='ink'] .ec-fav--icon {
+  background: #ddd9d2;
+}
+.ec-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+/* 名字行：名 + 凭证靠左，分类定住行尾（hover 时让位给动作钮列） */
 .ec-name-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .ec-name {
   font-size: var(--text-base);
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -630,37 +626,30 @@ onUnmounted(() => {
   cursor: pointer;
   transition: color var(--transition);
 }
-/* 中段截断：头部先缩出省略号，尾部（区分段）常驻不截 */
-.ud-head { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.ud-tail { flex: 0 0 auto; }
+/* 两色显示：主机实色定住，路径整段淡出、尾部截断 */
+.u-host { flex: 0 0 auto; }
+.u-path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-faint); }
 .ec-domain:hover { color: var(--accent); }
+.ec-domain:hover .u-path { color: var(--accent-light); }
 .ec-cat {
   display: inline-flex;
   align-items: center;
-  height: 20px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-muted);
-  background: var(--bg-tag-default);
-  border: 1px solid var(--badge-cat-border);
-  padding: 0 8px;
-  border-radius: var(--radius-tag);
   flex-shrink: 0;
   white-space: nowrap;
-  transition: color var(--transition), background-color var(--transition), border-color var(--transition);
+  margin-left: auto;
+  padding-left: var(--space-2);
+  transition: color var(--transition), opacity var(--transition);
 }
 
 .ec-cred {
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  padding: 0 7px;
-  color: var(--badge-ver-text);
-  background: var(--badge-ver-bg);
-  border: 1px solid var(--accent-soft);
-  border-radius: var(--radius-pill);
+  color: var(--text-faint);
+  opacity: 0.7;
   flex-shrink: 0;
-  transition: background-color var(--transition), border-color var(--transition);
 }
 
 /* meta 行里的路径：纯文本链接，不再是胶囊 */
@@ -681,7 +670,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 500;
   font-family: inherit;
   color: var(--accent);
@@ -694,19 +683,26 @@ onUnmounted(() => {
 }
 .card-paths-more:hover, .card-paths-more[aria-expanded] { color: var(--accent-hover); text-decoration: underline; }
 
-/* 渐进披露：动作钮平时以五成透明常驻（位置稳定、可点），行被点亮才升到全不透明 */
+/* 渐进披露：动作钮脱流浮在行尾右缘，hover 才显形；
+   左缘一条向 --sunken 的渐隐垫底，压住其下的分类/长 URL（hover 时分类同步淡出） */
 .ec-actions {
+  position: absolute;
+  right: calc(var(--space-4) - 4px);
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  /* 三枚钮共 98px：定宽让跨行右缘对齐 */
-  flex: 0 0 98px;
+  padding-left: 28px;
+  background: linear-gradient(90deg, transparent, var(--sunken) 40%);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
 .entry-card:hover .ec-actions,
 .entry-card:focus-within .ec-actions { opacity: 1; }
+.entry-card:hover .ec-cat,
+.entry-card:focus-within .ec-cat { opacity: 0; }
 /* 批量态整行是选择热区，动作入口先让位 */
 .entry-card.batching .ec-actions { display: none; }
 .ib.ec-act { width: 30px; height: 30px; flex-shrink: 0; }
@@ -726,7 +722,7 @@ onUnmounted(() => {
    此处不再重复声明，避免局部副本和全局定义漂移 */
 
 /* 骨架屏行形/方块/呼吸在 global.css，此处只留本行的宽度分配 */
-.loading { padding: var(--space-2) 0; }
+.loading { padding: 0; }
 .skeleton-id { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
 .skeleton-line.name { width: 140px; }
 .skeleton-line.note { width: 220px; height: 6px; }

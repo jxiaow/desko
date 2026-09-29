@@ -7,13 +7,13 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const BASES = {
-  paper: { bg: 'rgb(245, 244, 241)', text: 'rgb(29, 28, 26)' },
-  ink:   { bg: 'rgb(25, 24, 22)',    text: 'rgb(236, 235, 230)' },
+  paper: { bg: 'rgb(248, 248, 247)', text: 'rgb(51, 50, 48)' },
+  ink:   { bg: 'rgb(28, 27, 24)',    text: 'rgb(237, 235, 230)' },
 } as const
 
 const ACCENT_HEX = {
   paper: { ink: '#3d5a80', celadon: '#3d7355', clay: '#9a5b33', plum: '#5f62b8' },
-  ink:   { ink: '#7d9fc6', celadon: '#7fb89a', clay: '#d09a6a', plum: '#9ba0e8' },
+  ink:   { ink: '#89a8cd', celadon: '#7fb89a', clay: '#d09a6a', plum: '#9ba0e8' },
 } as const
 
 type BaseId = keyof typeof BASES
@@ -176,7 +176,7 @@ test.describe('主题', () => {
       return style
     }
 
-    expect(await probeToast('7')).toEqual({ bg: 'rgb(236, 235, 230)', color: 'rgb(47, 125, 82)' })
+    expect(await probeToast('7')).toEqual({ bg: 'rgb(239, 237, 232)', color: 'rgb(47, 125, 82)' })
 
     await settingsTab(dialog, 'appearance')
     await dialog.locator('.theme-chip', { hasText: '纸' }).click()

@@ -137,7 +137,7 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
   min-width: 0;
 }
 /* 就地展开的底栏里，图标按钮与描边按钮同高，视觉上是一条线 */
-.note-toolbar.dense .ib { width: 26px; height: 26px; border-radius: var(--radius-sm); }
+.note-toolbar.dense .ib { width: 26px; height: 26px; border-radius: var(--radius-ib); }
 .toolbar-flex {
   flex: 1;
   display: flex;

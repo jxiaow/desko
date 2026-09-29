@@ -13,6 +13,7 @@ import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import { useClipboard } from '../../composables/useClipboard'
 import OptionSelect from '../shared/OptionSelect.vue'
+import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
@@ -465,9 +466,7 @@ const doRestoreFile = async () => {
         </div>
         <div class="setting-actions">
           <button class="action-btn primary" :disabled="!!busy || !schedulable" @click="doBackup">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
+            <AppIcon name="download" :size="14" />
             备份
           </button>
         </div>
@@ -556,7 +555,7 @@ const doRestoreFile = async () => {
           <div class="dialog-header">
             <h3>{{ st.hasPassword ? '修改备份密码' : '设置备份密码' }}</h3>
             <button class="dialog-close" title="关闭" @click="closePwd">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <AppIcon name="x" :size="18" />
             </button>
           </div>
           <div class="dialog-body">
@@ -586,7 +585,7 @@ const doRestoreFile = async () => {
           <div class="dialog-header">
             <h3>{{ restoreMode === 'cloud' ? '从云端恢复' : '从文件恢复' }}</h3>
             <button class="dialog-close" title="关闭" @click="closeRestore">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <AppIcon name="x" :size="18" />
             </button>
           </div>
           <div class="dialog-body">
@@ -615,7 +614,7 @@ const doRestoreFile = async () => {
           <div class="dialog-header">
             <h3>连接坚果云</h3>
             <button class="dialog-close" title="关闭" @click="closeCloud">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <AppIcon name="x" :size="18" />
             </button>
           </div>
           <div class="dialog-body">
@@ -656,7 +655,7 @@ const doRestoreFile = async () => {
           <div class="dialog-header">
             <h3>云端备份 · {{ hostOf(st.cloud.server) }}</h3>
             <button class="dialog-close" title="关闭" @click="closeRemote">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <AppIcon name="x" :size="18" />
             </button>
           </div>
           <div class="dialog-body dialog-body-tight remote-list">

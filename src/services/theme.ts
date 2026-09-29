@@ -75,12 +75,12 @@ export interface AccentInfo {
 }
 
 export const THEMES: ThemeInfo[] = [
-  { id: 'paper', name: '纸', prev: { page: '#f7f6f4', sidebar: '#eeede9', card: '#ffffff', rowHover: '#faf9f7', edge: '#e9e8e4', accent: '#3d5a80', ink: '#1d1c1a' } },
-  { id: 'ink', name: '墨', prev: { page: '#191816', sidebar: '#1f1e1b', card: '#211f1c', rowHover: '#292723', edge: '#33302b', accent: '#7d9fc6', ink: '#e9e8e5' } },
+  { id: 'paper', name: '纸', prev: { page: '#f8f8f7', sidebar: '#edecea', card: '#fcfcfc', rowHover: '#f7f7f7', edge: '#e6e6e4', accent: '#3d5a80', ink: '#333230' } },
+  { id: 'ink', name: '墨', prev: { page: '#1c1b18', sidebar: '#201f1c', card: '#24221e', rowHover: '#2a2823', edge: '#34312b', accent: '#89a8cd', ink: '#edebe6' } },
 ]
 
 export const ACCENTS: AccentInfo[] = [
-  { id: 'ink', name: '墨蓝', dot: '#3d5a80', dotInk: '#7d9fc6' },
+  { id: 'ink', name: '墨蓝', dot: '#3d5a80', dotInk: '#89a8cd' },
   { id: 'celadon', name: '青瓷', dot: '#3d7355', dotInk: '#7fb89a' },
   { id: 'clay', name: '赭石', dot: '#9a5b33', dotInk: '#d09a6a' },
   { id: 'plum', name: '紫罗', dot: '#5f62b8', dotInk: '#9ba0e8' },

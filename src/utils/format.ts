@@ -123,16 +123,12 @@ export function formatUrlDisplay(url: string): string {
   }
 }
 
-/**
- * 行内 URL 中段截断：同一台服务器的条目头部全同，区分度全在尾部。
- * 尾部取最后一段路径（≤20 字符整段保住，否则固定保尾 16 字符），头部弹性收缩出省略号。
- */
-export function splitUrlDisplay(url: string): { head: string; tail: string } {
+/** 行内两色显示：主机实色、路径淡出，拆不出来就整串归主机 */
+export function splitUrlHostPath(url: string): { host: string; path: string } {
   const full = formatUrlDisplay(url)
-  if (full.length <= 28) return { head: full, tail: '' }
-  const idx = full.lastIndexOf('/')
-  const tail = idx > 0 && full.length - idx <= 20 ? full.slice(idx) : full.slice(-16)
-  return { head: full.slice(0, full.length - tail.length), tail }
+  const idx = full.indexOf('/')
+  if (idx <= 0) return { host: full, path: '' }
+  return { host: full.slice(0, idx), path: full.slice(idx) }
 }
 
 export function getDateGroupLabel(timestamp: number): string {

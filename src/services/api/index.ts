@@ -1,5 +1,6 @@
 export { authApi } from './auth'
 export { entriesApi } from './entries'
+export { faviconsApi } from './favicons'
 export { notesApi } from './notes'
 export { urlPathsApi } from './urlPaths'
 export { fileShortcutsApi } from './fileShortcuts'

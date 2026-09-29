@@ -225,14 +225,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   font-size: 11.5px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-  margin-bottom: var(--space-5);
+  margin-bottom: 8px;
 }
 .fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.5; }
 
 .fs-scroll { flex: 1; overflow-y: auto; min-height: 0; }
 /* 铺了纸就得给纸外留出桌沿，否则 800px 以下的窗口里纸边贴住滚动条 */
 .fs-scroll:has(.fs-doc) { padding-inline: var(--space-5); scrollbar-gutter: stable; }
-.fs-inner { animation: fs-rise 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; padding-block: var(--space-6) var(--space-8); }
+.fs-inner { animation: fs-rise 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; padding-block: 12px 20px; }
 @keyframes fs-rise { from { opacity: 0; } }
 
 /* 只读浏览铺一张纸：书写态是「对着空桌子写」，阅读态是「拿起写好的一页」，
@@ -241,7 +241,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   width: 100%;
   max-width: 800px;
   margin: var(--space-5) auto var(--space-8);
-  padding: var(--space-10) var(--space-12) var(--space-10);
+  padding: 20px 28px;
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
@@ -252,16 +252,16 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 
 /* 只读正文：排版语言与列表卡片同源，字号行距按全屏阅读放大 */
 .fs-view {
-  font-size: 14.5px;
-  line-height: 27px;
+  font-size: 13.5px;
+  line-height: 23px;
   color: var(--text);
   word-break: break-word;
 }
-.fs-view :deep(> * + *) { margin-top: var(--space-4); }
-.fs-view :deep(* + h1), .fs-view :deep(* + h2), .fs-view :deep(* + h3) { margin-top: var(--space-6); }
-.fs-view :deep(h1) { font-size: 24px; font-weight: 600; letter-spacing: -0.022em; line-height: 32px; }
-.fs-view :deep(h2) { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; line-height: 26px; }
-.fs-view :deep(h3) { font-size: 16px; font-weight: 600; line-height: 24px; }
+.fs-view :deep(> * + *) { margin-top: 10px; }
+.fs-view :deep(* + h1), .fs-view :deep(* + h2), .fs-view :deep(* + h3) { margin-top: 14px; }
+.fs-view :deep(h1) { font-size: 20px; font-weight: 600; letter-spacing: -0.022em; line-height: 26px; }
+.fs-view :deep(h2) { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 24px; margin-top: 12px; }
+.fs-view :deep(h3) { font-size: 15.5px; font-weight: 600; line-height: 22px; margin-top: 10px; }
 .fs-view :deep(strong) { font-weight: 600; color: var(--text); }
 .fs-view :deep(ul), .fs-view :deep(ol) { padding-left: var(--space-5); }
 .fs-view :deep(li) { margin: 4px 0; }

@@ -17,6 +17,7 @@ import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import { useNotesStore } from '../../stores/notes'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
 // 口令行只在设过小记口令时出现；设置页可能先于小记模块打开，自己拉一次状态
@@ -256,52 +257,27 @@ onMounted(() => { loadSettings() })
             <h2>设置</h2>
           </div>
           <button class="nav-tab" :class="{ on: tab === 'general' }" @click="tab = 'general'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
-              <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
-              <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
-              <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
-            </svg>
+            <AppIcon name="adjustments" :size="16" />
             <span>{{ TAB_LABELS.general }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'appearance' }" @click="tab = 'appearance'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="13.5" cy="6.5" r=".5"/>
-              <circle cx="17.5" cy="10.5" r=".5"/>
-              <circle cx="8.5" cy="7.5" r=".5"/>
-              <circle cx="6.5" cy="12.5" r=".5"/>
-              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.436-.657-.436-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
-            </svg>
+            <AppIcon name="palette" :size="16" />
             <span>{{ TAB_LABELS.appearance }}</span>
           </button>
           <button v-if="fileshareOn" class="nav-tab" :class="{ on: tab === 'fileshare' }" @click="tab = 'fileshare'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            </svg>
+            <AppIcon name="globe" :size="16" />
             <span>{{ TAB_LABELS.fileshare }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'backup' }" @click="tab = 'backup'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <ellipse cx="12" cy="5" rx="9" ry="3"/>
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-            </svg>
+            <AppIcon name="database" :size="16" />
             <span>{{ TAB_LABELS.backup }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'security' }" @click="tab = 'security'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
+            <AppIcon name="lock" :size="16" />
             <span>{{ TAB_LABELS.security }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'about' }" @click="tab = 'about'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="16" x2="12" y2="12"/>
-              <line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
+            <AppIcon name="info" :size="16" />
             <span>{{ TAB_LABELS.about }}</span>
           </button>
         </aside>
@@ -310,10 +286,7 @@ onMounted(() => { loadSettings() })
           <header class="settings-head">
             <h3>{{ TAB_LABELS[tab] }}</h3>
             <button class="close-btn" @click="close" title="关闭">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
+              <AppIcon name="x" :size="16" />
             </button>
           </header>
 
@@ -479,17 +452,13 @@ onMounted(() => { loadSettings() })
                 <div class="setting-info">
                   <span class="setting-name">修改主密码</span>
                 </div>
-                <svg class="arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="9 18 15 12 9 6"/>
-                </svg>
+                <AppIcon class="arrow-icon" name="chevRight" :size="16" />
               </div>
               <div v-if="noteKey.is_set" class="setting-item clickable" @click="emit('openChangeNoteKey')">
                 <div class="setting-info">
                   <span class="setting-name">修改小记口令</span>
                 </div>
-                <svg class="arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="9 18 15 12 9 6"/>
-                </svg>
+                <AppIcon class="arrow-icon" name="chevRight" :size="16" />
               </div>
               <div class="setting-item">
                 <div class="setting-info">
@@ -673,7 +642,7 @@ onMounted(() => { loadSettings() })
   height: 28px;
   border: none;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   cursor: pointer;
   display: flex;
   align-items: center;

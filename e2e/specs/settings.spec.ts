@@ -53,7 +53,7 @@ test.describe('Settings 设置', () => {
     const pane = visiblePane(dialog)
 
     // 行组吃内嵌凹槽底色（paper 的 --sunken），条目之间只留 1px 细线
-    await expect(pane.locator('.group-content').first()).toHaveCSS('background-color', 'rgb(240, 239, 236)')
+    await expect(pane.locator('.group-content').first()).toHaveCSS('background-color', 'rgb(241, 241, 240)')
     // 控制轴一档高：按钮与输入件同 28px，右缘成线
     await expect(pane.locator('.setting-item', { hasText: '数据库路径' }).locator('button.action-btn')).toHaveCSS('height', '28px')
     await expect(pane.locator('.setting-item', { hasText: '云端保留份数' }).locator('.number-input')).toHaveCSS('height', '28px')

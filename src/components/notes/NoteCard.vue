@@ -376,7 +376,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   padding: 0 var(--space-1);
   margin-left: calc(0px - var(--space-1));
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   background: transparent;
   color: var(--accent);
   font-size: var(--text-sm);

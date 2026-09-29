@@ -85,10 +85,7 @@ onUnmounted(() => {
 
         <form class="lock-form" @submit.prevent="doUnlock">
           <div class="unlock-field">
-            <svg class="unlock-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2.5"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
+            <AppIcon class="unlock-field-icon" name="lock" :size="16" />
             <input
               class="unlock-input"
               :type="revealed ? 'text' : 'password'"
@@ -108,10 +105,7 @@ onUnmounted(() => {
               <AppIcon :name="revealed ? 'eyeOff' : 'eye'" :size="15" />
             </button>
             <button class="unlock-btn" type="submit" title="解锁" aria-label="解锁">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M5 12h14"/>
-                <path d="M13 5l7 7-7 7"/>
-              </svg>
+              <AppIcon name="arrowRight" :size="13" />
             </button>
           </div>
 
@@ -253,7 +247,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;

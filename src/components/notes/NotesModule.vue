@@ -629,6 +629,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   overflow-x: hidden;
   scroll-behavior: smooth;
+  /* 拆面轮：微光画布已上移到 .app-root，本页不再自铺 */
 }
 /* 一行一张：正常窗口铺满，最大化时收在 --stream-max 内居中。
    顶部不留内边距：与其余四页同款——顶栏贴顶，滚动行不会从它上面露出来 */
@@ -664,7 +665,10 @@ onBeforeUnmount(() => {
   color: var(--text-faint);
   letter-spacing: 0.02em;
   padding: var(--space-2) 0 var(--space-2) var(--space-1);
-  background: var(--bg);
+  /* 与 .page-bar 同一条画布配方（global.css --canvas-bg）：吸顶件若铺平色（原先 var(--bg)）
+     会把画布光晕压掉一档，静止时就显出一条亮带。fixed 附着让它取到身后那一小条视口切片 */
+  background: var(--canvas-bg);
+  background-attachment: fixed;
 }
 .day-head.pinned { color: var(--accent); }
 .day-head::after { content: ''; flex: 1; height: 1px; background: var(--border); opacity: 0.7; }

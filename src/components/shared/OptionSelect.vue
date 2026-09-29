@@ -3,6 +3,7 @@
    菜单走 PopoverMenu，避开 WebView2 原生 select 的系统深色弹层。 */
 import { ref } from 'vue'
 import PopoverMenu from './PopoverMenu.vue'
+import AppIcon from './AppIcon.vue'
 
 export interface OptionItem {
   value: string | number
@@ -47,9 +48,7 @@ const pick = (v: string | number) => {
     @click="toggle"
   >
     <span class="opt-value">{{ currentLabel() }}</span>
-    <svg class="opt-chev" :class="{ up: open }" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
+      <AppIcon class="opt-chev" :class="{ up: open }" name="chevDown" :size="11" />
   </button>
   <PopoverMenu v-if="open && anchor" :anchor="anchor" modal align="start" @close="open = false">
     <button

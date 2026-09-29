@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { suppressHover } from '../../utils/hoverGuard'
+import AppIcon from '../shared/AppIcon.vue'
 import BackupBadge from './BackupBadge.vue'
 
 defineProps<{
@@ -88,22 +89,16 @@ onUnmounted(() => {
     <div class="titlebar-buttons">
       <template v-if="!isLocked">
         <button  class="titlebar-btn tb-util" @click="emit('openSettings')" title="设置">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
+          <AppIcon name="gear" :size="16" />
         </button>
         <button  class="titlebar-btn tb-util" @click="emit('lock')" title="锁定">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
+          <AppIcon name="lock" :size="16" />
         </button>
         <div class="titlebar-divider"></div>
       </template>
       <button  class="titlebar-btn" @click="minimize" title="最小化">
         <svg width="12" height="12" viewBox="0 0 12 12">
-          <rect x="1" y="5.5" width="10" height="1" fill="currentColor"/>
+          <rect x="2" y="5.5" width="8" height="1" fill="currentColor"/>
         </svg>
       </button>
       <button  class="titlebar-btn" @click="toggleMaximize" :title="isMaximized ? '还原' : '最大化'">
@@ -111,13 +106,14 @@ onUnmounted(() => {
           <rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
         <svg v-else width="12" height="12" viewBox="0 0 12 12">
-          <path d="M4.5 1.5H9.5a1.5 1.5 0 0 1 1.5 1.5V6.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
-          <rect x="1.5" y="4" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/>
+          <path d="M5.5 2.2H8.8a1.2 1.2 0 0 1 1.2 1.2v3.3" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+          <rect x="2" y="4.2" width="6" height="6" rx="1.2" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
       </button>
       <button  class="titlebar-btn titlebar-btn-close" @click="close" title="关闭">
+        <!-- 三钮同一档：同 2–10 光学盒、同 1px 实笔（原先关闭是 1.2px 的 10×10，比另两颗又粗又大） -->
         <svg width="12" height="12" viewBox="0 0 12 12">
-          <path d="M1 1 L11 11 M1 11 L11 1" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M2 2 10 10M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
         </svg>
       </button>
     </div>
@@ -127,10 +123,8 @@ onUnmounted(() => {
 <style scoped>
 .titlebar {
   height: 42px;
-  background: var(--chrome-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--border);
+  /* 拆面轮：顶栏不再另起一层板——透明并入整窗微光画布，无底色无分割线 */
+  background: transparent;
   display: flex;
   align-items: center;
   position: relative;
@@ -218,7 +212,7 @@ onUnmounted(() => {
   width: 32px;
   height: 28px;
   align-self: center;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
 }
 
 /* 顶栏底色本身就比 --hover 更暗（浅色主题 chrome≈#f7f6f4、--hover=#faf9f7），

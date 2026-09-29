@@ -200,8 +200,8 @@ test.describe('Entries 网址收藏', () => {
     await gh.hover()
     await gh.locator('.card-check').click()
 
-    // 全包裹：1px 实环压在边框外沿，底色吃满整张卡（锚点 = paper 底色 × 墨蓝 accent）
-    await expect(gh).toHaveCSS('box-shadow', 'rgb(61, 90, 128) 0px 0px 0px 1px, rgba(29, 28, 26, 0.06) 0px 4px 12px -2px, rgb(212, 210, 202) 0px 0px 0px 1px')
+    // 去胶囊轮：白卡内选中不再外扩实环，改 1px 内描边 + 浸润底（锚点 = paper 底色 × 墨蓝 accent）
+    await expect(gh).toHaveCSS('box-shadow', 'rgb(61, 90, 128) 0px 0px 0px 1px inset')
     await expect(gh).toHaveCSS('background-color', 'rgb(232, 238, 244)')
     await expect(gh.locator('.ec-name')).toHaveCSS('color', 'rgb(49, 73, 106)')
 

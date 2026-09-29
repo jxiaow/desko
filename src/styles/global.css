@@ -18,6 +18,10 @@
   /* 圆角系统 */
   --radius-xs: 4px;
   --radius-sm: 6px;
+  /* 控件档：图标按钮与小型按钮专用。原先它们跟着 --radius-sm 吃 6px，28px 的钮只占短边 21%，
+     是全场最方的一档（卡片 10/56≈18% 但有 14px 弹窗与胶囊压着）。抬到 9px≈32%，落回同一轨。
+     只给按钮——输入字段/标签/气泡仍走 --radius-sm，圆角轴一分为二，别互相牵连。 */
+  --radius-ib: 9px;
   --radius: 10px;
   --radius-md: 12px;
   --radius-lg: 10px;
@@ -58,6 +62,9 @@
   --fs-max: 900px;
   /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
   --stream-max: 1200px;
+  /* 四个列表页的阅读列上限：按视口给，侧栏展开/折叠不跟着抖。
+     1235 常态窗与 1440 都还吃在 900 下限上，只有最大化（≥1920）才涨到 1120 */
+  --content-max: clamp(900px, calc(100vw - 800px), 1120px);
   /* 小记卡片正文高度上限：短的小记按实际内容，长的由 JS 收在这里之上最近的整行边界 */
   --memo-max-h: 144px;
   --rail-w: 248px;
@@ -98,7 +105,8 @@
    色温同族，accent 四档：墨蓝 ink / 青瓷 celadon / 赭石 clay / 紫罗 plum。
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ---------- paper：暖纸。界面退到灰阶，白面浮在米灰底上，靠发丝描边分层 ---------- */
+/* ---------- paper：暖纸 v3（减黄提净）。灰阶抽掉大半黄味与 ink D1 同族，
+   白面浮在净灰底上，层差拉开一档，字色微收更 crisp ---------- */
 :root, [data-theme="paper"] {
   /* 品牌缺省：墨蓝（accent 覆盖层会按 data-accent 重填这一族） */
   --accent: #3d5a80;
@@ -110,34 +118,36 @@
   --accent-ring: rgba(61, 90, 128, 0.16);
   --text-brand: #31496a;
 
-  /* 面：暖纸五档。相邻档差一档色温，不做条纹 */
-  /* 轻量化轮：纸色底族提亮减黄（暖米灰→近中性），层间色阶拉开 */
-  --bg: #f7f6f4;
-  --panel-bg: #ffffff;
-  --chrome-bg: rgba(247, 246, 244, 0.78);
-  --sunken: #f0efec;
-  --fill: #e9e8e4;
-  --hover: #faf9f7;
-  --active: #eeede9;
+  /* 面：净灰五档。相邻档差一档色温，不做条纹
+     --panel-bg 不用纯白：卡片占窗面七成，255 会把眼睛适应点亮到顶，旁边 #f1f1f0 就显脏。
+     分层本来就由 --border 那条发丝线担（它比画布还深 11 级），收 3 级不掉分离度。
+     --hover 跟着重切，保持与卡片底约 5 级差，否则行悬停没有反馈。 */
+  --bg: #f8f8f7;
+  --panel-bg: #fcfcfc;
+  --chrome-bg: rgba(248, 248, 247, 0.78);
+  --sunken: #f1f1f0;
+  --fill: #eaeae8;
+  --hover: #f7f7f7;
+  --active: #eeedeb;
   --overlay: rgba(29, 28, 26, 0.42);
 
-  /* 文字：四级暖中性，深字浅底一眼可读 */
-  --text: #1d1c1a;
-  --text-secondary: #4f4e48;
-  --text-muted: #6e6c64;
-  --text-faint: #98968c;
+  /* 文字：四级近中性，深字浅底一眼可读 */
+  --text: #333230;
+  --text-secondary: #4d4c49;
+  --text-muted: #6b6a66;
+  --text-faint: #95948e;
 
   /* 描边：层级靠边框，不靠色块 */
-  --border: #e9e8e4;
-  --border-strong: #d8d6d1;
-  --border-subtle: #f0efec;
-  --border-hover: #d8d6d1;
+  --border: #e6e6e4;
+  --border-strong: #d5d5d2;
+  --border-subtle: #f1f1f0;
+  --border-hover: #d5d5d2;
 
   /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
-  --text-url: #4f4e48;
-  --badge-cat-bg: #f2f1ed;
-  --badge-cat-border: #e9e8e4;
-  --badge-cat-text: #4f4e48;
+  --text-url: #4d4c49;
+  --badge-cat-bg: #f0f0ee;
+  --badge-cat-border: #e6e6e4;
+  --badge-cat-text: #4d4c49;
   --badge-ver-bg: #e8eef4;
   --badge-ver-text: #31496a;
 
@@ -146,7 +156,7 @@
   /* 轻量化轮：行卡不再靠宽大软影浮起，阴影只留一丝贴地感，分层交还发丝描边 */
   --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
-  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d8d6d1;
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d5d5d2;
   --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
   --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -166,8 +176,8 @@
   --warning-soft: #f6efdf;
 
   /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
-  --sidebar-bg: #eeede9;
-  --sidebar-hover: #e6e4df;
+  --sidebar-bg: #edecea;
+  --sidebar-hover: #e5e5e3;
 
   /* 品牌标渐变 */
   --brand-g1: #6c88aa;
@@ -176,14 +186,14 @@
   --brand-knob: #ffffff;
 
   /* 锁屏 */
-  --lock-wash-a: #faf9f7;
-  --lock-wash-b: #eeede9;
+  --lock-wash-a: #fbfbfa;
+  --lock-wash-b: #edecea;
   --lock-orb-1: rgba(61, 90, 128, 0.07);
   --lock-orb-2: rgba(61, 90, 128, 0.045);
 
   /* 毛玻璃底栏 */
   --frost-bg: rgba(255, 255, 255, 0.86);
-  --frost-border: #e9e8e4;
+  --frost-border: #e6e6e4;
 
   /* 深色面：气泡与 toast */
   --tip-bg: #26241f;
@@ -234,49 +244,50 @@
   --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
-/* ---------- ink：暖墨。与纸同一只手的色温，深色下分层靠描边+顶部高光 ---------- */
+/* ---------- ink：暖石。深色 v3 轮：画布抬离近黑、文字实色不掺透明，
+   小字对比全部 ≥5.2:1（正文 ≈11:1），冷调半透明字在深色下会发糊。 ---------- */
 [data-theme="ink"] {
-  --accent: #7d9fc6;
-  --accent-hover: #96b3d4;
-  --accent-active: #6a8bb2;
+  --accent: #89a8cd;
+  --accent-hover: #a2bcda;
+  --accent-active: #6f92ba;
   --accent-on: #171614;
-  --accent-soft: rgba(125, 159, 198, 0.16);
-  --accent-light: rgba(125, 159, 198, 0.28);
-  --accent-ring: rgba(125, 159, 198, 0.32);
-  --text-brand: #a8c3e0;
+  --accent-soft: rgba(137, 168, 205, 0.15);
+  --accent-light: rgba(137, 168, 205, 0.26);
+  --accent-ring: rgba(137, 168, 205, 0.32);
+  --text-brand: #adc6e2;
 
-  --bg: #191816;
-  --panel-bg: #211f1c;
-  --chrome-bg: rgba(25, 24, 22, 0.85);
-  --sunken: #131211;
-  --fill: #2b2925;
-  --hover: #292723;
-  --active: #33302b;
+  --bg: #1c1b18;
+  --panel-bg: #24221e;
+  --chrome-bg: rgba(28, 27, 24, 0.85);
+  --sunken: #171613;
+  --fill: #2f2c27;
+  --hover: #2a2823;
+  --active: #35322c;
   --overlay: rgba(0, 0, 0, 0.62);
 
-  --text: #e9e8e5;
-  --text-secondary: #b5b4b0;
-  --text-muted: #9d9c97;
-  --text-faint: #7c7b76;
+  --text: #edebe6;
+  --text-secondary: #c9c6bf;
+  --text-muted: #aba8a1;
+  --text-faint: #8a877f;
 
-  --border: #33302b;
-  --border-strong: #47433c;
-  --border-subtle: #262420;
-  --border-hover: #47433c;
+  --border: #34312b;
+  --border-strong: #45413a;
+  --border-subtle: #2a2823;
+  --border-hover: #45413a;
 
-  --text-url: #c8c7c1;
-  --badge-cat-bg: #262420;
-  --badge-cat-border: #35322c;
-  --badge-cat-text: #b5b4b0;
-  --badge-ver-bg: rgba(125, 159, 198, 0.16);
-  --badge-ver-text: #a8c3e0;
+  --text-url: #cfccc4;
+  --badge-cat-bg: #2a2823;
+  --badge-cat-border: #34312b;
+  --badge-cat-text: #c9c6bf;
+  --badge-ver-bg: rgba(137, 168, 205, 0.15);
+  --badge-ver-text: #adc6e2;
 
   /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   /* 轻量化轮：墨色行卡去掉 18px 大投影与外圈环，只留顶部高光一丝 */
   --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #47433c;
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #45413a;
   --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
   --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
   --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -284,7 +295,7 @@
   --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
 
   --danger: #e08079;
-  --danger-on: #211f1c;
+  --danger-on: #24221e;
   --danger-hover: #ea9d97;
   --danger-soft: #35211e;
   --danger-border: #55302b;
@@ -293,33 +304,33 @@
   --warning: #d9a95f;
   --warning-soft: #2e2718;
 
-  --sidebar-bg: #1f1e1b;
-  --sidebar-hover: #2a2825;
+  --sidebar-bg: #201f1c;
+  --sidebar-hover: #2a2823;
 
-  --brand-g1: #a8c3e0;
-  --brand-g2: #7d9fc6;
-  --brand-g3: #5c7ea6;
-  --brand-knob: #191816;
+  --brand-g1: #adc6e2;
+  --brand-g2: #89a8cd;
+  --brand-g3: #6f92ba;
+  --brand-knob: #1c1b18;
 
-  --lock-wash-a: #191816;
-  --lock-wash-b: #211f1c;
-  --lock-orb-1: rgba(125, 159, 198, 0.14);
-  --lock-orb-2: rgba(125, 159, 198, 0.07);
+  --lock-wash-a: #1c1b18;
+  --lock-wash-b: #24221e;
+  --lock-orb-1: rgba(137, 168, 205, 0.14);
+  --lock-orb-2: rgba(137, 168, 205, 0.07);
 
-  --frost-bg: rgba(33, 31, 28, 0.85);
-  --frost-border: #33302b;
+  --frost-bg: rgba(36, 34, 30, 0.85);
+  --frost-border: #34312b;
 
   /* 深色界面的浮层反过来：亮底暗字 */
-  --tip-bg: #ecebe6;
+  --tip-bg: #efede8;
   --tip-fg: #1d1c1a;
-  --toast-bg: #ecebe6;
+  --toast-bg: #efede8;
   --toast-ok: #2f7d52;
   --toast-err: #b23c37;
   --toast-info: #4c6c92;
 
   --scrollbar: rgba(255, 255, 255, 0.14);
   --scrollbar-hover: rgba(255, 255, 255, 0.24);
-  --selection: rgba(125, 159, 198, 0.30);
+  --selection: rgba(137, 168, 205, 0.30);
 
   /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
   --cat-1: #8a8fd8;
@@ -369,13 +380,13 @@
   --selection: rgba(61, 90, 128, 0.18); --toast-info: #93aecb;
 }
 [data-theme="ink"][data-accent="ink"] {
-  --accent: #7d9fc6; --accent-hover: #96b3d4; --accent-active: #6a8bb2;
-  --accent-on: #171614; --accent-soft: rgba(125, 159, 198, 0.16); --accent-light: rgba(125, 159, 198, 0.28);
-  --accent-ring: rgba(125, 159, 198, 0.32); --text-brand: #a8c3e0;
-  --badge-ver-bg: rgba(125, 159, 198, 0.16); --badge-ver-text: #a8c3e0;
-  --brand-g1: #a8c3e0; --brand-g2: #7d9fc6; --brand-g3: #5c7ea6;
-  --lock-orb-1: rgba(125, 159, 198, 0.14); --lock-orb-2: rgba(125, 159, 198, 0.07);
-  --selection: rgba(125, 159, 198, 0.30); --toast-info: #4c6c92;
+  --accent: #89a8cd; --accent-hover: #a2bcda; --accent-active: #6f92ba;
+  --accent-on: #171614; --accent-soft: rgba(137, 168, 205, 0.15); --accent-light: rgba(137, 168, 205, 0.26);
+  --accent-ring: rgba(137, 168, 205, 0.32); --text-brand: #adc6e2;
+  --badge-ver-bg: rgba(137, 168, 205, 0.15); --badge-ver-text: #adc6e2;
+  --brand-g1: #adc6e2; --brand-g2: #89a8cd; --brand-g3: #6f92ba;
+  --lock-orb-1: rgba(137, 168, 205, 0.14); --lock-orb-2: rgba(137, 168, 205, 0.07);
+  --selection: rgba(137, 168, 205, 0.30); --toast-info: #4c6c92;
 }
 
 /* ---- 青瓷 celadon（苔绿，承锁页第四轮母版 #3d7355） ---- */
@@ -461,9 +472,14 @@
   --text-primary: var(--text);
 
   /* 主列表页规格引入的语义名，一律 var() 指到既有物理槽，零新增 hex */
-  /* 顶栏底：与页面底色同源的半透磨砂（配 .page-bar 的 backdrop-blur 生效）。
-     静止时看不出是一条带；滚动内容从 48px 栏下面穿过去时被糊住而不是顶出来 */
-  --bg-toolbar: color-mix(in srgb, var(--bg) 72%, transparent);
+  /* 画布底：两团 accent 光晕压在 sunken 上，几何按视口定位（.app-root 不滚动，天然 fixed）。
+     凡是浮在这层画布上的吸顶件（.page-bar / 小记 .day-head）必须复用同一条配方 +
+     background-attachment: fixed，否则平铺半透明底会把光晕压掉一档，静止时就显出一条亮带 */
+  --canvas-bg:
+    radial-gradient(760px 460px at 82% -120px, var(--lock-orb-1), transparent 70%),
+    radial-gradient(620px 420px at 6% -100px, var(--lock-orb-2), transparent 68%),
+    var(--sunken);
+  --bg-toolbar: var(--canvas-bg);
   --bg-popover: var(--panel-bg);
   --bg-tag-default: var(--badge-cat-bg);
   --bg-mono-chip: var(--sunken);
@@ -512,11 +528,13 @@ body {
 
 #app { height: 100%; }
 
-.app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; }
+/* inset 轮：画布沉到 sunken 一档灰（顶栏/侧栏/工具条仍透明并入），白面板成为画布上唯一的亮面；
+   光晕从窗口顶边一路铺下来，与锁屏同一呼吸源 */
+.app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; background: var(--canvas-bg); }
 .app-root.locked-bg { background: linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%); }
 .app-layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
-.main-area { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); height: 100%; }
-.main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); min-height: 0; }
+.main-area { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: transparent; height: 100%; }
+.main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: transparent; min-height: 0; }
 
 /* 侧栏折叠时文字淡出而不是消失。Sidebar.vue 用 <Transition name="nav-text"> 包 v-if。 */
 .nav-text-enter-active,
@@ -702,7 +720,7 @@ body {
   height: 24px;
   border: none;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   cursor: pointer;
   color: var(--text-muted);
   display: flex;
@@ -1052,6 +1070,11 @@ body {
 .empty-icon svg { width: 24px; height: 24px; }
 .empty-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: var(--space-1); }
 .empty-desc { font-size: 13px; color: var(--text-muted); }
+/* 空态三点节奏：中点落 accent，与微光画布同色系；纯装饰，不带语义 */
+.empty-motto { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 22px; }
+.empty-motto .d { width: 4px; height: 4px; border-radius: 50%; background: var(--border-strong); }
+.empty-motto .d.mid { width: 6px; height: 6px; background: var(--accent); opacity: 0.8; }
+.empty-motto .w { font-size: 11.5px; color: var(--text-faint); letter-spacing: 0.14em; }
 
 /* 滚动条 */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -1086,7 +1109,7 @@ body {
   height: 24px;
   border: none;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
@@ -1108,7 +1131,7 @@ body {
   padding: 0 var(--space-2);
   border: 1px solid var(--border);
   background: var(--panel-bg);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   color: var(--text-secondary);
   font-size: 12px;
   font-family: inherit;
@@ -1135,7 +1158,7 @@ body {
   padding: 0 var(--space-2);
   border: none;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   color: var(--text-muted);
   font-size: 12px;
   font-family: inherit;
@@ -1156,40 +1179,86 @@ body {
      以下一份为准，scoped 里的副本一律删除。 ---------- */
 
 /* 滚动容器：顶部不留内边距——sticky 的 top:0 会贴在 padding-top 下面，
-   露出一条能看见内容的缝。底部 22px 是常态呼吸，批量底栏浮起时换回净空 */
-.content-inner { flex: 1; overflow-y: auto; padding: 0 var(--space-5) 22px; }
+   露出一条能看见内容的缝。底部 22px 是常态呼吸，批量底栏浮起时换回净空。
+   微光画布：页面顶部透一层 accent 微光，与锁屏同源（orb 槽随 accent 走）；
+   背景钉在容器上，内容滚过时微光不动 */
+.content-inner {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--space-5) 22px;
+  /* inset 轮：居中阅读列——窄窗时保持 space-5 常态边距，宽窗两侧对称加宽，
+     行长不再随窗口无限拉大。上限走 --content-max（视口驱动，最大化才放宽到 1120） */
+  padding-inline: max(var(--space-5), calc(50% - var(--content-max) / 2));
+}
 .content-inner:has(.batch-dock) { padding-bottom: var(--dock-clearance); }
 
 /* 吸顶工具栏：48px 定高，五页同一条。
-   底色与页面同色（不再另起一条亮带），滚动内容从栏下方穿过时被糊住而不是顶出来；
-   负外边距吃满滚动容器宽度，左右间距与 .content-inner 同为 space-5，栏内控件与行卡左缘对齐 */
+   inset 轮起与内容列同宽同左缘（不再负边距吃满），底色取画布色半透——
+   行列表滚动到栏下时被同色磨砂糊住而不是顶出来 */
 .page-bar {
   position: sticky;
   top: 0;
   z-index: 20;
   height: 48px;
-  margin: 0 calc(var(--space-5) * -1);
-  padding: 0 var(--space-5);
+  /* 半透明平铺底会把画布那两团径向光晕压平成一条比四周亮的横带（静止时就看得见）。
+     改成与 .app-root 同一条画布配方（--bg-toolbar）+ fixed 附着：静止时与身后逐像素
+     重合，滚动时靠不透明底盖住行。background 简写会重置 attachment，故其后重申。 */
   background: var(--bg-toolbar);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background-attachment: fixed;
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
-/* 栏内控件一律 34px 档（全局 36px 是弹窗/表单档，塞进 48px 栏会顶天） */
-.page-bar .search-box { flex: 0 0 240px; min-width: 0; height: 34px; margin-right: var(--space-2); }
-.page-bar .search-box input { font-size: var(--text-sm); }
+/* 栏内控件一律 30px 档（减重轮：34 档在 48px 栏里仍显厚；全局 36px 是弹窗/表单档） */
+.page-bar .search-box { flex: 0 0 200px; min-width: 0; height: 30px; margin-right: var(--space-2); }
+.page-bar .search-box input { font-size: var(--text-xs); }
 .page-bar .btn-primary,
 .page-bar .btn-secondary,
-.page-bar .bar-btn { height: 34px; }
+.page-bar .bar-btn { height: 30px; }
+/* 栏内主钮收白描边档：整窗唯一那块实心色让给内容区，工具条只留一个视觉重点。
+   弹窗/表单里的 .btn-primary 仍是实心 accent，主从关系没被打乱。 */
+.page-bar .btn-primary {
+  background: var(--bg-surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-xs);
+}
+.page-bar .btn-primary:hover {
+  background: var(--bg-surface);
+  border-color: var(--accent);
+  color: var(--text-brand);
+  transform: none;
+}
+.page-bar .btn-primary:active {
+  background: var(--sunken);
+  color: var(--text-brand);
+  transform: none;
+}
+/* 钮里的图形（＋/上传/启停）担色，文字担形 */
+.page-bar .btn-primary svg { color: var(--accent); }
 
-/* 骨架屏：行形与行卡同尺寸（56px 行卡档），呼吸只走在容器上，条块是静的 */
+/* 行列表（inset 轮）：一块白色圆角面板承托，面板内行间只剩发丝细线；
+   面板高度随行数收口，工具条浮在灰底上与它形成前后两层；
+   行自身的 hover/选中态由各页负责，骨架行同落面板 */
+.rowlist {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-3);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.rowlist > * + * { border-top: 1px solid var(--border); }
+.rowlist .skeleton-row { border: none; border-radius: 0; box-shadow: none; background: transparent; }
+
+/* 骨架屏：行形与行卡同尺寸（inset 轮 52px 行档），呼吸只走在容器上，条块是静的 */
 .skeleton-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  height: 56px;
+  height: 52px;
   padding: 0 var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
@@ -1198,13 +1267,14 @@ body {
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 .skeleton-block {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-badge);
-  background: var(--hover);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  /* inset 轮：骨架行落进白面板，比画布档深的 fill 才看得见条块 */
+  background: var(--fill);
   flex-shrink: 0;
 }
-.skeleton-line { height: 8px; border-radius: 4px; background: var(--hover); flex-shrink: 0; }
+.skeleton-line { height: 8px; border-radius: 4px; background: var(--fill); flex-shrink: 0; }
 .skeleton-line.w24 { width: 24%; }
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w70 { width: 70%; }
@@ -1243,7 +1313,7 @@ body {
   padding: 0 var(--space-2);
   border: 1px solid transparent;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
@@ -1320,7 +1390,7 @@ body {
   height: 26px;
   padding: 0 var(--space-2);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   background: var(--fill);
   color: var(--text-secondary);
   font-size: 12px;

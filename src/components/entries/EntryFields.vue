@@ -296,7 +296,7 @@ defineExpose({ save })
             @input="showCategoryDropdown = true; clearInvalid('category')"
             @keydown.enter.prevent="commitCategory"
           />
-          <svg class="cat-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg>
+          <AppIcon class="cat-chevron" name="chevDown" :size="12" />
           <Teleport to="body">
             <div
               v-if="showCategoryDropdown"
@@ -489,7 +489,7 @@ defineExpose({ save })
   flex-shrink: 0; height: 28px; padding: 0 11px;
   font-size: 12px; font-weight: 500; font-family: inherit;
   color: var(--text-secondary); background: var(--panel-bg);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-ib);
   cursor: pointer; transition: all var(--transition-fast);
 }
 .btn-add-path:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }

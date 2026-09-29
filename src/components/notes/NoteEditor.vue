@@ -476,9 +476,7 @@ defineExpose({ focusEnd, insertText, insertImage })
       <div class="lang-dropdown">
         <button class="lang-btn" @click="showLangDropdown = !showLangDropdown">
           <span>{{ codeLanguages.find(l => l.value === currentLang)?.label }}</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
+          <AppIcon name="chevDown" :size="12" />
         </button>
         <div v-if="showLangDropdown" class="lang-options">
           <div v-for="lang in codeLanguages" :key="lang.value"
@@ -540,16 +538,16 @@ defineExpose({ focusEnd, insertText, insertImage })
 /* 全屏书写：一张纸的排版尺度 */
 .note-editor.v-full :deep(.ProseMirror) {
   padding: 0;
-  font-size: 17px;
-  line-height: 1.9;
+  font-size: 15.5px;
+  line-height: 1.68;
   letter-spacing: -0.012em;
   min-height: 40vh;
   caret-color: var(--accent);
 }
 
-.note-editor.v-full :deep(.ProseMirror > * + *) { margin-top: var(--space-4); }
-.note-editor.v-full :deep(h1) { font-size: 27px; font-weight: 650; line-height: 1.35; letter-spacing: -0.026em; margin-top: var(--space-6); }
-.note-editor.v-full :deep(h2) { font-size: 21px; font-weight: 620; line-height: 1.45; letter-spacing: -0.02em; margin-top: var(--space-5); }
+.note-editor.v-full :deep(.ProseMirror > * + *) { margin-top: 10px; }
+.note-editor.v-full :deep(h1) { font-size: 23px; font-weight: 650; line-height: 1.35; letter-spacing: -0.026em; margin-top: var(--space-4); }
+.note-editor.v-full :deep(h2) { font-size: 18px; font-weight: 620; line-height: 1.45; letter-spacing: -0.02em; margin-top: 12px; }
 .note-editor.v-full :deep(h3) { font-size: 18px; font-weight: 600; }
 .note-editor.v-full :deep(blockquote) { border-left-width: 3px; padding-left: var(--space-4); }
 .note-editor.v-full :deep(pre) { font-size: 13.5px; line-height: 1.75; padding: var(--space-4); background: var(--panel-bg); border: none; box-shadow: var(--shadow-xs); }
@@ -664,7 +662,7 @@ defineExpose({ focusEnd, insertText, insertImage })
   padding: 4px 10px;
   background: var(--panel-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   font-size: 12px;
   color: var(--text-secondary);
   cursor: pointer;

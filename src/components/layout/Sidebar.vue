@@ -9,6 +9,7 @@ import { useEntriesStore } from '../../stores/entries'
 import { useNotesStore } from '../../stores/notes'
 import { useFileShortcutsStore } from '../../stores/fileShortcuts'
 import BrandLogo from '../shared/BrandLogo.vue'
+import AppIcon from '../shared/AppIcon.vue'
 
 defineProps<{
   collapsed: boolean
@@ -53,17 +54,14 @@ const onDragDblclick = (e: MouseEvent) => {
         <span class="sidebar-name">Desko</span>
       </template>
       <button class="sidebar-toggle" :title="collapsed ? '展开侧栏' : '收起侧栏'" @click="$emit('update:collapsed', !collapsed)">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <line x1="9" y1="3" x2="9" y2="21"/>
-        </svg>
+        <AppIcon name="panel" :size="18" />
       </button>
     </div>
 
     <div class="sidebar-nav">
       <router-link to="/entries" class="nav-item m-ent" :class="{ active: route.path === '/entries' }" aria-label="网址收藏">
         <div class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <AppIcon name="navEntries" :size="22" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">网址收藏</span>
@@ -74,7 +72,7 @@ const onDragDblclick = (e: MouseEvent) => {
       </router-link>
       <router-link to="/notes" class="nav-item m-not" :class="{ active: route.path === '/notes' }" aria-label="小记">
         <div class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <AppIcon name="navNotes" :size="22" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">小记</span>
@@ -85,7 +83,7 @@ const onDragDblclick = (e: MouseEvent) => {
       </router-link>
       <router-link to="/files" class="nav-item m-fil" :class="{ active: route.path === '/files' }" aria-label="文件快捷">
         <div class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          <AppIcon name="navFiles" :size="22" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">文件快捷</span>
@@ -96,7 +94,7 @@ const onDragDblclick = (e: MouseEvent) => {
       </router-link>
       <router-link v-if="mfaEnabled" to="/mfa" class="nav-item m-mfa" :class="{ active: route.path === '/mfa' }" aria-label="验证码">
         <div class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9.5 11.5l2 2 3.5-3.5"/></svg>
+          <AppIcon name="navMfa" :size="22" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">验证码</span>
@@ -104,7 +102,7 @@ const onDragDblclick = (e: MouseEvent) => {
       </router-link>
       <router-link v-if="fileshareEnabled" to="/fileshare" class="nav-item m-lan" :class="{ active: route.path === '/fileshare' }" aria-label="局域网传输">
         <div class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>
+          <AppIcon name="navLan" :size="22" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">局域网传输</span>
@@ -117,8 +115,9 @@ const onDragDblclick = (e: MouseEvent) => {
 <style scoped>
 .sidebar {
   width: var(--sidebar-w);
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-border);
+  /* 拆面轮：侧栏并入整窗画布，不再是一块重色板；只剩一条发丝右界 */
+  background: transparent;
+  border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -131,7 +130,7 @@ const onDragDblclick = (e: MouseEvent) => {
   width: 64px;
 }
 
-/* 顶部品牌行：与右列标题栏同高（42px）；侧栏底色转微灰后补一条分割线收口 */
+/* 顶部品牌行：与右列标题栏同高（42px）；拆面轮后画布贯通，不再补分割线 */
 .sidebar-top {
   height: 42px;
   flex-shrink: 0;
@@ -139,7 +138,6 @@ const onDragDblclick = (e: MouseEvent) => {
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-1);
-  border-bottom: 1px solid var(--sidebar-border);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -195,7 +193,7 @@ const onDragDblclick = (e: MouseEvent) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-ib);
   transition: all var(--transition);
 }
 
@@ -242,36 +240,24 @@ const onDragDblclick = (e: MouseEvent) => {
 }
 
 .nav-item.active {
-  /* 与内容区浮卡同一语言：极淡水洗铺底 + 左侧胶囊柱做唯一重音，色相取本模块的 --h */
-  background: color-mix(in srgb, var(--h) 8%, transparent);
-  color: var(--h);
+  /* inset 轮：激活态=与列表面板同材质的一小块白，图标戴 accent 色做唯一重音 */
+  background: var(--panel-bg);
+  color: var(--text);
   font-weight: 600;
+  box-shadow: var(--shadow-xs);
 }
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 16px;
-  border-radius: 999px;
-  background: var(--h);
-}
+.nav-item.active .nav-icon { color: var(--h); }
 
 .sidebar.collapsed .nav-item {
   justify-content: center;
   padding: 0;
 }
 
-/* 折叠档窄栏里左胶囊柱不贴边会浮在半空，去掉它，靠水洗底 + accent 图标做激活信号 */
-.sidebar.collapsed .nav-item.active::before {
-  display: none;
-}
-
+/* 图标档 22px：36px 行轨里留 7px 上下余量。这条 CSS 会盖掉 AppIcon 的 width/height
+   属性（样式优先于呈现属性），改尺寸时两处一起动 */
 .nav-icon {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -279,8 +265,8 @@ const onDragDblclick = (e: MouseEvent) => {
 }
 
 .nav-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 
 .nav-text {
