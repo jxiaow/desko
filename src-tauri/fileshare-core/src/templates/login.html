@@ -6,30 +6,54 @@
   <title>访问验证 · Desko</title>
   <style>
     :root {
-      --bg: #f8f8fa; --panel: #ffffff; --fill: #f1f1f4;
-      --border: #e3e3ea; --text: #1b1b20; --text2: #5e5e68; --muted: #8d8d98; --faint: #b6b6c0;
-      --accent: #5b57d9; --accent-hover: #4c48c6; --accent-ring: rgba(91, 87, 217, 0.15);
-      --danger: #c2413e;
-      --r-sm: 6px; --r-md: 10px;
-      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+      --r-sm: 6px; --r-xl: 14px;
+      --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      --font-mono: Consolas, 'JetBrains Mono', monospace;
+      --bg:#f7f6f4; --panel:#ffffff; --sunken:#f0efec;
+      --text:#37352f; --muted:#6e6c64; --faint:#98968c;
+      --border:#e9e8e4; --border-strong:#d8d6d1;
+      --accent:#3d5a80; --accent-hover:#31496a; --accent-on:#fff; --ring:rgba(61,90,128,.16);
+      --shadow-card:0 1px 2px 0 rgba(29,28,26,.04);
+      --shadow-pop:0 16px 36px -8px rgba(29,28,26,.12),0 4px 10px -2px rgba(29,28,26,.04),0 0 0 1px rgba(0,0,0,.06);
+      --danger:#a9443c;
+      --g1:#6c88aa; --g3:#283d58;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { min-height: 100vh; font: 14px/1.5 var(--font); background: var(--bg); color: var(--text); display: grid; place-items: center; -webkit-font-smoothing: antialiased; }
-    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 6px 24px rgba(27,27,32,.08); width: 360px; max-width: 92vw; padding: 30px 26px; }
-    .logo { width: 44px; height: 44px; border-radius: 12px; background: var(--accent); display: grid; place-items: center; color: #fff; margin: 0 auto 14px; }
-    h1 { font: 600 17px/1.3 var(--font); text-align: center; margin-bottom: 4px; }
-    p { font-size: 12.5px; color: var(--muted); text-align: center; margin-bottom: 22px; }
-    input { width: 100%; padding: 10px 13px; border: 1px solid var(--border); border-radius: var(--r-md); font: 14px/1.4 var(--font); background: var(--fill); color: var(--text); margin-bottom: 10px; transition: border-color .15s, box-shadow .15s, background .15s; }
-    input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel); }
-    input::placeholder { color: var(--faint); }
-    button { width: 100%; padding: 10px; border: none; border-radius: var(--r-md); background: var(--accent); color: #fff; font: 600 14px/1.4 var(--font); cursor: pointer; transition: background .15s; }
-    button:hover { background: var(--accent-hover); }
-    .err { font-size: 12px; color: var(--danger); text-align: center; min-height: 16px; margin-bottom: 8px; }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:#191816; --panel:#211f1c; --sunken:#131211;
+        --text:#e9e8e5; --muted:#9d9c97; --faint:#7c7b76;
+        --border:#33302b; --border-strong:#47433c;
+        --accent:#7d9fc6; --accent-hover:#96b3d4; --accent-on:#171614; --ring:rgba(125,159,198,.32);
+        --shadow-card:inset 0 1px 0 rgba(255,255,255,.04);
+        --shadow-pop:0 24px 54px -12px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.08);
+        --danger:#e08079;
+        --g1:#a8c3e0; --g3:#5c7ea6;
+      }
+    }
+    @font-face {
+      font-family: 'HarmonyOS Sans SC';
+      src: url('/fonts/app.woff2') format('woff2-variations');
+      font-weight: 40 900; font-style: normal; font-display: swap;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { min-height:100vh; font:14px/1.5 var(--font-ui); background:var(--bg); color:var(--text); display:grid; place-items:center; -webkit-font-smoothing:antialiased; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:var(--r-xl); box-shadow:var(--shadow-pop); width:360px; max-width:92vw; padding:28px 24px; }
+    .brand { width:34px; height:34px; border-radius:8px; background:linear-gradient(135deg,var(--g1),var(--g3)); display:grid; place-items:center; margin:0 auto 12px; }
+    .brand svg { color:#fff; }
+    h1 { font:600 15px/1.3 var(--font-ui); text-align:center; margin-bottom:4px; letter-spacing:-.01em; }
+    p { font-size:12px; color:var(--muted); text-align:center; margin-bottom:20px; }
+    input { width:100%; height:32px; padding:0 12px; border:1px solid var(--border); border-radius:var(--r-sm); font:14px/1 var(--font-ui); background:var(--sunken); color:var(--text); margin-bottom:10px; outline:none; transition:border-color .15s, box-shadow .15s, background .15s; }
+    input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); background:var(--panel); }
+    input::placeholder { color:var(--faint); }
+    button { width:100%; height:32px; border:none; border-radius:var(--r-sm); background:var(--accent); color:var(--accent-on); font:500 13px/1 var(--font-ui); cursor:pointer; transition:background .15s; }
+    button:hover { background:var(--accent-hover); }
+    .err { font-size:12px; color:var(--danger); text-align:center; min-height:16px; margin-bottom:8px; }
+    @media (prefers-reduced-motion: reduce) { * { transition-duration:.01ms !important; } }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="logo"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+    <div class="brand"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
     <h1>局域网文件传输</h1>
     <p>该服务已开启访问口令，请输入口令继续</p>
     %%ERROR%%

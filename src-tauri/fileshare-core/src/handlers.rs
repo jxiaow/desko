@@ -18,12 +18,14 @@ use crate::http_util::{
 use crate::multipart;
 use crate::pages::{self, HomePage, RowData};
 
-const PAGE_SIZE: usize = 10;
+const PAGE_SIZE: usize = 20;
 const MAX_FORM_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_LOGIN_BYTES: u64 = 8 * 1024;
 /// 单次上传请求的合计字节上限：挡误操作与恶意灌盘，正常局域网传文件够用
 const MAX_UPLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 const SESSION_TTL_COOKIE_SECS: u64 = 7 * 24 * 3600;
+/// 中文界面字体：与主窗口同一份 HarmonyOS Sans SC 子集，随页面内嵌供出
+const APP_FONT: &[u8] = include_bytes!("../../../public/fonts/harmonyos-sans-sc.woff2");
 
 /// 服务运行期共享状态：请求线程与 Tauri 命令共用一份。
 pub struct RuntimeState {
@@ -122,8 +124,8 @@ fn dispatch(
     content_type: &str,
     cookie_header: &str,
 ) -> Handled {
-    // 口令门：/login 之外一律先验会话
-    if cfg.password_sha256.is_some() && path != "/login" {
+    // 口令门：/login 与字体静态资源之外一律先验会话
+    if cfg.password_sha256.is_some() && path != "/login" && !path.starts_with("/fonts/") {
         let cookies = parse_cookie(cookie_header);
         let authed = cookie_get(&cookies, SESSION_COOKIE)
             .map(|t| state.sessions.validate(t))
@@ -148,6 +150,7 @@ fn dispatch(
             let next = sanitize_next(pair_get(query, "next").unwrap_or(""));
             ok_respond(request, html_resp(StatusCode(200), &pages::login_page(false, &next), None))
         }
+        ("GET", "/fonts/app.woff2") => ok_respond(request, font_resp()),
         ("POST", "/login") => handle_login(request, state, cfg),
         _ => ok_respond(request, text_resp(StatusCode(404), "Not Found")),
     }
@@ -183,28 +186,33 @@ fn handle_index(
     let is_partial = pair_get(query, "partial") == Some("1");
 
     // 无筛选无排序开关：全目录合并，固定按修改时间倒序
-    let (rows, count, total_pages, current) = page_entries(cfg, &search, page);
-    let count_text = format!("{} 个文件", count);
+    let (rows, count, shown, has_more) = page_entries(cfg, &search, page);
+    let count_text = if has_more {
+        format!("已显示 {} / {} 个文件", shown, count)
+    } else {
+        format!("{} 个文件", count)
+    };
     let share_index = 0usize;
+    let next_page = if has_more { shown / PAGE_SIZE + 1 } else { 0 };
 
     if is_partial {
         let body = pages::partial_response(
             &count_text,
-            &pages::render_rows(&rows),
-            &pages::render_pagination(total_pages, current, &search),
+            &pages::render_more_and(next_page, &search, &pages::render_rows(&rows)),
         );
         return ok_respond(request, html_resp(StatusCode(200), &body, None));
     }
 
     let dirs: Vec<String> = cfg.share_dirs.iter().map(|d| d.display().to_string()).collect();
+    let upload_dir = dirs.first().map(String::as_str).unwrap_or("");
     let html = pages::home_page(&HomePage {
         lan_url: &format!("http://{}:{}", state.lan_ip, state.bound_port),
         toast: if message.is_empty() { None } else { Some(&message) },
         search_q: &search,
         count_text,
-        rows_html: pages::render_rows(&rows),
-        pagination_html: pages::render_pagination(total_pages, current, &search),
+        rows_html: pages::render_more_and(next_page, &search, &pages::render_rows(&rows)),
         share_index,
+        upload_dir,
         share_dirs: &dirs,
     });
     ok_respond(request, html_resp(StatusCode(200), &html, None))
@@ -214,7 +222,7 @@ fn page_entries(
     cfg: &ShareConfig,
     search: &str,
     page: usize,
-) -> (Vec<RowData>, usize, usize, usize) {
+) -> (Vec<RowData>, usize, usize, bool) {
     let mut all: Vec<(usize, FileEntry)> = Vec::new();
     for (i, dir) in cfg.share_dirs.iter().enumerate() {
         for entry in list_files(dir) {
@@ -242,7 +250,7 @@ fn page_entries(
             share_dir: cfg.share_dirs[*i].display().to_string(),
         })
         .collect();
-    (rows, count, total_pages, current)
+    (rows, count, end, current < total_pages)
 }
 
 // ── 下载 ────────────────────────────────────────────────────
@@ -532,6 +540,19 @@ fn text_resp(status: StatusCode, body: &str) -> Response<Cursor<Vec<u8>>> {
     )
 }
 
+fn font_resp() -> Response<Cursor<&'static [u8]>> {
+    Response::new(
+        StatusCode(200),
+        build_headers(vec![
+            ("Content-Type", "font/woff2"),
+            ("Cache-Control", "public, max-age=31536000, immutable"),
+        ]),
+        Cursor::new(APP_FONT),
+        Some(APP_FONT.len()),
+        None,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -593,8 +614,8 @@ mod tests {
     #[test]
     fn page_windowing_clamps_and_slices() {
         let cfg = ShareConfig::default(); // 无目录
-        let (rows, count, total, current) = page_entries(&cfg, "", 999);
-        assert_eq!((rows.len(), count, total, current), (0, 0, 1, 1));
+        let (rows, count, shown, has_more) = page_entries(&cfg, "", 999);
+        assert_eq!((rows.len(), count, shown, has_more), (0, 0, 0, false));
     }
 
     fn test_state(dirs: Vec<PathBuf>) -> Arc<RuntimeState> {
@@ -646,6 +667,11 @@ mod tests {
         let resp = ureq::get(&format!("{}/?partial=1", base)).call().unwrap();
         let body = resp.into_string().unwrap();
         assert!(body.starts_with("1 个文件\n---PARTIAL---\n"));
+
+        // 字体静态资源
+        let resp = ureq::get(&format!("{}/fonts/app.woff2", base)).call().unwrap();
+        assert_eq!(resp.status(), 200);
+        assert_eq!(resp.header("Content-Type").unwrap_or(""), "font/woff2");
 
         // 搜索未命中
         let resp = ureq::get(&format!("{}/?q=zzzz", base)).call().unwrap();
