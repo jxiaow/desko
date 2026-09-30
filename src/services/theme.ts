@@ -76,7 +76,7 @@ export interface AccentInfo {
 
 export const THEMES: ThemeInfo[] = [
   { id: 'paper', name: '纸', prev: { page: '#f8f8f7', sidebar: '#edecea', card: '#fcfcfc', rowHover: '#f7f7f7', edge: '#e6e6e4', accent: '#3d5a80', ink: '#333230' } },
-  { id: 'ink', name: '墨', prev: { page: '#1c1b18', sidebar: '#201f1c', card: '#24221e', rowHover: '#2a2823', edge: '#34312b', accent: '#89a8cd', ink: '#edebe6' } },
+  { id: 'ink', name: '墨', prev: { page: '#23221e', sidebar: '#282621', card: '#312f29', rowHover: '#38352e', edge: '#413e37', accent: '#89a8cd', ink: '#e6e4de' } },
 ]
 
 export const ACCENTS: AccentInfo[] = [

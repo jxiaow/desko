@@ -464,7 +464,7 @@ onUnmounted(() => {
 }
 .tabs .tab.active { background: transparent; box-shadow: none; color: var(--text); font-weight: 600; }
 .tab-more { font-family: inherit; font-size: var(--text-xs); }
-.tab-count { display: inline-block; background: none; color: var(--text-faint); font-size: var(--text-xs); padding: 0; margin-left: 4px; font-weight: 500; line-height: 14px; }
+.tab-count { display: inline-block; background: none; color: var(--text-muted); font-size: var(--text-xs); padding: 0; margin-left: 4px; font-weight: 500; line-height: 14px; }
 .tab.active .tab-count { background: none; color: var(--accent); }
 
 /* 「更多」下拉：224px 面板，内置分类搜索，列表最高 192px 再滚动 */
@@ -493,7 +493,7 @@ onUnmounted(() => {
 }
 .tab-pop-list { max-height: 192px; overflow-y: auto; scrollbar-width: thin; }
 .tab-pop-list .pop-item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.tab-pop-empty { padding: var(--space-2) 8px; font-size: var(--text-sm); color: var(--text-faint); text-align: center; }
+.tab-pop-empty { padding: var(--space-2) 8px; font-size: var(--text-sm); color: var(--text-muted); text-align: center; }
 
 /* inset 轮：行落在白色面板里（global.css .rowlist），行间发丝线由面板承托；
    行不再有卡皮，hover/选中只换底色 */
@@ -602,7 +602,7 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
 }
-.meta-dot { color: var(--text-faint); opacity: 0.6; flex-shrink: 0; }
+.meta-dot { color: var(--text-faint); flex-shrink: 0; }
 .ec-note {
   font-size: var(--text-sm);
   color: var(--text-muted);
@@ -628,7 +628,7 @@ onUnmounted(() => {
 }
 /* 两色显示：主机实色定住，路径整段淡出、尾部截断 */
 .u-host { flex: 0 0 auto; }
-.u-path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-faint); }
+.u-path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); }
 .ec-domain:hover { color: var(--accent); }
 .ec-domain:hover .u-path { color: var(--accent-light); }
 .ec-cat {
@@ -647,8 +647,7 @@ onUnmounted(() => {
 .ec-cred {
   display: inline-flex;
   align-items: center;
-  color: var(--text-faint);
-  opacity: 0.7;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 

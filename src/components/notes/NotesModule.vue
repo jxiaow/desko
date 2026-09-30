@@ -662,7 +662,7 @@ onBeforeUnmount(() => {
   gap: var(--space-2);
   font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--text-faint);
+  color: var(--text-muted);
   letter-spacing: 0.02em;
   padding: var(--space-2) 0 var(--space-2) var(--space-1);
   /* 与 .page-bar 同一条画布配方（global.css --canvas-bg）：吸顶件若铺平色（原先 var(--bg)）

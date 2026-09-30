@@ -405,10 +405,11 @@ const onPaste = async (e: ClipboardEvent) => {
   font-weight: 700;
   letter-spacing: 0.02em;
 }
-/* 色相钉 cat-3 槽，切主题跟各主题的槽走 */
-.mfa-tile.tone-1 { background: color-mix(in srgb, var(--h) 8%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 16%, var(--panel-bg)); }
-.mfa-tile.tone-2 { background: color-mix(in srgb, var(--h) 15%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 28%, var(--panel-bg)); }
-.mfa-tile.tone-3 { background: color-mix(in srgb, var(--h) 26%, var(--panel-bg)); color: var(--h); border-color: color-mix(in srgb, var(--h) 42%, var(--panel-bg)); }
+/* 色相钉 cat-3 槽，切主题跟各主题的槽走；字色在同色相上掺 45% 前景，
+   使浓淡三档的底洗不再吃掉字母本身的可读性（两轴都 ≥4.5） */
+.mfa-tile.tone-1 { background: color-mix(in srgb, var(--h) 8%, var(--panel-bg)); color: color-mix(in srgb, var(--h) 55%, var(--text)); border-color: color-mix(in srgb, var(--h) 16%, var(--panel-bg)); }
+.mfa-tile.tone-2 { background: color-mix(in srgb, var(--h) 15%, var(--panel-bg)); color: color-mix(in srgb, var(--h) 55%, var(--text)); border-color: color-mix(in srgb, var(--h) 28%, var(--panel-bg)); }
+.mfa-tile.tone-3 { background: color-mix(in srgb, var(--h) 26%, var(--panel-bg)); color: color-mix(in srgb, var(--h) 55%, var(--text)); border-color: color-mix(in srgb, var(--h) 42%, var(--panel-bg)); }
 .card-issuer {
   flex: 1;
   min-width: 0;
@@ -456,7 +457,7 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 /* 通宽底缘进度线：2px 贴卡底沿，读秒收进码行右侧；剩余≤5s 整卡描边转警示色 */
 .card-bottom { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--fill); }
 .card-bottom-fill { height: 100%; background: var(--accent); transition: width 1s linear; }
-.timer-text { margin-left: auto; font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.timer-text { margin-left: auto; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .mfa-card.expiring { border-color: color-mix(in srgb, var(--warning) 55%, transparent); }
 .mfa-card.expiring .card-code { color: var(--warning); }
 .mfa-card.expiring .card-bottom-fill { background: var(--warning); }
@@ -524,5 +525,5 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 
 .qr-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .qr-row .btn-secondary { height: 32px; } /* 正文动作钮落字段档，别高过底栏主钮 */
-.qr-hint { font-size: var(--text-xs); color: var(--text-faint); }
+.qr-hint { font-size: var(--text-xs); color: var(--text-muted); }
 </style>

@@ -436,7 +436,7 @@ defineExpose({ save })
 
 .path-empty {
   height: 100%; display: flex; align-items: center; justify-content: center;
-  font-size: 12px; color: var(--text-faint);
+  font-size: 12px; color: var(--text-muted);
 }
 
 /* 行即扁平条目：微绿底悬停浮现，无独立卡壳 */
@@ -453,7 +453,7 @@ defineExpose({ save })
   font-size: 11px; font-weight: 500; color: var(--accent); background: var(--accent-soft);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.path-sep { flex-shrink: 0; font-size: 12px; color: var(--text-faint); }
+.path-sep { flex-shrink: 0; font-size: 12px; color: var(--text-muted); }
 .path-value {
   flex: 1; min-width: 0;
   font-family: var(--font-mono); font-size: 12px; color: var(--text);

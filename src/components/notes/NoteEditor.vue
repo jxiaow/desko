@@ -635,7 +635,7 @@ defineExpose({ focusEnd, insertText, insertImage })
 .sm-hint {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   white-space: nowrap;
 }
 

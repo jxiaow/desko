@@ -228,24 +228,26 @@
   --ft-img: #9a5a72;
   --ft-unk: #7a7f88;
 
-  /* 代码块：与界面同一只手的色温 */
+  /* 代码块：与界面同一只手的色温（配色收口轮：整族在 --sunken 上顶住 4.5，
+     注释/标点保持"最静"档但不再是看不见） */
   --code-fg: #1a1b20;
-  --code-kw: #a85b7d;
-  --code-str: #3f7a5e;
-  --code-num: #a0603a;
-  --code-type: #8a7534;
+  --code-kw: #9d5275;
+  --code-str: #3a7256;
+  --code-num: #96593a;
+  --code-type: #7d6a2f;
   --code-fn: #4a6d9c;
   --code-var: #5e6672;
-  --code-com: #b4b6c0;
+  --code-com: #686a73;
   --code-tag: #6a5a99;
-  --code-pun: #8b8d98;
+  --code-pun: #5e6168;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', monospace;
 }
 
-/* ---------- ink：暖石。深色 v3 轮：画布抬离近黑、文字实色不掺透明，
-   小字对比全部 ≥5.2:1（正文 ≈11:1），冷调半透明字在深色下会发糊。 ---------- */
+/* ---------- ink：暖石。净暖分层轮（2026-09-29）：色相不动，画布与面板的层级差
+   从 3.5 档抬到 6.2 档（去胶囊轮的"面板浮在画布上"此前在深色里等于不存在），
+   正文降到 ≈10.5:1 让眼睛先看见面、再看见字，muted 顶住 5.8:1 底线。 ---------- */
 [data-theme="ink"] {
   --accent: #89a8cd;
   --accent-hover: #a2bcda;
@@ -256,38 +258,38 @@
   --accent-ring: rgba(137, 168, 205, 0.32);
   --text-brand: #adc6e2;
 
-  --bg: #1c1b18;
-  --panel-bg: #24221e;
-  --chrome-bg: rgba(28, 27, 24, 0.85);
-  --sunken: #171613;
-  --fill: #2f2c27;
-  --hover: #2a2823;
-  --active: #35322c;
+  --bg: #23221e;
+  --panel-bg: #312f29;
+  --chrome-bg: rgba(35, 34, 30, 0.86);
+  --sunken: #1e1d19;
+  --fill: #3b382f;
+  --hover: #38352e;
+  --active: #46423a;
   --overlay: rgba(0, 0, 0, 0.62);
 
-  --text: #edebe6;
-  --text-secondary: #c9c6bf;
-  --text-muted: #aba8a1;
-  --text-faint: #8a877f;
+  --text: #e6e4de;
+  --text-secondary: #c7c4bd;
+  --text-muted: #aeaba4;
+  --text-faint: #9c9992;
 
-  --border: #34312b;
-  --border-strong: #45413a;
-  --border-subtle: #2a2823;
-  --border-hover: #45413a;
+  --border: #413e37;
+  --border-strong: #565249;
+  --border-subtle: #34322c;
+  --border-hover: #565249;
 
-  --text-url: #cfccc4;
-  --badge-cat-bg: #2a2823;
-  --badge-cat-border: #34312b;
-  --badge-cat-text: #c9c6bf;
+  --text-url: #c9c6bf;
+  --badge-cat-bg: #34322c;
+  --badge-cat-border: #413e37;
+  --badge-cat-text: #c7c4bd;
   --badge-ver-bg: rgba(137, 168, 205, 0.15);
   --badge-ver-text: #adc6e2;
 
   /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   /* 轻量化轮：墨色行卡去掉 18px 大投影与外圈环，只留顶部高光一丝 */
-  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #45413a;
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #565249;
   --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
   --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
   --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -295,30 +297,30 @@
   --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
 
   --danger: #e08079;
-  --danger-on: #24221e;
+  --danger-on: #1e1d19;
   --danger-hover: #ea9d97;
-  --danger-soft: #35211e;
-  --danger-border: #55302b;
+  --danger-soft: #3a2622;
+  --danger-border: #5c352f;
   --success: #6fbf95;
-  --success-soft: #1c2a22;
+  --success-soft: #223028;
   --warning: #d9a95f;
-  --warning-soft: #2e2718;
+  --warning-soft: #342c1c;
 
-  --sidebar-bg: #201f1c;
-  --sidebar-hover: #2a2823;
+  --sidebar-bg: #282621;
+  --sidebar-hover: #38352e;
 
   --brand-g1: #adc6e2;
   --brand-g2: #89a8cd;
   --brand-g3: #6f92ba;
-  --brand-knob: #1c1b18;
+  --brand-knob: #23221e;
 
-  --lock-wash-a: #1c1b18;
-  --lock-wash-b: #24221e;
+  --lock-wash-a: #23221e;
+  --lock-wash-b: #312f29;
   --lock-orb-1: rgba(137, 168, 205, 0.14);
   --lock-orb-2: rgba(137, 168, 205, 0.07);
 
-  --frost-bg: rgba(36, 34, 30, 0.85);
-  --frost-border: #34312b;
+  --frost-bg: rgba(49, 47, 41, 0.88);
+  --frost-border: #413e37;
 
   /* 深色界面的浮层反过来：亮底暗字 */
   --tip-bg: #efede8;
@@ -328,8 +330,8 @@
   --toast-err: #b23c37;
   --toast-info: #4c6c92;
 
-  --scrollbar: rgba(255, 255, 255, 0.14);
-  --scrollbar-hover: rgba(255, 255, 255, 0.24);
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
   --selection: rgba(137, 168, 205, 0.30);
 
   /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
@@ -358,7 +360,7 @@
   --code-type: #e0c060;
   --code-fn: #8aa8e0;
   --code-var: #b6b2a8;
-  --code-com: #5f5c54;
+  --code-com: #9d9991;
   --code-tag: #ab8de6;
   --code-pun: #8c94a6;
 
@@ -825,7 +827,7 @@ body {
   padding: 1px 6px;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--sunken);
@@ -1409,7 +1411,7 @@ body {
 .mini.danger:hover { background: var(--danger-soft); color: var(--danger); }
 
 /* 自动保存状态 */
-.save-hint { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.save-hint { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .save-hint.saving { color: var(--warning); }
 .save-hint.saved { color: var(--success); }
 

@@ -485,7 +485,7 @@ onBeforeUnmount(() => {
 .ft-ico.folder { background: var(--warning-soft); color: var(--warning); }
 /* 扩展名色底：字色取 --ft-* 槽，底/描边是同色的淡水洗——类型一眼可辨，又不炸成彩色贴纸 */
 .ft-ico.toned {
-  color: var(--ftc);
+  color: color-mix(in srgb, var(--ftc) 55%, var(--text));
   background: color-mix(in srgb, var(--ftc) 10%, var(--panel-bg));
   border-color: color-mix(in srgb, var(--ftc) 25%, var(--panel-bg));
 }
@@ -517,7 +517,7 @@ onBeforeUnmount(() => {
   align-items: center;
   font-size: var(--text-xs);
   font-weight: 500;
-  color: var(--text-faint);
+  color: var(--text-muted);
   flex-shrink: 0;
   white-space: nowrap;
 }

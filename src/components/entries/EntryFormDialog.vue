@@ -65,11 +65,11 @@ useEscapeClose(() => emit('close'))
 </template>
 
 <style scoped>
-/* 居中偏上悬浮：遮罩透底 + 6px 弥散 */
+/* 居中偏上悬浮：遮罩与其余弹窗同配方（--overlay），弥散稍重一档 */
 .form-overlay {
   align-items: flex-start;
   padding-top: 7vh;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--overlay);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
@@ -79,9 +79,7 @@ useEscapeClose(() => emit('close'))
   /* 顶 7vh + 底部留 2vh：内容自然高在此内，绝不触发外层滚动 */
   max-height: 91vh;
   border: 1px solid var(--border);
-  box-shadow:
-    0 8px 20px -4px rgba(12, 20, 16, 0.1),
-    0 24px 48px -12px rgba(12, 20, 16, 0.14);
+  box-shadow: var(--shadow-pop);
 }
 
 /* 严禁弹窗外层滚动条：唯一滚动区收进子路径视窗 */
@@ -92,7 +90,7 @@ useEscapeClose(() => emit('close'))
 /* 46px 底栏浅底色 + 28px 按钮档已上抬为全局 .dialog-footer；
    这里只留本弹窗的布局差量：左侧快捷键徽标把按钮推到右边 */
 .entry-form-dialog .dialog-footer { justify-content: space-between; }
-.footer-hints { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-faint); }
+.footer-hints { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-muted); }
 .footer-hints .kbd {
   padding: 1px 4px; border: 1px solid var(--border); border-radius: 4px;
   background: var(--panel-bg); font-family: var(--font-mono);

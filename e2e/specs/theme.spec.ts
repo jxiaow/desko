@@ -8,7 +8,7 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const BASES = {
   paper: { bg: 'rgb(248, 248, 247)', text: 'rgb(51, 50, 48)' },
-  ink:   { bg: 'rgb(28, 27, 24)',    text: 'rgb(237, 235, 230)' },
+  ink:   { bg: 'rgb(35, 34, 30)',    text: 'rgb(230, 228, 222)' },
 } as const
 
 const ACCENT_HEX = {

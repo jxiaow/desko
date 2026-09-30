@@ -36,16 +36,25 @@ await page.waitForSelector('.app-layout', { timeout: 30000 })
 
 // ── 1. 真实渲染文本对比度（computed color × 合成祖先背景）
 const contrast = await page.evaluate(() => {
-  const parse = (s) => { const m = s.match(/[\d.]+/g); return m ? m.map(Number) : null }
+  const parse = (s) => {
+    const sm = s.match(/^color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/)
+    if (sm) return [+sm[1] * 255, +sm[2] * 255, +sm[3] * 255, sm[4] === undefined ? 1 : +sm[4]]
+    const m = s.match(/[\d.]+/g)
+    return m ? m.map(Number) : null
+  }
   const bgOf = (el) => {
-    let c = 'rgba(0,0,0,0)'
     for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
       const b = parse(getComputedStyle(n).backgroundColor)
-      if (b && b[3] !== 0) { c = b; break }
+      if (!b || (b.length > 3 && b[3] === 0)) continue
+      const a = b.length > 3 ? b[3] : 1
+      if (a > 0.999) return b.slice(0, 3)
+      // 半透明底（字母块淡染、accent-soft 一类）必须合成到最近的实色祖先，
+      // 否则会把 7% 淡染当成整块深底，测出假的低对比
+      const under = bgOf(n.parentElement || document.body)
+      return b.slice(0, 3).map((v, i) => v * a + under[i] * (1 - a))
     }
-    const top = parse(getComputedStyle(document.documentElement).backgroundColor)
-    if (String(c) === 'rgba(0,0,0,0)' && top && top[3] !== 0) c = top
-    return Array.isArray(c) ? c : parse(c) || [255, 255, 255, 1]
+    const top = parse(getComputedStyle(document.body).backgroundColor)
+    return top ? top.slice(0, 3) : [255, 255, 255]
   }
   const lum = (r, g, b) => { const f = (x) => { x /= 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4 }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b) }
   const out = []
