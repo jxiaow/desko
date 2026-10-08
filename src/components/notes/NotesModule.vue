@@ -8,23 +8,17 @@ import NoteCard from './NoteCard.vue'
 import NoteComposer from './NoteComposer.vue'
 import NoteFullscreen from './NoteFullscreen.vue'
 import NoteLockDialog from './NoteLockDialog.vue'
-import PopoverMenu from '../shared/PopoverMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { htmlToLinkText, htmlToText } from '../../utils/format'
 import { attachmentSrc, collectAttachmentNames } from '../../services/attachmentSrc'
 import type { IconName } from '../../utils/icons'
 import type { Note } from '../../types'
-import type { NoteSort, NoteView } from '../../stores/notes'
+import type { NoteView } from '../../stores/notes'
 
 const VIEWS: { key: NoteView; label: string; icon: IconName }[] = [
   { key: 'all', label: '全部', icon: 'all' },
   { key: 'pinned', label: '置顶', icon: 'pin' },
   { key: 'starred', label: '收藏', icon: 'star' },
-]
-const SORTS: { key: NoteSort; label: string }[] = [
-  { key: 'new', label: '最新' },
-  { key: 'old', label: '最早' },
-  { key: 'updated', label: '最近更新' },
 ]
 const NEWBORN_MS = 400
 const RAIL_FALLBACK_ROOM = 900
@@ -34,7 +28,7 @@ const notesStore = useNotesStore()
 const toastStore = useToastStore()
 const { copyRichToClipboard } = useClipboard()
 const {
-  notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
+  notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, hasActiveFilters,
   noteRailCollapsed,
   isBatchMode, hasNoteSelection, selectedNoteIds, noteAttachments, noteSaveState, notePlains, noteKey,
   tagCounts, viewCounts, filteredNotes, groupedNotes,
@@ -59,6 +53,8 @@ const editingId = ref<string | null>(null)
 const fsTarget = ref<'new' | string | null>(null)
 const fsMode = ref<'edit' | 'view'>('edit')
 const newbornId = ref<string | null>(null)
+/** 打开编辑那一刻的正文快照：自动保存下「取消」靠它把这条写回原样 */
+const editSnapshot = ref('')
 /** 全库小记口令弹窗：mode 决定要输什么，thenLock 是口令到手后要补做的那次加密 */
 const keyDialog = ref<{ mode: 'setup' | 'unlock' | 'change'; thenLock?: string } | null>(null)
 
@@ -102,8 +98,6 @@ const toggleNoteDomain = () => {
 const railRoom = ref(true)
 /** 窄窗口下用户手动叫出来的浮层侧栏。放不下的时候开关也不能消失，否则侧栏就再也回不来了 */
 const railPinned = ref(false)
-const filterAnchor = ref<HTMLElement | null>(null)
-const sortAnchor = ref<HTMLElement | null>(null)
 
 /** 侧栏真正在流内可见 = 放得下 且 用户没收起 */
 const railOpen = computed(() => railRoom.value && !noteRailCollapsed.value)
@@ -119,44 +113,18 @@ const toggleRail = () => {
 }
 watch(railRoom, (room) => {
   if (room) railPinned.value = false
-  if (room || railOpen.value) filterAnchor.value = null
 })
 
 const draftText = computed(() => htmlToText(draftHtml.value))
 const draftEmpty = computed(() => !draftText.value.trim() && !collectAttachmentNames(draftHtml.value).length)
 const fsNote = computed(() =>
   typeof fsTarget.value === 'string' ? findNote(fsTarget.value) : null)
-const sortLabel = computed(() =>
-  SORTS.find(s => s.key === noteSort.value)?.label ?? '最新')
 
 /** 侧栏脚注：全库口径，不受筛选影响，和顶栏那条「筛后 / 总数」分开表意 */
 const railSummary = computed(() => {
   const lockedN = notes.value.filter((n) => n.encrypted).length
   return `共 ${notes.value.length} 条小记${lockedN ? ` · ${lockedN} 条已加密` : ''}`
 })
-
-const pickFilter = (e: MouseEvent) => {
-  const el = e.currentTarget as HTMLElement
-  filterAnchor.value = filterAnchor.value === el ? null : el
-  sortAnchor.value = null
-}
-const pickSort = (e: MouseEvent) => {
-  const el = e.currentTarget as HTMLElement
-  sortAnchor.value = sortAnchor.value === el ? null : el
-  filterAnchor.value = null
-}
-const chooseView = (view: NoteView) => {
-  noteView.value = view
-  filterAnchor.value = null
-}
-const chooseSort = (sort: NoteSort) => {
-  noteSort.value = sort
-  sortAnchor.value = null
-}
-const resetFilters = () => {
-  clearFilters()
-  filterAnchor.value = null
-}
 
 /** 落库成功后清空书写面，光标回到顶部输入框 */
 const afterPublish = async (note: Note) => {
@@ -177,6 +145,7 @@ const openCard = (note: Note) => {
   if (fsTarget.value) return
   // 锁着的没有明文，编辑无从谈起
   if (note.encrypted && notePlains.value[note.id] == null) return
+  editSnapshot.value = note.content_html
   editingId.value = note.id
   loadAttachments(note.id)
 }
@@ -184,13 +153,21 @@ const closeCard = async () => {
   await flushNoteSave()
   editingId.value = null
 }
+/** 取消就地编辑：把正文写回打开前的快照，再落盘关闭 */
+const cancelCard = async () => {
+  if (!editingId.value) return
+  saveNoteContent(editingId.value, editSnapshot.value)
+  await flushNoteSave()
+  editingId.value = null
+}
 
 const openFullscreen = async (target: 'new' | string, mode: 'edit' | 'view' = 'edit') => {
   await flushNoteSave()
-  if (target !== 'new') loadAttachments(target)
+  if (target !== 'new') {
+    loadAttachments(target)
+    editSnapshot.value = findNote(target)?.content_html ?? ''
+  }
   editingId.value = null
-  filterAnchor.value = null
-  sortAnchor.value = null
   fsMode.value = mode
   fsTarget.value = target
 }
@@ -203,6 +180,18 @@ const closeFullscreen = async () => {
     await nextTick()
     composerRef.value?.focus()
   }
+}
+/** 取消全屏编辑：已有小记写回快照；新草稿直接丢弃（本就没落库） */
+const cancelFullscreen = async () => {
+  if (!fsTarget.value) return
+  if (fsTarget.value === 'new') {
+    draftHtml.value = ''
+    fsTarget.value = null
+    return
+  }
+  saveNoteContent(fsTarget.value, editSnapshot.value)
+  await flushNoteSave()
+  fsTarget.value = null
 }
 
 const onFsUpdate = (html: string) => {
@@ -327,30 +316,10 @@ onBeforeUnmount(() => {
             >
               <AppIcon name="x" :size="14" />
             </button>
-            <span class="bar-count">{{ filteredNotes.length }} / {{ notes.length }} 条</span>
           </div>
+          <!-- 计数是栏上的元信息，与收藏页同一位置（搜索框里只放搜索框自己的东西） -->
+          <span class="bar-count">{{ filteredNotes.length }} / {{ notes.length }} 条</span>
 
-          <button
-            class="bar-btn"
-            :class="{ active: noteSort !== 'new' }"
-            type="button"
-            :title="`排序：${sortLabel}`"
-            :aria-label="`排序：${sortLabel}`"
-            @click="pickSort"
-          >
-            <AppIcon name="clock" :size="16" />
-          </button>
-          <button
-            v-if="!railVisible"
-            class="bar-btn"
-            :class="{ active: hasActiveFilters }"
-            type="button"
-            title="筛选视图与标签"
-            aria-label="筛选视图与标签"
-            @click="pickFilter"
-          >
-            <AppIcon name="filter" :size="16" />
-          </button>
           <button
             class="bar-btn"
             :class="{ active: isBatchMode }"
@@ -425,9 +394,11 @@ onBeforeUnmount(() => {
                 :attachments="noteAttachments[note.id] ?? []"
                 :save-state="editingId === note.id ? noteSaveState : ''"
                 :unlocked="notePlains[note.id] != null"
+                :active-tags="activeTags"
                 @open="openCard(note)"
                 @update="saveNoteContent(note.id, $event)"
                 @close="closeCard"
+                @cancel="cancelCard"
                 @fullscreen="openFullscreen(note.id)"
                 @view="openFullscreen(note.id, 'view')"
                 @encrypt="requestEncrypt(note.id)"
@@ -547,6 +518,7 @@ onBeforeUnmount(() => {
       :save-state="fsNote ? noteSaveState : ''"
       @update="onFsUpdate"
       @close="closeFullscreen"
+      @cancel="cancelFullscreen"
       @publish="publishDraft"
       @edit="fsMode = 'edit'"
       @add-image="fsNote ? addImageToNote(fsNote.id) : addImageToDraft()"
@@ -562,55 +534,6 @@ onBeforeUnmount(() => {
       @close="keyDialog = null"
       @done="onKeyDialogDone"
     />
-
-    <PopoverMenu v-if="filterAnchor" :anchor="filterAnchor" wide align="end" @close="filterAnchor = null">
-      <div class="pop-sec">
-        <div class="pop-label">视图</div>
-        <div class="pop-tabs">
-          <button
-            v-for="v in VIEWS"
-            :key="v.key"
-            class="tab"
-            :class="{ active: noteView === v.key }"
-            type="button"
-            @click="chooseView(v.key)"
-          >{{ v.label }}<span class="tab-count">{{ viewCounts[v.key] }}</span></button>
-        </div>
-      </div>
-      <div class="pop-sec">
-        <div class="pop-label">标签 · {{ activeTags.size ? `已选 ${activeTags.size}` : '可多选' }}</div>
-        <div class="pop-tabs">
-          <button
-            v-for="[tag, count] in tagCounts"
-            :key="tag"
-            class="tab"
-            :class="{ active: activeTags.has(tag) }"
-            type="button"
-            @click="toggleTagFilter(tag)"
-          >#{{ tag }}<span class="tab-count">{{ count }}</span></button>
-        </div>
-        <div v-if="!tagCounts.length" class="rail-empty">还没有标签</div>
-      </div>
-      <div v-if="hasActiveFilters" class="pop-sec tight">
-        <button class="tab danger" type="button" @click="resetFilters">清空筛选</button>
-      </div>
-    </PopoverMenu>
-
-    <PopoverMenu v-if="sortAnchor" :anchor="sortAnchor" align="end" @close="sortAnchor = null">
-      <div class="pop-sec">
-        <div class="pop-label">排序</div>
-        <div class="pop-tabs">
-          <button
-            v-for="s in SORTS"
-            :key="s.key"
-            class="tab"
-            :class="{ active: noteSort === s.key }"
-            type="button"
-            @click="chooseSort(s.key)"
-          >{{ s.label }}</button>
-        </div>
-      </div>
-    </PopoverMenu>
   </div>
 </template>
 
@@ -642,14 +565,15 @@ onBeforeUnmount(() => {
 /* 书写框与吸顶栏拉开一档间距（列表页首行同款） */
 .stream-inner .composer { margin-top: var(--space-2); }
 
-/* ---------- 顶部工具条：吃 global.css 的 .page-bar 骨架（44px 磨砂吸顶），
-   本页只有两处与全宽页不同：搜索框随流伸缩（上限 320）并顶住左段，
-   靠它的 auto 外边距把动作键推到右端；计数并进框内——它统计的就是
-   这个框筛出来的结果，摆在框外像是整页的总数 ---------- */
-.page-bar .search-box { flex: 1; min-width: 80px; max-width: 320px; margin-right: auto; }
-.page-bar .bar-count { margin-right: 0; padding-left: var(--space-1); font-size: var(--text-sm); }
-/* 右段动作键之间的分组线收成分居的短细线——通高的竖线在 44px 磨砂栏里像表格线 */
-.page-bar .bar-div { align-self: center; height: 16px; opacity: 0.55; }
+/* ---------- 顶部工具条：吃 global.css 的 .page-bar 骨架（54px 吸顶画布），
+   本页只有一处与全宽页不同：搜索框随流伸缩（上限 320）。
+   计数用 global 的 .bar-count（margin-right: auto），把动作键推到右端，
+   与验证码页同一位置 ---------- */
+.page-bar .search-box { flex: 1; min-width: 80px; max-width: 320px; }
+/* 右段动作键之间的分组线收成分居的短细线——通高的竖线在 54px 页栏里像表格线。
+   margin 归零：.page-bar 本身已有 8px gap，global 那条又自带 4px，两侧各叠成 12px，
+   分组线两侧净距 25px、邻钮之间只有 8px，读起来像断成了两截。 */
+.page-bar .bar-div { align-self: center; height: 16px; opacity: 0.55; margin: 0; }
 
 /* ---------- 日期分组 ---------- */
 .day { margin-bottom: var(--space-4); }
@@ -676,7 +600,7 @@ onBeforeUnmount(() => {
 .day-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .memo-skeleton {
@@ -743,9 +667,7 @@ onBeforeUnmount(() => {
   z-index: 40;
   box-shadow: var(--shadow-pop);
   border-left: 1px solid var(--border);
-  animation: rail-in var(--transition) ease both;
 }
-@keyframes rail-in { from { opacity: 0; transform: translateX(8px); } }
 .rail-sep { height: 1px; flex-shrink: 0; background: var(--border); margin: var(--space-3) var(--space-2); }
 .rail-empty { font-size: var(--text-sm); color: var(--text-muted); padding: 0 var(--space-2); }
 .rail .tab-count { font-size: var(--text-xs); margin-left: 0; }
@@ -762,8 +684,4 @@ onBeforeUnmount(() => {
 }
 
 /* ---------- 批量底栏的骨架在 global.css，条目页共用同一套 ---------- */
-
-.pop-sec.tight { padding-top: 0; }
-.tab.danger { color: var(--danger); }
-.tab.danger:hover { background: var(--danger-soft); }
 </style>

@@ -35,10 +35,13 @@ const props = withDefaults(defineProps<{
   initialContent?: string
   variant?: 'composer' | 'card' | 'full'
   placeholder?: string
+  /** 胶囊输入展开后给三行书写地板 */
+  roomy?: boolean
 }>(), {
   initialContent: '',
   variant: 'card',
   placeholder: '输入 / 打开命令...',
+  roomy: false,
 })
 
 const emit = defineEmits<{
@@ -211,6 +214,14 @@ const isBlankContent = (html: string | undefined): boolean => {
   const text = html.replace(/<[^>]*>/g, '').trim()
   return text.length === 0
 }
+
+/**
+ * 胶囊输入的高度不写 JS：书写面是普通块，内容自己往上顶，`min-height` 只当地板。
+ * 静置一行（22px），`roomy` 给三行（94px = 3×24.65 行高 + 20 内衬）。
+ * 曾按 scrollHeight 逐键回写 min-height，按下工具条按钮先触发 blur、伸缩当场把按钮抽走，
+ * mousedown 与 mouseup 落点错位，发布/全屏全部点不动。
+ * 卡片就地编辑和全屏面有自己的定高档，不参与。
+ */
 
 const editor = useEditor({
   // 库里存的是 attachments/<名>，编辑器里要看到真图；存回去时再洗回相对形态
@@ -434,6 +445,16 @@ const insertText = (text: string) => {
   editor.value?.chain().focus().insertContent(text).run()
 }
 
+/** 快捷插入芯片走编辑器自己的命令链，不往正文里塞 markdown 源字符 */
+const insertTask = () => {
+  editor.value?.chain().focus().toggleTaskList().run()
+}
+
+/** 芯片不吃焦点（按钮上 mousedown.prevent），所以空选区的 toggleCode 能留住待输入标记 */
+const insertInlineCode = () => {
+  editor.value?.chain().focus().toggleCode().run()
+}
+
 /** 图片块追加到光标处；默认宽度按书写面区分：列表窄栏小图够用，全屏才给大图 */
 const insertImage = (src: string) => {
   const ed = editor.value
@@ -442,11 +463,11 @@ const insertImage = (src: string) => {
   ed.chain().focus().insertContent({ type: 'image', attrs: { src, width } }).run()
 }
 
-defineExpose({ focusEnd, insertText, insertImage })
+defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage })
 </script>
 
 <template>
-  <div ref="editorWrapper" class="note-editor" :class="`v-${variant}`" @change="relocateCaret">
+  <div ref="editorWrapper" class="note-editor" :class="[`v-${variant}`, { roomy: props.roomy }]" @change="relocateCaret">
     <EditorContent :editor="editor" />
     <Teleport to="body">
       <div
@@ -508,7 +529,8 @@ defineExpose({ focusEnd, insertText, insertImage })
   word-break: break-word;
 }
 
-/* 胶囊输入：平时收成一行的占位高度，聚焦后长到约五行；有内容时按内容撑开 */
+/* 胶囊输入：高度由内容自己顶起来，min-height 只当地板，46vh 是滚动上限。
+   min-height 不加过渡——伸缩要的是跟手，缓动会让高度慢半拍 */
 .note-editor.v-composer :deep(.ProseMirror) {
   padding: var(--space-3) var(--space-4) var(--space-2);
   font-size: 14.5px;
@@ -517,9 +539,11 @@ defineExpose({ focusEnd, insertText, insertImage })
   max-height: 46vh;
   scrollbar-gutter: stable;
   overflow-y: auto;
-  transition: min-height var(--transition-slow);
 }
-.note-editor.v-composer:focus-within :deep(.ProseMirror) { min-height: 148px; }
+/* 展开态给三行地板（3×24.65 行高 + 20 内衬）：只有一行的书写面写两句就撞底。
+   地板跟着"展开"而不是"聚焦"走——按钮按下先触发 blur，地板若当场收回去，
+   按钮在 mousedown 与 mouseup 之间被抽走，发布就点不动了 */
+.note-editor.v-composer.roomy :deep(.ProseMirror) { min-height: 94px; }
 /* 竖长图只封顶宽会撑出半屏高；书写面里按视口高度收着放，全屏给更大的额度 */
 .note-editor :deep(.img-node img) { max-height: 34vh; object-fit: contain; }
 .note-editor.v-full :deep(.img-node img) { max-height: 60vh; }
@@ -527,7 +551,7 @@ defineExpose({ focusEnd, insertText, insertImage })
 /* 卡片就地展开：与只读态同一套字号，避免展开时文字跳动；留出三行书写余量 */
 .note-editor.v-card :deep(.ProseMirror) {
   padding: 0;
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 1.6;
   min-height: 72px;
   max-height: 46vh;
@@ -535,20 +559,20 @@ defineExpose({ focusEnd, insertText, insertImage })
   overflow-y: auto;
 }
 
-/* 全屏书写：一张纸的排版尺度 */
+/* 全屏书写：一张纸的排版尺度（密一档，一屏多放几行） */
 .note-editor.v-full :deep(.ProseMirror) {
   padding: 0;
-  font-size: 15.5px;
-  line-height: 1.68;
+  font-size: 14.5px;
+  line-height: 1.6;
   letter-spacing: -0.012em;
   min-height: 40vh;
   caret-color: var(--accent);
 }
 
-.note-editor.v-full :deep(.ProseMirror > * + *) { margin-top: 10px; }
-.note-editor.v-full :deep(h1) { font-size: 23px; font-weight: 650; line-height: 1.35; letter-spacing: -0.026em; margin-top: var(--space-4); }
-.note-editor.v-full :deep(h2) { font-size: 18px; font-weight: 620; line-height: 1.45; letter-spacing: -0.02em; margin-top: 12px; }
-.note-editor.v-full :deep(h3) { font-size: 18px; font-weight: 600; }
+.note-editor.v-full :deep(.ProseMirror > * + *) { margin-top: 8px; }
+.note-editor.v-full :deep(h1) { font-size: 21px; font-weight: 650; line-height: 1.32; letter-spacing: -0.026em; margin-top: var(--space-4); }
+.note-editor.v-full :deep(h2) { font-size: var(--text-lg); font-weight: 620; line-height: 1.42; letter-spacing: -0.02em; margin-top: 12px; }
+.note-editor.v-full :deep(h3) { font-size: 16px; font-weight: 600; }
 .note-editor.v-full :deep(blockquote) { border-left-width: 3px; padding-left: var(--space-4); }
 .note-editor.v-full :deep(pre) { font-size: 13.5px; line-height: 1.75; padding: var(--space-4); background: var(--panel-bg); border: none; box-shadow: var(--shadow-xs); }
 .note-editor.v-full :deep(hr) { border: none; height: 1px; background: linear-gradient(90deg, transparent, var(--border-strong), transparent); margin: var(--space-6) 0; }
@@ -573,15 +597,16 @@ defineExpose({ focusEnd, insertText, insertImage })
 .note-editor :deep(li::marker) { color: var(--text-faint); }
 .note-editor :deep(strong) { font-weight: 600; color: var(--text); }
 .note-editor :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
-.note-editor :deep(code) { font-family: var(--font-mono); font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
+.note-editor :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
 .note-editor :deep(pre) { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .note-editor :deep(pre code) { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
 .note-editor :deep(hr) { border: none; border-top: 1px solid var(--border); margin: var(--space-3) 0; }
-.note-editor :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 3px; }
+.note-editor :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .note-editor :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
 /* 正文必须撑满剩余宽度：弹性项默认按内容收缩，空条目会缩成 0 宽，光标没有行盒可落 = 看不见光标 */
 .note-editor :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
-.note-editor :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 5px; }
+/* 勾选框的自绘配方在 global.css，这里只按本层行高把它挪到第一行居中 */
+.note-editor :deep(ul[data-type='taskList'] input) { margin-top: 4px; }
 
 /* 语法高亮的配色规则在 global.css：那里写一次，编辑器与只读渲染共用 */
 
@@ -624,22 +649,22 @@ defineExpose({ focusEnd, insertText, insertImage })
   width: 15px;
   flex-shrink: 0;
   text-align: center;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--text-secondary);
 }
 
-.sm-label { flex: 1; min-width: 0; font-size: 13px; }
+.sm-label { flex: 1; min-width: 0; font-size: var(--text-sm); }
 
 .sm-hint {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-.sm-empty { padding: 9px 7px; font-size: 12.5px; color: var(--text-muted); }
+.sm-empty { padding: 9px 7px; font-size: var(--text-sm); color: var(--text-muted); }
 
 .slash-item.active { background: var(--accent-soft); }
 .slash-item.active .sm-label { color: var(--accent-active); font-weight: 500; }
@@ -663,7 +688,7 @@ defineExpose({ focusEnd, insertText, insertImage })
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-ib);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s;
@@ -702,7 +727,7 @@ defineExpose({ focusEnd, insertText, insertImage })
 
 .lang-option {
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text);
   cursor: pointer;
   transition: background 0.1s;

@@ -25,11 +25,8 @@ test.describe('Files 文件快捷', () => {
     const pdf = shortcutRow(page, '月度报告')
     // 路径列只留尾部两段，完整路径挂在 title 上
     await expect(shortcutRow(page, '项目资料').locator('.cell-path')).toHaveText('…/e2e/project')
-    await expect(shortcutRow(page, '项目资料').locator('.cell-type')).toHaveText('文件夹')
-    await expect(pdf.locator('.cell-type')).toHaveText('文档')
     await expect(pdf.locator('.cell-path')).toHaveText('…/e2e/report.pdf')
     await expect(pdf.locator('.ft-ico')).toHaveText('pdf')
-    await expect(pdf.locator('.cell-time')).not.toBeEmpty()
     expect(await e2e.count(page, 'list_file_shortcuts')).toBe(1)
   })
 
@@ -41,11 +38,12 @@ test.describe('Files 文件快捷', () => {
       .toBe(1)
   })
 
-  test('行内动作：在终端中打开', async ({ page }) => {
+  test('⋯ 菜单：在终端中打开', async ({ page }) => {
     await gotoFiles(page)
     const row = shortcutRow(page, '项目资料')
     await row.hover()
-    await tipButton(row, '在终端中打开').click()
+    await tipButton(row, '更多操作').click()
+    await page.locator('.popover .pop-item', { hasText: '在终端中打开' }).click()
     const calls = await page.evaluate(() =>
       (window as any).__E2E__.invocations
         .filter((i: any) => i.cmd === 'open_terminal')
@@ -67,8 +65,8 @@ test.describe('Files 文件快捷', () => {
     const box = await row.locator('.row-acts').boundingBox()
     expect(box).not.toBeNull()
     expect(box!.x + box!.width).toBeLessThanOrEqual(800)
-    await tipButton(row, '在终端中打开').click()
-    expect(await e2e.count(page, 'open_terminal')).toBe(1)
+    await tipButton(row, '复制地址 (C)').click()
+    await expectToast(page, '地址已复制')
     // 名字列只是省略，不换行也不撑高
     await expect(row.locator('.row-name')).toHaveCSS('text-overflow', 'ellipsis')
   })
@@ -86,7 +84,8 @@ test.describe('Files 文件快捷', () => {
     await gotoFiles(page)
     const row = shortcutRow(page, '项目资料')
     await row.hover()
-    await tipButton(row, '复制地址').click()
+    // 钮面 title 带着键盘提示（C = 复制当前卡路径）
+    await tipButton(row, '复制地址 (C)').click()
     await expectToast(page, '地址已复制')
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('C:/e2e/project')
   })
@@ -123,7 +122,7 @@ test.describe('Files 文件快捷', () => {
     const dialog = page.locator('.dialog-overlay .dialog')
 
     // 名称为空 -> toast 校验
-    await dialog.locator('button.btn-primary:text-is("添 加")').click()
+    await dialog.locator('button.btn-primary:text-is("添加")').click()
     await expectToast(page, '请填写名称和路径')
     await waitForToastGone(page)
 
@@ -131,7 +130,7 @@ test.describe('Files 文件快捷', () => {
     await dialog.locator('input[placeholder="快捷方式名称"]').fill('E2E 笔记')
     await dialog.locator('input[placeholder="粘贴文件/文件夹路径，或点击右侧浏览"]').fill('C:/e2e/notes.txt')
     await dialog.locator('button.type-btn:text-is("文件")').click()
-    await dialog.locator('button.btn-primary:text-is("添 加")').click()
+    await dialog.locator('button.btn-primary:text-is("添加")').click()
 
     await expect(page.locator('.shortcut-row')).toHaveCount(3)
     await expect(shortcutRow(page, 'E2E 笔记')).toBeVisible()
@@ -149,7 +148,7 @@ test.describe('Files 文件快捷', () => {
     const dialog = page.locator('.dialog-overlay .dialog')
     await expect(dialog.locator('h3')).toHaveText('编辑快捷方式')
     await dialog.locator('input[placeholder="快捷方式名称"]').fill('月度报告 v2')
-    await dialog.locator('button.btn-primary:text-is("保 存")').click()
+    await dialog.locator('button.btn-primary:text-is("保存")').click()
     await expect(shortcutRow(page, '月度报告 v2')).toBeVisible()
     const snap = await e2e.snapshot(page)
     expect(snap.fileShortcuts.find((f: any) => f.name === '月度报告 v2')).toBeTruthy()
@@ -168,5 +167,44 @@ test.describe('Files 文件快捷', () => {
     await expectToast(page, '已删除')
     await expect(page.locator('.shortcut-row')).toHaveCount(1)
     expect((await e2e.snapshot(page)).fileShortcuts).toHaveLength(1)
+  })
+
+  test('底部行右键：菜单不越出视口，删除项可见', async ({ page }) => {
+    await bootUnlocked(page, {
+      fileShortcuts: [
+        { name: '项目资料', path: 'C:/e2e/project', shortcut_type: 'folder' as const },
+        { name: '月度报告', path: 'C:/e2e/report.pdf', shortcut_type: 'file' as const },
+        ...Array.from({ length: 12 }, (_, i) => ({
+          name: `S${i}`, path: `C:/e2e/f${i}.txt`, shortcut_type: 'file' as const,
+        })),
+      ],
+    })
+    await page.locator('a.nav-item[href="/files"]').click()
+    await expect(page.locator('.shortcut-row')).toHaveCount(14)
+    const last = page.locator('.shortcut-row').last()
+    await last.scrollIntoViewIfNeeded()
+    await last.click({ button: 'right', position: { x: 150, y: 40 } })
+    const menu = page.locator('.popover')
+    await expect(menu).toBeVisible()
+    const del = menu.locator('.pop-item', { hasText: '删除' })
+    await expect(del).toBeInViewport()
+  })
+
+  test('⋯ 更多菜单删除', async ({ page }) => {
+    await gotoFiles(page)
+    const row = shortcutRow(page, '项目资料')
+    await row.hover()
+    await tipButton(row, '更多操作').click()
+    const menu = page.locator('.popover')
+    await expect(menu).toBeVisible()
+    // 菜单收低频动作 + 删除，不与 hover 钮重复
+    await expect(menu.locator('.pop-item')).toHaveCount(3)
+    await menu.locator('.pop-item', { hasText: '删除' }).click()
+
+    const confirm = page.locator('.confirm-dialog')
+    await expect(confirm.locator('.dialog-body p')).toHaveText('确定删除「项目资料」快捷方式？')
+    await confirm.locator('button.btn-danger').click()
+    await expectToast(page, '已删除')
+    await expect(page.locator('.shortcut-row')).toHaveCount(1)
   })
 })

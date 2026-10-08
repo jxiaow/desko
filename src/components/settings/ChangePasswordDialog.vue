@@ -75,8 +75,8 @@ useEscapeClose(close)
         <p v-if="err" class="auth-error">{{ err }}</p>
       </div>
       <div class="dialog-footer">
-        <button class="btn-secondary" @click="close">取 消</button>
-        <button class="btn-primary" @click="doChangePassword">确 定</button>
+        <button class="btn-secondary" @click="close">取消</button>
+        <button class="btn-primary" @click="doChangePassword">确定</button>
       </div>
     </div>
     </div>
@@ -86,7 +86,7 @@ useEscapeClose(close)
 <style scoped>
 .auth-error {
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--text-xs);
   margin-top: 10px;
   text-align: center;
 }

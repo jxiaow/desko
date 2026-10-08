@@ -18,7 +18,6 @@ const emit = defineEmits<{
 const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
 
 const focus = () => editorRef.value?.focusEnd()
-const insertTag = () => editorRef.value?.insertText(' #')
 const insertImage = (src: string) => editorRef.value?.insertImage(src)
 
 defineExpose({ focus, insertImage })
@@ -45,6 +44,17 @@ const onKeydown = (e: KeyboardEvent) => {
     ;(document.activeElement as HTMLElement | null)?.blur()
   }
 }
+
+/** 收回一行：展开态是粘滞的，只有明确「不写了」才收。 */
+const collapse = () => {
+  expanded.value = false
+  ;(document.activeElement as HTMLElement | null)?.blur()
+}
+/** 放弃草稿：清空正文（父层 draftHtml 随之落空）并收回一行。本就没落库，无需回退。 */
+const discard = () => {
+  emit('update', '')
+  collapse()
+}
 </script>
 
 <template>
@@ -52,6 +62,7 @@ const onKeydown = (e: KeyboardEvent) => {
     <NoteEditor
       ref="editorRef"
       variant="composer"
+      :roomy="open"
       :initial-content="props.html"
       placeholder="此刻的想法… 用 #标签 归类"
       @update="emit('update', $event)"
@@ -63,9 +74,10 @@ const onKeydown = (e: KeyboardEvent) => {
         :note="null"
         primary-label="发布"
         :primary-disabled="props.empty"
+        :cancel-label="props.empty ? '' : '放弃'"
         @add-image="emit('addImage')"
-        @insert-tag="insertTag"
         @fullscreen="emit('fullscreen')"
+        @cancel="discard"
         @primary="emit('publish')"
       >
         <template #hint>
@@ -88,8 +100,7 @@ const onKeydown = (e: KeyboardEvent) => {
 /* 焦点态：容器描边转主色 + 3px 光圈，指明当前唯一的书写面 */
 .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }
 
-/* 书写面高度由 NoteEditor 的 :focus-within 负责展开；失焦后 .open 接管，粘滞保持不收回 */
-.composer.open :deep(.note-editor.v-composer .ProseMirror) { min-height: 148px; }
+/* 书写面高度逐键跟随内容，由 NoteEditor 自己落 min-height；这里只管展开/收起工具条 */
 
 /* 收起时工具条整条让位，只留一行输入；展开才滑出来。
    visibility 不能省：max-height:0 只裁掉绘制，按钮仍可命中，会在输入框下面吃掉一截点击 */

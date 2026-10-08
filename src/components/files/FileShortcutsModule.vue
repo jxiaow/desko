@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
 import { fileShortcutsApi as api } from '../../services/api/fileShortcuts'
 import type { FileShortcut } from '../../types'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { useGridKeys } from '../../composables/useGridKeys'
 import AppIcon from '../shared/AppIcon.vue'
-import { formatRelativeTime } from '../../utils/format'
+import PopoverMenu from '../shared/PopoverMenu.vue'
 
-defineProps<{
+const props = defineProps<{
   searchKeyword: string
   loading: boolean
   /** 上一次加载的失败原因；非空时显示「加载失败 · 重试」而不是空态 */
@@ -34,6 +35,29 @@ const editingId = ref<string | null>(null)
 const addForm = ref({ name: '', path: '', type: 'file' as 'file' | 'folder' })
 
 const contextMenu = ref({ show: false, x: 0, y: 0, shortcut: null as FileShortcut | null })
+const ctxPanel = ref<HTMLElement | null>(null)
+
+/* 「更多操作」浮层：只放删除，其余动作已在 hover 钮上 */
+const moreMenu = ref({ anchor: null as HTMLElement | null, shortcut: null as FileShortcut | null })
+
+const openMoreMenu = (el: HTMLElement, shortcut: FileShortcut) => {
+  if (moreMenu.value.shortcut?.id === shortcut.id) {
+    closeMoreMenu()
+    return
+  }
+  moreMenu.value = { anchor: el, shortcut }
+}
+
+const closeMoreMenu = () => {
+  moreMenu.value = { anchor: null, shortcut: null }
+}
+
+/** ⋯ 菜单项复用行内动作：先取当前条目，再收起菜单 */
+const runOnMoreMenu = (fn: (shortcut: FileShortcut) => void) => {
+  const shortcut = moreMenu.value.shortcut
+  closeMoreMenu()
+  if (shortcut) fn(shortcut)
+}
 
 const pickFile = async () => {
   try {
@@ -144,9 +168,16 @@ const openShortcut = async (shortcut: FileShortcut) => {
   }
 }
 
-const onContextMenu = (event: MouseEvent, shortcut: FileShortcut) => {
+const onContextMenu = async (event: MouseEvent, shortcut: FileShortcut) => {
   event.preventDefault()
   contextMenu.value = { show: true, x: event.clientX, y: event.clientY, shortcut }
+  await nextTick()
+  const el = ctxPanel.value
+  if (!el) return
+  /* 贴边钳制：底部/右缘的行右键时，菜单不得把「删除」顶出可视区 */
+  const { width, height } = el.getBoundingClientRect()
+  contextMenu.value.x = Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8))
+  contextMenu.value.y = Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8))
 }
 
 const closeContextMenu = () => {
@@ -219,6 +250,15 @@ const getFileExt = (path: string) => {
   return parts.length > 1 ? parts.pop()!.toLowerCase() : ''
 }
 
+/* 二维游走 + C 复制路径：列数按网格实测，Enter/Space 的开启动作留在卡片自身 */
+const { onGridKeydown } = useGridKeys({
+  cardSelector: '.shortcut-row',
+  onCopy: (id) => {
+    const shortcut = props.filteredShortcuts.find(s => s.id === id)
+    if (shortcut) void copyPathToClipboard(shortcut)
+  },
+})
+
 /* 扩展名 → 文件类型槽位。这里只定"哪类文件归哪个槽"，
    具体什么颜色由当前主题给（global.css 的 --ft-*），切主题才会跟着换。 */
 const EXT_SLOT: Record<string, string> = {
@@ -235,14 +275,6 @@ const EXT_SLOT: Record<string, string> = {
 
 const extVar = (ext: string) => `var(--ft-${EXT_SLOT[ext] || 'unk'})`
 
-/** 行列表的「类型」列说人话：色块已经给了具体扩展名，这里只给归类 */
-const SLOT_LABEL: Record<string, string> = {
-  pdf: '文档', doc: '文档', sheet: '表格', deck: '演示', arch: '归档',
-  code: '代码', mark: '文本', img: '图片', unk: '文件',
-}
-const typeLabel = (s: FileShortcut) =>
-  s.shortcut_type === 'folder' ? '文件夹' : (SLOT_LABEL[EXT_SLOT[getFileExt(s.path)] || 'unk'] ?? '文件')
-
 /** 路径只保留尾部：行宽有限，盘符和上层目录是噪音，完整路径在 title 里 */
 const pathTail = (path: string) => {
   const parts = path.replace(/\\/g, '/').split('/').filter(Boolean)
@@ -256,6 +288,14 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 const kbdHint = computed(() => (isMac ? '⌘K' : 'Ctrl K'))
 
 const onGlobalKey = (e: KeyboardEvent) => {
+  /* Ctrl/Cmd+Enter：弹窗开着即为保存，优先于其它键位 */
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if (showAddDialog.value) {
+      e.preventDefault()
+      doAdd()
+    }
+    return
+  }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
     searchRef.value?.focus()
@@ -287,23 +327,29 @@ onBeforeUnmount(() => {
       </div>
       <button class="btn-primary" @click="showAddDialog = true">
         <AppIcon name="plus" :size="14" />
-        新增条目
+        添加快捷方式
       </button>
     </div>
 
-    <div v-if="loading" class="loading-list rowlist">
-      <div class="skeleton-row" v-for="n in 6" :key="n">
-        <span class="skeleton-block"></span>
-        <span class="skeleton-line w40"></span>
-        <span class="skeleton-line w24"></span>
+    <div v-if="loading" class="card-grid">
+      <div class="skeleton-card" v-for="n in 6" :key="n">
+        <div class="sc-top">
+          <span class="skeleton-slot"></span>
+          <div class="sc-id">
+            <div class="skeleton-line name"></div>
+            <div class="skeleton-line note"></div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div v-else-if="filteredShortcuts.length > 0" class="shortcut-list rowlist">
+    <!-- 浮岛网格：与收藏页同一层壳（global.css .grid-card），卡内只换内容排布 -->
+    <div v-else-if="filteredShortcuts.length > 0" class="shortcut-list card-grid" @keydown="onGridKeydown">
       <div
         v-for="shortcut in filteredShortcuts"
         :key="shortcut.id"
-        class="shortcut-row"
+        class="shortcut-row grid-card"
+        :data-id="shortcut.id"
         role="button"
         tabindex="0"
         :aria-label="`打开 ${shortcut.name}`"
@@ -312,39 +358,44 @@ onBeforeUnmount(() => {
         @keydown.space.prevent="openShortcut(shortcut)"
         @contextmenu="onContextMenu($event, shortcut)"
       >
-        <!-- 第一段：图标 + 名称/路径两行，靠左聚拢吃掉中间空白（大方化轮） -->
-        <div class="cell-name">
-          <span v-if="shortcut.shortcut_type === 'folder'" class="ft-ico folder" aria-hidden="true">
+        <!-- 头部：34px 类型档 + 名称/路径两行；动作列钉卡右上角，hover 显形 -->
+        <div class="sc-top">
+          <span v-if="shortcut.shortcut_type === 'folder'" class="ft-ico grid-slot grid-slot--folder" aria-hidden="true">
             <AppIcon name="folder" :size="18" />
           </span>
-          <span v-else class="ft-ico toned" :style="{ '--ftc': extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
-          <div class="fs-text">
+          <span v-else class="ft-ico toned grid-slot" :style="{ '--ftc': extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
+          <div class="sc-id">
             <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
             <span class="cell-path"><span class="path-chip" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span></span>
           </div>
         </div>
-
-        <!-- 第二段：类型胶囊 + 添加时间 -->
-        <div class="fs-tags">
-          <span class="cell-type">{{ typeLabel(shortcut) }}</span>
-          <span class="cell-time">{{ formatRelativeTime(shortcut.created_at) }}</span>
-        </div>
-
-        <!-- 动作栏常驻占位，行点亮才淡入 -->
-        <div class="row-acts">
-          <button class="ib" type="button" title="打开所在目录" @click.stop="openContainingFolder(shortcut)">
-            <AppIcon name="folder" :size="14" />
-          </button>
-          <button class="ib" type="button" title="在终端中打开" @click.stop="openInTerminal(shortcut)">
-            <AppIcon name="terminal" :size="14" />
-          </button>
-          <button class="ib" :class="{ copied: copiedId === shortcut.id }" type="button" :title="copiedId === shortcut.id ? '已复制' : '复制地址'" @click.stop="copyPathToClipboard(shortcut)">
-            <AppIcon :name="copiedId === shortcut.id ? 'check' : 'copy'" :size="14" />
+        <div class="row-acts grid-acts sc-acts">
+          <button class="ib" :class="{ copied: copiedId === shortcut.id }" type="button" :title="copiedId === shortcut.id ? '已复制' : '复制地址 (C)'" @click.stop="copyPathToClipboard(shortcut)">
+            <AppIcon :name="copiedId === shortcut.id ? 'check' : 'copy'" :size="15" />
           </button>
           <button class="ib" type="button" title="编辑" @click.stop="openEdit(shortcut)">
-            <AppIcon name="edit" :size="14" />
+            <AppIcon name="edit" :size="15" />
+          </button>
+          <button class="ib" type="button" title="更多操作" aria-label="更多操作" @click.stop="openMoreMenu($event.currentTarget as HTMLElement, shortcut)">
+            <AppIcon name="dots" :size="15" />
           </button>
         </div>
+
+        <PopoverMenu v-if="moreMenu.shortcut?.id === shortcut.id" :anchor="moreMenu.anchor" :width="136" @close="closeMoreMenu">
+          <button class="pop-item" type="button" @click="runOnMoreMenu(openContainingFolder)">
+            <AppIcon name="folderOpen" :size="14" />
+            打开所在目录
+          </button>
+          <button class="pop-item" type="button" @click="runOnMoreMenu(openInTerminal)">
+            <AppIcon name="terminal" :size="14" />
+            在终端中打开
+          </button>
+          <span class="pop-sep"></span>
+          <button class="pop-item danger" type="button" @click="runOnMoreMenu(confirmDelete)">
+            <AppIcon name="trash" :size="14" />
+            删除
+          </button>
+        </PopoverMenu>
       </div>
     </div>
 
@@ -362,41 +413,41 @@ onBeforeUnmount(() => {
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'folder'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无快捷方式' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」开始' }}</div>
+      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「添加快捷方式」开始' }}</div>
     </div>
 
-    <!-- Add/Edit Dialog -->
+    <!-- Add/Edit Dialog：与收藏表单弹窗同一套骨架（居中悬浮 + 42px 头 + 32px 字段轴 + 46px 底栏带快捷键徽标） -->
     <Transition name="dialog">
-      <div v-if="showAddDialog" class="dialog-overlay">
+      <div v-if="showAddDialog" class="dialog-overlay form-overlay">
         <div class="dialog shortcut-dialog" role="dialog" aria-modal="true" :aria-label="isEditing() ? '编辑快捷方式' : '添加快捷方式'">
           <div class="dialog-header">
             <div class="dialog-header-left">
               <h3>{{ isEditing() ? '编辑快捷方式' : '添加快捷方式' }}</h3>
             </div>
-            <button  class="dialog-close" @click="cancelAdd" title="关闭">
+            <button class="dialog-close" type="button" title="关闭" @click="cancelAdd">
               <AppIcon name="x" :size="18" />
             </button>
           </div>
           <div class="dialog-body">
             <div class="form-group">
-              <label>路径</label>
+              <label>路径 <span class="req">*</span></label>
               <div class="path-input-row">
                 <input v-model="addForm.path" placeholder="粘贴文件/文件夹路径，或点击右侧浏览" @blur="onPathInput" />
                 <span class="path-acts">
                   <button class="path-act" type="button" title="从剪贴板粘贴" @click="pastePath">
                     <AppIcon name="clipboard" :size="14" />
                   </button>
-                  <button  class="path-act" @click="pickFile" title="选择文件">
+                  <button class="path-act" type="button" title="选择文件" @click="pickFile">
                     <AppIcon name="file" :size="14" />
                   </button>
-                  <button  class="path-act" @click="pickFolder" title="选择文件夹">
+                  <button class="path-act" type="button" title="选择文件夹" @click="pickFolder">
                     <AppIcon name="folderOpen" :size="14" />
                   </button>
                 </span>
               </div>
             </div>
             <div class="form-group">
-              <label>名称</label>
+              <label>名称 <span class="req">*</span></label>
               <input v-model="addForm.name" placeholder="快捷方式名称" />
             </div>
             <div class="form-group">
@@ -409,15 +460,22 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="dialog-footer">
-            <button class="btn-secondary" @click="cancelAdd">取 消</button>
-            <button class="btn-primary" @click="doAdd">{{ isEditing() ? '保 存' : '添 加' }}</button>
+            <div class="footer-hints">
+              <span class="kbd">Ctrl</span><span class="kbd">Enter</span><span>保存</span>
+              <span class="hints-dot">·</span>
+              <span class="kbd">Esc</span><span>取消</span>
+            </div>
+            <div class="footer-actions">
+              <button class="btn-secondary" type="button" @click="cancelAdd">取消</button>
+              <button class="btn-primary" type="button" @click="doAdd">{{ isEditing() ? '保存' : '添加' }}</button>
+            </div>
           </div>
         </div>
       </div>
     </Transition>
 
     <!-- Context Menu -->
-    <div v-if="contextMenu.show" class="popover" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
+    <div v-if="contextMenu.show" ref="ctxPanel" class="popover" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
       <div class="pop-item" @click="editFromMenu">
         <AppIcon name="edit" :size="14" />
         编辑
@@ -448,61 +506,42 @@ onBeforeUnmount(() => {
    本页没有分类标签，动作钮顶到右缘 */
 .page-bar .btn-primary { margin-left: auto; }
 
-/* 拆面轮：与收藏页同款，行直接落画布（global.css .rowlist 只剩发丝分行） */
-.shortcut-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  height: 60px;
-  padding: 0 var(--space-4);
-  cursor: pointer;
-  position: relative;
-  transition: background-color 0.15s ease;
-}
-.shortcut-row:hover { background: var(--fill); }
-.shortcut-row:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-light); background: var(--fill); }
-/* 骨架行跟本页 60px 行同档，加载完成时行高不跳 */
-.rowlist .skeleton-row { height: 60px; }
+/* 卡皮、抬影、焦点环与动作显形都在 global.css 的 .grid-card 一节；
+   这里只留文件卡自己的排版与类型着色 */
 
-/* 主列靠左聚拢：图标 + 名/路径两行，flex:1 吃掉中间空白 */
-.cell-name { display: flex; align-items: center; gap: 14px; flex: 1 1 auto; min-width: 0; }
-.fs-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-.ft-ico {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 8px;
-  background: var(--fill);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 10px;
+/* 头部：34px 类型档 + 名称/路径两行；只有名字行给动作列让位，路径行保整幅 */
+.sc-top { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+.sc-id { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+
+/* 动作列：钉卡右上角、与名字行居中（15 内距 + (18−24)/2），不压路径行；hover 显形走 global.css */
+.sc-acts { position: absolute; top: 12px; right: 15px; }
+
+/* 档面的尺寸/圆角/中性底色走 global.css .grid-slot，目录档与局域网共享目录共用
+   .grid-slot--folder，这里只叠扩展名类型色。
+   选择器带 .grid-card 一层是为了压过 .grid-slot 的中性底（同名权重看先后，不赌构建顺序）。 */
+.grid-card .ft-ico {
+  font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: -0.02em;
 }
-.ft-ico.folder { background: var(--warning-soft); color: var(--warning); }
-/* 扩展名色底：字色取 --ft-* 槽，底/描边是同色的淡水洗——类型一眼可辨，又不炸成彩色贴纸 */
-.ft-ico.toned {
+/* 扩展名色底：字色取 --ft-* 槽，底是同色的淡水洗——类型一眼可辨，又不炸成彩色贴纸 */
+.grid-card .ft-ico.toned {
   color: color-mix(in srgb, var(--ftc) 55%, var(--text));
   background: color-mix(in srgb, var(--ftc) 10%, var(--panel-bg));
-  border-color: color-mix(in srgb, var(--ftc) 25%, var(--panel-bg));
 }
-.row-name { font-size: var(--text-base); font-weight: 500; color: var(--text-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 路径进 meta 行：等宽小字，与收藏页 URL 同档 */
-.cell-path {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
+.row-name { font-size: var(--text-sm); font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 84px; }
+
+/* 路径：等宽 12px 灰字，尾部优先截断（保文件名，盘符与上层目录是噪音） */
+.cell-path { min-width: 0; display: flex; align-items: center; }
 .path-chip {
   display: inline-block;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text-url);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -510,41 +549,39 @@ onBeforeUnmount(() => {
 }
 .shortcut-row:hover .path-chip { color: var(--text-secondary); }
 
-.fs-tags { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); min-width: 0; }
-/* 减重轮：与收藏页 .ec-cat 同款，类型脱胶囊成裸小灰字 */
-.cell-type {
-  display: inline-flex;
-  align-items: center;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-.cell-time { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* 四枚 30px 动作钮：定宽占位、平时五成透明常驻，行点亮升到全不透明；删除收进右键菜单 */
-.row-acts {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  flex: 0 0 132px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-.row-acts .ib { width: 30px; height: 30px; }
 /* 复制回执态：对勾 + 成功色，1.2s 后转回 */
 .row-acts .ib.copied { color: var(--success); }
-.shortcut-row:hover .row-acts, .shortcut-row:focus-within .row-acts { opacity: 1; }
 
-/* 骨架行形/方块/呼吸走 global.css，此处只留宽度分配 */
-.loading-list { padding: 0; }
-.skeleton-line.w40 { width: 40%; }
-.skeleton-line.w24 { width: 24%; margin-left: auto; }
+/* 骨架卡的皮与呼吸走 global.css，此处只留宽度分配 */
+.skeleton-line.name { width: 118px; }
+.skeleton-line.note { width: 172px; height: 6px; }
 
-/* Add dialog：440px 紧凑壳；底栏浅底色 + 28px 按钮档走 global.css .dialog-footer */
-.shortcut-dialog { width: 440px; }
+/* ---------- 添加/编辑弹窗：与收藏表单弹窗同一套骨架 ----------
+   520px 壳、居中悬浮（遮罩走全局居中基线，只把磨砂提到 6px 与首页同档）、42px 头、46px 底栏（浅底 + 28px 钮走 global.css .dialog-footer） */
+.form-overlay {
+  background: var(--overlay);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.shortcut-dialog {
+  width: 520px;
+  max-height: 91vh;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-pop);
+}
+.shortcut-dialog .dialog-header { height: 42px; padding: 0 20px; }
+.shortcut-dialog .dialog-header h3 { font-size: var(--text-base); }
+.shortcut-dialog .dialog-body { overflow: hidden; padding: 16px 20px 12px; }
+.shortcut-dialog .dialog-footer { justify-content: space-between; }
+
+/* 字段轴：标签 12px/行高 14px 下距 6px，组距 12px（钉住全局 18px 行高防撑高） */
+.shortcut-dialog label { font-size: var(--text-xs); line-height: 14px; margin-bottom: 6px; }
+.shortcut-dialog .form-group { margin-bottom: 12px; }
+.shortcut-dialog .form-group:last-child { margin-bottom: 0; }
+.req { color: var(--danger); font-style: normal; }
+
+/* 底栏快捷键徽标走 global.css 的 .footer-hints / .kbd，本页不再 scoped 一份 */
+.footer-actions { display: flex; align-items: center; gap: 8px; }
 
 /* 输入组：外框归容器（底色/描边与全局 .form-group input 同皮肤），
    :focus-within 点亮 accent；路径文本等宽、13px 与收藏弹窗字段档一致 */
@@ -566,7 +603,8 @@ onBeforeUnmount(() => {
   outline: none;
   background: transparent;
   padding: 0 10px;
-  font-family: var(--font-mono);
+  /* 路径框走 UI 字体（继承全局 .form-group input）：Windows 路径常混中文，
+     Consolas 拉丁 + HarmonyOS 汉字混排时字重字面打架 */
   font-size: var(--text-sm);
   color: var(--text);
   box-shadow: none; /* 高亮环归容器（:focus-within），别在输入框本体上再画一圈 */
@@ -587,10 +625,12 @@ onBeforeUnmount(() => {
 .path-act + .path-act { border-left: 1px solid var(--border); }
 .path-act:hover { color: var(--accent); background: var(--accent-soft); }
 
-/* 分段控制器：凹槽轨道 + 浮白滑块（与页面 .tab / 侧栏同一套浮卡语言，无边框靠阴影） */
+/* 分段控制器：凹槽轨道 + 浮白滑块（与页面 .tab / 侧栏同一套浮卡语言，无边框靠阴影）；
+   整体钉 32px 与输入框同轴 */
 .type-seg {
   position: relative;
   display: flex;
+  height: 32px;
   padding: 3px;
   background: var(--sunken);
   border-radius: var(--radius);
@@ -612,7 +652,10 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   flex: 1;
-  padding: 6px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   font-size: var(--text-sm);
   font-weight: 500;
   border: none;

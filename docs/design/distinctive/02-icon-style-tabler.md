@@ -26,7 +26,9 @@ App 内 50 枚功能图标的**形状骨架**整体换成 Tabler Icons（MIT，v
 
 全部对比图共用同一条 1.05px 笔画轨，所以看到的差异只来自形状骨架，不来自线宽。
 
-侧栏「验证码」一枚单独对拍过：Tabler `auth-2fa` 在 14px 下把 "2FA" 三个字母糊成一团，不可读；改用 `numbers`。
+侧栏「验证码」一枚对拍过三次：Tabler `auth-2fa` 在 14px 下把 "2FA" 三个字母糊成一团，不可读；换 `numbers` 后三颗数字没有容器，22px 的图标轨里读作渲染坏了；2026-09-30 定为 `key`（斜置剪影，与标题栏那颗正立挂锁不同形）。
+
+同一天侧栏另外四枚也重选了一遍，判据只有一条：**22px 下轮廓要能单独认出来**。`notebook` 的书脊+两点糊成一团 → `note`；`files` 与「复制」同形 → `folder`；`devices` 读作"多窗口" → `network`；`bookmark` 站得住，未动。候选对比板见 `design/nav-icon-mock/`。
 
 ## 3. 映射表（61 键）
 
@@ -60,8 +62,8 @@ App 内 50 枚功能图标的**形状骨架**整体换成 Tabler Icons（MIT，v
 | clock | clock | globe | world |
 | panel | layout-sidebar-right | gear | settings |
 | bulletlist | list | navEntries | bookmark |
-| navNotes | notebook | navFiles | files |
-| navMfa | numbers | navLan | devices |
+| navNotes | note（原 notebook） | navFiles | folder（原 files） |
+| navMfa | key（原 numbers） | navLan | network（原 devices） |
 
 `max` / `min` 是**小记全屏/还原**按钮（`NoteFullscreen.vue:87`、`NoteToolbar.vue:93`），不是窗控，因此可以换；选 `arrows-maximize`/`arrows-minimize` 而非 `maximize`/`minimize`（后者是四角括号，在 13px 下与窗控混淆）。
 
@@ -108,9 +110,11 @@ App 内 50 枚功能图标的**形状骨架**整体换成 Tabler Icons（MIT，v
 
 ## 6. 一条被主动放弃的规则
 
-上一轮定过「侧栏五枚 nav 图标采用一处实心焦点族规则」（同一图形里实心块 + 描边并存）。Tabler 的 outline 母版没有这种混合形态，`bookmark / notebook / files / numbers / devices` 五枚换成纯描边。
+上一轮定过「侧栏五枚 nav 图标采用一处实心焦点族规则」（同一图形里实心块 + 描边并存）。Tabler 的 outline 母版没有这种混合形态，`bookmark / note / folder / key / network` 五枚换成纯描边。
 
 决定：**接受这次丢失**，不为五枚图标单独维护混合体。侧栏的层级感本就由 `--nav-active` 底色与左侧 3px 焦点条承担，不靠图标内部实心块。
+
+> 2026-10-08 更新：03 轮把实心以**稳定状态**的形式收回来过一轮（侧栏当前模块五枚 + 已收藏星标，取 Solar Round Bold 整枚实心，非混合体），与本节当年砍掉的"hover/focus 混合实心"不是同一件事。其中侧栏五枚同日按真窗口走查再次退回描边，只留星标——结论与理由见 `03-icon-style-solar.md` 第 3 节规则 3。本节"层级感不靠图标内部实心块"的判断成立。
 
 ## 7. `:filled` 通道
 

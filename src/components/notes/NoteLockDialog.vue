@@ -104,17 +104,17 @@ useEscapeClose(() => emit('close'))
 
 <style scoped>
 .note-lock-dialog { width: 380px; }
-.lock-tip { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-3); }
+.lock-tip { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-3); }
 .link-btn {
   border: none;
   background: none;
   color: var(--accent);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   cursor: pointer;
   padding: 0;
   margin-top: var(--space-2);
   font-family: inherit;
 }
 .link-btn:hover { text-decoration: underline; }
-.lock-error { margin: var(--space-2) 0 0; font-size: 12px; color: var(--danger); }
+.lock-error { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--danger); }
 </style>

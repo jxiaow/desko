@@ -2,17 +2,20 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { suppressHover } from '../../utils/hoverGuard'
+import { releaseHover, suppressHover } from '../../utils/hoverGuard'
 import AppIcon from '../shared/AppIcon.vue'
 import BackupBadge from './BackupBadge.vue'
 
 defineProps<{
   isLocked?: boolean
+  /** 侧栏收到 0 宽时，恢复入口挪到这里 */
+  sidebarHidden?: boolean
 }>()
 
 const emit = defineEmits<{
   openSettings: []
   lock: []
+  showSidebar: []
 }>()
 
 const appWindow = getCurrentWindow()
@@ -63,9 +66,12 @@ onMounted(async () => {
   unlisten = await appWindow.onResized(async () => {
     await updateMaximizedState()
   })
-  unlistenFocus = await appWindow.onFocusChanged(() => {
-    // 失焦时冻结；重新获得焦点（托盘恢复）时再冻结一次，防止隐藏前被假移动解除
-    suppressHover()
+  unlistenFocus = await appWindow.onFocusChanged(({ payload: hasFocus }) => {
+    // 失焦才冻结；重新获得焦点必须当场解除。遮罩是整窗 fixed，留着它，
+    // 用户回来后的第一下点击会打在遮罩上被吞掉（标题栏那颗同步钮实测点了没反应）。
+    // 而恢复时 WebView2 在旧坐标重放的那次 pointermove 按坐标差规则解不开，等不来自动解除。
+    if (hasFocus) releaseHover()
+    else suppressHover()
   })
 })
 
@@ -80,14 +86,22 @@ onUnmounted(() => {
     <div class="titlebar-drag" @mousedown="startDrag" @dblclick="toggleMaximize"></div>
 
     <div v-if="!isLocked" class="titlebar-left" @mousedown="startDrag" @dblclick="toggleMaximize">
+      <button
+        v-if="sidebarHidden"
+        class="titlebar-btn tb-util sidebar-restore"
+        title="显示侧栏 (Ctrl+B)"
+        @click="emit('showSidebar')"
+      >
+        <AppIcon name="panel" :size="16" />
+      </button>
       <div class="titlebar-brand">
         <span class="titlebar-crumb">{{ crumb }}</span>
-        <BackupBadge />
       </div>
     </div>
 
     <div class="titlebar-buttons">
       <template v-if="!isLocked">
+        <BackupBadge />
         <button  class="titlebar-btn tb-util" @click="emit('openSettings')" title="设置">
           <AppIcon name="gear" :size="16" />
         </button>
@@ -151,11 +165,13 @@ onUnmounted(() => {
 /* 锁定页顶栏悬浮在光晕上，控制键按锁页规格放宽到 44px 命中区 */
 .titlebar-locked .titlebar-btn { width: 44px; }
 
+/* 整条都是拖拽区，右端那一排靠 z-index 压在它上面：
+   这样同步钮在不在（要配齐备份密码 + 云端才现身）都不用回来改这里的魔法数 */
 .titlebar-drag {
   position: absolute;
   top: 0;
   left: 0;
-  right: 230px;
+  right: 0;
   bottom: 0;
 }
 
@@ -166,6 +182,9 @@ onUnmounted(() => {
   padding-left: var(--space-5);
   z-index: 1;
 }
+
+/* 侧栏收进 0 宽后唯一的恢复入口：与右端设置/锁定同档（32×28 圆角方块） */
+.sidebar-restore { margin-right: var(--space-1); }
 
 /* 模块名锚点：13.5px 半粗，与侧栏应用名同档 */
 .titlebar-brand {
@@ -178,7 +197,7 @@ onUnmounted(() => {
 .titlebar-crumb {
   display: inline-flex;
   align-items: center;
-  font-size: 13.5px;
+  font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-title);

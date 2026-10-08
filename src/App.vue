@@ -38,7 +38,9 @@ const { fetchShortcuts } = fileShortcutsStore
 const passwordStore = usePasswordStore()
 const { evictExpiredPasswords, clearSensitiveState } = passwordStore
 
-const isSidebarCollapsed = ref(true)
+/** 侧栏三态（V5.2 收编轮 P2）：展开 208 / 图标轨 56 / 收起 0。
+    缺省仍是图标轨——和旧的两态时代一致，小窗开局不把内容挤窄。 */
+const sidebarMode = ref<'expanded' | 'rail' | 'hidden'>('rail')
 const showSettings = ref(false)
 const settingsInitialTab = ref<'general' | 'fileshare'>('general')
 const showChangePassword = ref(false)
@@ -107,11 +109,14 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalKey)
 })
 
-/* Ctrl/Cmd+B 切换侧栏：与浏览器书签栏习惯同键位 */
+/* Ctrl/Cmd+B 按 rail → expanded → hidden 的顺序循环：缺省是图标轨，
+   所以第一下必须先展开（旧两态时代就是这个手感），第三下才收干净 */
+const SIDEBAR_MODES = ['rail', 'expanded', 'hidden'] as const
 function onGlobalKey(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'b') {
     e.preventDefault()
-    isSidebarCollapsed.value = !isSidebarCollapsed.value
+    const i = SIDEBAR_MODES.indexOf(sidebarMode.value)
+    sidebarMode.value = SIDEBAR_MODES[(i + 1) % SIDEBAR_MODES.length]
   }
 }
 </script>
@@ -131,14 +136,17 @@ function onGlobalKey(e: KeyboardEvent) {
 
     <div v-else class="app-layout">
       <Sidebar
-        :collapsed="isSidebarCollapsed"
-        @update:collapsed="isSidebarCollapsed = $event"
+        v-if="sidebarMode !== 'hidden'"
+        :collapsed="sidebarMode === 'rail'"
+        @update:collapsed="sidebarMode = $event ? 'rail' : 'expanded'"
       />
 
       <div class="main-area">
         <TitleBar
+          :sidebar-hidden="sidebarMode === 'hidden'"
           @open-settings="openSettingsGeneral"
           @lock="doLock"
+          @show-sidebar="sidebarMode = 'expanded'"
         />
 
         <div class="main-content">

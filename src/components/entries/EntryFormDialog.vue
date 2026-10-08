@@ -10,6 +10,7 @@ const props = defineProps<{ categories: string[]; entry: Entry | null }>()
 const emit = defineEmits<{
   close: []
   saved: [id: string]
+  openUrl: [url: string]
 }>()
 
 const title = computed(() => (props.entry ? '编辑网址收藏' : '新增网址收藏'))
@@ -46,7 +47,7 @@ useEscapeClose(() => emit('close'))
           </button>
         </div>
         <div class="dialog-body">
-          <EntryFields ref="fields" :entry="entry" :categories="categories" @saved="onSaved" />
+          <EntryFields ref="fields" :entry="entry" :categories="categories" @saved="onSaved" @open-url="url => emit('openUrl', url)" />
         </div>
         <div class="dialog-footer">
           <div class="footer-hints">
@@ -65,10 +66,8 @@ useEscapeClose(() => emit('close'))
 </template>
 
 <style scoped>
-/* 居中偏上悬浮：遮罩与其余弹窗同配方（--overlay），弥散稍重一档 */
+/* 居中悬浮：遮罩走全局 .dialog-overlay 的居中基线，这里只加深磨砂一档 */
 .form-overlay {
-  align-items: flex-start;
-  padding-top: 7vh;
   background: var(--overlay);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -76,26 +75,19 @@ useEscapeClose(() => emit('close'))
 
 .entry-form-dialog {
   width: 520px;
-  /* 顶 7vh + 底部留 2vh：内容自然高在此内，绝不触发外层滚动 */
+  /* 上下各留 4.5vh：内容自然高在此内，绝不触发外层滚动 */
   max-height: 91vh;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-pop);
 }
 
-/* 严禁弹窗外层滚动条：唯一滚动区收进子路径视窗 */
+/* 表单正文自然高，不出外层滚动条；子路径已搬去独立弹窗 */
 .entry-form-dialog .dialog-body { overflow: hidden; padding: 16px 20px 12px; }
 .entry-form-dialog .dialog-header { height: 42px; padding: 0 20px; }
-.entry-form-dialog .dialog-header h3 { font-size: 14px; }
+.entry-form-dialog .dialog-header h3 { font-size: var(--text-base); }
 
-/* 46px 底栏浅底色 + 28px 按钮档已上抬为全局 .dialog-footer；
+/* 46px 底栏浅底色 + 28px 按钮档、快捷键提示（.footer-hints/.kbd）均已上抬为全局；
    这里只留本弹窗的布局差量：左侧快捷键徽标把按钮推到右边 */
 .entry-form-dialog .dialog-footer { justify-content: space-between; }
-.footer-hints { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-muted); }
-.footer-hints .kbd {
-  padding: 1px 4px; border: 1px solid var(--border); border-radius: 4px;
-  background: var(--panel-bg); font-family: var(--font-mono);
-  font-size: 10px; line-height: 13px; color: var(--text-muted);
-}
-.hints-dot { margin: 0 4px; }
 .footer-actions { display: flex; align-items: center; gap: 8px; }
 </style>

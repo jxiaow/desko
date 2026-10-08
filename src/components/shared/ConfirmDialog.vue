@@ -30,8 +30,8 @@ useEscapeClose(() => emit('cancel'), () => props.dialog.show)
         <p>{{ dialog.message }}</p>
       </div>
       <div class="dialog-footer">
-        <button class="btn-secondary" @click="emit('cancel')">取 消</button>
-        <button class="btn-danger" @click="emit('confirm')">确 定</button>
+        <button class="btn-secondary" @click="emit('cancel')">取消</button>
+        <button class="btn-danger" @click="emit('confirm')">确定</button>
       </div>
     </div>
     </div>

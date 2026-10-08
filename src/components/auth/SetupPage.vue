@@ -91,7 +91,7 @@ const doSetup = async () => {
 
 .auth-title {
   text-align: center;
-  font-size: 20px;
+  font-size: var(--text-xl);
   font-weight: 700;
   letter-spacing: -0.02em;
   margin-bottom: var(--space-2);
@@ -100,7 +100,7 @@ const doSetup = async () => {
 
 .auth-subtitle {
   text-align: center;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   margin-bottom: var(--space-6);
 }
@@ -110,7 +110,7 @@ const doSetup = async () => {
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 13px;
+  font-size: var(--text-sm);
   outline: none;
   transition: all var(--transition);
   background: var(--bg);
@@ -130,7 +130,7 @@ const doSetup = async () => {
   color: var(--accent-on);
   border: none;
   border-radius: var(--radius);
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
   margin-top: var(--space-4);
@@ -150,13 +150,13 @@ const doSetup = async () => {
 
 .auth-error {
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--text-xs);
   margin-top: var(--space-3);
   text-align: center;
 }
 
 .auth-tip {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   margin-top: var(--space-3);
   text-align: center;

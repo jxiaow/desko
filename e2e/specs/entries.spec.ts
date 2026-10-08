@@ -91,6 +91,24 @@ test.describe('Entries 网址收藏', () => {
     await dialog.locator('input[placeholder="登录用户名"]').fill('user@notion.so')
     await dialog.locator('input[placeholder="登录密码"]').fill('No@tion2024')
     await dialog.locator('textarea[placeholder="可选"]').fill('文档与笔记')
+
+    // 子路径住独立弹窗：增删只写回草稿，摘要行回显，落库等「保存条目」
+    await dialog.locator('.paths-manage').click()
+    const paths = page.locator('.paths-dialog')
+    await expect(paths.locator('h3')).toHaveText('子路径')
+    await expect(paths.locator('.path-row:not(.path-add)')).toHaveCount(0)
+    await expect(paths.locator('.paths-count')).toHaveText('0 个 · Notion')
+    await paths.locator('.add-label').fill('首页')
+    await paths.locator('.add-path').fill('/web')
+    await paths.locator('.add-path').press('Enter')
+    await expect(paths.locator('.path-value')).toHaveCount(1)
+    await expect(paths.locator('.paths-count')).toHaveText('1 个 · Notion')
+    await paths.locator('.dialog-footer button.btn-primary').click()
+    await expect(paths).toHaveCount(0)
+    await expect(dialog.locator('.pm-sum')).toHaveText('首页 / web')
+    // 草稿阶段库里还没有这条路径
+    expect((await e2e.snapshot(page)).urlPaths).toHaveLength(0)
+
     await dialog.locator('.dialog-footer button.btn-primary').click()
 
     await expectToast(page, '已添加')
@@ -102,6 +120,8 @@ test.describe('Entries 网址收藏', () => {
     const created = snap.entries.find((e: any) => e.name === 'Notion')
     expect(created.category).toBe('工具')
     expect(created.url).toBe('https://www.notion.so')
+    expect(snap.urlPaths).toHaveLength(1)
+    expect(snap.urlPaths[0]).toMatchObject({ entry_id: created.id, path: '/web', label: '首页' })
   })
 
   test('详情点编辑：弹统一编辑弹窗改名', async ({ page }) => {
@@ -141,9 +161,10 @@ test.describe('Entries 网址收藏', () => {
 
   test('批量选择与删除', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    // 勾选即进：点第一张卡的勾选位即入批量态，不碰工具栏钮
-    await entryCard(page, 'GitHub').hover()
-    await entryCard(page, 'GitHub').locator('.card-check').click()
+    // 勾选框只在批量态显形：hover 不再抛框，入口是页条「选择」
+    const pickBtn = page.locator('.page-bar .bar-btn[aria-label="选择条目"]')
+    await pickBtn.click()
+    await entryCard(page, 'GitHub').click()
     await expect(page.locator('.batch-dock')).toBeVisible()
 
     // 批量态下整张卡就是选择热区
@@ -151,12 +172,16 @@ test.describe('Entries 网址收藏', () => {
     await expect(page.locator('.dock-count')).toHaveText('已选 2 项')
     await expect(entryCard(page, 'GitHub')).toHaveClass(/selected/)
 
+    // 网址链接也让位给勾选，不把浏览器带起来
+    await entryCard(page, '钉钉').locator('a.ec-domain').click()
+    await expect(page.locator('.dock-count')).toHaveText('已选 3 项')
+    expect(await e2e.count(page, 'shell:open')).toBe(0)
+
     await page.locator('.dock-btn', { hasText: '取消全选' }).click()
-    // 清空即收：选中归零，底坞自动退出
+    // 清空即收：选中归零，底坞自动退出，待选态还在
     await expect(page.locator('.batch-dock')).toHaveCount(0)
 
-    await entryCard(page, 'GitHub').hover()
-    await entryCard(page, 'GitHub').locator('.card-check').click() // 二次进入
+    await entryCard(page, 'GitHub').click() // 二次进入
     await page.locator('.dock-btn:text-is("全选")').click()
     await expect(page.locator('.dock-count')).toHaveText('已选 3 项')
     await entryCard(page, '钉钉').click() // 反选一个
@@ -194,27 +219,61 @@ test.describe('Entries 网址收藏', () => {
     await expect(page.locator('.entry-card.batching')).toHaveCount(0)
   })
 
-  test('选中态浸润微环，上下键在行间搬焦点', async ({ page }) => {
+  test('选中态浸润 + 网格二维游走与 C 复制', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const gh = entryCard(page, 'GitHub')
-    await gh.hover()
-    await gh.locator('.card-check').click()
+    await page.locator('.page-bar .bar-btn[aria-label="选择条目"]').click()
+    await gh.click()
 
-    // 去胶囊轮：白卡内选中不再外扩实环，改 1px 内描边 + 浸润底（锚点 = paper 底色 × 墨蓝 accent）
-    await expect(gh).toHaveCSS('box-shadow', 'rgb(61, 90, 128) 0px 0px 0px 1px inset')
+    // 浮岛网格轮：选中 = 浸润底 + accent 实描边（白面板里的 1px 内环随 .rowlist 一起退了）
     await expect(gh).toHaveCSS('background-color', 'rgb(232, 238, 244)')
+    await expect(gh).toHaveCSS('border-top-color', 'rgb(61, 90, 128)')
     await expect(gh.locator('.ec-name')).toHaveCSS('color', 'rgb(49, 73, 106)')
 
-    // 列表渲染顺序不保证等于 seed 顺序，所以先量出当前行的位置再断言位移
+    // 900px 窗（侧栏轨 56 + 内距 48）落 2 列，3 张卡排成两行，跨行步进才是 2
+    await page.setViewportSize({ width: 900, height: 700 })
+    const grid = page.locator('.card-grid')
+    expect(await grid.evaluate(el =>
+      getComputedStyle(el).gridTemplateColumns.split(' ').filter(Boolean).length)).toBe(2)
+
     const cards = page.locator('.entry-card')
-    await gh.focus()
-    const at = await cards.evaluateAll((els) => els.indexOf(document.activeElement as any))
-    expect(at).toBeGreaterThanOrEqual(0)
-    const dir = at === 0 ? 1 : -1
-    await page.keyboard.press(dir === 1 ? 'ArrowDown' : 'ArrowUp')
-    await expect(cards.nth(at + dir)).toBeFocused()
-    await page.keyboard.press(dir === 1 ? 'ArrowUp' : 'ArrowDown')
-    await expect(gh).toBeFocused()
+    await cards.first().focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(cards.nth(1)).toBeFocused()
+    await page.keyboard.press('ArrowLeft')
+    await expect(cards.nth(0)).toBeFocused()
+    await page.keyboard.press('ArrowDown')
+    await expect(cards.nth(2)).toBeFocused()
+    await page.keyboard.press('ArrowUp')
+    await expect(cards.nth(0)).toBeFocused()
+
+    // C = 复制当前卡网址（列表渲染顺序不保证等于 seed 顺序，只验协议头）
+    await page.keyboard.press('c')
+    await expectToast(page, '网址已复制')
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^https?:\/\//)
+  })
+
+  test('toast 是贴右下的反色胶囊', async ({ page }) => {
+    await page.setViewportSize({ width: 1040, height: 670 })
+    await bootUnlocked(page, SEED)
+    await page.locator('.entry-card').first().focus()
+    await page.keyboard.press('c')
+    const toast = page.locator('.toast')
+    await expect(toast).toBeVisible()
+    // 等 0.18s 入场过渡落定，仍在 0.8s 驻留窗口内
+    await page.waitForTimeout(220)
+
+    const box = await toast.boundingBox()
+    expect(1040 - (box.x + box.width)).toBeLessThanOrEqual(21)
+    expect(1040 - (box.x + box.width)).toBeGreaterThanOrEqual(19)
+    expect(670 - (box.y + box.height)).toBeLessThanOrEqual(21)
+    expect(670 - (box.y + box.height)).toBeGreaterThanOrEqual(19)
+
+    const style = await toast.evaluate((el) => {
+      const cs = getComputedStyle(el)
+      return { radius: cs.borderRadius, bg: cs.backgroundColor, size: cs.fontSize }
+    })
+    expect(style).toEqual({ radius: '99px', bg: 'rgb(38, 36, 31)', size: '12px' })
   })
 
   test('复制卡片并查看/复制密码', async ({ page }) => {

@@ -57,7 +57,16 @@ export interface E2EConfig {
   noteOpen?: boolean
   /** 附件目录里"已落盘"的文件名，用来演未引用扫描 */
   staged?: string[]
-  fileshare?: { port?: number; shareDirs?: string[]; localOnly?: boolean; running?: boolean; boundPort?: number }
+  fileshare?: {
+    port?: number
+    shareDirs?: string[]
+    localOnly?: boolean
+    running?: boolean
+    boundPort?: number
+    hasPassword?: boolean
+    /** 共享目录里"已存在"的文件名，用来演拖入同名避让 */
+    imported?: string[]
+  }
 }
 
 interface EntryRecord {
@@ -150,9 +159,9 @@ interface BackendState {
   /** 附件目录里"已落盘"的文件，用来演未引用扫描 */
   staged: { file_path: string; file_size: number }[]
   settings: Record<string, string>
-  backup: { hasPassword: boolean; files: BackupPackageRecord[]; exports: string[] }
+  backup: { hasPassword: boolean; files: BackupPackageRecord[]; exports: string[]; busy: boolean }
   cloud: { configured: boolean; server: string; account: string; lastSyncAt: number; packages: BackupPackageRecord[]; attachments: string[] }
-  fileshare: { running: boolean; port: number; boundPort: number | null; shareDirs: string[]; localOnly: boolean; hasPassword: boolean }
+  fileshare: { running: boolean; port: number; boundPort: number | null; shareDirs: string[]; localOnly: boolean; hasPassword: boolean; imported: string[] }
 }
 
 declare global {
@@ -169,6 +178,8 @@ export interface E2EBridge {
   seed(config: E2EConfig): void
   queueDialog(value: unknown): void
   emitEvent(event: string, payload?: unknown): void
+  /** 演「后台正有一轮在跑」：真实后端的 busy 是原子闸门，mock 的命令是同步跑的，只能由测试拨 */
+  setBackupBusy(busy: boolean): void
   hasListener(event: string): boolean
   count(cmd: string): number
 }
@@ -277,15 +288,16 @@ class MockBackend {
         file_size: 2048,
       })),
       settings: { ...(config.settings ?? {}) },
-      backup: { hasPassword: false, files: [], exports: [] },
+      backup: { hasPassword: false, files: [], exports: [], busy: false },
       cloud: { configured: false, server: '', account: '', lastSyncAt: 0, packages: [], attachments: [] },
-      fileshare: { running: false, port: 8000, boundPort: null, shareDirs: [], localOnly: false, hasPassword: false },
+      fileshare: { running: false, port: 8000, boundPort: null, shareDirs: [], localOnly: false, hasPassword: false, imported: [] },
     }
     if (config.fileshare) {
       if (config.fileshare.port) state.fileshare.port = config.fileshare.port
       if (config.fileshare.shareDirs) state.fileshare.shareDirs = config.fileshare.shareDirs.slice()
       state.fileshare.localOnly = config.fileshare.localOnly ?? false
       state.fileshare.hasPassword = config.fileshare.hasPassword ?? false
+      state.fileshare.imported = (config.fileshare.imported ?? []).slice()
       if (config.fileshare.running) {
         state.fileshare.running = true
         state.fileshare.boundPort = config.fileshare.boundPort ?? state.fileshare.port
@@ -392,6 +404,7 @@ class MockBackend {
       emitEvent: (event: string, payload?: unknown) => {
         this.eventListeners.get(event)?.forEach((h) => h(payload))
       },
+      setBackupBusy: (busy: boolean) => { this.state.backup.busy = busy },
       hasListener: (event: string) => (this.eventListeners.get(event)?.size ?? 0) > 0,
       count: (cmd: string) => this.invocations.filter((i) => i.cmd === cmd).length,
     }
@@ -1028,8 +1041,8 @@ class MockBackend {
         pending: files.filter((f) => !this.state.cloud.packages.some((p) => p.name === f.name)).length,
         lastRoundAt: files[0]?.time ?? 0,
         cloudConfigured: this.state.cloud.configured,
-        // mock 的命令是同步跑的，没有后台线程这一档
-        busy: false,
+        // 闸门：真实后端是 AtomicBool，这里跟着 backup_run 的在跑与否走，测试也能用 setBackupBusy 拨
+        busy: this.state.backup.busy,
       }
     },
 
@@ -1047,24 +1060,31 @@ class MockBackend {
       this.requireUnlocked()
       if (!this.state.cloud.configured) throw '还没连接云端，备份无处可传'
       if (!this.state.backup.hasPassword) throw '请先设置备份密码'
-      for (const [text, pct] of [['导出库快照', 8], ['镜像附件 3/3', 60], ['打包并加密（AES-256-GCM）', 88], ['完成', 100]] as const) {
-        await sleep(40)
-        this.emit('backup-progress', { op: 'pack', text, pct })
+      // 与 Rust 的 BusyGuard 同形：闸门只掐这一轮，跑完必还
+      if (this.state.backup.busy) throw '已有备份任务在进行中'
+      this.state.backup.busy = true
+      try {
+        for (const [text, pct] of [['导出库快照', 8], ['镜像附件 3/3', 60], ['打包并加密（AES-256-GCM）', 88], ['完成', 100]] as const) {
+          await sleep(40)
+          this.emit('backup-progress', { op: 'pack', text, pct })
+        }
+        const now = Date.now()
+        // 包名只到秒：连点两次会撞名，往后挪一秒（真实后端同样处理）
+        let ts = now
+        while (this.state.backup.files.some((f) => f.name === `desko-${backupStamp(ts)}.dsbk`)) ts += 1000
+        const file: BackupPackageRecord = {
+          name: `desko-${backupStamp(ts)}.dsbk`,
+          time: ts,
+          size: 262_144,
+          attachments: 3,
+        }
+        this.state.backup.files.unshift(file)
+        // 手动这一档不看自动开关：配了云端就传（force）
+        await this.uploadAndSettle('upload')
+        return { package: { ...file }, uploaded: true, error: null }
+      } finally {
+        this.state.backup.busy = false
       }
-      const now = Date.now()
-      // 包名只到秒：连点两次会撞名，往后挪一秒（真实后端同样处理）
-      let ts = now
-      while (this.state.backup.files.some((f) => f.name === `desko-${backupStamp(ts)}.dsbk`)) ts += 1000
-      const file: BackupPackageRecord = {
-        name: `desko-${backupStamp(ts)}.dsbk`,
-        time: ts,
-        size: 262_144,
-        attachments: 3,
-      }
-      this.state.backup.files.unshift(file)
-      // 手动这一档不看自动开关：配了云端就传（force）
-      await this.uploadAndSettle('upload')
-      return { package: { ...file }, uploaded: true, error: null }
     },
 
     // 迁移导出：附件本体一起装进单个 .dsbk，写到用户选的路径，不进本地备份列表
@@ -1320,6 +1340,38 @@ class MockBackend {
 
     fileshare_set_password: ({ password }) => {
       this.state.fileshare.hasPassword = !!String(password ?? '')
+    },
+
+    // 桌面拖入落盘：与 Rust 侧同一套语义（清洗、同名加 (n)、文件夹与超限逐条拒绝）
+    fileshare_import_files: ({ shareIndex, paths }) => {
+      const f = this.state.fileshare
+      if (!f.shareDirs[Number(shareIndex)]) throw '共享目录已不在列表里，请重新选择'
+      const stored: { name: string }[] = []
+      const failed: string[] = []
+      for (const raw of (paths as string[]) ?? []) {
+        const s = String(raw)
+        const base = s.split(/[\\/]/).filter(Boolean).pop() ?? s
+        if (/[/\\]$/.test(s)) {
+          failed.push(`${base}：只收文件，文件夹请先压缩`)
+          continue
+        }
+        if (base.startsWith('big')) {
+          failed.push(`${base}：超过单文件 4 GiB 上限`)
+          continue
+        }
+        const name = base.replace(/[<>:"/\\|?*]/g, '').trim()
+        if (!name) {
+          failed.push(`${base}：文件名不合法`)
+          continue
+        }
+        const stem = name.replace(/\.[^.]+$/, '')
+        const ext = name.slice(stem.length)
+        let final = name
+        for (let i = 1; f.imported.includes(final); i += 1) final = `${stem} (${i})${ext}`
+        f.imported.push(final)
+        stored.push({ name: final })
+      }
+      return { stored, failed }
     },
 
     mfa_read_image: ({ path }) => {

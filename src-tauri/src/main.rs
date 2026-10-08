@@ -244,6 +244,7 @@ fn main() {
             commands::fileshare::fileshare_get_config,
             commands::fileshare::fileshare_save_config,
             commands::fileshare::fileshare_set_password,
+            commands::fileshare::fileshare_import_files,
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::url_paths::list_url_paths,

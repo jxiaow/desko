@@ -74,8 +74,14 @@ test.describe('Settings 设置', () => {
     await expect(danger).toHaveCSS('color', 'rgb(169, 68, 60)')
     await expect(danger).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 
-    // 关键主操作品牌实底，一栏只这一颗
+    // 三级动作的最高档：能按时是品牌实底；按不动时洗成 --fill、字色不跟着淡掉
+    // （禁用态整颗 opacity .45 曾把标签压到 2.19:1，读不出这颗是干什么的）
     const backup = pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn.primary')
+    await expect(backup).toHaveCSS('background-color', 'rgb(234, 234, 232)')
+    await expect(backup).toHaveCSS('color', 'rgb(77, 76, 73)')
+    await expect(backup).toHaveCSS('opacity', '1')
+    // 补齐备份密码 → schedulable，这一档才现出品牌底
+    await setBackupPwd(page, pane)
     await expect(backup).toHaveCSS('background-color', 'rgb(61, 90, 128)')
     await expect(backup).toHaveCSS('color', 'rgb(255, 255, 255)')
   })
@@ -116,7 +122,7 @@ test.describe('Settings 设置', () => {
   test('弹窗内的 hover 提示压在遮罩之上', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page)
-    await dialog.locator('.close-btn').hover()
+    await dialog.locator('.dialog-close').hover()
     await expect(page.locator('.app-tip')).toHaveText('关闭')
     // 气泡是挂在 body 上的单例，层级一旦低于弹窗遮罩，在弹窗里就永远看不见
     const [tipZ, overlayZ] = await page.evaluate(() => {
@@ -300,6 +306,49 @@ test.describe('Settings 设置', () => {
     await expect(badge).toBeVisible({ timeout: 10_000 })
     await expect(badge).toHaveAttribute('title', /云端备份已开启 · 最近一轮/)
     await expect(badge.locator('.bb-text')).toHaveCount(0)
+
+    // 徽标自己就是入口：点一下即跑一轮，不用先进设置面板（弹窗得先收掉，否则遮罩吃掉点击）
+    await dialog.locator('.dialog-close').click()
+    await expect(page.locator('.dialog-overlay')).toHaveCount(0)
+    await waitForToastGone(page)
+    await badge.click()
+    await expectToast(page, '已传云端')
+    await expect(badge.locator('.bb-text')).toHaveCount(0)
+    expect((await e2e.snapshot(page)).cloud.packages).toHaveLength(2)
+  })
+
+  test('标题栏备份徽标：别的入口发起的那轮也得让它转起来', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const dialog = await openSettings(page, 'backup')
+    const pane = dialog.locator('.backup-pane')
+    await setBackupPwd(page, pane)
+    await connectCloud(page, pane)
+    await pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn').click()
+    await expectToast(page, '已传云端')
+    await waitForToastGone(page)
+    await dialog.locator('.dialog-close').click()
+    const badge = page.locator('.backup-badge')
+    await expect(badge).toBeVisible({ timeout: 10_000 })
+    /** 全局 tooltip 会把被指针扫过的按钮的 title 摘成 data-tip（同 helpers.tipButton），两种都得认 */
+    const tipOf = (l: Locator) => l.evaluate((el) => el.getAttribute('data-tip') ?? el.getAttribute('title') ?? '')
+
+    // 定时/停笔即备/退出那一档不经过这颗钮，只推进度事件：徽标得跟着转，tip 带步骤
+    await e2e.emitEvent(page, 'backup-progress', { op: 'pack', text: '镜像附件 12/40', pct: 40 })
+    await expect(badge).toHaveClass(/bb-sync/)
+    await expect.poll(() => tipOf(badge)).toBe('云端同步中 · 镜像附件 12/40 40%')
+    await e2e.emitEvent(page, 'backup-progress', { op: 'upload', text: '完成', pct: 100 })
+    await expect(badge).toHaveClass(/bb-idle/)
+
+    // 事件整段错过（徽标这侧没听到、或一轮里压根没推事件）时，闸门 busy 就是唯一的真相。
+    // 先等过收尾那口气（末条事件比闸门释放早到，宽限期里 busy 不算数）
+    await page.evaluate(() => (window as any).__E2E__.setBackupBusy(true))
+    await page.waitForTimeout(1_800)
+    await e2e.emitEvent(page, 'auto-backup', {})
+    await expect(badge).toHaveClass(/bb-sync/)
+    await expect.poll(() => tipOf(badge)).toBe('云端同步中 · 本轮由后台发起')
+    await page.evaluate(() => (window as any).__E2E__.setBackupBusy(false))
+    await e2e.emitEvent(page, 'auto-backup', {})
+    await expect(badge).toHaveClass(/bb-idle/)
   })
 
   test('传上云的包本地随即清掉，只留兜底几份', async ({ page }) => {

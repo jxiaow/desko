@@ -8,8 +8,19 @@ export interface UrlPath {
   created_at: number
 }
 
-// Entry response from backend (no encrypted password)
-// Note: Backend uses snake_case, so we match that here
+/** 编辑弹窗里的子路径草稿：未落库的带临时 id，删除只打标记，随「保存条目」一并提交 */
+export interface LocalPath {
+  id: string
+  path: string
+  label: string
+  notes: string
+  isNew: boolean
+  isDeleted: boolean
+  /** 库里存的是旧格式（整条地址），保存时改写回库 */
+  dirty: boolean
+}
+
+// Entry response from backend (no encrypted password)// Note: Backend uses snake_case, so we match that here
 export interface Entry {
   id: string
   name: string

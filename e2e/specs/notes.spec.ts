@@ -89,29 +89,69 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.composer .ProseMirror')).toHaveText('')
   })
 
-  test('composer 展开粘滞：失焦不收起，空内容按 Esc 才收起', async ({ page }) => {
+  test('composer 伸缩：展开给三行地板，越过地板才逐键长', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')
-    const minHeight = () => pm.evaluate((el) => getComputedStyle(el).minHeight)
+    // scrollHeight 取整、行高 24.65，比对留 2px 余量
+    const height = () => pm.evaluate((el) => el.getBoundingClientRect().height)
+    const line = () => pm.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))
+    const over = async (base: number) => (await height()) - base
 
-    // 默认单行胶囊
-    await expect(minHeight).resolves.toBe('22px')
-    await expect(page.locator('.composer button.btn-primary')).toBeHidden()
-
-    // 点开后展开成书写面
+    const idle = await height()
     await pm.click()
-    await expect.poll(minHeight, { timeout: 3000 }).toBe('148px')
-    await expect(page.locator('.composer button.btn-primary')).toBeVisible()
+    const floor = await height()
+    const lh = await line()
 
-    // 点击页面别处（空内容失焦）：不许收回
+    // 点进去就是三行：一行的书写面写两句就撞底，逐键伸缩跟不上思路
+    expect(floor - idle).toBeGreaterThanOrEqual(2 * lh - 2)
+
+    // 地板吃得下前两行，不再逐键跳动
+    await page.keyboard.type('第一行')
+    expect(await over(floor)).toBeLessThan(2)
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('第二行')
+    expect(await over(floor)).toBeLessThan(2)
+
+    // 第三段连行带段距越过地板，此后逐键长
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('第三行')
+    expect(await over(floor)).toBeGreaterThan(2)
+
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('第四行')
+    expect(await over(floor)).toBeGreaterThan(2 * lh - 6)
+
+    // 失焦不收回：内容还在就保持高
     await page.locator('.memo').first().click()
-    await page.waitForTimeout(500)
-    await expect(minHeight).resolves.toBe('148px')
+    await page.waitForTimeout(300)
+    expect(await over(floor)).toBeGreaterThan(2 * lh - 6)
 
-    // 空内容按 Esc：收回胶囊
+    // 删干净：地板还在（展开态不因失焦收回），按 Esc 才收成一行
+    await pm.click()
+    await page.keyboard.press('Control+a')
+    await page.keyboard.press('Backspace')
+    await expect.poll(async () => await over(floor), { timeout: 3000 }).toBeLessThan(2)
+    await page.keyboard.press('Escape')
+    await expect.poll(async () => await over(idle), { timeout: 3000 }).toBeLessThan(2)
+  })
+
+  test('composer 工具条粘滞：失焦不收起，空内容按 Esc 才收起', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    const bar = page.locator('.composer-bar')
+    const visible = () => bar.evaluate((el) => getComputedStyle(el).visibility)
+
+    await expect(visible).resolves.toBe('hidden')
+    await pm.click()
+    await expect.poll(visible, { timeout: 3000 }).toBe('visible')
+
+    await page.locator('.memo').first().click()
+    await page.waitForTimeout(300)
+    await expect(visible).resolves.toBe('visible')
+
     await pm.click()
     await page.keyboard.press('Escape')
-    await expect.poll(minHeight, { timeout: 3000 }).toBe('22px')
+    await expect.poll(visible, { timeout: 3000 }).toBe('hidden')
   })
 
   test('就地编辑：悬停按钮进入、自动保存、完成退出', async ({ page }) => {
@@ -507,5 +547,36 @@ test.describe('Notes 小记', () => {
     await page.locator('.composer .ProseMirror input[type=checkbox]').first().click()
     await page.keyboard.type('ABC')
     await expect(pm.locator('li p').first()).toHaveText('第一项ABC')
+  })
+
+  test('插入芯片：待办把当前行变成任务项', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('买牛奶')
+    await page.locator('.composer button[aria-label="插入待办项"]').click()
+    await expect(pm.locator('ul[data-type="taskList"] li p').first()).toHaveText('买牛奶')
+    await expect(pm.locator('input[type=checkbox]')).toHaveCount(1)
+  })
+
+  test('插入芯片：代码在光标处起一段行内代码', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('跑 ')
+    await page.locator('.composer button[aria-label="插入行内代码"]').click()
+    await page.keyboard.type('npm test')
+    await expect(pm.locator('code')).toHaveText('npm test')
+  })
+
+  test('卡 meta 行的标签胶囊：点开筛选、再点取消', async ({ page }) => {
+    await gotoNotes(page)
+    const pill = page.locator('.memo .tag-pill').first()
+    await expect(pill).toHaveText('#产品')
+    await pill.click()
+    await expect(page.locator('.bar-count')).toHaveText('1 / 3 条')
+    await expect(pill).toHaveClass(/on/)
+    await pill.click()
+    await expect(page.locator('.bar-count')).toHaveText('3 / 3 条')
   })
 })

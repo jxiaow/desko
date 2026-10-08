@@ -17,6 +17,16 @@ export interface FileShareConfig {
   hasPassword: boolean
 }
 
+export interface StoredFile {
+  name: string
+}
+
+export interface ImportOutcome {
+  stored: StoredFile[]
+  /** 每个未落盘的文件一条中文原因 */
+  failed: string[]
+}
+
 export const fileshareApi = {
   status: (): Promise<FileShareStatus> =>
     invoke('fileshare_status'),
@@ -31,4 +41,7 @@ export const fileshareApi = {
   /** 空串 = 清除口令 */
   setPassword: (password: string): Promise<void> =>
     invoke('fileshare_set_password', { password }),
+  /** 桌面拖入落盘。网页端 /upload 有跨站门，WebView 到不了，本地投递走命令层 */
+  importFiles: (shareIndex: number, paths: string[]): Promise<ImportOutcome> =>
+    invoke('fileshare_import_files', { shareIndex, paths }),
 }

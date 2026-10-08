@@ -44,6 +44,48 @@ test.describe('导航与布局', () => {
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(0)
   })
 
+  test('失焦冻结 hover、重新获得焦点当场解冻：回来第一下点击不该被遮罩吞', async ({ page }) => {
+    await bootUnlocked(page)
+    /** 遮罩是整窗 fixed 的 .hover-blocker，压在最上层时命中的就是它，按钮收不到这一下 */
+    const hit = () =>
+      page.evaluate(() => {
+        const btn = document.querySelector('.titlebar-btn.tb-util')!
+        const r = btn.getBoundingClientRect()
+        const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)!
+        return el === btn || btn.contains(el) ? 'button' : (el.getAttribute('class') ?? el.tagName)
+      })
+
+    await e2e.emitEvent(page, 'window-focus', false)
+    await expect(page.locator('.hover-blocker')).toHaveCount(1)
+    expect(await hit()).toBe('hover-blocker')
+
+    // 真机恢复时 WebView2 只在旧坐标重放一次 pointermove，按坐标差那条规则解不开，
+    // 只能靠焦点事件当场解除
+    await e2e.emitEvent(page, 'window-focus', true)
+    await expect(page.locator('.hover-blocker')).toHaveCount(0)
+    expect(await hit()).toBe('button')
+  })
+
+  test('Ctrl+B 三态循环：图标轨 → 展开 → 收起，收起态恢复钮在标题栏', async ({ page }) => {
+    await bootUnlocked(page)
+    const width = async () => (await page.locator('.sidebar').boundingBox())?.width ?? 0
+
+    // 缺省落图标轨
+    await expect(page.locator('.sidebar')).toHaveClass(/collapsed/)
+    await expect.poll(width).toBe(56)
+
+    await page.keyboard.press('Control+b')
+    await expect.poll(width).toBe(208)
+
+    await page.keyboard.press('Control+b')
+    await expect(page.locator('.sidebar')).toHaveCount(0)
+    await expect(page.locator('.sidebar-restore')).toBeVisible()
+
+    await page.locator('.sidebar-restore').click()
+    await expect.poll(width).toBe(208)
+    await expect(page.locator('.sidebar-restore')).toHaveCount(0)
+  })
+
   test('锁定再解锁后停留在原路由', async ({ page }) => {
     await bootUnlocked(page)
     await page.locator('a.nav-item[href="/notes"]').click()

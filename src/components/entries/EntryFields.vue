@@ -3,20 +3,10 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { entriesApi } from '../../services/api/entries'
 import { urlPathsApi } from '../../services/api/urlPaths'
 import { normalizeSubPath } from '../../utils/urlPath'
-import type { Entry, CreateEntryInput, UpdateEntryInput } from '../../types'
+import type { Entry, LocalPath, CreateEntryInput, UpdateEntryInput } from '../../types'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
-
-interface LocalPath {
-  id: string
-  path: string
-  label: string
-  notes: string
-  isNew: boolean
-  isDeleted: boolean
-  /** 库里存的是旧格式（整条地址），保存时改写回库 */
-  dirty: boolean
-}
+import PathsDialog from './PathsDialog.vue'
 
 const props = defineProps<{
   /** null 表示新建条目 */
@@ -24,7 +14,7 @@ const props = defineProps<{
   categories: string[]
 }>()
 
-const emit = defineEmits<{ saved: [id: string] }>()
+const emit = defineEmits<{ saved: [id: string]; openUrl: [url: string] }>()
 
 const toastStore = useToastStore()
 
@@ -59,8 +49,9 @@ function clearInvalid(key: RequiredField) {
 }
 
 const localPaths = ref<LocalPath[]>([])
-let tempIdCounter = 0
-const generateTempId = () => `temp-${++tempIdCounter}`
+/** 密码明文只在本次编辑内可见；换条目时收回，不留显示态 */
+const showPwd = ref(false)
+const showPaths = ref(false)
 
 const showCategoryDropdown = ref(false)
 const dropdownPos = ref({ top: 0, left: 0, width: 0 })
@@ -125,6 +116,8 @@ onUnmounted(() => {
 })
 
 watch(() => props.entry, async (entry) => {
+  showPwd.value = false
+  showPaths.value = false
   if (entry) {
     form.value = {
       name: entry.name,
@@ -157,56 +150,13 @@ watch(() => props.entry, async (entry) => {
   }
 }, { immediate: true })
 
-/* ---------- 子路径：列表只读呈现，追加走底部添加行 ---------- */
-
-const draft = ref({ label: '', path: '' })
-const addPathRef = ref<HTMLInputElement | null>(null)
-const pathAddLabelRef = ref<HTMLInputElement | null>(null)
+/* ---------- 子路径：增删住独立弹窗，表单里只留一行摘要入口 ---------- */
 
 const activePaths = computed(() => localPaths.value.filter(p => !p.isDeleted))
 
-const pathLabel = (p: LocalPath) => {
-  if (!p.label) return '未命名'
-  return p.label.length > 8 ? p.label.slice(0, 8) + '…' : p.label
-}
-
-const addPath = () => {
-  const raw = draft.value.path.trim()
-  if (!raw) {
-    addPathRef.value?.focus()
-    return
-  }
-  const path = normalizeSubPath(raw)
-  if (!path) {
-    toastStore.showToast('只需填主机名之后的路径，例如 /builds/linux', 'error')
-    addPathRef.value?.focus()
-    return
-  }
-  localPaths.value.push({
-    id: generateTempId(),
-    path,
-    label: draft.value.label.trim(),
-    notes: '',
-    isNew: true,
-    isDeleted: false,
-    dirty: false,
-  })
-  draft.value = { label: '', path: '' }
-  nextTick(() => {
-    if (pathListRef.value) pathListRef.value.scrollTop = pathListRef.value.scrollHeight
-    addPathRef.value?.focus()
-  })
-}
-
-const pathListRef = ref<HTMLElement | null>(null)
-
-const removePath = (index: number) => {
-  const path = activePaths.value[index]
-  const at = localPaths.value.indexOf(path)
-  if (at < 0) return
-  if (path.isNew) localPaths.value.splice(at, 1)
-  else path.isDeleted = true
-}
+const pathsSummary = computed(() => activePaths.value.length
+  ? activePaths.value.map(p => `${p.label || '未命名'} / ${p.path.replace(/^\//, '')}`).join(' · ')
+  : '未添加 · 点击管理')
 
 const save = async () => {
   const missing = (['name', 'category', 'url'] as const).filter(k => !form.value[k].trim())
@@ -330,46 +280,40 @@ defineExpose({ save })
     <div class="form-row cred-row">
       <div class="form-group">
         <label>用户名</label>
-        <input v-model="form.username" placeholder="登录用户名" />
+        <input v-model="form.username" class="mono-field" placeholder="登录用户名" />
       </div>
       <div class="form-group">
         <label>密码{{ props.entry ? '（留空则不修改）' : '' }}</label>
-        <input v-model="form.password" type="password" placeholder="登录密码" />
+        <div class="pwd-wrap">
+          <input v-model="form.password" class="mono-field" :type="showPwd ? 'text' : 'password'" placeholder="登录密码" />
+          <button class="pwd-act" type="button" :title="showPwd ? '隐藏密码' : '显示密码'" @click="showPwd = !showPwd">
+            <AppIcon :name="showPwd ? 'eyeOff' : 'eye'" :size="14" />
+          </button>
+        </div>
       </div>
     </div>
 
-    <div class="paths-section">
-      <div class="paths-header">
-        <label>子路径</label>
-        <span class="paths-count">{{ activePaths.length }} 个路径</span>
-      </div>
-
-      <div class="paths-card">
-        <div ref="pathListRef" class="path-list">
-          <div v-if="!activePaths.length" class="path-empty">暂无子路径</div>
-          <div v-for="(path, index) in activePaths" :key="path.id" class="path-row">
-            <span class="path-tag" :title="path.label || undefined">{{ pathLabel(path) }}</span>
-            <span class="path-sep">/</span>
-            <span class="path-value" :title="path.path">{{ path.path.replace(/^\//, '') }}</span>
-            <button class="path-del" type="button" title="删除路径" @click="removePath(index)">
-              <AppIcon name="x" :size="11" />
-            </button>
-          </div>
-        </div>
-
-        <div class="path-add">
-          <input ref="pathAddLabelRef" v-model="draft.label" class="add-label" placeholder="标签" maxlength="20" @keydown.enter.prevent="addPath" />
-          <span class="path-sep">/</span>
-          <input ref="addPathRef" v-model="draft.path" class="add-path" placeholder="dashboard" @keydown.enter.prevent="addPath" />
-          <button class="btn-add-path" type="button" @click="addPath">添加</button>
-        </div>
-      </div>
+    <div class="form-group paths-group">
+      <label>子路径</label>
+      <button class="paths-manage" type="button" @click="showPaths = true">
+        <span class="pm-sum" :class="{ empty: !activePaths.length }">{{ pathsSummary }}</span>
+        <span class="pm-go">管理<AppIcon name="chevRight" :size="12" /></span>
+      </button>
     </div>
 
     <div class="form-group notes-group">
       <label>备注说明</label>
       <textarea v-model="form.notes" placeholder="可选" rows="2"></textarea>
     </div>
+
+    <PathsDialog
+      v-if="showPaths"
+      :paths="localPaths"
+      :entry-name="form.name"
+      :base-url="form.url"
+      @close="showPaths = false"
+      @open-url="url => emit('openUrl', url)"
+    />
   </div>
 </template>
 
@@ -379,17 +323,30 @@ defineExpose({ save })
 .entry-fields textarea {
   height: 32px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 /* 呼吸节奏：标签下距 6px、组距 12px（对齐已验收原型）；行高钉 14px 防全局 18px 撑高 */
-.entry-fields label { font-size: 12px; line-height: 14px; margin-bottom: 6px; }
+.entry-fields label { font-size: var(--text-xs); line-height: 14px; margin-bottom: 6px; }
 .entry-fields .form-group { margin-bottom: 12px; }
 .entry-fields .form-row { margin-bottom: 12px; gap: 12px; }
 .entry-fields textarea { height: 52px; padding: 6px 10px; resize: none; line-height: 17px; }
 .entry-fields .cred-row { margin: 12px 0; }
 .entry-fields .notes-group { margin-bottom: 0; }
 .url-mono { font-family: var(--font-mono); }
+.mono-field { font-family: var(--font-mono); }
 .req { color: var(--danger); font-style: normal; }
+
+/* 密码显隐自绘：WebView2 注入的原生 ::-ms-reveal 改不动样式、深色下近乎隐形，只能关掉 */
+.pwd-wrap { position: relative; }
+.pwd-wrap input { padding-right: 32px; }
+.pwd-wrap input::-ms-reveal { display: none; }
+.pwd-act {
+  position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; padding: 0;
+  display: grid; place-items: center; border: none; background: none;
+  color: var(--text-faint); border-radius: var(--radius-xs); cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.pwd-act:hover { color: var(--accent); background: var(--hover); }
 
 /* 名称/分类 1:1 双列 */
 .row-meta { grid-template-columns: 1fr 1fr; }
@@ -411,88 +368,25 @@ defineExpose({ save })
 }
 .entry-fields input.field-alert { animation: field-alert 0.5s ease-out 2; }
 
-/* ---------- 子路径：内陷滚动卡，视窗恒定 80px——增删条目弹窗总高零变化 ---------- */
-.paths-section { margin: 12px 0; }
-.paths-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-.paths-header label { margin-bottom: 0; }
-.paths-count { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-
-.paths-card {
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--sunken); padding: 6px 8px;
+/* ---------- 子路径：整块住独立弹窗，表单里只留一行入口，与 32px 字段同轴 ---------- */
+.paths-manage {
+  width: 100%; height: 32px; padding: 0 8px 0 11px;
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  font-family: inherit; font-size: var(--text-sm); color: var(--text);
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  cursor: pointer; transition: border-color var(--transition-fast), background var(--transition-fast);
 }
-
-.path-list {
-  display: flex; flex-direction: column; gap: 2px;
-  height: 80px; max-height: 80px; overflow-y: auto; min-height: 0;
-  margin: 0 -2px; padding: 0 2px;
-  scrollbar-width: thin; scrollbar-color: transparent transparent;
-}
-.path-list:hover { scrollbar-color: var(--text-muted) transparent; }
-.path-list::-webkit-scrollbar { width: 3px; }
-.path-list::-webkit-scrollbar-track { background: transparent; }
-.path-list::-webkit-scrollbar-thumb { background: transparent; border-radius: 2px; transition: background var(--transition-fast); }
-.path-list:hover::-webkit-scrollbar-thumb { background: var(--text-muted); }
-
-.path-empty {
-  height: 100%; display: flex; align-items: center; justify-content: center;
-  font-size: 12px; color: var(--text-muted);
-}
-
-/* 行即扁平条目：微绿底悬停浮现，无独立卡壳 */
-.path-row {
-  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
-  height: 26px; padding: 0 5px; border-radius: 4px;
-  background: transparent; transition: background var(--transition-fast);
-}
-.path-row:hover { background: var(--hover); }
-/* 标签做成胶囊：与斜杠、路径形成「标签 / path」节奏 */
-.path-tag {
-  flex: 0 0 auto; max-width: 84px;
-  height: 18px; line-height: 18px; padding: 0 7px; border-radius: 9px;
-  font-size: 11px; font-weight: 500; color: var(--accent); background: var(--accent-soft);
+.paths-manage:hover { border-color: var(--border-strong); background: var(--panel-bg) }
+.paths-manage:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring) }
+.pm-sum {
+  flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--text-xs);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.path-sep { flex-shrink: 0; font-size: 12px; color: var(--text-muted); }
-.path-value {
-  flex: 1; min-width: 0;
-  font-family: var(--font-mono); font-size: 12px; color: var(--text);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.pm-sum.empty { font-family: inherit; color: var(--text-muted) }
+.pm-go {
+  flex: none; display: inline-flex; align-items: center; gap: 3px;
+  font-size: var(--text-xs); color: var(--text-muted);
 }
-/* 删除是低频动作，悬停行才浮现 */
-.path-del {
-  flex-shrink: 0; width: 18px; height: 18px; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: 4px; background: transparent;
-  color: var(--danger); cursor: pointer;
-  opacity: 0; transition: opacity var(--transition-fast), background var(--transition-fast);
-}
-.path-row:hover .path-del { opacity: 1; }
-.path-del:hover { background: var(--danger-soft, var(--hover)); }
-
-/* 吸底录入栏：28px 紧凑档，与 32px 字段轴分层 */
-.path-add {
-  display: flex; align-items: center; gap: 8px;
-  margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border-divider);
-}
-.path-add input {
-  height: 28px; padding: 0 8px; font-size: 12.5px;
-  border: 1px solid var(--border-input, var(--border)); border-radius: var(--radius-sm);
-  background: var(--panel-bg); color: var(--text);
-}
-/* input 的 min-width:auto 会回退到 UA 固有宽（≈190px），必须显式钉死才吃得到 72px */
-.path-add .add-label { flex: 0 0 72px; min-width: 72px; }
-.path-add .add-path { flex: 1; min-width: 0; font-family: var(--font-mono); }
-.path-add .add-label:focus,
-.path-add .add-path:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); }
-.btn-add-path {
-  flex-shrink: 0; height: 28px; padding: 0 11px;
-  font-size: 12px; font-weight: 500; font-family: inherit;
-  color: var(--text-secondary); background: var(--panel-bg);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-ib);
-  cursor: pointer; transition: all var(--transition-fast);
-}
-.btn-add-path:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
 .category-create { color: var(--accent); }
 </style>

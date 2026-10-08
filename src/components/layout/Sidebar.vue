@@ -54,14 +54,14 @@ const onDragDblclick = (e: MouseEvent) => {
         <span class="sidebar-name">Desko</span>
       </template>
       <button class="sidebar-toggle" :title="collapsed ? '展开侧栏' : '收起侧栏'" @click="$emit('update:collapsed', !collapsed)">
-        <AppIcon name="panel" :size="18" />
+        <AppIcon name="panel" :size="collapsed ? 20 : 18" />
       </button>
     </div>
 
     <div class="sidebar-nav">
       <router-link to="/entries" class="nav-item m-ent" :class="{ active: route.path === '/entries' }" aria-label="网址收藏">
         <div class="nav-icon">
-          <AppIcon name="navEntries" :size="22" />
+          <AppIcon name="navEntries" :size="collapsed ? 22 : 18" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">网址收藏</span>
@@ -72,7 +72,7 @@ const onDragDblclick = (e: MouseEvent) => {
       </router-link>
       <router-link to="/notes" class="nav-item m-not" :class="{ active: route.path === '/notes' }" aria-label="小记">
         <div class="nav-icon">
-          <AppIcon name="navNotes" :size="22" />
+          <AppIcon name="navNotes" :size="collapsed ? 22 : 18" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">小记</span>
@@ -83,7 +83,7 @@ const onDragDblclick = (e: MouseEvent) => {
       </router-link>
       <router-link to="/files" class="nav-item m-fil" :class="{ active: route.path === '/files' }" aria-label="文件快捷">
         <div class="nav-icon">
-          <AppIcon name="navFiles" :size="22" />
+          <AppIcon name="navFiles" :size="collapsed ? 22 : 18" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">文件快捷</span>
@@ -94,7 +94,7 @@ const onDragDblclick = (e: MouseEvent) => {
       </router-link>
       <router-link v-if="mfaEnabled" to="/mfa" class="nav-item m-mfa" :class="{ active: route.path === '/mfa' }" aria-label="验证码">
         <div class="nav-icon">
-          <AppIcon name="navMfa" :size="22" />
+          <AppIcon name="navMfa" :size="collapsed ? 22 : 18" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">验证码</span>
@@ -102,7 +102,7 @@ const onDragDblclick = (e: MouseEvent) => {
       </router-link>
       <router-link v-if="fileshareEnabled" to="/fileshare" class="nav-item m-lan" :class="{ active: route.path === '/fileshare' }" aria-label="局域网传输">
         <div class="nav-icon">
-          <AppIcon name="navLan" :size="22" />
+          <AppIcon name="navLan" :size="collapsed ? 22 : 18" />
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed" class="nav-text">局域网传输</span>
@@ -115,8 +115,9 @@ const onDragDblclick = (e: MouseEvent) => {
 <style scoped>
 .sidebar {
   width: var(--sidebar-w);
-  /* 拆面轮：侧栏并入整窗画布，不再是一块重色板；只剩一条发丝右界 */
-  background: transparent;
+  /* V5.2 侧栏轮：恢复独立面（推翻拆面轮的"并入画布"）——列的体积感靠这一档底色，
+     只留发丝右界时它和画布同色，五枚导航像浮在页面上而不是站成一列 */
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -127,7 +128,7 @@ const onDragDblclick = (e: MouseEvent) => {
 }
 
 .sidebar.collapsed {
-  width: 64px;
+  width: var(--sidebar-rail-w);
 }
 
 /* 顶部品牌行：与右列标题栏同高（42px）；拆面轮后画布贯通，不再补分割线 */
@@ -152,10 +153,10 @@ const onDragDblclick = (e: MouseEvent) => {
   margin: 0 auto;
 }
 
-/* 折叠档：.sidebar-nav 的 6px scrollbar-gutter 会把图标整体左推，
+/* 折叠档：.sidebar-nav 的 9px scrollbar-gutter 会把图标整体左推，
    用等量左内衬补回来，图标与 toggle 同落中线 */
 .sidebar.collapsed .sidebar-nav {
-  padding-left: calc(var(--space-2) + 6px);
+  padding-left: calc(var(--space-2) + 9px);
 }
 
 .sidebar-brand {
@@ -182,8 +183,8 @@ const onDragDblclick = (e: MouseEvent) => {
 }
 
 .sidebar-toggle {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   margin-left: auto;
   flex-shrink: 0;
   border: none;
@@ -240,11 +241,13 @@ const onDragDblclick = (e: MouseEvent) => {
 }
 
 .nav-item.active {
-  /* inset 轮：激活态=与列表面板同材质的一小块白，图标戴 accent 色做唯一重音 */
+  /* V5.2 侧栏轮：激活=同材质白块 + 抬影，重音给整条（文字也转 accent），
+     只让图标变色的话在一列灰字里点不出来。
+     图标一律用描边母版：22px 的实心母版在白块里糊成色块，状态已由容器说尽。 */
   background: var(--panel-bg);
-  color: var(--text);
+  color: var(--accent);
   font-weight: 600;
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-card);
 }
 .nav-item.active .nav-icon { color: var(--h); }
 
@@ -253,11 +256,12 @@ const onDragDblclick = (e: MouseEvent) => {
   padding: 0;
 }
 
-/* 图标档 22px：36px 行轨里留 7px 上下余量。这条 CSS 会盖掉 AppIcon 的 width/height
-   属性（样式优先于呈现属性），改尺寸时两处一起动 */
+/* 图标分两档：展开档文字打头，图标退到 18px 当锚点；图标轨档 22px，
+   那里图标是唯一线索，缩到 18 会显得空。AppIcon 的 size 决定实笔反算，
+   CSS 只负责盒子，两处必须同档 */
 .nav-icon {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -265,6 +269,16 @@ const onDragDblclick = (e: MouseEvent) => {
 }
 
 .nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sidebar.collapsed .nav-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.sidebar.collapsed .nav-icon svg {
   width: 22px;
   height: 22px;
 }
@@ -274,7 +288,7 @@ const onDragDblclick = (e: MouseEvent) => {
   overflow: hidden;
 }
 
-/* 计数胶囊：收纳模块体量，淡底同模块色，激活态加重 */
+/* 计数胶囊：圆形等宽数字，非激活走中性档，激活跟着整条转 accent */
 .nav-count {
   flex-shrink: 0;
   height: 18px;
@@ -284,10 +298,11 @@ const onDragDblclick = (e: MouseEvent) => {
   align-items: center;
   justify-content: center;
   font-size: var(--text-xs);
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  border-radius: var(--radius-badge);
-  background: color-mix(in srgb, var(--h) 8%, var(--fill));
-  color: color-mix(in srgb, var(--h) 75%, var(--text-muted));
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  color: var(--text-muted);
 }
 
 .nav-item.active .nav-count {

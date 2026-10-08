@@ -9,6 +9,7 @@ interface MockWindow {
   close(): Promise<void>
   startDragging(): Promise<void>
   onResized(handler: () => void): Promise<() => void>
+  onFocusChanged(handler: (e: { payload: boolean }) => void): Promise<() => void>
 }
 
 // 最大化态要真翻转：TitleBar 靠 isMaximized() 换「最大化/还原」两颗 glyph，
@@ -28,6 +29,9 @@ export function getCurrentWindow(): MockWindow {
     close: async () => backend.logInvocation('window:close'),
     startDragging: async () => backend.logInvocation('window:startDragging'),
     onResized: async (handler: () => void) => backend.onEvent('window-resized', handler),
+    // 焦点：payload 即 hasFocus，测试用 emitEvent('window-focus', true/false) 拨
+    onFocusChanged: async (handler) =>
+      backend.onEvent('window-focus', (hasFocus) => handler({ payload: !!hasFocus })),
   }
 }
 

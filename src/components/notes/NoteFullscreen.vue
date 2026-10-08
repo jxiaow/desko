@@ -27,6 +27,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   update: [html: string]
   close: []
+  cancel: []
   publish: []
   edit: []
   addImage: []
@@ -81,14 +82,13 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 </script>
 
 <template>
-  <section class="fs" role="dialog" aria-modal="true" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'">
+  <section class="fs" :class="{ 'fs-read': viewMode }" role="dialog" aria-modal="true" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'">
     <header class="fs-head" @mousedown="startDrag">
       <button class="fs-exit" type="button" @click="emit('close')">
         <AppIcon name="min" :size="13" />
         退出全屏
         <span class="kbd">Esc</span>
       </button>
-      <span class="spacer"></span>
       <span class="save-hint" :class="props.saveState">
         {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '草稿不会丢') }}
       </span>
@@ -152,12 +152,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
         :save-state="props.saveState"
         :primary-label="props.note ? '完成' : '发布'"
         :primary-disabled="empty"
+        :cancel-label="props.note ? '取消' : '放弃'"
         :show-fullscreen="false"
         @add-image="emit('addImage')"
         @insert-tag="insertTag"
         @toggle-pin="emit('togglePin')"
         @toggle-star="emit('toggleStar')"
         @delete="emit('delete')"
+        @cancel="emit('cancel')"
         @primary="onPrimary"
       >
         <template #hint>
@@ -178,11 +180,16 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   z-index: 150;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(920px 420px at 50% -6%, var(--accent-soft), transparent 72%), var(--bg);
-  animation: fs-in var(--transition-slow) ease both;
+  /* 阅读面与 .app-root 同一条画布配方（global.css --canvas-bg）：这张纸要比桌亮才读得出
+     是「拿起写好的一页」，桌面压到 --sunken 那档才有 1.069 的纸/桌差 */
+  background: var(--canvas-bg);
+  background-attachment: fixed;
 }
-/* 入场只做透明度和位移，位移放在不含 fixed 子元素的层上，避免破坏 slash 菜单的视口定位 */
-@keyframes fs-in { from { opacity: 0; } }
+/* 书写面分档回浅场：对着空桌子写字不需要那层桌布，--bg 亮一档 + 顶部那团主色晕更透气。
+   侧栏轨本来就吃 --sidebar-bg（与画布已有 1.045 的界），所以这里换底不新增一种接缝 */
+.fs:not(.fs-read) {
+  background: radial-gradient(920px 420px at 50% -6%, var(--accent-soft), transparent 72%), var(--bg);
+}
 
 .fs-col {
   width: 100%;
@@ -192,37 +199,40 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 }
 /* 首尾栏铺满区域：按钮贴左右边缘，只有书写列收在 --fs-max 内 */
 .fs-head {
-  height: 52px;
+  height: 54px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   padding-inline: var(--space-5);
 }
+/* 退出钮吃页栏控件方言：30px / --radius-ib / 平时无底，hover 才上 --hover-chrome 那层洗 */
 .fs-exit {
   height: 30px;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-2);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid var(--border);
-  background: var(--panel-bg);
-  border-radius: var(--radius-pill);
+  gap: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-ib);
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   cursor: pointer;
-  box-shadow: var(--shadow-xs);
   transition: all var(--transition);
   font-family: inherit;
+  flex-shrink: 0;
 }
-.fs-exit:hover { color: var(--accent); border-color: var(--accent-light); background: var(--accent-soft); }
+.fs-exit:hover { color: var(--text); background: var(--hover-chrome); }
 .fs-exit .kbd { background: transparent; border-bottom-width: 1px; }
+/* 状态字跟着退出钮走左组，与五页 .bar-count 同位；原先孤悬右端像另一条栏 */
+.fs-head .save-hint { margin-right: auto; padding-left: var(--space-1); }
 
 .fs-meta {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   margin-bottom: 8px;
@@ -232,11 +242,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 .fs-scroll { flex: 1; overflow-y: auto; min-height: 0; }
 /* 铺了纸就得给纸外留出桌沿，否则 800px 以下的窗口里纸边贴住滚动条 */
 .fs-scroll:has(.fs-doc) { padding-inline: var(--space-5); scrollbar-gutter: stable; }
-.fs-inner { animation: fs-rise 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; padding-block: 12px 20px; }
-@keyframes fs-rise { from { opacity: 0; } }
+.fs-inner { padding-block: 12px 20px; }
 
 /* 只读浏览铺一张纸：书写态是「对着空桌子写」，阅读态是「拿起写好的一页」，
-   底色和投影把这层区分开，阅读宽度也收到 800px（比书写列窄一档） */
+   底色和投影把这层区分开，阅读宽度也收到 800px（比书写列窄一档）。
+   投影与 .grid-card / .memo 同档（--shadow-card）：这张纸与列表里的卡是同一层东西 */
 .fs-doc {
   width: 100%;
   max-width: 800px;
@@ -245,7 +255,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-card);
 }
 
 .fs-atts { margin-top: var(--space-5); }
@@ -259,21 +269,22 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 }
 .fs-view :deep(> * + *) { margin-top: 10px; }
 .fs-view :deep(* + h1), .fs-view :deep(* + h2), .fs-view :deep(* + h3) { margin-top: 14px; }
-.fs-view :deep(h1) { font-size: 20px; font-weight: 600; letter-spacing: -0.022em; line-height: 26px; }
-.fs-view :deep(h2) { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 24px; margin-top: 12px; }
+.fs-view :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.022em; line-height: 26px; }
+.fs-view :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: -0.01em; line-height: 24px; margin-top: 12px; }
 .fs-view :deep(h3) { font-size: 15.5px; font-weight: 600; line-height: 22px; margin-top: 10px; }
 .fs-view :deep(strong) { font-weight: 600; color: var(--text); }
 .fs-view :deep(ul), .fs-view :deep(ol) { padding-left: var(--space-5); }
 .fs-view :deep(li) { margin: 4px 0; }
 .fs-view :deep(li::marker) { color: var(--text-faint); }
 .fs-view :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-4); color: var(--text-secondary); }
-.fs-view :deep(code) { font-family: var(--font-mono); font-size: 13px; background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 4px; padding: 1px 5px; color: var(--text-secondary); }
-.fs-view :deep(pre) { font-family: var(--font-mono); font-size: 13px; line-height: 22px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-3) var(--space-4); overflow-x: auto; }
+.fs-view :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
+.fs-view :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 22px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-3) var(--space-4); overflow-x: auto; }
 .fs-view :deep(pre code) { background: none; border: none; padding: 0; color: inherit; }
 .fs-view :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 5px; }
 .fs-view :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
 .fs-view :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
-.fs-view :deep(ul[data-type='taskList'] input) { accent-color: var(--accent); margin-top: 7px; }
+/* 勾选框的自绘配方在 global.css，B 档行高 23 下要往下挪一格 */
+.fs-view :deep(ul[data-type='taskList'] input) { margin-top: 5px; }
 /* 只读层里的勾选框不接操作，别让人点了以为改了状态 */
 .fs-view :deep(input[type='checkbox']) { pointer-events: none; }
 .fs-view :deep(hr) { border: none; border-top: 1px solid var(--border); }
@@ -290,8 +301,48 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   backdrop-filter: blur(10px);
 }
 
+/* ---------- 阅读态：底栏收成居中胶囊 ----------
+   通高底板 + border-top + 磨砂那套在拆面轮已经从顶栏撤掉，阅读面不该留一份。
+   但它必须占住一条真实行高，不能浮在 .fs-scroll 上方：浮岛盖的是通高正文，
+   滚到中段时胶囊正好压在一条正文行上（09-30 那版 fixed 的实测遮挡）。
+   现在胶囊自己占 50 + 20 下衬，正文滚到它就停，画布底从四周透出来，看着仍是浮着的一粒。 */
+.fs-read .fs-foot {
+  position: static;
+  align-self: center;
+  margin: 0 0 var(--space-5);
+  height: 50px;
+  gap: 2px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  max-width: calc(100% - 40px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-dock);
+  backdrop-filter: none;
+}
+.fs-read .fs-foot > .spacer { flex: 0 0 auto; width: 0; margin: 0 var(--space-1); }
+/* 胶囊里的动作 = .dock-btn 方言：34px 无底胶囊，常态不描边 */
+.fs-read .fs-foot .eb {
+  height: 34px;
+  padding: 0 9px;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.fs-read .fs-foot .eb:hover:not(:disabled) { background: var(--hover-chrome); color: var(--text); border: none; }
+.fs-read .fs-foot .eb.on { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.fs-read .fs-foot .eb.on.warn { color: var(--warning); background: var(--warning-soft); }
+.fs-read .fs-foot .eb.danger { color: var(--danger); }
+.fs-read .fs-foot .eb.danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); border: none; }
+.fs-read .fs-foot .eb.primary { background: var(--accent); color: var(--accent-on); font-weight: 600; border: none; }
+.fs-read .fs-foot .eb.primary:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-on); }
+
 .fs-hint {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
   white-space: nowrap;
   padding: 0 var(--space-1);

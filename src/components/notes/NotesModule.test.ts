@@ -409,7 +409,7 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
-  it('hides the rail below the min room and shows the filter pill', async () => {
+  it('hides the rail below the min room but keeps the rail toggle', async () => {
     stageNotes([makeNote()])
     const wrapper = await mountModule()
     await wrapper.find('.bar-btn[aria-label="展开侧栏"]').trigger('click')
@@ -423,7 +423,8 @@ describe('NotesModule', () => {
 
     await fire(700)
     expect(wrapper.find('.rail').exists()).toBe(false)
-    expect(wrapper.find('[aria-label="筛选视图与标签"]').exists()).toBe(true)
+    // 窄窗里侧栏只能叫成浮层，开关必须还在——否则视图与标签再没有入口
+    expect(wrapper.find('.bar-btn[aria-label="展开侧栏"]').exists()).toBe(true)
 
     await fire(720) // 未跨越阈值不再改状态
     expect(wrapper.find('.rail').exists()).toBe(false)
@@ -440,10 +441,10 @@ describe('NotesModule', () => {
     const pill = (w: typeof wrapper, label: string) =>
       w.find(`.bar-btn[aria-label="${label}侧栏"]`)
 
-    // 默认收起，筛选入口回到顶栏
+    // 默认收起：右栏不出现，顶栏只剩选择与侧栏开关
     expect(store.noteRailCollapsed).toBe(true)
     expect(wrapper.find('.rail').exists()).toBe(false)
-    expect(wrapper.find('[aria-label="筛选视图与标签"]').exists()).toBe(true)
+    expect(wrapper.find('.bar-btn[aria-label="展开侧栏"]').exists()).toBe(true)
 
     await pill(wrapper, '展开').trigger('click')
     await flushPromises()

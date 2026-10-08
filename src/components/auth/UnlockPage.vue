@@ -220,7 +220,7 @@ onUnmounted(() => {
   padding: 0 62px 0 36px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-family: inherit;
   color: var(--text);
   background: var(--panel-bg);
@@ -308,7 +308,7 @@ onUnmounted(() => {
 }
 
 .unlock-error {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--danger);
   white-space: nowrap;
 }
@@ -332,7 +332,7 @@ onUnmounted(() => {
 }
 
 .motto-text {
-  font-size: 12px;
+  font-size: var(--text-xs);
   letter-spacing: 0.1em;
   color: var(--text-secondary);
   white-space: nowrap;

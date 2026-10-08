@@ -137,7 +137,7 @@ if (await newBtn.count()) {
   findings.push({ area: 'dialog-escape', closed })
 }
 
-// ── 5. 行卡键盘激活：Tab 到第一张 entry-card，Enter 与 Space 各试
+// ── 5. 网格卡键盘激活：Tab 到第一张 entry-card，Enter 与 Space 各试
 const list = page.locator('.entry-card').first()
 if (await list.count()) {
   await list.focus()
@@ -154,7 +154,42 @@ if (await list.count()) {
   if (afterEnter > before) { await page.keyboard.press('Escape'); await page.waitForTimeout(300) }
 }
 
-// ── 6. reduced-motion 生效性
+// ── 6. 抬影边界（V5.2 §5）：只有浮岛网格卡与页条主钮抬影，其余卡/行仍走 9-28 贴地基线
+const gridCard = page.locator('.grid-card').first()
+if (await gridCard.count()) {
+  // 上一节把焦点留在了卡片上，:focus-visible 本身就带抬影，先失焦+移开鼠标取真实静止态
+  await page.mouse.move(0, 0)
+  await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur())
+  await page.waitForTimeout(250)
+  const still = await gridCard.evaluate((el) => ({ transform: getComputedStyle(el).transform, shadow: getComputedStyle(el).boxShadow }))
+  await gridCard.hover()
+  await page.waitForTimeout(250)
+  const raised = await gridCard.evaluate((el) => ({ transform: getComputedStyle(el).transform, shadow: getComputedStyle(el).boxShadow }))
+  findings.push({ area: 'grid-card-hover-elevates', still, raised, moved: still.transform !== raised.transform })
+
+  const primary = page.locator('.page-bar .btn-primary').first()
+  await primary.hover()
+  await page.waitForTimeout(250)
+  const btn = await primary.evaluate((el) => {
+    const cs = getComputedStyle(el)
+    return { transform: cs.transform, radius: cs.borderRadius, height: cs.height, shadow: cs.boxShadow }
+  })
+  findings.push({ area: 'page-bar-primary-pill', ...btn })
+  await page.mouse.move(0, 0)
+  await page.waitForTimeout(200)
+
+  // 反向对照：小记流的卡不在豁免名单里，hover 不得位移
+  await page.locator('a.nav-item[href="/notes"]').click()
+  await page.waitForSelector('.memo')
+  const memo = page.locator('.memo').first()
+  await memo.hover()
+  await page.waitForTimeout(250)
+  findings.push({ area: 'non-grid-hover-stays-flat', transform: await memo.evaluate((el) => getComputedStyle(el).transform) })
+  await page.locator('a.nav-item[href="/entries"]').click()
+  await page.waitForSelector('.grid-card')
+}
+
+// ── 7. reduced-motion 生效性
 const rmPage = await ctx.newPage()
 await rmPage.emulateMedia({ reducedMotion: 'reduce' })
 await rmPage.addInitScript((cfg) => { window.__E2E_CONFIG__ = cfg }, seed)
@@ -168,6 +203,13 @@ const dur = await rmPage.evaluate(() => {
   return el ? getComputedStyle(el).transitionDuration : 'none'
 })
 findings.push({ area: 'reduced-motion', transitionDuration: dur })
+// 减重动效下网格卡只压位移，抬影与描边升档留着
+const rmCard = rmPage.locator('.grid-card').first()
+if (await rmCard.count()) {
+  await rmCard.hover()
+  await rmPage.waitForTimeout(150)
+  findings.push({ area: 'reduced-motion-grid-card', transform: await rmCard.evaluate((el) => getComputedStyle(el).transform) })
+}
 
 await browser.close()
 const report = { theme: THEME, generatedAt: new Date().toISOString(), findings }

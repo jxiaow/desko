@@ -10,7 +10,7 @@ export function useBatch() {
   const confirmStore = useConfirmStore()
 
   const selectedIds = ref<Set<string>>(new Set())
-  /** 待选态：工具栏「选择」钮开合。勾选即进仍成立——有选中就等于在批量里。 */
+  /** 待选态：工具栏「选择」钮开合。收藏卡的勾选框只在批量态显形，这颗钮就是唯一入口。 */
   const pickMode = ref(false)
   const hasSelection = computed(() => selectedIds.value.size > 0)
   const isBatchMode = computed(() => pickMode.value || hasSelection.value)

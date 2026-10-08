@@ -1,4 +1,4 @@
-// 侧栏 + 窗口控件验收截图：真应用里拍「展开 180 / 折叠 64」两态侧栏，
+// 侧栏 + 窗口控件验收截图：真应用里拍侧栏三态（展开 208 / 图标轨 56 / 收起 0），
 // 外加标题栏右端那一排按钮（含最大化和还原两种 glyph），每套配色一张。
 // 用法：先起 vite --mode e2e --port 1430，再 node scripts/nav-shots.mjs [combo ...]
 // 默认拍 paper-celadon 与 ink-celadon；输出 design/nav-shots/<combo>/*.png
@@ -39,7 +39,8 @@ for (const combo of COMBOS) {
     console.log(`${out}/${name}.png`)
   }
 
-  // 侧栏默认就是折叠档（App.vue isSidebarCollapsed = true），先拍折叠，再展开
+  // 侧栏缺省就是图标轨（App.vue sidebarMode = 'rail'），先拍轨态整窗（含 54px 页条），再展开
+  await shoot('0-window-rail', page.locator('body'))
   await shoot('1-sidebar-collapsed', page.locator('.sidebar'))
   await page.locator('.sidebar-toggle').click()
   await page.waitForTimeout(400)
@@ -60,6 +61,12 @@ for (const combo of COMBOS) {
   await page.locator('.titlebar-buttons button').nth(3).click()
   await page.waitForTimeout(400)
   await shoot('4-titlebar-restored', page.locator('.titlebar-buttons'))
+
+  // 第三态：此刻侧栏在展开档，Ctrl+B 一下即收到 0 宽，恢复钮落在标题栏面包屑左侧
+  await page.keyboard.press('Control+b')
+  await page.waitForTimeout(400)
+  await shoot('5-sidebar-hidden', page.locator('body'))
+  await shoot('6-titlebar-restore', page.locator('.titlebar-left'))
 
   await page.close()
 }

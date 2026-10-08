@@ -1,4 +1,4 @@
-//! 局域网文件传输的命令层：只做进程管理与文件协议，HTTP 逻辑全在 desko-fileshare 子进程。
+//! 局域网文件传输的命令层：只做进程管理、文件协议与桌面拖入落盘，HTTP 逻辑全在 desko-fileshare 子进程。
 //! 主程序 ⇄ 服务进程通过两个 JSON 文件通信：
 //!   fileshare.json        配置真相（本模块写；服务进程轮询热加载，/settings 也回写它）
 //!   fileshare.status.json 运行状态（服务进程写；本模块读，pid 用于甄别陈旧状态件）
@@ -15,6 +15,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
 use fileshare_core::config::{self, ShareConfig};
+use fileshare_core::files::{claim_available_name, sanitize_upload_name};
 
 use crate::error::AppError;
 use crate::AppState;
@@ -22,6 +23,8 @@ use crate::AppState;
 const CONFIG_FILE: &str = "fileshare.json";
 const STATUS_FILE: &str = "fileshare.status.json";
 const META_ENABLED: &str = "fileshare_enabled";
+/// 桌面拖入的单文件上限，与网页端 `POST /upload` 的 4 GiB 同档
+const MAX_IMPORT_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 // 进程化之前的旧 meta 键，仅作一次性迁移读取
 const META_LEGACY_PORT: &str = "fileshare_port";
 const META_LEGACY_DIRS: &str = "fileshare_share_dirs";
@@ -57,6 +60,20 @@ pub struct ConfigDto {
     pub share_dirs: Vec<String>,
     pub local_only: bool,
     pub has_password: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredFile {
+    pub name: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportOutcome {
+    pub stored: Vec<StoredFile>,
+    /// 每个未落盘的文件一条中文原因，前端逐条呈现，不静默丢
+    pub failed: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -426,6 +443,73 @@ fn to_dto(cfg: &ShareConfig) -> ConfigDto {
         local_only: cfg.local_only,
         has_password: cfg.password_sha256.is_some(),
     }
+}
+
+// ── 桌面拖入落盘 ────────────────────────────────────────────
+
+fn base_name(p: &Path) -> String {
+    p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.display().to_string())
+}
+
+fn import_one(dir_canon: &Path, raw: &str) -> Result<StoredFile, String> {
+    let src = Path::new(raw);
+    let shown = base_name(src);
+    let meta = std::fs::symlink_metadata(src).map_err(|_| format!("{}：读不到文件", shown))?;
+    if !meta.is_file() {
+        return Err(format!("{}：只收文件，文件夹请先压缩", shown));
+    }
+    if meta.len() > MAX_IMPORT_BYTES {
+        return Err(format!("{}：超过单文件 {} GiB 上限", shown, MAX_IMPORT_BYTES >> 30));
+    }
+    let Some(name) = sanitize_upload_name(&shown) else {
+        return Err(format!("{}：文件名不合法", shown));
+    };
+    if src.parent().and_then(|p| p.canonicalize().ok()).as_deref() == Some(dir_canon) {
+        return Err(format!("{}：已经在这个共享目录里", name));
+    }
+    // 占位选名与网页端同一件：photo.jpg → photo (1).jpg，返回前目标名已被 create_new 占住
+    let target = claim_available_name(dir_canon, &name)
+        .map_err(|e| format!("{}：落盘失败 {}", name, e))?;
+    match std::fs::copy(src, &target) {
+        Ok(_) => Ok(StoredFile { name: base_name(&target) }),
+        Err(e) => {
+            let _ = std::fs::remove_file(&target);
+            Err(format!("{}：落盘失败 {}", name, e))
+        }
+    }
+}
+
+fn import_inner(app: &AppHandle, share_index: usize, paths: Vec<String>) -> Result<ImportOutcome, AppError> {
+    let cfg = ensure_config(app)?;
+    let dir = cfg
+        .share_dirs
+        .get(share_index)
+        .ok_or_else(|| AppError::FileShare("共享目录已不在列表里，请重新选择".to_string()))?;
+    let dir_canon = dir
+        .canonicalize()
+        .map_err(|_| AppError::FileShare(format!("共享目录不可访问：{}", dir.display())))?;
+    let mut stored = Vec::new();
+    let mut failed = Vec::new();
+    for raw in &paths {
+        match import_one(&dir_canon, raw) {
+            Ok(file) => stored.push(file),
+            Err(msg) => failed.push(msg),
+        }
+    }
+    Ok(ImportOutcome { stored, failed })
+}
+
+/// 桌面拖入的落盘通道。网页端 `POST /upload` 有 Origin/CSRF 门（handlers.rs 拒绝跨站 POST），
+/// WebView 发不过去也不该绕；本地投递直接走命令层，复用同一套清洗与重名避让件。
+#[tauri::command]
+pub async fn fileshare_import_files(
+    app: AppHandle,
+    share_index: usize,
+    paths: Vec<String>,
+) -> Result<ImportOutcome, AppError> {
+    tauri::async_runtime::spawn_blocking(move || import_inner(&app, share_index, paths))
+        .await
+        .map_err(|e| AppError::FileShare(format!("投递任务失败: {}", e)))?
 }
 
 // ── 生命周期钩子（main.rs 调用）─────────────────────────────

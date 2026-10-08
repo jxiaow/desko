@@ -6,10 +6,24 @@
 // 输出：design/dialog-check/<themeId>/
 //   0-lock-screen 锁屏门面 · 1..15 弹窗与浮层（原有 15 张）
 //   16/17 设置通用/关于 · 20..23 四页空状态 · 24/25 窄窗 800/720
+// 每张都必须在本次运行里真的拍到：开跑先清空目录，收尾核对 EXPECTED 清单，
+// 缺帧直接非零退出——上一轮的旧 PNG 留在原地会被当成这轮的结果。
 import { chromium } from '@playwright/test'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, existsSync } from 'node:fs'
 
 const BASE = 'http://127.0.0.1:1430'
+
+/** 与下面 shot() 的名字一一对应；改流程就同步改这张表 */
+const EXPECTED = [
+  '0-lock-screen',
+  '1-entry-form', '9-entry-detail', '12-entry-menu', '13-entry-category',
+  '14-entry-detail-notes', '15-entry-batch',
+  '2-shortcut-form', '3-mfa-add', '4-confirm', '18-fileshare',
+  '16-settings-general', '5-settings-appearance', '6-settings-security',
+  '7-settings-backup', '11-settings-fileshare', '17-settings-about', '10-change-password',
+  '8-note-editor', '24-narrow-800', '25-narrow-720',
+  '20-empty-entries', '21-empty-notes', '22-empty-files', '23-empty-mfa',
+]
 
 // v2 双轴：2 底色 × 4 accent = 8 组
 const COMBOS = [
@@ -62,8 +76,10 @@ const seedFor = (combo, empty = false) => ({
 
 const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'msedge' })
 
-const openSeeded = async (dir, seed) => {
+const openSeeded = async (dir, seed, taken) => {
   const page = await browser.newPage({ viewport: { width: 1040, height: 670 }, deviceScaleFactor: 1.5 })
+  // 每步限时 6 秒：选择器落空就当场炸，不等默认 30 秒再假装没事
+  page.setDefaultTimeout(6000)
   page.on('pageerror', (e) => console.log(`pageerror: ${e.message}`))
   await page.addInitScript((cfg) => { window.__E2E_CONFIG__ = cfg }, seed)
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' })
@@ -71,6 +87,7 @@ const openSeeded = async (dir, seed) => {
   const shot = async (name) => {
     await page.waitForTimeout(500)
     await page.screenshot({ path: `${dir}/${name}.png` })
+    taken?.add(name)
     console.log(`${dir}/${name}.png (${++n})`)
   }
   return { page, shot }
@@ -86,9 +103,12 @@ const unlock = async (page) => {
 for (const THEME of RUN) {
   const dir = `design/dialog-check/${THEME}`
   mkdirSync(dir, { recursive: true })
+  // 清掉上一轮的帧：这次没拍到的名字必须是"缺文件"，而不是"旧图还在"
+  for (const f of readdirSync(dir)) if (f.endsWith('.png')) rmSync(`${dir}/${f}`, { force: true, maxRetries: 2, retryDelay: 150 })
+  const taken = new Set()
 
   // ---------- 有数据会话：锁屏 + 全部弹窗/浮层 + 设置全页签 + 窄窗 ----------
-  const { page, shot } = await openSeeded(dir, seedFor(THEME))
+  const { page, shot } = await openSeeded(dir, seedFor(THEME), taken)
 
   // 0) 锁屏：全 App 注视最久的单屏，进门先拍
   await shot('0-lock-screen')
@@ -99,8 +119,10 @@ for (const THEME of RUN) {
   await page.locator('.page-bar button.btn-primary').click(); await shot('1-entry-form')
   await page.keyboard.press('Escape'); await page.waitForTimeout(300)
 
-  // 2) 收藏：详情弹窗（非批量态点整行 = 详情）
-  await page.locator('.entry-card, .ec-card, [class*=card]').first().click()
+  // 2) 收藏：详情弹窗（非批量态点整行 = 详情）。
+  //    选择器必须写死 .entry-card：`[class*=card]` 会先命中容器 .card-grid，点了个空处，
+  //    详情弹窗永远不出现，而上一轮的 9-entry-detail.png 还留在目录里冒充结果。
+  await page.locator('.entry-card').first().click()
   await page.locator('.detail-dialog').waitFor(); await shot('9-entry-detail')
   await page.keyboard.press('Escape'); await page.waitForTimeout(300)
 
@@ -115,8 +137,8 @@ for (const THEME of RUN) {
   await page.locator('.entry-card', { hasText: 'GitHub' }).first().click()
   await page.locator('.detail-dialog').waitFor(); await shot('14-entry-detail-notes')
   await page.keyboard.press('Escape'); await page.waitForTimeout(250)
-  // 勾选即进：悬停第一张卡点勾选位入批量态，底坞「完成」清空退出
-  await page.locator('.entry-card').first().hover(); await page.waitForTimeout(200)
+  // 批量态：页条「选择」钮开待选，点卡即勾，底坞「完成」清空退出
+  await page.locator('.page-bar .bar-btn[aria-label="选择条目"]').click(); await page.waitForTimeout(200)
   await page.locator('.entry-card').first().locator('.card-check').click(); await page.waitForTimeout(250)
   await page.locator('.entry-card').nth(1).click(); await shot('15-entry-batch')
   await page.locator('.batch-dock .dock-btn', { hasText: '完成' }).click(); await page.waitForTimeout(250)
@@ -134,6 +156,9 @@ for (const THEME of RUN) {
   await page.locator('.mfa-card .ib.danger').first().click(); await shot('4-confirm')
   await page.locator('.confirm-dialog .dialog-footer button').first().click(); await page.waitForTimeout(200)
 
+  // 4b) 局域网传输：整页（跑起来才有横幅 + 多目录芯片行）
+  await page.locator('a.nav-item[href="/fileshare"]').click(); await shot('18-fileshare')
+
   // 5) 设置：六个页签全拍 + 修改主密码（嵌套弹窗）
   await page.locator('button[title="设置"], button[data-tip="设置"]').first().click()
   await page.locator('.settings-dialog').waitFor()
@@ -150,10 +175,10 @@ for (const THEME of RUN) {
   await page.keyboard.press('Escape'); await page.waitForTimeout(200)
   await page.keyboard.press('Escape'); await page.waitForTimeout(300)
 
-  // 6) 小记：行内编辑器（编辑钮展开）
+  // 6) 小记：行内编辑器（编辑钮展开）。卡根类名是 .memo，动作钮 .ib.memo-edit
   await page.locator('a.nav-item[href="/notes"]').click(); await page.waitForTimeout(400)
-  await page.locator('.memo-card, [class*=memo]').first().hover(); await page.waitForTimeout(200)
-  await page.locator('.memo-edit, [title="编辑"]').first().click(); await shot('8-note-editor')
+  await page.locator('.memo').first().hover(); await page.waitForTimeout(200)
+  await page.locator('.memo .memo-edit').first().click(); await shot('8-note-editor')
   await page.keyboard.press('Escape'); await page.waitForTimeout(300)
 
   // 7) 窄窗实测：800 / 720 两档，看侧栏与收藏页怎么变形
@@ -163,7 +188,7 @@ for (const THEME of RUN) {
   await page.close()
 
   // ---------- 空数据会话：四页空状态 ----------
-  const { page: ep, shot: eshot } = await openSeeded(dir, seedFor(THEME, true))
+  const { page: ep, shot: eshot } = await openSeeded(dir, seedFor(THEME, true), taken)
   await unlock(ep)
   for (const [href, name] of [
     ['/entries', '20-empty-entries'], ['/notes', '21-empty-notes'],
@@ -172,6 +197,15 @@ for (const THEME of RUN) {
     await ep.locator(`a.nav-item[href="${href}"]`).click(); await eshot(name)
   }
   await ep.close()
+
+  // ---------- 收尾对账：EXPECTED 与实际落盘逐名核对，缺一张就非零退出 ----------
+  const missing = EXPECTED.filter(name => !existsSync(`${dir}/${name}.png`))
+  if (missing.length) {
+    console.error(`\n${dir} 缺帧 ${missing.length}/${EXPECTED.length}：${missing.join(', ')}`)
+    process.exitCode = 1
+  } else {
+    console.log(`\n${dir}：${EXPECTED.length} 帧全部为本次新拍`)
+  }
 }
 
 await browser.close()

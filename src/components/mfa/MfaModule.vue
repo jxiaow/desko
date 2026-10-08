@@ -15,17 +15,12 @@ const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
 const router = useRouter()
 
-/* 发行方首字母块：与收藏行同配方（词首两枚，中文取前两字），色调按发行方名哈希——同发行方恒定同色 */
+/* 发行方首字母块：与收藏/文件行的身份档同一配方（词首两枚，中文取前两字），
+   档面尺寸/圆角/底色走 global.css 的 .grid-slot，色彩不再按发行方哈希分浓淡 */
 const initials = (name: string) => {
   const words = name.trim().split(/[\s._\-/@]+/).filter(Boolean)
   if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
   return name.trim().slice(0, 2).toUpperCase()
-}
-/** 模块色相身份：本页图块统一取 cat-3 色相，发行方哈希只分浓淡三档 */
-const tileTone = (name: string) => {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0
-  return ['tone-1', 'tone-2', 'tone-3'][Math.abs(h) % 3] as string
 }
 
 const codes = ref<MfaCode[]>([])
@@ -273,7 +268,7 @@ const onPaste = async (e: ClipboardEvent) => {
         @keydown.space.prevent="copyCode(c)"
       >
         <div class="card-top">
-          <span class="mfa-tile" :class="tileTone(c.issuer || c.label)" aria-hidden="true">{{ initials(c.issuer || c.label) }}</span>
+          <span class="mfa-tile grid-slot" aria-hidden="true">{{ initials(c.issuer || c.label) }}</span>
           <span class="card-issuer" :title="c.issuer || c.label">{{ c.issuer || c.label }}</span>
           <button class="ib danger" type="button" title="删除" @click.stop="confirmDelete(c)">
             <AppIcon name="trash" :size="14" />
@@ -349,8 +344,8 @@ const onPaste = async (e: ClipboardEvent) => {
             </template>
           </div>
           <div class="dialog-footer">
-            <button class="btn-secondary" @click="closeAdd">取 消</button>
-            <button class="btn-primary" :disabled="busy" @click="submitAdd">添 加</button>
+            <button class="btn-secondary" @click="closeAdd">取消</button>
+            <button class="btn-primary" :disabled="busy" @click="submitAdd">添加</button>
           </div>
         </div>
       </div>
@@ -385,31 +380,11 @@ const onPaste = async (e: ClipboardEvent) => {
   border-color: var(--border-card-hover);
   background: var(--bg-surface-hover);
 }
-.mfa-card:focus-visible { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-ring); }
+.mfa-card:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 
 .card-top { display: flex; align-items: center; gap: var(--space-3); }
-/* 36px 图块档：与收藏/文件行的图块同尺寸，同页一色三档浓淡 */
-.mfa-tile {
-  --h: var(--cat-3);
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-badge);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-/* 色相钉 cat-3 槽，切主题跟各主题的槽走；字色在同色相上掺 45% 前景，
-   使浓淡三档的底洗不再吃掉字母本身的可读性（两轴都 ≥4.5） */
-.mfa-tile.tone-1 { background: color-mix(in srgb, var(--h) 8%, var(--panel-bg)); color: color-mix(in srgb, var(--h) 55%, var(--text)); border-color: color-mix(in srgb, var(--h) 16%, var(--panel-bg)); }
-.mfa-tile.tone-2 { background: color-mix(in srgb, var(--h) 15%, var(--panel-bg)); color: color-mix(in srgb, var(--h) 55%, var(--text)); border-color: color-mix(in srgb, var(--h) 28%, var(--panel-bg)); }
-.mfa-tile.tone-3 { background: color-mix(in srgb, var(--h) 26%, var(--panel-bg)); color: color-mix(in srgb, var(--h) 55%, var(--text)); border-color: color-mix(in srgb, var(--h) 42%, var(--panel-bg)); }
+/* 档面尺寸/圆角/中性底色走 global.css .grid-slot（34px 档），这里只留两枚字母的字面处理 */
+.mfa-tile { font-weight: 700; letter-spacing: 0.02em; }
 .card-issuer {
   flex: 1;
   min-width: 0;
@@ -426,8 +401,8 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 
 .card-label {
   margin-top: 2px;
-  /* 与图块右侧的发行方名左缘对齐 */
-  margin-left: calc(36px + var(--space-3));
+  /* 与图块右侧的发行方名左缘对齐（34px 档 + 12px 间距） */
+  margin-left: calc(34px + var(--space-3));
   font-size: var(--text-xs);
   color: var(--text-muted);
   overflow: hidden;
@@ -438,7 +413,7 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 .card-code-row { display: flex; align-items: baseline; gap: var(--space-2); margin-top: var(--space-2); }
 .card-code {
   font-family: var(--font-mono);
-  font-size: 30px;
+  font-size: var(--text-3xl);
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--text);
@@ -446,7 +421,7 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
   border-radius: var(--radius-sm);
 }
 /* 复制反馈：码区整块翻成「已复制」，1.2s 后转回——回执落在结果本身上 */
-.card-code.copied { font-size: 20px; letter-spacing: 0.02em; color: var(--success); }
+.card-code.copied { font-size: var(--text-xl); letter-spacing: 0.02em; color: var(--success); }
 /* 换码闪光：只在数字真换新的一瞬走一遍，是变化回执不是入场装饰 */
 @keyframes code-flash {
   0% { background: color-mix(in srgb, var(--cat-3) 22%, transparent); }

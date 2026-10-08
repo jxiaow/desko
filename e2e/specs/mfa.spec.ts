@@ -37,7 +37,7 @@ test.describe('MFA 验证码', () => {
       .locator('.switch-slider')
       .click()
     await expectToast(page, '设置已保存')
-    await dialog.locator('.close-btn').click()
+    await dialog.locator('.dialog-close').click()
     await expect(page.locator('a.nav-item[href="/mfa"]')).toHaveCount(1)
   })
 

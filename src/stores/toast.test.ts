@@ -47,13 +47,27 @@ describe('Toast Store', () => {
       expect(store.toast.type).toBe('info')
     })
 
-    it('should hide toast after 2500ms', () => {
+    it('should hide success toast after 800ms', () => {
       const store = useToastStore()
 
       store.showToast('Message')
       expect(store.toast.show).toBe(true)
 
-      vi.advanceTimersByTime(2500)
+      vi.advanceTimersByTime(799)
+      expect(store.toast.show).toBe(true)
+
+      vi.advanceTimersByTime(1)
+      expect(store.toast.show).toBe(false)
+    })
+
+    it('should keep error toast 2400ms so the reason stays readable', () => {
+      const store = useToastStore()
+
+      store.showToast('端口被占用', 'error')
+      vi.advanceTimersByTime(800)
+      expect(store.toast.show).toBe(true)
+
+      vi.advanceTimersByTime(1600)
       expect(store.toast.show).toBe(false)
     })
 
@@ -61,14 +75,14 @@ describe('Toast Store', () => {
       const store = useToastStore()
 
       store.showToast('First message')
-      vi.advanceTimersByTime(1000)
+      vi.advanceTimersByTime(500)
 
       store.showToast('Second message')
-      vi.advanceTimersByTime(1000)
+      vi.advanceTimersByTime(799)
       expect(store.toast.show).toBe(true)
       expect(store.toast.message).toBe('Second message')
 
-      vi.advanceTimersByTime(1500)
+      vi.advanceTimersByTime(800)
       expect(store.toast.show).toBe(false)
     })
   })

@@ -571,8 +571,8 @@ const doRestoreFile = async () => {
             <p v-if="pwdErr" class="modal-error">{{ pwdErr }}</p>
           </div>
           <div class="dialog-footer">
-            <button class="btn-secondary" @click="closePwd">取 消</button>
-            <button class="btn-primary" :disabled="!!busy" @click="submitPwd">{{ busy?.op === 'pwd' ? '处理中…' : '保 存' }}</button>
+            <button class="btn-secondary" @click="closePwd">取消</button>
+            <button class="btn-primary" :disabled="!!busy" @click="submitPwd">{{ busy?.op === 'pwd' ? '处理中…' : '保存' }}</button>
           </div>
         </div>
       </div>
@@ -600,7 +600,7 @@ const doRestoreFile = async () => {
             <p v-if="restoreErr" class="modal-error">{{ restoreErr }}</p>
           </div>
           <div class="dialog-footer">
-            <button class="btn-secondary" @click="closeRestore">取 消</button>
+            <button class="btn-secondary" @click="closeRestore">取消</button>
             <button class="btn-primary" @click="submitRestore">恢 复</button>
           </div>
         </div>
@@ -641,8 +641,8 @@ const doRestoreFile = async () => {
           <div class="dialog-footer">
             <button class="btn-secondary" :disabled="testing" @click="testConn">{{ testing ? '测试中…' : '测试连接' }}</button>
             <span class="footer-spacer" />
-            <button class="btn-secondary" @click="closeCloud">取 消</button>
-            <button class="btn-primary" @click="saveCloud">保 存</button>
+            <button class="btn-secondary" @click="closeCloud">取消</button>
+            <button class="btn-primary" @click="saveCloud">保存</button>
           </div>
         </div>
       </div>
@@ -687,14 +687,14 @@ const doRestoreFile = async () => {
   align-items: center;
   gap: 6px;
   margin: var(--space-2) 0 0;
-  font-size: 11px;
+  font-size: var(--text-2xs);
   font-weight: 600;
   letter-spacing: 0.4px;
   color: var(--text-muted);
 }
 .label-tag {
   font-weight: 500;
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   padding: 0 6px;
   border-radius: 8px;
   background: var(--hover);
@@ -702,7 +702,7 @@ const doRestoreFile = async () => {
 }
 
 /* 路径是给人抄的，不是给人猜的：等宽体让 \ 与 l、0 与 O 分得开 */
-.db-path { font-family: var(--font-mono); font-size: 11.5px; }
+.db-path { font-family: var(--font-mono); font-size: var(--text-xs); }
 .conn-name { display: inline-flex; align-items: center; gap: 7px; }
 
 /* 行内进度：替换所在行的说明行，不撑高、不挪布局 */
@@ -713,7 +713,7 @@ const doRestoreFile = async () => {
   min-width: 0;
 }
 .rp-text {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -734,7 +734,7 @@ const doRestoreFile = async () => {
   border-radius: 2px;
   transition: width 0.2s;
 }
-.rp-pct { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.rp-pct { font-size: var(--text-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 .file-row {
   display: flex;
@@ -746,7 +746,7 @@ const doRestoreFile = async () => {
 }
 .file-row:last-child { border-bottom: none; }
 .file-name {
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text);
   flex: 1;
@@ -755,14 +755,14 @@ const doRestoreFile = async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.file-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.file-meta { font-size: var(--text-2xs); color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .file-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
 .row-btn {
   border: none;
   background: transparent;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   color: var(--text-secondary);
   padding: 3px 8px;
@@ -771,17 +771,18 @@ const doRestoreFile = async () => {
   transition: all 0.15s;
 }
 .row-btn:hover:not(:disabled) { background: var(--hover); color: var(--accent); }
-.row-btn:disabled { opacity: 0.45; cursor: default; }
+/* 裸文字钮没有面可洗：禁用时沿字色阶降一档（muted ≈4.4:1 仍读得清），不整颗淡出 */
+.row-btn:disabled { color: var(--text-muted); cursor: default; }
 
 .empty-line {
   padding: 14px var(--space-4);
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 
 .pane-note {
   margin: 0 0 var(--space-2);
-  font-size: 10.5px;
+  font-size: var(--text-2xs);
   line-height: 1.6;
   color: var(--text-muted);
 }
@@ -795,14 +796,14 @@ const doRestoreFile = async () => {
 
 .modal-help {
   margin: 0 0 var(--space-3);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   line-height: 1.6;
   color: var(--text-muted);
 }
 .form-group .modal-help { margin: 6px 0 0; }
 .help-link { color: var(--accent); text-decoration: none; white-space: nowrap; }
 .help-link:hover { text-decoration: underline; }
-.modal-error { margin: var(--space-2) 0 0; font-size: 12px; color: var(--danger); }
-.modal-ok { margin: var(--space-2) 0 0; font-size: 12px; color: var(--accent); }
+.modal-error { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--danger); }
+.modal-ok { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--accent); }
 .footer-spacer { flex: 1; }
 </style>

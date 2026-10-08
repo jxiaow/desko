@@ -17,53 +17,54 @@ const fmtTime = (ts: number) => {
 }
 
 const tip = computed(() => {
-  if (syncing.value) return `云端同步中 · ${syncing.value.text}`
-  if (note.value) return `上次同步失败：${note.value} · 稍后自动重试`
-  if (pending.value) return `${pending.value} 份还没传上云 · 稍后自动补传`
-  return status.value?.lastRoundAt
-    ? `云端备份已开启 · 最近一轮 ${fmtTime(status.value.lastRoundAt)}`
-    : '云端备份已开启，等待第一轮'
+  const s = syncing.value
+  if (s) return `云端同步中 · ${s.text}${s.pct ? ` ${s.pct}%` : ''}`
+  if (note.value) return `上次同步失败：${note.value} · 点击可重试`
+  if (pending.value) return `${pending.value} 份还没传上云 · 点击立刻补传`
+  if (status.value?.lastRoundAt) return `云端备份已开启 · 最近一轮 ${fmtTime(status.value.lastRoundAt)} · 点击立刻同步`
+  return '云端备份已开启，等待第一轮 · 点击立刻同步'
 })
 </script>
 
 <template>
-  <span
+  <button
     v-if="visible"
-    class="backup-badge"
+    class="titlebar-btn tb-util backup-badge"
     :class="syncing ? 'bb-sync' : note ? 'bb-error' : pending ? 'bb-wait' : 'bb-idle'"
     :title="tip"
+    aria-label="云端同步"
+    @click="store.syncNow()"
   >
-    <AppIcon class="bb-icon" name="cloud" :size="14" />
-    <span v-if="syncing" class="bb-text">{{ syncing.pct }}%</span>
-    <span v-else-if="pending" class="bb-text">{{ pending }}</span>
-  </span>
+    <AppIcon class="bb-icon" name="refresh" :size="16" />
+    <span v-if="pending && !syncing" class="bb-text">{{ pending }}</span>
+  </button>
 </template>
 
 <style scoped>
-.backup-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
+/* 尺寸与 hover 住在标题栏的 .titlebar-btn.tb-util 档（32×28、--radius-ib）：
+   这颗只是那一排里的一员，状态色画在字形上，免得和 hover 的换色抢同一层。 */
+.backup-badge { position: relative; }
+
+.bb-text {
+  position: absolute;
+  right: 0;
+  top: 1px;
+  font-size: var(--text-2xs);
   line-height: 1;
-  color: var(--text-muted);
-  user-select: none;
-  -webkit-user-select: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--warning);
 }
 
-.bb-icon { flex-shrink: 0; display: block; }
+.backup-badge.bb-sync .bb-icon {
+  color: var(--accent);
+  animation: bb-spin 1.15s linear infinite;
+}
 
-.bb-text { font-variant-numeric: tabular-nums; }
+.backup-badge.bb-wait .bb-icon { color: var(--warning); }
 
-.bb-sync { color: var(--accent); }
-.bb-sync .bb-icon { animation: bb-pulse 1.1s ease-in-out infinite; }
+.backup-badge.bb-error .bb-icon { color: var(--danger); }
 
-.bb-wait { color: var(--warning); }
-
-.bb-error { color: var(--danger); }
-
-@keyframes bb-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+@keyframes bb-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

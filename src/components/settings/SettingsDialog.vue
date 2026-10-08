@@ -285,7 +285,7 @@ onMounted(() => { loadSettings() })
         <div class="settings-main">
           <header class="settings-head">
             <h3>{{ TAB_LABELS[tab] }}</h3>
-            <button class="close-btn" @click="close" title="关闭">
+            <button class="dialog-close" @click="close" title="关闭">
               <AppIcon name="x" :size="16" />
             </button>
           </header>
@@ -536,6 +536,8 @@ onMounted(() => { loadSettings() })
   background: var(--panel-bg);
   border-radius: var(--radius-lg);
   width: min(640px, 92vw);
+  /* 定高：壳高不随页签内容变。实测六页内容 231..931，按内容收时壳顶在 y=95..197 之间跳
+     102px，左导航和关闭钮跟着跳位；短页的余量留在下方，长页由面板自己滚。 */
   height: min(480px, 84vh);
   overflow: hidden;
   box-shadow: var(--shadow-pop);
@@ -570,7 +572,7 @@ onMounted(() => { loadSettings() })
 }
 
 .nav-brand h2 {
-  font-size: 13.5px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text);
   margin: 0;
@@ -585,7 +587,7 @@ onMounted(() => { loadSettings() })
   border-radius: var(--radius-sm);
   background: transparent;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--text-base);
   color: var(--sidebar-text);
   text-align: left;
   cursor: pointer;
@@ -603,9 +605,12 @@ onMounted(() => { loadSettings() })
 }
 
 .nav-tab.on {
-  background: var(--sidebar-active);
-  color: var(--sidebar-text-active);
+  /* 与主窗口侧栏同一套激活语言：同材质白块 + 贴地影，重音给整条。
+     原先这里吃 --sidebar-active（accent 淡染），等于同一个 App 里两种"选中长这样" */
+  background: var(--panel-bg);
+  color: var(--accent);
   font-weight: 600;
+  box-shadow: var(--shadow-card);
 }
 
 .nav-tab.on svg {
@@ -631,36 +636,17 @@ onMounted(() => { loadSettings() })
 }
 
 .settings-head h3 {
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text);
   margin: 0;
-}
-
-.close-btn {
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-ib);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: background var(--transition), color var(--transition);
-}
-
-.close-btn:hover {
-  background: var(--hover);
-  color: var(--text);
 }
 
 .stacked { flex-wrap: wrap; }
 .fs-port-input { width: 84px; }
 .fs-pw-ctl { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 .fs-tag {
-  font-size: 11px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   padding: 1px 8px;
   border-radius: var(--radius-pill);
@@ -678,7 +664,7 @@ onMounted(() => { loadSettings() })
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-family: inherit;
 }
 .fs-pw-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
@@ -704,7 +690,7 @@ onMounted(() => { loadSettings() })
    （中间一行是悬浮态底色）、行尾一枚强调色小块。所见即所得，不配文字解释。
    边框固定 2px 占位，选中只换颜色，切换时不跳布局。 */
 .pane-label {
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
   margin: var(--space-4) 0 var(--space-2);
@@ -732,7 +718,7 @@ onMounted(() => { loadSettings() })
   border: 1px solid var(--border);
   background: var(--panel-bg);
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition: border-color var(--transition-fast, 0.15s), background 0.15s;
@@ -762,6 +748,8 @@ onMounted(() => { loadSettings() })
   cursor: pointer;
   text-align: left;
   font-family: inherit;
+  /* button 不带 font-size 会落回浏览器默认 13.333px，比相邻文字粗一档 */
+  font-size: var(--text-sm);
   transition: border-color var(--transition-slow), box-shadow var(--transition-slow), background var(--transition);
 }
 .theme-chip:hover { border-color: var(--border-strong); background: var(--hover); }
@@ -840,7 +828,7 @@ onMounted(() => { loadSettings() })
   height: 5px;
   border-radius: var(--radius-pill);
 }
-.theme-chip-name { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.3; }
+.theme-chip-name { font-size: var(--text-sm); font-weight: 600; color: var(--text); line-height: 1.3; }
 
 /* 关于面板只有三行内容，居中排成一块，比顶格加一屏空白更像介绍页。 */
 .settings-about {
@@ -861,13 +849,13 @@ onMounted(() => { loadSettings() })
 }
 
 .about-name {
-  font-size: 17px;
+  font-size: var(--text-lg);
   font-weight: 600;
   color: var(--text);
 }
 
 .about-version {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 

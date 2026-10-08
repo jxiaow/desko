@@ -19,6 +19,8 @@ const props = withDefaults(defineProps<{
   dense?: boolean
   /** 编辑态顶栏：置顶/收藏/删除这类状态动作退回只读悬停排，编辑条只管写作 */
   showStateActions?: boolean
+  /** 非空则主钮左侧多一颗次级「取消/放弃」钮：自动保存模型下它表达回退/丢弃，不是伪保存 */
+  cancelLabel?: string
 }>(), {
   saveState: '',
   primaryDisabled: false,
@@ -27,6 +29,7 @@ const props = withDefaults(defineProps<{
   showFullscreen: true,
   dense: false,
   showStateActions: true,
+  cancelLabel: '',
 })
 
 const emit = defineEmits<{
@@ -36,6 +39,7 @@ const emit = defineEmits<{
   togglePin: []
   toggleStar: []
   delete: []
+  cancel: []
   primary: []
 }>()
 
@@ -57,7 +61,8 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
     <button  :class="btnCls" type="button" title="添加图片" aria-label="添加图片" @click="emit('addImage')">
       <AppIcon name="image" :size="iconSize" /><span v-if="!props.dense">图片</span>
     </button>
-    <button  :class="btnCls" type="button" title="在正文插入 #标签" aria-label="在正文插入 #标签" @click="emit('insertTag')">
+    <!-- 胶囊输入那一栏自带 #标签 插入芯片，这里再放一颗就是同一个动作摆两次 -->
+    <button v-if="!props.plain" :class="btnCls" type="button" title="在正文插入 #标签" aria-label="在正文插入 #标签" @click="emit('insertTag')">
       <AppIcon name="tag" :size="iconSize" /><span v-if="!props.dense">标签</span>
     </button>
 
@@ -111,6 +116,17 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
     </button>
 
     <button
+      v-if="props.cancelLabel"
+      :class="[btnCls, 'tb-cancel']"
+      type="button"
+      :title="props.cancelLabel"
+      :aria-label="props.cancelLabel"
+      @click="emit('cancel')"
+    >
+      <AppIcon name="x" :size="iconSize" /><span v-if="!props.dense">{{ props.cancelLabel }}</span>
+    </button>
+
+    <button
       v-if="props.plain"
       class="btn-primary go"
       type="button"
@@ -137,7 +153,7 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
   min-width: 0;
 }
 /* 就地展开的底栏里，图标按钮与描边按钮同高，视觉上是一条线 */
-.note-toolbar.dense .ib { width: 26px; height: 26px; border-radius: var(--radius-ib); }
+.note-toolbar.dense .ib { width: 24px; height: 24px; border-radius: var(--radius-ib); }
 .toolbar-flex {
   flex: 1;
   display: flex;
@@ -145,5 +161,5 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
   justify-content: flex-end;
   min-width: 24px;
 }
-.go { height: 28px; padding: 0 var(--space-4); font-size: 12.5px; }
+.go { height: 28px; padding: 0 var(--space-4); font-size: var(--text-sm); }
 </style>

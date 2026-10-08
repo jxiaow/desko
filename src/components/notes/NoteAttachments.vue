@@ -60,16 +60,16 @@ const broken = reactive(new Set<string>())
   background: linear-gradient(135deg, var(--accent-light), var(--accent-soft));
 }
 .att-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.att-ext { font-size: 11px; font-weight: 600; color: var(--accent); letter-spacing: 0.02em; }
+.att-ext { font-size: var(--text-2xs); font-weight: 600; color: var(--accent); letter-spacing: 0.02em; }
 .att-name {
-  font-size: 9.5px;
+  font-size: var(--text-2xs);
   color: var(--text-secondary);
   padding: 2px var(--space-1) 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.att-size { font-size: 9.5px; color: var(--text-muted); padding: 0 var(--space-1) var(--space-1); }
+.att-size { font-size: var(--text-2xs); color: var(--text-muted); padding: 0 var(--space-1) var(--space-1); }
 .att-del {
   position: absolute;
   top: 2px;

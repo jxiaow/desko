@@ -25,7 +25,7 @@ const SAVED_HINT_DELAY = 1500
 const META_CACHE_LIMIT = 400
 const metaCache = new Map<string, { text: string; tags: string[] }>()
 
-function noteMeta(html: string) {
+export function noteMeta(html: string) {
   let meta = metaCache.get(html)
   if (!meta) {
     const text = htmlToText(html)

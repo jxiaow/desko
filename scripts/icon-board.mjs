@@ -18,8 +18,8 @@ const COMBOS = [
   { id: 'ink-plum', theme: 'ink', accent: 'plum' },
 ]
 const SIZES = [14, 16, 20, 24]
-// 与 AppIcon.vue 同源：实笔宽按尺寸反算，全窗恒定 1.05px（写死 2 会让小板子和真界面不像）
-const STROKE_PX = 1.05
+// 与 AppIcon.vue 同源：实笔宽按尺寸反算，全窗恒定 1.15px（写死 2 会让小板子和真界面不像）
+const STROKE_PX = 1.15
 const strokeFor = (s) => +(STROKE_PX * 24 / s).toFixed(2)
 
 // 1) 图标注册表
@@ -41,11 +41,16 @@ const blocks = COMBOS.map((c) => ({
     grab(new RegExp(`\\[data-theme="${c.theme}"\\]\\[data-accent="${c.accent}"\\] \\{([\\s\\S]*?)\\}`), `accent="${c.accent}"`),
 }))
 
-const cell = (icon) => `
+const cell = (icon) => {
+  // 实心件在 AppIcon 里走 fill=currentColor / stroke=none，板上必须同规格，否则看着像没画完
+  const filled = icon.name.endsWith('Filled')
+  const paint = filled ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor"'
+  return `
   <div class="cell">
-    <div class="row">${SIZES.map((s) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeFor(s)}" stroke-linecap="round" stroke-linejoin="round">${icon.markup}</svg>`).join('')}</div>
+    <div class="row">${SIZES.map((s) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" ${paint} stroke-width="${strokeFor(s)}" stroke-linecap="round" stroke-linejoin="round">${icon.markup}</svg>`).join('')}</div>
     <div class="nm">${icon.name}</div>
   </div>`
+}
 
 const html = `<!doctype html><meta charset="utf-8"><style>
 ${blocks.map((b) => `[data-theme="${b.theme}"][data-accent="${b.accent}"] {${b.body}}`).join('\n')}
@@ -69,30 +74,31 @@ const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'msed
 const page = await browser.newPage({ viewport: { width: 1320, height: 900 }, deviceScaleFactor: 1.5 })
 await page.setContent(html, { waitUntil: 'load' })
 
-// 几何守护：14px 那档 stroke-width 最大（1.8 单位），按它算含笔宽的紧包围盒。
-// 越出 1–23 就意味着描边会被 viewBox 裁掉一角 —— 肉眼看缩略图看不出来。
-const overflow = await page.evaluate(() => {
+// 几何守护：Solar 是满幅件（图形本体占 2–22，比 Tabler 的 3–21 更铺得开），所以留白全部来自
+// viewBox 边到画布的距离。按 App 内最小档位（12px，sw = 轨宽 × 24/12）量含笔宽的紧包围盒：
+// 越出 0–24 就会被 viewBox 裁掉一角 —— 肉眼看缩略图看不出来。
+const MIN_RENDER_PX = 12
+const overflow = await page.evaluate((sw12) => {
   const bad = []
   for (const theme of document.querySelectorAll('.theme')) {
     theme.querySelectorAll('.cell').forEach((cell, i) => {
       const svg = cell.querySelector('.row svg')
       // 实心件（*-Filled）在 AppIcon 里走 fill=currentColor / stroke=none，不该按描边量
-      const sw = cell.querySelector('.nm').textContent.endsWith('Filled')
-        ? 0
-        : parseFloat(svg.getAttribute('stroke-width'))
+      const filled = cell.querySelector('.nm').textContent.endsWith('Filled')
+      const sw = filled ? 0 : sw12
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
       for (const el of svg.querySelectorAll('path,rect,circle,line,polyline')) {
         const b = el.getBBox()
         x0 = Math.min(x0, b.x - sw / 2); y0 = Math.min(y0, b.y - sw / 2)
         x1 = Math.max(x1, b.x + b.width + sw / 2); y1 = Math.max(y1, b.y + b.height + sw / 2)
       }
-      if (x0 < 1 || y0 < 1 || x1 > 23 || y1 > 23)
-        bad.push(`${cell.querySelector('.nm').textContent}: (${x0.toFixed(1)},${y0.toFixed(1)})–(${x1.toFixed(1)},${y1.toFixed(1)})`)
+      if (x0 < 0 || y0 < 0 || x1 > 24 || y1 > 24)
+        bad.push(`${cell.querySelector('.nm').textContent}: (${x0.toFixed(2)},${y0.toFixed(2)})–(${x1.toFixed(2)},${y1.toFixed(2)})`)
     })
     break
   }
   return bad
-})
+}, strokeFor(MIN_RENDER_PX))
 for (const line of overflow) console.log(`越界 ${line}`)
 
 mkdirSync('design/icon-board', { recursive: true })
@@ -101,4 +107,4 @@ for (const c of COMBOS) {
   console.log(`design/icon-board/${c.id}.png`)
 }
 await browser.close()
-if (overflow.length) { console.log(`${overflow.length} 枚图标描边越出 1–23，会被 viewBox 裁角`); process.exit(1) }
+if (overflow.length) { console.log(`${overflow.length} 枚图标描边越出 viewBox（0–24），会被裁角`); process.exit(1) }

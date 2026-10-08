@@ -50,7 +50,7 @@ export async function bootUnlocked(
   return auth
 }
 
-/** 断言 toast 文案（toast 2500ms 自动消失，操作后应立即断言） */
+/** 断言 toast 文案（成功/提示 800ms、错误 2400ms 自动消失，操作后应立即断言） */
 export async function expectToast(page: Page, text: string | RegExp): Promise<void> {
   await expect(page.locator('.toast')).toContainText(text as string)
 }

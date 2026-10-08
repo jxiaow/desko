@@ -157,6 +157,7 @@ const duplicateEntry = async (entry: Entry) => {
     :entry="formEntry"
     @close="showForm = false"
     @saved="onFormSaved"
+    @open-url="openUrl"
   />
 
   <DetailDialog
