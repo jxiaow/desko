@@ -59,17 +59,6 @@ const onDragDblclick = (e: MouseEvent) => {
     </div>
 
     <div class="sidebar-nav">
-      <router-link to="/entries" class="nav-item m-ent" :class="{ active: route.path === '/entries' }" aria-label="网址收藏">
-        <div class="nav-icon">
-          <AppIcon name="navEntries" :size="collapsed ? 22 : 18" />
-        </div>
-        <Transition name="nav-text">
-          <span v-if="!collapsed" class="nav-text">网址收藏</span>
-        </Transition>
-        <Transition name="nav-text">
-          <span v-if="!collapsed && counts['/entries']!.value > 0" class="nav-count">{{ counts['/entries']!.value }}</span>
-        </Transition>
-      </router-link>
       <router-link to="/notes" class="nav-item m-not" :class="{ active: route.path === '/notes' }" aria-label="小记">
         <div class="nav-icon">
           <AppIcon name="navNotes" :size="collapsed ? 22 : 18" />
@@ -79,6 +68,17 @@ const onDragDblclick = (e: MouseEvent) => {
         </Transition>
         <Transition name="nav-text">
           <span v-if="!collapsed && counts['/notes']!.value > 0" class="nav-count">{{ counts['/notes']!.value }}</span>
+        </Transition>
+      </router-link>
+      <router-link to="/entries" class="nav-item m-ent" :class="{ active: route.path === '/entries' }" aria-label="网址收藏">
+        <div class="nav-icon">
+          <AppIcon name="navEntries" :size="collapsed ? 22 : 18" />
+        </div>
+        <Transition name="nav-text">
+          <span v-if="!collapsed" class="nav-text">网址收藏</span>
+        </Transition>
+        <Transition name="nav-text">
+          <span v-if="!collapsed && counts['/entries']!.value > 0" class="nav-count">{{ counts['/entries']!.value }}</span>
         </Transition>
       </router-link>
       <router-link to="/files" class="nav-item m-fil" :class="{ active: route.path === '/files' }" aria-label="文件快捷">
@@ -241,13 +241,11 @@ const onDragDblclick = (e: MouseEvent) => {
 }
 
 .nav-item.active {
-  /* V5.2 侧栏轮：激活=同材质白块 + 抬影，重音给整条（文字也转 accent），
-     只让图标变色的话在一列灰字里点不出来。
-     图标一律用描边母版：22px 的实心母版在白块里糊成色块，状态已由容器说尽。 */
-  background: var(--panel-bg);
+  /* 激活只改字色与字重，不铺底：V5.2 那版"同材质白块 + 抬影"在展开档读作一块
+     浮起的卡，到图标轨档就成了压在图标底下的白底——那颗白块被判定为异物，去掉。
+     整列只有一项是 accent 色 + 600 字重，重音够点得出来。 */
   color: var(--accent);
   font-weight: 600;
-  box-shadow: var(--shadow-card);
 }
 .nav-item.active .nav-icon { color: var(--h); }
 

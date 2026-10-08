@@ -16,8 +16,17 @@ test.describe('导航与布局', () => {
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(3)
     // 侧栏骨架：顶部品牌行 + 导航两块，别无他物
     await expect(page.locator('.sidebar > *')).toHaveCount(2)
+    // 常驻三项的顺序钉死：小记打头（收藏/文件紧随），改顺序要连这条一起改
+    expect(await page.locator('.sidebar-nav .nav-item').evaluateAll(
+      (els) => els.map((el) => el.getAttribute('href')),
+    )).toEqual(['/notes', '/entries', '/files'])
     // 标题栏只放模块名（品牌位已移入全高侧栏顶部）
     await expect(page.locator('.titlebar-crumb')).toHaveText('网址收藏')
+
+    // 激活态不铺底：图标轨档那层白块会读成图标的底，重音只给字色。
+    // 用当前项（已 active、指针没压着）来量——点过的那条会带 hover 填充，量不到激活态本身
+    await expect(page.locator('a.nav-item[href="/entries"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect(page.locator('a.nav-item[href="/entries"]')).toHaveCSS('box-shadow', 'none')
 
     // 小记
     await page.locator('a.nav-item[href="/notes"]').click()
