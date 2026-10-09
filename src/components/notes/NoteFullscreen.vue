@@ -60,6 +60,10 @@ const onUpdate = (value: string) => {
 const insertTag = () => editorRef.value?.insertText(' #')
 const insertImage = (src: string) => editorRef.value?.insertImage(src)
 
+/** 编辑器把 canUndo/canRedo 挂在暴露的 ref 上，这里包一层只读给底栏那两颗钮 */
+const canUndo = computed(() => !!editorRef.value?.canUndo)
+const canRedo = computed(() => !!editorRef.value?.canRedo)
+
 defineExpose({ insertImage })
 
 const onPrimary = () => {
@@ -154,8 +158,13 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
         :primary-disabled="empty"
         :cancel-label="props.note ? '取消' : '放弃'"
         :show-fullscreen="false"
+        show-history
+        :can-undo="canUndo"
+        :can-redo="canRedo"
         @add-image="emit('addImage')"
         @insert-tag="insertTag"
+        @undo="editorRef?.undo()"
+        @redo="editorRef?.redo()"
         @toggle-pin="emit('togglePin')"
         @toggle-star="emit('toggleStar')"
         @delete="emit('delete')"

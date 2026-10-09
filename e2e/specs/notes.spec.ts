@@ -341,6 +341,35 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.memo')).toHaveCount(4)
   })
 
+  test('全屏书写：撤销/重做钮跟着历史栈走，键盘那条也认', async ({ page }) => {
+    await gotoNotes(page)
+    await page.locator('.composer .ProseMirror').click()
+    await page.locator('.composer button[title="全屏书写"], .composer button[data-tip="全屏书写"]').click()
+    const fs = page.locator('section.fs')
+    await expect(fs).toBeVisible()
+
+    const pm = fs.locator('.ProseMirror')
+    const undo = fs.locator('.fs-foot button[aria-label="撤销"]')
+    const redo = fs.locator('.fs-foot button[aria-label="重做"]')
+    // 没得退时钮在但灰着：藏起来会让人以为这里压根不能撤销
+    await pm.click()
+    await expect(undo).toBeDisabled()
+    await expect(redo).toBeDisabled()
+
+    await page.keyboard.type('第一段')
+    await expect(undo).toBeEnabled()
+    await undo.click()
+    await expect(pm).toHaveText('')
+    await expect(undo).toBeDisabled()
+    await expect(redo).toBeEnabled()
+
+    await redo.click()
+    await expect(pm).toHaveText('第一段')
+    // 键盘快捷键与钮同一条历史栈（StarterKit 的 history 一直开着）
+    await page.keyboard.press('Control+z')
+    await expect(pm).toHaveText('')
+  })
+
   test('全屏查看：只读渲染、转编辑、Esc 关闭', async ({ page }) => {
     await gotoNotes(page)
     const m = memo(page, '第一条小记')

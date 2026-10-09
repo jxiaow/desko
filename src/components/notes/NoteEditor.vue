@@ -223,6 +223,10 @@ const isBlankContent = (html: string | undefined): boolean => {
  * 卡片就地编辑和全屏面有自己的定高档，不参与。
  */
 
+/** 撤销/重做的可用性：每笔事务后重算，供底栏那两颗钮决定灰不灰 */
+const canUndo = ref(false)
+const canRedo = ref(false)
+
 const editor = useEditor({
   // 库里存的是 attachments/<名>，编辑器里要看到真图；存回去时再洗回相对形态
   content: resolveAssetHtml(props.initialContent || ''),
@@ -245,6 +249,10 @@ const editor = useEditor({
   onUpdate: ({ editor }) => {
     emit('update', normalizeAssetHtml(editor.getHTML()))
     checkSlashMenu(editor)
+  },
+  onTransaction: ({ editor }) => {
+    canUndo.value = editor.can().undo()
+    canRedo.value = editor.can().redo()
   },
 })
 
@@ -445,6 +453,10 @@ const insertText = (text: string) => {
   editor.value?.chain().focus().insertContent(text).run()
 }
 
+/** 底栏那两颗钮先 focus 再走 history：不抢回来的话点完钮光标还在按钮上 */
+const undo = () => { editor.value?.chain().focus().undo().run() }
+const redo = () => { editor.value?.chain().focus().redo().run() }
+
 /** 快捷插入芯片走编辑器自己的命令链，不往正文里塞 markdown 源字符 */
 const insertTask = () => {
   editor.value?.chain().focus().toggleTaskList().run()
@@ -463,7 +475,7 @@ const insertImage = (src: string) => {
   ed.chain().focus().insertContent({ type: 'image', attrs: { src, width } }).run()
 }
 
-defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage })
+defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, undo, redo, canUndo, canRedo })
 </script>
 
 <template>

@@ -21,6 +21,10 @@ const props = withDefaults(defineProps<{
   showStateActions?: boolean
   /** 非空则主钮左侧多一颗次级「取消/放弃」钮：自动保存模型下它表达回退/丢弃，不是伪保存 */
   cancelLabel?: string
+  /** 全屏书写面才给撤销/重做：胶囊输入和卡片就地编辑不留这排 */
+  showHistory?: boolean
+  canUndo?: boolean
+  canRedo?: boolean
 }>(), {
   saveState: '',
   primaryDisabled: false,
@@ -30,6 +34,9 @@ const props = withDefaults(defineProps<{
   dense: false,
   showStateActions: true,
   cancelLabel: '',
+  showHistory: false,
+  canUndo: false,
+  canRedo: false,
 })
 
 const emit = defineEmits<{
@@ -41,6 +48,8 @@ const emit = defineEmits<{
   delete: []
   cancel: []
   primary: []
+  undo: []
+  redo: []
 }>()
 
 const saveText: Record<NoteSaveState, string> = {
@@ -58,6 +67,17 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
 
 <template>
   <div class="note-toolbar" :class="{ dense: props.dense }">
+    <!-- 撤销/重做只给图标不给字：这一排已有图片/标签/置顶/收藏，再挂两组字会把主钮挤到换行。
+         两颗都是「一枚字形即语义」，靠 title 读得出。没得退时灰着，不藏钮——
+         藏起来会让人以为这里根本不能撤销。 -->
+    <template v-if="props.showHistory">
+      <button class="eb" type="button" :disabled="!props.canUndo" title="撤销 (Ctrl+Z)" aria-label="撤销" @click="emit('undo')">
+        <AppIcon name="undo" :size="12" />
+      </button>
+      <button class="eb" type="button" :disabled="!props.canRedo" title="重做 (Ctrl+Shift+Z)" aria-label="重做" @click="emit('redo')">
+        <AppIcon name="redo" :size="12" />
+      </button>
+    </template>
     <button  :class="btnCls" type="button" title="添加图片" aria-label="添加图片" @click="emit('addImage')">
       <AppIcon name="image" :size="iconSize" /><span v-if="!props.dense">图片</span>
     </button>

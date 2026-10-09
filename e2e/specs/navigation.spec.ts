@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test'
 import { bootUnlocked, e2e } from '../helpers'
 test.describe('导航与布局', () => {
-  test('默认路由重定向到 /entries', async ({ page }) => {
+  test('默认路由重定向到 /notes（启动即选中小记）', async ({ page }) => {
     await bootUnlocked(page)
-    await expect(page).toHaveURL(/\/entries$/)
+    await expect(page).toHaveURL(/\/notes$/)
   })
 
   test('侧栏收起/展开与三视图切换', async ({ page }) => {
@@ -20,22 +20,21 @@ test.describe('导航与布局', () => {
     expect(await page.locator('.sidebar-nav .nav-item').evaluateAll(
       (els) => els.map((el) => el.getAttribute('href')),
     )).toEqual(['/notes', '/entries', '/files'])
-    // 标题栏只放模块名（品牌位已移入全高侧栏顶部）
-    await expect(page.locator('.titlebar-crumb')).toHaveText('网址收藏')
+    // 标题栏只放模块名（品牌位已移入全高侧栏顶部）；默认落点是侧栏第一项小记
+    await expect(page.locator('.titlebar-crumb')).toHaveText('小记')
+    await expect(page.locator('.notes-page')).toBeVisible()
 
     // 激活态不铺底：图标轨档那层白块会读成图标的底，重音只给字色。
     // 用当前项（已 active、指针没压着）来量——点过的那条会带 hover 填充，量不到激活态本身
-    await expect(page.locator('a.nav-item[href="/entries"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-    await expect(page.locator('a.nav-item[href="/entries"]')).toHaveCSS('box-shadow', 'none')
-
-    // 小记
-    await page.locator('a.nav-item[href="/notes"]').click()
-    await expect(page).toHaveURL(/\/notes$/)
-    await expect(page.locator('.notes-page')).toBeVisible()
     await expect(page.locator('a.nav-item[href="/notes"]')).toHaveClass(/active/)
-    // 面包屑跟着路由走，标题栏不再重复放一份导航
-    await expect(page.locator('.titlebar-crumb')).toHaveText('小记')
+    await expect(page.locator('a.nav-item[href="/notes"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect(page.locator('a.nav-item[href="/notes"]')).toHaveCSS('box-shadow', 'none')
     expect(await e2e.count(page, 'list_notes')).toBe(1)
+
+    // 网址收藏
+    await page.locator('a.nav-item[href="/entries"]').click()
+    await expect(page).toHaveURL(/\/entries$/)
+    await expect(page.locator('.titlebar-crumb')).toHaveText('网址收藏')
 
     // 文件快捷（路由切换触发 fetchShortcuts）；未 seed 数据时渲染空态
     await page.locator('a.nav-item[href="/files"]').click()
