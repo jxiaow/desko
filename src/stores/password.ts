@@ -35,6 +35,22 @@ export const usePasswordStore = defineStore('password', () => {
     return passwordCache.value[id]?.value || '••••••••'
   }
 
+  /**
+   * 详情弹窗打开时预热一次。密码不在列表负载里（EntryResponse 不带），而详情那行
+   * 只在缓存有值时才渲染，不主动取就永远不出现——存了密码也看不到。
+   * 取失败/空密码都当作"没有密码"，让那行继续缺席。
+   */
+  const primePassword = async (id: string) => {
+    const cached = passwordCache.value[id]
+    if (cached && Date.now() - cached.ts <= PASSWORD_CACHE_TTL) return
+    try {
+      const pwd = await entriesStore.getPassword(id)
+      passwordCache.value[id] = { value: pwd, ts: Date.now() }
+    } catch {
+      delete passwordCache.value[id]
+    }
+  }
+
   const getPassword = async (id: string): Promise<string> => {
     return await entriesStore.getPassword(id)
   }
@@ -57,6 +73,7 @@ export const usePasswordStore = defineStore('password', () => {
     visiblePasswords,
     passwordCache,
     togglePassword,
+    primePassword,
     getPasswordDisplay,
     getPassword,
     evictExpiredPasswords,

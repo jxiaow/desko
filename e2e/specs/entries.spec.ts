@@ -13,6 +13,16 @@ function entryCard(page: Page, name: string) {
   return page.locator(cardByName(name))
 }
 
+/**
+ * 启动默认落点自 10-09 起是小记，收藏页要自己点过去。
+ * 不走 bootUnlocked 的 path 参数：那是解锁前 goto 子路由，视图会在锁定态挂载并发 fetch。
+ */
+async function bootEntries(page: Page, config: Parameters<typeof bootUnlocked>[1] = {}) {
+  await bootUnlocked(page, config)
+  await page.locator('a.nav-item[href="/entries"]').click()
+  await expect(page).toHaveURL(/\/entries$/)
+}
+
 async function confirmDialog(page: Page, expectedMessage?: string) {
   const dialog = page.locator('.confirm-dialog')
   await expect(dialog).toBeVisible()
@@ -30,7 +40,7 @@ async function cardAction(page: Page, name: string, label: string) {
 
 test.describe('Entries 网址收藏', () => {
   test('解锁后展示 seed 条目与分类 tabs', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     await expect(page.locator('.entry-card')).toHaveCount(3)
     await expect(entryCard(page, 'GitHub').locator('.ec-name')).toBeVisible()
     await expect(entryCard(page, 'GitHub').locator('.ec-cat')).toHaveText('开发')
@@ -43,7 +53,7 @@ test.describe('Entries 网址收藏', () => {
   })
 
   test('搜索过滤与清除', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     const search = page.locator('.search-box input')
     await search.fill('git')
     await expect(page.locator('.entry-card')).toHaveCount(1)
@@ -58,7 +68,7 @@ test.describe('Entries 网址收藏', () => {
   })
 
   test('按分类 tab 过滤：常驻钮直点，收进「更多」的走下拉', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     // 分类聚合顺序不保证等于 seed 声明顺序：可见就直点，否则开「更多」面板点
     const tab = page.locator('.tabs .tab:not(.tab-more)', { hasText: '邮箱' })
     if (await tab.count()) {
@@ -74,7 +84,7 @@ test.describe('Entries 网址收藏', () => {
   })
 
   test('新增网址收藏：必填警示 + 创建成功', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     await page.locator('.page-bar button.btn-primary').click()
     const dialog = page.locator('.dialog.entry-form-dialog')
     await expect(dialog.locator('h3')).toHaveText('新增网址收藏')
@@ -125,7 +135,7 @@ test.describe('Entries 网址收藏', () => {
   })
 
   test('详情点编辑：弹统一编辑弹窗改名', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     await entryCard(page, 'GitHub').click()
     const detail = page.locator('.detail-dialog')
     await expect(detail).toBeVisible()
@@ -150,7 +160,7 @@ test.describe('Entries 网址收藏', () => {
   })
 
   test('单条删除收在 ⋯ 菜单里，走确认对话框', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     await cardAction(page, '钉钉', '删除')
     await confirmDialog(page, '确定删除「钉钉」？')
     await expectToast(page, '已删除')
@@ -160,7 +170,7 @@ test.describe('Entries 网址收藏', () => {
   })
 
   test('批量选择与删除', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     // 勾选框只在批量态显形：hover 不再抛框，入口是页条「选择」
     const pickBtn = page.locator('.page-bar .bar-btn[aria-label="选择条目"]')
     await pickBtn.click()
@@ -197,7 +207,7 @@ test.describe('Entries 网址收藏', () => {
   })
 
   test('工具栏「选择」钮：开待选显形勾选框，再点整体退出', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     // title 会被全局 tooltip 机制摘走，锚 aria-label
     const pickBtn = page.locator('.page-bar .bar-btn[aria-label="选择条目"]')
     await pickBtn.click()
@@ -220,7 +230,7 @@ test.describe('Entries 网址收藏', () => {
   })
 
   test('选中态浸润 + 网格二维游走与 C 复制', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     const gh = entryCard(page, 'GitHub')
     await page.locator('.page-bar .bar-btn[aria-label="选择条目"]').click()
     await gh.click()
@@ -255,7 +265,7 @@ test.describe('Entries 网址收藏', () => {
 
   test('toast 是贴右下的反色胶囊', async ({ page }) => {
     await page.setViewportSize({ width: 1040, height: 670 })
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     await page.locator('.entry-card').first().focus()
     await page.keyboard.press('c')
     const toast = page.locator('.toast')
@@ -276,15 +286,43 @@ test.describe('Entries 网址收藏', () => {
     expect(style).toEqual({ radius: '99px', bg: 'rgb(38, 36, 31)', size: '12px' })
   })
 
+  test('详情一打开就有密码行：默认掩码，点显示才露明文', async ({ page }) => {
+    await bootEntries(page, {
+      entries: [
+        { name: 'GitHub', url: 'https://github.com', username: 'user@example.com', password: 'Gh!tHub2024', category: '开发' },
+        { name: '空密码站', url: 'https://empty.example.com', username: 'guest', password: '', category: '开发' },
+      ],
+    })
+    await entryCard(page, 'GitHub').click()
+    const detail = page.locator('.detail-dialog')
+    await expect(detail.locator('.detail-pwd')).toHaveText('••••••••••')
+    // 密码不在列表负载里：打开详情取一次，那行才渲染得出来
+    expect(await e2e.count(page, 'get_password')).toBe(1)
+
+    await tipButton(detail, '显示密码').click()
+    await expect(detail.locator('.detail-pwd')).toHaveText('Gh!tHub2024')
+
+    // 关掉再开：2 分钟 TTL 内不重复请求
+    await detail.locator('.dialog-close').click()
+    await entryCard(page, 'GitHub').click()
+    await expect(detail.locator('.detail-pwd')).toBeVisible()
+    expect(await e2e.count(page, 'get_password')).toBe(1)
+
+    // 没存密码的条目不出这行
+    await detail.locator('.dialog-close').click()
+    await entryCard(page, '空密码站').click()
+    await expect(detail.locator('.detail-pwd')).toHaveCount(0)
+  })
+
   test('复制卡片并查看/复制密码', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     const card = entryCard(page, 'GitHub')
     await cardAction(page, 'GitHub', '复制副本')
     await expectToast(page, '已复制卡片')
     await expect(entryCard(page, 'GitHub 副本')).toBeVisible()
     expect((await e2e.snapshot(page)).entries).toHaveLength(4)
 
-    // 复制卡片会用 getPassword 填充原条目密码缓存，此后详情页才有显示/复制密码按钮
+    // 复制卡片本身取一次密码；随后打开详情的预热撞上 2 分钟 TTL，不再多打一次
     await expect.poll(() => e2e.count(page, 'get_password')).toBe(1)
     await card.click()
     const detail = page.locator('.detail-dialog')
@@ -301,13 +339,13 @@ test.describe('Entries 网址收藏', () => {
   })
 
   test('点击卡片网址走 shell open', async ({ page }) => {
-    await bootUnlocked(page, SEED)
+    await bootEntries(page, SEED)
     await entryCard(page, 'Gmail').locator('a.ec-domain').click()
     await expect.poll(() => e2e.count(page, 'shell:open')).toBe(1)
   })
 
   test('工具条粘顶时贴住滚动容器上沿，不留能看见卡片的缝', async ({ page }) => {
-    await bootUnlocked(page, {
+    await bootEntries(page, {
       entries: Array.from({ length: 9 }, (_, i) => ({
         name: `条目 ${i}`,
         url: `http://10.0.0.65/builds/private/item_${i}`,

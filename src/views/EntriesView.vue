@@ -50,6 +50,8 @@ const openAdd = () => {
 
 const openDetail = (entry: Entry) => {
   detailId.value = entry.id
+  /* 不等 await：取到就出那行，取不到（没存密码/解密失败）那行继续缺席 */
+  passwordStore.primePassword(entry.id)
 }
 
 /** 新增/编辑共用同一个表单弹窗；从详情进来时先收起详情，不叠第二层遮罩 */
