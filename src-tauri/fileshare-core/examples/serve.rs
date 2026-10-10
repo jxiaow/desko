@@ -14,7 +14,13 @@ fn main() {
     let base_dir = cfg_path.parent().unwrap().to_path_buf();
     let persist = fileshare_core::file_persist(cfg_path.clone());
 
-    let server = fileshare_core::start(cfg, base_dir, persist).expect("start");
+    let server = fileshare_core::start(
+        cfg,
+        base_dir,
+        persist,
+        std::sync::Arc::new(fileshare_core::guard::FailGate::new(None)),
+    )
+    .expect("start");
     let info = server.info();
     println!(
         "serving http://127.0.0.1:{} (lan {}) dirs={}",

@@ -150,16 +150,15 @@ pub fn partial_response(count_text: &str, rows_html: &str) -> String {
     format!("{}{}{}", count_text, PARTIAL_SEP, rows_html)
 }
 
-pub fn login_page(error: bool, next: &str) -> String {
+pub fn login_page(err: Option<&str>, next: &str) -> String {
     replace_all(
         LOGIN,
         &[
             (
                 "%%ERROR%%",
-                if error {
-                    r#"<div class="err">口令不正确</div>"#.to_string()
-                } else {
-                    String::new()
+                match err {
+                    Some(msg) => format!(r#"<div class="err">{}</div>"#, html_escape(msg)),
+                    None => String::new(),
                 },
             ),
             ("%%NEXT%%", html_escape(next)),
@@ -245,10 +244,16 @@ mod tests {
 
     #[test]
     fn login_page_sanitizes_next() {
-        let html = login_page(true, r#"/"onmouseover="x"#);
+        let html = login_page(Some("口令不正确"), r#"/"onmouseover="x"#);
         assert!(html.contains("口令不正确"));
         // 引号被转义，next 参数无法闭合属性
         assert!(!html.contains(r#"value="/""#));
         assert!(html.contains("&quot;"));
+    }
+
+    #[test]
+    fn login_page_omits_error_block_when_absent() {
+        let html = login_page(None, "/");
+        assert!(!html.contains(r#"<div class="err">"#), "首次进登录页不该有报错行");
     }
 }

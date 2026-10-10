@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::error::AppError;
 use crate::services::cloud_service;
@@ -11,8 +11,9 @@ fn master_key(state: &AppState) -> Result<Vec<u8>, AppError> {
     crate::services::get_master_key(state)
 }
 
-fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
-    app.path().app_data_dir().map_err(|e| AppError::Io(e.to_string()))
+/// 备份目录随当前档案根（多档案 D1）；`app` 形参保留仅为调用点不变。
+fn app_data_dir(_app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
+    Ok(crate::paths::profile_root())
 }
 
 #[tauri::command]

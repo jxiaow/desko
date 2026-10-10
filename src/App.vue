@@ -1,16 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
-import { useEntriesStore } from './stores/entries'
-import { useFileShortcutsStore } from './stores/fileShortcuts'
-import { useNotesStore } from './stores/notes'
 import { useToastStore } from './stores/toast'
 import { useConfirmStore } from './stores/confirm'
 import { usePasswordStore } from './stores/password'
 import { useAutoLock } from './composables/useAutoLock'
 import { installHoverGuard } from './utils/hoverGuard'
+import { bootEnabledModules, lockEnabledModules } from './modules/state'
+import type { SettingsTabId } from './modules/registry'
 import TitleBar from './components/layout/TitleBar.vue'
 import Sidebar from './components/layout/Sidebar.vue'
 import SetupPage from './components/auth/SetupPage.vue'
@@ -26,15 +24,9 @@ const { appState } = storeToRefs(authStore)
 const { checkInitialized, lock } = authStore
 const toastStore = useToastStore()
 const { toast } = storeToRefs(toastStore)
-const { showToast } = toastStore
 const confirmStore = useConfirmStore()
 const { confirmDialog } = storeToRefs(confirmStore)
 const { handleConfirm } = confirmStore
-const entriesStore = useEntriesStore()
-const { fetchEntries } = entriesStore
-const fileShortcutsStore = useFileShortcutsStore()
-const { fetchShortcuts } = fileShortcutsStore
-
 const passwordStore = usePasswordStore()
 const { evictExpiredPasswords, clearSensitiveState } = passwordStore
 
@@ -42,15 +34,10 @@ const { evictExpiredPasswords, clearSensitiveState } = passwordStore
     缺省仍是图标轨——和旧的两态时代一致，小窗开局不把内容挤窄。 */
 const sidebarMode = ref<'expanded' | 'rail' | 'hidden'>('rail')
 const showSettings = ref(false)
-const settingsInitialTab = ref<'general' | 'fileshare'>('general')
+const settingsInitialTab = ref<SettingsTabId>('appearance')
 const showChangePassword = ref(false)
 /** 小记口令没在手时，设置页那一步得先解锁再改，mode 就是当前该问哪一句 */
 const noteKeyMode = ref<'unlock' | 'change' | null>(null)
-
-const openChangeNoteKey = () => {
-  const store = useNotesStore()
-  noteKeyMode.value = store.noteKey.is_open ? 'change' : 'unlock'
-}
 
 const onNoteKeyDone = () => {
   if (noteKeyMode.value === 'unlock') {
@@ -60,42 +47,32 @@ const onNoteKeyDone = () => {
   noteKeyMode.value = null
 }
 
-const openSettingsGeneral = () => {
-  settingsInitialTab.value = 'general'
+const openSettingsAppearance = () => {
+  settingsInitialTab.value = 'appearance'
   showSettings.value = true
 }
 // 模块页摘要行等处请求直达设置弹窗的某个页签
 const onOpenSettingsTab = (e: Event) => {
-  settingsInitialTab.value = ((e as CustomEvent).detail === 'fileshare' ? 'fileshare' : 'general')
+  settingsInitialTab.value = (e as CustomEvent).detail as SettingsTabId
   showSettings.value = true
 }
 
 const doLock = async () => {
   await lock()
   clearSensitiveState()
-  // 加密小记的会话明文跟着锁回去
-  useNotesStore().clearUnlockedNotes()
+  // 加密小记的会话明文、收藏的筛选态——各模块自己那份跟着锁回去
+  lockEnabledModules()
   try { await navigator.clipboard.writeText('') } catch {}
-  entriesStore.searchKeyword = ''
-  entriesStore.activeTab = 'all'
 }
 
 useAutoLock(doLock, evictExpiredPasswords)
 
-const onSetupComplete = async () => { await fetchEntries((msg) => showToast(msg, 'error')) }
-const onUnlockComplete = async () => { await fetchEntries((msg) => showToast(msg, 'error')) }
-
-const route = useRoute()
-watch(route, (newRoute) => {
-  if (newRoute.name === 'files') {
-    fetchShortcuts()
-  }
-})
+const bootModules = () => bootEnabledModules()
 
 onMounted(async () => {
   await checkInitialized()
   if (appState.value === 'unlocked') {
-    await fetchEntries((msg) => showToast(msg, 'error'))
+    await bootEnabledModules()
   }
 
   // WebView 收不到窗口隐藏/最小化时的 mouseleave，:hover 与 tooltip 会残留到下次打开
@@ -127,12 +104,12 @@ function onGlobalKey(e: KeyboardEvent) {
     <TitleBar
       v-if="appState !== 'unlocked'"
       :is-locked="appState === 'locked'"
-      @open-settings="openSettingsGeneral"
+      @open-settings="openSettingsAppearance"
       @lock="doLock"
     />
 
-    <SetupPage v-if="appState === 'setup'" @setup-complete="onSetupComplete" />
-    <UnlockPage v-else-if="appState === 'locked'" @unlock-complete="onUnlockComplete" />
+    <SetupPage v-if="appState === 'setup'" @setup-complete="bootModules" />
+    <UnlockPage v-else-if="appState === 'locked'" @unlock-complete="bootModules" />
 
     <div v-else class="app-layout">
       <Sidebar
@@ -144,7 +121,7 @@ function onGlobalKey(e: KeyboardEvent) {
       <div class="main-area">
         <TitleBar
           :sidebar-hidden="sidebarMode === 'hidden'"
-          @open-settings="openSettingsGeneral"
+          @open-settings="openSettingsAppearance"
           @lock="doLock"
           @show-sidebar="sidebarMode = 'expanded'"
         />
@@ -160,8 +137,8 @@ function onGlobalKey(e: KeyboardEvent) {
       :initial-tab="settingsInitialTab"
       @close="showSettings = false"
       @open-change-password="showChangePassword = true"
-      @open-change-note-key="openChangeNoteKey"
-      @entries-refreshed="fetchEntries"
+      @open-change-note-key="noteKeyMode = $event"
+      @entries-refreshed="bootModules"
     />
 
     <ChangePasswordDialog

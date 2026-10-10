@@ -44,8 +44,10 @@ Tabler 这一版把"有没有图标可用"解决了（62 键注册表 + 31 处�
 `scripts/vendor-solar-icons.mjs` 的 `MAP` 是唯一事实来源，下表为人读版本（Solar 名一律去 `-linear` 后缀读；`square-alt-arrow-up`、`pin-broken`、`lock-broken` 为整名照用）。
 
 > 10-08 后续：标题栏那颗备份徽标从"只读状态"改成"点了就跑一轮"的同步钮，形也跟着换——`cloud`（说的是"云"这个名词）改成 `refresh`（循环双箭头，说的是"再走一遍"这个动作），`cloud` 键失去最后一个调用点、随即删注册表条目，键数仍 61+1。
+>
+> 10-10 图标轨辨识度轮：侧栏收到 56px 后图标是唯一线索，八枚里有五枚在 22px 读作"灰色抽象符号"（`folder` 像袋子、`server` 像列表、`key` 一团加一根棍、`square-alt-arrow-up` 方框加箭头、`globe` 的大陆线糊成斑），且轨档既无文字也无 hover 名称。本轮按"剪影互不重复"重挑八枚（对拍板：`design/rail-icon-mock/`），换形不换风格族，实笔仍 1.15px；同时给 `.nav-item` 补只在图标轨档生效的 `title`（展开档文字已在，挂上就是重复噪声），走全局 tooltip 出模块名。穿透/直连/Codex 三枚原先借通用键 `globe`/`external`/`user`（这三键在别处仍是原义），故新立 `navTunnel`/`navBypass`/`navCodex` 三键，注册表 66 描边 + 1 实心。
 
-### 4.1 描边 61 键
+### 4.1 描边 66 键
 
 | 键 | Solar | 键 | Solar |
 | --- | --- | --- | --- |
@@ -71,15 +73,17 @@ Tabler 这一版把"有没有图标可用"解决了（62 键注册表 + 31 处�
 | `user` | user | `mapPin` | map-point |
 | `alert` | danger-triangle | `chevDown` | alt-arrow-down |
 | `shield` | shield | `globe` | globe |
-| `gear` | settings | `navEntries` | bookmark |
-| `navNotes` | document-text | `navFiles` | folder |
-| `navMfa` | key | `navLan` | server |
-| `arrowRight` | arrow-right | `clipboard` | clipboard |
-| `file` | file-text | `folderOpen` | folder-open |
-| `refresh` | refresh | `download` | download-minimalistic |
-| `adjustments` | settings-minimalistic | `palette` | palette |
-| `info` | info-circle | `chevRight` | alt-arrow-right |
-| `database` | database | | |
+| `gear` | settings | `navEntries` | tag |
+| `navNotes` | notebook | `navFiles` | folder-with-files |
+| `navMfa` | lock-password | `navLan` | devices |
+| `navTunnel` | cloud-upload | `navBypass` | checklist-minimalistic |
+| `navCodex` | user-circle | `arrowRight` | arrow-right |
+| `clipboard` | clipboard | `file` | file-text |
+| `folderOpen` | folder-open | `refresh` | refresh |
+| `download` | download-minimalistic | `adjustments` | settings-minimalistic |
+| `palette` | palette | `info` | info-circle |
+| `chevRight` | alt-arrow-right | `database` | database |
+| `undo` | undo-left-round | `redo` | undo-right-round |
 
 ### 4.2 实心 1 键（Round Bold）
 

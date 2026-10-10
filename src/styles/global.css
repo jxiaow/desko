@@ -1299,6 +1299,56 @@ body {
 .rowlist > * + * { border-top: 1px solid var(--border); }
 .rowlist .skeleton-row { border: none; border-radius: 0; box-shadow: none; background: transparent; }
 
+/* 穿透页行卡壳：一层卡 + 细线分行。同页两组件共用这一层，
+   scoped 到组件就跨不进子组件，所以与 .rowlist/.card-grid 一起放骨架里。 */
+.tn-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  margin-bottom: var(--space-4);
+}
+.tn-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 9px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.tn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  height: 60px;
+}
+/* 行与行之间只剩发丝线；夹在中间的是备注行，两侧都要有线 */
+.tn-row + .tn-row,
+.tn-note + .tn-row { border-top: 1px solid var(--border); }
+.tn-label {
+  flex-shrink: 0;
+  width: 76px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.tn-value { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text); }
+.tn-state { font-size: var(--text-xs); color: var(--text-secondary) }
+.tn-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+}
+.tn-note.chip-warn { background: var(--warning-soft); color: var(--warning); }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+
 /* 浮岛网格（V5.2 收编轮 P3，C1/C1b）：卡片直接浮在画布上，不包 .rowlist 白面板，
    否则卡中卡。列数由容器宽自适应——minmax 取 280px 而非 spec 的 310px：默认窗内容宽 928px
    下 310 只落 2 列，与 spec 自己写的「3 列自适应」矛盾。

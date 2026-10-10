@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { fileshareApi } from '../../services/api/fileshare'
 import { errText } from '../../services/api/backup'
-import { readFileshareFeature } from '../../services/fileshareFeature'
 import {
   fsStatus,
   fsConfig,
@@ -22,7 +20,6 @@ import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
-const router = useRouter()
 
 const dirAdd = ref('')
 const targetIdx = ref(0)
@@ -150,11 +147,6 @@ async function importPaths(paths: string[]) {
 let unlistenDrag: (() => void) | undefined
 
 onMounted(async () => {
-  // 直敲 URL 也要拦：开关没开就没有这个页面
-  if (!(await readFileshareFeature())) {
-    await router.replace('/entries')
-    return
-  }
   fsRefresh()
   // 外部文件只能由原生层给路径：HTML5 的 dataTransfer 在这拿不到真实路径
   unlistenDrag = await getCurrentWebview().onDragDropEvent((event) => {
@@ -337,7 +329,7 @@ onUnmounted(() => unlistenDrag?.())
 
 <style scoped>
 /* Cascadia Code 的斜杠零和写意字形在 12px 小字下发斜扎眼，本页等宽一律 Consolas 优先 */
-.content-inner { --font-mono: Consolas, 'Cascadia Mono', monospace; }
+.content-inner { --font-mono: Consolas, 'Cascadia Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace; }
 
 .mono { font-family: var(--font-mono); }
 
@@ -370,7 +362,7 @@ onUnmounted(() => unlistenDrag?.())
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.06em;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   border-bottom: 1px solid var(--border);
 }
 .group-row {

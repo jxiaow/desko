@@ -14,8 +14,15 @@ pub const META_KEEP_REMOTE: &str = "keep_remote";
 /// 于是每同步一次就自我判定成一轮新备份，转圈往外推包。
 pub const STATE_FILE: &str = ".sync-state.json";
 
-pub const PKG_DIR: &str = "desko/packages";
-pub const ATT_DIR: &str = "desko/attachments";
+/// 云命名空间随当前档案走（多档案 D5/D9）：基名取自 `paths::cloud_base()`
+/// —— default → `desko`（原地可续既有云目录），其余 → `desko-<ns>`。
+/// 两档不同 ns ⇒ 不同远端目录，同步互不覆盖；跨机同 ns 则是特性（同一档案跟着走）。
+pub fn pkg_dir() -> String {
+    format!("{}/packages", crate::paths::cloud_base())
+}
+pub fn att_dir() -> String {
+    format!("{}/attachments", crate::paths::cloud_base())
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CloudCreds {
@@ -262,8 +269,8 @@ pub fn sync_core(
     }
 
     let client = client_for(cfg);
-    client.ensure_dir(PKG_DIR)?;
-    client.ensure_dir(ATT_DIR)?;
+    client.ensure_dir(&pkg_dir())?;
+    client.ensure_dir(&att_dir())?;
 
     let total = att_todo.len().max(1);
     let mut uploaded_atts = record.attachments.clone();
@@ -273,7 +280,7 @@ pub fn sync_core(
             (i as f64 / total as f64 * 70.0) as u8,
         );
         let bytes = std::fs::read(backups.join("attachments").join(format!("{}.enc", name)))?;
-        client.put(&format!("{}/{}.enc", ATT_DIR, name), &bytes)?;
+        client.put(&format!("{}/{}.enc", att_dir(), name), &bytes)?;
         uploaded_atts.push((**name).clone());
     }
 
@@ -285,13 +292,13 @@ pub fn sync_core(
             70 + (i as f64 / total_p as f64 * 20.0) as u8,
         );
         let bytes = std::fs::read(backups.join(name))?;
-        client.put(&format!("{}/{}", PKG_DIR, name), &bytes)?;
+        client.put(&format!("{}/{}", pkg_dir(), name), &bytes)?;
         uploaded_pkgs.push((**name).clone());
     }
 
     progress("云端轮转", 92);
     let mut remote: Vec<String> = client
-        .propfind(PKG_DIR)?
+        .propfind(&pkg_dir())?
         .into_iter()
         .map(|e| e.name)
         .filter(|n| n.starts_with("desko-") && n.ends_with(".dsbk"))
@@ -299,7 +306,7 @@ pub fn sync_core(
     remote.sort();
     remote.reverse();
     for old in remote.iter().skip(keep.max(1) as usize) {
-        client.delete(&format!("{}/{}", PKG_DIR, old))?;
+        client.delete(&format!("{}/{}", pkg_dir(), old))?;
     }
 
     progress("完成", 100);
@@ -313,7 +320,7 @@ pub fn sync_core(
 pub fn list_remote(cfg: &CloudCreds) -> Result<Vec<crate::webdav::DavEntry>, AppError> {
     // 还没同步过时目录不存在，那是空列表不是错误
     let mut entries: Vec<_> = client_for(cfg)
-        .propfind_opt(PKG_DIR)?
+        .propfind_opt(&pkg_dir())?
         .unwrap_or_default()
         .into_iter()
         .filter(|e| e.name.starts_with("desko-") && e.name.ends_with(".dsbk"))
@@ -331,7 +338,7 @@ pub fn download_package(cfg: &CloudCreds, backups: &Path, name: &str) -> Result<
     if local_pkg.exists() {
         return Ok(local_pkg);
     }
-    client_for(cfg).get(&format!("{}/{}", PKG_DIR, name), &local_pkg)?;
+    client_for(cfg).get(&format!("{}/{}", pkg_dir(), name), &local_pkg)?;
     Ok(local_pkg)
 }
 
@@ -342,13 +349,13 @@ pub fn fetch_attachments(
     manifest: &crate::backup::Manifest,
     progress: &dyn Fn(&str, u8),
 ) -> Result<(), AppError> {
-    let att_dir = backups.join("attachments");
-    std::fs::create_dir_all(&att_dir)?;
+    let local_dir = backups.join("attachments");
+    std::fs::create_dir_all(&local_dir)?;
     let client = client_for(cfg);
     let missing: Vec<_> = manifest
         .files
         .iter()
-        .filter(|f| !att_dir.join(format!("{}.enc", f.name)).exists())
+        .filter(|f| !local_dir.join(format!("{}.enc", f.name)).exists())
         .collect();
     let total = missing.len().max(1);
     for (i, f) in missing.iter().enumerate() {
@@ -357,8 +364,8 @@ pub fn fetch_attachments(
             (i as f64 / total as f64 * 60.0) as u8,
         );
         client.get(
-            &format!("{}/{}.enc", ATT_DIR, f.name),
-            &att_dir.join(format!("{}.enc", f.name)),
+            &format!("{}/{}.enc", att_dir(), f.name),
+            &local_dir.join(format!("{}.enc", f.name)),
         )?;
     }
     Ok(())
@@ -377,6 +384,17 @@ mod tests {
         assert!(normalize_server("http://a.com/dav").is_err()); // 只收 https
         assert!(normalize_server("a b").is_err()); // 域名里带空格
         assert!(normalize_server("").is_err());
+    }
+
+    /// 云命名空间随档案根走：远端目录基名必须 = 当前 `paths::cloud_base()`，
+    /// 换档案（不同 ns）即换目录，两档同步互不覆盖。
+    #[test]
+    fn cloud_dirs_follow_profile_namespace() {
+        let base = crate::paths::cloud_base();
+        assert_eq!(pkg_dir(), format!("{base}/packages"));
+        assert_eq!(att_dir(), format!("{base}/attachments"));
+        // 未 init 时兜底 base 是 desko（default 原地续旧云目录）
+        assert!(pkg_dir().starts_with("desko/"));
     }
 
     /// 造一个只有 packages/attachments 的假备份目录

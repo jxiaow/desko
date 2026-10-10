@@ -1,5 +1,5 @@
 [workspace]
-members = ["fileshare-core"]
+members = ["fileshare-core", "codex-core"]
 
 [package]
 name = "desko"
@@ -17,6 +17,10 @@ tauri-plugin-shell = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+# codex-core 里配额预警发原生通知、open_codex_config_toml 打开文件，
+# 两者都用 state::<Plugin>() 取实例，不在这里注册会在调用点 panic。
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.31", features = ["bundled", "backup"] }
@@ -35,6 +39,7 @@ open = "5"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 ureq = "2"
 fileshare-core = { path = "fileshare-core" }
+codex-core = { path = "codex-core" }
 
 [target.'cfg(windows)'.dependencies]
 # 版本与 tauri 传递依赖对齐（0.61），只给 session_lock 用
@@ -43,4 +48,16 @@ windows = { version = "0.61", features = [
     "Win32_System_LibraryLoader",
     "Win32_System_RemoteDesktop",
     "Win32_UI_WindowsAndMessaging",
+    # WNDCLASSEXW / RegisterClassExW 在 0.61 里是条目级门控，字段用到 HBRUSH，缺这条编不过
+    "Win32_Graphics_Gdi",
+    # bypass_service 探出口用 GetBestRoute2 / GetIfEntry2
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Networking_WinSock",
+    # tunnel_service 用 Job Object 兜住 cloudflared：desko 被强杀时不留孤儿隧道。
+    # CreateJobObjectW 在 0.61 里被 Win32_Security 门控（首参是 SECURITY_ATTRIBUTES），
+    # JOBOBJECT_EXTENDED_LIMIT_INFORMATION 被 Win32_System_Threading 门控（内含 IO_COUNTERS）。
+    "Win32_System_JobObjects",
+    "Win32_Security",
+    "Win32_System_Threading",
 ] }

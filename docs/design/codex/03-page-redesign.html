@@ -1,0 +1,959 @@
+<!doctype html>
+<!-- Codex 账号页重排对拍稿（2026-10-10 方向已定：导入进添加账号弹窗、凭据信息进设置、导出所选进批量 dock；
+     同一轮把账号行加高到三行事实，对齐上游账号卡的信息量）。
+     改完重跑：node scripts/mock-build.mjs docs/design/codex/03-page-redesign.src.html docs/design/codex/03-page-redesign.html
+     四帧：A 账号页重排后 / B 批量态 dock / C 添加账号·导入 tab / D 设置·通用 的 Codex 区块。
+     改动要点：一页一卡（删「本机与导入」卡）、卡头长句降成卡脚静音行、去掉 page-bar 的当前胶囊；
+     账号行 60→88px 三行——L1 身份+当前+等级，L2 Team/登录方式/用户 ID，L3 有效期/重置次数/更新于；
+     配额块收成两档 + 绝对重置时刻；其余字段（来源见 04 号文档）未取到就整段不占位。 -->
+<html lang="zh"><head><meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "HarmonyOS Sans SC", system-ui, sans-serif; }
+:root {
+  /* 间距系统 - 4px 基础 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* 圆角系统 */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  /* 控件档：图标按钮与小型按钮专用。原先它们跟着 --radius-sm 吃 6px，28px 的钮只占短边 21%，
+     是全场最方的一档（卡片 10/56≈18% 但有 14px 弹窗与胶囊压着）。抬到 9px≈32%，落回同一轨。
+     只给按钮——输入字段/标签/气泡仍走 --radius-sm，圆角轴一分为二，别互相牵连。 */
+  --radius-ib: 9px;
+  --radius: 10px;
+  --radius-md: 12px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 99px;
+
+  /* 字号阶梯：所有 UI 文本走这条轴，不再用 10.5/11.5/12.5/13.5/14.5/17.5 这种半像素。
+     编辑器/列表/标题等组件用一档；需要略大或略小时优先调字重，不挤字号档。
+     body 的 15px 走 --text-md。大方化轮整体上抬一档（docs/design/spacious/01-plan.md）。
+     2xs/3xl 是本轮补的两端：
+       · 2xs 只给"嵌在固定小盒子里的辅助信息"（键帽、单位、分组小标、卡脚标签），
+         正文与说明文字不许降到这一档以下（lighten 轮已把 11px 的说明文字抬到 12）；
+       · 3xl 只给"读一个大数值"的读数面（验证码），其余文本停在 2xl。 */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+
+  /* AppIcon :size 走这几档，不再 10/11/12/13/14/15/16/18/24 全谱散布。
+     组件传 :size 时按数值用，CSS 写 width/height 时引用 px 形式。
+     tile 档 18：34px 身份档里的图形，16 显小、20 顶边，与档内 favicon 的 22px 图取同一重量 */
+  --icon-xs-px: 12px;
+  --icon-sm-px: 14px;
+  --icon-md-px: 16px;
+  --icon-tile-px: 18px;
+  --icon-lg-px: 20px;
+  --icon-xl-px: 26px;
+
+  /* 批量浮底栏占位高度：所有列表容器底部要让出这块空间，避免最后一行被遮 */
+  --dock-clearance: 96px;
+
+  /* 过渡 */
+  --transition-fast: 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* 布局尺度 */
+  /* 侧栏三态（V5.2 收编轮 P2）：展开 208 / 图标轨 56 / 收起 0，
+     第三态不占宽，恢复入口在标题栏面包屑左侧 */
+  --sidebar-w: 208px;
+  --sidebar-rail-w: 56px;
+  /* 全屏书写栏宽度：正文越宽越要收着 */
+  --fs-max: 900px;
+  /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
+  --stream-max: 1200px;
+  /* 四个列表页的阅读列上限：按视口给，侧栏展开/折叠不跟着抖。
+     1235 常态窗与 1440 都还吃在 900 下限上，只有最大化（≥1920）才涨到 1120 */
+  --content-max: clamp(900px, calc(100vw - 800px), 1120px);
+  /* 小记卡片正文高度上限：短的小记按实际内容，长的由 JS 收在这里之上最近的整行边界 */
+  --memo-max-h: 144px;
+  --rail-w: 248px;
+  /* 小记顶栏的实际占位高度：粘性日期行和窄窗口下的浮层侧栏都要从它下面开始。
+     五页顶栏统一收编为 54px 定高后（V5.2 收编轮 P2），这里跟着 .page-bar 走 */
+  --stream-bar-h: 54px;
+  /* 容器窄于此值时收起右栏，筛选降级为浮层 */
+  --rail-min-room: 900px;
+
+}
+:root, [data-theme="paper"] {
+  /* 品牌缺省：墨蓝（accent 覆盖层会按 data-accent 重填这一族） */
+  --accent: #3d5a80;
+  --accent-hover: #31496a;
+  --accent-active: #283d58;
+  --accent-on: #ffffff;
+  --accent-soft: #e8eef4;
+  --accent-light: #d3dfeb;
+  --accent-ring: rgba(61, 90, 128, 0.16);
+  --text-brand: #31496a;
+
+  /* 面：净灰五档。相邻档差一档色温，不做条纹
+     --panel-bg 不用纯白：卡片占窗面七成，255 会把眼睛适应点亮到顶，旁边 #f1f1f0 就显脏。
+     分层本来就由 --border 那条发丝线担（它比画布还深 11 级），收 3 级不掉分离度。
+     --hover 跟着重切，保持与卡片底约 5 级差，否则行悬停没有反馈。 */
+  --bg: #f8f8f7;
+  --panel-bg: #fcfcfc;
+  --chrome-bg: rgba(248, 248, 247, 0.78);
+  --sunken: #f1f1f0;
+  --fill: #eaeae8;
+  --hover: #f7f7f7;
+  --active: #eeedeb;
+  --overlay: rgba(29, 28, 26, 0.42);
+
+  /* 文字：四级近中性，深字浅底一眼可读 */
+  --text: #333230;
+  --text-secondary: #4d4c49;
+  --text-muted: #6b6a66;
+  --text-faint: #95948e;
+
+  /* 描边：层级靠边框，不靠色块 */
+  --border: #e6e6e4;
+  --border-strong: #d5d5d2;
+  --border-subtle: #f1f1f0;
+  --border-hover: #d5d5d2;
+
+  /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
+  --text-url: #4d4c49;
+  --badge-cat-bg: #f0f0ee;
+  --badge-cat-border: #e6e6e4;
+  --badge-cat-text: #4d4c49;
+  --badge-ver-bg: #e8eef4;
+  --badge-ver-text: #31496a;
+
+  /* 投影带暖褐，纯灰投影在米底上会显脏 */
+  --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  /* 轻量化轮：行卡不再靠宽大软影浮起，阴影只留一丝贴地感，分层交还发丝描边 */
+  --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d5d5d2;
+  --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  /* 批量药丸浮在列表之上，要比任何弹层都高：弥散更深、落点更远，只用当前主题的字色 */
+  --shadow-dock: 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14);
+
+  /* 状态色：一个语义一档强度，浅色下全部 ≥4.5:1 可读写。
+     危险取砖红（与暖纸同色温），成功取青瓷苔绿，警告取土黄。 */
+  --danger: #a9443c;
+  --danger-on: #ffffff;
+  --danger-hover: #8c362f;
+  --danger-soft: #f7ece9;
+  --danger-border: #eacfc8;
+  --success: #3d7355;
+  --success-soft: #ecf3ee;
+  --warning: #96682a;
+  --warning-soft: #f6efdf;
+
+  /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
+  --sidebar-bg: #edecea;
+  --sidebar-hover: #e5e5e3;
+
+  /* 品牌标渐变 */
+  --brand-g1: #6c88aa;
+  --brand-g2: #3d5a80;
+  --brand-g3: #283d58;
+  --brand-knob: #ffffff;
+
+  /* 锁屏 */
+  --lock-wash-a: #fbfbfa;
+  --lock-wash-b: #edecea;
+  --lock-orb-1: rgba(61, 90, 128, 0.07);
+  --lock-orb-2: rgba(61, 90, 128, 0.045);
+
+  /* 毛玻璃底栏 */
+  --frost-bg: rgba(255, 255, 255, 0.86);
+  --frost-border: #e6e6e4;
+
+  /* 深色面：气泡与 toast */
+  --tip-bg: #26241f;
+  --tip-fg: #f2f0ea;
+  --toast-bg: #26241f;
+  --toast-ok: #9cc4ae;
+  --toast-err: #e09a92;
+  --toast-info: #93aecb;
+
+  /* 滚动条与选区 */
+  --scrollbar: rgba(29, 28, 26, 0.16);
+  --scrollbar-hover: rgba(29, 28, 26, 0.28);
+  --selection: rgba(61, 90, 128, 0.18);
+
+  /* 头像：按分类取色，六档同明度同彩度（v2 起只服务内容侧） */
+  --cat-1: #5f62b8;
+  --cat-2: #7b5fb0;
+  --cat-3: #a85b7d;
+  --cat-4: #937042;
+  --cat-5: #46806b;
+  --cat-6: #457f8a;
+  --cat-text: #ffffff;
+
+  /* 文件类型：保留 pdf红/doc蓝/xls绿 的通用认知，只降饱和 */
+  --ft-pdf: #b8564f;
+  --ft-doc: #4a6d9c;
+  --ft-sheet: #3f7a5e;
+  --ft-deck: #a0603a;
+  --ft-arch: #6a5a99;
+  --ft-code: #8a7534;
+  --ft-mark: #5e6672;
+  --ft-img: #9a5a72;
+  --ft-unk: #7a7f88;
+
+  /* 代码块：与界面同一只手的色温（配色收口轮：整族在 --sunken 上顶住 4.5，
+     注释/标点保持"最静"档但不再是看不见） */
+  --code-fg: #1a1b20;
+  --code-kw: #9d5275;
+  --code-str: #3a7256;
+  --code-num: #96593a;
+  --code-type: #7d6a2f;
+  --code-fn: #4a6d9c;
+  --code-var: #5e6672;
+  --code-com: #686a73;
+  --code-tag: #6a5a99;
+  --code-pun: #5e6168;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  /* Consolas 没有中文字形：不在它后面接 UI 中文族，等宽件里的中文（占位符、子路径、代码注释）
+     就会回落到宋体，和同一行的无衬线文字明显两种笔形 */
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="ink"] {
+  --accent: #89a8cd;
+  --accent-hover: #a2bcda;
+  --accent-active: #6f92ba;
+  --accent-on: #171614;
+  --accent-soft: rgba(137, 168, 205, 0.15);
+  --accent-light: rgba(137, 168, 205, 0.26);
+  --accent-ring: rgba(137, 168, 205, 0.32);
+  --text-brand: #adc6e2;
+
+  --bg: #1d1c1a;
+  --panel-bg: #22211e;
+  --chrome-bg: rgba(29, 28, 26, 0.86);
+  --sunken: #181716;
+  --fill: #2a2927;
+  --hover: #282622;
+  --active: #343431;
+  --overlay: rgba(0, 0, 0, 0.62);
+
+  --text: #e6e4de;
+  --text-secondary: #c7c4bd;
+  --text-muted: #aeaba4;
+  --text-faint: #9c9992;
+
+  --border: #30302d;
+  --border-strong: #434340;
+  --border-subtle: #252421;
+  --border-hover: #434340;
+
+  --text-url: #c9c6bf;
+  --badge-cat-bg: #252421;
+  --badge-cat-border: #30302d;
+  --badge-cat-text: #c7c4bd;
+  --badge-ver-bg: rgba(137, 168, 205, 0.15);
+  --badge-ver-text: #adc6e2;
+
+  /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* 轻量化轮：墨色行卡去掉 18px 大投影与外圈环，只留顶部高光一丝 */
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* 深色下纯黑弥散等于没有：药丸靠那圈高光边浮起来 */
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+
+  --danger: #e08079;
+  --danger-on: #181716;
+  --danger-hover: #ea9d97;
+  --danger-soft: #271a17;
+  --danger-border: #462924;
+  --success: #6fbf95;
+  --success-soft: #17211c;
+  --warning: #d9a95f;
+  --warning-soft: #241e13;
+
+  --sidebar-bg: #1a1917;
+  --sidebar-hover: #282622;
+
+  --brand-g1: #adc6e2;
+  --brand-g2: #89a8cd;
+  --brand-g3: #6f92ba;
+  --brand-knob: #1d1c1a;
+
+  --lock-wash-a: #1d1c1a;
+  --lock-wash-b: #22211e;
+  --lock-orb-1: rgba(137, 168, 205, 0.14);
+  --lock-orb-2: rgba(137, 168, 205, 0.07);
+
+  --frost-bg: rgba(34, 33, 30, 0.88);
+  --frost-border: #30302d;
+
+  /* 深色界面的浮层反过来：亮底暗字 */
+  --tip-bg: #efede8;
+  --tip-fg: #1d1c1a;
+  --toast-bg: #efede8;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #4c6c92;
+
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(137, 168, 205, 0.30);
+
+  /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
+  --cat-1: #8a8fd8;
+  --cat-2: #ab8de6;
+  --cat-3: #de8fb8;
+  --cat-4: #d8b078;
+  --cat-5: #6fc0a0;
+  --cat-6: #6fb8c8;
+  --cat-text: #171614;
+
+  --ft-pdf: #f0716b;
+  --ft-doc: #7aa2f7;
+  --ft-sheet: #3fb950;
+  --ft-deck: #e0a45c;
+  --ft-arch: #a98be8;
+  --ft-code: #e0c060;
+  --ft-mark: #8c94a6;
+  --ft-img: #e08bb8;
+  --ft-unk: #6b7280;
+
+  --code-fg: #e4e2dc;
+  --code-kw: #de9ab8;
+  --code-str: #6fd0a8;
+  --code-num: #e0b072;
+  --code-type: #e0c060;
+  --code-fn: #8aa8e0;
+  --code-var: #b6b2a8;
+  --code-com: #9d9991;
+  --code-tag: #ab8de6;
+  --code-pun: #8c94a6;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="paper"][data-accent="ink"] {
+  --accent: #3d5a80; --accent-hover: #31496a; --accent-active: #283d58;
+  --accent-on: #ffffff; --accent-soft: #e8eef4; --accent-light: #d3dfeb;
+  --accent-ring: rgba(61, 90, 128, 0.16); --text-brand: #31496a;
+  --badge-ver-bg: #e8eef4; --badge-ver-text: #31496a;
+  --brand-g1: #6c88aa; --brand-g2: #3d5a80; --brand-g3: #283d58;
+  --lock-orb-1: rgba(61, 90, 128, 0.07); --lock-orb-2: rgba(61, 90, 128, 0.045);
+  --selection: rgba(61, 90, 128, 0.18); --toast-info: #93aecb;
+
+}
+[data-theme="ink"][data-accent="ink"] {
+  --accent: #89a8cd; --accent-hover: #a2bcda; --accent-active: #6f92ba;
+  --accent-on: #171614; --accent-soft: rgba(137, 168, 205, 0.15); --accent-light: rgba(137, 168, 205, 0.26);
+  --accent-ring: rgba(137, 168, 205, 0.32); --text-brand: #adc6e2;
+  --badge-ver-bg: rgba(137, 168, 205, 0.15); --badge-ver-text: #adc6e2;
+  --brand-g1: #adc6e2; --brand-g2: #89a8cd; --brand-g3: #6f92ba;
+  --lock-orb-1: rgba(137, 168, 205, 0.14); --lock-orb-2: rgba(137, 168, 205, 0.07);
+  --selection: rgba(137, 168, 205, 0.30); --toast-info: #4c6c92;
+
+}
+:root {
+  --sidebar-border: var(--border);
+  --sidebar-active: var(--accent-soft);
+  --sidebar-text: var(--text-secondary);
+  --sidebar-text-active: var(--accent);
+  --ft-bg: var(--fill);
+  --code-bg: var(--sunken);
+  --code-bd: var(--border);
+
+  --bg-app: var(--bg);
+  --bg-surface: var(--panel-bg);
+  --bg-surface-hover: var(--hover);
+  --bg-surface-active: var(--active);
+  /* 吸顶件/浮岛上的控件悬停填充：不吃 --hover。--hover 是按「行悬停在卡面上」切的浅灰，
+     而页栏铺的是画布 --sunken（纸 #f1f1f0），比 --hover（#f7f7f7）还深一档——
+     指过去等于把钮点亮，实测与周边只差 1.055:1，看不出是反馈。
+     改从文字色反推：纸底压暗、墨底提亮，同一条配方两套主题自适应（实测 1.17:1 / 1.25:1）。 */
+  --hover-chrome: color-mix(in srgb, var(--text) 9%, transparent);
+  --bg-sidebar: var(--sidebar-bg);
+  --border-focus: var(--accent);
+  --text-primary: var(--text);
+
+  /* 主列表页规格引入的语义名，一律 var() 指到既有物理槽，零新增 hex */
+  /* 画布底：两团 accent 光晕压在 sunken 上，几何按视口定位（.app-root 不滚动，天然 fixed）。
+     凡是浮在这层画布上的吸顶件（.page-bar / 小记 .day-head）必须复用同一条配方 +
+     background-attachment: fixed，否则平铺半透明底会把光晕压掉一档，静止时就显出一条亮带 */
+  --canvas-bg:
+    radial-gradient(760px 460px at 82% -120px, var(--lock-orb-1), transparent 70%),
+    radial-gradient(620px 420px at 6% -100px, var(--lock-orb-2), transparent 68%),
+    var(--sunken);
+  --bg-toolbar: var(--canvas-bg);
+  --bg-popover: var(--panel-bg);
+  --bg-tag-default: var(--badge-cat-bg);
+  --bg-mono-chip: var(--sunken);
+  --bg-statusbar: var(--panel-bg);
+  --border-line: var(--border);
+  --border-card-hover: var(--border-hover);
+  --border-input: var(--border);
+  --border-divider: var(--border-subtle);
+  --text-title: var(--text);
+  --text-body: var(--text-secondary);
+  /* --shadow-card 为主题槽位（轻量化轮起只给贴地一丝）：行卡分层靠发丝描边，
+     阴影抬升档（--shadow-card-hover）已退役，hover 反馈改背景+描边显色 */
+  --shadow-popover: var(--shadow-pop);
+  --radius-card: var(--radius-lg);
+  --radius-badge: var(--radius);
+  --radius-menu: var(--radius-lg);
+  --radius-tag: var(--radius-sm);
+  --radius-btn: var(--radius);
+
+}
+body { background: #6f6f6f; padding: 28px 28px 40px; display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
+.cap { color: #ededed; font-size: 13px; font-weight: 600; letter-spacing: .04em; margin-bottom: 10px; }
+.cap small { display: block; margin-top: 4px; font-weight: 400; font-size: 12px; color: #bdbdbd; }
+
+.win { position: relative; width: 1040px; height: 670px; background: var(--bg-toolbar);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+  box-shadow: var(--shadow-pop); display: flex; flex-direction: column; }
+
+/* 窗框：42 标题条 + 56 图标栏，与真程序同尺寸 */
+.tb { flex-shrink: 0; height: 42px; display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); border-bottom: 1px solid var(--border-subtle); }
+.tb h1 { font-size: var(--text-base); font-weight: 600; color: var(--text); }
+.wctl { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--text-muted); }
+.wctl i { width: 26px; height: 26px; border-radius: var(--radius-sm); display: inline-flex;
+  align-items: center; justify-content: center; font-style: normal; }
+.body { flex: 1; min-height: 0; display: flex; }
+.rail { flex-shrink: 0; width: 56px; background: var(--sidebar-bg); border-right: 1px solid var(--sidebar-border);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; }
+.nav { width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center;
+  justify-content: center; color: var(--text-muted); }
+.nav.on { background: var(--panel-bg); color: var(--accent); box-shadow: var(--shadow-card); }
+.main { flex: 1; min-width: 0; overflow: hidden; padding: 0 var(--space-5) var(--space-5); }
+
+/* 页栏 54px：本页只剩右侧动作组（「当前」不再在这条里重复一遍） */
+.pagebar { height: 54px; display: flex; align-items: center; gap: var(--space-2); }
+.chip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
+  border-radius: var(--radius-pill); background: var(--panel-bg); border: 1px solid var(--border);
+  font-size: var(--text-xs); color: var(--text-secondary); }
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
+.pbtn, .sbtn { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px;
+  border-radius: var(--radius-pill); font-family: inherit; font-size: var(--text-xs); font-weight: 600;
+  border: 1px solid transparent; cursor: default; white-space: nowrap; }
+.pbtn { background: var(--accent); color: var(--accent-on); box-shadow: 0 4px 14px -3px var(--accent); }
+.sbtn { background: var(--panel-bg); color: var(--text-secondary); border-color: var(--border); font-weight: 500; }
+.pb-r { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+
+/* 一层卡 + 发丝分行；其余页行轨 60px，账号行按信息量加高到 88px */
+.card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card); }
+.head { height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  border-bottom: 1px solid var(--border); font-size: var(--text-xs); font-weight: 600;
+  letter-spacing: .06em; color: var(--text-muted); }
+.cnt { margin-left: auto; font-weight: 500; letter-spacing: 0; color: var(--text-faint); font-size: var(--text-2xs); }
+.row { display: flex; align-items: center; gap: 10px; padding: 0 16px; height: 60px; }
+.row.acc { height: 88px; gap: 12px; }
+.row + .row { border-top: 1px solid var(--border); }
+.row.cur, .row.picked { background: var(--accent-soft); }
+.dot2 { width: 34px; height: 34px; flex-shrink: 0; border-radius: var(--radius-ib); display: inline-flex;
+  align-items: center; justify-content: center; font-size: var(--text-sm); font-weight: 600;
+  background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text-muted); }
+.dot2.cur { background: var(--accent); color: var(--accent-on); }
+.pick { width: 18px; height: 18px; flex-shrink: 0; border-radius: 5px; display: inline-flex;
+  align-items: center; justify-content: center; border: 1px solid var(--border-strong); fontWeight: 600; }
+.pick.on { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+.mid { flex: 1; min-width: 0; }
+.l1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.mail { font-size: var(--text-sm); font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { font-size: var(--text-2xs); font-weight: 600; line-height: 18px; padding: 1px 9px; border-radius: var(--radius-pill);
+  background: var(--fill); color: var(--text-secondary); }
+.tag.on { background: var(--accent-soft); color: var(--accent); }
+.tag.warn { background: var(--warning-soft); color: var(--warning); }
+/* 等级徽标：等宽大写，和状态 chip 拉开形制 */
+.tier { font-family: var(--font-mono); font-size: var(--text-2xs); font-weight: 700; letter-spacing: .06em;
+  line-height: 18px; padding: 1px 7px; border-radius: var(--radius-xs);
+  background: var(--fill); color: var(--text-secondary); }
+/* 事实行：L2 是身份事实（Team/登录方式/用户 ID），L3 是时效事实（有效期/重置/更新于） */
+.l2, .l3 { margin-top: 4px; font-size: var(--text-xs);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.l2 { color: var(--text-muted); }
+.l3 { color: var(--text-secondary); }
+.num { font-family: var(--font-mono); font-weight: 600; color: var(--text); }
+
+/* 配额：两档并成一列，条 + 百分比 + 绝对重置时刻 */
+.qw { flex-shrink: 0; width: 196px; display: flex; flex-direction: column; gap: 4px; }
+.q { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
+.qt { width: 16px; font-family: var(--font-mono); color: var(--text-faint); }
+.qb { flex: 1; height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; }
+.qb i { display: block; height: 100%; background: var(--success); border-radius: 2px; }
+.q.mid .qb i { background: var(--warning); }
+.q.low .qb i { background: var(--danger); }
+.qn { width: 32px; text-align: right; font-family: var(--font-mono); }
+.qw .when { font-size: var(--text-2xs); color: var(--text-faint) }
+
+.acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.ab { height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 11px; flex-shrink: 0;
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: inherit; font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary); }
+.ab.go { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+.ab.only { width: 28px; padding: 0; justify-content: center; }
+.curmark { width: 28px; display: flex; justify-content: center; color: var(--accent) }
+
+/* 卡脚静音行：原来的卡头长句搬到这里，且只留「不代你重启」这半句 */
+.group-note { display: flex; align-items: center; gap: 6px; padding: 9px 16px;
+  border-top: 1px solid var(--border); font-size: var(--text-xs); color: var(--text-muted); }
+
+/* 批量底栏 */
+.dock { margin-top: var(--space-3); height: 46px; display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius-pill); box-shadow: var(--shadow-pop); }
+.dock .n { font-size: var(--text-xs); color: var(--text-secondary); font-weight: 600; margin-right: 4px }
+.db { height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 11px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--panel-bg);
+  font-family: inherit; font-size: var(--text-xs); color: var(--text-secondary); }
+.db.danger { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft) }
+.dock .sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px }
+.dock .end { margin-left: auto }
+.hint { margin: 10px 2px 0; font-size: var(--text-xs); color: #cfcfcf; }
+.hint b { color: #fff }
+
+/* 弹窗 */
+.scrim { position: absolute; inset: 0; background: rgba(20,20,20,.34); display: flex;
+  align-items: center; justify-content: center; }
+.dlg { width: 520px; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); overflow: hidden; }
+.dlg-h { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border); font-size: var(--text-sm); font-weight: 600; color: var(--text); }
+.dlg-h .x { margin-left: auto; color: var(--text-muted); }
+.dlg-b { padding: var(--space-4); display: flex; flex-direction: column; }
+.seg { align-self: flex-start; display: inline-flex; gap: 2px; padding: 2px; background: var(--fill);
+  border-radius: var(--radius-pill); }
+.seg span { height: 28px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: var(--radius-pill);
+  font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); }
+.seg span.on { background: var(--panel-bg); color: var(--text); box-shadow: var(--shadow-card); }
+.lead { margin: 12px 0 0; font-size: var(--text-xs); line-height: 1.7; color: var(--text-muted); }
+.frow { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.mono { font-family: var(--font-mono); }
+.pathline { margin-top: 12px; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px;
+  background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.pathline .k { flex-shrink: 0; font-size: var(--text-2xs); color: var(--text-faint) }
+.pathline .v { flex: 1; min-width: 0; font-size: var(--text-xs); color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.dlg-f { display: flex; align-items: center; height: 46px; padding: 0 var(--space-4);
+  border-top: 1px solid var(--border); background: var(--sunken); }
+.dlg-f .ab { margin-left: auto }
+.fr { margin-left: auto; display: flex; align-items: center; gap: 8px }
+
+/* 重置 5 小时额度：确认与明细同一个弹窗（对齐上游：入口 → 同一弹窗内含明细） */
+.rcd { width: 420px }
+.rmeta { font-size: var(--text-xs); line-height: 1.7; color: var(--text-secondary) }
+.rmeta b { font-weight: 600; color: var(--text) }
+.rexp { margin-top: 10px; display: flex; align-items: center; gap: 6px;
+  font-size: var(--text-xs); color: var(--text-secondary) }
+.rdet { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle) }
+.rdet-t { font-size: var(--text-2xs); font-weight: 600; letter-spacing: .04em; color: var(--text-muted) }
+.rlist { margin-top: 8px; display: flex; flex-direction: column; gap: 6px;
+  max-height: 168px; overflow: auto }
+.rcredit { display: flex; align-items: center; gap: 8px; line-height: 18px;
+  font-size: var(--text-xs); color: var(--text-secondary) }
+.rcredit .rs { flex-shrink: 0; font-size: var(--text-2xs); font-weight: 600; line-height: 18px;
+  padding: 1px 8px; border-radius: var(--radius-pill); background: var(--fill); color: var(--text-secondary) }
+.rcredit .rs.ok { background: var(--success-soft); color: var(--success) }
+.rcredit .t { font-family: var(--font-mono) }
+.rempty { font-size: var(--text-xs); color: var(--text-muted) }
+.rerr { font-size: var(--text-xs); color: var(--danger) }
+.ab.no { background: var(--danger); border-color: var(--danger); color: var(--danger-on) }
+/* 禁用只洗面：字色留在 --text-secondary，一眼点不动但读得清 */
+.ab.off { background: var(--fill); border-color: var(--border); color: var(--text-secondary);
+  box-shadow: none; cursor: not-allowed }
+.win.plain { height: auto; background: transparent; border: none; box-shadow: none; gap: 18px }
+
+/* 设置弹窗：左导航 + 右面板 */
+.sdlg { width: 640px; height: 480px; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); overflow: hidden; display: flex; }
+.snav { width: 148px; flex-shrink: 0; background: var(--sunken); border-right: 1px solid var(--border);
+  padding: 12px 8px; display: flex; flex-direction: column; gap: 2px }
+.snav .t { height: 30px; display: flex; align-items: center; padding: 0 10px; border-radius: var(--radius-sm);
+  font-size: var(--text-xs); color: var(--text-secondary) }
+.snav .t.on { background: var(--panel-bg); color: var(--text); font-weight: 600; box-shadow: var(--shadow-card) }
+.spane { flex: 1; min-width: 0; overflow: hidden; padding: 14px 16px }
+.sitem { display: flex; align-items: center; gap: 14px; padding: 10px 0 }
+.sitem + .sitem { border-top: 1px solid var(--border-subtle) }
+.sinfo { flex: 1; min-width: 0 }
+.sname { display: block; font-size: var(--text-sm); color: var(--text) }
+.sdesc { display: block; margin-top: 2px; font-size: var(--text-xs); color: var(--text-muted); line-height: 1.5 }
+.sw { width: 34px; height: 20px; border-radius: var(--radius-pill); background: var(--border-strong);
+  position: relative; flex-shrink: 0 }
+.sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--panel-bg); box-shadow: var(--shadow-xs) }
+.sw.on { background: var(--accent) }
+.sw.on::after { left: 16px }
+.spath { margin-top: 6px; display: flex; align-items: center; gap: 8px }
+.spath code { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--text-2xs);
+  color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.sec { margin: 4px 0 0; font-size: var(--text-2xs); font-weight: 600; letter-spacing: .06em; color: var(--text-faint) }
+</style></head>
+<body>
+
+<div class="frame">
+  <div class="cap">A 账号页重排后：一页一卡，「本机与导入」整卡撤走<small>行轨落宿主 60px；卡头只留「账号 · 2」；「当前」只在行上标一次；那句长提示降成卡脚一行静音字。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="3"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 11C2 7.22876 2 5.34315 3.17157 4.17157C4.34315 3 6.22876 3 10 3H14C17.7712 3 19.6569 3 20.8284 4.17157C22 5.34315 22 7.22876 22 11V13C22 16.7712 22 18.6569 20.8284 19.8284C19.6569 21 17.7712 21 14 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V11Z"/><path d="M15 21L15 3"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3 8C3 5.17157 3 3.75736 3.87868 2.87868C4.75736 2 6.17157 2 9 2H15C17.8284 2 19.2426 2 20.1213 2.87868C21 3.75736 21 5.17157 21 8V16C21 18.8284 21 20.2426 20.1213 21.1213C19.2426 22 17.8284 22 15 22H9C6.17157 22 4.75736 22 3.87868 21.1213C3 20.2426 3 18.8284 3 16V8Z"/><path d="M8 2.5V22"/><path d="M2 12H4"/><path d="M2 16H4"/><path d="M2 8H4"/><path d="M11.5 6.5H16.5"/><path d="M11.5 10H16.5"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4.72848 16.1369C3.18295 14.5914 2.41018 13.8186 2.12264 12.816C1.83509 11.8134 2.08083 10.7485 2.57231 8.61875L2.85574 7.39057C3.26922 5.59881 3.47597 4.70292 4.08944 4.08944C4.70292 3.47597 5.59881 3.26922 7.39057 2.85574L8.61875 2.57231C10.7485 2.08083 11.8134 1.83509 12.816 2.12264C13.8186 2.41018 14.5914 3.18295 16.1369 4.72848L17.9665 6.55812C20.6555 9.24711 22 10.5916 22 12.2623C22 13.933 20.6555 15.2775 17.9665 17.9665C15.2775 20.6555 13.933 22 12.2623 22C10.5916 22 9.24711 20.6555 6.55812 17.9665L4.72848 16.1369Z"/><circle cx="8.607" cy="8.879" r="2" transform="rotate(-45 8.607 8.879)"/><path d="M11.5417 18.5L18.5208 11.5208"/></g></svg></div>
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M18 10L13 10"/><path d="M19.9998 6.23751C19.9989 5.94017 19.9946 5.76263 19.9743 5.60842C19.7971 4.26222 18.7378 3.2029 17.3916 3.02567C17.1966 3 16.9644 3 16.5 3H10"/><path d="M2 6.94975C2 6.06722 2 5.62595 2.06935 5.25839C2.37464 3.64031 3.64031 2.37464 5.25839 2.06935C5.62595 2 6.06722 2 6.94975 2C7.33642 2 7.52976 2 7.71557 2.01738C8.51665 2.09229 9.27652 2.40704 9.89594 2.92051C10.0396 3.03961 10.1763 3.17633 10.4497 3.44975L11 4C11.8158 4.81578 12.2237 5.22367 12.7121 5.49543C12.9804 5.64471 13.2651 5.7626 13.5604 5.84678C14.0979 6 14.6747 6 15.8284 6H16.2021C17.9811 6 19.159 6 19.9998 6.23751C20.4031 6.35144 20.7288 6.52002 21.0062 6.76946C21.0849 6.84024 21.1598 6.91514 21.2305 6.99383C22 7.84935 22 9.16554 22 11.7979V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V6.94975Z"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M6.00879 8C6.04466 5.52043 6.22859 4.11466 7.17167 3.17157C8.34324 2 10.2289 2 14.0001 2C17.7713 2 19.657 2 20.8285 3.17157C22.0001 4.34315 22.0001 6.22876 22.0001 10V14C22.0001 17.7712 22.0001 19.6569 20.8285 20.8284C19.657 22 17.7713 22 14.0001 22H12"/><path d="M2 14.5C2 13.0955 2 12.3933 2.33706 11.8889C2.48298 11.6705 2.67048 11.483 2.88886 11.3371C3.39331 11 4.09554 11 5.5 11C6.90446 11 7.60669 11 8.11114 11.3371C8.32952 11.483 8.51702 11.6705 8.66294 11.8889C9 12.3933 9 13.0955 9 14.5V18.5C9 19.9045 9 20.6067 8.66294 21.1111C8.51702 21.3295 8.32952 21.517 8.11114 21.6629C7.60669 22 6.90446 22 5.5 22C4.09554 22 3.39331 22 2.88886 21.6629C2.67048 21.517 2.48298 21.3295 2.33706 21.1111C2 20.6067 2 19.9045 2 18.5V14.5Z"/><path d="M17 19H12"/></g></svg></div>
+        <div class="nav on"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="9" r="3"/><circle cx="12" cy="12" r="10"/><path d="M17.9691 20C17.81 17.1085 16.9247 15 11.9999 15C7.07521 15 6.18991 17.1085 6.03076 20"/></g></svg></div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.67981 13L3.67981 11.3333C3.67981 6.73096 7.4402 3 12.0789 3C15.1178 3 17.7799 4.60136 19.2545 7M2 11.3333L3.67981 13L5.35962 11.3333"/><path d="M20.3139 11V12.6667C20.3139 17.269 16.5391 21 11.8827 21C8.83213 21 6.15995 19.3986 4.67969 17M22.0001 12.6667L20.3139 11L18.6277 12.6667"/></g></svg>刷新配额</span>
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"/><path d="M8.5 12.5L10.5 14.5L15.5 9.5"/></g></svg>选择</span>
+            <span class="pbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4 12L20 12"/><path d="M12.0204 4L12.0205 20.0003"/></g></svg>添加账号</span>
+          </div>
+        </div>
+
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个</span></div>
+          <div class="row acc cur">
+            <span class="dot2 cur">主</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">主力</span><span class="tag on">当前</span><span class="tier">PRO</span></div>
+              <div class="l2">Team Name：个人账户 · 使用 OAuth 登录 · 用户 ID：<span class="mono">9f6305d7…</span></div>
+              <div class="l3">有效期至 2026-11-10 10:18 · 重置 <span class="num">2</span> 次 · 更新于 10-08 09:58</div>
+            </div>
+            <div class="qw">
+              <div class="q"><span class="qt">5h</span><span class="qb"><i style="width:82%"></i></span><span class="qn">82%</span></div>
+              <div class="q"><span class="qt">周</span><span class="qb"><i style="width:60%"></i></span><span class="qn">60%</span></div>
+              <div class="when">周重置 4d 19h · 10/15 09:42</div>
+            </div>
+            <div class="acts">
+              <span class="curmark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13L9 17L19 7"/></svg></span>
+              <span class="ab only"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></g></svg></span>
+            </div>
+          </div>
+          <div class="row acc">
+            <span class="dot2">K</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">key@e2e.dev</span><span class="tag">API Key</span><span class="tier">PLUS</span></div>
+              <div class="l2">供应商：OpenAI · Base URL：<span class="mono">https://api.openai.com/v1</span></div>
+              <div class="l3">标签：工作 / 备用 · 更新于 10-08 09:20</div>
+            </div>
+            <div class="qw">
+              <div class="q low"><span class="qt">5h</span><span class="qb"><i style="width:18%"></i></span><span class="qn">18%</span></div>
+              <div class="q"><span class="qt">周</span><span class="qb"><i style="width:90%"></i></span><span class="qn">90%</span></div>
+              <div class="when">5h 重置 2h · 10/10 16:00</div>
+            </div>
+            <div class="acts">
+              <span class="ab go">切换</span>
+              <span class="ab only"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></g></svg></span>
+            </div>
+          </div>
+          <div class="group-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="10"/><path d="M12 17V11"/><path d="M12 8H12.0001"/></g></svg>切号只改写官方凭据文件，desko 不代你重启 Codex。</div>
+        </section>
+        <div class="hint">卡高 38 + 88 + 88 + 34 = <b>248px</b>；页栏 54；下方留白是短列表的常态，不再靠第二张卡填</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">B 批量态：导出所选从常驻灰钮搬进 dock<small>它本来就是选择态动作；单条导出仍在 ⋯ 菜单里，不与行内快捷钮重复。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="3"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 11C2 7.22876 2 5.34315 3.17157 4.17157C4.34315 3 6.22876 3 10 3H14C17.7712 3 19.6569 3 20.8284 4.17157C22 5.34315 22 7.22876 22 11V13C22 16.7712 22 18.6569 20.8284 19.8284C19.6569 21 17.7712 21 14 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V11Z"/><path d="M15 21L15 3"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3 8C3 5.17157 3 3.75736 3.87868 2.87868C4.75736 2 6.17157 2 9 2H15C17.8284 2 19.2426 2 20.1213 2.87868C21 3.75736 21 5.17157 21 8V16C21 18.8284 21 20.2426 20.1213 21.1213C19.2426 22 17.8284 22 15 22H9C6.17157 22 4.75736 22 3.87868 21.1213C3 20.2426 3 18.8284 3 16V8Z"/><path d="M8 2.5V22"/><path d="M2 12H4"/><path d="M2 16H4"/><path d="M2 8H4"/><path d="M11.5 6.5H16.5"/><path d="M11.5 10H16.5"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4.72848 16.1369C3.18295 14.5914 2.41018 13.8186 2.12264 12.816C1.83509 11.8134 2.08083 10.7485 2.57231 8.61875L2.85574 7.39057C3.26922 5.59881 3.47597 4.70292 4.08944 4.08944C4.70292 3.47597 5.59881 3.26922 7.39057 2.85574L8.61875 2.57231C10.7485 2.08083 11.8134 1.83509 12.816 2.12264C13.8186 2.41018 14.5914 3.18295 16.1369 4.72848L17.9665 6.55812C20.6555 9.24711 22 10.5916 22 12.2623C22 13.933 20.6555 15.2775 17.9665 17.9665C15.2775 20.6555 13.933 22 12.2623 22C10.5916 22 9.24711 20.6555 6.55812 17.9665L4.72848 16.1369Z"/><circle cx="8.607" cy="8.879" r="2" transform="rotate(-45 8.607 8.879)"/><path d="M11.5417 18.5L18.5208 11.5208"/></g></svg></div>
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M18 10L13 10"/><path d="M19.9998 6.23751C19.9989 5.94017 19.9946 5.76263 19.9743 5.60842C19.7971 4.26222 18.7378 3.2029 17.3916 3.02567C17.1966 3 16.9644 3 16.5 3H10"/><path d="M2 6.94975C2 6.06722 2 5.62595 2.06935 5.25839C2.37464 3.64031 3.64031 2.37464 5.25839 2.06935C5.62595 2 6.06722 2 6.94975 2C7.33642 2 7.52976 2 7.71557 2.01738C8.51665 2.09229 9.27652 2.40704 9.89594 2.92051C10.0396 3.03961 10.1763 3.17633 10.4497 3.44975L11 4C11.8158 4.81578 12.2237 5.22367 12.7121 5.49543C12.9804 5.64471 13.2651 5.7626 13.5604 5.84678C14.0979 6 14.6747 6 15.8284 6H16.2021C17.9811 6 19.159 6 19.9998 6.23751C20.4031 6.35144 20.7288 6.52002 21.0062 6.76946C21.0849 6.84024 21.1598 6.91514 21.2305 6.99383C22 7.84935 22 9.16554 22 11.7979V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V6.94975Z"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M6.00879 8C6.04466 5.52043 6.22859 4.11466 7.17167 3.17157C8.34324 2 10.2289 2 14.0001 2C17.7713 2 19.657 2 20.8285 3.17157C22.0001 4.34315 22.0001 6.22876 22.0001 10V14C22.0001 17.7712 22.0001 19.6569 20.8285 20.8284C19.657 22 17.7713 22 14.0001 22H12"/><path d="M2 14.5C2 13.0955 2 12.3933 2.33706 11.8889C2.48298 11.6705 2.67048 11.483 2.88886 11.3371C3.39331 11 4.09554 11 5.5 11C6.90446 11 7.60669 11 8.11114 11.3371C8.32952 11.483 8.51702 11.6705 8.66294 11.8889C9 12.3933 9 13.0955 9 14.5V18.5C9 19.9045 9 20.6067 8.66294 21.1111C8.51702 21.3295 8.32952 21.517 8.11114 21.6629C7.60669 22 6.90446 22 5.5 22C4.09554 22 3.39331 22 2.88886 21.6629C2.67048 21.517 2.48298 21.3295 2.33706 21.1111C2 20.6067 2 19.9045 2 18.5V14.5Z"/><path d="M17 19H12"/></g></svg></div>
+        <div class="nav on"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="9" r="3"/><circle cx="12" cy="12" r="10"/><path d="M17.9691 20C17.81 17.1085 16.9247 15 11.9999 15C7.07521 15 6.18991 17.1085 6.03076 20"/></g></svg></div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.67981 13L3.67981 11.3333C3.67981 6.73096 7.4402 3 12.0789 3C15.1178 3 17.7799 4.60136 19.2545 7M2 11.3333L3.67981 13L5.35962 11.3333"/><path d="M20.3139 11V12.6667C20.3139 17.269 16.5391 21 11.8827 21C8.83213 21 6.15995 19.3986 4.67969 17M22.0001 12.6667L20.3139 11L18.6277 12.6667"/></g></svg>刷新配额</span>
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13L9 17L19 7"/></svg>退出选择</span>
+            <span class="pbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4 12L20 12"/><path d="M12.0204 4L12.0205 20.0003"/></g></svg>添加账号</span>
+          </div>
+        </div>
+
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个 · 已选 2</span></div>
+          <div class="row acc cur picked">
+            <span class="pick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13L9 17L19 7"/></svg></span>
+            <span class="dot2 cur">主</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">主力</span><span class="tag on">当前</span><span class="tier">PRO</span></div>
+              <div class="l2">Team Name：个人账户 · 使用 OAuth 登录 · 用户 ID：<span class="mono">9f6305d7…</span></div>
+              <div class="l3">有效期至 2026-11-10 10:18 · 重置 <span class="num">2</span> 次 · 更新于 10-08 09:58</div>
+            </div>
+            <div class="qw">
+              <div class="q"><span class="qt">5h</span><span class="qb"><i style="width:82%"></i></span><span class="qn">82%</span></div>
+              <div class="q"><span class="qt">周</span><span class="qb"><i style="width:60%"></i></span><span class="qn">60%</span></div>
+              <div class="when">周重置 4d 19h · 10/15 09:42</div>
+            </div>
+            <div class="acts"><span class="ab only"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></g></svg></span></div>
+          </div>
+          <div class="row acc picked">
+            <span class="pick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13L9 17L19 7"/></svg></span>
+            <span class="dot2">K</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">key@e2e.dev</span><span class="tag">API Key</span><span class="tier">PLUS</span></div>
+              <div class="l2">供应商：OpenAI · Base URL：<span class="mono">https://api.openai.com/v1</span></div>
+              <div class="l3">标签：工作 / 备用 · 更新于 10-08 09:20</div>
+            </div>
+            <div class="qw">
+              <div class="q low"><span class="qt">5h</span><span class="qb"><i style="width:18%"></i></span><span class="qn">18%</span></div>
+              <div class="q"><span class="qt">周</span><span class="qb"><i style="width:90%"></i></span><span class="qn">90%</span></div>
+              <div class="when">5h 重置 2h · 10/10 16:00</div>
+            </div>
+            <div class="acts"><span class="ab only"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></g></svg></span></div>
+          </div>
+          <div class="group-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="10"/><path d="M12 17V11"/><path d="M12 8H12.0001"/></g></svg>切号只改写官方凭据文件，desko 不代你重启 Codex。</div>
+        </section>
+
+        <div class="dock">
+          <span class="n">已选 2 条</span>
+          <span class="db"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"/><path d="M8.5 12.5L10.5 14.5L15.5 9.5"/></g></svg>全选</span>
+          <span class="db"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.67981 13L3.67981 11.3333C3.67981 6.73096 7.4402 3 12.0789 3C15.1178 3 17.7799 4.60136 19.2545 7M2 11.3333L3.67981 13L5.35962 11.3333"/><path d="M20.3139 11V12.6667C20.3139 17.269 16.5391 21 11.8827 21C8.83213 21 6.15995 19.3986 4.67969 17M22.0001 12.6667L20.3139 11L18.6277 12.6667"/></g></svg>刷新配额</span>
+          <span class="db"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3 15C3 17.8284 3 19.2426 3.87868 20.1213C4.75736 21 6.17157 21 9 21H15C17.8284 21 19.2426 21 20.1213 20.1213C21 19.2426 21 17.8284 21 15"/><path d="M12 3V16M8 11.625L12 16L16 11.625"/></g></svg>导出所选 JSON</span>
+          <span class="sep"></span>
+          <span class="db danger"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M9.1709 4C9.58273 2.83481 10.694 2 12.0002 2C13.3064 2 14.4177 2.83481 14.8295 4"/><path d="M20.5001 6H3.5"/><path d="M18.8332 8.5L18.3732 15.3991C18.1962 18.054 18.1077 19.3815 17.2427 20.1907C16.3777 21 15.0473 21 12.3865 21H11.6132C8.95235 21 7.62195 21 6.75694 20.1907C5.89194 19.3815 5.80344 18.054 5.62644 15.3991L5.1665 8.5"/><path d="M9.5 11L10 16"/><path d="M14.5 11L14 16"/></g></svg>删除选中</span>
+          <span class="db end"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13L9 17L19 7"/></svg>完成</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">C 添加账号弹窗：多第 4 个 tab「导入」<small>「导入本机」与「从文件导入」和浏览器登录/设备码/API Key 同级——它们都是「加一条账号」的路子。弹窗只读那份文件，不改它。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="3"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 11C2 7.22876 2 5.34315 3.17157 4.17157C4.34315 3 6.22876 3 10 3H14C17.7712 3 19.6569 3 20.8284 4.17157C22 5.34315 22 7.22876 22 11V13C22 16.7712 22 18.6569 20.8284 19.8284C19.6569 21 17.7712 21 14 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V11Z"/><path d="M15 21L15 3"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3 8C3 5.17157 3 3.75736 3.87868 2.87868C4.75736 2 6.17157 2 9 2H15C17.8284 2 19.2426 2 20.1213 2.87868C21 3.75736 21 5.17157 21 8V16C21 18.8284 21 20.2426 20.1213 21.1213C19.2426 22 17.8284 22 15 22H9C6.17157 22 4.75736 22 3.87868 21.1213C3 20.2426 3 18.8284 3 16V8Z"/><path d="M8 2.5V22"/><path d="M2 12H4"/><path d="M2 16H4"/><path d="M2 8H4"/><path d="M11.5 6.5H16.5"/><path d="M11.5 10H16.5"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4.72848 16.1369C3.18295 14.5914 2.41018 13.8186 2.12264 12.816C1.83509 11.8134 2.08083 10.7485 2.57231 8.61875L2.85574 7.39057C3.26922 5.59881 3.47597 4.70292 4.08944 4.08944C4.70292 3.47597 5.59881 3.26922 7.39057 2.85574L8.61875 2.57231C10.7485 2.08083 11.8134 1.83509 12.816 2.12264C13.8186 2.41018 14.5914 3.18295 16.1369 4.72848L17.9665 6.55812C20.6555 9.24711 22 10.5916 22 12.2623C22 13.933 20.6555 15.2775 17.9665 17.9665C15.2775 20.6555 13.933 22 12.2623 22C10.5916 22 9.24711 20.6555 6.55812 17.9665L4.72848 16.1369Z"/><circle cx="8.607" cy="8.879" r="2" transform="rotate(-45 8.607 8.879)"/><path d="M11.5417 18.5L18.5208 11.5208"/></g></svg></div>
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M18 10L13 10"/><path d="M19.9998 6.23751C19.9989 5.94017 19.9946 5.76263 19.9743 5.60842C19.7971 4.26222 18.7378 3.2029 17.3916 3.02567C17.1966 3 16.9644 3 16.5 3H10"/><path d="M2 6.94975C2 6.06722 2 5.62595 2.06935 5.25839C2.37464 3.64031 3.64031 2.37464 5.25839 2.06935C5.62595 2 6.06722 2 6.94975 2C7.33642 2 7.52976 2 7.71557 2.01738C8.51665 2.09229 9.27652 2.40704 9.89594 2.92051C10.0396 3.03961 10.1763 3.17633 10.4497 3.44975L11 4C11.8158 4.81578 12.2237 5.22367 12.7121 5.49543C12.9804 5.64471 13.2651 5.7626 13.5604 5.84678C14.0979 6 14.6747 6 15.8284 6H16.2021C17.9811 6 19.159 6 19.9998 6.23751C20.4031 6.35144 20.7288 6.52002 21.0062 6.76946C21.0849 6.84024 21.1598 6.91514 21.2305 6.99383C22 7.84935 22 9.16554 22 11.7979V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V6.94975Z"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M6.00879 8C6.04466 5.52043 6.22859 4.11466 7.17167 3.17157C8.34324 2 10.2289 2 14.0001 2C17.7713 2 19.657 2 20.8285 3.17157C22.0001 4.34315 22.0001 6.22876 22.0001 10V14C22.0001 17.7712 22.0001 19.6569 20.8285 20.8284C19.657 22 17.7713 22 14.0001 22H12"/><path d="M2 14.5C2 13.0955 2 12.3933 2.33706 11.8889C2.48298 11.6705 2.67048 11.483 2.88886 11.3371C3.39331 11 4.09554 11 5.5 11C6.90446 11 7.60669 11 8.11114 11.3371C8.32952 11.483 8.51702 11.6705 8.66294 11.8889C9 12.3933 9 13.0955 9 14.5V18.5C9 19.9045 9 20.6067 8.66294 21.1111C8.51702 21.3295 8.32952 21.517 8.11114 21.6629C7.60669 22 6.90446 22 5.5 22C4.09554 22 3.39331 22 2.88886 21.6629C2.67048 21.517 2.48298 21.3295 2.33706 21.1111C2 20.6067 2 19.9045 2 18.5V14.5Z"/><path d="M17 19H12"/></g></svg></div>
+        <div class="nav on"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="9" r="3"/><circle cx="12" cy="12" r="10"/><path d="M17.9691 20C17.81 17.1085 16.9247 15 11.9999 15C7.07521 15 6.18991 17.1085 6.03076 20"/></g></svg></div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.67981 13L3.67981 11.3333C3.67981 6.73096 7.4402 3 12.0789 3C15.1178 3 17.7799 4.60136 19.2545 7M2 11.3333L3.67981 13L5.35962 11.3333"/><path d="M20.3139 11V12.6667C20.3139 17.269 16.5391 21 11.8827 21C8.83213 21 6.15995 19.3986 4.67969 17M22.0001 12.6667L20.3139 11L18.6277 12.6667"/></g></svg>刷新配额</span>
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"/><path d="M8.5 12.5L10.5 14.5L15.5 9.5"/></g></svg>选择</span>
+            <span class="pbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4 12L20 12"/><path d="M12.0204 4L12.0205 20.0003"/></g></svg>添加账号</span>
+          </div>
+        </div>
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个</span></div>
+          <div class="row acc cur">
+            <span class="dot2 cur">主</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">主力</span><span class="tag on">当前</span><span class="tier">PRO</span></div>
+              <div class="l2">Team Name：个人账户 · 使用 OAuth 登录 · 用户 ID：<span class="mono">9f6305d7…</span></div>
+              <div class="l3">有效期至 2026-11-10 10:18 · 重置 <span class="num">2</span> 次 · 更新于 10-08 09:58</div>
+            </div>
+            <div class="acts"><span class="curmark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13L9 17L19 7"/></svg></span><span class="ab only"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></g></svg></span></div>
+          </div>
+        </section>
+      </div>
+      <div class="scrim">
+        <div class="dlg">
+          <div class="dlg-h">添加 Codex 账号<span class="x"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span></div>
+          <div class="dlg-b">
+            <div class="seg"><span>浏览器登录</span><span>设备码</span><span>API Key</span><span class="on">导入</span></div>
+            <p class="lead">从本机已登录的 Codex 或一个 auth.json 文件里读凭据，落成一条 desko 账号记录。只读那份文件，不改它，也不动官方凭据。</p>
+            <div class="pathline">
+              <span class="k">本机凭据</span>
+              <span class="v mono">C:\Users\jxiaow\.codex\auth.json</span>
+            </div>
+            <div class="frow">
+              <span class="ab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3 15C3 17.8284 3 19.2426 3.87868 20.1213C4.75736 21 6.17157 21 9 21H15C17.8284 21 19.2426 21 20.1213 20.1213C21 19.2426 21 17.8284 21 15"/><path d="M12 3V16M8 11.625L12 16L16 11.625"/></g></svg>导入本机账号</span>
+              <span class="ab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M18 10L13 10"/><path d="M2 6.94975C2 6.06722 2 5.62595 2.06935 5.25839C2.37464 3.64031 3.64031 2.37464 5.25839 2.06935C5.62595 2 6.06722 2 6.94975 2C7.33642 2 7.52976 2 7.71557 2.01738C8.51665 2.09229 9.27652 2.40704 9.89594 2.92051C10.0396 3.03961 10.1763 3.17633 10.4497 3.44975L11 4C11.8158 4.81578 12.2237 5.22367 12.7121 5.49543C12.9804 5.64471 13.2651 5.7626 13.5604 5.84678C14.0979 6 14.6747 6 15.8284 6H16.2021C18.8345 6 20.1506 6 21.0062 6.76946C21.0849 6.84024 21.1598 6.91514 21.2305 6.99383C22 7.84935 22 9.16554 22 11.7979V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V6.94975Z"/></g></svg>从 auth.json 导入…</span>
+            </div>
+          </div>
+          <div class="dlg-f"><span class="ab">取消</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">D 设置·通用：凭据路径与「打开 config.toml」收到 Codex 区块<small>它俩是「这台机器上官方文件在哪」的事实，不是账号动作；放这里不占账号页，也顺手把模块开关和它该管的文件放在一起。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="3"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 11C2 7.22876 2 5.34315 3.17157 4.17157C4.34315 3 6.22876 3 10 3H14C17.7712 3 19.6569 3 20.8284 4.17157C22 5.34315 22 7.22876 22 11V13C22 16.7712 22 18.6569 20.8284 19.8284C19.6569 21 17.7712 21 14 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V11Z"/><path d="M15 21L15 3"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3 8C3 5.17157 3 3.75736 3.87868 2.87868C4.75736 2 6.17157 2 9 2H15C17.8284 2 19.2426 2 20.1213 2.87868C21 3.75736 21 5.17157 21 8V16C21 18.8284 21 20.2426 20.1213 21.1213C19.2426 22 17.8284 22 15 22H9C6.17157 22 4.75736 22 3.87868 21.1213C3 20.2426 3 18.8284 3 16V8Z"/><path d="M8 2.5V22"/><path d="M2 12H4"/><path d="M2 16H4"/><path d="M2 8H4"/><path d="M11.5 6.5H16.5"/><path d="M11.5 10H16.5"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4.72848 16.1369C3.18295 14.5914 2.41018 13.8186 2.12264 12.816C1.83509 11.8134 2.08083 10.7485 2.57231 8.61875L2.85574 7.39057C3.26922 5.59881 3.47597 4.70292 4.08944 4.08944C4.70292 3.47597 5.59881 3.26922 7.39057 2.85574L8.61875 2.57231C10.7485 2.08083 11.8134 1.83509 12.816 2.12264C13.8186 2.41018 14.5914 3.18295 16.1369 4.72848L17.9665 6.55812C20.6555 9.24711 22 10.5916 22 12.2623C22 13.933 20.6555 15.2775 17.9665 17.9665C15.2775 20.6555 13.933 22 12.2623 22C10.5916 22 9.24711 20.6555 6.55812 17.9665L4.72848 16.1369Z"/><circle cx="8.607" cy="8.879" r="2" transform="rotate(-45 8.607 8.879)"/><path d="M11.5417 18.5L18.5208 11.5208"/></g></svg></div>
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M18 10L13 10"/><path d="M19.9998 6.23751C19.9989 5.94017 19.9946 5.76263 19.9743 5.60842C19.7971 4.26222 18.7378 3.2029 17.3916 3.02567C17.1966 3 16.9644 3 16.5 3H10"/><path d="M2 6.94975C2 6.06722 2 5.62595 2.06935 5.25839C2.37464 3.64031 3.64031 2.37464 5.25839 2.06935C5.62595 2 6.06722 2 6.94975 2C7.33642 2 7.52976 2 7.71557 2.01738C8.51665 2.09229 9.27652 2.40704 9.89594 2.92051C10.0396 3.03961 10.1763 3.17633 10.4497 3.44975L11 4C11.8158 4.81578 12.2237 5.22367 12.7121 5.49543C12.9804 5.64471 13.2651 5.7626 13.5604 5.84678C14.0979 6 14.6747 6 15.8284 6H16.2021C17.9811 6 19.159 6 19.9998 6.23751C20.4031 6.35144 20.7288 6.52002 21.0062 6.76946C21.0849 6.84024 21.1598 6.91514 21.2305 6.99383C22 7.84935 22 9.16554 22 11.7979V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V6.94975Z"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M6.00879 8C6.04466 5.52043 6.22859 4.11466 7.17167 3.17157C8.34324 2 10.2289 2 14.0001 2C17.7713 2 19.657 2 20.8285 3.17157C22.0001 4.34315 22.0001 6.22876 22.0001 10V14C22.0001 17.7712 22.0001 19.6569 20.8285 20.8284C19.657 22 17.7713 22 14.0001 22H12"/><path d="M2 14.5C2 13.0955 2 12.3933 2.33706 11.8889C2.48298 11.6705 2.67048 11.483 2.88886 11.3371C3.39331 11 4.09554 11 5.5 11C6.90446 11 7.60669 11 8.11114 11.3371C8.32952 11.483 8.51702 11.6705 8.66294 11.8889C9 12.3933 9 13.0955 9 14.5V18.5C9 19.9045 9 20.6067 8.66294 21.1111C8.51702 21.3295 8.32952 21.517 8.11114 21.6629C7.60669 22 6.90446 22 5.5 22C4.09554 22 3.39331 22 2.88886 21.6629C2.67048 21.517 2.48298 21.3295 2.33706 21.1111C2 20.6067 2 19.9045 2 18.5V14.5Z"/><path d="M17 19H12"/></g></svg></div>
+        <div class="nav on"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="9" r="3"/><circle cx="12" cy="12" r="10"/><path d="M17.9691 20C17.81 17.1085 16.9247 15 11.9999 15C7.07521 15 6.18991 17.1085 6.03076 20"/></g></svg></div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.67981 13L3.67981 11.3333C3.67981 6.73096 7.4402 3 12.0789 3C15.1178 3 17.7799 4.60136 19.2545 7M2 11.3333L3.67981 13L5.35962 11.3333"/><path d="M20.3139 11V12.6667C20.3139 17.269 16.5391 21 11.8827 21C8.83213 21 6.15995 19.3986 4.67969 17M22.0001 12.6667L20.3139 11L18.6277 12.6667"/></g></svg>刷新配额</span>
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"/><path d="M8.5 12.5L10.5 14.5L15.5 9.5"/></g></svg>选择</span>
+            <span class="pbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4 12L20 12"/><path d="M12.0204 4L12.0205 20.0003"/></g></svg>添加账号</span>
+          </div>
+        </div>
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个</span></div>
+          <div class="row acc cur">
+            <span class="dot2 cur">主</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">主力</span><span class="tag on">当前</span><span class="tier">PRO</span></div>
+              <div class="l2">Team Name：个人账户 · 使用 OAuth 登录 · 用户 ID：<span class="mono">9f6305d7…</span></div>
+              <div class="l3">有效期至 2026-11-10 10:18 · 重置 <span class="num">2</span> 次 · 更新于 10-08 09:58</div>
+            </div>
+            <div class="acts"><span class="curmark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13L9 17L19 7"/></svg></span><span class="ab only"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></g></svg></span></div>
+          </div>
+        </section>
+      </div>
+      <div class="scrim">
+        <div class="sdlg">
+          <div class="snav">
+            <span class="t on">通用</span><span class="t">档案</span><span class="t">局域网传输</span>
+            <span class="t">外观</span><span class="t">数据与备份</span><span class="t">安全</span><span class="t">关于</span>
+          </div>
+          <div class="spane">
+            <div class="sitem">
+              <div class="sinfo"><span class="sname">内网穿透</span><span class="sdesc">开启后侧栏出现「内网穿透」页</span></div>
+              <span class="sw"></span>
+            </div>
+            <div class="sitem">
+              <div class="sinfo"><span class="sname">直连清单</span><span class="sdesc">开启后侧栏显示「直连清单」页</span></div>
+              <span class="sw"></span>
+            </div>
+            <div class="sitem">
+              <div class="sinfo">
+                <span class="sname">Codex 账号</span>
+                <span class="sdesc">开启后侧栏出现「Codex 账号」页，管理多个 Codex 账号并切换官方凭据</span>
+                <div class="spath">
+                  <code>C:\Users\jxiaow\.codex\auth.json</code>
+                  <span class="ab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M6 14.5H14"/><path d="M6 18H11.5"/><path d="M13 2.2627V5.0003C13 7.35732 13 8.53583 13.7322 9.26806C14.4645 10.0003 15.643 10.0003 18 10.0003H21.58"/><path d="M3.17139 3.17157C4.34296 2 6.23851 2 10.0296 2C11.5546 2 12.3173 2.00011 13.0093 2.26562C13.7012 2.53114 14.2651 3.03857 15.3929 4.05365L19.3516 7.61621C20.6558 8.78998 21.3078 9.3774 21.6538 10.1543C21.9998 10.9312 22 11.8079 22 13.5625V14C22 17.7712 22 19.6566 20.8284 20.8281C19.6569 21.9997 17.7712 22 14 22L9.9969 21.9997C6.22761 21.9997 4.34284 21.9997 3.17157 20.8284C2 19.6569 2 17.7712 2 14V9.9982C2 6.22817 2 4.34296 3.17139 3.17157Z"/></g></svg>打开 config.toml</span>
+                </div>
+              </div>
+              <span class="sw on"></span>
+            </div>
+            <div class="sec">—— 以下是既有项，未动 ——</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">E 重置 5 小时额度：确认与明细同一个弹窗<small>上游同构（行内 pill → 同一弹窗里先看明细再确认）。打开即拉 get_codex_reset_credits：可用/已使用/已过期三态都列出来，最近到期单独一行；「重置」是 danger。数据不在列表响应里时（正在加载/取失败）不挡动作，只把明细区换成对应提示。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="3"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 11C2 7.22876 2 5.34315 3.17157 4.17157C4.34315 3 6.22876 3 10 3H14C17.7712 3 19.6569 3 20.8284 4.17157C22 5.34315 22 7.22876 22 11V13C22 16.7712 22 18.6569 20.8284 19.8284C19.6569 21 17.7712 21 14 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V11Z"/><path d="M15 21L15 3"/></g></svg></i><i><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3 8C3 5.17157 3 3.75736 3.87868 2.87868C4.75736 2 6.17157 2 9 2H15C17.8284 2 19.2426 2 20.1213 2.87868C21 3.75736 21 5.17157 21 8V16C21 18.8284 21 20.2426 20.1213 21.1213C19.2426 22 17.8284 22 15 22H9C6.17157 22 4.75736 22 3.87868 21.1213C3 20.2426 3 18.8284 3 16V8Z"/><path d="M8 2.5V22"/><path d="M2 12H4"/><path d="M2 16H4"/><path d="M2 8H4"/><path d="M11.5 6.5H16.5"/><path d="M11.5 10H16.5"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4.72848 16.1369C3.18295 14.5914 2.41018 13.8186 2.12264 12.816C1.83509 11.8134 2.08083 10.7485 2.57231 8.61875L2.85574 7.39057C3.26922 5.59881 3.47597 4.70292 4.08944 4.08944C4.70292 3.47597 5.59881 3.26922 7.39057 2.85574L8.61875 2.57231C10.7485 2.08083 11.8134 1.83509 12.816 2.12264C13.8186 2.41018 14.5914 3.18295 16.1369 4.72848L17.9665 6.55812C20.6555 9.24711 22 10.5916 22 12.2623C22 13.933 20.6555 15.2775 17.9665 17.9665C15.2775 20.6555 13.933 22 12.2623 22C10.5916 22 9.24711 20.6555 6.55812 17.9665L4.72848 16.1369Z"/><circle cx="8.607" cy="8.879" r="2" transform="rotate(-45 8.607 8.879)"/><path d="M11.5417 18.5L18.5208 11.5208"/></g></svg></div>
+        <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M18 10L13 10"/><path d="M19.9998 6.23751C19.9989 5.94017 19.9946 5.76263 19.9743 5.60842C19.7971 4.26222 18.7378 3.2029 17.3916 3.02567C17.1966 3 16.9644 3 16.5 3H10"/><path d="M2 6.94975C2 6.06722 2 5.62595 2.06935 5.25839C2.37464 3.64031 3.64031 2.37464 5.25839 2.06935C5.62595 2 6.06722 2 6.94975 2C7.33642 2 7.52976 2 7.71557 2.01738C8.51665 2.09229 9.27652 2.40704 9.89594 2.92051C10.0396 3.03961 10.1763 3.17633 10.4497 3.44975L11 4C11.8158 4.81578 12.2237 5.22367 12.7121 5.49543C12.9804 5.64471 13.2651 5.7626 13.5604 5.84678C14.0979 6 14.6747 6 15.8284 6H16.2021C17.9811 6 19.159 6 19.9998 6.23751C20.4031 6.35144 20.7288 6.52002 21.0062 6.76946C21.0849 6.84024 21.1598 6.91514 21.2305 6.99383C22 7.84935 22 9.16554 22 11.7979V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V6.94975Z"/></g></svg></div><div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><path d="M6.00879 8C6.04466 5.52043 6.22859 4.11466 7.17167 3.17157C8.34324 2 10.2289 2 14.0001 2C17.7713 2 19.657 2 20.8285 3.17157C22.0001 4.34315 22.0001 6.22876 22.0001 10V14C22.0001 17.7712 22.0001 19.6569 20.8285 20.8284C19.657 22 17.7713 22 14.0001 22H12"/><path d="M2 14.5C2 13.0955 2 12.3933 2.33706 11.8889C2.48298 11.6705 2.67048 11.483 2.88886 11.3371C3.39331 11 4.09554 11 5.5 11C6.90446 11 7.60669 11 8.11114 11.3371C8.32952 11.483 8.51702 11.6705 8.66294 11.8889C9 12.3933 9 13.0955 9 14.5V18.5C9 19.9045 9 20.6067 8.66294 21.1111C8.51702 21.3295 8.32952 21.517 8.11114 21.6629C7.60669 22 6.90446 22 5.5 22C4.09554 22 3.39331 22 2.88886 21.6629C2.67048 21.517 2.48298 21.3295 2.33706 21.1111C2 20.6067 2 19.9045 2 18.5V14.5Z"/><path d="M17 19H12"/></g></svg></div>
+        <div class="nav on"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.48" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="9" r="3"/><circle cx="12" cy="12" r="10"/><path d="M17.9691 20C17.81 17.1085 16.9247 15 11.9999 15C7.07521 15 6.18991 17.1085 6.03076 20"/></g></svg></div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.67981 13L3.67981 11.3333C3.67981 6.73096 7.4402 3 12.0789 3C15.1178 3 17.7799 4.60136 19.2545 7M2 11.3333L3.67981 13L5.35962 11.3333"/><path d="M20.3139 11V12.6667C20.3139 17.269 16.5391 21 11.8827 21C8.83213 21 6.15995 19.3986 4.67969 17M22.0001 12.6667L20.3139 11L18.6277 12.6667"/></g></svg>刷新配额</span>
+            <span class="sbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"/><path d="M8.5 12.5L10.5 14.5L15.5 9.5"/></g></svg>选择</span>
+            <span class="pbtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4 12L20 12"/><path d="M12.0204 4L12.0205 20.0003"/></g></svg>添加账号</span>
+          </div>
+        </div>
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个</span></div>
+          <div class="row acc">
+            <span class="dot2">备</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">备用</span><span class="tier">PLUS</span></div>
+              <div class="l2">Team Name：个人账户 · 使用账号密码登录 · 用户 ID：<span class="mono">4c81be20…</span></div>
+              <div class="l3">有效期至 2027-01-01 00:00 · 重置 <span class="num">2</span> 次</div>
+            </div>
+            <div class="acts"><span class="ab only"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></g></svg></span></div>
+          </div>
+        </section>
+      </div>
+      <div class="scrim">
+        <div class="dlg rcd">
+          <div class="dlg-h">重置 5 小时额度<span class="x"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span></div>
+          <div class="dlg-b">
+            <div class="rmeta">将立即用掉 <b>263291365@qq.com</b> 的一次 5 小时额度重置，用掉后不可撤销（当前还剩 <span class="num">2</span> 次）。</div>
+            <div class="rexp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.80" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="10"/><path d="M12 8V12L14.5 14.5"/></g></svg>最近到期：10-12 20:00</div>
+            <div class="rdet">
+              <div class="rdet-t">重置次数明细</div>
+              <div class="rlist">
+                <div class="rcredit"><span class="rs ok">可用</span>发放：<span class="t">10-08 09:58</span> · 到期：<span class="t">10-12 20:00</span></div>
+                <div class="rcredit"><span class="rs ok">可用</span>发放：<span class="t">09-30 14:02</span> · 到期：<span class="t">10-14 14:02</span></div>
+                <div class="rcredit"><span class="rs">已使用</span>发放：<span class="t">09-18 10:30</span> · 使用：<span class="t">09-20 21:14</span></div>
+                <div class="rcredit"><span class="rs">已过期</span>发放：<span class="t">08-02 08:00</span> · 到期：<span class="t">08-12 08:00</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="dlg-f"><span class="fr"><span class="ab">取消</span><span class="ab no">重置</span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">F 明细区的三种边界：加载中 / 没有记录 / 取不到<small>明细是「看清楚再决定」的附加信息，不该反过来挡动作：加载中把「重置」洗面；取失败只在明细区留一行红字，按钮照旧可用（次数本身来自账号列表，不依赖这次请求）；后端没给 credits 就是「暂无重置记录」，不编造行。</small></div>
+  <div class="win plain">
+    <div class="dlg rcd">
+      <div class="dlg-h">重置 5 小时额度<span class="x"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span></div>
+      <div class="dlg-b">
+        <div class="rmeta">将立即用掉 <b>263291365@qq.com</b> 的一次 5 小时额度重置，用掉后不可撤销（当前还剩 <span class="num">1</span> 次）。</div>
+        <div class="rdet">
+          <div class="rdet-t">重置次数明细</div>
+          <div class="rempty"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.67981 13L3.67981 11.3333C3.67981 6.73096 7.4402 3 12.0789 3C15.1178 3 17.7799 4.60136 19.2545 7M2 11.3333L3.67981 13L5.35962 11.3333"/><path d="M20.3139 11V12.6667C20.3139 17.269 16.5391 21 11.8827 21C8.83213 21 6.15995 19.3986 4.67969 17M22.0001 12.6667L20.3139 11L18.6277 12.6667"/></g></svg> 加载中…</div>
+        </div>
+      </div>
+      <div class="dlg-f"><span class="fr"><span class="ab">取消</span><span class="ab no off">重置</span></span></div>
+    </div>
+
+    <div class="dlg rcd">
+      <div class="dlg-h">重置 5 小时额度<span class="x"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span></div>
+      <div class="dlg-b">
+        <div class="rmeta">将立即用掉 <b>263291365@qq.com</b> 的一次 5 小时额度重置，用掉后不可撤销（当前还剩 <span class="num">1</span> 次）。</div>
+        <div class="rdet">
+          <div class="rdet-t">重置次数明细</div>
+          <div class="rempty">暂无重置记录</div>
+        </div>
+      </div>
+      <div class="dlg-f"><span class="fr"><span class="ab">取消</span><span class="ab no">重置</span></span></div>
+    </div>
+
+    <div class="dlg rcd">
+      <div class="dlg-h">重置 5 小时额度<span class="x"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span></div>
+      <div class="dlg-b">
+        <div class="rmeta">将立即用掉 <b>263291365@qq.com</b> 的一次 5 小时额度重置，用掉后不可撤销（当前还剩 <span class="num">1</span> 次）。</div>
+        <div class="rdet">
+          <div class="rdet-t">重置次数明细</div>
+          <div class="rerr">加载重置记录失败：主动重置接口返回错误 401</div>
+        </div>
+      </div>
+      <div class="dlg-f"><span class="fr"><span class="ab">取消</span><span class="ab no">重置</span></span></div>
+    </div>
+  </div>
+</div>
+
+</body></html>

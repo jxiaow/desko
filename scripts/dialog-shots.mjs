@@ -19,7 +19,7 @@ const EXPECTED = [
   '1-entry-form', '9-entry-detail', '12-entry-menu', '13-entry-category',
   '14-entry-detail-notes', '15-entry-batch',
   '2-shortcut-form', '3-mfa-add', '4-confirm', '18-fileshare',
-  '16-settings-general', '5-settings-appearance', '6-settings-security',
+  '16-settings-modules', '5-settings-appearance', '6-settings-security',
   '7-settings-backup', '11-settings-fileshare', '17-settings-about', '10-change-password',
   '8-note-editor', '24-narrow-800', '25-narrow-720',
   '20-empty-entries', '21-empty-notes', '22-empty-files', '23-empty-mfa',
@@ -162,7 +162,7 @@ for (const THEME of RUN) {
   // 5) 设置：六个页签全拍 + 修改主密码（嵌套弹窗）
   await page.locator('button[title="设置"], button[data-tip="设置"]').first().click()
   await page.locator('.settings-dialog').waitFor()
-  await page.locator('.settings-dialog .nav-tab', { hasText: '通用' }).click(); await shot('16-settings-general')
+  await page.locator('.settings-dialog .nav-tab', { hasText: '模块' }).click(); await shot('16-settings-modules')
   await page.locator('.settings-dialog .nav-tab', { hasText: '外观' }).click(); await shot('5-settings-appearance')
   await page.locator('.settings-dialog .nav-tab', { hasText: '安全' }).click(); await shot('6-settings-security')
   await page.locator('.settings-dialog .nav-tab', { hasText: '数据与备份' }).click(); await shot('7-settings-backup')

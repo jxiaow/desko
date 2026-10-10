@@ -1,13 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, type ComputedRef } from 'vue'
 import { useRoute } from 'vue-router'
-import { storeToRefs } from 'pinia'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { mfaEnabled, readMfaFeature } from '../../services/mfaFeature'
-import { fileshareEnabled, readFileshareFeature } from '../../services/fileshareFeature'
-import { useEntriesStore } from '../../stores/entries'
-import { useNotesStore } from '../../stores/notes'
-import { useFileShortcutsStore } from '../../stores/fileShortcuts'
+import { enabledModules } from '../../modules/state'
+import { modulePath } from '../../modules/registry'
 import BrandLogo from '../shared/BrandLogo.vue'
 import AppIcon from '../shared/AppIcon.vue'
 
@@ -20,19 +15,6 @@ defineEmits<{
 }>()
 
 const route = useRoute()
-
-const { entries } = storeToRefs(useEntriesStore())
-const { notes } = storeToRefs(useNotesStore())
-const { shortcuts } = storeToRefs(useFileShortcutsStore())
-
-const counts: Record<string, ComputedRef<number>> = {
-  '/entries': computed(() => entries.value.length),
-  '/notes': computed(() => notes.value.length),
-  '/files': computed(() => shortcuts.value.length),
-}
-
-// 侧栏只在解锁态挂载，这里读一次正好跟上锁/解锁的重挂节奏
-onMounted(() => { readMfaFeature(); readFileshareFeature() })
 
 const startDrag = (e: MouseEvent) => {
   if ((e.target as HTMLElement).closest('button')) return
@@ -59,53 +41,23 @@ const onDragDblclick = (e: MouseEvent) => {
     </div>
 
     <div class="sidebar-nav">
-      <router-link to="/notes" class="nav-item m-not" :class="{ active: route.path === '/notes' }" aria-label="小记">
+      <router-link
+        v-for="m in enabledModules"
+        :key="m.id"
+        :to="modulePath(m.id)"
+        class="nav-item"
+        :class="{ active: route.path === modulePath(m.id) }"
+        :aria-label="m.title"
+        :data-tip="collapsed ? m.title : undefined"
+      >
         <div class="nav-icon">
-          <AppIcon name="navNotes" :size="collapsed ? 22 : 18" />
+          <AppIcon :name="m.icon" :size="collapsed ? 22 : 18" />
         </div>
         <Transition name="nav-text">
-          <span v-if="!collapsed" class="nav-text">小记</span>
+          <span v-if="!collapsed" class="nav-text">{{ m.title }}</span>
         </Transition>
         <Transition name="nav-text">
-          <span v-if="!collapsed && counts['/notes']!.value > 0" class="nav-count">{{ counts['/notes']!.value }}</span>
-        </Transition>
-      </router-link>
-      <router-link to="/entries" class="nav-item m-ent" :class="{ active: route.path === '/entries' }" aria-label="网址收藏">
-        <div class="nav-icon">
-          <AppIcon name="navEntries" :size="collapsed ? 22 : 18" />
-        </div>
-        <Transition name="nav-text">
-          <span v-if="!collapsed" class="nav-text">网址收藏</span>
-        </Transition>
-        <Transition name="nav-text">
-          <span v-if="!collapsed && counts['/entries']!.value > 0" class="nav-count">{{ counts['/entries']!.value }}</span>
-        </Transition>
-      </router-link>
-      <router-link to="/files" class="nav-item m-fil" :class="{ active: route.path === '/files' }" aria-label="文件快捷">
-        <div class="nav-icon">
-          <AppIcon name="navFiles" :size="collapsed ? 22 : 18" />
-        </div>
-        <Transition name="nav-text">
-          <span v-if="!collapsed" class="nav-text">文件快捷</span>
-        </Transition>
-        <Transition name="nav-text">
-          <span v-if="!collapsed && counts['/files']!.value > 0" class="nav-count">{{ counts['/files']!.value }}</span>
-        </Transition>
-      </router-link>
-      <router-link v-if="mfaEnabled" to="/mfa" class="nav-item m-mfa" :class="{ active: route.path === '/mfa' }" aria-label="验证码">
-        <div class="nav-icon">
-          <AppIcon name="navMfa" :size="collapsed ? 22 : 18" />
-        </div>
-        <Transition name="nav-text">
-          <span v-if="!collapsed" class="nav-text">验证码</span>
-        </Transition>
-      </router-link>
-      <router-link v-if="fileshareEnabled" to="/fileshare" class="nav-item m-lan" :class="{ active: route.path === '/fileshare' }" aria-label="局域网传输">
-        <div class="nav-icon">
-          <AppIcon name="navLan" :size="collapsed ? 22 : 18" />
-        </div>
-        <Transition name="nav-text">
-          <span v-if="!collapsed" class="nav-text">局域网传输</span>
+          <span v-if="!collapsed && m.count && m.count() > 0" class="nav-count">{{ m.count() }}</span>
         </Transition>
       </router-link>
     </div>

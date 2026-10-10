@@ -14,7 +14,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
-use fileshare_core::config::{self, ShareConfig};
+use fileshare_core::config::{self, PublicPolicy, ShareConfig};
 use fileshare_core::files::{claim_available_name, sanitize_upload_name};
 
 use crate::error::AppError;
@@ -89,10 +89,12 @@ struct StatusFile {
 
 // ── 路径与进程 ───────────────────────────────────────────────
 
-fn app_data_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
-    app.path()
-        .app_data_dir()
-        .map_err(|e| AppError::FileShare(format!("无法定位应用数据目录: {}", e)))
+/// 配置/状态文件随当前档案根（多档案 D1）；`app` 形参保留仅为调用点不变。
+/// fileshare.json 只落本机、不进备份包。老布局下指向 `%APPDATA%\desko\shared` 的默认目录
+/// 由一次性迁移改写成相对锚点 "shared"（见 profile_service::rewrite_fileshare_share_dirs），
+/// 之后按档案根解析，天然随档案切换走。
+fn app_data_dir(_app: &AppHandle) -> Result<PathBuf, AppError> {
+    Ok(crate::paths::profile_root())
 }
 
 fn config_path(app: &AppHandle) -> Result<PathBuf, AppError> {
@@ -259,9 +261,28 @@ fn ensure_config(app: &AppHandle) -> Result<ShareConfig, AppError> {
     if cfg.share_dirs.is_empty() {
         cfg.share_dirs = vec![dir.join("shared")];
     }
+    // 文件刚诞生就带上当前公网投影：否则"先挂穿透、后启传输"这个次序会让服务进程
+    // 读到一份空 public，界面上说好的口令与只读一条也没生效
+    cfg.public = crate::commands::tunnel::public_projection(app);
     config::ensure_dirs_exist(&cfg.share_dirs).map_err(AppError::FileShare)?;
     config::save_file(&path, &cfg).map_err(AppError::FileShare)?;
     Ok(cfg)
+}
+
+/// 公网策略下发：只动 `public` 这一片，共享目录与局域网口令由各自的路径负责，这里不吞。
+/// 服务进程 400ms 轮询配置，改完不用重启。
+///
+/// 配置文件还没落地时直接跳过：凭空建一份 `shareDirs` 为空的配置会让服务进程拒绝启动
+/// （"尚未配置共享目录"），而穿透页不该有这种副作用。局域网传输第一次真正确起来时
+/// `start_inner` 会补投影，两边读到的是同一张服务表。
+pub fn write_public_policies(app: &AppHandle, policies: Vec<PublicPolicy>) -> Result<(), AppError> {
+    let path = config_path(app)?;
+    if !path.exists() {
+        return Ok(());
+    }
+    config::update_file(&path, &ShareConfig::default(), |c| c.public = policies)
+        .map_err(AppError::FileShare)?;
+    Ok(())
 }
 
 fn build_status(running: bool, cfg: &ShareConfig, sf: Option<&StatusFile>) -> StatusDto {

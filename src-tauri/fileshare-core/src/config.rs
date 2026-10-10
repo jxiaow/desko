@@ -23,6 +23,22 @@ pub struct ShareConfig {
     /// 局域网便利型门槛，能离线爆破弱口令，别拿它当强鉴权用。
     #[serde(default)]
     pub password_sha256: Option<String>,
+    /// 公网侧逐条策略：desko 的穿透页写，本进程只读。
+    /// 只有 Host 命中其中某个 hostname 的请求才受它管，局域网侧行为一律不变。
+    #[serde(default)]
+    pub public: Vec<PublicPolicy>,
+}
+
+/// 一条公网子域的策略。口令缺省即拒绝：宁可公网打不通，不可无凭据能读。
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PublicPolicy {
+    pub hostname: String,
+    #[serde(default)]
+    pub password_sha256: Option<String>,
+    /// true = 只给读：上传与写文本一律拒
+    #[serde(default)]
+    pub read_only: bool,
 }
 
 impl ShareConfig {
@@ -33,6 +49,16 @@ impl ShareConfig {
         } else {
             self.port
         }
+    }
+
+    /// Host 头命中的公网策略；DNS 标签大小写不敏感
+    pub fn public_policy(&self, host: &str) -> Option<&PublicPolicy> {
+        if host.is_empty() {
+            return None;
+        }
+        self.public
+            .iter()
+            .find(|p| p.hostname.eq_ignore_ascii_case(host))
     }
 }
 
@@ -202,12 +228,27 @@ mod tests {
             local_only: true,
             share_dirs: vec![PathBuf::from("sub")],
             password_sha256: Some("deadbeef".to_string()),
+            public: vec![PublicPolicy {
+                hostname: "files.example.com".to_string(),
+                password_sha256: Some("pubhash".to_string()),
+                read_only: true,
+            }],
         };
         save_file(&p, &cfg).unwrap();
         let loaded = load_file(&p).unwrap().unwrap();
         assert_eq!(loaded.port, 8123);
         assert!(loaded.local_only);
         assert_eq!(loaded.password_sha256.as_deref(), Some("deadbeef"));
+        // 公网策略原样过盘：desko 写的就是这边读的
+        assert_eq!(loaded.public, cfg.public);
+        // 键名是跨进程的契约，驼峰。类型两边共用所以改名会同时炸两边——
+        // 但落盘形态先钉住，别等真机上"desko 说下发成功了"才发现读不回来
+        let text = std::fs::read_to_string(&p).unwrap();
+        assert!(text.contains("\"passwordSha256\": \"pubhash\""), "{text}");
+        assert!(text.contains("\"readOnly\": true"), "{text}");
+        assert_eq!(loaded.public_policy("FILES.EXAMPLE.COM").unwrap().password_sha256.as_deref(), Some("pubhash"));
+        assert!(loaded.public_policy("other.example.com").is_none());
+        assert!(loaded.public_policy("").is_none());
         assert!(loaded.share_dirs[0].is_absolute());
         assert_eq!(
             loaded.share_dirs[0],

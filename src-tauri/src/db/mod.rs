@@ -6,6 +6,8 @@ pub mod url_path_repo;
 pub mod file_repo;
 pub mod attachment_repo;
 pub mod mfa_repo;
+pub mod bypass_repo;
+pub mod tunnel_repo;
 
 pub use models::*;
 
@@ -201,6 +203,35 @@ mod tests {
             .query_row("SELECT content_html FROM notes WHERE id='n1'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(html2, html, "幂等");
+        drop(db);
+        cleanup(&path);
+    }
+
+    /// 上一版建的库只有八列：重开库要把公网策略两列补上，老行读出来是默认值
+    /// （只读默认开、口令默认没设）。这条路只在真机老库上走得到，所以单独测
+    #[test]
+    fn public_policy_columns_are_added_to_an_existing_table() {
+        let (db, path) = setup_test_db();
+        db.conn
+            .execute_batch(
+                "ALTER TABLE tunnel_services DROP COLUMN public_read_only;
+                 ALTER TABLE tunnel_services DROP COLUMN public_password_sha256;",
+            )
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO tunnel_services (id, hostname, port, label, preset, routed, created_at, updated_at)
+                 VALUES ('s1','files.example.com',8421,'局域网传输','fileshare',1,100,100)",
+                [],
+            )
+            .unwrap();
+        drop(db);
+
+        let db = Database::new(&path).unwrap();
+        let got = db.get_tunnel_service("s1").unwrap().unwrap();
+        assert!(got.public_password_sha256.is_empty(), "老行没设过口令，读出来就该是空");
+        assert!(got.public_read_only, "默认只读：补列不能顺手把写权限打开");
+        assert_eq!(got.hostname, "files.example.com");
         drop(db);
         cleanup(&path);
     }

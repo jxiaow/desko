@@ -1,0 +1,36 @@
+{
+ "modules/account": {
+  "kept": [
+   "ACCOUNTS_DIR",
+   "QuotaAlertPayload",
+   "build_quota_alert_notification_text",
+   "dispatch_quota_alert",
+   "emit_quota_alert",
+   "get_data_dir",
+   "is_dev_profile",
+   "resolve_data_dir",
+   "send_quota_alert_native_notification"
+  ],
+  "missing_seeds": [],
+  "lines": 184
+ },
+ "modules/windows_operation": {
+  "kept": [
+   "WINDOWS_OPERATION_ERROR_PREFIX",
+   "WindowsOperationErrorPayload",
+   "format_error",
+   "format_permission_io_error",
+   "is_access_denied_message"
+  ],
+  "missing_seeds": [],
+  "lines": 117
+ },
+ "modules/test_support": {
+  "kept": [
+   "env_lock",
+   "fallback_data_dir"
+  ],
+  "missing_seeds": [],
+  "lines": 20
+ }
+}

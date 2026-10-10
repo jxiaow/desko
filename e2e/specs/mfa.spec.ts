@@ -21,9 +21,9 @@ async function gotoMfa(page: Page, seed = SEED) {
 }
 
 test.describe('MFA 验证码', () => {
-  test('开关默认关：没有侧栏入口，直达 /mfa 被带回条目页', async ({ page }) => {
+  test('开关默认关：没有侧栏入口，直达 /mfa 被带回小记页', async ({ page }) => {
     await bootUnlocked(page, {}, '/mfa')
-    await expect(page).toHaveURL(/\/entries$/)
+    await expect(page).toHaveURL(/\/notes$/)
     await expect(page.locator('a.nav-item[href="/mfa"]')).toHaveCount(0)
     expect(await e2e.count(page, 'mfa_codes')).toBe(0)
   })
@@ -31,12 +31,12 @@ test.describe('MFA 验证码', () => {
   test('设置里打开开关后侧栏立刻出现入口', async ({ page }) => {
     await bootUnlocked(page)
     await expect(page.locator('a.nav-item[href="/mfa"]')).toHaveCount(0)
-    const dialog = await openSettings(page, 'general')
+    const dialog = await openSettings(page, 'modules')
     await visiblePane(dialog)
-      .locator('.setting-item', { hasText: '验证码模块' })
+      .locator('.setting-item', { hasText: '验证码' })
       .locator('.switch-slider')
       .click()
-    await expectToast(page, '设置已保存')
+    await expectToast(page, '验证码已开启')
     await dialog.locator('.dialog-close').click()
     await expect(page.locator('a.nav-item[href="/mfa"]')).toHaveCount(1)
   })

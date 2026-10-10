@@ -41,9 +41,13 @@ pub fn new_session_token() -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
+/// 会话归属：局域网一条空串，公网按子域各算各的。
+/// 一条子域登上的会话不能拿去读另一条——它们可以有不同的口令与动作面。
+pub const LAN_SCOPE: &str = "lan";
+
 pub struct SessionStore {
-    // token → 过期时刻（unix 秒）
-    inner: Mutex<HashMap<String, u64>>,
+    // token → (归属, 过期时刻 unix 秒)
+    inner: Mutex<HashMap<String, (String, u64)>>,
 }
 
 impl SessionStore {
@@ -51,36 +55,37 @@ impl SessionStore {
         SessionStore { inner: Mutex::new(HashMap::new()) }
     }
 
-    pub fn issue(&self) -> String {
+    pub fn issue(&self, scope: &str) -> String {
         let token = new_session_token();
         if let Ok(mut map) = self.inner.lock() {
             let now = now_secs();
-            map.retain(|_, expires| *expires > now);
-            map.insert(token.clone(), now + SESSION_TTL_SECS);
+            map.retain(|_, (_, expires)| *expires > now);
+            map.insert(token.clone(), (scope.to_string(), now + SESSION_TTL_SECS));
         }
         token
     }
 
-    pub fn validate(&self, token: &str) -> bool {
+    pub fn validate(&self, token: &str, scope: &str) -> bool {
         let Ok(mut map) = self.inner.lock() else { return false };
         let now = now_secs();
         match map.get_mut(token) {
-            Some(expires) if *expires > now => {
+            Some((own, expires)) if *expires > now && own == scope => {
                 *expires = now + SESSION_TTL_SECS; // 滑动作废，长传不断线
                 true
             }
-            Some(_) => {
+            // 过期才回收：拿别的子域的会话来撞，不该把正主的会话一起清掉
+            Some((_, expires)) if *expires <= now => {
                 map.remove(token);
                 false
             }
-            None => false,
+            _ => false,
         }
     }
 
-    /// 口令变更后旧会话全部作废
-    pub fn clear(&self) {
+    /// 某一归属的会话全部作废（口令换了）；别的归属不受影响
+    pub fn revoke(&self, scope: &str) {
         if let Ok(mut map) = self.inner.lock() {
-            map.clear();
+            map.retain(|_, (own, _)| own != scope);
         }
     }
 }
@@ -91,7 +96,7 @@ impl Default for SessionStore {
     }
 }
 
-fn now_secs() -> u64 {
+pub(crate) fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -151,13 +156,32 @@ mod tests {
     }
 
     #[test]
-    fn session_issue_validate_clear() {
+    fn session_issue_validate_revoke() {
         let store = SessionStore::new();
-        let token = store.issue();
-        assert!(store.validate(&token));
-        assert!(!store.validate("deadbeef"));
-        store.clear();
-        assert!(!store.validate(&token));
+        let token = store.issue(LAN_SCOPE);
+        assert!(store.validate(&token, LAN_SCOPE));
+        assert!(!store.validate("deadbeef", LAN_SCOPE));
+        store.revoke(LAN_SCOPE);
+        assert!(!store.validate(&token, LAN_SCOPE));
+    }
+
+    #[test]
+    fn revoking_one_scope_keeps_the_others() {
+        let store = SessionStore::new();
+        let lan = store.issue(LAN_SCOPE);
+        let files = store.issue("files.example.com");
+        store.revoke("files.example.com");
+        assert!(!store.validate(&files, "files.example.com"), "改口令那条要重新登");
+        assert!(store.validate(&lan, LAN_SCOPE), "局域网正在传的不该被踢下线");
+    }
+
+    #[test]
+    fn session_does_not_cross_hostname() {
+        let store = SessionStore::new();
+        let a = store.issue("files.example.com");
+        assert!(!store.validate(&a, "docs.example.com"), "一条子域的会话读不了另一条");
+        assert!(store.validate(&a, "files.example.com"), "撞别的域不该把正主的会话弄没");
+        assert!(!store.validate(&store.issue(LAN_SCOPE), "files.example.com"));
     }
 
     #[test]

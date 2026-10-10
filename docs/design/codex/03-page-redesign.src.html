@@ -1,0 +1,546 @@
+<!doctype html>
+<!-- Codex 账号页重排对拍稿（2026-10-10 方向已定：导入进添加账号弹窗、凭据信息进设置、导出所选进批量 dock；
+     同一轮把账号行加高到三行事实，对齐上游账号卡的信息量）。
+     改完重跑：node scripts/mock-build.mjs docs/design/codex/03-page-redesign.src.html docs/design/codex/03-page-redesign.html
+     四帧：A 账号页重排后 / B 批量态 dock / C 添加账号·导入 tab / D 设置·通用 的 Codex 区块。
+     改动要点：一页一卡（删「本机与导入」卡）、卡头长句降成卡脚静音行、去掉 page-bar 的当前胶囊；
+     账号行 60→88px 三行——L1 身份+当前+等级，L2 Team/登录方式/用户 ID，L3 有效期/重置次数/更新于；
+     配额块收成两档 + 绝对重置时刻；其余字段（来源见 04 号文档）未取到就整段不占位。 -->
+<html lang="zh"><head><meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "HarmonyOS Sans SC", system-ui, sans-serif; }
+<!--TOKENS-->
+body { background: #6f6f6f; padding: 28px 28px 40px; display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
+.cap { color: #ededed; font-size: 13px; font-weight: 600; letter-spacing: .04em; margin-bottom: 10px; }
+.cap small { display: block; margin-top: 4px; font-weight: 400; font-size: 12px; color: #bdbdbd; }
+
+.win { position: relative; width: 1040px; height: 670px; background: var(--bg-toolbar);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+  box-shadow: var(--shadow-pop); display: flex; flex-direction: column; }
+
+/* 窗框：42 标题条 + 56 图标栏，与真程序同尺寸 */
+.tb { flex-shrink: 0; height: 42px; display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); border-bottom: 1px solid var(--border-subtle); }
+.tb h1 { font-size: var(--text-base); font-weight: 600; color: var(--text); }
+.wctl { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--text-muted); }
+.wctl i { width: 26px; height: 26px; border-radius: var(--radius-sm); display: inline-flex;
+  align-items: center; justify-content: center; font-style: normal; }
+.body { flex: 1; min-height: 0; display: flex; }
+.rail { flex-shrink: 0; width: 56px; background: var(--sidebar-bg); border-right: 1px solid var(--sidebar-border);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; }
+.nav { width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center;
+  justify-content: center; color: var(--text-muted); }
+.nav.on { background: var(--panel-bg); color: var(--accent); box-shadow: var(--shadow-card); }
+.main { flex: 1; min-width: 0; overflow: hidden; padding: 0 var(--space-5) var(--space-5); }
+
+/* 页栏 54px：本页只剩右侧动作组（「当前」不再在这条里重复一遍） */
+.pagebar { height: 54px; display: flex; align-items: center; gap: var(--space-2); }
+.chip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
+  border-radius: var(--radius-pill); background: var(--panel-bg); border: 1px solid var(--border);
+  font-size: var(--text-xs); color: var(--text-secondary); }
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
+.pbtn, .sbtn { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px;
+  border-radius: var(--radius-pill); font-family: inherit; font-size: var(--text-xs); font-weight: 600;
+  border: 1px solid transparent; cursor: default; white-space: nowrap; }
+.pbtn { background: var(--accent); color: var(--accent-on); box-shadow: 0 4px 14px -3px var(--accent); }
+.sbtn { background: var(--panel-bg); color: var(--text-secondary); border-color: var(--border); font-weight: 500; }
+.pb-r { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+
+/* 一层卡 + 发丝分行；其余页行轨 60px，账号行按信息量加高到 88px */
+.card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card); }
+.head { height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  border-bottom: 1px solid var(--border); font-size: var(--text-xs); font-weight: 600;
+  letter-spacing: .06em; color: var(--text-muted); }
+.cnt { margin-left: auto; font-weight: 500; letter-spacing: 0; color: var(--text-faint); font-size: var(--text-2xs); }
+.row { display: flex; align-items: center; gap: 10px; padding: 0 16px; height: 60px; }
+.row.acc { height: 88px; gap: 12px; }
+.row + .row { border-top: 1px solid var(--border); }
+.row.cur, .row.picked { background: var(--accent-soft); }
+.dot2 { width: 34px; height: 34px; flex-shrink: 0; border-radius: var(--radius-ib); display: inline-flex;
+  align-items: center; justify-content: center; font-size: var(--text-sm); font-weight: 600;
+  background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text-muted); }
+.dot2.cur { background: var(--accent); color: var(--accent-on); }
+.pick { width: 18px; height: 18px; flex-shrink: 0; border-radius: 5px; display: inline-flex;
+  align-items: center; justify-content: center; border: 1px solid var(--border-strong); fontWeight: 600; }
+.pick.on { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+.mid { flex: 1; min-width: 0; }
+.l1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.mail { font-size: var(--text-sm); font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { font-size: var(--text-2xs); font-weight: 600; line-height: 18px; padding: 1px 9px; border-radius: var(--radius-pill);
+  background: var(--fill); color: var(--text-secondary); }
+.tag.on { background: var(--accent-soft); color: var(--accent); }
+.tag.warn { background: var(--warning-soft); color: var(--warning); }
+/* 等级徽标：等宽大写，和状态 chip 拉开形制 */
+.tier { font-family: var(--font-mono); font-size: var(--text-2xs); font-weight: 700; letter-spacing: .06em;
+  line-height: 18px; padding: 1px 7px; border-radius: var(--radius-xs);
+  background: var(--fill); color: var(--text-secondary); }
+/* 事实行：L2 是身份事实（Team/登录方式/用户 ID），L3 是时效事实（有效期/重置/更新于） */
+.l2, .l3 { margin-top: 4px; font-size: var(--text-xs);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.l2 { color: var(--text-muted); }
+.l3 { color: var(--text-secondary); }
+.num { font-family: var(--font-mono); font-weight: 600; color: var(--text); }
+
+/* 配额：两档并成一列，条 + 百分比 + 绝对重置时刻 */
+.qw { flex-shrink: 0; width: 196px; display: flex; flex-direction: column; gap: 4px; }
+.q { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); }
+.qt { width: 16px; font-family: var(--font-mono); color: var(--text-faint); }
+.qb { flex: 1; height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; }
+.qb i { display: block; height: 100%; background: var(--success); border-radius: 2px; }
+.q.mid .qb i { background: var(--warning); }
+.q.low .qb i { background: var(--danger); }
+.qn { width: 32px; text-align: right; font-family: var(--font-mono); }
+.qw .when { font-size: var(--text-2xs); color: var(--text-faint) }
+
+.acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.ab { height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 11px; flex-shrink: 0;
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: inherit; font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary); }
+.ab.go { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+.ab.only { width: 28px; padding: 0; justify-content: center; }
+.curmark { width: 28px; display: flex; justify-content: center; color: var(--accent) }
+
+/* 卡脚静音行：原来的卡头长句搬到这里，且只留「不代你重启」这半句 */
+.group-note { display: flex; align-items: center; gap: 6px; padding: 9px 16px;
+  border-top: 1px solid var(--border); font-size: var(--text-xs); color: var(--text-muted); }
+
+/* 批量底栏 */
+.dock { margin-top: var(--space-3); height: 46px; display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius-pill); box-shadow: var(--shadow-pop); }
+.dock .n { font-size: var(--text-xs); color: var(--text-secondary); font-weight: 600; margin-right: 4px }
+.db { height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 11px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--panel-bg);
+  font-family: inherit; font-size: var(--text-xs); color: var(--text-secondary); }
+.db.danger { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft) }
+.dock .sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px }
+.dock .end { margin-left: auto }
+.hint { margin: 10px 2px 0; font-size: var(--text-xs); color: #cfcfcf; }
+.hint b { color: #fff }
+
+/* 弹窗 */
+.scrim { position: absolute; inset: 0; background: rgba(20,20,20,.34); display: flex;
+  align-items: center; justify-content: center; }
+.dlg { width: 520px; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); overflow: hidden; }
+.dlg-h { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border); font-size: var(--text-sm); font-weight: 600; color: var(--text); }
+.dlg-h .x { margin-left: auto; color: var(--text-muted); }
+.dlg-b { padding: var(--space-4); display: flex; flex-direction: column; }
+.seg { align-self: flex-start; display: inline-flex; gap: 2px; padding: 2px; background: var(--fill);
+  border-radius: var(--radius-pill); }
+.seg span { height: 28px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: var(--radius-pill);
+  font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); }
+.seg span.on { background: var(--panel-bg); color: var(--text); box-shadow: var(--shadow-card); }
+.lead { margin: 12px 0 0; font-size: var(--text-xs); line-height: 1.7; color: var(--text-muted); }
+.frow { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.mono { font-family: var(--font-mono); }
+.pathline { margin-top: 12px; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px;
+  background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.pathline .k { flex-shrink: 0; font-size: var(--text-2xs); color: var(--text-faint) }
+.pathline .v { flex: 1; min-width: 0; font-size: var(--text-xs); color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.dlg-f { display: flex; align-items: center; height: 46px; padding: 0 var(--space-4);
+  border-top: 1px solid var(--border); background: var(--sunken); }
+.dlg-f .ab { margin-left: auto }
+.fr { margin-left: auto; display: flex; align-items: center; gap: 8px }
+
+/* 重置 5 小时额度：确认与明细同一个弹窗（对齐上游：入口 → 同一弹窗内含明细） */
+.rcd { width: 420px }
+.rmeta { font-size: var(--text-xs); line-height: 1.7; color: var(--text-secondary) }
+.rmeta b { font-weight: 600; color: var(--text) }
+.rexp { margin-top: 10px; display: flex; align-items: center; gap: 6px;
+  font-size: var(--text-xs); color: var(--text-secondary) }
+.rdet { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle) }
+.rdet-t { font-size: var(--text-2xs); font-weight: 600; letter-spacing: .04em; color: var(--text-muted) }
+.rlist { margin-top: 8px; display: flex; flex-direction: column; gap: 6px;
+  max-height: 168px; overflow: auto }
+.rcredit { display: flex; align-items: center; gap: 8px; line-height: 18px;
+  font-size: var(--text-xs); color: var(--text-secondary) }
+.rcredit .rs { flex-shrink: 0; font-size: var(--text-2xs); font-weight: 600; line-height: 18px;
+  padding: 1px 8px; border-radius: var(--radius-pill); background: var(--fill); color: var(--text-secondary) }
+.rcredit .rs.ok { background: var(--success-soft); color: var(--success) }
+.rcredit .t { font-family: var(--font-mono) }
+.rempty { font-size: var(--text-xs); color: var(--text-muted) }
+.rerr { font-size: var(--text-xs); color: var(--danger) }
+.ab.no { background: var(--danger); border-color: var(--danger); color: var(--danger-on) }
+/* 禁用只洗面：字色留在 --text-secondary，一眼点不动但读得清 */
+.ab.off { background: var(--fill); border-color: var(--border); color: var(--text-secondary);
+  box-shadow: none; cursor: not-allowed }
+.win.plain { height: auto; background: transparent; border: none; box-shadow: none; gap: 18px }
+
+/* 设置弹窗：左导航 + 右面板 */
+.sdlg { width: 640px; height: 480px; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); overflow: hidden; display: flex; }
+.snav { width: 148px; flex-shrink: 0; background: var(--sunken); border-right: 1px solid var(--border);
+  padding: 12px 8px; display: flex; flex-direction: column; gap: 2px }
+.snav .t { height: 30px; display: flex; align-items: center; padding: 0 10px; border-radius: var(--radius-sm);
+  font-size: var(--text-xs); color: var(--text-secondary) }
+.snav .t.on { background: var(--panel-bg); color: var(--text); font-weight: 600; box-shadow: var(--shadow-card) }
+.spane { flex: 1; min-width: 0; overflow: hidden; padding: 14px 16px }
+.sitem { display: flex; align-items: center; gap: 14px; padding: 10px 0 }
+.sitem + .sitem { border-top: 1px solid var(--border-subtle) }
+.sinfo { flex: 1; min-width: 0 }
+.sname { display: block; font-size: var(--text-sm); color: var(--text) }
+.sdesc { display: block; margin-top: 2px; font-size: var(--text-xs); color: var(--text-muted); line-height: 1.5 }
+.sw { width: 34px; height: 20px; border-radius: var(--radius-pill); background: var(--border-strong);
+  position: relative; flex-shrink: 0 }
+.sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--panel-bg); box-shadow: var(--shadow-xs) }
+.sw.on { background: var(--accent) }
+.sw.on::after { left: 16px }
+.spath { margin-top: 6px; display: flex; align-items: center; gap: 8px }
+.spath code { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--text-2xs);
+  color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.sec { margin: 4px 0 0; font-size: var(--text-2xs); font-weight: 600; letter-spacing: .06em; color: var(--text-faint) }
+</style></head>
+<body>
+
+<div class="frame">
+  <div class="cap">A 账号页重排后：一页一卡，「本机与导入」整卡撤走<small>行轨落宿主 60px；卡头只留「账号 · 2」；「当前」只在行上标一次；那句长提示降成卡脚一行静音字。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><i>{{i:min:15}}</i><i>{{i:panel:15}}</i><i>{{i:x:15}}</i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav">{{i:navNotes:17}}</div><div class="nav">{{i:navEntries:17}}</div>
+        <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navLan:17}}</div>
+        <div class="nav on">{{i:navCodex:17}}</div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn">{{i:refresh:13}}刷新配额</span>
+            <span class="sbtn">{{i:checkall:13}}选择</span>
+            <span class="pbtn">{{i:plus:13}}添加账号</span>
+          </div>
+        </div>
+
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个</span></div>
+          <div class="row acc cur">
+            <span class="dot2 cur">主</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">主力</span><span class="tag on">当前</span><span class="tier">PRO</span></div>
+              <div class="l2">Team Name：个人账户 · 使用 OAuth 登录 · 用户 ID：<span class="mono">9f6305d7…</span></div>
+              <div class="l3">有效期至 2026-11-10 10:18 · 重置 <span class="num">2</span> 次 · 更新于 10-08 09:58</div>
+            </div>
+            <div class="qw">
+              <div class="q"><span class="qt">5h</span><span class="qb"><i style="width:82%"></i></span><span class="qn">82%</span></div>
+              <div class="q"><span class="qt">周</span><span class="qb"><i style="width:60%"></i></span><span class="qn">60%</span></div>
+              <div class="when">周重置 4d 19h · 10/15 09:42</div>
+            </div>
+            <div class="acts">
+              <span class="curmark">{{i:check:15}}</span>
+              <span class="ab only">{{i:dots:15}}</span>
+            </div>
+          </div>
+          <div class="row acc">
+            <span class="dot2">K</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">key@e2e.dev</span><span class="tag">API Key</span><span class="tier">PLUS</span></div>
+              <div class="l2">供应商：OpenAI · Base URL：<span class="mono">https://api.openai.com/v1</span></div>
+              <div class="l3">标签：工作 / 备用 · 更新于 10-08 09:20</div>
+            </div>
+            <div class="qw">
+              <div class="q low"><span class="qt">5h</span><span class="qb"><i style="width:18%"></i></span><span class="qn">18%</span></div>
+              <div class="q"><span class="qt">周</span><span class="qb"><i style="width:90%"></i></span><span class="qn">90%</span></div>
+              <div class="when">5h 重置 2h · 10/10 16:00</div>
+            </div>
+            <div class="acts">
+              <span class="ab go">切换</span>
+              <span class="ab only">{{i:dots:15}}</span>
+            </div>
+          </div>
+          <div class="group-note">{{i:info:13}}切号只改写官方凭据文件，desko 不代你重启 Codex。</div>
+        </section>
+        <div class="hint">卡高 38 + 88 + 88 + 34 = <b>248px</b>；页栏 54；下方留白是短列表的常态，不再靠第二张卡填</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">B 批量态：导出所选从常驻灰钮搬进 dock<small>它本来就是选择态动作；单条导出仍在 ⋯ 菜单里，不与行内快捷钮重复。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><i>{{i:min:15}}</i><i>{{i:panel:15}}</i><i>{{i:x:15}}</i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav">{{i:navNotes:17}}</div><div class="nav">{{i:navEntries:17}}</div>
+        <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navLan:17}}</div>
+        <div class="nav on">{{i:navCodex:17}}</div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn">{{i:refresh:13}}刷新配额</span>
+            <span class="sbtn">{{i:check:13}}退出选择</span>
+            <span class="pbtn">{{i:plus:13}}添加账号</span>
+          </div>
+        </div>
+
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个 · 已选 2</span></div>
+          <div class="row acc cur picked">
+            <span class="pick on">{{i:check:12}}</span>
+            <span class="dot2 cur">主</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">主力</span><span class="tag on">当前</span><span class="tier">PRO</span></div>
+              <div class="l2">Team Name：个人账户 · 使用 OAuth 登录 · 用户 ID：<span class="mono">9f6305d7…</span></div>
+              <div class="l3">有效期至 2026-11-10 10:18 · 重置 <span class="num">2</span> 次 · 更新于 10-08 09:58</div>
+            </div>
+            <div class="qw">
+              <div class="q"><span class="qt">5h</span><span class="qb"><i style="width:82%"></i></span><span class="qn">82%</span></div>
+              <div class="q"><span class="qt">周</span><span class="qb"><i style="width:60%"></i></span><span class="qn">60%</span></div>
+              <div class="when">周重置 4d 19h · 10/15 09:42</div>
+            </div>
+            <div class="acts"><span class="ab only">{{i:dots:15}}</span></div>
+          </div>
+          <div class="row acc picked">
+            <span class="pick on">{{i:check:12}}</span>
+            <span class="dot2">K</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">key@e2e.dev</span><span class="tag">API Key</span><span class="tier">PLUS</span></div>
+              <div class="l2">供应商：OpenAI · Base URL：<span class="mono">https://api.openai.com/v1</span></div>
+              <div class="l3">标签：工作 / 备用 · 更新于 10-08 09:20</div>
+            </div>
+            <div class="qw">
+              <div class="q low"><span class="qt">5h</span><span class="qb"><i style="width:18%"></i></span><span class="qn">18%</span></div>
+              <div class="q"><span class="qt">周</span><span class="qb"><i style="width:90%"></i></span><span class="qn">90%</span></div>
+              <div class="when">5h 重置 2h · 10/10 16:00</div>
+            </div>
+            <div class="acts"><span class="ab only">{{i:dots:15}}</span></div>
+          </div>
+          <div class="group-note">{{i:info:13}}切号只改写官方凭据文件，desko 不代你重启 Codex。</div>
+        </section>
+
+        <div class="dock">
+          <span class="n">已选 2 条</span>
+          <span class="db">{{i:checkall:12}}全选</span>
+          <span class="db">{{i:refresh:12}}刷新配额</span>
+          <span class="db">{{i:download:12}}导出所选 JSON</span>
+          <span class="sep"></span>
+          <span class="db danger">{{i:trash:12}}删除选中</span>
+          <span class="db end">{{i:check:12}}完成</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">C 添加账号弹窗：多第 4 个 tab「导入」<small>「导入本机」与「从文件导入」和浏览器登录/设备码/API Key 同级——它们都是「加一条账号」的路子。弹窗只读那份文件，不改它。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><i>{{i:min:15}}</i><i>{{i:panel:15}}</i><i>{{i:x:15}}</i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav">{{i:navNotes:17}}</div><div class="nav">{{i:navEntries:17}}</div>
+        <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navLan:17}}</div>
+        <div class="nav on">{{i:navCodex:17}}</div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn">{{i:refresh:13}}刷新配额</span>
+            <span class="sbtn">{{i:checkall:13}}选择</span>
+            <span class="pbtn">{{i:plus:13}}添加账号</span>
+          </div>
+        </div>
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个</span></div>
+          <div class="row acc cur">
+            <span class="dot2 cur">主</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">主力</span><span class="tag on">当前</span><span class="tier">PRO</span></div>
+              <div class="l2">Team Name：个人账户 · 使用 OAuth 登录 · 用户 ID：<span class="mono">9f6305d7…</span></div>
+              <div class="l3">有效期至 2026-11-10 10:18 · 重置 <span class="num">2</span> 次 · 更新于 10-08 09:58</div>
+            </div>
+            <div class="acts"><span class="curmark">{{i:check:15}}</span><span class="ab only">{{i:dots:15}}</span></div>
+          </div>
+        </section>
+      </div>
+      <div class="scrim">
+        <div class="dlg">
+          <div class="dlg-h">添加 Codex 账号<span class="x">{{i:x:16}}</span></div>
+          <div class="dlg-b">
+            <div class="seg"><span>浏览器登录</span><span>设备码</span><span>API Key</span><span class="on">导入</span></div>
+            <p class="lead">从本机已登录的 Codex 或一个 auth.json 文件里读凭据，落成一条 desko 账号记录。只读那份文件，不改它，也不动官方凭据。</p>
+            <div class="pathline">
+              <span class="k">本机凭据</span>
+              <span class="v mono">C:\Users\jxiaow\.codex\auth.json</span>
+            </div>
+            <div class="frow">
+              <span class="ab">{{i:download:13}}导入本机账号</span>
+              <span class="ab">{{i:folder:13}}从 auth.json 导入…</span>
+            </div>
+          </div>
+          <div class="dlg-f"><span class="ab">取消</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">D 设置·通用：凭据路径与「打开 config.toml」收到 Codex 区块<small>它俩是「这台机器上官方文件在哪」的事实，不是账号动作；放这里不占账号页，也顺手把模块开关和它该管的文件放在一起。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><i>{{i:min:15}}</i><i>{{i:panel:15}}</i><i>{{i:x:15}}</i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav">{{i:navNotes:17}}</div><div class="nav">{{i:navEntries:17}}</div>
+        <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navLan:17}}</div>
+        <div class="nav on">{{i:navCodex:17}}</div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn">{{i:refresh:13}}刷新配额</span>
+            <span class="sbtn">{{i:checkall:13}}选择</span>
+            <span class="pbtn">{{i:plus:13}}添加账号</span>
+          </div>
+        </div>
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个</span></div>
+          <div class="row acc cur">
+            <span class="dot2 cur">主</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">主力</span><span class="tag on">当前</span><span class="tier">PRO</span></div>
+              <div class="l2">Team Name：个人账户 · 使用 OAuth 登录 · 用户 ID：<span class="mono">9f6305d7…</span></div>
+              <div class="l3">有效期至 2026-11-10 10:18 · 重置 <span class="num">2</span> 次 · 更新于 10-08 09:58</div>
+            </div>
+            <div class="acts"><span class="curmark">{{i:check:15}}</span><span class="ab only">{{i:dots:15}}</span></div>
+          </div>
+        </section>
+      </div>
+      <div class="scrim">
+        <div class="sdlg">
+          <div class="snav">
+            <span class="t on">通用</span><span class="t">档案</span><span class="t">局域网传输</span>
+            <span class="t">外观</span><span class="t">数据与备份</span><span class="t">安全</span><span class="t">关于</span>
+          </div>
+          <div class="spane">
+            <div class="sitem">
+              <div class="sinfo"><span class="sname">内网穿透</span><span class="sdesc">开启后侧栏出现「内网穿透」页</span></div>
+              <span class="sw"></span>
+            </div>
+            <div class="sitem">
+              <div class="sinfo"><span class="sname">直连清单</span><span class="sdesc">开启后侧栏显示「直连清单」页</span></div>
+              <span class="sw"></span>
+            </div>
+            <div class="sitem">
+              <div class="sinfo">
+                <span class="sname">Codex 账号</span>
+                <span class="sdesc">开启后侧栏出现「Codex 账号」页，管理多个 Codex 账号并切换官方凭据</span>
+                <div class="spath">
+                  <code>C:\Users\jxiaow\.codex\auth.json</code>
+                  <span class="ab">{{i:file:13}}打开 config.toml</span>
+                </div>
+              </div>
+              <span class="sw on"></span>
+            </div>
+            <div class="sec">—— 以下是既有项，未动 ——</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">E 重置 5 小时额度：确认与明细同一个弹窗<small>上游同构（行内 pill → 同一弹窗里先看明细再确认）。打开即拉 get_codex_reset_credits：可用/已使用/已过期三态都列出来，最近到期单独一行；「重置」是 danger。数据不在列表响应里时（正在加载/取失败）不挡动作，只把明细区换成对应提示。</small></div>
+  <div class="win">
+    <div class="tb"><h1>Codex 账号</h1><div class="wctl"><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><i>{{i:min:15}}</i><i>{{i:panel:15}}</i><i>{{i:x:15}}</i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav">{{i:navNotes:17}}</div><div class="nav">{{i:navEntries:17}}</div>
+        <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navLan:17}}</div>
+        <div class="nav on">{{i:navCodex:17}}</div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <div class="pb-r">
+            <span class="sbtn">{{i:refresh:13}}刷新配额</span>
+            <span class="sbtn">{{i:checkall:13}}选择</span>
+            <span class="pbtn">{{i:plus:13}}添加账号</span>
+          </div>
+        </div>
+        <section class="card">
+          <div class="head">账号<span class="cnt">2 个</span></div>
+          <div class="row acc">
+            <span class="dot2">备</span>
+            <div class="mid">
+              <div class="l1"><span class="mail">备用</span><span class="tier">PLUS</span></div>
+              <div class="l2">Team Name：个人账户 · 使用账号密码登录 · 用户 ID：<span class="mono">4c81be20…</span></div>
+              <div class="l3">有效期至 2027-01-01 00:00 · 重置 <span class="num">2</span> 次</div>
+            </div>
+            <div class="acts"><span class="ab only">{{i:dots:15}}</span></div>
+          </div>
+        </section>
+      </div>
+      <div class="scrim">
+        <div class="dlg rcd">
+          <div class="dlg-h">重置 5 小时额度<span class="x">{{i:x:16}}</span></div>
+          <div class="dlg-b">
+            <div class="rmeta">将立即用掉 <b>263291365@qq.com</b> 的一次 5 小时额度重置，用掉后不可撤销（当前还剩 <span class="num">2</span> 次）。</div>
+            <div class="rexp">{{i:clock:14}}最近到期：10-12 20:00</div>
+            <div class="rdet">
+              <div class="rdet-t">重置次数明细</div>
+              <div class="rlist">
+                <div class="rcredit"><span class="rs ok">可用</span>发放：<span class="t">10-08 09:58</span> · 到期：<span class="t">10-12 20:00</span></div>
+                <div class="rcredit"><span class="rs ok">可用</span>发放：<span class="t">09-30 14:02</span> · 到期：<span class="t">10-14 14:02</span></div>
+                <div class="rcredit"><span class="rs">已使用</span>发放：<span class="t">09-18 10:30</span> · 使用：<span class="t">09-20 21:14</span></div>
+                <div class="rcredit"><span class="rs">已过期</span>发放：<span class="t">08-02 08:00</span> · 到期：<span class="t">08-12 08:00</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="dlg-f"><span class="fr"><span class="ab">取消</span><span class="ab no">重置</span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">F 明细区的三种边界：加载中 / 没有记录 / 取不到<small>明细是「看清楚再决定」的附加信息，不该反过来挡动作：加载中把「重置」洗面；取失败只在明细区留一行红字，按钮照旧可用（次数本身来自账号列表，不依赖这次请求）；后端没给 credits 就是「暂无重置记录」，不编造行。</small></div>
+  <div class="win plain">
+    <div class="dlg rcd">
+      <div class="dlg-h">重置 5 小时额度<span class="x">{{i:x:16}}</span></div>
+      <div class="dlg-b">
+        <div class="rmeta">将立即用掉 <b>263291365@qq.com</b> 的一次 5 小时额度重置，用掉后不可撤销（当前还剩 <span class="num">1</span> 次）。</div>
+        <div class="rdet">
+          <div class="rdet-t">重置次数明细</div>
+          <div class="rempty">{{i:refresh:13}} 加载中…</div>
+        </div>
+      </div>
+      <div class="dlg-f"><span class="fr"><span class="ab">取消</span><span class="ab no off">重置</span></span></div>
+    </div>
+
+    <div class="dlg rcd">
+      <div class="dlg-h">重置 5 小时额度<span class="x">{{i:x:16}}</span></div>
+      <div class="dlg-b">
+        <div class="rmeta">将立即用掉 <b>263291365@qq.com</b> 的一次 5 小时额度重置，用掉后不可撤销（当前还剩 <span class="num">1</span> 次）。</div>
+        <div class="rdet">
+          <div class="rdet-t">重置次数明细</div>
+          <div class="rempty">暂无重置记录</div>
+        </div>
+      </div>
+      <div class="dlg-f"><span class="fr"><span class="ab">取消</span><span class="ab no">重置</span></span></div>
+    </div>
+
+    <div class="dlg rcd">
+      <div class="dlg-h">重置 5 小时额度<span class="x">{{i:x:16}}</span></div>
+      <div class="dlg-b">
+        <div class="rmeta">将立即用掉 <b>263291365@qq.com</b> 的一次 5 小时额度重置，用掉后不可撤销（当前还剩 <span class="num">1</span> 次）。</div>
+        <div class="rdet">
+          <div class="rdet-t">重置次数明细</div>
+          <div class="rerr">加载重置记录失败：主动重置接口返回错误 401</div>
+        </div>
+      </div>
+      <div class="dlg-f"><span class="fr"><span class="ab">取消</span><span class="ab no">重置</span></span></div>
+    </div>
+  </div>
+</div>
+
+</body></html>

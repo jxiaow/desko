@@ -37,22 +37,11 @@ test-results/
 playwright-report/
 blob-report/
 
-# 四主题实机截图，node scripts/theme-shots.mjs 可随时重生成
-design/theme-shots/
+# design/ 整目录默认不入本：历轮 mock/走查产物全部是跑完即弃的草稿。
+# 早年显式加进版本库的基线文件（原型 html/截图/脚本）已被跟踪，不受这条影响；
+# 日后要新立基线，用 git add -f 有意识地加，而不是让 git status 一轮比一轮脏。
+design/*
 
-# 走查与验证截图，Playwright 跑一遍就能重生成，不进版本库
-design/fix-shots/
-design/redesign-shots/
-design/status-shots/
-design/note-lock-shots/
-design/unify-shots/
-design/lock-shots/
-design/nav-shots/
-design/nav-mock/
-design/white-mock/
-design/distinctive/
-design/proto-*.png
-design/r*-*.png
 shots/
 shots-proto/
 docs/design/**/*.png
@@ -62,18 +51,9 @@ docs/design/**/*.png
 
 # 实跑校验脚本与中间产物，跑完即可弃
 tmp/
-design/rail-check/
-design/dialog-check/
-design/bar-check/
-design/icon-board/
-design/icon-fillet/
-design/fs-density/
-design/round-mock/
-design/round-zoom/
-design/round-vet/
-design/tabler-mock/
-design/icon-style-mock/
-design/star-shot/
-design/name-tone/
-design/name-size/
-design/dark-mock/
+
+# 走查生成的 txt 报告（reports 下历史 audit-*.json 是显式入库的，不受影响）
+.design-qa/reports/*.txt
+
+# 一次性截图/联调脚本，跑完即可弃
+scripts/.tmp-*

@@ -160,6 +160,36 @@ mod key_lifecycle_tests {
         backup::container::unpack(p, dek)
     }
 
+    /// 备份包是点名装箱：库快照 + 清单里那些附件，其余目录根本不进视野。
+    /// 穿透凭据一旦进包 = 把公网入口的钥匙交给云端，而云端密文永不删 —— 这条边界得有测试守着。
+    #[test]
+    fn package_holds_nothing_beyond_the_db_and_listed_attachments() {
+        let root = tmp("scope");
+        let path = root.join("data.db");
+        let db = fresh_db(path.to_str().unwrap());
+        let master = vec![3u8; KEY_LENGTH];
+        let (dek, wrap, _) = set_backup_password(&db, &master, "backup-pw").unwrap();
+
+        // 与 tunnel_service 的目录树同形：凭据、配置、二进制都摆在档案根里
+        let cf = root.join("tunnel").join("cf");
+        std::fs::create_dir_all(&cf).unwrap();
+        std::fs::write(cf.join("tun-1.json"), br#"{"AccountTag":"let-me-out"}"#).unwrap();
+        std::fs::write(root.join("tunnel").join("config.yml"), b"ingress: local").unwrap();
+
+        let name = make_package(&root, path.to_str().unwrap(), &dek, &wrap);
+        let pkg = backup::backups_dir(&root).join(&name);
+        let zip_bytes = backup::container::unpack(&pkg, &dek).unwrap();
+        let reader = zip::ZipArchive::new(std::io::Cursor::new(&zip_bytes)).unwrap();
+        let names: Vec<String> = reader.file_names().map(|s| s.to_string()).collect();
+        assert_eq!(
+            names,
+            vec!["manifest.json".to_string(), "data.db".to_string()],
+            "包里多了别的条目：档案根下的其它目录会被一起带走"
+        );
+        assert!(!String::from_utf8_lossy(&zip_bytes).contains("let-me-out"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// 新机器/重装后：本地什么都没设，光凭包 + 备份密码就能取出数据密钥
     #[test]
     fn fresh_machine_can_restore_from_package_alone() {

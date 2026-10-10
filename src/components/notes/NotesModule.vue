@@ -427,7 +427,7 @@ onBeforeUnmount(() => {
 
           <div v-else-if="!filteredNotes.length" class="empty-state">
             <div class="empty-icon">
-              <AppIcon :name="hasActiveFilters ? 'searchEmpty' : 'doc'" :size="24" />
+              <AppIcon :name="hasActiveFilters ? 'searchEmpty' : 'navNotes'" :size="24" />
             </div>
             <div class="empty-title">{{ hasActiveFilters ? '未找到匹配的小记' : '还没有小记' }}</div>
             <div class="empty-desc">{{ hasActiveFilters ? '试试清空筛选或其他关键词' : '在上方写第一条' }}</div>
@@ -586,7 +586,7 @@ onBeforeUnmount(() => {
   gap: var(--space-2);
   font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   letter-spacing: 0.02em;
   padding: var(--space-2) 0 var(--space-2) var(--space-1);
   /* 与 .page-bar 同一条画布配方（global.css --canvas-bg）：吸顶件若铺平色（原先 var(--bg)）

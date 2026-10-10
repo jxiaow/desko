@@ -3,12 +3,10 @@ use crate::error::AppError;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// 附件统一落在这个目录，asset: 协议的白名单也只看它（见 main.rs 的 allow_directory）
+/// 附件统一落在这个目录，asset: 协议的白名单也只看它（见 main.rs 的 allow_directory）。
+/// 具体位置由当前档案根决定（多档案 D1/D2），见 `crate::paths`。
 pub fn attachments_dir() -> PathBuf {
-    let root = std::env::var("APPDATA")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".to_string());
-    Path::new(&root).join("desko").join("attachments")
+    crate::paths::attachments_dir()
 }
 
 /// 正文里附件 src 的前缀。库里存 `attachments/<文件名>`，显示时再由前端拼本机目录 ——

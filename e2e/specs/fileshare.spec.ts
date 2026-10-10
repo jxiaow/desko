@@ -29,9 +29,9 @@ async function dragPhase(page: Page, type: 'enter' | 'leave') {
 }
 
 test.describe('局域网文件传输', () => {
-  test('开关默认关：没有侧栏入口，直达 /fileshare 被带回条目页', async ({ page }) => {
+  test('开关默认关：没有侧栏入口，直达 /fileshare 被带回小记页', async ({ page }) => {
     await bootUnlocked(page, {}, '/fileshare')
-    await expect(page).toHaveURL(/\/entries$/)
+    await expect(page).toHaveURL(/\/notes$/)
     await expect(page.locator('a.nav-item[href="/fileshare"]')).toHaveCount(0)
     expect(await e2e.count(page, 'fileshare_status')).toBe(0)
   })
@@ -39,9 +39,9 @@ test.describe('局域网文件传输', () => {
   test('开关只开入口不自动起服务，模块页手动启动才监听', async ({ page }) => {
     await bootUnlocked(page)
     await expect(page.locator('a.nav-item[href="/fileshare"]')).toHaveCount(0)
-    const dialog = await openSettings(page, 'general')
+    const dialog = await openSettings(page, 'modules')
     await visiblePane(dialog)
-      .locator('.setting-item', { hasText: '局域网文件传输' })
+      .locator('.setting-item', { hasText: '局域网传输' })
       .locator('.switch-slider')
       .click()
     await expectToast(page, '局域网传输已开启')
@@ -121,16 +121,16 @@ test.describe('局域网文件传输', () => {
     await expect(page.locator('.group-note.chip-warn', { hasText: '未设访问口令' })).toBeVisible()
   })
 
-  test('关闭开关：停服并从不一致的当前页带回条目页', async ({ page }) => {
+  test('关闭开关：停服并从不一致的当前页带回小记页', async ({ page }) => {
     await gotoFileshare(page)
-    const dialog = await openSettings(page, 'general')
+    const dialog = await openSettings(page, 'modules')
     await visiblePane(dialog)
-      .locator('.setting-item', { hasText: '局域网文件传输' })
+      .locator('.setting-item', { hasText: '局域网传输' })
       .locator('.switch-slider')
       .click()
     await expectToast(page, '设置已保存')
     expect(await e2e.count(page, 'fileshare_stop')).toBe(1)
-    await expect(page).toHaveURL(/\/entries$/)
+    await expect(page).toHaveURL(/\/notes$/)
   })
 
   test('端口漂移：黄色胶囊显示实际端口与被占的配置端口', async ({ page }) => {

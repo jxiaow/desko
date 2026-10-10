@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::backup::{self, PackageInfo};
 use crate::error::AppError;
@@ -21,8 +21,10 @@ pub(crate) fn emit_progress(app: &AppHandle, op: &str, text: &str, pct: u8) {
     );
 }
 
-fn app_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
-    app.path().app_data_dir().map_err(|e| AppError::Io(e.to_string()))
+/// 当前档案根即「应用数据目录」（多档案 D1）。备份/staging/换库都以它为基。
+/// 保留 `app` 形参仅为调用点不变；实际路径来自 `paths` 全局。
+fn app_data_dir(_app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
+    Ok(crate::paths::profile_root())
 }
 
 #[tauri::command]

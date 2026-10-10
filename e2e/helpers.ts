@@ -85,8 +85,12 @@ export async function hoverCard(page: Page, name: string): Promise<void> {
 
 /** 设置弹窗是左菜单 / 右内容，非默认面板要先点菜单项才有可见的可交互节点 */
 const SETTINGS_TAB = {
-  general: '通用',
+  profiles: '档案',
+  modules: '模块',
+  notes: '小记',
+  files: '文件快捷',
   fileshare: '局域网传输',
+  codex: 'Codex 账号',
   appearance: '外观',
   backup: '数据与备份',
   security: '安全',

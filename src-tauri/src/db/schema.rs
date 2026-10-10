@@ -64,6 +64,41 @@ pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
             period INTEGER NOT NULL DEFAULT 30,
             created_at INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS bypass_targets (
+            id TEXT PRIMARY KEY,
+            host TEXT NOT NULL UNIQUE,
+            input TEXT NOT NULL DEFAULT '',
+            kind TEXT NOT NULL,
+            port INTEGER NOT NULL DEFAULT 443,
+            path TEXT NOT NULL DEFAULT '',
+            scheme TEXT NOT NULL DEFAULT 'https',
+            address TEXT NOT NULL DEFAULT '',
+            interface_name TEXT NOT NULL DEFAULT '',
+            next_hop TEXT NOT NULL DEFAULT '',
+            verdict TEXT NOT NULL DEFAULT '',
+            stale INTEGER NOT NULL DEFAULT 0,
+            note TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            checked_at INTEGER NOT NULL DEFAULT 0
+        );
+        -- host 上的 UNIQUE 约束自带索引，这条曾是多余的第二份；留一句幂等清理，
+        -- 收掉早期开发库里已经建出来的那枚
+        DROP INDEX IF EXISTS idx_bypass_targets_host;
+
+        CREATE TABLE IF NOT EXISTS tunnel_services (
+            id TEXT PRIMARY KEY,
+            hostname TEXT NOT NULL UNIQUE,
+            port INTEGER NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            preset TEXT NOT NULL DEFAULT '',
+            routed INTEGER NOT NULL DEFAULT 0,
+            public_password_sha256 TEXT NOT NULL DEFAULT '',
+            public_read_only INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
     ")?;
 
     // 迁移：为 notes 表添加 pinned 和 starred 字段（如果不存在）
@@ -96,6 +131,33 @@ pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
              ALTER TABLE notes ADD COLUMN wrap_pass TEXT NOT NULL DEFAULT '';
              ALTER TABLE notes ADD COLUMN pass_salt TEXT NOT NULL DEFAULT '';
              ALTER TABLE notes ADD COLUMN wrap_master TEXT NOT NULL DEFAULT '';"
+        )?;
+    }
+
+    // 迁移：直连清单记下粘贴原文。端口/路径/掩码都不在 host 列里，
+    // 重探只按 host 走会把 http://host:9090/a 探成 https://host:443
+    let has_bp_input: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('bypass_targets') WHERE name='input'",
+        [],
+        |r| r.get(0),
+    ).unwrap_or(0) > 0;
+
+    if !has_bp_input {
+        conn.execute_batch("ALTER TABLE bypass_targets ADD COLUMN input TEXT NOT NULL DEFAULT '';")?;
+    }
+
+    // 迁移：穿透服务带上公网策略。口令只存摘要，且只对 desko 自己起的服务有意义——
+    // 第三方本机端口不在我们的请求链路上，收不到这份策略。只读默认开：端出去先窄后宽。
+    let has_ts_policy: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('tunnel_services') WHERE name='public_password_sha256'",
+        [],
+        |r| r.get(0),
+    ).unwrap_or(0) > 0;
+
+    if !has_ts_policy {
+        conn.execute_batch(
+            "ALTER TABLE tunnel_services ADD COLUMN public_password_sha256 TEXT NOT NULL DEFAULT '';
+             ALTER TABLE tunnel_services ADD COLUMN public_read_only INTEGER NOT NULL DEFAULT 1;"
         )?;
     }
 

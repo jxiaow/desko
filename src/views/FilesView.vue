@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useFileShortcutsStore } from '../stores/fileShortcuts'
 import FileShortcutsModule from '../components/files/FileShortcutsModule.vue'
@@ -8,6 +9,8 @@ const {
   loading, loadError, searchKeyword, filteredShortcuts, shortcuts,
 } = storeToRefs(fileShortcutsStore)
 const { fetchShortcuts, addShortcut, updateShortcut, removeShortcut } = fileShortcutsStore
+
+onMounted(fetchShortcuts)
 </script>
 
 <template>

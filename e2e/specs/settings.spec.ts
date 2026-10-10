@@ -86,9 +86,9 @@ test.describe('Settings 设置', () => {
     await expect(backup).toHaveCSS('color', 'rgb(255, 255, 255)')
   })
 
-  test('终端偏好：通用页可选，改动落盘', async ({ page }) => {
+  test('终端偏好：文件快捷页可选，改动落盘', async ({ page }) => {
     await bootUnlocked(page, SEED)
-    const dialog = await openSettings(page, 'general')
+    const dialog = await openSettings(page, 'files')
     const pane = visiblePane(dialog)
     const trigger = pane.locator('.setting-item', { hasText: '在终端中打开' }).locator('button.opt-trigger')
     await expect(trigger).toHaveCount(1)
@@ -98,6 +98,30 @@ test.describe('Settings 设置', () => {
     await page.locator('.popover.modal .opt-item', { hasText: '命令提示符' }).click()
     await expectToast(page, '已保存终端偏好')
     await expect.poll(() => e2e.count(page, 'set_setting')).toBeGreaterThan(before)
+  })
+
+  test('模块配置页签：开关模块时对应页签出现/消失', async ({ page }) => {
+    await bootUnlocked(page, SEED)
+    const dialog = await openSettings(page, 'modules')
+    const pane = visiblePane(dialog)
+
+    // 默认开启的核心模块，设置左导航有独立配置页签
+    await expect(dialog.locator('.nav-tab', { hasText: '小记' })).toHaveCount(1)
+    await expect(dialog.locator('.nav-tab', { hasText: '文件快捷' })).toHaveCount(1)
+    // 默认关闭的模块不出现
+    await expect(dialog.locator('.nav-tab', { hasText: '局域网传输' })).toHaveCount(0)
+
+    // 关掉文件快捷 → 配置页签消失
+    await pane.locator('.setting-item', { hasText: '文件快捷' }).locator('label.switch').click()
+    await expectToast(page, '设置已保存')
+    await expect(dialog.locator('.nav-tab', { hasText: '文件快捷' })).toHaveCount(0)
+
+    // 开启局域网传输 → 配置页签出现，且能点进面板
+    await pane.locator('.setting-item', { hasText: '局域网传输' }).locator('label.switch').click()
+    await expectToast(page, '局域网传输已开启')
+    await expect(dialog.locator('.nav-tab', { hasText: '局域网传输' })).toHaveCount(1)
+    await settingsTab(dialog, 'fileshare')
+    await expect(visiblePane(dialog).locator('.setting-item', { hasText: '端口' })).toBeVisible()
   })
 
   test('点遮罩不关窗，Esc 只关最上面那层', async ({ page }) => {

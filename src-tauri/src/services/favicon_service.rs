@@ -1,14 +1,12 @@
 use sha2::{Digest, Sha256};
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
-/// favicon 缓存目录：扁平一档文件，asset: 协议白名单只看它（见 main.rs 的 allow_directory）
+/// favicon 缓存目录：扁平一档文件，asset: 协议白名单只看它（见 main.rs 的 allow_directory）。
+/// 位置由当前档案根决定（多档案 D1/D2），见 `crate::paths`。
 pub fn favicons_dir() -> PathBuf {
-    let root = std::env::var("APPDATA")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".to_string());
-    Path::new(&root).join("desko").join("favicons")
+    crate::paths::favicons_dir()
 }
 
 const EXTS: [&str; 5] = ["ico", "png", "gif", "webp", "svg"];
@@ -197,7 +195,7 @@ mod tests {
     #[ignore]
     fn resolve_fetches_real_site() {
         let path = resolve("https://github.com").expect("github favicon 应抓到");
-        let p = Path::new(&path);
+        let p = std::path::Path::new(&path);
         assert!(p.is_file());
         assert_eq!(p.parent().unwrap(), favicons_dir().as_path());
         let second = resolve("https://github.com/desko/desko");

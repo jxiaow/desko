@@ -410,7 +410,7 @@ onBeforeUnmount(() => {
 
     <div v-else class="empty-state">
       <div class="empty-icon">
-        <AppIcon :name="searchKeyword ? 'searchEmpty' : 'folder'" :size="24" />
+        <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navFiles'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无快捷方式' }}</div>
       <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「添加快捷方式」开始' }}</div>
@@ -531,7 +531,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--ftc) 10%, var(--panel-bg));
 }
 
-.row-name { font-size: var(--text-sm); font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 84px; }
+.row-name { font-size: var(--text-base); font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 84px; }
 
 /* 路径：等宽 12px 灰字，尾部优先截断（保文件名，盘符与上层目录是噪音） */
 .cell-path { min-width: 0; display: flex; align-items: center; }

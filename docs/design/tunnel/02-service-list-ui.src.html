@@ -1,0 +1,310 @@
+<!doctype html>
+<!-- 内网穿透页对拍稿（2026-10-09 拍板的形状：一条隧道 + N 条服务）。
+     改完重跑：node scripts/mock-build.mjs docs/design/tunnel/02-service-list-ui.src.html docs/design/tunnel/02-service-list-ui.html
+     三帧分别是 A 首次进入 / B 已运行 / C 单条服务的公网设置；同目录的 02-service-list-ui.html 是注好真 token 的可直接打开版。 -->
+<html lang="zh"><head><meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "HarmonyOS Sans SC", system-ui, sans-serif; }
+<!--TOKENS-->
+body { background: #6f6f6f; padding: 28px 28px 40px; display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
+.cap { color: #ededed; font-size: 13px; font-weight: 600; letter-spacing: .04em; margin-bottom: 10px; }
+.cap small { display: block; margin-top: 4px; font-weight: 400; font-size: 12px; color: #bdbdbd; }
+
+.win { position: relative; width: 1040px; height: 670px; background: var(--bg-toolbar);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+  box-shadow: var(--shadow-pop); display: flex; flex-direction: column; }
+
+/* 窗框：42 标题条 + 56 图标栏，与真程序同尺寸 */
+.tb { flex-shrink: 0; height: 42px; display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); border-bottom: 1px solid var(--border-subtle); }
+.tb h1 { font-size: var(--text-base); font-weight: 600; color: var(--text); }
+.wctl { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--text-muted); }
+.wctl i { width: 26px; height: 26px; border-radius: var(--radius-sm); display: inline-flex;
+  align-items: center; justify-content: center; font-style: normal; }
+.body { flex: 1; min-height: 0; display: flex; }
+.rail { flex-shrink: 0; width: 56px; background: var(--sidebar-bg); border-right: 1px solid var(--sidebar-border);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; }
+.nav { width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center;
+  justify-content: center; color: var(--text-muted); }
+.nav.on { background: var(--panel-bg); color: var(--accent); box-shadow: var(--shadow-card); }
+.main { flex: 1; min-width: 0; overflow: hidden; padding: 0 var(--space-5) var(--space-5); }
+
+/* 页栏 54px：整条隧道的状态、地址、起停住这里 */
+.pagebar { height: 54px; display: flex; align-items: center; gap: var(--space-2); }
+.chip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
+  border-radius: var(--radius-pill); background: var(--panel-bg); border: 1px solid var(--border);
+  font-size: var(--text-xs); color: var(--text-secondary); }
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
+.chip.live { color: var(--accent); border-color: var(--accent-light); background: var(--accent-soft); }
+.chip.live .dot { background: var(--accent); }
+.chip.warn { color: var(--warning); border-color: var(--warning-soft); background: var(--warning-soft); }
+.chip.warn .dot { background: var(--warning); }
+.pbtn, .sbtn, .dbtn { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px;
+  border-radius: var(--radius-pill); font-family: inherit; font-size: var(--text-xs); font-weight: 600;
+  border: 1px solid transparent; cursor: default; white-space: nowrap; }
+.pbtn { background: var(--accent); color: var(--accent-on); box-shadow: 0 4px 14px -3px var(--accent); }
+.pbtn.off { background: var(--fill); color: var(--text-faint); box-shadow: none; border-color: var(--border); }
+.sbtn { background: var(--panel-bg); color: var(--text-secondary); border-color: var(--border); font-weight: 500; }
+.dbtn { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-border); font-weight: 500; }
+.only { width: 30px; padding: 0; justify-content: center; }
+.pb-r { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+
+/* 一层卡 + 发丝分行 */
+.card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card); }
+.card + .card, .card + .foot { margin-top: var(--space-3); }
+.head { height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  border-bottom: 1px solid var(--border); font-size: var(--text-xs); font-weight: 600;
+  letter-spacing: .06em; color: var(--text-muted); }
+.cnt { margin-left: auto; font-weight: 500; letter-spacing: 0; color: var(--text-faint); font-size: var(--text-2xs); }
+.head .ab { margin-left: auto; }
+.head .cnt + .ab { margin-left: 10px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 0 16px; height: 44px; }
+.row + .row { border-top: 1px solid var(--border); }
+.row.cur { height: 64px; }
+.row.tall { height: 56px; }
+.dot2 { width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; font-size: 10px; }
+.done .dot2 { background: var(--accent-soft); border: 1px solid var(--accent-light); color: var(--accent); }
+.cur .dot2 { background: var(--accent); color: var(--accent-on); }
+.todo .dot2 { border: 1px solid var(--border-strong); color: var(--text-faint); }
+.lbl { flex-shrink: 0; width: 58px; font-size: var(--text-sm); font-weight: 500; color: var(--text); }
+.todo .lbl { font-weight: 400; color: var(--text-secondary); }
+.mid { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.val { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub { font-size: var(--text-xs); color: var(--text-muted); }
+.todo .val, .todo .sub { color: var(--text-faint); }
+.ab { height: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 0 11px; flex-shrink: 0;
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: inherit; font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary); }
+.ab.go { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+.ab.off { color: var(--text-faint); background: var(--fill); }
+.ab.ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+.note { display: flex; align-items: center; gap: 6px; padding: 9px 16px; border-top: 1px solid var(--border);
+  font-size: var(--text-xs); color: var(--text-muted); }
+.note.warn { background: var(--warning-soft); color: var(--warning); }
+.hint { margin: 10px 2px 0; font-size: var(--text-xs); color: #cfcfcf; }
+
+/* 服务行：名字 + 地址 + 指向 + 状态 + 动作 */
+.svc { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.svc-l1 { display: flex; align-items: baseline; gap: 8px; }
+.svc-name { font-size: var(--text-sm); font-weight: 500; color: var(--text); flex-shrink: 0; }
+.svc-host { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--accent);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svc-l2 { display: flex; align-items: center; gap: 8px; font-size: var(--text-2xs); color: var(--text-muted); }
+.svc-l2 code { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary);
+  background: var(--fill); padding: 1px 5px; border-radius: var(--radius-xs); }
+.badge { font-size: var(--text-2xs); padding: 1px 7px; border-radius: var(--radius-pill);
+  background: var(--fill); color: var(--text-secondary); }
+.badge.on { background: var(--accent-soft); color: var(--accent); }
+.badge.bad { background: var(--warning-soft); color: var(--warning); }
+.acts { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.add { display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 16px;
+  border-top: 1px solid var(--border); font-size: var(--text-sm); color: var(--text-muted); }
+
+/* 页脚诊断条 */
+.foot { background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.foot-l { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px;
+  font-size: var(--text-xs); color: var(--text-secondary); }
+.foot-l .k { color: var(--text-muted); }
+.foot-l .mono { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary); }
+.foot-l .ab { margin-left: auto; background: transparent; }
+
+/* 服务详情弹窗：公网面的新布局 */
+.scrim { position: absolute; inset: 0; background: rgba(20,20,20,.34); display: flex;
+  align-items: center; justify-content: center; }
+.dlg { width: 520px; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); overflow: hidden; }
+.dlg-h { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border); font-size: var(--text-sm); font-weight: 600; color: var(--text); }
+.dlg-h .x { margin-left: auto; color: var(--text-muted); }
+.fset { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.fset + .fset { border-top: 1px solid var(--border-subtle); }
+.fset-t { font-size: var(--text-2xs); font-weight: 600; letter-spacing: .06em; color: var(--text-faint); }
+.f { display: flex; align-items: center; gap: var(--space-3); }
+.f > label { width: 78px; flex-shrink: 0; font-size: var(--text-xs); color: var(--text-secondary); }
+.ipt { height: 32px; flex: 1; min-width: 0; padding: 0 10px; background: var(--panel-bg);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);
+  font-family: var(--font-mono); font-size: 13px; }
+.ro { height: 32px; flex: 1; display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--text-muted); }
+.seg { display: inline-flex; padding: 2px; background: var(--sunken); border: 1px solid var(--border);
+  border-radius: var(--radius-pill); }
+.seg span { height: 26px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: var(--radius-pill);
+  font-size: var(--text-xs); color: var(--text-secondary); }
+.seg span.on { background: var(--panel-bg); color: var(--accent); font-weight: 600; box-shadow: var(--shadow-xs); }
+.sw { width: 34px; height: 20px; border-radius: var(--radius-pill); background: var(--border-strong);
+  position: relative; flex-shrink: 0; }
+.sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--panel-bg); box-shadow: var(--shadow-xs); }
+.sw.on { background: var(--accent); }
+.sw.on::after { left: 16px; }
+.f-hint { font-size: var(--text-2xs); color: var(--text-faint); padding-left: 90px; }
+.dlg-f { display: flex; align-items: center; gap: var(--space-2); height: 46px; padding: 0 var(--space-4);
+  border-top: 1px solid var(--border); background: var(--sunken); }
+.dlg-f .ab { margin-left: auto; }
+</style></head>
+<body>
+
+<div class="frame">
+  <div class="cap">A 首次进入：一条隧道 + 零条服务，只摊开当前该做的一步<small>隧道只有一条（本机持有），要做的事按步骤流排；服务列表此时是空态一行。</small></div>
+  <div class="win">
+    <div class="tb"><h1>内网穿透</h1><div class="wctl"><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><i>{{i:min:15}}</i><i>{{i:panel:15}}</i><i>{{i:x:15}}</i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav">{{i:navNotes:17}}</div><div class="nav">{{i:navEntries:17}}</div>
+        <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navLan:17}}</div>
+        <div class="nav on">{{i:globe:17}}</div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <span class="chip"><span class="dot"></span>隧道未建立</span>
+          <div class="pb-r"><span class="pbtn off">{{i:external:13}}启动隧道</span></div>
+        </div>
+
+        <section class="card">
+          <div class="head">接入准备<span class="cnt">第 2 步 / 共 3 步</span></div>
+          <div class="row done">
+            <span class="dot2">{{i:check:11}}</span>
+            <span class="mid"><span class="sub">穿透程序 cloudflared 2026.10.0 已校验</span></span>
+          </div>
+          <div class="row cur">
+            <span class="dot2">2</span>
+            <span class="lbl">授权</span>
+            <span class="mid"><span class="sub">在浏览器里登录 Cloudflare，凭据只留本机自己那份目录</span></span>
+            <span class="ab go">{{i:external:12}}去授权</span>
+          </div>
+          <div class="row todo">
+            <span class="dot2">3</span>
+            <span class="lbl">建隧道</span>
+            <span class="mid"><span class="sub">授权完成后才能建，本机只建自己这一条</span></span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="head">公网服务<span class="cnt">0 条</span></div>
+          <div class="add">{{i:plus:13}}添加一项本地服务</div>
+        </section>
+        <div class="hint">↑ 首屏三块共 320px：准备流 190 + 服务空态 82 + 页栏 54</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">B 已运行：准备流收成一行摘要，服务列表是主角<small>一条隧道挂多个子域，每个子域指向一个本地端口；局域网传输只是其中一条。</small></div>
+  <div class="win">
+    <div class="tb"><h1>内网穿透</h1><div class="wctl"><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><i>{{i:min:15}}</i><i>{{i:panel:15}}</i><i>{{i:x:15}}</i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav">{{i:navNotes:17}}</div><div class="nav">{{i:navEntries:17}}</div>
+        <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navLan:17}}</div>
+        <div class="nav on">{{i:globe:17}}</div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <span class="chip live"><span class="dot"></span>已连上边缘</span>
+          <span class="chip"><span class="dot"></span>3 项服务</span>
+          <div class="pb-r">
+            <span class="dbtn">{{i:x:13}}停止隧道</span>
+            <span class="sbtn only">{{i:dots:14}}</span>
+          </div>
+        </div>
+
+        <section class="card">
+          <div class="row done tall">
+            <span class="dot2">{{i:check:11}}</span>
+            <span class="mid"><span class="lbl" style="width:auto">隧道已就绪</span><span class="val">e2e-desko · 本机持有</span></span>
+            <span class="ab">{{i:adjustments:12}}调整</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="head">公网服务<span class="cnt">3 条 · 随隧道一起起停</span><span class="ab">{{i:plus:12}}添加</span></div>
+
+          <div class="row tall">
+            <div class="svc">
+              <div class="svc-l1"><span class="svc-name">局域网传输</span><span class="svc-host">files.example.com</span></div>
+              <div class="svc-l2"><code>127.0.0.1:8421</code><span class="badge on">需口令</span><span class="badge">只读</span><span>本机正在监听</span></div>
+            </div>
+            <div class="acts"><span class="ab ghost">{{i:copy:12}}</span><span class="ab ghost">{{i:dots:13}}</span></div>
+          </div>
+
+          <div class="row tall">
+            <div class="svc">
+              <div class="svc-l1"><span class="svc-name">文档站</span><span class="svc-host">docs.example.com</span></div>
+              <div class="svc-l2"><code>127.0.0.1:4000</code><span class="badge bad">无鉴权 · 任何人都能读</span><span>本机正在监听</span></div>
+            </div>
+            <div class="acts"><span class="ab ghost">{{i:copy:12}}</span><span class="ab ghost">{{i:dots:13}}</span></div>
+          </div>
+
+          <div class="row tall">
+            <div class="svc">
+              <div class="svc-l1"><span class="svc-name">调试面板</span><span class="svc-host">dbg.example.com</span></div>
+              <div class="svc-l2"><code>127.0.0.1:9229</code><span class="badge">未探到响应</span><span class="badge bad">目标端口没在听</span></div>
+            </div>
+            <div class="acts"><span class="ab ghost">{{i:copy:12}}</span><span class="ab ghost">{{i:dots:13}}</span></div>
+          </div>
+
+          <div class="add">{{i:plus:13}}添加一项本地服务</div>
+        </section>
+
+        <div class="foot">
+          <div class="foot-l"><span class="k">穿透程序</span><span class="mono">2026.10.0 已校验</span><span class="mono">PID 424242</span><span class="ab">{{i:chevDown:12}}详情</span></div>
+        </div>
+        <div class="hint">↑ 只有"局域网传输"那条的徽标是 desko 能强制的策略；第三方端口 desko 不在请求链路上，徽标是登记时探到的事实。服务不能单独挂断（边缘按整条隧道发流），所以列表里没有每行的开关</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">C 单条服务的公网设置：局域网传输在公网侧的全新界面<small>不复用局域网页的布局；公网面只问三件事——指向哪儿、谁能进、能做什么。</small></div>
+  <div class="win">
+    <div class="tb"><h1>内网穿透</h1><div class="wctl"><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><i>{{i:min:15}}</i><i>{{i:panel:15}}</i><i>{{i:x:15}}</i></div></div>
+    <div class="body">
+      <div class="rail">
+        <div class="nav">{{i:navNotes:17}}</div><div class="nav">{{i:navEntries:17}}</div>
+        <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navLan:17}}</div>
+        <div class="nav on">{{i:globe:17}}</div>
+      </div>
+      <div class="main">
+        <div class="pagebar">
+          <span class="chip live"><span class="dot"></span>已连上边缘</span>
+          <span class="chip"><span class="dot"></span>3 项服务</span>
+          <div class="pb-r"><span class="dbtn">{{i:x:13}}停止隧道</span><span class="sbtn only">{{i:dots:14}}</span></div>
+        </div>
+        <section class="card">
+          <div class="row done tall"><span class="dot2">{{i:check:11}}</span><span class="mid"><span class="lbl" style="width:auto">隧道已就绪</span><span class="val">e2e-desko · 本机持有</span></span><span class="ab">{{i:adjustments:12}}调整</span></div>
+        </section>
+      </div>
+
+      <div class="scrim">
+        <div class="dlg">
+          <div class="dlg-h">局域网传输 · 公网设置<span class="x">{{i:x:15}}</span></div>
+          <div class="fset">
+            <div class="fset-t">指向</div>
+            <div class="f"><label>公网子域</label><input class="ipt" value="files.example.com"></div>
+            <div class="f"><label>本地地址</label><input class="ipt" value="127.0.0.1:8421"><span class="badge on">自动读到</span></div>
+            <div class="f-hint">端口由本机服务实际监听值填入，写死配置端口会因占用漂移而连不上。</div>
+          </div>
+          <div class="fset">
+            <div class="fset-t">谁能进</div>
+            <div class="f"><label>访问口令</label><input class="ipt" value="••••••••••"><span class="ab">改</span></div>
+            <div class="f-hint">公网侧口令不可为空，且与局域网口令分开设。</div>
+            <div class="f"><label>失败锁定</label><div class="ro"><span class="sw on"></span>5 次失败锁 15 分钟，跨重启保持</div></div>
+          </div>
+          <div class="fset">
+            <div class="fset-t">能做什么</div>
+            <div class="f"><label>动作面</label><div class="seg"><span class="on">只读（浏览/下载）</span><span>允许上传</span></div></div>
+            <div class="f"><label>改服务端配置</label><div class="ro"><span class="sw"></span>公网侧禁用</div></div>
+          </div>
+          <div class="dlg-f"><span class="sub">改动即刻生效，无需重启隧道</span><span class="ab">取消</span><span class="ab go">保存</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body></html>

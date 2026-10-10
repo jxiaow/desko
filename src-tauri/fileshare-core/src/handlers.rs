@@ -7,11 +7,12 @@ use std::sync::Arc;
 
 use tiny_http::{Header, Request, Response, StatusCode};
 
-use crate::auth::{sanitize_next, SESSION_COOKIE};
-use crate::config::{ensure_dirs_exist, normalize_share_dirs, ShareConfig};
+use crate::auth::{sanitize_next, LAN_SCOPE, SESSION_COOKIE};
+use crate::config::{ensure_dirs_exist, normalize_share_dirs, PublicPolicy, ShareConfig};
 use crate::files::{
     claim_available_name, format_size, list_files, resolve_file_in_share, sanitize_upload_name, FileEntry,
 };
+use crate::guard::{FailGate, Rule, RULE_HOST, RULE_SOURCE};
 use crate::http_util::{
     content_type_of, cookie_get, pair_get, parse_cookie, parse_pairs, percent_decode, split_lines, url_encode,
 };
@@ -31,6 +32,8 @@ const APP_FONT: &[u8] = include_bytes!("../../../public/fonts/harmonyos-sans-sc.
 pub struct RuntimeState {
     pub config: std::sync::RwLock<ShareConfig>,
     pub sessions: Arc<crate::auth::SessionStore>,
+    /// 公网侧登录失败的计数：落文件，重启不清零
+    pub gate: Arc<FailGate>,
     /// 网页端改共享目录后写回 meta（SQLite 只能在命令侧摸，这里注入回调）
     pub persist_dirs: Arc<dyn Fn(&[PathBuf]) -> Result<(), String> + Send + Sync>,
     pub bound_port: u16,
@@ -48,6 +51,29 @@ impl RuntimeState {
     }
 }
 
+/// 这一请求从哪一面进来。局域网面一律按老行为走，公网面才受服务表那条策略管
+struct Face {
+    policy: Option<PublicPolicy>,
+    /// 会话归属：局域网一个桶，公网按子域各一个桶
+    scope: String,
+    /// 失败计数用的来源标识
+    src_ip: String,
+}
+
+impl Face {
+    fn is_public(&self) -> bool {
+        self.policy.is_some()
+    }
+
+    /// 两维同时计：换来源 IP 绕不开整域那一维
+    fn gate_keys(&self) -> Vec<(String, Rule)> {
+        vec![
+            (format!("{}|{}", self.scope, self.src_ip), RULE_SOURCE),
+            (format!("{}|*", self.scope), RULE_HOST),
+        ]
+    }
+}
+
 /// 每请求取一次配置快照，改目录/口令下一个请求即生效（"热加载"等价物）
 pub fn handle(request: Request, state: Arc<RuntimeState>) {
     let cfg = state.snapshot();
@@ -61,10 +87,12 @@ pub fn handle(request: Request, state: Arc<RuntimeState>) {
     };
     let query = parse_pairs(&query_raw);
 
-    // 边界防串：Host 只认 IP/localhost（挡 DNS 重绑——rebind 后 Host 是攻击者域名）；
-    // POST 再查 Origin 同源与 Sec-Fetch-Site（挡跨站表单 CSRF，无口令态没有 cookie 可挡）
+    // 边界防串：Host 只认 IP/localhost（挡 DNS 重绑——rebind 后 Host 是攻击者域名），
+    // 外加服务表里逐条登记过的公网子域；POST 再查 Origin 同源与 Sec-Fetch-Site
     let host = url_host(&header_of(&request, "host"));
-    if !host_trusted(&host, &state.lan_ip) {
+    let lan_face = host_trusted(&host, &state.lan_ip);
+    let policy = cfg.public_policy(&host).cloned();
+    if !lan_face && policy.is_none() {
         if let Err(e) = fail(request, text_resp(StatusCode(403), "Forbidden host")) {
             eprintln!("desko fileshare: 回复失败: {}", e);
         }
@@ -83,8 +111,24 @@ pub fn handle(request: Request, state: Arc<RuntimeState>) {
         }
     }
 
+    // 公网面的来源取边缘注的头：socket 对端永远是 127.0.0.1，拿它计数等于全机一个桶。
+    // 局域网里的人可以连 Host 一起编来伪造这个值，代价是把自己锁进更严的那一维
+    let socket_ip = request
+        .remote_addr()
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let cf_ip = header_of(&request, "cf-connecting-ip");
+    let src_ip = match &policy {
+        // 边缘注入的头必须是合法 IP 才敢当来源：局域网里伪造一条就能把无辜来源
+        // 定点锁进错误桶，非法值一律回落到 socket 对端
+        Some(_) if cf_ip.parse::<std::net::IpAddr>().is_ok() => cf_ip,
+        _ => socket_ip,
+    };
+    let scope = policy.as_ref().map(|p| p.hostname.to_ascii_lowercase()).unwrap_or_else(|| LAN_SCOPE.to_string());
+    let face = Face { policy, scope, src_ip };
+
     // respond 失败基本都是客户端断连，request 已被消耗，没有补救动作，只留痕
-    if let Err(e) = dispatch(request, &state, &cfg, &method, &path, &query, &content_type, &cookie_header) {
+    if let Err(e) = dispatch(request, &state, &cfg, &face, &method, &path, &query, &content_type, &cookie_header) {
         eprintln!("desko fileshare: 回复失败: {}", e);
     }
 }
@@ -118,24 +162,43 @@ fn dispatch(
     request: Request,
     state: &Arc<RuntimeState>,
     cfg: &ShareConfig,
+    face: &Face,
     method: &str,
     path: &str,
     query: &[(String, String)],
     content_type: &str,
     cookie_header: &str,
 ) -> Handled {
+    // 公网面先按这条服务的策略收动作面：口令没配 = 直接不通，宁可打不开也不裸奔；
+    // 改共享目录只许 desko 主程序那边动；只读的这条不给写
+    if let Some(policy) = &face.policy {
+        if policy.password_sha256.is_none() {
+            return ok_respond(request, text_resp(StatusCode(403), "这条服务还没设公网口令，desko 不放它上公网"));
+        }
+        if method == "POST" && path == "/settings" {
+            return ok_respond(request, text_resp(StatusCode(403), "公网侧不能改共享目录"));
+        }
+        if method == "POST" && policy.read_only && matches!(path, "/upload" | "/save-text") {
+            return ok_respond(request, text_resp(StatusCode(403), "这条在公网侧是只读的"));
+        }
+    }
+
     // 口令门：/login 与字体静态资源之外一律先验会话
-    if cfg.password_sha256.is_some() && path != "/login" && !path.starts_with("/fonts/") {
+    let stored = match &face.policy {
+        Some(p) => p.password_sha256.clone(),
+        None => cfg.password_sha256.clone(),
+    };
+    if stored.is_some() && path != "/login" && !path.starts_with("/fonts/") {
         let cookies = parse_cookie(cookie_header);
         let authed = cookie_get(&cookies, SESSION_COOKIE)
-            .map(|t| state.sessions.validate(t))
+            .map(|t| state.sessions.validate(t, &face.scope))
             .unwrap_or(false);
         if !authed {
             let next = original_target(method, path, query);
             return if method == "GET" {
                 ok_respond(request, redirect_resp(&format!("/login?next={}", url_encode(&next)), None))
             } else {
-                ok_respond(request, html_resp(StatusCode(401), &pages::login_page(false, &next), None))
+                ok_respond(request, html_resp(StatusCode(401), &pages::login_page(Some("口令不正确"), &next), None))
             };
         }
     }
@@ -148,10 +211,10 @@ fn dispatch(
         ("POST", "/save-text") => handle_save_text(request, state, cfg, query),
         ("GET", "/login") => {
             let next = sanitize_next(pair_get(query, "next").unwrap_or(""));
-            ok_respond(request, html_resp(StatusCode(200), &pages::login_page(false, &next), None))
+            ok_respond(request, html_resp(StatusCode(200), &pages::login_page(None, &next), None))
         }
         ("GET", "/fonts/app.woff2") => ok_respond(request, font_resp()),
-        ("POST", "/login") => handle_login(request, state, cfg),
+        ("POST", "/login") => handle_login(request, state, face),
         _ => ok_respond(request, text_resp(StatusCode(404), "Not Found")),
     }
 }
@@ -430,7 +493,7 @@ fn handle_settings_post(request: Request, state: &Arc<RuntimeState>) -> Handled 
 
 // ── 登录 ────────────────────────────────────────────────────
 
-fn handle_login(request: Request, state: &Arc<RuntimeState>, cfg: &ShareConfig) -> Handled {
+fn handle_login(request: Request, state: &Arc<RuntimeState>, face: &Face) -> Handled {
     let (request, body) = match read_body(request, MAX_LOGIN_BYTES) {
         Ok(pair) => pair,
         Err((request, ())) => return fail(request, text_resp(StatusCode(400), "Body too large")),
@@ -438,19 +501,60 @@ fn handle_login(request: Request, state: &Arc<RuntimeState>, cfg: &ShareConfig) 
     let pairs = parse_pairs(&String::from_utf8_lossy(&body));
     let next = sanitize_next(pair_get(&pairs, "next").unwrap_or("/"));
     let password = pair_get(&pairs, "password").unwrap_or("").to_string();
-    let Some(stored) = &cfg.password_sha256 else {
+    let public = face.is_public();
+    let stored = match &face.policy {
+        Some(p) => p.password_sha256.clone(),
+        None => state.snapshot().password_sha256,
+    };
+    let Some(stored) = stored else {
         // 口令已被关掉：直接放行
         return ok_respond(request, redirect_resp(&next, None));
     };
-    if !crate::auth::verify_password(&password, stored) {
-        return ok_respond(request, html_resp(StatusCode(401), &pages::login_page(true, &next), None));
+    let keys = face.gate_keys();
+    let now = crate::auth::now_secs();
+    // 公网侧才限速：局域网那扇门的便利是它存在的理由，端出去就只剩爆破面
+    if public {
+        let wait = state.gate.wait_secs(&keys, now);
+        if wait > 0 {
+            return ok_respond(request, locked_resp(&next, wait));
+        }
     }
-    let token = state.sessions.issue();
-    let cookie = format!(
+    if !crate::auth::verify_password(&password, &stored) {
+        if public {
+            // 刚跨过阈值的那一次就按锁定回：401 不带 Retry-After 会把「已锁」
+            // 藏到下一次请求才显形，客户端这段时间仍在新试
+            let wait = state.gate.record_fail(&keys, now);
+            if wait > 0 {
+                return ok_respond(request, locked_resp(&next, wait));
+            }
+        }
+        return ok_respond(request, html_resp(StatusCode(401), &pages::login_page(Some("口令不正确"), &next), None));
+    }
+    if public {
+        state.gate.record_success(&keys);
+    }
+    let token = state.sessions.issue(&face.scope);
+    let mut cookie = format!(
         "{}={}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
         SESSION_COOKIE, token, SESSION_TTL_COOKIE_SECS
     );
+    // 公网侧走的是 https 到边缘，Secure 才挂得住；局域网是 http，加了会被浏览器丢掉
+    if public {
+        cookie.push_str("; Secure");
+    }
     ok_respond(request, redirect_resp(&next, Some(cookie)))
+}
+
+/// 锁定期内：429 + Retry-After，页面上写还剩多久
+fn locked_resp(next: &str, wait: u64) -> Response<Cursor<Vec<u8>>> {
+    let body = pages::login_page(Some(&format!("试得太多次了，{} 秒后再试", wait)), next);
+    let data = body.as_bytes().to_vec();
+    let len = data.len();
+    let headers = build_headers(vec![
+        ("Content-Type", "text/html; charset=utf-8"),
+        ("Retry-After", &wait.to_string()),
+    ]);
+    Response::new(StatusCode(429), headers, Cursor::new(data), Some(len), None)
 }
 
 // ── 响应小工具 ───────────────────────────────────────────────
@@ -556,6 +660,7 @@ fn font_resp() -> Response<Cursor<&'static [u8]>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn home_url_message_append() {
@@ -619,14 +724,20 @@ mod tests {
     }
 
     fn test_state(dirs: Vec<PathBuf>) -> Arc<RuntimeState> {
+        test_state_with(dirs, Vec::new())
+    }
+
+    fn test_state_with(dirs: Vec<PathBuf>, public: Vec<PublicPolicy>) -> Arc<RuntimeState> {
         Arc::new(RuntimeState {
             config: std::sync::RwLock::new(ShareConfig {
                 port: 8000,
                 local_only: true,
                 share_dirs: dirs,
                 password_sha256: None,
+                public,
             }),
             sessions: Arc::new(crate::auth::SessionStore::new()),
+            gate: Arc::new(FailGate::new(None)),
             persist_dirs: Arc::new(|_| Ok(())),
             bound_port: 8000,
             lan_ip: "127.0.0.1".to_string(),
@@ -634,8 +745,64 @@ mod tests {
         })
     }
 
+    /// 起一个真监听，返回 base 端口与停止位
+    fn serve(state: Arc<RuntimeState>) -> (u16, Arc<std::sync::atomic::AtomicBool>) {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop2 = stop.clone();
+        std::thread::spawn(move || crate::server::accept_loop(server, state, stop2));
+        (port, stop)
+    }
+
     fn no_redirect_agent() -> ureq::Agent {
         ureq::AgentBuilder::new().redirects(0).build()
+    }
+
+    /// 手工发一条请求：公网面靠 Host 头认身份，测试必须能指定任意 Host。
+    /// 读带超时，服务没回话也只是空响应，不会把测试挂在那里等。
+    fn exchange<S: AsRef<str>>(port: u16, headers: &[S], body: &str) -> String {
+        use std::io::{Read, Write};
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(3)))
+            .unwrap();
+        let mut req = headers
+            .iter()
+            .map(|h| h.as_ref().to_string())
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        req.push_str("\r\n\r\n");
+        req.push_str(body);
+        if stream.write_all(req.as_bytes()).is_err() {
+            return String::new();
+        }
+        let mut buf = Vec::new();
+        loop {
+            let mut chunk = [0u8; 4096];
+            match stream.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                Err(_) => break,
+            }
+        }
+        String::from_utf8_lossy(&buf).into_owned()
+    }
+
+    fn status_of(resp: &str) -> u16 {
+        resp.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0)
+    }
+
+    fn header_value(resp: &str, name: &str) -> String {
+        resp.lines()
+            .find(|line| {
+                line.split_once(':')
+                    .map(|(k, _)| k.eq_ignore_ascii_case(name))
+                    .unwrap_or(false)
+            })
+            .and_then(|line| line.split_once(':'))
+            .map(|(_, v)| v.trim().to_string())
+            .unwrap_or_default()
     }
 
     // 端到端冒烟：真实 socket 走一遍 index/download/upload/save-text
@@ -861,5 +1028,201 @@ mod tests {
 
         stop.store(true, std::sync::atomic::Ordering::Relaxed);
         fs::remove_dir_all(&dir).ok();
+    }
+
+    // ── 公网面 ──────────────────────────────────────────────
+
+    fn public(host: &str, password: Option<&str>, read_only: bool) -> PublicPolicy {
+        PublicPolicy {
+            hostname: host.to_string(),
+            password_sha256: password.map(crate::auth::sha256_hex),
+            read_only,
+        }
+    }
+
+    /// 公网面要指定任意 Host，只能手工拼请求；长度一律现算，写死一字节差就把服务端吊住
+    fn request(method: &str, target: &str, host: &str) -> Vec<String> {
+        vec![
+            format!("{method} {target} HTTP/1.1"),
+            format!("Host: {host}"),
+            "Connection: close".to_string(),
+        ]
+    }
+
+    fn form(body: &str) -> Vec<String> {
+        vec![
+            "Content-Type: application/x-www-form-urlencoded".to_string(),
+            format!("Content-Length: {}", body.len()),
+        ]
+    }
+
+    fn log_in(port: u16, host: &str, password: &str) -> String {
+        let body = format!("next=%2F&password={password}");
+        let mut lines = request("POST", "/login", host);
+        lines.extend(form(&body));
+        let resp = exchange(port, &lines, &body);
+        header_value(&resp, "Set-Cookie").split(';').next().unwrap_or("").to_string()
+    }
+
+    fn get_as(port: u16, host: &str, target: &str, token: &str) -> String {
+        let mut lines = request("GET", target, host);
+        if !token.is_empty() {
+            lines.push(format!("Cookie: {token}"));
+        }
+        exchange(port, &lines, "")
+    }
+
+    #[test]
+    fn unregistered_domain_host_is_rejected() {
+        let dir = temp_dir();
+        let state = test_state_with(vec![dir.clone()], vec![public("files.example.com", Some("sesame"), false)]);
+        let (port, stop) = serve(state);
+        let resp = get_as(port, "attacker.example", "/", "");
+        assert_eq!(status_of(&resp), 403, "没登记过的域名不该被认成公网面");
+        // 局域网面照旧
+        assert_eq!(status_of(&get_as(port, "127.0.0.1", "/", "")), 200);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn public_entry_without_password_refuses_everything() {
+        let dir = temp_dir();
+        // desko 侧本不该把无口令的条目下发，这里验的是 sidecar 自己的兜底
+        let state = test_state_with(vec![dir.clone()], vec![public("naked.example.com", None, false)]);
+        let (port, stop) = serve(state);
+        let resp = get_as(port, "naked.example.com", "/", "");
+        assert_eq!(status_of(&resp), 403);
+        assert!(resp.contains("还没设公网口令"), "resp={resp}");
+        // 连登录页也不给开：没有口令就没有可登的门
+        assert_eq!(status_of(&get_as(port, "naked.example.com", "/login", "")), 403);
+        // 同一进程上局域网面不受牵连
+        assert_eq!(status_of(&get_as(port, "127.0.0.1", "/", "")), 200);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn public_login_sets_secure_cookie_and_stays_on_its_host() {
+        let dir = temp_dir();
+        let state = test_state_with(
+            vec![dir.clone()],
+            vec![
+                public("files.example.com", Some("sesame"), false),
+                public("docs.example.com", Some("other"), false),
+            ],
+        );
+        let (port, stop) = serve(state);
+        let body = "next=%2F&password=sesame";
+        let mut lines = request("POST", "/login", "files.example.com");
+        lines.extend(form(body));
+        let resp = exchange(port, &lines, body);
+        assert_eq!(status_of(&resp), 302, "resp={resp}");
+        let cookie = header_value(&resp, "Set-Cookie");
+        assert!(cookie.contains("Secure"), "公网会话必须只走 https：{cookie}");
+        let token = cookie.split(';').next().unwrap().to_string();
+
+        assert_eq!(status_of(&get_as(port, "files.example.com", "/", &token)), 200);
+        // 拿到隔壁子域去用：另一条有另一条的口令，会话不通用
+        let cross = get_as(port, "docs.example.com", "/", &token);
+        assert_eq!(status_of(&cross), 302);
+        assert!(cross.contains("/login?next="), "resp={cross}");
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn read_only_public_entry_blocks_writes() {
+        let dir = temp_dir();
+        let state = test_state_with(vec![dir.clone()], vec![public("ro.example.com", Some("sesame"), true)]);
+        let (port, stop) = serve(state);
+        let token = log_in(port, "ro.example.com", "sesame");
+        assert!(!token.is_empty(), "登录没拿到会话");
+
+        let boundary = "DESKOPUB";
+        let body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"files\"; filename=\"x.txt\"\r\nContent-Type: text/plain\r\n\r\ndata\r\n--{boundary}--\r\n"
+        );
+        let mut lines = request("POST", "/upload?share=0", "ro.example.com");
+        lines.push(format!("Cookie: {token}"));
+        lines.push(format!("Content-Type: multipart/form-data; boundary={boundary}"));
+        lines.push(format!("Content-Length: {}", body.len()));
+        let upload = exchange(port, &lines, &body);
+        assert_eq!(status_of(&upload), 403);
+        assert!(upload.contains("只读"), "resp={upload}");
+        assert!(!dir.join("x.txt").exists(), "被拒的上传不能落盘");
+
+        let save_body = "filename=y&content=hello";
+        let mut lines = request("POST", "/save-text?share=0", "ro.example.com");
+        lines.push(format!("Cookie: {token}"));
+        lines.extend(form(save_body));
+        assert_eq!(status_of(&exchange(port, &lines, save_body)), 403);
+        assert!(!dir.join("y.txt").exists(), "被拒的写文本不能落盘");
+
+        // 读的一面照常
+        assert_eq!(status_of(&get_as(port, "ro.example.com", "/", &token)), 200);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn public_face_cannot_change_share_dirs() {
+        let dir = temp_dir();
+        let state = test_state_with(vec![dir.clone()], vec![public("files.example.com", Some("sesame"), false)]);
+        let (port, stop) = serve(state);
+        let body = format!("share_dirs={}", url_encode(&dir.display().to_string()));
+        let mut lines = request("POST", "/settings", "files.example.com");
+        lines.extend(form(&body));
+        let resp = exchange(port, &lines, &body);
+        assert_eq!(status_of(&resp), 403);
+        assert!(resp.contains("不能改共享目录"), "resp={resp}");
+
+        // 同一份表单从局域网面提交仍然有效——收窄只作用于公网面
+        let mut lan = request("POST", "/settings", "127.0.0.1");
+        lan.extend(form(&body));
+        assert_eq!(status_of(&exchange(port, &lan, &body)), 302);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn public_login_locks_out_after_repeated_failures() {
+        let dir = temp_dir();
+        let state = test_state_with(
+            vec![dir.clone()],
+            vec![public("files.example.com", Some("sesame"), false)],
+        );
+        let (port, stop) = serve(state);
+        let attempt = |password: &str| {
+            let body = format!("next=%2F&password={password}");
+            let mut lines = request("POST", "/login", "files.example.com");
+            lines.extend(form(&body));
+            exchange(port, &lines, &body)
+        };
+        for i in 0..crate::guard::RULE_SOURCE.limit {
+            assert_eq!(status_of(&attempt("wrong")), 401, "第 {} 次不该锁", i + 1);
+        }
+        // 越过上限的这次当场给 429：锁既然生效了，就不该再装成"口令不对"让人白试
+        let locking = attempt("wrong");
+        assert_eq!(status_of(&locking), 429, "resp={locking}");
+        assert!(locking.contains("Retry-After"), "resp={locking}");
+        // 锁定期内：连正确口令也先被挡
+        let locked = attempt("sesame");
+        assert_eq!(status_of(&locked), 429, "resp={locked}");
+        assert!(locked.contains("秒后再试"));
+
+        // 局域网面不受这条子域的锁定影响——便利是它存在的理由
+        let mut lan = request("POST", "/login", "127.0.0.1");
+        let lan_body = "next=%2F&password=sesame";
+        lan.extend(form(lan_body));
+        assert_eq!(status_of(&exchange(port, &lan, lan_body)), 302);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    fn temp_dir() -> PathBuf {
+        let d = std::env::temp_dir().join(format!("desko-h-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&d).unwrap();
+        d
     }
 }

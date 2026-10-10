@@ -11,3 +11,6 @@ pub mod backup;
 pub mod cloud;
 pub mod mfa;
 pub mod fileshare;
+pub mod profiles;
+pub mod bypass;
+pub mod tunnel;

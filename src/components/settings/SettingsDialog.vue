@@ -1,49 +1,48 @@
 <script setup lang="ts">
 import BrandLogo from '../shared/BrandLogo.vue'
 import BackupPane from './BackupPane.vue'
-import OptionSelect from '../shared/OptionSelect.vue'
-import { ref, computed, onMounted } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useRoute, useRouter } from 'vue-router'
+import ProfilesPane from './ProfilesPane.vue'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { settingsApi } from '../../services/api/settings'
 import { THEMES, ACCENTS, DEFAULT_APPEARANCE, chooseTheme, chooseAccent, readTheme } from '../../services/theme'
 import type { ThemeId, AccentId, ThemeInfo } from '../../services/theme'
-import { TERMINALS, readTerminal, saveTerminal } from '../../services/terminal'
-import type { TerminalId } from '../../services/terminal'
-import { mfaEnabled, readMfaFeature, saveMfaFeature } from '../../services/mfaFeature'
-import { fileshareEnabled, readFileshareFeature, saveFileshareFeature } from '../../services/fileshareFeature'
-import { fsBusy, fsConfig, fsHasPassword, fsRefresh, fsSaveConfig, fsSetPassword } from '../../services/fileshareSettings'
+import { moduleFlags, loadModuleFlags } from '../../modules/state'
+import { MODULES, moduleById, type ModuleId, type SettingsTabId } from '../../modules/registry'
+import { toggleModule } from '../../modules/runtime'
 import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
-import { useNotesStore } from '../../stores/notes'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
-// 口令行只在设过小记口令时出现；设置页可能先于小记模块打开，自己拉一次状态
-const notesStore = useNotesStore()
-const { noteKey } = storeToRefs(notesStore)
-void notesStore.refreshNoteKey()
 
 const emit = defineEmits<{
   close: []
   openChangePassword: []
-  openChangeNoteKey: []
+  openChangeNoteKey: [mode: 'unlock' | 'change']
   entriesRefreshed: []
 }>()
 
 const show = ref(true)
-const TAB_LABELS = {
-  general: '通用',
-  fileshare: '局域网传输',
+const FIXED_TAB_LABELS = {
+  profiles: '档案',
+  modules: '模块',
   appearance: '外观',
   backup: '数据与备份',
   security: '安全',
   about: '关于',
 } as const
-type TabId = keyof typeof TAB_LABELS
-const props = defineProps<{ initialTab?: TabId }>()
-const tab = ref<TabId>(props.initialTab ?? 'general')
+
+const props = defineProps<{ initialTab?: SettingsTabId }>()
+
+const isValidTab = (id?: SettingsTabId): id is SettingsTabId => {
+  if (!id) return false
+  if (id in FIXED_TAB_LABELS) return true
+  const m = MODULES.find((x) => x.id === id)
+  return !!m?.settings
+}
+
+const tab = ref<SettingsTabId>(isValidTab(props.initialTab) ? props.initialTab : 'appearance')
 // 存 0 表示不开自动锁定，useAutoLock 读到 0 直接跳过这一轮
 const autoLockEnabled = ref(false)
 const autoLockTimeout = ref(5)
@@ -51,40 +50,41 @@ const lockOnClose = ref(false)
 const lockOnSystemLock = ref(false)
 const theme = ref<ThemeId>(DEFAULT_APPEARANCE.theme)
 const accent = ref<AccentId>(DEFAULT_APPEARANCE.accent)
-const terminal = ref<TerminalId>('auto')
-const mfaOn = ref(mfaEnabled.value)
-const fileshareOn = ref(fileshareEnabled.value)
-// 局域网传输的服务设置（页签内），状态走 fileshareSettings 单例与模块页共享
-const fsPortInput = ref(8000)
-const fsLocalOnly = ref(false)
-const fsShowPwInput = ref(false)
-const fsPasswordInput = ref('')
 
-const syncFileshareForm = () => {
-  const cfg = fsConfig.value
-  if (!cfg) return
-  fsPortInput.value = cfg.port
-  fsLocalOnly.value = cfg.localOnly
-}
-const route = useRoute()
-const router = useRouter()
-const terminalDesc = computed(
-  () => TERMINALS.find((t) => t.id === terminal.value)?.desc ?? ''
+const enabledSettingsModules = computed(() => MODULES.filter((m) => moduleFlags[m.id] && m.settings))
+const tabLabel = computed(() => {
+  if (tab.value in FIXED_TAB_LABELS) {
+    return FIXED_TAB_LABELS[tab.value as keyof typeof FIXED_TAB_LABELS]
+  }
+  return moduleById(tab.value as ModuleId).settings?.label ?? ''
+})
+
+// 模块配置面板：首次点开才加载，之后 v-show 常驻
+const loadedPanes = ref<Set<ModuleId>>(new Set())
+const paneCache = reactive<Partial<Record<ModuleId, Awaited<ReturnType<NonNullable<(typeof MODULES)[number]['settings']>['pane']>>>>>({})
+
+watch(
+  tab,
+  async (id) => {
+    const m = MODULES.find((x) => x.id === id && x.settings)
+    if (m && !loadedPanes.value.has(id as ModuleId)) {
+      paneCache[id as ModuleId] = await m.settings!.pane()
+      loadedPanes.value.add(id as ModuleId)
+    }
+  },
+  { immediate: true },
 )
-const terminalOptions = TERMINALS.map((t) => ({ value: t.id, label: t.name }))
 
 const loadSettings = async () => {
   const ap = await readTheme()
   theme.value = ap.theme
   accent.value = ap.accent
-  terminal.value = await readTerminal()
-  mfaOn.value = await readMfaFeature()
-  fileshareOn.value = await readFileshareFeature()
-  if (tab.value === 'fileshare' && !fileshareOn.value) tab.value = 'general'
-  if (fileshareOn.value) {
-    await fsRefresh()
-    syncFileshareForm()
+  await loadModuleFlags()
+  // 如果当前页签属于一个已关掉的模块，回落到外观
+  if (!(tab.value in FIXED_TAB_LABELS) && !moduleFlags[tab.value as ModuleId]) {
+    tab.value = 'appearance'
   }
+  await Promise.all(enabledSettingsModules.value.map((m) => m.settings!.load?.()))
   try {
     const timeout = await settingsApi.getSetting('auto_lock_timeout')
     const minutes = parseInt(timeout)
@@ -153,87 +153,15 @@ const prevAccent = (t: ThemeInfo) => {
   return t.id === 'ink' ? a.dotInk : a.dot
 }
 
-const saveTerminalPref = async (id: TerminalId) => {
-  if (id === terminal.value) return
-  terminal.value = id
-  const saved = await saveTerminal(id)
-  toastStore.showToast(saved ? '已保存终端偏好' : '已设置，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
-}
-
-const saveMfaFeaturePref = async () => {
+/** 开关只有一条路径：落库成功才认，失败由状态层扳回；路由与页面跟着收 */
+const onToggleModule = async (id: ModuleId, e: Event) => {
+  const on = (e.target as HTMLInputElement).checked
   try {
-    await saveMfaFeature(mfaOn.value)
-    // 正停在验证码页时关掉，得把人带回去，不然留着一个没有入口的页面
-    if (!mfaOn.value && route.path === '/mfa') await router.replace('/entries')
-    toastStore.showToast('设置已保存')
-  } catch (e: any) {
-    toastStore.showToast('保存失败: ' + e.message, 'error')
-  }
-}
-
-const saveFileshareFeaturePref = async () => {
-  try {
-    await saveFileshareFeature(fileshareOn.value)
-    if (!fileshareOn.value && route.path === '/fileshare') await router.replace('/entries')
-    if (!fileshareOn.value && tab.value === 'fileshare') tab.value = 'general'
-    toastStore.showToast(fileshareOn.value ? '局域网传输已开启' : '设置已保存')
-  } catch (e: any) {
-    // saveFileshareFeature 内部已回滚单例，界面按单例扳回（开、关两个方向都可能失败）
-    fileshareOn.value = fileshareEnabled.value
-    toastStore.showToast((fileshareOn.value ? '关闭失败: ' : '开启失败: ') + e.message, 'error')
-  }
-}
-
-const applyFsPort = async () => {
-  const cfg = fsConfig.value
-  if (!cfg || fsBusy.value) return
-  const port = Math.max(1, Math.min(65535, fsPortInput.value || cfg.port))
-  fsPortInput.value = port
-  if (port === cfg.port) return
-  try {
-    await fsSaveConfig(cfg.shareDirs, port, cfg.localOnly)
-    toastStore.showToast('端口已更新')
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-  } finally {
-    syncFileshareForm()
-  }
-}
-
-const applyFsLocalOnly = async () => {
-  const cfg = fsConfig.value
-  if (!cfg || fsBusy.value) return
-  const want = fsLocalOnly.value
-  try {
-    await fsSaveConfig(cfg.shareDirs, fsPortInput.value, want)
-    toastStore.showToast(want ? '已切到仅本机访问' : '已对局域网开放')
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-    fsLocalOnly.value = !want
-  } finally {
-    syncFileshareForm()
-  }
-}
-
-const applyFsPassword = async () => {
-  if (fsBusy.value) return
-  try {
-    await fsSetPassword(fsPasswordInput.value)
-    toastStore.showToast('访问口令已更新')
-    fsPasswordInput.value = ''
-    fsShowPwInput.value = false
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-  }
-}
-
-const clearFsPassword = async () => {
-  if (fsBusy.value) return
-  try {
-    await fsSetPassword('')
-    toastStore.showToast('已清除访问口令')
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
+    await toggleModule(id, on)
+    if (!on && tab.value === id) tab.value = 'appearance'
+    toastStore.showToast(on ? moduleById(id).title + '已开启' : '设置已保存')
+  } catch (err: any) {
+    toastStore.showToast((on ? '开启失败: ' : '关闭失败: ') + errText(err), 'error')
   }
 }
 
@@ -244,7 +172,7 @@ const close = () => {
 
 useEscapeClose(close)
 
-onMounted(() => { loadSettings() })
+onMounted(loadSettings)
 </script>
 
 <template>
@@ -256,134 +184,78 @@ onMounted(() => { loadSettings() })
             <BrandLogo />
             <h2>设置</h2>
           </div>
-          <button class="nav-tab" :class="{ on: tab === 'general' }" @click="tab = 'general'">
-            <AppIcon name="adjustments" :size="16" />
-            <span>{{ TAB_LABELS.general }}</span>
+          <button class="nav-tab" :class="{ on: tab === 'profiles' }" @click="tab = 'profiles'">
+            <AppIcon name="user" :size="16" />
+            <span>{{ FIXED_TAB_LABELS.profiles }}</span>
+          </button>
+          <button class="nav-tab" :class="{ on: tab === 'modules' }" @click="tab = 'modules'">
+            <AppIcon name="bulletlist" :size="16" />
+            <span>{{ FIXED_TAB_LABELS.modules }}</span>
+          </button>
+          <button
+            v-for="m in enabledSettingsModules"
+            :key="m.id"
+            class="nav-tab"
+            :class="{ on: tab === m.id }"
+            @click="tab = m.id"
+          >
+            <AppIcon :name="m.settings!.icon" :size="16" />
+            <span>{{ m.settings!.label }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'appearance' }" @click="tab = 'appearance'">
             <AppIcon name="palette" :size="16" />
-            <span>{{ TAB_LABELS.appearance }}</span>
-          </button>
-          <button v-if="fileshareOn" class="nav-tab" :class="{ on: tab === 'fileshare' }" @click="tab = 'fileshare'">
-            <AppIcon name="globe" :size="16" />
-            <span>{{ TAB_LABELS.fileshare }}</span>
+            <span>{{ FIXED_TAB_LABELS.appearance }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'backup' }" @click="tab = 'backup'">
             <AppIcon name="database" :size="16" />
-            <span>{{ TAB_LABELS.backup }}</span>
+            <span>{{ FIXED_TAB_LABELS.backup }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'security' }" @click="tab = 'security'">
             <AppIcon name="lock" :size="16" />
-            <span>{{ TAB_LABELS.security }}</span>
+            <span>{{ FIXED_TAB_LABELS.security }}</span>
           </button>
           <button class="nav-tab" :class="{ on: tab === 'about' }" @click="tab = 'about'">
             <AppIcon name="info" :size="16" />
-            <span>{{ TAB_LABELS.about }}</span>
+            <span>{{ FIXED_TAB_LABELS.about }}</span>
           </button>
         </aside>
 
         <div class="settings-main">
           <header class="settings-head">
-            <h3>{{ TAB_LABELS[tab] }}</h3>
+            <h3>{{ tabLabel }}</h3>
             <button class="dialog-close" @click="close" title="关闭">
               <AppIcon name="x" :size="16" />
             </button>
           </header>
 
-          <!-- 通用 -->
-          <section v-show="tab === 'general'" class="settings-pane">
+          <!-- 模块 -->
+          <section v-show="tab === 'modules'" class="settings-pane">
+            <p class="module-hint">关一个模块只是收起它的侧栏入口，数据与口令都留在本机，重开即用。</p>
             <div class="group-content">
-              <div class="setting-item">
+              <div v-for="m in MODULES" :key="m.id" class="setting-item">
                 <div class="setting-info">
-                  <span class="setting-name">在终端中打开</span>
-                  <span class="setting-desc">{{ terminalDesc }}</span>
-                </div>
-                <div class="setting-control">
-                  <OptionSelect
-                    :model-value="terminal"
-                    :options="terminalOptions"
-                    @update:model-value="saveTerminalPref($event as TerminalId)"
-                  />
-                </div>
-              </div>
-              <div class="setting-item">
-                <div class="setting-info">
-                  <span class="setting-name">验证码模块</span>
-                  <span class="setting-desc">开启后侧栏出现「验证码」页，管理 TOTP 动态码</span>
+                  <span class="setting-name">{{ m.title }}</span>
+                  <span class="setting-desc">{{ m.desc }}</span>
                 </div>
                 <label class="switch">
-                  <input type="checkbox" v-model="mfaOn" @change="saveMfaFeaturePref" />
-                  <span class="switch-slider"></span>
-                </label>
-              </div>
-              <div class="setting-item">
-                <div class="setting-info">
-                  <span class="setting-name">局域网文件传输</span>
-                  <span class="setting-desc">开启后侧栏出现「局域网传输」页，同网段设备用浏览器互传文件</span>
-                </div>
-                <label class="switch">
-                  <input type="checkbox" v-model="fileshareOn" @change="saveFileshareFeaturePref" />
+                  <input type="checkbox" :checked="moduleFlags[m.id]" @change="onToggleModule(m.id, $event)" />
                   <span class="switch-slider"></span>
                 </label>
               </div>
             </div>
           </section>
 
-          <!-- 局域网传输：服务设置（共享目录仍在模块页管理） -->
-          <section v-show="tab === 'fileshare'" class="settings-pane">
-            <div class="group-content">
-              <div class="setting-item">
-                <div class="setting-info">
-                  <span class="setting-name">端口</span>
-                  <span class="setting-desc">被占用时自动向后漂移，实际端口见传输页顶部</span>
-                </div>
-                <input
-                  v-model.number="fsPortInput"
-                  class="number-input fs-port-input"
-                  type="number"
-                  min="1"
-                  max="65535"
-                  @change="applyFsPort"
-                  @keyup.enter="applyFsPort"
-                />
-              </div>
-              <div class="setting-item">
-                <div class="setting-info">
-                  <span class="setting-name">仅本机访问</span>
-                  <span class="setting-desc">只监听 127.0.0.1，其他设备无法连接</span>
-                </div>
-                <label class="switch">
-                  <input type="checkbox" v-model="fsLocalOnly" @change="applyFsLocalOnly" />
-                  <span class="switch-slider"></span>
-                </label>
-              </div>
-              <div class="setting-item" :class="{ stacked: fsShowPwInput }">
-                <div class="setting-info">
-                  <span class="setting-name">访问口令</span>
-                  <span class="setting-desc">启用后网页端所有页面都要先输口令</span>
-                </div>
-                <div class="fs-pw-ctl">
-                  <span class="fs-tag" :class="{ on: fsHasPassword }">{{ fsHasPassword ? '已启用' : '未启用' }}</span>
-                  <button v-if="!fsShowPwInput" class="action-btn" @click="fsShowPwInput = true">
-                    {{ fsHasPassword ? '修改口令' : '设置口令' }}
-                  </button>
-                  <button v-if="fsHasPassword" class="action-btn" :disabled="fsBusy" @click="clearFsPassword">清除口令</button>
-                </div>
-                <div v-if="fsShowPwInput" class="fs-pw-row">
-                  <input
-                    v-model="fsPasswordInput"
-                    class="fs-pw-input"
-                    type="password"
-                    placeholder="新口令"
-                    autocomplete="new-password"
-                    @keyup.enter="applyFsPassword"
-                  />
-                  <button class="action-btn primary" :disabled="fsBusy || !fsPasswordInput" @click="applyFsPassword">设置</button>
-                  <button class="action-btn" @click="fsShowPwInput = false; fsPasswordInput = ''">取消</button>
-                </div>
-              </div>
-            </div>
+          <!-- 档案 -->
+          <section v-show="tab === 'profiles'" class="settings-pane">
+            <ProfilesPane />
           </section>
+
+          <!-- 模块配置面板：首开挂载，之后常驻 -->
+          <template v-for="m in enabledSettingsModules" :key="m.id">
+            <section v-show="tab === m.id" v-if="loadedPanes.has(m.id)" class="settings-pane">
+              <component :is="paneCache[m.id]" @open-change-note-key="emit('openChangeNoteKey', $event)" />
+            </section>
+          </template>
 
           <!-- 外观 -->
           <section v-show="tab === 'appearance'" class="settings-pane">
@@ -451,12 +323,6 @@ onMounted(() => { loadSettings() })
               <div class="setting-item clickable" @click="emit('openChangePassword')">
                 <div class="setting-info">
                   <span class="setting-name">修改主密码</span>
-                </div>
-                <AppIcon class="arrow-icon" name="chevRight" :size="16" />
-              </div>
-              <div v-if="noteKey.is_set" class="setting-item clickable" @click="emit('openChangeNoteKey')">
-                <div class="setting-info">
-                  <span class="setting-name">修改小记口令</span>
                 </div>
                 <AppIcon class="arrow-icon" name="chevRight" :size="16" />
               </div>
@@ -642,33 +508,6 @@ onMounted(() => { loadSettings() })
   margin: 0;
 }
 
-.stacked { flex-wrap: wrap; }
-.fs-port-input { width: 84px; }
-.fs-pw-ctl { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
-.fs-tag {
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-.fs-tag.on { border-color: var(--success); color: var(--success); }
-.fs-pw-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding-bottom: var(--space-1); }
-.fs-pw-input {
-  flex: 1;
-  min-width: 140px;
-  height: 28px;
-  padding: 0 10px;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-size: var(--text-xs);
-  font-family: inherit;
-}
-.fs-pw-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-
 /* 面板用 v-show 而非 v-if：切页时 number-input 不卸载，@change 才不会被切页吞掉。
    弹窗定高，各页同高，切页不跳。 */
 .settings-pane {
@@ -679,6 +518,18 @@ onMounted(() => { loadSettings() })
   padding: var(--space-5);
   display: flex;
   flex-direction: column;
+}
+
+/* 面板是 flex column：行组作为直接子项会被压扁再裁（overflow: hidden），
+   「模块」页 8 行的末两行就是这么消失的。让它保持自然高度，超出交给面板滚。 */
+.settings-pane > .group-content {
+  flex-shrink: 0;
+}
+
+.module-hint {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .arrow-icon {

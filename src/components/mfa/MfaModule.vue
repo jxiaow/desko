@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
 import jsQR from 'jsqr'
 import { mfaApi, type MfaCode } from '../../services/api/mfa'
 import { errText } from '../../services/api/backup'
-import { readMfaFeature } from '../../services/mfaFeature'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
@@ -13,7 +11,6 @@ import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
-const router = useRouter()
 
 /* 发行方首字母块：与收藏/文件行的身份档同一配方（词首两枚，中文取前两字），
    档面尺寸/圆角/底色走 global.css 的 .grid-slot，色彩不再按发行方哈希分浓淡 */
@@ -73,11 +70,6 @@ function tick() {
 }
 
 onMounted(async () => {
-  // 直敲 URL 或锁前停在本页都可能绕开侧栏入口，页面自己再拦一道
-  if (!(await readMfaFeature())) {
-    await router.replace('/entries')
-    return
-  }
   refresh()
   timer = window.setInterval(tick, 1000)
 })
@@ -284,7 +276,7 @@ const onPaste = async (e: ClipboardEvent) => {
     </div>
 
     <div v-else class="empty-state">
-      <div class="empty-icon"><AppIcon name="lock" :size="24" /></div>
+      <div class="empty-icon"><AppIcon name="navMfa" :size="24" /></div>
       <div class="empty-title">暂无验证码</div>
       <div class="empty-desc">点击「新增」，粘贴 otpauth 链接或识别二维码</div>
     </div>

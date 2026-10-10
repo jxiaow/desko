@@ -6,9 +6,14 @@
 //!   --parent <pid>        父进程看门狗：父亡自尽，防强杀主程序后成孤儿
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use fileshare_core::config::{self};
-use fileshare_core::{apply_live_config, rotate_sessions, Server};
+use fileshare_core::guard::FailGate;
+use fileshare_core::{apply_live_config, revoke_sessions, Server};
+
+/// 失败锁定计数随配置同目录：进程重启（换端口、desko 重启）不清零
+const GUARD_FILE: &str = "fileshare.auth.json";
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -54,9 +59,15 @@ fn main() {
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
     let persist = fileshare_core::file_persist(config_path.clone());
+    let gate = Arc::new(FailGate::new(Some(base_dir.join(GUARD_FILE))));
 
     let mut desired = cfg.clone();
-    let mut server: Option<Server> = match fileshare_core::start(desired.clone(), base_dir.clone(), persist.clone()) {
+    let mut server: Option<Server> = match fileshare_core::start(
+        desired.clone(),
+        base_dir.clone(),
+        persist.clone(),
+        gate.clone(),
+    ) {
         Ok(s) => {
             write_status(&status_path, &s.info());
             Some(s)
@@ -79,7 +90,12 @@ fn main() {
         if sig == last_sig {
             // 端口漂移重试：起不来时（server None）继续尝试 desired
             if server.is_none() {
-                if let Ok(s) = fileshare_core::start(desired.clone(), base_dir.clone(), persist.clone()) {
+                if let Ok(s) = fileshare_core::start(
+                    desired.clone(),
+                    base_dir.clone(),
+                    persist.clone(),
+                    gate.clone(),
+                ) {
                     write_status(&status_path, &s.info());
                     server = Some(s);
                 }
@@ -98,13 +114,14 @@ fn main() {
         };
         let port_changed = next.effective_port() != desired.effective_port();
         let bind_changed = next.local_only != desired.local_only;
-        let password_changed = next.password_sha256 != desired.password_sha256;
+        // 先算出哪些归属的口令动了，再落配置：改一条公网子域不该把局域网正在传的踢下线
+        let revoked = fileshare_core::revoked_scopes(&desired, &next);
         desired = next.clone();
         if port_changed || bind_changed {
             if let Some(old) = server.take() {
                 old.stop();
             }
-            match fileshare_core::start(desired.clone(), base_dir.clone(), persist.clone()) {
+            match fileshare_core::start(desired.clone(), base_dir.clone(), persist.clone(), gate.clone()) {
                 Ok(s) => {
                     write_status(&status_path, &s.info());
                     server = Some(s);
@@ -116,8 +133,8 @@ fn main() {
             }
         } else if let Some(s) = &server {
             apply_live_config(&s.runtime, next);
-            if password_changed {
-                rotate_sessions(&s.runtime);
+            if !revoked.is_empty() {
+                revoke_sessions(&s.runtime, &revoked);
             }
             write_status(&status_path, &s.info());
         }

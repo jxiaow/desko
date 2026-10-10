@@ -186,7 +186,7 @@ onUnmounted(() => {
 /* 侧栏收进 0 宽后唯一的恢复入口：与右端设置/锁定同档（32×28 圆角方块） */
 .sidebar-restore { margin-right: var(--space-1); }
 
-/* 模块名锚点：13.5px 半粗，与侧栏应用名同档 */
+/* 模块名锚点：15px/650，全窗唯一的页面身份层级（typo-hierarchy 轮拍板） */
 .titlebar-brand {
   display: flex;
   align-items: center;
@@ -197,8 +197,8 @@ onUnmounted(() => {
 .titlebar-crumb {
   display: inline-flex;
   align-items: center;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--text-title);
   user-select: none;

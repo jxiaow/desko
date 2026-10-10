@@ -188,3 +188,51 @@ pub struct MfaCode {
     /// 当前这步还剩几秒换码
     pub remaining: i64,
 }
+
+/// 直连清单里的一条被管目标：域名钉 hosts，IP/CIDR 只钉路由
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BypassTarget {
+    pub id: String,
+    pub host: String,
+    /// 粘贴进来的原文，重探按它重新解析（host 列不含端口/路径/掩码）
+    pub input: String,
+    pub kind: String,
+    pub port: i64,
+    pub path: String,
+    pub scheme: String,
+    /// 最近一次探到并钉住的真址
+    pub address: String,
+    pub interface_name: String,
+    pub next_hop: String,
+    /// 最近一次的判定：directOk / hostsOnly / needRoute / unreachable / egressUnknown
+    pub verdict: String,
+    /// 钉住的真址已不在 DoH 当前答案里，且指定它探活也失败
+    pub stale: bool,
+    pub note: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub checked_at: i64,
+}
+
+/// 穿透服务表的一行：一个公网子域指向本机一个端口。
+/// 口令只存 sha256 摘要，且只对 desko 自己起的服务（`preset = fileshare`）生效——
+/// 第三方本机端口不在我们的请求链路上，能强制的策略一条也落不到它头上。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelService {
+    pub id: String,
+    pub hostname: String,
+    pub port: i64,
+    pub label: String,
+    /// fileshare = desko 自己的局域网传输（唯一能强制公网策略的一种），空 = 用户登记的通用服务
+    pub preset: String,
+    /// 这条子域的 DNS 记录是否已经指到隧道
+    pub routed: bool,
+    /// 公网侧登录口令摘要；空 = 没设口令
+    pub public_password_sha256: String,
+    /// 公网侧只读：禁止上传与新建
+    pub public_read_only: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}

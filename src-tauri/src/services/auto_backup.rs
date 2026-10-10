@@ -68,7 +68,7 @@ pub struct Job {
 
 impl Job {
     /// 取参数。没解锁、没设备份密码都算「这轮不跑」而不是错误 —— 定时器每秒都可能撞上锁屏。
-    pub fn prepare(app: &AppHandle, state: &AppState) -> Result<Option<Job>, AppError> {
+    pub fn prepare(_app: &AppHandle, state: &AppState) -> Result<Option<Job>, AppError> {
         let master = {
             let m = state
                 .master_key
@@ -114,10 +114,7 @@ impl Job {
                 .map_err(|_| AppError::Database("lock error".to_string()))?;
             db.get_db_path()
         };
-        let data_dir = app
-            .path()
-            .app_data_dir()
-            .map_err(|e| AppError::Io(e.to_string()))?;
+        let data_dir = crate::paths::profile_root();
         Ok(Some(Job {
             db_path,
             attachments: attachment_service::attachments_dir(),
@@ -347,11 +344,7 @@ fn read_cfg(app: &AppHandle) -> Cfg {
 fn paths(app: &AppHandle) -> Option<(String, PathBuf, PathBuf)> {
     let state = app.state::<AppState>();
     let db = state.db.lock().ok()?;
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|_| AppError::Io("no app data dir".to_string()))
-        .ok()?;
+    let data_dir = crate::paths::profile_root();
     Some((
         db.get_db_path(),
         attachment_service::attachments_dir(),

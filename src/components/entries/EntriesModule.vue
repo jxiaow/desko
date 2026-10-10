@@ -338,7 +338,7 @@ onUnmounted(() => {
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon">
-        <AppIcon :name="searchKeyword ? 'searchEmpty' : 'folder'" :size="24" />
+        <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navEntries'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无记录' }}</div>
       <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」添加' }}</div>
@@ -444,7 +444,7 @@ onUnmounted(() => {
 /* 名字行：13px/600 单行截断；右侧 18px 让给卡角的凭证标记 */
 .ec-name-row { display: flex; align-items: center; min-width: 0; padding-right: 18px; }
 .ec-name {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text);
   min-width: 0;
