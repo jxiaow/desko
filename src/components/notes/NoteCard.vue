@@ -14,7 +14,6 @@ const props = withDefaults(defineProps<{
   editing?: boolean
   isBatchMode?: boolean
   isSelected?: boolean
-  justPublished?: boolean
   attachments?: Attachment[]
   saveState?: NoteSaveState
   /** 加密小记在本会话是否已解锁（明文在手） */
@@ -25,7 +24,6 @@ const props = withDefaults(defineProps<{
   editing: false,
   isBatchMode: false,
   isSelected: false,
-  justPublished: false,
   attachments: () => [],
   saveState: '',
   unlocked: false,
@@ -258,7 +256,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     v-if="!props.editing"
     ref="memoEl"
     class="memo"
-    :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected, newborn: props.justPublished }"
+    :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected }"
     tabindex="0"
     role="button"
     :aria-label="locked ? `已加密小记${props.note.title ? '：' + props.note.title : ''}（${formatRelativeTime(props.note.created_at)}，单击解锁）` : `小记：${props.note.title}（Enter 或悬停按钮编辑）`"
@@ -429,8 +427,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo.pinned { border-color: var(--accent-light); }
 .memo.editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }
 .memo:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-.memo.newborn { animation: born var(--transition-slow) cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-@keyframes born { from { opacity: 0; transform: translateY(-6px) scale(0.99); } }
 
 .memo-body {
   position: relative;

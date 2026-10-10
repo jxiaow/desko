@@ -13,6 +13,9 @@ export function useClipboard() {
   const copyToClipboard = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text)
+      // 用户已把新内容复制进剪贴板，撤销待执行的密码清除定时器，
+      // 否则 30 秒后会误删这次复制的内容（定时器无法区分当前剪贴板归属）。
+      clearClipboardTimer()
       toastStore.showToast(`${label}已复制`)
     } catch {
       toastStore.showToast('复制失败', 'error')
@@ -26,6 +29,7 @@ export function useClipboard() {
         'text/html': new Blob([html], { type: 'text/html' }),
         'text/plain': new Blob([text], { type: 'text/plain' }),
       })])
+      clearClipboardTimer()
       toastStore.showToast(`${label}已复制`)
       return
     } catch {

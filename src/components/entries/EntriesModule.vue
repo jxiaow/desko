@@ -428,7 +428,7 @@ onUnmounted(() => {
   font-size: var(--text-sm);
   color: var(--text);
 }
-.tab-pop-list { max-height: 192px; overflow-y: auto; scrollbar-width: thin; }
+.tab-pop-list { max-height: 192px; overflow-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
 .tab-pop-list .pop-item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .tab-pop-empty { padding: var(--space-2) 8px; font-size: var(--text-sm); color: var(--text-muted); text-align: center; }
 

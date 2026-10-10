@@ -555,7 +555,7 @@ function rowNote(t: BypassTarget) {
   gap: 7px;
   margin: var(--space-4) 0 0;
   padding: var(--space-3) 0 0;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border);
 }
 .concl-facts > div { display: flex; align-items: baseline; gap: var(--space-3); }
 .concl-facts dt { flex: 0 0 64px; font-size: var(--text-xs); color: var(--text-muted); }

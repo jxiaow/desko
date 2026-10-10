@@ -36,7 +36,7 @@ test.describe('导航与布局', () => {
     await expect(page).toHaveURL(/\/entries$/)
     await expect(page.locator('.titlebar-crumb')).toHaveText('网址收藏')
 
-    // 文件快捷（路由切换触发 fetchShortcuts）；未 seed 数据时渲染空态
+    // 文件快捷（数据在解锁时由注册表 boot 拉一次，切路由不再重取）；未 seed 数据时渲染空态
     await page.locator('a.nav-item[href="/files"]').click()
     await expect(page).toHaveURL(/\/files$/)
     await expect(page.locator('.empty-title')).toHaveText('暂无快捷方式')

@@ -628,15 +628,11 @@ defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, 
   z-index: 300;
   padding: 4px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-pop);
-  animation: sm-in var(--transition-fast) ease both;
-}
-
-@keyframes sm-in {
-  from { opacity: 0; transform: translateY(-3px) scale(0.98); }
 }
 
 .slash-menu::-webkit-scrollbar { width: 4px; }
@@ -733,6 +729,7 @@ defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, 
   box-shadow: var(--shadow-pop);
   max-height: 200px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   min-width: 120px;
   z-index: 100;
 }

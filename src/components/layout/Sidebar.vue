@@ -158,6 +158,7 @@ const onDragDblclick = (e: MouseEvent) => {
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 6px var(--space-2) var(--space-2);
   min-height: 0;
 }

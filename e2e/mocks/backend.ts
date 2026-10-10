@@ -1875,7 +1875,7 @@ class MockBackend {
     },
 
     // ===== file_shortcuts.rs =====
-    // 注意：update_file_shortcut 的 JS 侧是扁平参数 { id, ...input }
+    // 注意：update_file_shortcut 的 JS 侧是扁平参数；tauri 默认按 camelCase 取键（shortcutType）
     list_file_shortcuts: () => {
       this.requireUnlocked()
       return this.state.fileShortcuts
@@ -1897,12 +1897,12 @@ class MockBackend {
       return { ...rec }
     },
 
-    update_file_shortcut: ({ id, name, path, shortcut_type }) => {
+    update_file_shortcut: ({ id, name, path, shortcutType }) => {
       this.requireUnlocked()
       const rec = this.findShortcut(id)
       if (name !== undefined && name !== null) rec.name = name
       if (path !== undefined && path !== null) rec.path = path
-      if (shortcut_type !== undefined && shortcut_type !== null) rec.shortcut_type = shortcut_type
+      if (shortcutType !== undefined && shortcutType !== null) rec.shortcut_type = shortcutType
     },
 
     delete_file_shortcut: ({ id }) => {

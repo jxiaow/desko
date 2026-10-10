@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useNotesStore } from '../../stores/notes'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
@@ -16,7 +16,11 @@ const pw2 = ref('')
 const err = ref('')
 const busy = ref(false)
 
-const needsConfirm = props.mode !== 'unlock'
+// 设置页那条链会在同一个实例上从 unlock 续到 change，确认格必须是活的；
+// 定死的 const 会让续上的改密格永远少一格，提交钮永远点不动
+const needsConfirm = computed(() => props.mode !== 'unlock')
+// unlock 续到 change 时把刚输的口令清掉：别让旧口令悄悄顶着"新口令"交上去
+watch(() => props.mode, () => { pw.value = ''; pw2.value = ''; err.value = '' })
 const MIN_LEN = 8
 
 const title = computed(() =>

@@ -8,6 +8,8 @@ import { useToastStore } from '../../stores/toast'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
 
+/** 传入则本次登录覆盖该已有账号（重新授权），留空则新增一条。 */
+const props = defineProps<{ reauthAccountId?: string | null }>()
 const emit = defineEmits<{ close: [] }>()
 const toastStore = useToastStore()
 useEscapeClose(() => close())
@@ -63,6 +65,13 @@ async function watchOAuth() {
         waiting.value = false
         toastStore.showToast('授权超时，重新发起一次即可', 'error')
       }),
+      // 设备码轮询遇到明确失败（非 403/404 待授权）后端会终止并广播原因；
+      // 不接这条事件，弹窗只会干等到超时后误报「授权超时」。
+      listen<{ loginId: string; error: string }>('codex-device-auth-error', (e) => {
+        if (e.payload.loginId !== loginId.value) return
+        waiting.value = false
+        toastStore.showToast(`设备授权失败：${e.payload.error}`, 'error')
+      }),
     ])
   ).filter(Boolean)
 }
@@ -72,8 +81,8 @@ async function finishLogin() {
   if (!loginId.value) return
   busy.value = true
   try {
-    const a = await codexApi.oauthCompleted(loginId.value)
-    toastStore.showToast(`已登录 ${a.email}`)
+    const a = await codexApi.oauthCompleted(loginId.value, props.reauthAccountId ?? undefined)
+    toastStore.showToast(props.reauthAccountId ? `已重新登录 ${a.email}` : `已登录 ${a.email}`)
     await refreshAccounts()
     emit('close')
   } catch (e) {
@@ -88,7 +97,7 @@ async function startOAuth() {
   busy.value = true
   try {
     portBusy.value = await codexApi.oauthPortInUse()
-    const r = await codexApi.oauthStart()
+    const r = await codexApi.oauthStart(props.reauthAccountId ?? undefined)
     loginId.value = r.loginId
     authUrl.value = r.authUrl
     waiting.value = true
@@ -214,9 +223,9 @@ onMounted(() => {
 
 <template>
   <div class="dialog-overlay" @click.self="close">
-    <div class="dialog auth-dialog" role="dialog" aria-modal="true" aria-label="添加 Codex 账号">
+    <div class="dialog auth-dialog" role="dialog" aria-modal="true" :aria-label="reauthAccountId ? '重新登录 Codex 账号' : '添加 Codex 账号'">
       <div class="dialog-header">
-        <h3>添加 Codex 账号</h3>
+        <h3>{{ reauthAccountId ? '重新登录 Codex 账号' : '添加 Codex 账号' }}</h3>
         <button class="dialog-close" type="button" title="关闭" @click="close">
           <AppIcon name="x" :size="16" />
         </button>
@@ -357,7 +366,7 @@ onMounted(() => {
 
 .row { display: flex; align-items: center; gap: 10px; margin-top: 14px }
 .cb-row { margin-top: 10px }
-.cb-row .input { flex: 1; min-width: 0; height: 28px }
+.cb-row .input { flex: 1; min-width: 0; height: 32px }
 
 .line { display: flex; align-items: center; gap: 8px; margin-top: 12px; min-width: 0 }
 .line .chip { flex-shrink: 0 }
@@ -388,5 +397,5 @@ onMounted(() => {
 
 .field { display: flex; flex-direction: column; gap: 6px; margin-top: 14px }
 .field-label { font-size: var(--text-xs); color: var(--text-secondary) }
-.field .input { height: 28px }
+.field .input { height: 32px }
 </style>

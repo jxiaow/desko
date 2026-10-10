@@ -3,6 +3,7 @@ import BrandLogo from '../shared/BrandLogo.vue'
 import BackupPane from './BackupPane.vue'
 import ProfilesPane from './ProfilesPane.vue'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
+import { getVersion } from '@tauri-apps/api/app'
 import { settingsApi } from '../../services/api/settings'
 import { THEMES, ACCENTS, DEFAULT_APPEARANCE, chooseTheme, chooseAccent, readTheme } from '../../services/theme'
 import type { ThemeId, AccentId, ThemeInfo } from '../../services/theme'
@@ -50,6 +51,8 @@ const lockOnClose = ref(false)
 const lockOnSystemLock = ref(false)
 const theme = ref<ThemeId>(DEFAULT_APPEARANCE.theme)
 const accent = ref<AccentId>(DEFAULT_APPEARANCE.accent)
+/** 关于页的版本号取自运行时应用版本，取不到就不显示，别再写死一个假版本 */
+const appVersion = ref('')
 
 const enabledSettingsModules = computed(() => MODULES.filter((m) => moduleFlags[m.id] && m.settings))
 const tabLabel = computed(() => {
@@ -172,7 +175,12 @@ const close = () => {
 
 useEscapeClose(close)
 
-onMounted(loadSettings)
+onMounted(() => {
+  loadSettings()
+  getVersion()
+    .then((v) => (appVersion.value = v))
+    .catch(() => {})
+})
 </script>
 
 <template>
@@ -376,7 +384,7 @@ onMounted(loadSettings)
                 <BrandLogo />
               </div>
               <div class="about-name">案头 Desko</div>
-              <div class="about-version">v1.0.0</div>
+              <div v-if="appVersion" class="about-version">v{{ appVersion }}</div>
             </div>
           </section>
         </div>
@@ -498,7 +506,7 @@ onMounted(loadSettings)
   gap: var(--space-3);
   height: 44px;
   padding: 0 var(--space-3) 0 var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border);
 }
 
 .settings-head h3 {
@@ -515,6 +523,7 @@ onMounted(loadSettings)
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: var(--space-5);
   display: flex;
   flex-direction: column;

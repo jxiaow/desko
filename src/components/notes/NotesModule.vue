@@ -20,7 +20,6 @@ const VIEWS: { key: NoteView; label: string; icon: IconName }[] = [
   { key: 'pinned', label: '置顶', icon: 'pin' },
   { key: 'starred', label: '收藏', icon: 'star' },
 ]
-const NEWBORN_MS = 400
 const RAIL_FALLBACK_ROOM = 900
 
 const notesStore = useNotesStore()
@@ -52,7 +51,6 @@ const draftHtml = ref('')
 const editingId = ref<string | null>(null)
 const fsTarget = ref<'new' | string | null>(null)
 const fsMode = ref<'edit' | 'view'>('edit')
-const newbornId = ref<string | null>(null)
 /** 打开编辑那一刻的正文快照：自动保存下「取消」靠它把这条写回原样 */
 const editSnapshot = ref('')
 /** 全库小记口令弹窗：mode 决定要输什么，thenLock 是口令到手后要补做的那次加密 */
@@ -127,18 +125,16 @@ const railSummary = computed(() => {
 })
 
 /** 落库成功后清空书写面，光标回到顶部输入框 */
-const afterPublish = async (note: Note) => {
+const afterPublish = async () => {
   draftHtml.value = ''
   fsTarget.value = null
-  newbornId.value = note.id
-  setTimeout(() => { if (newbornId.value === note.id) newbornId.value = null }, NEWBORN_MS)
   await nextTick()
   composerRef.value?.focus()
 }
 
 const publishDraft = async () => {
   const note = await publishNote(draftHtml.value)
-  if (note) await afterPublish(note)
+  if (note) await afterPublish()
 }
 
 const openCard = (note: Note) => {
@@ -270,7 +266,6 @@ watch(notes, () => {
 
 let observer: ResizeObserver | null = null
 onMounted(() => {
-  fetchNotes()
   document.addEventListener('keydown', onKeyDown)
   const root = pageEl.value
   if (!root) return
@@ -390,7 +385,6 @@ onBeforeUnmount(() => {
                 :editing="editingId === note.id"
                 :is-batch-mode="isBatchMode"
                 :is-selected="selectedNoteIds.has(note.id)"
-                :just-published="newbornId === note.id"
                 :attachments="noteAttachments[note.id] ?? []"
                 :save-state="editingId === note.id ? noteSaveState : ''"
                 :unlocked="notePlains[note.id] != null"
@@ -550,6 +544,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   overflow-x: hidden;
   scroll-behavior: smooth;
   /* 拆面轮：微光画布已上移到 .app-root，本页不再自铺 */
@@ -622,6 +617,7 @@ onBeforeUnmount(() => {
   border-left: 1px solid var(--border);
   background: var(--sidebar-bg);
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: var(--space-4) var(--space-2) var(--space-4);
   display: flex;
   flex-direction: column;

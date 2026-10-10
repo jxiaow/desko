@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
       alias: isE2E
         ? {
             '@tauri-apps/api/core': mock('tauri-core.ts'),
+            '@tauri-apps/api/app': mock('tauri-app.ts'),
             '@tauri-apps/api/event': mock('tauri-event.ts'),
             '@tauri-apps/api/window': mock('tauri-window.ts'),
             '@tauri-apps/api/webview': mock('tauri-webview.ts'),

@@ -156,6 +156,7 @@ describe('module state', () => {
 
     moduleFlags.entries = true
     moduleFlags.notes = false
+    moduleFlags.files = false
     moduleFlags.codex = true
     await bootEnabledModules()
     expect(boot).toHaveBeenCalledTimes(1)

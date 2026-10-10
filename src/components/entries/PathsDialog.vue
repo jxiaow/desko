@@ -132,7 +132,7 @@ onMounted(() => pathRef.value?.focus())
   box-shadow: var(--shadow-pop);
 }
 
-.paths-head { height: 42px; padding: 0 20px; gap: var(--space-2) }
+.paths-head { gap: var(--space-2) }
 .paths-head h3 { font-size: var(--text-base) }
 .paths-count { font-size: var(--text-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums }
 .paths-head .dialog-close { margin-left: auto }

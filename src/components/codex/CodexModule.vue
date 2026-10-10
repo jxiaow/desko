@@ -32,8 +32,20 @@ const selected = ref<Set<string>>(new Set())
 const menuAnchor = ref<HTMLElement | null>(null)
 const menuAccount = ref<CodexAccount | null>(null)
 const showAuth = ref(false)
+/** 非空表示这轮登录是「重新授权」而不是新增 */
+const reauthAccountId = ref<string | null>(null)
 const editAccount = ref<CodexAccount | null>(null)
 const resetAccount = ref<CodexAccount | null>(null)
+
+const openAddAuth = () => {
+  reauthAccountId.value = null
+  showAuth.value = true
+}
+
+const openReauth = (a: CodexAccount) => {
+  reauthAccountId.value = a.id
+  showAuth.value = true
+}
 
 const isBatchMode = computed(() => pickMode.value || selected.value.size > 0)
 
@@ -270,7 +282,7 @@ onUnmounted(() => unlisten.forEach((f) => f()))
           <AppIcon :name="isBatchMode ? 'check' : 'checkall'" :size="13" />
           {{ isBatchMode ? '退出选择' : '选择' }}
         </button>
-        <button class="btn-primary add-btn" type="button" @click="showAuth = true">
+        <button class="btn-primary add-btn" type="button" @click="openAddAuth">
           <AppIcon name="plus" :size="13" />
           添加账号
         </button>
@@ -385,6 +397,14 @@ onUnmounted(() => unlisten.forEach((f) => f()))
             <AppIcon name="shield" :size="14" />强制刷新令牌
           </button>
           <button
+            v-if="menuAccount.auth_mode !== 'apikey'"
+            class="pop-item"
+            type="button"
+            @click="openReauth(menuAccount!); closeMenu()"
+          >
+            <AppIcon name="user" :size="14" />重新登录
+          </button>
+          <button
             v-if="(menuAccount.quota?.reset_credits_available ?? 0) > 0"
             class="pop-item"
             type="button"
@@ -430,7 +450,7 @@ onUnmounted(() => unlisten.forEach((f) => f()))
       </div>
     </template>
 
-    <CodexAuthDialog v-if="showAuth" @close="showAuth = false" />
+    <CodexAuthDialog v-if="showAuth" :reauth-account-id="reauthAccountId" @close="showAuth = false; reauthAccountId = null" />
     <CodexEditDialog v-if="editAccount" :account="editAccount" @close="editAccount = null" />
     <ResetCreditDialog v-if="resetAccount" :account="resetAccount" @close="resetAccount = null" />
   </div>

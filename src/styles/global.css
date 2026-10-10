@@ -711,18 +711,14 @@ body {
   box-shadow: var(--shadow-pop);
   display: flex;
   flex-direction: column;
-  animation: dialog-in var(--transition-slow) ease both;
-}
-
-@keyframes dialog-in {
-  from { opacity: 0; transform: scale(0.97) translateY(6px); }
 }
 
 .dialog-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
+  height: 44px;
+  padding: 0 var(--space-4);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -762,7 +758,7 @@ body {
 .dialog-close:hover { background: var(--hover); color: var(--text-secondary); }
 .dialog-close:active { transform: scale(0.9); }
 
-.dialog-body { padding: var(--space-4) var(--space-5); overflow-y: auto; flex: 1; }
+.dialog-body { padding: var(--space-4) var(--space-5); overflow-y: auto; scrollbar-gutter: stable; flex: 1; }
 /* 弹窗底栏：全站一套 —— 46px 浅底条 + 28px 按钮档（收藏弹窗 r13 原型值上抬为全局），
    原先只有 EntryFormDialog 自带这套，其余弹窗掉回 36px 全局按钮档，同一 App 两种底栏。 */
 .dialog-footer {
@@ -1225,6 +1221,7 @@ body {
 .content-inner {
   flex: 1;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 0 var(--space-5) 22px;
   /* inset 轮：居中阅读列——窄窗时保持 space-5 常态边距，宽窗两侧对称加宽，
      行长不再随窗口无限拉大。上限走 --content-max（视口驱动，最大化才放宽到 1120） */
@@ -1773,7 +1770,7 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
 
 /* Teleport 到 body 的分类下拉：脱离组件作用域，样式只能挂全局。
    与 .popover 同一套浮层语言（大圆角 + pop 阴影 + 内衬间距），条目落 .pop-item 同档 */
-.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); padding: var(--space-1); max-height: 200px; overflow-y: auto; }
+.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); padding: var(--space-1); max-height: 200px; overflow-y: auto; scrollbar-gutter: stable; }
 .category-dropdown-teleported .category-option { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); border-radius: var(--radius-sm); cursor: pointer; transition: background var(--transition-fast); }
 .category-dropdown-teleported .category-option:hover { background: var(--hover); }
 .category-dropdown-teleported .category-option.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }

@@ -42,6 +42,8 @@ test.describe('Settings 设置', () => {
     await expect(visiblePane(dialog).locator('.number-input')).toHaveValue('10')
     await settingsTab(dialog, 'about')
     await expect(dialog.locator('.settings-about .about-name')).toHaveText('案头 Desko')
+    // 版本号取运行时应用版本（e2e 桩为 1.0.0），不得再写死
+    await expect(dialog.locator('.settings-about .about-version')).toHaveText('v1.0.0')
     expect(await e2e.count(page, 'get_db_path')).toBe(1)
     expect(await e2e.count(page, 'get_setting')).toBeGreaterThanOrEqual(2)
   })
@@ -180,6 +182,18 @@ test.describe('Settings 设置', () => {
     await dialog.locator('h2').click() // 触发 change
     await expectToast(page, '设置已保存')
     expect((await e2e.snapshot(page)).settings.auto_lock_timeout).toBe('15')
+  })
+
+  test('闲置自动锁：超时到点真锁并提示', async ({ page }) => {
+    // 时钟要在应用脚本加载前接管：30s 轮询与 Date.now 差值都走假时间，
+    // 否则这条用例得陪跑真实的一分钟
+    await page.clock.install()
+    await bootUnlocked(page, { settings: { auto_lock_timeout: '1' } })
+    // 跨过 1 分钟阈值：60s 那次轮询判定闲置达标
+    await page.clock.fastForward('01:05')
+    await expect(page.locator('.unlock-input')).toBeVisible()
+    await expectToast(page, '已自动锁定')
+    expect((await e2e.snapshot(page)).unlocked).toBe(false)
   })
 
   test('切换关闭窗口时锁定', async ({ page }) => {

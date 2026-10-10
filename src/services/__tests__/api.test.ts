@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { authApi } from '../api/auth'
 import { entriesApi } from '../api/entries'
 import { dataApi } from '../api/data'
+import { fileShortcutsApi } from '../api/fileShortcuts'
 
 // Mock @tauri-apps/api/core
 vi.mock('@tauri-apps/api/core', () => ({
@@ -119,6 +120,25 @@ describe('api', () => {
 
       expect(mockInvoke).toHaveBeenCalledWith('get_db_path')
       expect(result).toBe('/path/to/db')
+    })
+  })
+
+  describe('fileShortcuts', () => {
+    it('updateFileShortcut maps shortcut_type to tauri camelCase key shortcutType', async () => {
+      mockInvoke.mockResolvedValue(undefined)
+
+      await fileShortcutsApi.updateFileShortcut('1', {
+        name: 'N',
+        path: '/p',
+        shortcut_type: 'folder'
+      })
+
+      expect(mockInvoke).toHaveBeenCalledWith('update_file_shortcut', {
+        id: '1',
+        name: 'N',
+        path: '/p',
+        shortcutType: 'folder'
+      })
     })
   })
 })

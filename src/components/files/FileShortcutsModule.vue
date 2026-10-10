@@ -569,8 +569,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-pop);
 }
-.shortcut-dialog .dialog-header { height: 42px; padding: 0 20px; }
-.shortcut-dialog .dialog-header h3 { font-size: var(--text-base); }
 .shortcut-dialog .dialog-body { overflow: hidden; padding: 16px 20px 12px; }
 .shortcut-dialog .dialog-footer { justify-content: space-between; }
 

@@ -144,11 +144,11 @@ async function consume() {
   font-size: var(--text-xs); color: var(--text-secondary);
 }
 
-.rc-details { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle) }
+.rc-details { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border) }
 .rc-details-title {
   font-size: var(--text-2xs); font-weight: 600; letter-spacing: .04em; color: var(--text-muted);
 }
-.rc-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 168px; overflow: auto }
+.rc-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 168px; overflow: auto; scrollbar-gutter: stable }
 .rc-row {
   display: flex; align-items: center; gap: 8px;
   font-size: var(--text-xs); line-height: 18px; color: var(--text-secondary);

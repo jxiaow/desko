@@ -1,11 +1,13 @@
 import { ref, computed } from 'vue'
 import { entriesApi as api } from '../services/api/entries'
 import { useEntriesStore } from '../stores/entries'
+import { usePasswordStore } from '../stores/password'
 import { useToastStore } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
 
 export function useBatch() {
   const entriesStore = useEntriesStore()
+  const passwordStore = usePasswordStore()
   const toastStore = useToastStore()
   const confirmStore = useConfirmStore()
 
@@ -50,6 +52,7 @@ export function useBatch() {
       try {
         const ids = Array.from(selectedIds.value)
         const count = await api.batchDeleteEntries(ids)
+        passwordStore.evictPasswords(ids)
         await entriesStore.fetchEntries()
         selectedIds.value.clear()
         toastStore.showToast(`已删除 ${count} 条记录`)

@@ -64,6 +64,14 @@ export const usePasswordStore = defineStore('password', () => {
     }
   }
 
+  /** 条目被删除后，它在内存里的解密明文必须跟着消失，
+      否则 TTL 内仍能凭 id 读回一份已不存在于库里的密码。 */
+  const evictPasswords = (ids: string[]) => {
+    for (const id of ids) {
+      delete passwordCache.value[id]
+    }
+  }
+
   const clearSensitiveState = () => {
     visiblePasswords.value = {}
     passwordCache.value = {}
@@ -77,6 +85,7 @@ export const usePasswordStore = defineStore('password', () => {
     getPasswordDisplay,
     getPassword,
     evictExpiredPasswords,
+    evictPasswords,
     clearSensitiveState,
   }
 })

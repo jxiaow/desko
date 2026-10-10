@@ -76,6 +76,7 @@ export const MODULES: ModuleDef[] = [
     defaultEnabled: true,
     core: true,
     count: () => useNotesStore().notes.length,
+    boot: () => useNotesStore().fetchNotes(),
     onLock: () => useNotesStore().clearUnlockedNotes(),
     view: async () => (await import('../views/NotesView.vue')).default,
     settings: {
@@ -112,6 +113,7 @@ export const MODULES: ModuleDef[] = [
     defaultEnabled: true,
     core: true,
     count: () => useFileShortcutsStore().shortcuts.length,
+    boot: () => useFileShortcutsStore().fetchShortcuts(),
     view: async () => (await import('../views/FilesView.vue')).default,
     settings: {
       label: '文件快捷',

@@ -248,7 +248,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 }
 .fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.5; }
 
-.fs-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+.fs-scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable; min-height: 0; }
 /* 铺了纸就得给纸外留出桌沿，否则 800px 以下的窗口里纸边贴住滚动条 */
 .fs-scroll:has(.fs-doc) { padding-inline: var(--space-5); scrollbar-gutter: stable; }
 .fs-inner { padding-block: 12px 20px; }

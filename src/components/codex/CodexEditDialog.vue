@@ -89,7 +89,7 @@ async function save() {
 }
 .field { display: flex; flex-direction: column; gap: 6px; margin-top: 12px }
 .field-label { font-size: var(--text-xs); color: var(--text-secondary) }
-.field .input { height: 28px }
+.field .input { height: 32px }
 .note-box { height: auto; padding: 8px 10px; line-height: 1.7; resize: vertical; font-family: inherit }
 .tag-preview { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0 }
 </style>

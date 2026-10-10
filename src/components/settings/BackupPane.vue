@@ -792,7 +792,7 @@ const doRestoreFile = async () => {
 .dialog-sm { width: 420px; }
 .dialog-body-tight { padding-top: var(--space-2); padding-bottom: var(--space-2); }
 /* 预留列表高度：loading 一行 → 列表撑开会跳，固定住再滚动 */
-.remote-list { min-height: 240px; overflow-y: auto; }
+.remote-list { min-height: 240px; overflow-y: auto; scrollbar-gutter: stable; }
 
 .modal-help {
   margin: 0 0 var(--space-3);

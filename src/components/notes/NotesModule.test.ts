@@ -87,6 +87,9 @@ const mountModule = async () => {
     attachTo: document.createElement('div'),
   })
   await flushPromises()
+  // 取数走注册表 boot（解锁时一次），组件挂载不再自取；测试按同一时序补这一刀
+  await useNotesStore().fetchNotes()
+  await flushPromises()
   return wrapper
 }
 
@@ -148,7 +151,6 @@ describe('NotesModule', () => {
     })
     expect(composer.props('html')).toBe('')
     expect(wrapper.findAll('.memo')).toHaveLength(1)
-    expect(wrapper.find('.memo.newborn').exists()).toBe(true)
     wrapper.unmount()
   })
 

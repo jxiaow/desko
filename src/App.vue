@@ -6,6 +6,7 @@ import { useToastStore } from './stores/toast'
 import { useConfirmStore } from './stores/confirm'
 import { usePasswordStore } from './stores/password'
 import { useAutoLock } from './composables/useAutoLock'
+import { useClipboard } from './composables/useClipboard'
 import { installHoverGuard } from './utils/hoverGuard'
 import { bootEnabledModules, lockEnabledModules } from './modules/state'
 import type { SettingsTabId } from './modules/registry'
@@ -29,6 +30,7 @@ const { confirmDialog } = storeToRefs(confirmStore)
 const { handleConfirm } = confirmStore
 const passwordStore = usePasswordStore()
 const { evictExpiredPasswords, clearSensitiveState } = passwordStore
+const { clearClipboardTimer } = useClipboard()
 
 /** 侧栏三态（V5.2 收编轮 P2）：展开 208 / 图标轨 56 / 收起 0。
     缺省仍是图标轨——和旧的两态时代一致，小窗开局不把内容挤窄。 */
@@ -62,6 +64,9 @@ const doLock = async () => {
   clearSensitiveState()
   // 加密小记的会话明文、收藏的筛选态——各模块自己那份跟着锁回去
   lockEnabledModules()
+  // 这里已直接把剪贴板清空，撤销待执行的密码延迟清除，否则解锁后复制的
+  // 新内容会在原定时点被误删。
+  clearClipboardTimer()
   try { await navigator.clipboard.writeText('') } catch {}
 }
 

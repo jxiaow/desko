@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, tipButton } from '../helpers'
+import { bootUnlocked, e2e, expectToast, openSettings, tipButton, visiblePane, waitForToastGone } from '../helpers'
 
 /** 全库一把小记口令：立的时候卡位数，之后解锁照原样填 */
 const NOTE_PASS = 'note-pw-1234'
@@ -481,6 +481,69 @@ test.describe('Notes 小记', () => {
     await expect(dialog).toHaveCount(0)
     await expect(memo(page, '封存的正文')).toBeVisible()
     expect(await e2e.count(page, 'note_key_recover')).toBe(1)
+  })
+
+  test('设置·小记页签：没设过口令只剩一行说明', async ({ page }) => {
+    await bootUnlocked(page, SEED, '/notes')
+    const dialog = await openSettings(page, 'notes')
+    const pane = visiblePane(dialog)
+    await expect(pane.locator('.setting-name')).toHaveText('小记口令')
+    await expect(pane.locator('.setting-desc')).toContainText('还没有给任何小记设置口令')
+    await expect(pane.locator('.setting-item.clickable')).toHaveCount(0)
+  })
+
+  test('设置·小记口令改密链：先解锁再改，旧口令即刻作废', async ({ page }) => {
+    const NEW_PASS = 'brand-new-key-9'
+    await bootUnlocked(page, {
+      notes: [{ title: '封存', content_html: '<p>封存的正文</p>', encrypted: true }],
+      notePassphrase: NOTE_PASS,
+    }, '/notes')
+    const dialog = await openSettings(page, 'notes')
+    const row = visiblePane(dialog).locator('.setting-item.clickable')
+    await expect(row).toContainText('修改小记口令')
+
+    // 口令不在手：点进去先拦解锁，错口令留在弹窗里
+    await row.click()
+    const key = page.locator('.note-lock-dialog')
+    await expect(key).toHaveAttribute('aria-label', '解锁加密小记')
+    await key.locator('input[type="password"]').fill('错位的口令')
+    await key.locator('button.btn-primary').click()
+    await expect(key.locator('.lock-error')).toContainText('密码错误')
+
+    // 解锁成功不返回设置页，而是直接续上改密格：两格输入
+    await key.locator('input[type="password"]').fill(NOTE_PASS)
+    await key.locator('button.btn-primary').click()
+    await expect(key).toHaveAttribute('aria-label', '修改小记口令')
+    await expect(key.locator('input[type="password"]')).toHaveCount(2)
+    // 位数不够：提交钮不亮
+    await key.locator('input[type="password"]').first().fill('short')
+    await key.locator('input[type="password"]').nth(1).fill('short')
+    await expect(key.locator('button.btn-primary')).toBeDisabled()
+    await key.locator('input[type="password"]').first().fill(NEW_PASS)
+    await key.locator('input[type="password"]').nth(1).fill('another-key-9')
+    await expect(key.locator('.lock-error')).toContainText('两次口令不一致')
+    await key.locator('input[type="password"]').nth(1).fill(NEW_PASS)
+    await key.locator('button.btn-primary').click()
+    await expectToast(page, '小记口令已修改')
+    await expect(key).toHaveCount(0)
+
+    await dialog.locator('.dialog-close').click()
+    // 改完口令域还开着：锁着的正文此刻已经见光（加密 seed 的标题不进锁牌，按位置认这条）
+    const sealed = page.locator('.memo').first()
+    await expect(sealed.locator('.memo-body')).toContainText('封存的正文')
+    // 整库锁回后验轮换：旧口令被拒，新口令一次开全库
+    await page.locator('.page-bar button[aria-label="锁回全部加密小记"]').click()
+    await expectToast(page, '加密小记已全部锁回')
+    await waitForToastGone(page)
+    await sealed.click()
+    await expect(key).toBeVisible()
+    await key.locator('input[type="password"]').fill(NOTE_PASS)
+    await key.locator('button.btn-primary').click()
+    await expect(key.locator('.lock-error')).toContainText('密码错误')
+    await key.locator('input[type="password"]').fill(NEW_PASS)
+    await key.locator('button.btn-primary').click()
+    await expect(key).toHaveCount(0)
+    await expect(memo(page, '封存的正文')).toBeVisible()
   })
 
   test('卡片上勾选任务项：改动落库，进编辑态不弹回', async ({ page }) => {

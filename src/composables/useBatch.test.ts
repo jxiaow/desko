@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useBatch } from './useBatch'
 import { useEntriesStore } from '../stores/entries'
+import { usePasswordStore } from '../stores/password'
 import { useToastStore } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
 import { entriesApi } from '../services/api/entries'
@@ -9,6 +10,10 @@ import { entriesApi } from '../services/api/entries'
 // Mock dependencies
 vi.mock('../stores/entries', () => ({
   useEntriesStore: vi.fn(),
+}))
+
+vi.mock('../stores/password', () => ({
+  usePasswordStore: vi.fn(),
 }))
 
 vi.mock('../stores/toast', () => ({
@@ -27,6 +32,7 @@ vi.mock('../services/api/entries', () => ({
 
 describe('useBatch', () => {
   let mockEntriesStore: any
+  let mockPasswordStore: any
   let mockToastStore: any
   let mockConfirmStore: any
 
@@ -38,6 +44,9 @@ describe('useBatch', () => {
       filteredEntries: [],
       fetchEntries: vi.fn(),
     }
+    mockPasswordStore = {
+      evictPasswords: vi.fn(),
+    }
     mockToastStore = {
       showToast: vi.fn(),
     }
@@ -46,6 +55,7 @@ describe('useBatch', () => {
     }
 
     vi.mocked(useEntriesStore).mockReturnValue(mockEntriesStore)
+    vi.mocked(usePasswordStore).mockReturnValue(mockPasswordStore)
     vi.mocked(useToastStore).mockReturnValue(mockToastStore)
     vi.mocked(useConfirmStore).mockReturnValue(mockConfirmStore)
   })
@@ -203,6 +213,7 @@ describe('useBatch', () => {
       await confirmCallback()
 
       expect(entriesApi.batchDeleteEntries).toHaveBeenCalledWith(['1', '2'])
+      expect(mockPasswordStore.evictPasswords).toHaveBeenCalledWith(['1', '2'])
       expect(mockEntriesStore.fetchEntries).toHaveBeenCalled()
       expect(selectedIds.value.size).toBe(0)
       expect(isBatchMode.value).toBe(false)

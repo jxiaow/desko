@@ -83,8 +83,6 @@ useEscapeClose(() => emit('close'))
 
 /* 表单正文自然高，不出外层滚动条；子路径已搬去独立弹窗 */
 .entry-form-dialog .dialog-body { overflow: hidden; padding: 16px 20px 12px; }
-.entry-form-dialog .dialog-header { height: 42px; padding: 0 20px; }
-.entry-form-dialog .dialog-header h3 { font-size: var(--text-base); }
 
 /* 46px 底栏浅底色 + 28px 按钮档、快捷键提示（.footer-hints/.kbd）均已上抬为全局；
    这里只留本弹窗的布局差量：左侧快捷键徽标把按钮推到右边 */
