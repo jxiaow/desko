@@ -359,7 +359,7 @@ usePageHeadStore().setHead('局域网传输')
 
 /* ── 分组卡：与穿透页 .tn-card 同一档面板方言（mock .wcard），一层框 + 发丝分行 ── */
 .clean-group-card {
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
@@ -467,7 +467,7 @@ usePageHeadStore().setHead('局域网传输')
 .drop-card {
   border: 1.5px dashed var(--border-hover);
   border-radius: 12px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   box-shadow: var(--shadow-card);
   margin-bottom: var(--space-3);
   transition: border-color var(--transition), background var(--transition);
@@ -502,7 +502,7 @@ usePageHeadStore().setHead('局域网传输')
 }
 .drop-card.active .well-ico,
 .drop-card.active .well-title { color: var(--accent); }
-.drop-card.off { background: var(--panel-bg); border-color: var(--border) }
+.drop-card.off { background: var(--bg-surface); border-color: var(--border) }
 .drop-card.off .well-ico,
 .drop-card.off .well-title { color: var(--text-muted) }
 
@@ -528,7 +528,7 @@ usePageHeadStore().setHead('局域网传输')
   font-weight: 600;
   color: var(--accent);
   white-space: nowrap;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--accent-light);
   border-radius: var(--radius-pill);
   padding: 6px 14px;
@@ -581,7 +581,7 @@ html.hover-suppressed .dir-row:hover .dir-del { opacity: 0; }
 }
 
 .input {
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);

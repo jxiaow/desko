@@ -150,7 +150,39 @@ describe('NotesModule', () => {
       category: '灵感',
     })
     expect(composer.props('html')).toBe('')
+    expect(useNotesStore().noteDraftHtml).toBe('')
     expect(wrapper.findAll('.memo')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('keeps unpublished fullscreen content when the module is unmounted and reopened', async () => {
+    stageNotes([])
+    let wrapper = await mountModule()
+    wrapper.findComponent(NoteComposer).vm.$emit('fullscreen')
+    await flushPromises()
+    expect(wrapper.find('.save-hint').text()).toBe('未发布')
+    wrapper.findComponent(NoteFullscreen).vm.$emit('update', '<p>切换页面后继续写 #工作</p>')
+    await flushPromises()
+    wrapper.unmount()
+
+    wrapper = await mountModule()
+    expect(wrapper.findComponent(NoteComposer).props('html')).toBe('<p>切换页面后继续写 #工作</p>')
+    expect(notesApi.createNote).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('discarding unpublished content also clears it after reopening the module', async () => {
+    stageNotes([])
+    let wrapper = await mountModule()
+    wrapper.findComponent(NoteComposer).vm.$emit('update', '<p>决定放弃的内容</p>')
+    await flushPromises()
+    const discard = wrapper.findComponent(NoteComposer).findAll('button').find(button => button.text() === '放弃')!
+    await discard.trigger('click')
+    expect(useNotesStore().noteDraftHtml).toBe('')
+    wrapper.unmount()
+
+    wrapper = await mountModule()
+    expect(wrapper.findComponent(NoteComposer).props('html')).toBe('')
     wrapper.unmount()
   })
 
@@ -373,11 +405,11 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
-  it('filters by clicking an inline tag in a card', async () => {
+  it('filters by clicking a footer tag in a card', async () => {
     stageNotes([makeNote(), makeNote({ id: 'b', title: '乙', content_html: '<p>乙 #生活</p>' })])
     const wrapper = await mountModule()
 
-    await wrapper.findAll('.tag-inline')[0].trigger('click')
+    await wrapper.findAll('.tag-pill')[0].trigger('click')
     expect(useNotesStore().activeTags.has('工作')).toBe(true)
     expect(wrapper.findAll('.memo')).toHaveLength(1)
     wrapper.unmount()

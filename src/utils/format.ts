@@ -24,15 +24,16 @@ export function formatRelativeTime(timestamp: number): string {
   return formatDate(timestamp)
 }
 
+// URL 的锚点是正文；中文紧邻的 #标签 则与空格分隔的标签一样识别。
+const TAG_TOKEN = /\b(?:[a-z][a-z\d+.-]*:\/\/|www\.)[^\s<>]+|#([\w\u4e00-\u9fa5]+)/gi
+
+function tagRanges(text: string) {
+  return [...text.matchAll(TAG_TOKEN)].flatMap(match =>
+    match[1] ? [{ tag: match[1], from: match.index!, to: match.index! + match[0].length }] : [])
+}
+
 export function extractTags(content: string): string[] {
-  // 支持英文、数字、下划线和中文字符
-  const tagRegex = /#([\w\u4e00-\u9fa5]+)/g
-  const tags: string[] = []
-  let match
-  while ((match = tagRegex.exec(content)) !== null) {
-    tags.push(match[1])
-  }
-  return [...new Set(tags)] // 去重
+  return [...new Set(tagRanges(content).map(match => match.tag))]
 }
 
 /** 正文转纯文本：块级元素之间补换行，不做长度截断 */
@@ -41,12 +42,13 @@ export function htmlToText(html: string): string {
   return containerToText(parseHtmlFragment(html))
 }
 
-/** 标签用的纯文本：代码块/行内代码里的 #xxx 是内容，不能当记号 */
+/** 标签用的纯文本：代码、链接里的 #xxx 是内容，不能当记号 */
 export function htmlToTagText(html: string): string {
   if (!html) return ''
-  const div = parseHtmlFragment(html)
-  div.querySelectorAll('pre, code').forEach((el) => el.remove())
-  return containerToText(div)
+  return tagTextGroups(parseHtmlFragment(html))
+    .map(nodes => nodes.map(node => node.data).join('').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' ')
 }
 
 /** 复制用纯文本轨：链接只留裸地址，标题走 text/html 那一轨；没有地址才退回链接文字 */
@@ -111,6 +113,68 @@ export function formatAbsTime(ts: number): string {
 }
 
 const TAG_IN_TEXT = /(^|\s)(#[\w\u4e00-\u9fa5]+)/g
+
+/** 列表标题中的标签交给底部标签区显示。 */
+export function stripTagsFromText(text: string): string {
+  for (const match of tagRanges(text).reverse()) {
+    text = text.slice(0, match.from) + text.slice(match.to)
+  }
+  return text
+}
+
+/** 标签识别的块/换行边界同时用于提取与阅读展示，粗体等行内节点不拆词。 */
+function tagTextGroups(root: Element): Text[][] {
+  const groups: Text[][] = []
+  let group: Text[] = []
+  const split = () => {
+    if (group.length) groups.push(group)
+    group = []
+  }
+  const visit = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      group.push(node as Text)
+      return
+    }
+    if (!(node instanceof Element)) return
+    if (node.matches('pre, code, a')) {
+      split()
+      return
+    }
+    const block = /^(P|DIV|H[1-6]|BLOCKQUOTE|LI|UL|OL|TR|TD|TH|BR|HR|IMG|INPUT)$/.test(node.tagName)
+    if (block) split()
+    node.childNodes.forEach(visit)
+    if (block) split()
+  }
+  visit(root)
+  split()
+  return groups
+}
+
+/** 仅调整列表阅读层，保留原始正文和块结构；代码与链接中的 # 是内容。 */
+export function stripTagsFromHtml(html: string): string {
+  if (!html) return html
+  const div = parseHtmlFragment(html)
+  for (const nodes of tagTextGroups(div)) {
+    let offset = 0
+    const parts = nodes.map(node => {
+      const start = offset
+      offset += node.length
+      return { node, start, end: offset }
+    })
+    const text = nodes.map(node => node.data).join('')
+    // 从后往前删文字，保留节点结构和前面范围的原始偏移。
+    for (const match of tagRanges(text).reverse()) {
+      const start = match.from
+      const end = match.to
+      for (const part of parts) {
+        const from = Math.max(start, part.start)
+        const to = Math.min(end, part.end)
+        if (from < to) part.node.deleteData(from - part.start, to - from)
+      }
+    }
+  }
+  return div.innerHTML
+}
 
 /**
  * 把正文里的 #标签 包成 span.tag-inline（flomo 式内联着色）。

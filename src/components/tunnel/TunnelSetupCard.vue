@@ -299,7 +299,7 @@ function revokeAuth() {
   min-width: 0;
   height: 32px;
   padding: 0 10px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);

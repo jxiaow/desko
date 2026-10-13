@@ -2,7 +2,7 @@
 // scripts/theme-intake.mjs（判决）与 scripts/theme-candidate-shots.mjs（真 app 覆盖出图）共用这一份，
 // 免得两处各写一套正则、判据随之漂移。
 import { readFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -50,9 +50,15 @@ export function themeCombos() {
   )
 }
 
+/** 读取样式入口及相对路径 @import，让校验、清单与原型使用同一份材质定义。 */
+export function readStyleSource(cssPath) {
+  return readFileSync(cssPath, 'utf8').replace(/@import\s+['"](\.[^'"]+)['"]\s*;/g,
+    (_, imported) => readStyleSource(resolve(dirname(cssPath), imported)))
+}
+
 /** global.css → { base: Map(底色 → Map(槽 → 值)), combo: Map("极性/accent" → Map(槽 → 值)), polarity } */
 export function readGlobal(cssPath = join(ROOT, 'src', 'styles', 'global.css')) {
-  const css = readFileSync(cssPath, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  const css = readStyleSource(cssPath).replace(/\/\*[\s\S]*?\*\//g, '')
   const base = new Map()
   const combo = new Map()
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {

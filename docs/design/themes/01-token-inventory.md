@@ -49,54 +49,54 @@
 
 | 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `--bg` | #f8f8f7 | #f8fbfe | #1d1c1a | #191c20 | 窗体画布底（最外层面） | src/styles/global.css ×4, src/components/auth/UnlockPage.vue ×3, src/components/auth/SetupPage.vue ×2 +7处 / 共 16 |
+| `--bg` | #f8f8f7 | #f1f2f3 | #1d1c1a | #191c20 | 窗体画布底（最外层面） | src/styles/global.css ×4, src/components/auth/UnlockPage.vue ×3, src/components/auth/SetupPage.vue ×2 +7处 / 共 16 |
 | `--panel-bg` | #fcfcfc | #fefefe | #22211e | #1f2328 | 卡片/面板/弹窗面（占窗面约七成，刻意非纯白） | src/styles/global.css ×23, src/components/fileshare/FileShareModule.vue ×5, src/components/settings/SettingsDialog.vue ×5 +12处 / 共 54 |
-| `--chrome-bg` | rgba(248, 248, 247, 0.78) | rgba(248, 251, 254, 0.85) | rgba(29, 28, 26, 0.86) | rgba(25, 28, 32, 0.86) | 标题栏一类的半透明吸顶底 | _无人引用_ |
-| `--sunken` | #f1f1f0 | #e8ecf2 | #181716 | #15171b | 下陷面：输入槽、代码底、字母块、页栏铺底 | src/styles/global.css ×6, src/components/bypass/BypassModule.vue, src/components/codex/CodexSessionsPanel.vue +1处 / 共 9 |
-| `--fill` | #eaeae8 | #e2e5eb | #2a2927 | #272c33 | 中性填充：进度槽、占位块、次级底 | src/styles/global.css ×9, src/components/codex/CodexModule.vue ×3, src/components/codex/CodexBatchDeleteDialog.vue +7处 / 共 20 |
-| `--hover` | #f7f7f7 | #f6f9fe | #282622 | #252a30 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） | src/styles/global.css ×15, src/components/notes/NoteEditor.vue ×2, src/components/settings/BackupPane.vue ×2 +9处 / 共 29 |
-| `--active` | #eeedeb | #e5e8ee | #343431 | #313740 | 行/项按下选中底 | src/styles/global.css / 共 1 |
-| `--overlay` | rgba(29, 28, 26, 0.42) | rgba(20, 22, 25, 0.40) | rgba(0, 0, 0, 0.62) | rgba(0, 0, 0, 0.65) | 遮罩层（弹窗背后的那层压暗） | src/components/entries/EntryFormDialog.vue, src/components/entries/PathsDialog.vue, src/components/files/FileShortcutsModule.vue +3处 / 共 6 |
+| `--chrome-bg` | rgba(248, 248, 247, 0.78) | rgba(241, 242, 243, 0.85) | rgba(29, 28, 26, 0.86) | rgba(25, 28, 32, 0.86) | 标题栏一类的半透明吸顶底 | _无人引用_ |
+| `--sunken` | #f1f1f0 | #ebecee | #181716 | #15171b | 下陷面：输入槽、代码底、字母块、页栏铺底 | src/styles/global.css ×6, src/components/bypass/BypassModule.vue, src/components/codex/CodexSessionsPanel.vue +1处 / 共 9 |
+| `--fill` | #eaeae8 | #dbdde0 | #2a2927 | #272c33 | 中性填充：进度槽、占位块、次级底 | src/styles/global.css ×9, src/components/codex/CodexModule.vue ×3, src/components/codex/CodexBatchDeleteDialog.vue +7处 / 共 20 |
+| `--hover` | #f7f7f7 | #f7f8f9 | #282622 | #252a30 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） | src/styles/global.css ×15, src/components/notes/NoteEditor.vue ×2, src/components/settings/BackupPane.vue ×2 +9处 / 共 29 |
+| `--active` | #eeedeb | #e1e3e6 | #343431 | #313740 | 行/项按下选中底 | src/styles/global.css / 共 1 |
+| `--overlay` | rgba(29, 28, 26, 0.42) | rgba(18, 19, 22, 0.42) | rgba(0, 0, 0, 0.62) | rgba(0, 0, 0, 0.65) | 遮罩层（弹窗背后的那层压暗） | src/components/entries/EntryFormDialog.vue, src/components/entries/PathsDialog.vue, src/components/files/FileShortcutsModule.vue +3处 / 共 6 |
 
 ### 文字
 
 | 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `--text` | #333230 | #202123 | #e6e4de | #e3e6ec | 正文一级字 | src/styles/global.css ×27, src/components/bypass/BypassModule.vue ×8, src/components/settings/SettingsDialog.vue ×6 +29处 / 共 106 |
-| `--text-secondary` | #4d4c49 | #424346 | #c7c4bd | #c3c8d2 | 二级字（说明、次要字段） | src/styles/global.css ×24, src/components/codex/CodexModule.vue ×4, src/components/codex/ResetCreditDialog.vue ×4 +20处 / 共 65 |
-| `--text-muted` | #6b6a66 | #5d5f63 | #aeaba4 | #abb1be | 三级字（标签、时间戳） | src/styles/global.css ×34, src/components/bypass/BypassModule.vue ×9, src/components/codex/CodexUsagePanel.vue ×7 +30处 / 共 123 |
-| `--text-faint` | #95948e | #8d8f93 | #9c9992 | #989fab | 四级字（占位、辅助）——深色下最低 5.8:1 底线 | src/components/bypass/BypassModule.vue ×3, src/components/codex/CodexModule.vue ×3, src/components/codex/CodexSessionsPanel.vue ×3 +18处 / 共 36 |
-| `--text-url` | #4d4c49 | #424346 | #c9c6bf | #c5c9d4 | 裸链接字色 | src/components/fileshare/FileShareModule.vue ×3, src/components/entries/EntriesModule.vue, src/components/files/FileShortcutsModule.vue +1处 / 共 6 |
+| `--text` | #333230 | #1a1b1d | #e6e4de | #e3e6ec | 正文一级字 | src/styles/global.css ×29, src/components/bypass/BypassModule.vue ×8, src/components/settings/SettingsDialog.vue ×6 +29处 / 共 109 |
+| `--text-secondary` | #4d4c49 | #3e3f42 | #c7c4bd | #c3c8d2 | 二级字（说明、次要字段） | src/styles/global.css ×24, src/components/codex/CodexModule.vue ×4, src/components/codex/ResetCreditDialog.vue ×4 +20处 / 共 65 |
+| `--text-muted` | #6b6a66 | #5b5d61 | #aeaba4 | #abb1be | 三级字（标签、时间戳） | src/styles/global.css ×34, src/components/bypass/BypassModule.vue ×9, src/components/codex/CodexUsagePanel.vue ×7 +30处 / 共 127 |
+| `--text-faint` | #95948e | #85888d | #9c9992 | #989fab | 四级字（占位、辅助）——深色下最低 5.8:1 底线 | src/components/bypass/BypassModule.vue ×3, src/components/codex/CodexModule.vue ×3, src/components/codex/CodexSessionsPanel.vue ×3 +16处 / 共 32 |
+| `--text-url` | #4d4c49 | #3e3f42 | #c9c6bf | #c5c9d4 | 裸链接字色 | src/components/fileshare/FileShareModule.vue ×3, src/components/entries/EntriesModule.vue, src/components/files/FileShortcutsModule.vue +1处 / 共 6 |
 
 ### 描边
 
 | 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `--border` | #e6e6e4 | #dbdfe6 | #30302d | #2d333b | 发丝描边：卡片/输入/分隔，分层主力 | src/styles/global.css ×38, src/components/fileshare/FileShareModule.vue ×9, src/components/notes/NoteEditor.vue ×5 +29处 / 共 112 |
-| `--border-strong` | #d5d5d2 | #c6c9d0 | #434340 | #3f4752 | 重描边：需要压住的边界、--shadow 的 1px 环 | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×3, src/components/settings/SettingsDialog.vue ×2 +6处 / 共 16 |
-| `--border-subtle` | #f1f1f0 | #eef2f9 | #252421 | #23272e | 极浅描边（比 --border 更退） | src/components/bypass/BypassModule.vue, src/styles/global.css / 共 2 |
-| `--border-hover` | #d5d5d2 | #c6c9d0 | #434340 | #3f4752 | 悬停描边 | src/styles/global.css ×3, src/components/fileshare/FileShareModule.vue, src/components/mfa/MfaModule.vue / 共 5 |
+| `--border` | #e6e6e4 | #d3d5d9 | #30302d | #2d333b | 发丝描边：卡片/输入/分隔，分层主力 | src/styles/global.css ×38, src/components/fileshare/FileShareModule.vue ×9, src/components/notes/NoteEditor.vue ×5 +29处 / 共 112 |
+| `--border-strong` | #d5d5d2 | #b9bdc2 | #434340 | #3f4752 | 重描边：需要压住的边界、--shadow 的 1px 环 | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×3, src/components/settings/SettingsDialog.vue ×2 +6处 / 共 16 |
+| `--border-subtle` | #f1f1f0 | #e9ebee | #252421 | #23272e | 极浅描边（比 --border 更退） | src/components/bypass/BypassModule.vue, src/styles/global.css / 共 2 |
+| `--border-hover` | #d5d5d2 | #b9bdc2 | #434340 | #3f4752 | 悬停描边 | src/styles/global.css ×3, src/components/fileshare/FileShareModule.vue, src/components/mfa/MfaModule.vue / 共 5 |
 
 ### 徽标
 
 | 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `--badge-cat-bg` | #f0f0ee | #e5e8ee | #252421 | #23272e | 分类胶囊徽标底 | src/styles/global.css / 共 1 |
-| `--badge-cat-border` | #e6e6e4 | #dbdfe6 | #30302d | #2d333b | 分类胶囊徽标描边 | _无人引用_ |
-| `--badge-cat-text` | #4d4c49 | #424346 | #c7c4bd | #c3c8d2 | 分类胶囊徽标字 | _无人引用_ |
+| `--badge-cat-bg` | #f0f0ee | #ebecee | #252421 | #23272e | 分类胶囊徽标底 | src/styles/global.css / 共 1 |
+| `--badge-cat-border` | #e6e6e4 | #d3d5d9 | #30302d | #2d333b | 分类胶囊徽标描边 | _无人引用_ |
+| `--badge-cat-text` | #4d4c49 | #3e3f42 | #c7c4bd | #c3c8d2 | 分类胶囊徽标字 | _无人引用_ |
 
 ### 投影
 
 | 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `--shadow-xs` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(20, 22, 25, 0.03) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 最小投影 | src/styles/global.css ×3, src/components/auth/UnlockPage.vue, src/components/notes/NoteComposer.vue +1处 / 共 6 |
-| `--shadow-card` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(20, 22, 25, 0.03) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 行卡投影（轻量化轮起只留一丝贴地感） | src/styles/global.css ×9, src/components/fileshare/FileShareModule.vue ×2, src/components/mfa/MfaModule.vue ×2 +3处 / 共 17 |
-| `--shadow-sm` | 0 1px 3px 0 rgba(29, 28, 26, 0.05) | 0 1px 3px 0 rgba(20, 22, 25, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | 小投影 | src/styles/global.css ×4, src/components/notes/NoteCard.vue ×2, src/components/fileshare/FileShareModule.vue +2处 / 共 9 |
-| `--shadow` | 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d5d5d2 | 0 4px 12px -2px rgba(20, 22, 25, 0.05), 0 0 0 1px #c6c9d0 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #3f4752 | 常规浮层投影（带 1px 描边环） | _无人引用_ |
-| `--shadow-md` | 0 6px 16px -6px rgba(29, 28, 26, 0.10) | 0 6px 16px -6px rgba(20, 22, 25, 0.08) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 中投影 | src/styles/global.css ×2, src/components/auth/SetupPage.vue, src/components/mfa/MfaModule.vue / 共 4 |
-| `--shadow-lg` | 0 12px 28px -8px rgba(29, 28, 26, 0.14) | 0 12px 28px -8px rgba(20, 22, 25, 0.12) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 大投影 | src/components/auth/SetupPage.vue / 共 1 |
-| `--shadow-pop` | 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(20, 22, 25, 0.10), 0 4px 10px -2px rgba(20, 22, 25, 0.03), 0 0 0 1px rgba(0, 0, 0, 0.05) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 弹层/菜单投影（最高一档常规浮面） | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×2, src/components/mfa/MfaModule.vue +2处 / 共 10 |
-| `--shadow-dock` | 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14) | 0 26px 60px -18px rgba(20, 22, 25, 0.28), 0 6px 18px rgba(20, 22, 25, 0.12) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 批量操作药丸投影（高于任何弹层） | src/components/notes/NoteFullscreen.vue, src/styles/global.css / 共 2 |
+| `--shadow-xs` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 最小投影 | src/styles/global.css ×3, src/components/auth/UnlockPage.vue, src/components/notes/NoteComposer.vue +1处 / 共 6 |
+| `--shadow-card` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 行卡投影（轻量化轮起只留一丝贴地感） | src/styles/global.css ×9, src/components/fileshare/FileShareModule.vue ×2, src/components/mfa/MfaModule.vue ×2 +3处 / 共 17 |
+| `--shadow-sm` | 0 1px 3px 0 rgba(29, 28, 26, 0.05) | 0 1px 3px 0 rgba(18, 19, 22, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | 小投影 | src/styles/global.css ×4, src/components/notes/NoteCard.vue ×2, src/components/fileshare/FileShareModule.vue +2处 / 共 9 |
+| `--shadow` | 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d5d5d2 | 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #3f4752 | 常规浮层投影（带 1px 描边环） | _无人引用_ |
+| `--shadow-md` | 0 6px 16px -6px rgba(29, 28, 26, 0.10) | 0 6px 16px -6px rgba(18, 19, 22, 0.10) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 中投影 | src/styles/global.css ×2, src/components/auth/SetupPage.vue, src/components/mfa/MfaModule.vue / 共 4 |
+| `--shadow-lg` | 0 12px 28px -8px rgba(29, 28, 26, 0.14) | 0 12px 28px -8px rgba(18, 19, 22, 0.14) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 大投影 | src/components/auth/SetupPage.vue / 共 1 |
+| `--shadow-pop` | 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 弹层/菜单投影（最高一档常规浮面） | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×2, src/components/mfa/MfaModule.vue +2处 / 共 10 |
+| `--shadow-dock` | 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14) | 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 批量操作药丸投影（高于任何弹层） | src/components/notes/NoteFullscreen.vue, src/styles/global.css / 共 2 |
 
 ### 状态色
 
@@ -116,8 +116,8 @@
 
 | 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `--sidebar-bg` | #edecea | #e5e8ee | #1a1917 | #17191d | 侧栏底（纸：比画布略深；墨：落在画布与卡面之间） | src/styles/global.css ×2, src/components/layout/Sidebar.vue, src/components/notes/NotesModule.vue +1处 / 共 5 |
-| `--sidebar-hover` | #e5e5e3 | #e2e5ec | #282622 | #252a30 | 侧栏项悬停底 | src/components/layout/Sidebar.vue ×2, src/components/notes/NotesModule.vue, src/components/settings/SettingsDialog.vue / 共 4 |
+| `--sidebar-bg` | #edecea | #e3e5e8 | #1a1917 | #17191d | 侧栏底（纸：比画布略深；墨：落在画布与卡面之间） | src/styles/global.css ×2, src/components/layout/Sidebar.vue, src/components/notes/NotesModule.vue +1处 / 共 5 |
+| `--sidebar-hover` | #e5e5e3 | #dadee1 | #282622 | #252a30 | 侧栏项悬停底 | src/components/layout/Sidebar.vue ×2, src/components/notes/NotesModule.vue, src/components/settings/SettingsDialog.vue / 共 4 |
 
 ### 品牌 / 锁屏
 
@@ -125,17 +125,17 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | `--brand-knob` | #ffffff | #ffffff | #1d1c1a | #191c20 | 品牌标上的高光旋钮/最亮点 | src/components/shared/BrandLogo.vue / 共 1 |
 | `--lock-wash-a` | #fbfbfa | #fefefe | #1d1c1a | #191c20 | 锁屏渐变上端 | src/styles/global.css / 共 1 |
-| `--lock-wash-b` | #edecea | #e5e8ee | #22211e | #1f2328 | 锁屏渐变下端 | src/components/auth/UnlockPage.vue, src/styles/global.css / 共 2 |
+| `--lock-wash-b` | #edecea | #e3e5e8 | #22211e | #1f2328 | 锁屏渐变下端 | src/components/auth/UnlockPage.vue, src/styles/global.css / 共 2 |
 
 ### 毛玻璃 / 浮层
 
 | 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `--frost-bg` | rgba(255, 255, 255, 0.86) | rgba(255, 255, 255, 0.88) | rgba(34, 33, 30, 0.88) | rgba(31, 35, 40, 0.88) | 毛玻璃底栏背景 | src/components/notes/NoteFullscreen.vue / 共 1 |
-| `--frost-border` | #e6e6e4 | #dbdfe6 | #30302d | #2d333b | 毛玻璃底栏描边 | _无人引用_ |
-| `--tip-bg` | #26241f | #202225 | #efede8 | #eef0f5 | 气泡提示底（深色主题下反转成亮底） | src/components/notes/NoteAttachments.vue, src/styles/global.css / 共 2 |
-| `--tip-fg` | #f2f0ea | #f7f8fa | #1d1c1a | #191c20 | 气泡提示字 | src/components/notes/NoteAttachments.vue, src/styles/global.css / 共 2 |
-| `--toast-bg` | #26241f | #202225 | #efede8 | #eef0f5 | toast 底 | src/components/shared/ToastNotification.vue / 共 1 |
+| `--frost-bg` | rgba(255, 255, 255, 0.86) | rgba(254, 254, 254, 0.88) | rgba(34, 33, 30, 0.88) | rgba(31, 35, 40, 0.88) | 毛玻璃底栏背景 | src/components/notes/NoteFullscreen.vue / 共 1 |
+| `--frost-border` | #e6e6e4 | #d3d5d9 | #30302d | #2d333b | 毛玻璃底栏描边 | _无人引用_ |
+| `--tip-bg` | #26241f | #1f2124 | #efede8 | #eef0f5 | 气泡提示底（深色主题下反转成亮底） | src/components/notes/NoteAttachments.vue, src/styles/global.css / 共 2 |
+| `--tip-fg` | #f2f0ea | #f4f5f6 | #1d1c1a | #191c20 | 气泡提示字 | src/components/notes/NoteAttachments.vue, src/styles/global.css / 共 2 |
+| `--toast-bg` | #26241f | #1f2124 | #efede8 | #eef0f5 | toast 底 | src/components/shared/ToastNotification.vue / 共 1 |
 | `--toast-ok` | #9cc4ae | #91c9a6 | #2f7d52 | #2f7d52 | toast 成功色 | src/components/shared/ToastNotification.vue / 共 1 |
 | `--toast-err` | #e09a92 | #e28e84 | #b23c37 | #b23c37 | toast 错误色 | src/components/shared/ToastNotification.vue / 共 1 |
 
@@ -143,8 +143,8 @@
 
 | 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `--scrollbar` | rgba(29, 28, 26, 0.16) | rgba(20, 22, 25, 0.14) | rgba(255, 255, 255, 0.16) | rgba(255, 255, 255, 0.16) | 滚动条滑块 | src/styles/global.css / 共 1 |
-| `--scrollbar-hover` | rgba(29, 28, 26, 0.28) | rgba(20, 22, 25, 0.24) | rgba(255, 255, 255, 0.26) | rgba(255, 255, 255, 0.26) | 滚动条悬停 | src/styles/global.css / 共 1 |
+| `--scrollbar` | rgba(29, 28, 26, 0.16) | rgba(18, 19, 22, 0.16) | rgba(255, 255, 255, 0.16) | rgba(255, 255, 255, 0.16) | 滚动条滑块 | src/styles/global.css / 共 1 |
+| `--scrollbar-hover` | rgba(29, 28, 26, 0.28) | rgba(18, 19, 22, 0.28) | rgba(255, 255, 255, 0.26) | rgba(255, 255, 255, 0.26) | 滚动条悬停 | src/styles/global.css / 共 1 |
 
 ### 头像分类色
 
@@ -223,12 +223,12 @@
 | 槽（按纸底 L\* 从高到低排） | 纸底值 | 纸 L\* | 雪底值 | 雪 L\* | 墨底值 | 墨 L\* | 岩底值 | 岩 L\* | 说明 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `--panel-bg` | #fcfcfc | 99.0 | #fefefe | 99.7 | #22211e | 12.7 | #1f2328 | 13.5 | 卡片/面板/弹窗面（占窗面约七成，刻意非纯白） |
-| `--bg` | #f8f8f7 | 97.6 | #f8fbfe | 98.5 | #1d1c1a | 10.3 | #191c20 | 10.1 | 窗体画布底（最外层面） |
-| `--hover` | #f7f7f7 | 97.2 | #f6f9fe | 97.8 | #282622 | 15.2 | #252a30 | 16.8 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） |
-| `--sunken` | #f1f1f0 | 95.1 | #e8ecf2 | 93.3 | #181716 | 7.8 | #15171b | 7.7 | 下陷面：输入槽、代码底、字母块、页栏铺底 |
-| `--active` | #eeedeb | 93.8 | #e5e8ee | 91.9 | #343431 | 21.6 | #313740 | 22.8 | 行/项按下选中底 |
-| `--sidebar-bg` | #edecea | 93.4 | #e5e8ee | 91.9 | #1a1917 | 8.8 | #17191d | 8.7 | 侧栏底（纸：比画布略深；墨：落在画布与卡面之间） |
-| `--fill` | #eaeae8 | 92.6 | #e2e5eb | 90.9 | #2a2927 | 16.6 | #272c33 | 17.8 | 中性填充：进度槽、占位块、次级底 |
+| `--bg` | #f8f8f7 | 97.6 | #f1f2f3 | 95.4 | #1d1c1a | 10.3 | #191c20 | 10.1 | 窗体画布底（最外层面） |
+| `--hover` | #f7f7f7 | 97.2 | #f7f8f9 | 97.5 | #282622 | 15.2 | #252a30 | 16.8 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） |
+| `--sunken` | #f1f1f0 | 95.1 | #ebecee | 93.4 | #181716 | 7.8 | #15171b | 7.7 | 下陷面：输入槽、代码底、字母块、页栏铺底 |
+| `--active` | #eeedeb | 93.8 | #e1e3e6 | 90.2 | #343431 | 21.6 | #313740 | 22.8 | 行/项按下选中底 |
+| `--sidebar-bg` | #edecea | 93.4 | #e3e5e8 | 90.9 | #1a1917 | 8.8 | #17191d | 8.7 | 侧栏底（纸：比画布略深；墨：落在画布与卡面之间） |
+| `--fill` | #eaeae8 | 92.6 | #dbdde0 | 88.0 | #2a2927 | 16.6 | #272c33 | 17.8 | 中性填充：进度槽、占位块、次级底 |
 
 **从现值反推的阶梯规则（新底色请沿用，别自创一层）**：
 
@@ -243,15 +243,15 @@
 
 | 槽 | 纸 | 雪 | 墨 | 岩 | 底线 |
 | --- | --- | --- | --- | --- | --- |
-| `--text` | 12.48 / 11.33 / 12.05 / 10.85 | 15.98 / 13.59 / 15.52 / 13.13 | 12.66 / 14.08 / 13.39 / 13.82 | 12.64 / 14.35 / 13.67 / 14.08 | ≥4.5 |
-| `--text-secondary` | 8.37 / 7.60 / 8.08 / 7.27 | 9.81 / 8.34 / 9.53 / 8.06 | 9.25 / 10.28 / 9.78 / 10.09 | 9.41 / 10.69 / 10.19 / 10.49 | ≥4.5 |
-| `--text-muted` | 5.28 / 4.79 / 5.09 / 4.59 | 6.34 / 5.40 / 6.16 / 5.21 | 7.02 / 7.81 / 7.43 / 7.66 | 7.35 / 8.34 / 7.95 / 8.18 | 暗底 ≥5.8 |
-| `--text-faint` | 2.96 / 2.69 / 2.86 / 2.58 | 3.21 / 2.73 / 3.12 / 2.64 | 5.66 / 6.30 / 5.99 / 6.18 | 5.93 / 6.74 / 6.42 / 6.61 | 暗底 ≥5.5（已被 5.8 卡过） |
-| `--text-url` | 8.37 / 7.60 / 8.08 / 7.27 | 9.81 / 8.34 / 9.53 / 8.06 | 9.44 / 10.50 / 9.98 / 10.30 | 9.54 / 10.83 / 10.32 / 10.63 | ≥4.5 |
-| `--danger` | 5.72 / 5.19 / 5.52 / 4.97 | 5.65 / 4.81 / 5.49 / 4.64 | 5.78 / 6.42 / 6.11 / 6.30 | 5.69 / 6.47 / 6.16 / 6.34 | ≥4.5 |
-| `--success` | 5.41 / 4.91 / 5.23 / 4.70 | 5.19 / 4.41 / 5.04 / 4.26 | 7.33 / 8.15 / 7.75 / 8.00 | 7.03 / 7.98 / 7.61 / 7.83 | ≥4.5 |
-| `--warning` | 4.75 / 4.31 / 4.58 / 4.13 | 4.72 / 4.01 / 4.58 / 3.88 | 7.51 / 8.35 / 7.94 / 8.19 | 7.43 / 8.44 / 8.04 / 8.28 | ≥4.5 |
-| `--text-brand` | 8.93 / 8.11 / 8.62 / 7.76 | 9.09 / 7.73 / 8.82 / 7.47 | 9.16 / 10.19 / 9.69 / 10.00 | 8.99 / 10.21 / 9.73 / 10.02 | ≥4.5 |
+| `--text` | 12.48 / 11.33 / 12.05 / 10.85 | 17.09 / 14.58 / 15.38 / 13.66 | 12.66 / 14.08 / 13.39 / 13.82 | 12.64 / 14.35 / 13.67 / 14.08 | ≥4.5 |
+| `--text-secondary` | 8.37 / 7.60 / 8.08 / 7.27 | 10.44 / 8.91 / 9.39 / 8.34 | 9.25 / 10.28 / 9.78 / 10.09 | 9.41 / 10.69 / 10.19 / 10.49 | ≥4.5 |
+| `--text-muted` | 5.28 / 4.79 / 5.09 / 4.59 | 6.54 / 5.58 / 5.89 / 5.23 | 7.02 / 7.81 / 7.43 / 7.66 | 7.35 / 8.34 / 7.95 / 8.18 | 暗底 ≥5.8 |
+| `--text-faint` | 2.96 / 2.69 / 2.86 / 2.58 | 3.53 / 3.01 / 3.17 / 2.82 | 5.66 / 6.30 / 5.99 / 6.18 | 5.93 / 6.74 / 6.42 / 6.61 | 暗底 ≥5.5（已被 5.8 卡过） |
+| `--text-url` | 8.37 / 7.60 / 8.08 / 7.27 | 10.44 / 8.91 / 9.39 / 8.34 | 9.44 / 10.50 / 9.98 / 10.30 | 9.54 / 10.83 / 10.32 / 10.63 | ≥4.5 |
+| `--danger` | 5.72 / 5.19 / 5.52 / 4.97 | 5.65 / 4.82 / 5.08 / 4.51 | 5.78 / 6.42 / 6.11 / 6.30 | 5.69 / 6.47 / 6.16 / 6.34 | ≥4.5 |
+| `--success` | 5.41 / 4.91 / 5.23 / 4.70 | 5.19 / 4.42 / 4.67 / 4.14 | 7.33 / 8.15 / 7.75 / 8.00 | 7.03 / 7.98 / 7.61 / 7.83 | ≥4.5 |
+| `--warning` | 4.75 / 4.31 / 4.58 / 4.13 | 4.72 / 4.03 / 4.25 / 3.77 | 7.51 / 8.35 / 7.94 / 8.19 | 7.43 / 8.44 / 8.04 / 8.28 | ≥4.5 |
+| `--text-brand` | 8.93 / 8.11 / 8.62 / 7.76 | 9.09 / 7.75 / 8.18 / 7.26 | 9.16 / 10.19 / 9.69 / 10.00 | 8.99 / 10.21 / 9.73 / 10.02 | ≥4.5 |
 
 彩底上的字（`*-on` 与分类/语法色）：
 
@@ -270,12 +270,12 @@
 | `--ft-sheet` | `--panel-bg` 文件图标色 | 4.92 | 4.94 | 6.34 | 6.31 | ≥3:1（图形件） |
 | `--ft-code` | `--panel-bg` 文件图标色 | 4.38 | 4.53 | 9.11 | 8.99 | ≥3:1（图形件） |
 | `--ft-unk` | `--panel-bg` 文件图标色 | 3.92 | 4.61 | 3.33 | 3.36 | ≥3:1（图形件） |
-| `--code-fg` | `--sunken` 代码语法色 | 15.21 | 14.68 | 13.82 | 14.22 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-kw` | `--sunken` 代码语法色 | 4.77 | 4.78 | 8.03 | 8.14 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-str` | `--sunken` 代码语法色 | 4.99 | 4.80 | 9.60 | 9.66 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-num` | `--sunken` 代码语法色 | 4.91 | 4.79 | 9.06 | 9.11 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-fn` | `--sunken` 代码语法色 | 4.69 | 4.85 | 7.47 | 7.60 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-com` | `--sunken` 代码语法色 | 4.77 | 4.89 | 6.31 | 6.80 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-fg` | `--sunken` 代码语法色 | 15.21 | 14.72 | 13.82 | 14.22 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-kw` | `--sunken` 代码语法色 | 4.77 | 4.80 | 8.03 | 8.14 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-str` | `--sunken` 代码语法色 | 4.99 | 4.81 | 9.60 | 9.66 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-num` | `--sunken` 代码语法色 | 4.91 | 4.80 | 9.06 | 9.11 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-fn` | `--sunken` 代码语法色 | 4.69 | 4.86 | 7.47 | 7.60 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-com` | `--sunken` 代码语法色 | 4.77 | 4.91 | 6.31 | 6.80 | ≥4.5:1；注释是最静档但仍要可读 |
 
 > 头像行只看色板本身对卡面：`--cat-text` 是色块上的字（纸底白字 / 墨底近黑字），不落在卡面上。
 

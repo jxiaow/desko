@@ -401,6 +401,7 @@ interface BackendState {
   masterPassword: string
   unlocked: boolean
   unlockAttempts: number
+  unlockBlockedUntil: number
   entries: EntryRecord[]
   notes: NoteRecord[]
   urlPaths: UrlPathRecord[]
@@ -588,7 +589,7 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'theme', 'accent', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'fileshare_enabled', 'tunnel_enabled', 'codex_enabled', 'bypass_enabled', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'theme', 'accent', 'background_atmosphere', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'fileshare_enabled', 'tunnel_enabled', 'codex_enabled', 'bypass_enabled', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold']
 
 /** 与 Rust 端 backup::LOCAL_FLOOR 对齐：传上云的包本地只留这么几份兜底 */
 const LOCAL_FLOOR = 3
@@ -707,6 +708,7 @@ class MockBackend {
       // 真实 app 启动时始终处于锁定态，需 unlock 命令解锁
       unlocked: false,
       unlockAttempts: 0,
+      unlockBlockedUntil: 0,
       entries: [],
       notes: [],
       urlPaths: [],
@@ -1036,6 +1038,7 @@ class MockBackend {
         })
         merged.unlocked = this.state.unlocked
         merged.unlockAttempts = this.state.unlockAttempts
+        merged.unlockBlockedUntil = this.state.unlockBlockedUntil
         merged.entries = [...merged.entries, ...this.state.entries]
         merged.notes = [...merged.notes, ...this.state.notes]
         merged.urlPaths = [...merged.urlPaths, ...this.state.urlPaths]
@@ -1077,6 +1080,10 @@ class MockBackend {
   // ---- 命令路由 ----
   async invoke(cmd: string, args: Record<string, unknown>): Promise<unknown> {
     this.invocations.push({ cmd, args })
+    if (cmd.includes('_codex_') || cmd.startsWith('codex_')) {
+      this.requireUnlocked()
+      if (this.state.settings.codex_enabled !== 'true') throw 'Codex 模块未启用，请在设置—模块里打开开关'
+    }
     const handler = this.commands[cmd]
     if (!handler) throw ERR_DB
     // 模拟异步 IPC
@@ -1765,24 +1772,28 @@ class MockBackend {
       this.state.initialized = true
       this.state.unlocked = true
       this.state.unlockAttempts = 0
+      this.state.unlockBlockedUntil = 0
     },
 
     unlock: ({ password }) => {
-      if (this.state.unlockAttempts >= 5) {
-        const delaySecs = (this.state.unlockAttempts - 4) * 5
+      if (Date.now() < this.state.unlockBlockedUntil) {
+        const delaySecs = Math.ceil((this.state.unlockBlockedUntil - Date.now()) / 1000)
         throw `尝试次数过多，请 ${delaySecs} 秒后重试`
       }
       if (password !== this.state.masterPassword) {
         this.state.unlockAttempts += 1
+        if (this.state.unlockAttempts >= 5) {
+          this.state.unlockBlockedUntil = Date.now() + Math.min(60, (this.state.unlockAttempts - 4) * 5) * 1000
+        }
         throw ERR_WRONG_PASSWORD
       }
       this.state.unlocked = true
       this.state.unlockAttempts = 0
+      this.state.unlockBlockedUntil = 0
     },
 
     lock: () => {
       this.state.unlocked = false
-      this.state.unlockAttempts = 0
       this.noteUnlocked.clear()
       this.noteOpen = false
     },

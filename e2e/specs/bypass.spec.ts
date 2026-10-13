@@ -341,7 +341,7 @@ test.describe('直连清单', () => {
     // 写过的行从小账与页栏摘出去，不然那个数字永远降不下来
     await expect(page.locator('.bp-status')).not.toContainText('待写入')
     await expect(writeBtn(page)).toHaveCount(0)
-    await expect(page.locator('.row-written')).toHaveCount(2)
+    await expect(page.locator('.bp-row .bp-flag', { hasText: '已写入' })).toHaveCount(2)
   })
 
   test('UAC 上按取消不算失败：账与批次都不动', async ({ page }) => {
@@ -350,7 +350,7 @@ test.describe('直连清单', () => {
     await page.locator('.dialog', { hasText: '写入前确认' }).locator('.btn-primary').click()
     await expectToast(page, '已取消授权')
     await expect(page.locator('.bp-status')).toContainText('待写入 2 条')
-    await expect(page.locator('.row-written')).toHaveCount(0)
+    await expect(page.locator('.bp-row .bp-flag', { hasText: '已写入' })).toHaveCount(0)
     await expect(page.locator('.page-bar .btn-secondary', { hasText: '写入落盘批次' })).toBeVisible()
   })
 
@@ -382,9 +382,9 @@ test.describe('直连清单', () => {
     // 系统已经退回没写过的样子，就没有可撤销的批次——留个按钮等于骗人再提一次权
     await expect(result.locator('.btn-secondary', { hasText: '撤销本批' })).toHaveCount(0)
     await expect(page.locator('.bp-status')).toContainText('待写入 2 条')
-    await expect(page.locator('.bp-row', { hasText: 'xtbg.example.com' }).locator('.row-stale')).toHaveText('写入失败')
+    await expect(page.locator('.bp-row', { hasText: 'xtbg.example.com' }).locator('.bp-flag')).toHaveText('写入失败')
     await result.locator('.btn-primary', { hasText: '完成' }).click()
-    await expect(page.locator('.row-written')).toHaveCount(0)
+    await expect(page.locator('.bp-row .bp-flag', { hasText: '已写入' })).toHaveCount(0)
 
     await rowBtn(page, 'xtbg.example.com', '更多操作')
     await expect(page.locator('.popover .pop-item', { hasText: '撤销上次写入' })).toHaveCount(0)
@@ -405,7 +405,7 @@ test.describe('直连清单', () => {
     await page.locator('.confirm-dialog .dialog-footer button', { hasText: '确定' }).click()
     await expectToast(page, '已撤销上次写入')
     expect(await e2e.count(page, 'bypass_revert')).toBe(1)
-    await expect(page.locator('.row-written')).toHaveCount(0)
+    await expect(page.locator('.bp-row .bp-flag', { hasText: '已写入' })).toHaveCount(0)
     await expect(page.locator('.bp-status')).toContainText('待写入 2 条')
   })
 
@@ -423,7 +423,7 @@ test.describe('直连清单', () => {
     await writeBtn(page).click()
     await page.locator('.dialog', { hasText: '写入前确认' }).locator('.btn-primary').click()
     await expectToast(page, '提权进程未回传结果')
-    await expect(page.locator('.row-written')).toHaveCount(0)
+    await expect(page.locator('.bp-row .bp-flag', { hasText: '已写入' })).toHaveCount(0)
     await expect(page.locator('.bp-status')).toContainText('待写入 2 条')
   })
 
@@ -485,7 +485,7 @@ test.describe('直连清单', () => {
       },
     })
     await page.locator('a.nav-item[href="/bypass"]').click()
-    await expect(page.locator('.bp-row .row-meta')).toContainText('CDN 轮换')
+    await expect(page.locator('.bp-row .bp-flag')).toHaveText('CDN 轮换')
   })
 
   test('带 CDN 轮换的那条默认不进批次，勾上「仍要固定」才写', async ({ page }) => {

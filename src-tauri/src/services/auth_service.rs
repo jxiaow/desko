@@ -3,6 +3,36 @@ use crate::crypto::{decrypt_password, encrypt_password, generate_salt, compute_v
 use crate::db::Database;
 use crate::error::AppError;
 
+/// 解锁失败后的冷却使用单调时钟，系统时间调整不会提前解除限制。
+#[derive(Default)]
+pub struct UnlockThrottle {
+    failures: u32,
+    retry_after: Option<std::time::Instant>,
+}
+
+impl UnlockThrottle {
+    pub fn check(&self, now: std::time::Instant) -> Result<(), AppError> {
+        if let Some(until) = self.retry_after {
+            if let Some(left) = until.checked_duration_since(now).filter(|d| !d.is_zero()) {
+                return Err(AppError::UnlockRateLimited(left.as_secs() + u64::from(left.subsec_nanos() > 0)));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn failed(&mut self, now: std::time::Instant) {
+        self.failures = self.failures.saturating_add(1);
+        if self.failures >= 5 {
+            let seconds = self.failures.saturating_sub(4).saturating_mul(5).min(60);
+            self.retry_after = Some(now + std::time::Duration::from_secs(seconds as u64));
+        }
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
 pub fn setup_master_password(db: &Database, master_key: &mut Option<Vec<u8>>, password: &str) -> Result<(), AppError> {
     if db.is_initialized()? {
         return Err(AppError::AlreadyInitialized);
@@ -59,6 +89,16 @@ pub fn change_master_password(db: &Database, old_key: &[u8], old_password: &str,
 
         updates.push((entry.id.clone(), new_encrypted_json));
     }
+    // 验证码密钥与云端凭据同样由主密钥保护，必须随主密码一起换封。
+    let mut mfa_updates = Vec::new();
+    for row in db.list_mfa_rows()? {
+        let sealed: EncryptedData = serde_json::from_str(&row.secret_enc)
+            .map_err(|e| AppError::Crypto(e.to_string()))?;
+        let plain = decrypt_password(&sealed, old_key)?;
+        let next = encrypt_password(&plain, &new_key)?;
+        mfa_updates.push((row.info.id, serde_json::to_string(&next)
+            .map_err(|e| AppError::Crypto(e.to_string()))?));
+    }
     let new_salt_b64 = BASE64.encode(&new_salt);
     // 备份密钥是用旧主密钥封存的，同一事务里换封
     let mut extra_meta: Vec<(&str, String)> = Vec::new();
@@ -70,6 +110,14 @@ pub fn change_master_password(db: &Database, old_key: &[u8], old_password: &str,
         let sealed_new = encrypt_password(&b64, &new_key)?;
         rewrapped = serde_json::to_string(&sealed_new).map_err(|e| AppError::Crypto(e.to_string()))?;
         extra_meta.push((crate::services::backup_service::META_KEY, rewrapped));
+    }
+    if let Some(json) = db.get_meta(crate::services::cloud_service::META_CFG)?.filter(|s| !s.is_empty()) {
+        let sealed: EncryptedData = serde_json::from_str(&json)
+            .map_err(|e| AppError::Crypto(e.to_string()))?;
+        let plain = decrypt_password(&sealed, old_key)?;
+        let next = encrypt_password(&plain, &new_key)?;
+        extra_meta.push((crate::services::cloud_service::META_CFG,
+            serde_json::to_string(&next).map_err(|e| AppError::Crypto(e.to_string()))?));
     }
     // 小记域密钥的主密钥封条跟着换封；解不开（历史坏数据）就留旧的，不拦改密
     if let Some(json) = db.get_meta("note_key_master_wrap")? {
@@ -85,7 +133,7 @@ pub fn change_master_password(db: &Database, old_key: &[u8], old_password: &str,
         }
     }
     let extra_refs: Vec<(&str, &str)> = extra_meta.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    db.finish_password_change(&updates, now, &new_salt_b64, &new_verify_hash, &extra_refs)?;
+    db.finish_password_change(&updates, &mfa_updates, now, &new_salt_b64, &new_verify_hash, &extra_refs)?;
 
     Ok(new_key)
 }
@@ -95,6 +143,61 @@ mod tests {
     use super::*;
     use crate::crypto::random_bytes;
     use crate::db::{cleanup, setup_test_db};
+
+    #[test]
+    fn unlock_throttle_expires_and_success_resets_it() {
+        let mut throttle = UnlockThrottle::default();
+        let now = std::time::Instant::now();
+        for _ in 0..4 { throttle.failed(now); }
+        assert!(throttle.check(now).is_ok());
+        throttle.failed(now);
+        assert_eq!(throttle.check(now).unwrap_err().user_message(), "尝试次数过多，请 5 秒后重试");
+        assert!(throttle.check(now + std::time::Duration::from_secs(4)).is_err());
+        assert!(throttle.check(now + std::time::Duration::from_secs(5)).is_ok());
+        throttle.failed(now + std::time::Duration::from_secs(5));
+        assert!(throttle.check(now + std::time::Duration::from_secs(14)).is_err());
+        assert!(throttle.check(now + std::time::Duration::from_secs(15)).is_ok());
+        throttle.reset();
+        assert!(throttle.check(now).is_ok());
+    }
+
+    #[test]
+    fn master_password_change_preserves_mfa_and_cloud_credentials() {
+        use crate::services::{mfa_service, cloud_service};
+        let db = Database::new(":memory:").unwrap();
+        let mut key = None;
+        setup_master_password(&db, &mut key, "old-master").unwrap();
+        let old = key.unwrap();
+        mfa_service::add_manual(&db, &old, "test", None, "JBSWY33NAXE3PY3B").unwrap();
+        cloud_service::save_cfg(&db, &old, &cloud_service::CloudCreds {
+            server: "https://example.invalid/".into(), account: "test".into(), app_password: "app-secret".into(),
+        }).unwrap();
+        let new = change_master_password(&db, &old, "old-master", "new-master").unwrap();
+        assert_eq!(mfa_service::list_codes(&db, &new).unwrap().len(), 1);
+        assert_eq!(cloud_service::load_cfg(&db, &new).unwrap().unwrap().app_password, "app-secret");
+        assert!(mfa_service::list_codes(&db, &old).is_err());
+        assert!(cloud_service::load_cfg(&db, &old).is_err());
+        assert_eq!(verify_password(&db, "new-master").unwrap(), new);
+        assert!(verify_password(&db, "old-master").is_err());
+    }
+
+    #[test]
+    fn broken_cloud_seal_aborts_password_change_without_partial_writes() {
+        use crate::services::{mfa_service, cloud_service};
+        let db = Database::new(":memory:").unwrap();
+        let mut key = None;
+        setup_master_password(&db, &mut key, "old-master").unwrap();
+        let old = key.unwrap();
+        mfa_service::add_manual(&db, &old, "test", None, "JBSWY33NAXE3PY3B").unwrap();
+        db.set_meta(cloud_service::META_CFG, "broken seal").unwrap();
+        let salt = db.get_meta("salt").unwrap();
+        let secret = db.list_mfa_rows().unwrap().remove(0).secret_enc;
+        assert!(change_master_password(&db, &old, "old-master", "new-master").is_err());
+        assert_eq!(db.get_meta("salt").unwrap(), salt);
+        assert_eq!(db.list_mfa_rows().unwrap().remove(0).secret_enc, secret);
+        assert_eq!(verify_password(&db, "old-master").unwrap(), old);
+        assert!(mfa_service::list_codes(&db, &old).is_ok());
+    }
 
     fn seal_ndk(ndk: &[u8], key: &[u8]) -> String {
         let wrapped = encrypt_password(&BASE64.encode(ndk), key).unwrap();

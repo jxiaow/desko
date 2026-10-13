@@ -47,6 +47,17 @@ describe('Confirm Store', () => {
     })
   })
 
+  it('锁定清理移除消息和回调，旧确认动作不能再执行', () => {
+    const store = useConfirmStore()
+    const action = vi.fn()
+    store.showConfirm('删除', '敏感正文', action)
+    store.clearConfirm()
+    expect(store.confirmDialog.message).toBe('')
+    expect(store.confirmDialog.show).toBe(false)
+    store.handleConfirm()
+    expect(action).not.toHaveBeenCalled()
+  })
+
   describe('dialog state', () => {
     it('should initialize with hidden dialog', () => {
       const store = useConfirmStore()

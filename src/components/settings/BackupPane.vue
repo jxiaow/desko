@@ -405,7 +405,7 @@ const doRestoreFile = async () => {
 
 <template>
   <div class="backup-pane">
-    <h4 class="section-label">数据</h4>
+    <h4 class="settings-section-label">数据</h4>
     <div class="group-content">
       <div class="setting-item">
         <div class="setting-info">
@@ -427,7 +427,7 @@ const doRestoreFile = async () => {
       </div>
     </div>
 
-    <h4 class="section-label">云端备份<span class="label-tag">坚果云 WebDAV</span></h4>
+    <h4 class="settings-section-label">云端备份<span class="label-tag">坚果云 WebDAV</span></h4>
     <div class="group-content">
       <div class="setting-item">
         <div class="setting-info">
@@ -519,7 +519,7 @@ const doRestoreFile = async () => {
       </div>
     </div>
 
-    <h4 class="section-label">迁移<span class="label-tag">不依赖云端</span></h4>
+    <h4 class="settings-section-label">迁移<span class="label-tag">不依赖云端</span></h4>
     <div class="group-content">
       <div class="setting-item">
         <div class="setting-info">
@@ -679,18 +679,6 @@ const doRestoreFile = async () => {
 .backup-pane {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-
-.section-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  color: var(--text-muted);
 }
 .label-tag {
   font-weight: 500;
@@ -734,7 +722,7 @@ const doRestoreFile = async () => {
   border-radius: 2px;
   transition: width 0.2s;
 }
-.rp-pct { font-size: var(--text-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.rp-pct { font-size: var(--text-2xs); color: var(--text-muted); }
 
 .file-row {
   display: flex;
@@ -755,7 +743,7 @@ const doRestoreFile = async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.file-meta { font-size: var(--text-2xs); color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.file-meta { font-size: var(--text-2xs); color: var(--text-muted); white-space: nowrap; }
 .file-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
 .row-btn {

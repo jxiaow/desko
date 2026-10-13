@@ -12,9 +12,58 @@ import {
   wordCount,
   formatAbsTime,
   highlightTagsInHtml,
+  stripTagsFromText,
+  stripTagsFromHtml,
   getDateGroupLabel,
   splitUrlHostPath,
 } from './format'
+
+describe('列表正文标签', () => {
+  it('只移除独立标签，保留 C# 与链接锚点文字', () => {
+    expect(stripTagsFromText('C# 记录 #工作 #产品 https://a.test/#part')).toBe('C# 记录   https://a.test/#part')
+  })
+
+  it('隐藏正文标签并保留富文本块、图片和任务项结构', () => {
+    const html = '<p>正文 #工作</p><p><strong>#产品</strong> 后续</p><ul data-type="taskList"><li data-type="taskItem"><label><input type="checkbox"></label><div><p>待办 #工作</p></div></li></ul><img src="attachments/a.png">'
+    const div = document.createElement('div')
+    div.innerHTML = stripTagsFromHtml(html)
+    expect(div.textContent).not.toContain('#工作')
+    expect(div.textContent).not.toContain('#产品')
+    expect(div.querySelectorAll('p')).toHaveLength(3)
+    expect(div.querySelector('strong')).not.toBeNull()
+    expect(div.querySelector('input')?.type).toBe('checkbox')
+    expect(div.querySelector('img')?.getAttribute('src')).toBe('attachments/a.png')
+  })
+
+  it('代码、链接与属性中的井号保持原样', () => {
+    expect(stripTagsFromHtml('<p>#标签 <code>#代码</code> <a href="/#part">#链接</a></p><pre>#脚本</pre>')).toBe('<p> <code>#代码</code> <a href="/#part">#链接</a></p><pre>#脚本</pre>')
+  })
+
+  it('跨粗体节点的标签完整隐藏，代码和换行会中断标签', () => {
+    expect(stripTagsFromHtml('<p>#工<strong>作</strong> <strong>#</strong>产品</p>')).toBe('<p><strong></strong> <strong></strong></p>')
+    expect(stripTagsFromHtml('<p>#工<code>代码</code>作<br>后续</p>')).toBe('<p><code>代码</code>作<br>后续</p>')
+  })
+
+  it('中文或中文标点紧邻标签时，正文和底部使用同一份识别结果', () => {
+    const html = '<p>今天，#工<strong>作</strong>，继续#产品</p>'
+    expect(extractTags(htmlToTagText(html))).toEqual(['工作', '产品'])
+    expect(stripTagsFromHtml(html)).toBe('<p>今天，<strong></strong>，继续</p>')
+    expect(stripTagsFromText('标题，#工作')).toBe('标题，')
+  })
+
+  it('URL、代码和链接不会生成底部标签', () => {
+    const html = '<p>https://example.com/#part #工作 <a href="/#ref">#链接</a><code>#代码</code></p>'
+    expect(extractTags(htmlToTagText(html))).toEqual(['工作'])
+    expect(stripTagsFromHtml(html)).toContain('https://example.com/#part')
+    expect(extractTags('https://example.com/#part 今天#工作')).toEqual(['工作'])
+  })
+
+  it('换行和列表项中断标签，提取与展示使用相同边界', () => {
+    const html = '<p>#工作<br>下一行</p><ul><li>#生活</li><li>普通内容</li></ul>'
+    expect(extractTags(htmlToTagText(html))).toEqual(['工作', '生活'])
+    expect(stripTagsFromHtml(html)).toBe('<p><br>下一行</p><ul><li></li><li>普通内容</li></ul>')
+  })
+})
 
 describe('splitUrlHostPath', () => {
   it('无路径 URL 全部归主机', () => {

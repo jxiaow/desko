@@ -1,4 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test'
+import type { Editor } from '@tiptap/core'
 import { bootUnlocked, e2e, expectToast, openSettings, tipButton, visiblePane, waitForToastGone } from '../helpers'
 
 /** 全库一把小记口令：立的时候卡位数，之后解锁照原样填 */
@@ -38,6 +39,81 @@ async function gotoNotes(page: Page) {
 }
 
 test.describe('Notes 小记', () => {
+  for (const variant of ['composer', 'card', 'full'] as const) {
+    test(`中文标点与组合输入：${variant} 光标跟随输入且保留连续空格`, async ({ page }) => {
+      await gotoNotes(page)
+      if (variant === 'card') {
+        const card = memo(page, '第一条小记')
+        await card.hover()
+        await card.locator('.memo-edit').click()
+      } else {
+        await page.locator('.composer .ProseMirror').click()
+        if (variant === 'full') await tipButton(page.locator('.composer'), '全屏书写').click()
+      }
+      const pm = page.locator(variant === 'composer' ? '.composer .ProseMirror' : variant === 'card' ? '.memo.editing .ProseMirror' : '.fs .ProseMirror')
+      await pm.fill('甲  乙')
+      await pm.press('End')
+      const cdp = await page.context().newCDPSession(page)
+      const compose = async (text: string) => {
+        await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length })
+        await cdp.send('Input.insertText', { text })
+      }
+      const state = () => pm.evaluate(el => {
+        const editor = (el as HTMLElement & { editor: Editor }).editor
+        return { text: editor.state.doc.textContent, head: editor.state.selection.head }
+      })
+      const text = '甲  乙，。；：“”！（）'
+      await compose('，。；：“”！（）')
+      await expect.poll(state).toEqual({ text, head: text.length + 1 })
+      await pm.evaluate(el => (el as HTMLElement & { editor: Editor }).editor.commands.setTextSelection(2))
+      await compose('，')
+      await page.keyboard.insertText('续')
+      await expect.poll(state).toEqual({ text: '甲，续  乙，。；：“”！（）', head: 4 })
+      await cdp.detach()
+    })
+  }
+
+  test('未发布的全屏内容切换模块后保留，发布后清空输入框', async ({ page }) => {
+    await gotoNotes(page)
+    const composer = page.locator('.composer .ProseMirror')
+    await composer.fill('顶部  输入的内容')
+    await tipButton(page.locator('.composer'), '全屏书写').click()
+    const fs = page.locator('.fs')
+    await expect(fs.locator('.save-hint')).toHaveText('未发布')
+    await fs.locator('.ProseMirror').press('End')
+    await page.keyboard.insertText('，全屏里接着写')
+    await page.locator('a.nav-item[href="/entries"]').click()
+    await expect(page).toHaveURL(/\/entries$/)
+    await page.locator('a.nav-item[href="/notes"]').click()
+    await expect(composer).toHaveText('顶部  输入的内容，全屏里接着写')
+    expect(await e2e.count(page, 'create_note')).toBe(0)
+    await tipButton(page.locator('.composer'), '全屏书写').click()
+    await expect(fs.locator('.ProseMirror')).toHaveText('顶部  输入的内容，全屏里接着写')
+    await fs.locator('.fs-foot button.eb.primary', { hasText: '发布' }).click()
+    await expect(fs).toHaveCount(0)
+    await expect(composer).toHaveText('')
+    await expect(memo(page, '顶部  输入的内容')).toBeVisible()
+    await page.locator('a.nav-item[href="/entries"]').click()
+    await page.locator('a.nav-item[href="/notes"]').click()
+    await expect(composer).toHaveText('')
+  })
+
+  test('列表标签只显示在底部，富文本标签及六个以上标签不遗漏', async ({ page }) => {
+    const html = '<p>标题，#工<strong>作</strong></p><p>正文#产品<br>下一行 #灵感 #生活 #研究 #计划 #更多</p><pre><code>#代码</code></pre><p><a href="https://example.com/#part">链接</a></p>'
+    await bootUnlocked(page, { notes: [{ title: '标题 #工作', content_html: html }] })
+    const card = page.locator('.memo')
+    await expect(card.locator('.memo-title')).toHaveText('标题，')
+    await expect(card.locator('.tag-pill')).toHaveText(['#工作', '#产品', '#灵感', '#生活', '#研究', '#计划', '#更多'])
+    await expect(card.locator('.memo-body')).not.toContainText(/#工作|#产品|#灵感|#生活|#研究|#计划|#更多/)
+    await expect(card.locator('.memo-body code')).toHaveText('#代码')
+    await expect(card.locator('.memo-body a')).toHaveAttribute('href', 'https://example.com/#part')
+    await card.hover()
+    await card.locator('.memo-edit').click()
+    await expect(page.locator('.memo.editing .ProseMirror')).toContainText('#工作')
+    await expect(page.locator('.memo.editing .ProseMirror')).toContainText('#更多')
+    expect((await e2e.snapshot(page)).notes).toEqual(expect.arrayContaining([expect.objectContaining({ content_html: html })]))
+  })
+
   test('进入 /notes 自动拉取并渲染 seed 小记', async ({ page }) => {
     await gotoNotes(page)
     await expect(page.locator('.memo')).toHaveCount(3)
@@ -162,7 +238,7 @@ test.describe('Notes 小记', () => {
     await expect.poll(visible, { timeout: 3000 }).toBe('hidden')
   })
 
-  test('就地编辑：悬停按钮进入、自动保存、完成退出', async ({ page }) => {
+  test('就地编辑：悬停按钮进入、自动保存、退出编辑', async ({ page }) => {
     await gotoNotes(page)
     const target = memo(page, '第一条小记')
     // 双击编辑已移除：手一抖就进编辑，误触太多
@@ -180,12 +256,90 @@ test.describe('Notes 小记', () => {
     await expect
       .poll(() => e2e.count(page, 'update_note'), { timeout: 5000 })
       .toBeGreaterThan(0)
-    await page.locator('.memo.editing button.eb.primary', { hasText: '完成' }).click()
+    await page.locator('.memo.editing button.eb.primary', { hasText: '退出编辑' }).click()
     await expect(page.locator('.memo.editing')).toHaveCount(0)
     await expect(memo(page, '改写后的第一条内容')).toBeVisible()
     const snap = await e2e.snapshot(page)
     const changed = snap.notes.find((n: any) => n.content_html.includes('改写后的第一条内容'))
     expect(changed).toBeTruthy()
+  })
+
+  for (const mode of ['card', 'full'] as const) {
+    test(`已有小记 ${mode}：撤销与重做同步保存，退出编辑保留最后修改`, async ({ page }) => {
+      await gotoNotes(page)
+      const target = memo(page, '第一条小记')
+      await target.hover()
+      await tipButton(target, '编辑').click()
+      if (mode === 'full') await tipButton(page.locator('.memo.editing'), '全屏书写').click()
+      const surface = page.locator(mode === 'card' ? '.memo.editing' : '.fs')
+      const toolbar = surface.locator('.note-toolbar')
+      const pm = surface.locator('.ProseMirror')
+      const original = '第一条小记：周会纪要与待办'
+      const changed = original + '，继续修改'
+      const undo = toolbar.getByRole('button', { name: '撤销', exact: true })
+      const redo = toolbar.getByRole('button', { name: '重做', exact: true })
+      await expect(toolbar.getByRole('button', { name: '取消', exact: true })).toHaveCount(0)
+      await expect(toolbar.getByRole('button', { name: '完成', exact: true })).toHaveCount(0)
+      await expect(undo).toBeDisabled()
+      await expect(redo).toBeDisabled()
+      if (mode === 'card') {
+        await expect.poll(() => surface.locator('.memo-time').evaluate(el => getComputedStyle(el).opacity)).toBe('1')
+      }
+      const savedText = async () => {
+        const snapshot = await e2e.snapshot(page)
+        return snapshot.notes.find((note: any) => note.content_html.includes('第一条小记'))?.content_html
+      }
+      await pm.click()
+      await pm.press('Control+End')
+      await page.keyboard.insertText('，继续修改')
+      await expect(pm).toHaveText(changed)
+      await expect.poll(savedText).toBe(`<p>${changed}</p>`)
+      await undo.click()
+      await expect(pm).toHaveText(original)
+      await expect.poll(savedText).toBe(`<p>${original}</p>`)
+      await redo.click()
+      await expect(pm).toHaveText(changed)
+      // 重做后立即退出，最后一笔还在防抖窗口里也必须写入。
+      await toolbar.getByRole('button', { name: '退出编辑', exact: true }).click()
+      await expect(surface).toHaveCount(0)
+      expect(await savedText()).toBe(`<p>${changed}</p>`)
+      await expect(memo(page, changed)).toBeVisible()
+    })
+  }
+
+  test('已有小记全屏清空正文后仍可退出，退出会保存空正文', async ({ page }) => {
+    await gotoNotes(page)
+    const target = memo(page, '第一条小记')
+    const snapshot = await e2e.snapshot(page)
+    const id = snapshot.notes.find((note: any) => note.content_html.includes('第一条小记')).id
+    await target.hover()
+    await tipButton(target, '编辑').click()
+    await tipButton(page.locator('.memo.editing'), '全屏书写').click()
+    const fs = page.locator('.fs')
+    await fs.locator('.ProseMirror').fill('')
+    const exit = fs.locator('.note-toolbar').getByRole('button', { name: '退出编辑', exact: true })
+    await expect(exit).toBeEnabled()
+    await exit.click()
+    await expect(fs).toHaveCount(0)
+    expect((await e2e.snapshot(page)).notes.find((note: any) => note.id === id).content_html).toBe('<p></p>')
+  })
+
+  test('新小记全屏仍可发布或放弃，放弃后切换模块不会恢复内容', async ({ page }) => {
+    await gotoNotes(page)
+    const composer = page.locator('.composer .ProseMirror')
+    await composer.fill('尚未发布的内容')
+    await tipButton(page.locator('.composer'), '全屏书写').click()
+    const fs = page.locator('.fs')
+    const toolbar = fs.locator('.note-toolbar')
+    await expect(toolbar.getByRole('button', { name: '发布', exact: true })).toBeEnabled()
+    await expect(toolbar.getByRole('button', { name: '退出编辑', exact: true })).toHaveCount(0)
+    await toolbar.getByRole('button', { name: '放弃', exact: true }).click()
+    await expect(fs).toHaveCount(0)
+    await expect(composer).toHaveText('')
+    await page.locator('a.nav-item[href="/entries"]').click()
+    await page.locator('a.nav-item[href="/notes"]').click()
+    await expect(composer).toHaveText('')
+    expect(await e2e.count(page, 'create_note')).toBe(0)
   })
 
   test('草稿纯图发布：stage 后正文出图块，发布时补附件记录', async ({ page }) => {
@@ -241,7 +395,7 @@ test.describe('Notes 小记', () => {
     await page.mouse.up()
     await expect(editor.locator('.img-node')).not.toHaveAttribute('style', /width: 30%/)
 
-    await page.locator('.memo.editing button.eb.primary', { hasText: '完成' }).click()
+    await page.locator('.memo.editing button.eb.primary', { hasText: '退出编辑' }).click()
     await expect(memo(page, '第一条小记').locator('img[data-note-image]')).toHaveCount(1)
     const snap = await e2e.snapshot(page)
     const saved = snap.notes.find((n: any) => n.content_html.includes('pic.png'))
@@ -649,22 +803,21 @@ test.describe('Notes 小记', () => {
     await expect(pm.locator('li p').first()).toHaveText('第一项ABC')
   })
 
-  test('插入芯片：待办把当前行变成任务项', async ({ page }) => {
+  test('Markdown：待办前缀把当前行变成任务项', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')
     await pm.click()
-    await page.keyboard.type('买牛奶')
-    await page.locator('.composer button[aria-label="插入待办项"]').click()
+    await page.keyboard.type('[] 买牛奶')
     await expect(pm.locator('ul[data-type="taskList"] li p').first()).toHaveText('买牛奶')
     await expect(pm.locator('input[type=checkbox]')).toHaveCount(1)
   })
 
-  test('插入芯片：代码在光标处起一段行内代码', async ({ page }) => {
+  test('键盘快捷键：在光标处起一段行内代码', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')
     await pm.click()
     await page.keyboard.type('跑 ')
-    await page.locator('.composer button[aria-label="插入行内代码"]').click()
+    await page.keyboard.press('Control+e')
     await page.keyboard.type('npm test')
     await expect(pm.locator('code')).toHaveText('npm test')
   })
@@ -673,6 +826,8 @@ test.describe('Notes 小记', () => {
     await gotoNotes(page)
     const pill = page.locator('.memo .tag-pill').first()
     await expect(pill).toHaveText('#产品')
+    await expect(page.locator('.memo .tag-inline')).toHaveCount(0)
+    await expect(memo(page, '第二条小记').locator('.memo-title')).not.toContainText('#产品')
     await pill.click()
     await expect(page.locator('.titlebar-count')).toHaveText('1 / 3 条')
     await expect(pill).toHaveClass(/on/)

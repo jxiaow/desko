@@ -154,7 +154,8 @@ for (const b of [...baseBlocks]) {
   /* 底色之间拉不拉得开是取舍不是律法（雪替砂的第一版就要了 Δ3.9 的近白档，
    * 结果实机看不出与纸底有别，v2 回头把面族推到 10.6；v3 用户改口要"白"，
    * 又回到 8.5——"白"与"拉得开"是同一架跷跷板，交稿方要哪一头得自己说清），所以只报数不拦。
-   * 锚点 = 面族七槽的平均 ΔRGB；现值 纸↔雪 8.5、墨↔岩 10.5。 */
+   * v4 把雪底的冷度撤成中性、分层改由明度台阶主担，两头同时拿到（ΔRGB 10.7），
+   * 代价是"雪=冷白"这条字面联想没了。锚点 = 面族七槽的平均 ΔRGB；现值 纸↔雪 10.7、墨↔岩 10.5。 */
   if (!current.has(t)) {
     const peers = [...current].filter(([x]) => global.polarity.get(x) === (dark ? 'dark' : 'light'))
     const dists = peers.map(([x, m]) => {
@@ -162,7 +163,7 @@ for (const b of [...baseBlocks]) {
         .filter((v) => Number.isFinite(v))
       return { x, mean: vs.reduce((a, v) => a + v, 0) / vs.length }
     }).sort((a, b) => a.mean - b.mean)
-    for (const d of dists) report.push(`· 面族平均 ΔRGB 对 ${d.x} ${d.mean.toFixed(1)}（现值同极底：纸↔雪 8.5，墨↔岩 10.5）`)
+    for (const d of dists) report.push(`· 面族平均 ΔRGB 对 ${d.x} ${d.mean.toFixed(1)}（现值同极底：纸↔雪 10.7，墨↔岩 10.5）`)
     const near = dists[0]
     if (near && near.mean < 8) {
       warns.push(`${t}: 与 ${near.x} 的面族平均 ΔRGB 只有 ${near.mean.toFixed(1)}，肉眼是同一张底挪半档。当新增方向要斟酌（每多一套底色就多 5 个组合的出图矩阵）；若这份稿是**替换**某套已发货底色，忽略这条。`)

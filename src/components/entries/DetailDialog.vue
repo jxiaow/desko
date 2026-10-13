@@ -142,7 +142,7 @@ useEscapeClose(() => emit('close'))
 .detail-val { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text); word-break: break-all; line-height: 18px; }
 .detail-mono { font-family: var(--font-mono); }
 /* 密码是"读一个值"的场景：常显等宽 + 抬一档到 15px，跟验证码的 30px 同一条排印思路 */
-.detail-pwd { font-family: var(--font-mono); font-size: var(--text-md); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+.detail-pwd { font-family: var(--font-mono); font-size: var(--text-md); letter-spacing: 0.06em; }
 .detail-empty { color: var(--text-muted); }
 .detail-link { color: var(--accent); cursor: pointer; text-decoration: none; font-family: var(--font-mono); font-size: var(--text-sm); }
 .detail-link:hover { text-decoration: underline; }

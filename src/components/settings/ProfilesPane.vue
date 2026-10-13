@@ -200,8 +200,7 @@ const doSwitch = (p: Profile) => {
   gap: var(--space-3);
 }
 
-/* 行列表：与 .setting-item 同一档——纸面直排、44px 行、通内容宽发丝线。
-   原先这里另抄了一份 56px 凹槽卡，和设置页其他页签不是一套。 */
+/* 档案行与设置行统一：44px 行高，靠间距区分条目。 */
 .prow {
   display: flex;
   align-items: center;
@@ -210,7 +209,6 @@ const doSwitch = (p: Profile) => {
   min-height: 44px;
   padding: 8px var(--space-2);
   margin: 0 calc(var(--space-2) * -1);
-  border-bottom: 1px solid var(--border);
 }
 .pinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .pname-line { display: flex; align-items: center; gap: var(--space-2); }

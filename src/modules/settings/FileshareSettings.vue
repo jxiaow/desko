@@ -156,7 +156,7 @@ const clearFsPassword = async () => {
   min-width: 140px;
   height: 28px;
   padding: 0 10px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);

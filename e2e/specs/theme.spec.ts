@@ -9,7 +9,7 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const BASES = {
   paper: { name: '纸', pol: 'light', bg: 'rgb(248, 248, 247)', text: 'rgb(51, 50, 48)' },
-  snow:  { name: '雪', pol: 'light', bg: 'rgb(248, 251, 254)', text: 'rgb(32, 33, 35)' },
+  snow:  { name: '雪', pol: 'light', bg: 'rgb(241, 242, 243)', text: 'rgb(26, 27, 29)' },
   ink:   { name: '墨', pol: 'dark',  bg: 'rgb(29, 28, 26)',    text: 'rgb(230, 228, 222)' },
   slate: { name: '岩', pol: 'dark',  bg: 'rgb(25, 28, 32)',    text: 'rgb(227, 230, 236)' },
 } as const
@@ -154,6 +154,20 @@ test.describe('主题', () => {
         expect(got.bg, `${label} 底色`).toBe(BASES[base].bg)
         expect(got.text, `${label} 文字`).toBe(BASES[base].text)
         expect(got.accent, `${label} 主色`).toBe(accentOf(base, accent))
+        const preview = dialog.locator(`.theme-prev[data-theme="${base}"]`)
+        const surfaces = await page.evaluate((base) => {
+          const preview = document.querySelector(`.theme-prev[data-theme="${base}"]`)!
+          const app = getComputedStyle(document.querySelector('.app-root')!)
+          const nav = getComputedStyle(document.querySelector('.sidebar')!)
+          const miniature = getComputedStyle(preview)
+          const miniatureNav = getComputedStyle(preview.querySelector('.tp-rail')!)
+          return { app: app.backgroundImage, preview: miniature.backgroundImage, nav: nav.backgroundColor, previewNav: miniatureNav.backgroundColor }
+        }, base)
+        // 同一配方：主窗口按视口绘制，预览按卡片尺寸等比缩小。
+        const relativeField = surfaces.app.replace(/([\d.]+)vw/g, '$1%').replace(/([\d.]+)vh/g, '$1%')
+        expect(surfaces.preview, `${label} 预览画布`).toBe(relativeField)
+        expect(surfaces.previewNav, `${label} 预览导航`).toBe(surfaces.nav)
+        expect(await preview.evaluate((el) => getComputedStyle(el).getPropertyValue('--accent').trim()), `${label} 预览强调色`).toBe(got.accent)
         seen[label] = `${got.bg}|${got.accent}`
       }
     }
@@ -192,7 +206,7 @@ test.describe('主题', () => {
       ink:   { bg: 'rgb(239, 237, 232)', color: 'rgb(47, 125, 82)' },
       slate: { bg: 'rgb(238, 240, 245)', color: 'rgb(47, 125, 82)' },
       paper: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
-      snow:  { bg: 'rgb(32, 34, 37)', color: 'rgb(145, 201, 166)' },
+      snow:  { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },
     }
     const order: BaseId[] = ['ink', 'slate', 'paper', 'snow']
     for (const [i, base] of order.entries()) {

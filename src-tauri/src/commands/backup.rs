@@ -149,6 +149,8 @@ pub(crate) async fn restore_package(
     dek: Vec<u8>,
     wrap: backup::container::Wrap,
 ) -> Result<(), AppError> {
+    let _guard = auto_backup::BusyGuard::try_acquire(&state)
+        .ok_or_else(|| AppError::Backup("已有备份或恢复任务在进行中".into()))?;
     let db_path = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
         db.get_db_path()

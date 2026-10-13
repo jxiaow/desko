@@ -35,7 +35,7 @@ test.describe('模块开关', () => {
       await dialog.locator('.settings-pane:visible .setting-item .setting-name').evaluateAll((els) =>
         els.map((el) => el.textContent?.trim()),
       ),
-    ).toEqual(['小记', '网址收藏', '文件快捷', '验证码', '局域网传输', '内网穿透', '直连清单', 'Codex 账号'])
+    ).toEqual(['小记', '网址收藏', '文件快捷', '验证码', '局域网传输', '内网穿透', '直连清单', 'Codex'])
   })
 
   test('关核心页：入口当场收起，当前页带回下一个开启的模块，重开即恢复', async ({ page }) => {

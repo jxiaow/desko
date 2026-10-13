@@ -15,8 +15,9 @@ import { join, relative, dirname } from 'node:path'
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const CSS_PATH = join(ROOT, 'src', 'styles', 'global.css')
+const MATERIAL_PATH = join(ROOT, 'src', 'styles', 'materials.css')
 
-const { readPolarity, readThemeIds } = await import('./lib/theme-tokens.mjs')
+const { readPolarity, readThemeIds, readStyleSource } = await import('./lib/theme-tokens.mjs')
 
 /* 底色/accent 名单一律从 theme.ts 现读：这里再抄一份，改轴时就漏一处 */
 const { themes: THEME_INFOS, accents: ACCENT_INFOS } = readThemeIds()
@@ -60,8 +61,9 @@ function collectBlocks(css) {
 }
 
 const rawCss = readFileSync(CSS_PATH, 'utf8')
-const css = stripComments(rawCss)
+const css = stripComments(rawCss).replace(/@import\s+['"][^'"]+['"]\s*;/g, '')
 const blocks = collectBlocks(css)
+const materialBlocks = collectBlocks(stripComments(readStyleSource(MATERIAL_PATH))).filter((b) => b.decls.length)
 
 const baseSlots = new Map()
 const comboSlots = new Map()
@@ -112,10 +114,7 @@ const where = (slot) => {
 }
 
 /* ---- 常量层（尺度：主题不许动） ---- */
-const scaleLines = rawCss.split('\n')
-let scaleEnd = scaleLines.findIndex((l) => l.includes('第 2 层'))
-if (scaleEnd < 0) scaleEnd = 0
-const scaleDecls = parseDecls(css.slice(0, css.indexOf('[data-theme=')))
+const scaleDecls = blocks.find((b) => b.kind === 'base' && b.theme === 'root').decls
 
 /* ---- 别名层（派生槽：跟着源头走，外部稿不必给值） ---- */
 const themeOwned = new Set([...baseSlots.values()].flatMap((m) => [...m.keys()]))
@@ -193,8 +192,8 @@ const NOTE = {
   '--brand-g1': '品牌标渐变上端',
   '--brand-g2': '品牌标渐变中段（= accent）',
   '--brand-g3': '品牌标渐变下端',
-  '--lock-orb-1': '画布/锁屏的第一团光晕（也进 --canvas-bg）',
-  '--lock-orb-2': '画布/锁屏的第二团光晕',
+  '--lock-orb-1': '历史光晕色槽（保留主题契约；当前材质由 accent 推导）',
+  '--lock-orb-2': '历史光晕色槽（保留主题契约；当前材质由 accent 推导）',
   '--selection': '文本选区底色',
   '--toast-info': '信息 toast 的图标/文字色',
 
@@ -323,7 +322,7 @@ const groupedSlots = () => {
 
 const out = []
 out.push('# desko 主题令牌清单（机器导出）', '')
-out.push(`> 由 \`node scripts/theme-tokens-dump.mjs\` 从 \`src/styles/global.css\` 与 \`src/**\` 现场解析生成，请勿手改。`)
+out.push(`> 由 \`node scripts/theme-tokens-dump.mjs\` 从 \`src/styles/global.css\`、\`src/styles/materials.css\` 与 \`src/**\` 现场解析生成，请勿手改。`)
 out.push(`> 底色槽位 **${slots.length}** 个，其中跟随 accent 的 **${ACCENT_FAMILY.size}** 个；底色 ${BASES.length} 套 × accent ${ACCENTS.length} 档 = ${BASES.length * ACCENTS.length} 个可见组合，但 accent 覆盖层只按**极性**写，共 ${POLARITIES.length * ACCENTS.length} 块。`, '')
 
 out.push('## 1. 契约与读法（这份文件是自包含的，读它的人不需要项目访问权）', '')
@@ -332,7 +331,7 @@ out.push(`- 第 2 节 = 全部键名逐字列出 + 现有 ${BASES.length} 套底
 out.push('- 第 3 节 = accent 族 17 槽在 ' + POLARITIES.length * ACCENTS.length + ' 个极性组合下的当前值。')
 out.push('- 第 4 节 = 面族明度阶梯（每个面的 L\\*、相邻档差多少）；第 5 节 = 对比度实测（字色对四面、彩底上的字、语法色对底）——这两节是**判据**，不是风格建议。')
 out.push('- 第 6 节 = 从现值反推出的推导公式：新加一档强调色只需要定 1 个主色，其余 16 槽按公式给。')
-out.push('- 第 7 节 = 不许重设计的东西（别名层跟着源头走，尺度层恒定）。')
+out.push('- 第 7 节 = 不许重设计的东西（别名层跟着源头走，尺度层恒定；材质层按氛围状态覆盖）。')
 out.push('- 第 9 节 = 交付格式（填空模板，照抄键名回填即可）；第 10 节 = 历史踩过的坑；第 11 节 = 可直接粘贴的任务提示词。', '')
 out.push('**硬契约**：')
 out.push(`- 底色轴 \`[data-theme="${BASES.join('"|"')}"]\` 各填**完全相同的槽位名**，缺一个槽 = 切过去那块颜色不动。`)
@@ -449,11 +448,19 @@ out.push('| 槽位 | 值 |')
 out.push('| --- | --- |')
 for (const d of scaleDecls) out.push(`| \`${d.name}\` | ${cell(d.value)} |`)
 out.push('')
+out.push('### 7.3 材质角色 —— 主题提供颜色，氛围开关决定表面策略', '')
+out.push('以下按源码顺序列出默认定义与状态覆盖。默认定义用于根节点与主题预览的 `.theme-scope`，再叠加当前匹配的 `data-atmosphere` 块；同名槽在不同状态下的值有不同的适用条件。', '')
+out.push('| 适用选择器 | 槽位 | 定义 |')
+out.push('| --- | --- | --- |')
+for (const b of materialBlocks) {
+  for (const d of b.decls) out.push(`| \`${cell(b.selector)}\` | \`${d.name}\` | ${cell(d.value)} |`)
+}
+out.push('')
 
 out.push('## 8. 新增一套主题要动的地方（本项目侧，供了解成本）', '')
 out.push('1. `src/styles/global.css` —— 新底色块补满 ' + slots.length + ' 槽（accent 族那 17 槽填所在极性的缺省档即可）；新 accent 档补齐 ' + POLARITIES.length + ' 个极性块')
-out.push('2. `src/services/theme.ts` —— `ThemeId` / `AccentId` 联合类型 + `THEMES` / `ACCENTS` 数组加条目（含 `prev` 预览的 7 个字段与 `dot`/`dotInk`，都是 CSS 值的字面量副本，最易漏）+ 新底色要在 `POLARITY` 表登记极性。设置弹窗与取值校验都由这两个数组驱动')
-out.push('3. `scripts/check-theme-coverage.mjs` —— `BASES` / `ACCENTS` / `POLARITIES` 名单')
+out.push('2. `src/services/theme.ts` —— `THEMES` / `ACCENTS` 数组加 ID 与名称，新底色在 `POLARITY` 表登记极性。类型与设置选项由注册表生成；预览直接读取 CSS 颜色与材质，不维护色值副本')
+out.push('3. `scripts/check-theme-coverage.mjs` —— 名单从 `theme.ts` 现读，运行校验即可')
 out.push('4. `e2e/specs/theme.spec.ts` —— `BASES` / `ACCENT_HEX` 锚点表（底色那两列存的是 `rgb(...)` 计算值，不是 hex；`ACCENT_HEX` 按极性键）')
 out.push('5. 截图脚本参数名（`theme-shots.mjs` / `dialog-shots.mjs` / `design-audit.mjs` 等按组合名出图）')
 out.push('')

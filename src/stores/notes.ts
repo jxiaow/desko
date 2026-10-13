@@ -5,7 +5,7 @@ import { useToastStore } from './toast'
 import { useConfirmStore } from './confirm'
 import { extractTags, getDateGroupLabel, deriveTitleFromHtml, headingTitle, htmlToTagText, htmlToText } from '../utils/format'
 import { collectAttachmentNames, ensureAttachmentBase, nameOf, normalizeAssetHtml } from '../services/attachmentSrc'
-import type { Note, Attachment } from '../types'
+import type { Note, Attachment, UpdateNoteInput } from '../types'
 import type { NoteKeyStatus, NotePlain } from '../services/api/notes'
 
 export type NoteView = 'all' | 'pinned' | 'starred'
@@ -45,6 +45,9 @@ export const useNotesStore = defineStore('notes', () => {
   /** 上一次 fetchNotes 的失败原因；视图据此把"加载失败"和"还没有小记"分开 */
   const notesLoadError = ref<string | null>(null)
 
+  /** 未发布正文跟随当前会话，页面卸载后仍可继续写；发布或放弃时清空。 */
+  const noteDraftHtml = ref('')
+
   // 筛选状态
   const noteSearchKeyword = ref('')
   const noteView = ref<NoteView>('all')
@@ -71,7 +74,9 @@ export const useNotesStore = defineStore('notes', () => {
   const noteSaveState = ref<NoteSaveState>('')
   let saveTimer: ReturnType<typeof setTimeout> | null = null
   let hintTimer: ReturnType<typeof setTimeout> | null = null
-  let pendingSaveId: string | null = null
+  // 按小记保存独立快照，共用防抖计时器；提交期间的新编辑也不会被覆盖。
+  const pendingSaves = new Map<string, UpdateNoteInput>()
+  let saveInFlight: Promise<void> | null = null
 
   const clearSaveTimer = () => {
     if (saveTimer) {
@@ -210,44 +215,45 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
-  const commitSave = async () => {
-    const id = pendingSaveId
-    if (!id) return
+  const commitSave = async (): Promise<void> => {
     clearSaveTimer()
-    pendingSaveId = null
-
-    const note = findNote(id)
-    if (!note) return
-    noteSaveState.value = 'saving'
-    try {
-      await api.updateNote(note.id, {
-        title: note.title,
-        content_html: note.content_html,
-        category: note.category ?? undefined,
-      })
-      // 编辑态新贴的图也要登记，否则文件没人认领（发布路径做了，保存路径漏了）
-      const names = collectAttachmentNames(note.content_html)
-      if (names.length) {
-        const known = new Set((noteAttachments.value[note.id] ?? []).map(a => nameOf(a.file_path)))
-        const fresh = names.filter(n => !known.has(n))
-        if (fresh.length) {
-          try {
-            const bound = await api.bindAttachments(note.id, fresh)
-            if (bound.length) {
-              noteAttachments.value[note.id] = [...bound, ...(noteAttachments.value[note.id] ?? [])]
-            }
-          } catch (e: any) {
-            toastStore.showToast('附件登记失败：' + e.message, 'error')
+    if (saveInFlight) return saveInFlight
+    if (!pendingSaves.size) return
+    const drain = async () => {
+      noteSaveState.value = 'saving'
+      try {
+        while (pendingSaves.size) {
+          const [id, input] = pendingSaves.entries().next().value!
+          if (!findNote(id)) {
+            pendingSaves.delete(id)
+            continue
           }
+          await api.updateNote(id, input)
+          const names = collectAttachmentNames(input.content_html)
+          const known = new Set((noteAttachments.value[id] ?? []).map(a => nameOf(a.file_path)))
+          const fresh = names.filter(n => !known.has(n))
+          if (fresh.length) {
+            try {
+              const bound = await api.bindAttachments(id, fresh)
+              if (bound.length) noteAttachments.value[id] = [...bound, ...(noteAttachments.value[id] ?? [])]
+            } catch (e: any) {
+              toastStore.showToast('附件登记失败：' + (e.message ?? e), 'error')
+            }
+          }
+          // 写入途中同一条又改过：旧请求成功不能抹掉新快照。
+          if (pendingSaves.get(id) === input) pendingSaves.delete(id)
         }
+        noteSaveState.value = 'saved'
+        if (hintTimer) clearTimeout(hintTimer)
+        hintTimer = setTimeout(() => { noteSaveState.value = '' }, SAVED_HINT_DELAY)
+      } catch (e: any) {
+        noteSaveState.value = ''
+        toastStore.showToast('保存失败：' + (e.message ?? e), 'error')
+        throw e
       }
-      noteSaveState.value = 'saved'
-      if (hintTimer) clearTimeout(hintTimer)
-      hintTimer = setTimeout(() => { noteSaveState.value = '' }, SAVED_HINT_DELAY)
-    } catch (e: any) {
-      noteSaveState.value = ''
-      toastStore.showToast('保存失败：' + e.message, 'error')
     }
+    saveInFlight = drain()
+    try { await saveInFlight } finally { saveInFlight = null }
   }
 
   /** 正文改动立即写回列表（保持列表与书写面一致），再防抖落盘 */
@@ -266,15 +272,18 @@ export const useNotesStore = defineStore('notes', () => {
     }
     // 加密行改的每个字都要跟着明文副本走，落盘时由 Rust 重新封进密文
     if (notes.value[idx].encrypted) notePlains.value[id] = html
-    pendingSaveId = id
+    pendingSaves.set(id, {
+      title: notes.value[idx].title,
+      content_html: html,
+      category: meta.tags[0] ?? undefined,
+    })
     noteSaveState.value = 'saving'
     clearSaveTimer()
-    saveTimer = setTimeout(commitSave, AUTOSAVE_DELAY)
+    saveTimer = setTimeout(() => { void commitSave().catch(() => {}) }, AUTOSAVE_DELAY)
   }
 
   /** 切换书写面或卸载前调用，避免防抖窗口内的最后一次编辑丢失 */
   const flushNoteSave = async () => {
-    if (!saveTimer) return
     await commitSave()
   }
 
@@ -376,6 +385,7 @@ export const useNotesStore = defineStore('notes', () => {
 
   const relockNoteDomain = async () => {
     try {
+      await flushNoteSave()
       await api.noteKeyRelock()
     } catch (e: any) {
       toastStore.showToast('操作失败：' + e.message, 'error')
@@ -401,6 +411,7 @@ export const useNotesStore = defineStore('notes', () => {
     const idx = notes.value.findIndex(n => n.id === id)
     if (idx < 0) return '小记不存在'
     try {
+      await flushNoteSave()
       await api.lockNote(id)
       notePlains.value[id] = notes.value[idx].content_html
       notes.value[idx] = {
@@ -434,6 +445,7 @@ export const useNotesStore = defineStore('notes', () => {
   /** 只收回会话明文，库里的密文不动 */
   const relockNote = async (id: string) => {
     try {
+      await flushNoteSave()
       await api.relockNote(id)
     } catch (e: any) {
       toastStore.showToast('操作失败：' + e.message, 'error')
@@ -456,8 +468,7 @@ export const useNotesStore = defineStore('notes', () => {
     const plain = notePlains.value[id]
     if (!note || plain == null) return '请先解锁'
     try {
-      clearSaveTimer()
-      pendingSaveId = null
+      await flushNoteSave()
       await api.removeNoteLock(id, {
         title: deriveTitleFromHtml(plain),
         content_html: plain,
@@ -490,6 +501,9 @@ export const useNotesStore = defineStore('notes', () => {
 
   /** 应用锁定：口令解出来的东西一律收回，加密小记重新锁上 */
   const clearUnlockedNotes = () => {
+    clearSaveTimer()
+    pendingSaves.clear()
+    metaCache.clear()
     noteKey.value = { ...noteKey.value, is_open: false }
     hideAllPlains()
   }
@@ -608,7 +622,7 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   return {
-    notes, notesLoading, notesLoadError,
+    notes, notesLoading, notesLoadError, noteDraftHtml,
     noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
     noteRailCollapsed,
     isBatchMode, hasNoteSelection, notePickMode, selectedNoteIds,

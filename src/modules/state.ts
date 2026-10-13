@@ -67,7 +67,12 @@ export async function bootEnabledModules(): Promise<void> {
   await Promise.all(enabledModules.value.map((m) => m.boot?.()))
 }
 
-/** 锁定：启用的模块各自收会话态 */
+/** 关闭过的模块也可能有待保存内容和敏感缓存，锁定时一并处理。 */
+export async function flushModulesBeforeLock(): Promise<void> {
+  await Promise.all(MODULES.map(m => m.beforeLock?.()))
+}
+
+/** 锁定：各模块收回会话态，不受当前开关影响。 */
 export function lockEnabledModules(): void {
-  for (const m of enabledModules.value) m.onLock?.()
+  for (const m of MODULES) m.onLock?.()
 }

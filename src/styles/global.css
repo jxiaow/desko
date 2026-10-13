@@ -1,3 +1,5 @@
+@import './materials.css';
+
 /* ═══════════════════════════════════════════════════════════════════
    第 1 层 · 尺度 —— 主题之间恒定。
    换主题只换颜色；圆角、间距、字号、动效一律不随主题变，
@@ -389,18 +391,23 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- snow：雪（冷白，2026-10 替换暖砂，同日第三版「白·留半档」）。
-   前两版的账都在注释里，别再走回头路：
+/* ---------- snow：雪（瓷白，2026-10 第四版「中性亮白」，替换第三版「白·留半档」）。
+   第三版实机判读三条：蓝味仍重／与纸仍分不出／层次太软 → 本轮换性格不是调档。
+   前两版的账也在注释里，别再走回头路：
    · v1 照外部稿只把纸底整体提亮半档（面族平均 ΔRGB 3.9）→ 实机判「和纸基本一样」。
    · v2 为了拉开距离把下陷/侧栏/填充整族压深（ΔRGB 10.6）→ 整窗读作冷灰台，且灰阶写成
      R<G<B 单调递增带了绿分量（--border a*=−1.13），实机判「底色偏青涩」。
-   · v3（本块）方向改回「白」：画布 L*98.5 近白、卡面守中性 #fefefe（sRGB 高 L* 处装不下
-     冷度，白卡必然中性），冷度交给描边那圈（border b*=−3.9、a*≈0）。
-     分层深度取半档：下陷 ΔL*−6.4／侧栏 −7.7／填充 −8.8（纸 −3.8／−5.5／−6.3，v2 是 −8.5／−7.8／−12.0），
-     与纸底面族平均 ΔRGB 8.5——比"看得出方向"的 10 低、在 intake 的 8 线之上，
-     这一档是"白"和"拉得开"之间用户拍板的落点。文字 15.98:1、muted 6.34:1。
-   code 族沿用 v2 压暗的一档（#776422/#3a689e/#63656f…）：下陷面提亮后对 #e8ecf2 仍 4.78–4.89:1，
-   照纸底原值会掉到 4.46，所以不跟着回提。
+   · 本块（v4）三件事：
+     温度：冷度从描边那圈整个撤走（v3 border b*=−3.9 → 本块 −2.2），全族 a* 守在 ±0.43、
+       b* 不超过 −3.0，读作中性灰而非蓝灰；与纸的对照由「暖白↔冷白」改成「暖白↔净白」。
+     分层：卡面顶到 intake 上限 #fefefe，画布 ΔL*−4.2／下陷 −6.3／侧栏 −8.8／填充 −11.6
+       （纸 −1.4／−3.8／−5.5／−6.3）——纸靠发丝线分层，雪靠明度台阶段差分层，这是两底的性格差。
+     对比：描边 ΔL*−14.4（纸 −7.7），文字 17.09／二级 10.44／muted 6.54／faint 3.53。
+     与纸底面族平均 ΔRGB 10.7（v3 是 8.5），过「看得出方向」的 10 线。
+   下陷面停在 −6.3 不再往深压，是 color-sweep 逮出来的：再深一档，clay/plum 两档 accent 的
+     12px 小字（.tab.active .tab-count、小记 .day-head）对 --sunken 从 4.52 掉到 4.37，破 4.5。
+   code 族沿用 v2 压暗的一档（#776422/#3a689e/#63656f…）：新下陷面 #ebecee 上 4.80–5.34:1，
+     照纸底原值会掉到 4.4 档，所以不跟着回提。
    accent 族 17 槽填的是亮极性的缺省档（墨蓝），底色块里这份一定会被 accent 覆盖层盖掉。 ---------- */
 [data-theme="snow"] {
   --accent: #3d5a80;
@@ -412,40 +419,40 @@
   --accent-ring: rgba(61, 90, 128, 0.16);
   --text-brand: #31496a;
 
-  --bg: #f8fbfe;
+  --bg: #f1f2f3;
   --panel-bg: #fefefe;
-  --chrome-bg: rgba(248, 251, 254, 0.85);
-  --sunken: #e8ecf2;
-  --fill: #e2e5eb;
-  --hover: #f6f9fe;
-  --active: #e5e8ee;
-  --overlay: rgba(20, 22, 25, 0.40);
+  --chrome-bg: rgba(241, 242, 243, 0.85);
+  --sunken: #ebecee;
+  --fill: #dbdde0;
+  --hover: #f7f8f9;
+  --active: #e1e3e6;
+  --overlay: rgba(18, 19, 22, 0.42);
 
-  --text: #202123;
-  --text-secondary: #424346;
-  --text-muted: #5d5f63;
-  --text-faint: #8d8f93;
+  --text: #1a1b1d;
+  --text-secondary: #3e3f42;
+  --text-muted: #5b5d61;
+  --text-faint: #85888d;
 
-  --border: #dbdfe6;
-  --border-strong: #c6c9d0;
-  --border-subtle: #eef2f9;
-  --border-hover: #c6c9d0;
+  --border: #d3d5d9;
+  --border-strong: #b9bdc2;
+  --border-subtle: #e9ebee;
+  --border-hover: #b9bdc2;
 
-  --text-url: #424346;
-  --badge-cat-bg: #e5e8ee;
-  --badge-cat-border: #dbdfe6;
-  --badge-cat-text: #424346;
+  --text-url: #3e3f42;
+  --badge-cat-bg: #ebecee;
+  --badge-cat-border: #d3d5d9;
+  --badge-cat-text: #3e3f42;
   --badge-ver-bg: #e8eef4;
   --badge-ver-text: #31496a;
 
-  --shadow-xs: 0 1px 2px 0 rgba(20, 22, 25, 0.03);
-  --shadow-card: 0 1px 2px 0 rgba(20, 22, 25, 0.03);
-  --shadow-sm: 0 1px 3px 0 rgba(20, 22, 25, 0.04);
-  --shadow: 0 4px 12px -2px rgba(20, 22, 25, 0.05), 0 0 0 1px #c6c9d0;
-  --shadow-md: 0 6px 16px -6px rgba(20, 22, 25, 0.08);
-  --shadow-lg: 0 12px 28px -8px rgba(20, 22, 25, 0.12);
-  --shadow-pop: 0 16px 36px -8px rgba(20, 22, 25, 0.10), 0 4px 10px -2px rgba(20, 22, 25, 0.03), 0 0 0 1px rgba(0, 0, 0, 0.05);
-  --shadow-dock: 0 26px 60px -18px rgba(20, 22, 25, 0.28), 0 6px 18px rgba(20, 22, 25, 0.12);
+  --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
+  --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(18, 19, 22, 0.05);
+  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2;
+  --shadow-md: 0 6px 16px -6px rgba(18, 19, 22, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(18, 19, 22, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14);
 
   --danger: #b83a30;
   --danger-on: #ffffff;
@@ -457,8 +464,8 @@
   --warning: #9c681e;
   --warning-soft: #f9f0df;
 
-  --sidebar-bg: #e5e8ee;
-  --sidebar-hover: #e2e5ec;
+  --sidebar-bg: #e3e5e8;
+  --sidebar-hover: #dadee1;
 
   --brand-g1: #6c88aa;
   --brand-g2: #3d5a80;
@@ -466,23 +473,23 @@
   --brand-knob: #ffffff;
 
   --lock-wash-a: #fefefe;
-  --lock-wash-b: #e5e8ee;
+  --lock-wash-b: #e3e5e8;
   --lock-orb-1: rgba(61, 90, 128, 0.07);
   --lock-orb-2: rgba(61, 90, 128, 0.045);
 
-  --frost-bg: rgba(255, 255, 255, 0.88);
-  --frost-border: #dbdfe6;
+  --frost-bg: rgba(254, 254, 254, 0.88);
+  --frost-border: #d3d5d9;
 
-  /* 深色浮层跟着底色翻冷，别在冷白上留一颗暖黑 */
-  --tip-bg: #202225;
-  --tip-fg: #f7f8fa;
-  --toast-bg: #202225;
+  /* 深色浮层与瓷白同色温：中性近黑，不再为了"跟底翻冷"掺蓝 */
+  --tip-bg: #1f2124;
+  --tip-fg: #f4f5f6;
+  --toast-bg: #1f2124;
   --toast-ok: #91c9a6;
   --toast-err: #e28e84;
   --toast-info: #93aecb;
 
-  --scrollbar: rgba(20, 22, 25, 0.14);
-  --scrollbar-hover: rgba(20, 22, 25, 0.24);
+  --scrollbar: rgba(18, 19, 22, 0.16);
+  --scrollbar-hover: rgba(18, 19, 22, 0.28);
   --selection: rgba(61, 90, 128, 0.18);
 
   --cat-1: #5465c4;
@@ -744,8 +751,7 @@
 /* ---------- 别名槽位：不填 hex，只指向别的槽，所以四套主题不必各写一遍。
      放在主题块之后、同一条 :root 上，切换主题时自动跟着源头走。
 
-     --bg-app 等八个是对外推荐的语义名（背景面 / 描边 / 文字三层），
-     源头仍是上面各主题填的物理槽；新代码优先用语义名。 ---------- */
+     背景材质角色统一定义在 materials.css；这里保留描边、文字和状态别名。 ---------- */
 :root {
   --sidebar-border: var(--border);
   --sidebar-active: var(--accent-soft);
@@ -755,32 +761,9 @@
   --code-bg: var(--sunken);
   --code-bd: var(--border);
 
-  --bg-app: var(--bg);
-  --bg-surface: var(--panel-bg);
-  --bg-surface-hover: var(--hover);
-  --bg-surface-active: var(--active);
-  /* 吸顶件/浮岛上的控件悬停填充：不吃 --hover。--hover 是按「行悬停在卡面上」切的浅灰，
-     而页栏铺的是画布 --sunken（纸 #f1f1f0），比 --hover（#f7f7f7）还深一档——
-     指过去等于把钮点亮，实测与周边只差 1.055:1，看不出是反馈。
-     改从文字色反推：纸底压暗、墨底提亮，同一条配方两套主题自适应（实测 1.17:1 / 1.25:1）。 */
-  --hover-chrome: color-mix(in srgb, var(--text) 9%, transparent);
-  --bg-sidebar: var(--sidebar-bg);
   --border-focus: var(--accent);
   --text-primary: var(--text);
 
-  /* 主列表页规格引入的语义名，一律 var() 指到既有物理槽，零新增 hex */
-  /* 画布底：两团 accent 光晕压在 sunken 上，几何按视口定位（.app-root 不滚动，天然 fixed）。
-     凡是浮在这层画布上的吸顶件（.page-bar / 小记 .day-head）必须复用同一条配方 +
-     background-attachment: fixed，否则平铺半透明底会把光晕压掉一档，静止时就显出一条亮带 */
-  --canvas-bg:
-    radial-gradient(760px 460px at 82% -120px, var(--lock-orb-1), transparent 70%),
-    radial-gradient(620px 420px at 6% -100px, var(--lock-orb-2), transparent 68%),
-    var(--sunken);
-  --bg-toolbar: var(--canvas-bg);
-  --bg-popover: var(--panel-bg);
-  --bg-tag-default: var(--badge-cat-bg);
-  --bg-mono-chip: var(--sunken);
-  --bg-statusbar: var(--panel-bg);
   --border-line: var(--border);
   --border-card-hover: var(--border-hover);
   --border-input: var(--border);
@@ -833,10 +816,10 @@ body {
 
 #app { height: 100%; }
 
-/* inset 轮：画布沉到 sunken 一档灰（顶栏/侧栏/工具条仍透明并入），白面板成为画布上唯一的亮面；
-   光晕从窗口顶边一路铺下来，与锁屏同一呼吸源 */
-.app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; background: var(--canvas-bg); }
-.app-root.locked-bg { background: linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%); }
+/* 画布以 sunken 托住内容面，静态柔光与颗粒沿用锁屏的材质。
+   背景固定到视口，与工具栏、日期行对齐；内容滚动时光场不跟着移动。 */
+.app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; background: var(--bg-app); background-attachment: fixed; }
+.app-root.locked-bg { background: var(--bg-lock); }
 .app-layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 .main-area { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: transparent; height: 100%; }
 .main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: transparent; min-height: 0; }
@@ -920,7 +903,7 @@ body {
 .btn-secondary {
   padding: 0 var(--space-4);
   height: 36px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -979,7 +962,8 @@ body {
 }
 
 .dialog {
-  background: var(--panel-bg);
+  background: var(--bg-dialog);
+  background-attachment: var(--floating-background-attachment);
   border: 1px solid var(--border);
   /* 弹窗壳是全站圆角最大的一件，吃 --radius-xl（14）；卡/输入件各在下档。 */
   border-radius: var(--radius-xl);
@@ -1126,7 +1110,7 @@ body {
   padding: 1px 4px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   line-height: 13px;
@@ -1275,7 +1259,7 @@ body {
   outline: none;
   transition: all var(--transition);
   font-family: inherit;
-  background: var(--bg);
+  background: var(--bg-input);
   color: var(--text);
 }
 .form-group textarea {
@@ -1287,22 +1271,30 @@ body {
   outline: none;
   transition: all var(--transition);
   font-family: inherit;
-  background: var(--bg);
+  background: var(--bg-input);
   color: var(--text);
 }
 .form-group input::placeholder,
 .form-group textarea::placeholder { color: var(--text-muted); }
 .form-group input:focus,
 .form-group textarea:focus,
-.form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg); }
+.form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--bg-input-focus); }
 .form-group textarea { resize: vertical; min-height: 56px; line-height: 17px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: var(--space-3); }
 .form-row .form-group { margin-bottom: 0; }
 
-/* ---------- 设置弹窗的行组：面板本身就是纸面，行与行之间只靠一道发丝线断句。
-   这里原先是一层 --sunken 圆角凹槽、凹槽里再分行——等于往纸面里塞第二层卡，
-   行文字也被凹槽的内距又推进了一档，和面板上的分组标题对不齐。
-   凹槽留给页首那句说明（.modhint），它才是需要和行列表区分开的一层。 ---------- */
+/* ---------- 设置行组：面板作为纸面，靠分组标题与行间距组织内容。 ---------- */
+.settings-section-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: var(--space-4) 0 var(--space-2);
+}
+.settings-section-label:first-child { margin-top: 0; }
+
 .setting-item {
   display: flex;
   align-items: center;
@@ -1310,13 +1302,10 @@ body {
   gap: var(--space-4);
   min-height: 44px;
   padding: 8px var(--space-2);
-  /* 负边距把发丝线推到行文字两侧之外：线几乎通栏，hover 填充却仍留 8px 内距，
-     不会把字贴在线边上。 */
+  /* 悬停背景向两侧各延伸一档，行文字仍与分组标题对齐。 */
   margin: 0 calc(var(--space-2) * -1);
-  border-bottom: 1px solid var(--border);
   transition: background var(--transition);
 }
-.setting-item:last-child { border-bottom: none; }
 .setting-item.clickable { cursor: pointer; border-radius: var(--radius-tag); }
 .setting-item.clickable:hover { background: var(--hover); }
 
@@ -1354,7 +1343,7 @@ body {
   font-family: inherit;
   font-size: var(--text-xs);
   color: var(--text-secondary);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   outline: none;
@@ -1409,7 +1398,7 @@ body {
   width: 16px;
   left: 2px;
   bottom: 2px;
-  background-color: var(--panel-bg);
+  background-color: var(--bg-surface);
   transition: 0.2s;
   border-radius: 50%;
   box-shadow: var(--shadow-xs);
@@ -1467,7 +1456,7 @@ body {
   width: 56px;
   height: 56px;
   border-radius: var(--radius-lg);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   color: var(--text-muted);
   opacity: 0.4;
@@ -1546,7 +1535,7 @@ body {
   height: 26px;
   padding: 0 var(--space-2);
   border: 1px solid var(--border);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border-radius: var(--radius-ib);
   color: var(--text-secondary);
   font-size: var(--text-xs);
@@ -1672,7 +1661,7 @@ body {
   display: flex;
   flex-direction: column;
   margin-top: var(--space-3);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-card);
@@ -1694,7 +1683,7 @@ body {
    头 44、行 44、内衬 14——行高取 44 而非 mock 的 40，因为行里最厚的件是 32px 控件档。
    scoped 到组件就跨不进子组件，所以与 .rowlist/.card-grid 一起放骨架里。 */
 .tn-card {
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
@@ -1790,11 +1779,12 @@ body {
 }
 .tn-card .btn-secondary:hover:not(:disabled) { background: var(--hover); color: var(--text) }
 
-/* 单行浮岛（mock .rcard）：一行一颗独立白卡，直连清单与 Codex 账号两页共用这一层。
+/* 单行浮岛（mock .rcard）：一行一颗独立白卡，Codex 账号页用它排行长清单，
+   直连清单只借它的壳装空态（行数据本身走面板卡＋发丝线那套）。
    壳是列容器不是行——展开时同一颗岛下面接一段凹底明细，不再往岛里套第二层卡。
    行档 64：岛里最厚的件是「主名 + 一句细字」，低于这一档两行字会顶到描边。 */
 .rcard {
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
@@ -1870,7 +1860,7 @@ body {
   min-height: 78px;
   padding: 12px 14px;
   cursor: pointer;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
@@ -1926,20 +1916,25 @@ body {
 /* favicon 档面：暗极性上多数站点标是深标（GitHub 黑猫），垫一片亮白底才不隐身。
    底色由字色与卡面混出，不另开色槽；亮极性本身是亮底，只有暗极性需要这层。 */
 [data-base="dark"] .grid-slot--icon {
-  background: color-mix(in srgb, var(--text) 92%, var(--panel-bg));
+  background: color-mix(in srgb, var(--text) 92%, var(--bg-surface));
 }
 /* 目录档：任何列目录的行/卡都用这一张脸（文件页快捷方式、局域网共享目录）。
-   只在此叠类型色，尺寸/圆角仍由 .grid-slot 给 */
-.grid-slot--folder { background: var(--warning-soft); color: var(--warning) }
+   只在此叠类型色，尺寸/圆角仍由 .grid-slot 给；字色与分类淡染、扩展名档同一配方
+   ——色相掺 35% 墨，纯色压同色淡底只有 4.25:1。 */
+.grid-slot--folder {
+  background: var(--warning-soft);
+  color: color-mix(in srgb, var(--warning) 65%, var(--text));
+}
 
 /* 卡内档面收进 24px（浮岛双行的身份块比行/弹窗的 34px 矮一档），img 跟着缩 */
 .grid-card .grid-slot { width: 24px; height: 24px; border-radius: 7px; font-size: var(--text-2xs) }
 .grid-card .grid-slot img { width: 16px; height: 16px }
 /* 分类淡染：favicon 到货前/抓不到时的字母兜底按分类 hue 上一点色（13% 底 + 色字），
-   --gc-hue 由页面按分类哈希给（收藏页）；到货后走 .grid-slot--icon 的中性/亮底 */
+   --gc-hue 由页面按分类哈希给（收藏页）；到货后走 .grid-slot--icon 的中性/亮底，未分类走基色档。
+   字色在色相上掺 35% 墨：纯色字压同色淡底最低只有 2.98:1，掺墨后回 4.5 以上。 */
 .grid-card .grid-slot--hue {
-  background: color-mix(in srgb, var(--gc-hue) 13%, var(--panel-bg));
-  color: var(--gc-hue);
+  background: color-mix(in srgb, var(--gc-hue) 13%, var(--bg-surface));
+  color: color-mix(in srgb, var(--gc-hue) 65%, var(--text));
 }
 
 /* ---------- 胶囊：状态、行首标签、可选项的统一配方。
@@ -1987,7 +1982,7 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   gap: 2px;
   padding: 2px;
   border-radius: 8px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   box-shadow: var(--shadow-sm);
   opacity: 0;
   pointer-events: none;
@@ -2037,7 +2032,7 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   box-shadow: var(--shadow-card);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
@@ -2126,7 +2121,8 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   gap: 2px;
   height: 50px;
   max-width: calc(100% - 40px);
-  background: var(--panel-bg);
+  background: var(--bg-dock);
+  background-attachment: var(--floating-background-attachment);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   box-shadow: var(--shadow-dock);
@@ -2217,7 +2213,7 @@ ul[data-type='taskList'] input[type='checkbox'] {
   margin: 3px 0 0;
   border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-xs);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   position: relative;
   cursor: pointer;
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
@@ -2247,7 +2243,8 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
 .popover {
   position: fixed;
   z-index: 200;
-  background: color-mix(in srgb, var(--panel-bg) 96%, transparent);
+  background: var(--bg-popover);
+  background-attachment: var(--floating-background-attachment);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border);
@@ -2264,7 +2261,7 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
 
 /* Teleport 到 body 的分类下拉：脱离组件作用域，样式只能挂全局。
    与 .popover 同一套浮层语言（大圆角 + pop 阴影 + 内衬间距），条目落 .pop-item 同档 */
-.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); padding: var(--space-1); max-height: 200px; overflow-y: auto; scrollbar-gutter: stable; }
+.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--bg-menu); background-attachment: var(--floating-background-attachment); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); padding: var(--space-1); max-height: 200px; overflow-y: auto; scrollbar-gutter: stable; }
 .category-dropdown-teleported .category-option { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); border-radius: var(--radius-sm); cursor: pointer; transition: background var(--transition-fast); }
 .category-dropdown-teleported .category-option:hover { background: var(--hover); }
 .category-dropdown-teleported .category-option.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
@@ -2321,7 +2318,7 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
 .pop-sec + .pop-sec { border-top: 1px solid var(--border); }
 .pop-label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; margin-bottom: var(--space-2); }
 .pop-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); }
-.tab-count { font-size: var(--text-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.tab-count { font-size: var(--text-2xs); color: var(--text-muted); margin-left: 4px; }
 .tab.active .tab-count { color: var(--accent); }
 
 /* 语法高亮：编辑器与只读渲染共用，色值全部来自当前主题的 --code-* */

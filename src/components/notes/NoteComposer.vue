@@ -100,7 +100,7 @@ const discard = () => {
   margin-bottom: var(--space-5);
 }
 .composer.open {
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border-color: var(--border);
   box-shadow: var(--shadow-xs);
 }

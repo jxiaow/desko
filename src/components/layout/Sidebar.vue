@@ -66,7 +66,7 @@ const onDragDblclick = (e: MouseEvent) => {
 .sidebar {
   width: var(--sidebar-w);
   /* Things 式暖灰目录列：体积感靠这一档底色，右界只留发丝线 */
-  background: var(--sidebar-bg);
+  background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -104,10 +104,9 @@ const onDragDblclick = (e: MouseEvent) => {
   margin: 0 auto;
 }
 
-/* 折叠档：.sidebar-nav 的 9px scrollbar-gutter 会把图标整体左推，
-   用等量左内衬补回来，图标与 toggle 同落中线 */
+/* 折叠档两侧预留等宽的滚动条槽，模块图标与顶部按钮共用中线。 */
 .sidebar.collapsed .sidebar-nav {
-  padding-left: calc(var(--space-2) + 9px);
+  scrollbar-gutter: stable both-edges;
 }
 
 .sidebar-name {
@@ -145,7 +144,7 @@ const onDragDblclick = (e: MouseEvent) => {
 .sidebar-sec {
   font-size: 11px;
   font-weight: 650;
-  color: var(--text-faint);
+  color: var(--text-nav-section);
   letter-spacing: 0.06em;
   padding: 0 10px 6px;
 }
@@ -236,7 +235,6 @@ const onDragDblclick = (e: MouseEvent) => {
   flex-shrink: 0;
   font-size: 12px;
   font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }
 

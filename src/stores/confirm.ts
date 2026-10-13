@@ -15,10 +15,15 @@ export const useConfirmStore = defineStore('confirm', () => {
     confirmDialog.value = { show: true, title, message, onConfirm }
   }
 
-  const handleConfirm = () => {
-    confirmDialog.value.onConfirm()
-    confirmDialog.value.show = false
+  const clearConfirm = () => {
+    confirmDialog.value = { show: false, title: '', message: '', onConfirm: () => {} }
   }
 
-  return { confirmDialog, showConfirm, handleConfirm }
+  const handleConfirm = () => {
+    const onConfirm = confirmDialog.value.onConfirm
+    clearConfirm()
+    onConfirm()
+  }
+
+  return { confirmDialog, showConfirm, handleConfirm, clearConfirm }
 })

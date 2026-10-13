@@ -19,9 +19,9 @@ const props = withDefaults(defineProps<{
   dense?: boolean
   /** 编辑态顶栏：置顶/收藏/删除这类状态动作退回只读悬停排，编辑条只管写作 */
   showStateActions?: boolean
-  /** 非空则主钮左侧多一颗次级「取消/放弃」钮：自动保存模型下它表达回退/丢弃，不是伪保存 */
+  /** 未发布内容可提供「放弃」；已有小记自动保存，只需退出编辑 */
   cancelLabel?: string
-  /** 全屏书写面才给撤销/重做：胶囊输入和卡片就地编辑不留这排 */
+  /** 编辑工具栏提供撤销/重做，与编辑器快捷键共用历史栈 */
   showHistory?: boolean
   canUndo?: boolean
   canRedo?: boolean
@@ -67,15 +67,13 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
 
 <template>
   <div class="note-toolbar" :class="{ dense: props.dense }">
-    <!-- 撤销/重做只给图标不给字：这一排已有图片/标签/置顶/收藏，再挂两组字会把主钮挤到换行。
-         两颗都是「一枚字形即语义」，靠 title 读得出。没得退时灰着，不藏钮——
-         藏起来会让人以为这里根本不能撤销。 -->
+    <!-- 历史为空时禁用按钮，保持工具栏位置稳定。 -->
     <template v-if="props.showHistory">
-      <button class="eb" type="button" :disabled="!props.canUndo" title="撤销 (Ctrl+Z)" aria-label="撤销" @click="emit('undo')">
-        <AppIcon name="undo" :size="12" />
+      <button :class="btnCls" type="button" :disabled="!props.canUndo" title="撤销 (Ctrl+Z)" aria-label="撤销" @click="emit('undo')">
+        <AppIcon name="undo" :size="iconSize" />
       </button>
-      <button class="eb" type="button" :disabled="!props.canRedo" title="重做 (Ctrl+Shift+Z)" aria-label="重做" @click="emit('redo')">
-        <AppIcon name="redo" :size="12" />
+      <button :class="btnCls" type="button" :disabled="!props.canRedo" title="重做 (Ctrl+Shift+Z)" aria-label="重做" @click="emit('redo')">
+        <AppIcon name="redo" :size="iconSize" />
       </button>
     </template>
     <button  :class="btnCls" type="button" title="添加图片" aria-label="添加图片" @click="emit('addImage')">
@@ -174,6 +172,12 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
 }
 /* 就地展开的底栏里，图标按钮与描边按钮同高，视觉上是一条线 */
 .note-toolbar.dense .ib { width: 24px; height: 24px; border-radius: var(--radius-ib); }
+.note-toolbar.dense .ib:disabled {
+  background: var(--fill);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  transform: none;
+}
 .toolbar-flex {
   flex: 1;
   display: flex;

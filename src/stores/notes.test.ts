@@ -17,6 +17,7 @@ vi.mock('../services/api/notes', () => ({
     unlockNote: vi.fn(),
     unlockNoteByMaster: vi.fn(),
     relockNote: vi.fn(),
+    noteKeyRelock: vi.fn(),
     removeNoteLock: vi.fn(),
     revealNote: vi.fn(),
     listAttachments: vi.fn(),
@@ -129,6 +130,56 @@ describe('Notes Store', () => {
       expect(notesApi.updateNote).toHaveBeenCalledTimes(1)
       expect(notesApi.updateNote).toHaveBeenCalledWith('1',
         expect.objectContaining({ content_html: '<p>更新</p>' }))
+    })
+
+    it('防抖窗口内编辑两条小记，两条都会落库', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote({ id: 'a' }), mockNote({ id: 'b' })]
+      vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
+      store.saveNoteContent('a', '<p>A</p>')
+      store.saveNoteContent('b', '<p>B</p>')
+      await vi.advanceTimersByTimeAsync(600)
+      expect(notesApi.updateNote).toHaveBeenCalledWith('a', expect.objectContaining({ content_html: '<p>A</p>' }))
+      expect(notesApi.updateNote).toHaveBeenCalledWith('b', expect.objectContaining({ content_html: '<p>B</p>' }))
+    })
+
+    it('保存尚未返回时再次编辑，flush 等到最新内容写完', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote()]
+      let finish!: () => void
+      vi.mocked(notesApi.updateNote).mockImplementationOnce(() => new Promise<void>(r => { finish = r }))
+      vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
+      store.saveNoteContent('1', '<p>第一版</p>')
+      const first = store.flushNoteSave()
+      store.saveNoteContent('1', '<p>第二版</p>')
+      let flushed = false
+      const second = store.flushNoteSave().then(() => { flushed = true })
+      expect(flushed).toBe(false)
+      finish()
+      await Promise.all([first, second])
+      expect(notesApi.updateNote).toHaveBeenLastCalledWith('1', expect.objectContaining({ content_html: '<p>第二版</p>' }))
+    })
+
+    it('保存失败保留待提交内容，下次 flush 可以重试', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote()]
+      vi.mocked(notesApi.updateNote).mockRejectedValueOnce(new Error('disk full')).mockResolvedValue(undefined)
+      store.saveNoteContent('1', '<p>需要保住的内容</p>')
+      await expect(store.flushNoteSave()).rejects.toThrow('disk full')
+      await store.flushNoteSave()
+      expect(notesApi.updateNote).toHaveBeenCalledTimes(2)
+    })
+
+    it('加密小记重锁前先保存正文，不能用清空后的正文提交', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote({ encrypted: true })]
+      store.notePlains = { '1': '<p>旧内容</p>' }
+      vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
+      store.saveNoteContent('1', '<p>新内容</p>')
+      await store.relockNote('1')
+      expect(notesApi.updateNote).toHaveBeenCalledWith('1', expect.objectContaining({ content_html: '<p>新内容</p>' }))
+      expect(vi.mocked(notesApi.updateNote).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(notesApi.relockNote).mock.invocationCallOrder[0])
+      expect(store.notes[0].content_html).toBe('')
     })
 
     /** 正文里的图片 src 只有相对形态：换机器、换账号都不会让图片失效 */

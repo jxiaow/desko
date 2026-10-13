@@ -90,7 +90,7 @@ const SETTINGS_TAB = {
   notes: '小记',
   files: '文件快捷',
   fileshare: '局域网传输',
-  codex: 'Codex 账号',
+  codex: 'Codex',
   appearance: '外观',
   backup: '数据与备份',
   security: '安全',

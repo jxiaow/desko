@@ -5,7 +5,7 @@ import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
-import { formatRelativeTime, highlightTagsInHtml } from '../../utils/format'
+import { formatRelativeTime, stripTagsFromHtml, stripTagsFromText } from '../../utils/format'
 import { resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import { noteMeta, type NoteSaveState } from '../../stores/notes'
@@ -35,7 +35,6 @@ const emit = defineEmits<{
   open: []
   update: [html: string]
   close: []
-  cancel: []
   fullscreen: []
   view: []
   encrypt: []
@@ -139,7 +138,7 @@ watch(() => props.editing, (on) => {
 })
 
 // 库里存的是 attachments/<名>，只显示层临时换成本机 asset URL
-const bodyHtml = computed(() => resolveAssetHtml(highlightTagsInHtml(props.note.content_html)))
+const bodyHtml = computed(() => resolveAssetHtml(stripTagsFromHtml(props.note.content_html)))
 
 /** 正文已引用的图片不再进附件条；编辑中按草稿过滤，保存前就不该闪出第二个 */
 const visibleAtts = computed(() =>
@@ -186,7 +185,7 @@ const locked = computed(() => props.note.encrypted && !props.unlocked)
 const PROMOTABLE = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE'])
 const firstBlock = computed(() => {
   const div = document.createElement('div')
-  div.innerHTML = props.note.content_html
+  div.innerHTML = bodyHtml.value
   return div.firstElementChild as HTMLElement | null
 })
 const promote = computed(() => {
@@ -195,13 +194,10 @@ const promote = computed(() => {
   return !!el && PROMOTABLE.has(el.tagName.toUpperCase()) && !!((el.textContent ?? '').trim())
 })
 const titleText = computed(() =>
-  promote.value ? (firstBlock.value?.textContent ?? '').trim() : props.note.title)
+  (promote.value ? (firstBlock.value?.textContent ?? '').trim() : stripTagsFromText(props.note.title).trim()) || '小记')
 
-/**
- * meta 行的标签胶囊取的是 noteMeta 那份缓存派生——和筛选、分类同一个来源，
- * 不会出现胶囊显示三个、点进去却筛出另一批。第五个之后正文里的内联标签仍可点。
- */
-const noteTags = computed(() => (locked.value ? [] : noteMeta(props.note.content_html).tags.slice(0, 5)))
+/** 列表标签只在底部展示，与筛选、分类共用 noteMeta 的派生结果。 */
+const noteTags = computed(() => (locked.value ? [] : noteMeta(props.note.content_html).tags))
 
 /* 头部条不吃正文点击（时间/附件/操作按钮区），但批量态下整卡都是选择热区。 */
 const onHeadClick = (e: MouseEvent) => {
@@ -223,11 +219,6 @@ const onBodyClick = (e: MouseEvent) => {
     toggleTask(e, box)
     return
   }
-  const tag = (e.target as HTMLElement).closest<HTMLElement>('.tag-inline')?.dataset.tag
-  if (tag) {
-    emit('tagClick', tag)
-    return
-  }
   // 展开收起交给正文下的显式按钮：正文单击曾是唯一的展开入口，但它和框选文字冲突
 }
 
@@ -245,6 +236,8 @@ const onUpdate = (value: string) => {
 
 const insertTag = () => editorRef.value?.insertText(' #')
 const insertImage = (src: string) => editorRef.value?.insertImage(src)
+const canUndo = computed(() => !!editorRef.value?.canUndo)
+const canRedo = computed(() => !!editorRef.value?.canRedo)
 
 // 暴露出去的实例只剩这两个键：props 不在代理上，外面要认哪张卡只能靠 noteId
 defineExpose({ insertImage, noteId: computed(() => props.note.id) })
@@ -400,15 +393,18 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         :show-state-actions="false"
         :note="props.note"
         :save-state="props.saveState"
-        primary-label="完成"
-        cancel-label="取消"
+        primary-label="退出编辑"
+        show-history
+        :can-undo="canUndo"
+        :can-redo="canRedo"
         @add-image="emit('addImage')"
         @insert-tag="insertTag"
         @fullscreen="emit('fullscreen')"
         @toggle-pin="emit('togglePin')"
         @toggle-star="emit('toggleStar')"
         @delete="emit('delete')"
-        @cancel="emit('cancel')"
+        @undo="editorRef?.undo()"
+        @redo="editorRef?.redo()"
         @primary="emit('close')"
       />
     </div>
@@ -563,7 +559,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; }
 /* 标签胶囊：20px 档与卡片里的其余胶囊同高。
    命中的那颗转主色，点下去看得见自己生效了；悬停不跟着动作排一起淡掉——它是筛选入口不是状态标 */
-.memo-tags { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.memo-tags { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
 .tag-pill {
   height: 20px;
   padding: 0 8px;
@@ -602,7 +598,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 /* 悬停/聚焦才显形，且不吞正文点击（透明态 pointer-events 关） */
 .memo:hover .memo-acts, .memo:focus-within .memo-acts { opacity: 1; pointer-events: auto; }
 /* 时间让位给动作排：实底只有排这么宽，长标题会被右缘裁掉，留着时间就是叠字 */
-.memo:hover .memo-time, .memo:focus-within .memo-time { opacity: 0; }
+.memo:not(.editing):hover .memo-time, .memo:not(.editing):focus-within .memo-time { opacity: 0; }
 .memo-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
 .memo-acts .ib :deep(svg) { width: 15px; height: 15px; }
 
@@ -614,7 +610,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   height: 16px;
   border: 1.5px solid var(--border-strong);
   border-radius: 4px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -642,7 +638,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 
 .edit-atts { margin-top: var(--space-3); }
 /* 动作条挪到卡顶：与只读态右上动作排同一位置语言，分隔线跟着翻成下沿虚线。
-   编辑条只管写作：左=时间+插入工具，右=保存状态+全屏+完成（CSS order 只在卡顶生效） */
+   编辑条只管写作：左=时间+撤销/重做+插入工具，右=保存状态+全屏+退出编辑（CSS order 只在卡顶生效） */
 .edit-bar {
   display: flex;
   align-items: center;

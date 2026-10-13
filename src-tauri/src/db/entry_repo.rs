@@ -119,6 +119,7 @@ impl Database {
     pub fn finish_password_change(
         &self,
         updates: &[(String, String)],
+        mfa_updates: &[(String, String)],
         updated_at: i64,
         salt_b64: &str,
         verify_hash: &str,
@@ -130,6 +131,9 @@ impl Database {
                 "UPDATE entries SET encrypted_password=?2, updated_at=?3 WHERE id=?1",
                 params![id, encrypted_password, updated_at],
             )?;
+        }
+        for (id, secret_enc) in mfa_updates {
+            tx.execute("UPDATE mfa_tokens SET secret_enc=?2 WHERE id=?1", params![id, secret_enc])?;
         }
         tx.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('salt', ?1)", params![salt_b64])?;
         tx.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('verify_hash', ?1)", params![verify_hash])?;

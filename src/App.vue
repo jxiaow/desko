@@ -8,7 +8,7 @@ import { usePasswordStore } from './stores/password'
 import { useAutoLock } from './composables/useAutoLock'
 import { useClipboard } from './composables/useClipboard'
 import { installHoverGuard } from './utils/hoverGuard'
-import { bootEnabledModules, lockEnabledModules } from './modules/state'
+import { bootEnabledModules, flushModulesBeforeLock, lockEnabledModules } from './modules/state'
 import type { SettingsTabId } from './modules/registry'
 import TitleBar from './components/layout/TitleBar.vue'
 import Sidebar from './components/layout/Sidebar.vue'
@@ -27,7 +27,7 @@ const toastStore = useToastStore()
 const { toast } = storeToRefs(toastStore)
 const confirmStore = useConfirmStore()
 const { confirmDialog } = storeToRefs(confirmStore)
-const { handleConfirm } = confirmStore
+const { handleConfirm, clearConfirm } = confirmStore
 const passwordStore = usePasswordStore()
 const { evictExpiredPasswords, clearSensitiveState } = passwordStore
 const { clearClipboardTimer } = useClipboard()
@@ -64,15 +64,24 @@ const onOpenSettingsTab = (e: Event) => {
   showSettings.value = true
 }
 
-const doLock = async () => {
-  await lock()
-  clearSensitiveState()
-  // 加密小记的会话明文、收藏的筛选态——各模块自己那份跟着锁回去
-  lockEnabledModules()
-  // 这里已直接把剪贴板清空，撤销待执行的密码延迟清除，否则解锁后复制的
-  // 新内容会在原定时点被误删。
-  clearClipboardTimer()
-  try { await navigator.clipboard.writeText('') } catch {}
+let lockInFlight: Promise<void> | null = null
+const doLock = (): Promise<void> => {
+  if (lockInFlight) return lockInFlight
+  showSettings.value = false
+  showChangePassword.value = false
+  noteKeyMode.value = null
+  clearConfirm()
+  lockInFlight = (async () => {
+    try { await flushModulesBeforeLock() } catch { /* 保存错误已有提示，锁定仍要完成 */ }
+    await lock()
+    clearSensitiveState()
+    // 会话明文随密钥一起收回，禁用过的模块也清理。
+    lockEnabledModules()
+    // 撤销旧密码清除定时器，避免解锁后的新剪贴板被误删。
+    clearClipboardTimer()
+    try { await navigator.clipboard.writeText('') } catch {}
+  })().finally(() => { lockInFlight = null })
+  return lockInFlight
 }
 
 useAutoLock(doLock, evictExpiredPasswords)
@@ -143,7 +152,7 @@ function onGlobalKey(e: KeyboardEvent) {
     </div>
 
     <SettingsDialog
-      v-if="showSettings"
+      v-if="showSettings && appState === 'unlocked'"
       :initial-tab="settingsInitialTab"
       @close="showSettings = false"
       @open-change-password="showChangePassword = true"
@@ -152,18 +161,18 @@ function onGlobalKey(e: KeyboardEvent) {
     />
 
     <ChangePasswordDialog
-      v-if="showChangePassword"
+      v-if="showChangePassword && appState === 'unlocked'"
       @close="showChangePassword = false"
     />
 
     <NoteLockDialog
-      v-if="noteKeyMode"
+      v-if="noteKeyMode && appState === 'unlocked'"
       :mode="noteKeyMode"
       @close="noteKeyMode = null"
       @done="onNoteKeyDone"
     />
 
     <ToastNotification :toast="toast" />
-    <ConfirmDialog :dialog="confirmDialog" @confirm="handleConfirm" @cancel="confirmDialog.show = false" />
+    <ConfirmDialog v-if="appState === 'unlocked'" :dialog="confirmDialog" @confirm="handleConfirm" @cancel="clearConfirm" />
   </div>
 </template>

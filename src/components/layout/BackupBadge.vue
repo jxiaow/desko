@@ -51,7 +51,6 @@ const tip = computed(() => {
   top: 1px;
   font-size: var(--text-2xs);
   line-height: 1;
-  font-variant-numeric: tabular-nums;
   color: var(--warning);
 }
 

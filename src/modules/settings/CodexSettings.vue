@@ -60,7 +60,7 @@ void loadQuotaSettings()
         <span class="setting-name">官方凭据路径</span>
         <span class="setting-desc">当前账号的授权文件位置</span>
         <div class="codex-path">
-          <code class="mono" :title="storagePaths.authPath">{{ storagePaths.authPath }}</code>
+          <code :title="storagePaths.authPath">{{ storagePaths.authPath }}</code>
           <button class="action-btn" type="button" @click="openCodexConfig">
             <AppIcon name="file" :size="13" />打开 config.toml
           </button>
@@ -117,6 +117,7 @@ void loadQuotaSettings()
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-secondary);
 }

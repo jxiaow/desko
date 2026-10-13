@@ -731,3 +731,21 @@ describe('codexState 批量删除作业', () => {
     expect(s.batchDeleteErrors.value).toEqual([{ accountId: 'a2', error: '令牌已失效' }])
   })
 })
+
+it('锁定清理后，旧账号请求的回包不能重新填回凭据', async () => {
+  setActivePinia(createPinia())
+  vi.clearAllMocks()
+  const s = await loadState()
+  let finish!: (value: CodexAccount[]) => void
+  mockInvoke.mockImplementation(async (cmd: string) => {
+    if (cmd === 'list_codex_accounts') return new Promise<CodexAccount[]>(r => { finish = r })
+    return null
+  })
+  s.accounts.value = [account()]
+  const refresh = s.refreshAccounts()
+  s.clearCodexSession()
+  finish([account()])
+  await refresh
+  expect(s.accounts.value).toEqual([])
+  expect(s.loaded.value).toBe(false)
+})

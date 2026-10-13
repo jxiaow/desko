@@ -66,6 +66,7 @@ const favOf = (item: Entry) => faviconSrcFor(item.url)
 /** 分类淡染：把 category 稳定哈希到六桶 hue（--cat-1..6），字母兜底档与分类点共用同一色，
    同分类卡片一眼归堆。favicon 到货时档面改走中性亮底，此色只喂给分类点。 */
 const CAT_HUES = ['--cat-1', '--cat-2', '--cat-3', '--cat-4', '--cat-5', '--cat-6']
+const hasCat = (item: Entry) => !!(item.category || '').trim()
 const hueOf = (category?: string | null): string => {
   const c = (category || '').trim()
   if (!c) return 'var(--text-faint)'
@@ -73,6 +74,9 @@ const hueOf = (category?: string | null): string => {
   for (const ch of c) h = (h * 31 + ch.codePointAt(0)!) >>> 0
   return `var(${CAT_HUES[h % CAT_HUES.length]})`
 }
+/** 未分类没有色相可表，压成灰淡染底反而把字母吃掉，落回中性字母档 */
+const slotClass = (item: Entry) => (favOf(item) ? 'grid-slot--icon' : hasCat(item) ? 'grid-slot--hue' : undefined)
+const slotStyle = (item: Entry) => (!favOf(item) && hasCat(item) ? { '--gc-hue': hueOf(item.category) } : undefined)
 
 /* ── 分类标签：全部 + 前 2 枚高频常驻，其余收进「更多」下拉（面板内可搜索） ── */
 const visibleTabs = computed(() => props.tabs.slice(0, 3))
@@ -283,12 +287,12 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
           <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="12" />
         </span>
 
-        <!-- 一行身份：24px 档（favicon 到货，否则分类淡染字母兜底）+ 名称 + 右对齐分类点 -->
+        <!-- 一行身份：24px 档（favicon 到货 → 分类淡染字母 → 未分类中性字母）+ 名称 + 右对齐分类点 -->
         <div class="row1">
           <span
             class="grid-slot"
-            :class="favOf(item) ? 'grid-slot--icon' : 'grid-slot--hue'"
-            :style="favOf(item) ? undefined : { '--gc-hue': hueOf(item.category) }"
+            :class="slotClass(item)"
+            :style="slotStyle(item)"
             aria-hidden="true"
           >
             <img v-if="favOf(item)" :src="favOf(item)!" alt="" />
@@ -473,7 +477,7 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
   align-items: center;
   gap: 6px;
   font-size: var(--text-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
   transition: color var(--transition);
 }
 .ec-cat i { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }

@@ -145,7 +145,7 @@ describe('module state', () => {
     expect(landingPath()).toBeNull()
   })
 
-  it('解锁只喂启用的模块，锁定只收启用的模块', async () => {
+  it('解锁只喂启用的模块，锁定也清理关闭过的模块', async () => {
     const { bootEnabledModules, lockEnabledModules, moduleFlags } = await loadState()
     const boot = vi.fn()
     const lock = vi.fn()
@@ -162,8 +162,8 @@ describe('module state', () => {
     expect(boot).toHaveBeenCalledTimes(1)
 
     lockEnabledModules()
-    // notes 关着：它的会话态不归它管
-    expect(lock).toHaveBeenCalledTimes(1)
+    // notes 关闭后留下的会话明文也必须收回。
+    expect(lock).toHaveBeenCalledTimes(2)
 
     moduleById('entries').boot = undefined
     moduleById('entries').onLock = undefined

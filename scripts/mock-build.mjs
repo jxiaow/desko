@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { readPolarity } from './lib/theme-tokens.mjs'
+import { readPolarity, readStyleSource } from './lib/theme-tokens.mjs'
 
 const POLARITY = readPolarity()
 
@@ -19,6 +19,10 @@ if (!SRC || !OUT) {
 
 const CSS_SELECTORS = new Set([
   ':root',
+  ':root, .theme-scope',
+  '.theme-scope',
+  ':root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]',
+  ':root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"]',
   ':root, [data-theme="paper"]',
   '[data-theme="snow"]',
   '[data-theme="ink"]',
@@ -77,7 +81,7 @@ function svg(name, size, icons) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`
 }
 
-const globalCss = readFileSync(path.join(root, 'src/styles/global.css'), 'utf8')
+const globalCss = readStyleSource(path.join(root, 'src/styles/global.css'))
 const tokens = pickTokenBlocks(globalCss)
 const missing = ['[data-theme="ink"]', '[data-base="light"][data-accent="ink"]'].filter(
   (s) => !tokens.includes(s),

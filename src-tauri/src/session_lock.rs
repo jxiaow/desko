@@ -7,7 +7,7 @@
 #[cfg(windows)]
 mod imp {
     use std::sync::OnceLock;
-    use tauri::{AppHandle, Emitter, Manager};
+    use tauri::{AppHandle, Manager};
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -46,20 +46,8 @@ mod imp {
         if !enabled {
             return;
         }
-        if let Ok(mut key) = state.master_key.lock() {
-            *key = None;
-        }
-        if let Ok(mut key) = state.backup_key.lock() {
-            *key = None;
-        }
-        if let Ok(mut attempts) = state.unlock_attempts.lock() {
-            *attempts = 0;
-        }
-        crate::commands::note_lock::close_domain(&state);
         drop(state);
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.emit("tray-lock", ());
-        }
+        crate::commands::auth::request_lock(app);
     }
 
     unsafe extern "system" fn wndproc(

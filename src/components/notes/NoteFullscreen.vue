@@ -27,7 +27,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   update: [html: string]
   close: []
-  cancel: []
+  discard: []
   publish: []
   edit: []
   addImage: []
@@ -94,7 +94,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
         <span class="kbd">Esc</span>
       </button>
       <span class="save-hint" :class="props.saveState">
-        {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '草稿不会丢') }}
+        {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '未发布') }}
       </span>
     </header>
 
@@ -154,9 +154,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
       <NoteToolbar v-else
         :note="props.note"
         :save-state="props.saveState"
-        :primary-label="props.note ? '完成' : '发布'"
-        :primary-disabled="empty"
-        :cancel-label="props.note ? '取消' : '放弃'"
+        :primary-label="props.note ? '退出编辑' : '发布'"
+        :primary-disabled="!props.note && empty"
+        :cancel-label="props.note ? '' : '放弃'"
         :show-fullscreen="false"
         show-history
         :can-undo="canUndo"
@@ -168,14 +168,14 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
         @toggle-pin="emit('togglePin')"
         @toggle-star="emit('toggleStar')"
         @delete="emit('delete')"
-        @cancel="emit('cancel')"
+        @cancel="emit('discard')"
         @primary="onPrimary"
       >
         <template #hint>
           <span
             class="fs-hint"
             :title="`完整快捷语法：# / ## / ### 空格 标题\n- 或 + 空格 无序列表 · 1. 空格 有序列表\n&gt; 空格 引用 · \`\`\` 空格 代码块\n[] 或 [x] 空格 任务 · --- 分割线\n**粗** *斜* ~~删~~ \`码\``"
-          ><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> {{ props.note ? '完成' : '发布' }}</span>
+          ><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> {{ props.note ? '退出编辑' : '发布' }}</span>
         </template>
       </NoteToolbar>
     </footer>
@@ -189,15 +189,16 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   z-index: 150;
   display: flex;
   flex-direction: column;
-  /* 阅读面与 .app-root 同一条画布配方（global.css --canvas-bg）：这张纸要比桌亮才读得出
+  /* 阅读面与 .app-root 同一条画布配方（materials.css --bg-app）：这张纸要比桌亮才读得出
      是「拿起写好的一页」，桌面压到 --sunken 那档才有 1.069 的纸/桌差 */
-  background: var(--canvas-bg);
+  background: var(--bg-app);
   background-attachment: fixed;
 }
-/* 书写面分档回浅场：对着空桌子写字不需要那层桌布，--bg 亮一档 + 顶部那团主色晕更透气。
+/* 书写面分档回浅场：--bg 亮一档，柔光与颗粒复用工作画布的氛围场。
    侧栏轨本来就吃 --sidebar-bg（与画布已有 1.045 的界），所以这里换底不新增一种接缝 */
 .fs:not(.fs-read) {
-  background: radial-gradient(920px 420px at 50% -6%, var(--accent-soft), transparent 72%), var(--bg);
+  background: var(--bg-editor);
+  background-attachment: var(--editor-background-attachment);
 }
 
 .fs-col {
@@ -242,7 +243,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   align-items: center;
   gap: var(--space-2);
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--text-canvas-meta);
   margin-bottom: 8px;
 }
 .fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.5; }
@@ -260,7 +261,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   max-width: 800px;
   margin: var(--space-5) auto var(--space-8);
   padding: 20px 28px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-card);
@@ -325,7 +326,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   max-width: calc(100% - 40px);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   box-shadow: var(--shadow-dock);
   backdrop-filter: none;
 }

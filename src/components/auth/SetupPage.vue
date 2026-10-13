@@ -70,7 +70,7 @@ const doSetup = async () => {
 }
 
 .auth-card {
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border-radius: var(--radius-lg);
   padding: var(--space-8) var(--space-8);
   width: 400px;
@@ -120,7 +120,7 @@ const doSetup = async () => {
 .auth-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-ring);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
 }
 
 .auth-btn {

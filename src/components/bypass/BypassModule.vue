@@ -48,6 +48,30 @@ const shown = computed(() => {
   )
 })
 
+/* 行上只留一颗状态旗，按优先级取最高的一颗，其余收进 title 与展开明细：
+   四颗信号并排会把名称列顶成一面旗墙，读不出「这一行是谁」。 */
+type RowFlag = { label: string; cls: string; tip: string }
+
+function flagsOf(t: BypassTarget): RowFlag[] {
+  const flags: RowFlag[] = []
+  if (t.applyState === 'failed') flags.push({ label: '写入失败', cls: 'warn', tip: '上次写入未通过校验，原因见结果弹窗' })
+  if (t.stale) flags.push({ label: '固定地址已失效', cls: 'warn', tip: 'hosts 里钉的地址已不在实际解析结果里' })
+  if (t.cdnLike) flags.push({ label: 'CDN 轮换', cls: 'off', tip: '真址带 CNAME 或多地址轮换，固定后会随节点变化失效' })
+  if (t.applyState === 'applied') flags.push({ label: '已写入', cls: 'ok', tip: '已写入 hosts 或系统路由' })
+  return flags
+}
+
+const rows = computed(() =>
+  shown.value.map((t) => {
+    const flags = flagsOf(t)
+    return {
+      t,
+      flag: flags[0] ?? null,
+      tip: flags.length > 1 ? flags.map((f) => f.label).join(' · ') : (flags[0]?.tip ?? ''),
+    }
+  }),
+)
+
 /* 探测结论走弹窗：这页的主体是清单，结论不许长期占页面 */
 const report = ref<ProbeReport | null>(null)
 
@@ -492,7 +516,7 @@ watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${tar
   <div class="content-inner">
     <div class="page-bar">
       <label class="probe-box">
-        <AppIcon name="search" :size="15" />
+        <AppIcon name="link" :size="15" />
         <input
           v-model="input"
           type="text"
@@ -527,6 +551,11 @@ watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${tar
         <AppIcon name="refresh" :size="13" />
         {{ revalidating ? (stopRequested ? '正在停止' : `重验 ${revalidating.done}/${revalidating.total}`) : '全量重验' }}
       </button>
+      <!-- 筛选是清单的动作，跟着清单的控件档走（32px），不挂在下面那行小账的尾巴上 -->
+      <label v-if="targets.length" class="bp-filter">
+        <AppIcon name="search" :size="13" />
+        <input v-model="filter" type="text" spellcheck="false" placeholder="筛选" aria-label="按名称筛选清单" />
+      </label>
     </div>
 
     <!-- 小账：「待写入」= 判定指向写 hosts/路由且这批还没写成的条数，写过的从这里摘出去，
@@ -543,53 +572,52 @@ watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${tar
         <span>固定地址失效 {{ status.stale }} 条</span>
       </template>
       <span v-if="status.hostsError" class="bp-status-err">{{ status.hostsError }}</span>
-      <label v-if="targets.length" class="bp-filter">
-        <AppIcon name="search" :size="13" />
-        <input v-model="filter" type="text" spellcheck="false" placeholder="筛选" aria-label="按名称筛选清单" />
-      </label>
     </div>
 
-    <!-- 清单：一条目标一颗浮岛，展开时同一颗岛下面接一段凹底明细 -->
-    <div v-if="loading" class="rcard-list" aria-hidden="true">
-      <div class="rcard rcard-row" v-for="n in 2" :key="n">
+    <!-- 清单：一层面板卡 + 发丝线分行，行按列对齐（名称／地址／出口／判定） -->
+    <div v-if="loading" class="bp-panel" aria-hidden="true">
+      <div class="bp-row" v-for="n in 2" :key="n">
         <span class="skeleton-block"></span>
         <span class="skeleton-line w40"></span>
       </div>
     </div>
 
-    <div v-else-if="targets.length" class="rcard-list">
-      <div v-for="t in shown" :key="t.id" class="rcard" :class="{ on: openRowId === t.id }">
-        <div class="rcard-row bp-row">
-          <button class="row-main" type="button" :aria-expanded="openRowId === t.id" @click="toggleRow(t)">
-            <span class="row-host mono" :title="t.host">{{ hostOf(t) }}</span>
-            <span class="row-meta mono" :title="`上次探测 ${fmtTime(t.checkedAt)}`">
-              <span v-if="t.address">{{ t.address }}</span>
-              <span v-if="t.interfaceName">出口 {{ t.interfaceName }}</span>
-              <span v-if="t.applyState === 'applied'" class="row-written">已写入</span>
-              <span v-else-if="t.applyState === 'failed'" class="row-stale">写入失败</span>
-              <span v-if="t.cdnLike" title="真址带 CNAME 或多地址轮换，固定后会随节点变化失效">CDN 轮换</span>
-              <span v-if="t.stale" class="row-stale">固定地址已失效</span>
+    <div v-else-if="targets.length" class="bp-panel">
+      <template v-for="row in rows" :key="row.t.id">
+        <div class="bp-row" :class="{ on: openRowId === row.t.id }">
+          <button class="row-main" type="button" :aria-expanded="openRowId === row.t.id" @click="toggleRow(row.t)">
+            <span class="bp-name">
+              <span class="row-host mono" :title="row.t.host">{{ hostOf(row.t) }}</span>
+              <span v-if="row.flag" class="badge bp-flag" :class="row.flag.cls" :title="row.tip">{{ row.flag.label }}</span>
             </span>
-            <span class="badge" :class="verdictClass(t.verdict)">{{ verdictLabel(t.verdict) }}</span>
+            <span class="bp-cell mono" :title="row.t.address || '未解析到实际地址'">{{ row.t.address || '—' }}</span>
+            <span
+              class="bp-cell"
+              :title="`${row.t.interfaceName ? '出口 ' + row.t.interfaceName : '未查询到出口接口'} · 上次探测 ${fmtTime(row.t.checkedAt)}`"
+            >
+              {{ row.t.interfaceName || '—' }}
+            </span>
+            <span class="badge" :class="verdictClass(row.t.verdict)">{{ verdictLabel(row.t.verdict) }}</span>
           </button>
           <div class="row-acts">
-            <button class="ib" type="button" title="重新探测" :disabled="busyRowId !== null" @click="recheckRow(t)">
+            <button class="ib" type="button" title="重新探测" :disabled="busyRowId !== null" @click="recheckRow(row.t)">
               <AppIcon name="refresh" :size="14" />
             </button>
-            <button class="ib pin" type="button" title="更多操作" @click="openMenu(t, $event)">
+            <button class="ib pin" type="button" title="更多操作" @click="openMenu(row.t, $event)">
               <AppIcon name="dots" :size="14" />
             </button>
           </div>
         </div>
 
         <!-- 就地展开：判定依据跟在行后，动作只留「改原文重探」，重探的快捷位已在行首 -->
-        <div v-if="openRowId === t.id" class="row-card">
-          <p class="row-note">{{ rowNote(t) }}</p>
+        <div v-if="openRowId === row.t.id" class="row-card">
+          <div class="row-note-line">
+            <p class="row-note">{{ rowNote(row.t) }}</p>
+            <span v-for="f in flagsOf(row.t)" :key="f.label" class="badge" :class="f.cls" :title="f.tip">{{ f.label }}</span>
+          </div>
           <div class="row-facts">
-            <span class="mono">实际地址 {{ t.address || '—' }}</span>
-            <span>出口接口 {{ t.interfaceName || '—' }}</span>
-            <span>网关 {{ t.nextHop || '—' }}</span>
-            <span :title="fmtTime(t.checkedAt)">探测时间 {{ clockOf(t.checkedAt) }}</span>
+            <span>网关 {{ row.t.nextHop || '—' }}</span>
+            <span :title="fmtTime(row.t.checkedAt)">探测时间 {{ clockOf(row.t.checkedAt) }}</span>
           </div>
           <div class="row-edit">
             <span class="row-edit-label">原始输入</span>
@@ -599,22 +627,22 @@ watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${tar
               type="text"
               spellcheck="false"
               aria-label="该条目的原始输入"
-              @keyup.enter="applyEdit(t)"
+              @keyup.enter="applyEdit(row.t)"
             />
             <button
               class="action-btn primary"
               type="button"
-              :disabled="busyRowId !== null || !draftInput.trim() || draftInput.trim() === t.input"
-              @click="applyEdit(t)"
+              :disabled="busyRowId !== null || !draftInput.trim() || draftInput.trim() === row.t.input"
+              @click="applyEdit(row.t)"
             >
               <AppIcon name="refresh" :size="13" />
               保存并重新探测
             </button>
           </div>
         </div>
-      </div>
+      </template>
 
-      <div v-if="!shown.length" class="bp-nohit">
+      <div v-if="!rows.length" class="bp-nohit">
         没有名称包含「{{ filter }}」的条目
       </div>
     </div>
@@ -819,7 +847,7 @@ watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${tar
 }
 .page-bar .btn-primary { flex-shrink: 0; }
 
-/* 小账行：一行细字，右侧挂筛选 */
+/* 小账行：一行细字 */
 .bp-status {
   display: flex;
   align-items: center;
@@ -835,26 +863,28 @@ watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${tar
   flex: 1 1 240px;
   overflow-wrap: anywhere;
 }
+/* 筛选吃页栏的 32px 控件档，与探测框同配方，只是不成长 */
 .bp-filter {
-  margin-left: auto;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  height: 24px;
-  padding: 0 var(--space-2);
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 var(--space-3);
   background: color-mix(in srgb, var(--text) 7%, transparent);
   border: none;
-  border-radius: 7px;
+  border-radius: var(--radius-ib);
   color: var(--text-muted);
 }
 .bp-filter input {
-  width: 96px;
+  width: 88px;
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;
   color: var(--text);
   font-family: inherit;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 
 /* 结论走全站统一弹窗壳：弹窗本身就是那张卡，里面不再套一层 */
@@ -918,11 +948,39 @@ watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${tar
 }
 .concl-pending li svg { flex-shrink: 0; margin-top: 2px; }
 
-/* 岛内一行：64px 档与描边由 .rcard/.rcard-row 骨架给，这里只管行内配方 */
+/* 面板卡：一层壳 + 发丝线分行，不做卡中卡。行档 48——这一页的行是「一行四列」的表，
+   不是「主名 + 一句细字」，64px 档会把单行数据撑成空场。 */
+.bp-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  margin-top: var(--space-3);
+  padding-top: 2px;
+}
+.bp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: 0 14px;
+}
+.bp-panel .bp-row + .bp-row,
+.bp-panel .row-card + .bp-row,
+.bp-panel .row-card {
+  border-top: 1px solid var(--border);
+}
+.bp-panel .bp-row:hover {
+  background: var(--hover);
+}
+
+/* 行内表格化：名称+状态旗／地址／出口／判定 四列对齐，判定钉右缘 */
 .row-main {
   flex: 1;
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr) minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
   border: none;
@@ -933,9 +991,17 @@ watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${tar
   text-align: left;
   cursor: pointer;
 }
-.row-host {
-  flex: 0 1 40%;
+.bp-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   min-width: 0;
+  overflow: hidden;
+}
+.row-host {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 280px;
   font-size: var(--text-md);
   font-weight: 600;
   color: var(--text);
@@ -943,35 +1009,44 @@ watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${tar
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.row-meta {
-  flex: 1;
+.bp-cell {
   min-width: 0;
-  font-size: var(--text-xs);
-  color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
-.row-meta > span + span::before {
-  content: '·'; margin: 0 6px; color: var(--text-faint);
+.row-main > .badge {
+  justify-self: end;
 }
-.row-stale { color: var(--warning); }
+.bp-flag {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .row-acts { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
-/* 浮岛上的快捷钮平时收着，⋯ 那颗常驻——它是这一行唯一的菜单入口 */
+/* 行上的快捷钮平时收着，⋯ 那颗常驻——它是这一行唯一的菜单入口 */
 .row-acts .ib { opacity: 0; transition: opacity var(--transition); }
-.rcard:hover .ib,
-.rcard:focus-within .ib,
-.rcard.on .ib { opacity: 1; }
+.bp-row:hover .ib,
+.bp-row:focus-within .ib,
+.bp-row.on .ib { opacity: 1; }
 .row-acts .ib.pin { opacity: 1; }
-html.hover-suppressed .rcard:hover .ib:not(.pin) { opacity: 0; }
+html.hover-suppressed .bp-row:hover .ib:not(.pin) { opacity: 0; }
 
-/* 展开的那一段：还在同一颗岛里，靠凹底与发丝顶线和行分开 */
+/* 展开的那一段：同一张面板里的凹底，靠发丝顶线与行分开 */
 .row-card {
   padding: var(--space-3) 14px var(--space-4);
   background: var(--sunken);
-  border-top: 1px solid var(--border);
+}
+.row-note-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 .row-note {
+  flex: 1 1 260px;
+  min-width: 0;
   margin: 0;
   font-size: var(--text-xs);
   line-height: 1.6;
@@ -984,6 +1059,21 @@ html.hover-suppressed .rcard:hover .ib:not(.pin) { opacity: 0; }
   margin-top: var(--space-3);
   font-size: var(--text-2xs);
   color: var(--text-muted);
+}
+/* 面板里的行卡不是浮岛，主钮的淡染档要在这一层重给一次 */
+.row-card .action-btn.primary {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--text-brand);
+  font-weight: 600;
+}
+.row-card .action-btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: transparent;
+  color: var(--text-brand);
+}
+.row-card .action-btn.primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 /* 改原文：输入框走 28px 档，与按钮同高同排 */
 .row-edit {
@@ -1014,9 +1104,10 @@ html.hover-suppressed .rcard:hover .ib:not(.pin) { opacity: 0; }
 }
 
 .bp-nohit {
-  padding: var(--space-3) 2px;
+  padding: var(--space-4) 14px;
+  border-top: 1px solid var(--border);
   font-size: var(--text-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 /* 写入确认与结果共用同一份两行列法：目标在左、要写的动作或原因在右 */
@@ -1067,9 +1158,6 @@ html.hover-suppressed .rcard:hover .ib:not(.pin) { opacity: 0; }
   font-size: var(--text-2xs);
   color: var(--warning);
 }
-
-/* 行上小字分档：写过的收口、失效与轮换的提醒 */
-.row-written { color: var(--success); }
 
 .mono { font-family: var(--font-mono); }
 </style>

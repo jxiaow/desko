@@ -14,7 +14,7 @@
  *     槽位名只许落在 accent 白名单内；
  *   · 底色/accent 名单从 theme.ts 现读，CSS 里缺哪一块就报哪一块。
  *
- * 这个脚本做六件事：
+ * 这个脚本做七件事：
  *   1. 每套底色槽位名完全对齐（以 paper 为基准）
  *   2. 10 个 accent 组合齐全，组合之间槽位名一致且都在白名单内
  *   3. 底色块里不许出现 var() 引用（那是别名块的活）；accent 块允许，
@@ -22,12 +22,13 @@
  *   4. 别名块不许被主题/accent 块重复定义（顺序反转会互相盖值）
  *   5. 全项目 var(--x) 用到了但没人定义的槽位
  *   6. theme.ts 的 POLARITY 必须覆盖每一套底色
+ *   7. 氛围状态与面板/导航底色策略只由材质层定义，组件消费角色
  *
  * 用法：node scripts/check-theme-coverage.mjs
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { readThemeIds } from './lib/theme-tokens.mjs'
+import { readThemeIds, readStyleSource } from './lib/theme-tokens.mjs'
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const CSS_PATH = join(ROOT, 'src', 'styles', 'global.css')
@@ -85,7 +86,7 @@ function collectBlocks(css) {
   return blocks
 }
 
-const css = stripComments(readFileSync(CSS_PATH, 'utf8'))
+const css = stripComments(readStyleSource(CSS_PATH))
 const blocks = collectBlocks(css)
 
 const problems = []
@@ -207,7 +208,7 @@ try {
   const polMap = new Map((pol ? [...pol[0].matchAll(/(\w+):\s*'([\w-]+)'/g)] : []).map((m) => [m[1], m[2]]))
   for (const t of BASES) {
     const p = polMap.get(t)
-    if (!p) problems.push(`theme.ts 的 POLARITY 里没有底色 '${t}'，applyTheme 会给它挂出空 data-base`)
+    if (!p) problems.push(`theme.ts 的 POLARITY 里没有底色 '${t}'，主题初始化会给它挂出空 data-base`)
     else if (!POLARITIES.includes(p)) problems.push(`theme.ts 里 ${t} 的极性 '${p}' 不是 ${POLARITIES.join('/')} 之一`)
   }
   for (const [t] of polMap) if (!BASES.includes(t)) problems.push(`theme.ts 的 POLARITY 里有未知底色 '${t}'，THEMES 里没有它`)
@@ -216,7 +217,7 @@ try {
 }
 
 /* ---- 6. 全项目引用了没人定义的槽位 ---- */
-/* 定义集 = global.css 里出现过的所有 "--xxx:"，含尺度层、底色层、accent 层、别名块 */
+/* 定义集包含样式入口导入的材质层、尺度层、底色层、accent 层与别名块。 */
 const defined = new Set(css.match(/--[\w-]+(?=\s*:)/g) || [])
 /* 组件局部变量：在 .vue / 页面作用域里自定自用，不归全局主题管
    --h / --ftc 由组件内联给；--toast-side 由 App.vue 按侧栏三态喂；--gc-hue 由收藏页按分类哈希给 */
@@ -242,6 +243,20 @@ for (const file of walk(join(ROOT, 'src'))) {
       usedSlots.get(m[1]).add(`${relative(ROOT, file)}:${i + 1}`)
     }
   })
+
+  // 材质策略只有一个入口：页面不判断氛围状态，面板与导航底色消费材质角色。
+  if (file.endsWith('.css') || file.endsWith('.vue')) {
+    const styles = file.endsWith('.vue')
+      ? [...text.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n')
+      : text
+    const clean = stripComments(styles)
+    if (file !== join(ROOT, 'src', 'styles', 'materials.css') && /\[data-atmosphere\b/.test(clean)) {
+      problems.push(`${relative(ROOT, file)} 在材质层之外判断背景氛围，请改为消费材质角色`)
+    }
+    if (file !== join(ROOT, 'src', 'styles', 'materials.css') && /background(?:-color|-image)?\s*:[^;{}]*var\(\s*--(?:panel-bg|sidebar-bg)\b/.test(clean)) {
+      problems.push(`${relative(ROOT, file)} 直接使用物理背景槽，请改为 --bg-surface / --bg-sidebar 等材质角色`)
+    }
+  }
 }
 
 for (const [slot, where] of usedSlots) {

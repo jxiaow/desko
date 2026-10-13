@@ -320,18 +320,24 @@ function reloadTrashBin() {
 }
 
 let unlisten: UnlistenFn[] = []
+let active = true
 
 onMounted(async () => {
   // 自动刷新的间隔与阈值先落进 state，定时器才能按上一次的选择起
   await loadQuotaSettings()
+  if (!active) return
   void refreshAccounts().then(() => {
+    if (!active) return
     startQuotaTicker()
     void refreshQuotasOnEnter()
   })
-  unlisten.push(await listen<SwitchProgress>('codex:switch-progress', (e) => applySwitchProgress(e.payload)))
+  const stop = await listen<SwitchProgress>('codex:switch-progress', (e) => applySwitchProgress(e.payload))
+  if (active) unlisten.push(stop)
+  else stop()
 })
 
 onUnmounted(() => {
+  active = false
   unlisten.forEach((f) => f())
   stopQuotaTicker()
 })
@@ -339,7 +345,7 @@ onUnmounted(() => {
 const pageHead = usePageHeadStore()
 watchEffect(() => {
   if (view.value === 'accounts') {
-    pageHead.setHead('Codex 账号', `${accounts.value.length} 个`)
+    pageHead.setHead('Codex', `${accounts.value.length} 个`)
   } else if (view.value === 'sessions') {
     pageHead.setHead('Codex 会话', `${sessions.value.length} 条`)
   } else if (view.value === 'usage') {
@@ -737,5 +743,5 @@ watchEffect(() => {
 .cur-mark { color: var(--accent); width: 30px; display: flex; justify-content: center }
 
 /* 作业进行中那一条：读的是计数不是动作，所以吃 accent 而不是 danger（删除已经发生了） */
-.dock-btn.job { color: var(--accent); font-variant-numeric: tabular-nums }
+.dock-btn.job { color: var(--accent) }
 </style>

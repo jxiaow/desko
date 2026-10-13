@@ -376,7 +376,7 @@ defineExpose({ save })
   background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
   cursor: pointer; transition: border-color var(--transition-fast), background var(--transition-fast);
 }
-.paths-manage:hover { border-color: var(--border-strong); background: var(--panel-bg) }
+.paths-manage:hover { border-color: var(--border-strong); background: var(--bg-surface) }
 .paths-manage:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring) }
 .pm-sum {
   flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--text-xs);

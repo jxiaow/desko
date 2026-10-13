@@ -13,7 +13,7 @@ const listRows = [
   { host: 'gitlab.inc.example.net', input: 'gitlab.inc.example.net', address: '10.18.4.11', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'directOk', note: '直连已可用' },
   { host: 'xtbg.xylink.com', input: 'http://xtbg.xylink.com:8443/agent', address: '172.30.2.109', interfaceName: 'vEthernet (TUN)', nextHop: '169.254.99.99', verdict: 'needRoute', note: '缺少绑定的路由' },
   { host: '172.33.0.0/16', input: '172.33.0.0/16', kind: 'cidr', address: '', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'directOk', note: '路由已通，无需处理' },
-  { host: 'registry.example-mirror.net', input: 'registry.example-mirror.net', address: '125.39.27.223', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'hostsOnly', note: '仅缺 DNS 固定', stale: true },
+  { host: 'registry.example-mirror.net', input: 'registry.example-mirror.net', address: '125.39.27.223', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'hostsOnly', note: '仅缺 DNS 固定', stale: true, applyState: 'applied' },
 ]
 
 /** 落盘链路的账：两条能自动定，一条带 CDN 特征默认不进批次 */
@@ -165,7 +165,7 @@ for (const theme of ['paper', 'ink']) {
         await page.locator('.dialog .btn-primary').click()
         if (scene.flow === 'awaiting') await page.waitForTimeout(500)
         if (scene.flow === 'result') await page.waitForSelector('.dialog:has-text("写入结果")')
-        if (scene.flow === 'written') await page.waitForSelector('.row-written')
+        if (scene.flow === 'written') await page.waitForSelector('.bp-row .bp-flag')
       }
     }
     await page.mouse.move(1020, 660)

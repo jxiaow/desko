@@ -48,16 +48,16 @@ test.describe('Settings 设置', () => {
     expect(await e2e.count(page, 'get_setting')).toBeGreaterThanOrEqual(2)
   })
 
-  test('设置行组：纸面直排细线 + 28px 控制轴 + 动作分三级', async ({ page }) => {
+  test('设置行组：无分割线 + 28px 控制轴 + 动作分三级', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page)
     await settingsTab(dialog, 'backup')
     const pane = visiblePane(dialog)
 
-    // 行组拍平在纸面上：面板里不再套第二层凹槽卡，条目之间只留 1px 细线
+    // 行组直接排在纸面上，靠间距分组
     await expect(pane.locator('.group-content').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
     const row = pane.locator('.setting-item', { hasText: '数据库路径' })
-    await expect(row).toHaveCSS('border-bottom-width', '1px')
+    await expect(row).toHaveCSS('border-bottom-width', '0px')
     await expect(row).toHaveCSS('min-height', '44px')
     // 控制轴一档高：按钮与输入件同 28px，右缘成线
     await expect(pane.locator('.setting-item', { hasText: '数据库路径' }).locator('button.action-btn')).toHaveCSS('height', '28px')
@@ -224,9 +224,9 @@ test.describe('Settings 设置', () => {
     await expect(pane).toBeVisible()
     // 旧的 SQL 导出入口没了；现在的「导出」是单文件迁移包
     await expect(dialog.locator('button', { hasText: /SQL/i })).toHaveCount(0)
-    await expect(pane.locator('.section-label', { hasText: '数据' })).toBeVisible()
-    await expect(pane.locator('.section-label', { hasText: '云端备份' })).toBeVisible()
-    await expect(pane.locator('.section-label', { hasText: '迁移' })).toBeVisible()
+    await expect(pane.getByRole('heading', { name: '数据', exact: true })).toBeVisible()
+    await expect(pane.getByRole('heading', { name: /云端备份/ })).toBeVisible()
+    await expect(pane.getByRole('heading', { name: /迁移/ })).toBeVisible()
     // 只有一把闸：既没有第二个"自动同步"开关，也没有单独的"定时备份"行了
     await expect(pane.locator('.setting-item', { hasText: '自动备份到云' })).toHaveCount(0)
     await expect(pane.locator('.setting-item', { hasText: '定时备份' })).toHaveCount(0)

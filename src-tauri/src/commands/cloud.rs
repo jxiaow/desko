@@ -58,7 +58,6 @@ pub async fn cloud_save_config(
     account: String,
     app_password: String,
 ) -> Result<(), AppError> {
-    let master = master_key(&state)?;
     let app_password = resolve_app_password(&state, app_password)?;
     let creds = cloud_service::CloudCreds {
         server: cloud_service::normalize_server(&server)?,
@@ -69,8 +68,11 @@ pub async fn cloud_save_config(
     tauri::async_runtime::spawn_blocking(move || cloud_service::test_connection(&checked))
         .await
         .map_err(|e| AppError::Backup(format!("任务失败: {}", e)))??;
+    // 连接测试期间可能改过主密码或锁屏，提交时重新取得当前密钥并持到落库结束。
+    let master = state.master_key.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    let master = master.as_ref().ok_or(AppError::NotUnlocked)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    cloud_service::save_cfg(&db, &master, &creds)
+    cloud_service::save_cfg(&db, master, &creds)
 }
 
 #[tauri::command]

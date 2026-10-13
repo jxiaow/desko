@@ -135,7 +135,12 @@ impl Database {
         drop(old);
         let swapped = crate::backup::swap_live_files(app_data_dir, attachments_dir, staging);
         let db_file = app_data_dir.join("data.db");
+        // 回滚失败时宁可停在错误态，也不能在旧文件之外悄悄新建一个空库。
+        if !db_file.exists() {
+            return Err(AppError::Backup("数据库文件尚未恢复，请重启后重试恢复".into()));
+        }
         self.conn = Connection::open(&db_file)?;
+        self.conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         schema::run_schema(&self.conn)?;
         // 旧版备份包里存的是那台机器的绝对路径，换机恢复后一律洗成本机相对形态
         self.normalize_attachment_paths()?;
@@ -160,6 +165,33 @@ pub(crate) fn cleanup(path: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn failed_attachment_move_reopens_original_database() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let root = std::env::temp_dir().join(format!("desko_swap_db_{}", uuid::Uuid::new_v4()));
+        let attachments = root.join("attachments");
+        let staging = root.join("staging");
+        std::fs::create_dir_all(&attachments).unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+        let mut db = Database::new(root.join("data.db").to_str().unwrap()).unwrap();
+        db.set_meta("initialized", "true").unwrap();
+        db.set_meta("original", "retained").unwrap();
+        drop(Database::new(staging.join("data.db").to_str().unwrap()).unwrap());
+        std::fs::write(attachments.join("held.bin"), b"held").unwrap();
+        let held = std::fs::OpenOptions::new().read(true).share_mode(0).open(attachments.join("held.bin")).unwrap();
+        assert!(db.swap_into_restored(&root, &attachments, &staging).is_err());
+        assert!(db.is_initialized().unwrap());
+        assert_eq!(db.get_meta("original").unwrap().as_deref(), Some("retained"));
+        drop(held);
+        drop(db);
+        crate::backup::recover_swap(&root, &attachments).unwrap();
+        let db = Database::new(root.join("data.db").to_str().unwrap()).unwrap();
+        assert!(db.is_initialized().unwrap());
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     /// 绝对路径进过库的代价：换机器/换账号之后图片全断。开库时洗成相对形态，
     /// 而且幂等 —— 第二次开库一个字节都不该再动。

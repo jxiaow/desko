@@ -517,22 +517,28 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
    这里只留文件卡自己的类型着色与字档 */
 
 /* 类型档：尺寸/圆角/中性底走 global.css .grid-slot（卡内收 24px），目录档共用 .grid-slot--folder，
-   这里只叠扩展名类型色。选择器带 .grid-card 一层以压过 .grid-slot 的中性底。 */
+   这里只叠扩展名类型色。选择器带 .grid-card 一层以压过 .grid-slot 的中性底。
+   四字母扩展名（docx/xlsx）在 11px 要 25–27px，24px 方档装不下会被 overflow 裁字，
+   所以档面横向让字撑开、竖向仍守 24px。 */
 .grid-card .ft-ico {
+  width: auto;
+  min-width: 24px;
+  padding: 0 3px;
   font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: -0.02em;
 }
-/* 扩展名色底：字色取 --ft-* 槽，底是同色淡水洗（13% 掺卡面）——类型一眼可辨，又不炸成贴纸 */
+/* 扩展名色底：底是同色淡水洗（13% 掺卡面），字在色相上掺 35% 墨压深一档——
+   纯色字压同色淡底只有 3.5–4.1:1，掺墨后回到 4.5 以上，色相仍一眼可辨。 */
 .grid-card .ft-ico.toned {
-  color: var(--ftc);
-  background: color-mix(in srgb, var(--ftc) 13%, var(--panel-bg));
+  color: color-mix(in srgb, var(--ftc) 65%, var(--text));
+  background: color-mix(in srgb, var(--ftc) 13%, var(--bg-surface));
 }
 
 /* 名字：14/600 单行截断，吃掉行宽；类型标签靠右淡字 */
 .row-name { flex: 1 1 auto; min-width: 0; font-size: var(--text-base); font-weight: 600; letter-spacing: -0.01em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-type { margin-left: auto; flex: none; font-size: var(--text-xs); color: var(--text-faint); }
+.sc-type { margin-left: auto; flex: none; font-size: var(--text-xs); color: var(--text-muted); }
 
 /* 路径：等宽 12px 灰字，缩进由 global .row2 给，尾部优先截断（保文件名，盘符与上层目录是噪音） */
 .path-chip {
@@ -592,7 +598,7 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
   overflow: hidden;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
-.path-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg); }
+.path-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--bg-surface); }
 .path-input-row input {
   flex: 1;
   min-width: 0;

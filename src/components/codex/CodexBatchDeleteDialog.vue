@@ -114,7 +114,7 @@ async function onAbandon() {
   height: min(480px, 84vh);
   --font-mono: Consolas, 'Cascadia Mono', monospace;
 }
-.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text) }
+.num { font-family: var(--font-mono); font-weight: 600; color: var(--text) }
 .num.bad { color: var(--danger) }
 
 .bd-count {

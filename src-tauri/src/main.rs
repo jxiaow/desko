@@ -17,14 +17,15 @@ use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Emitter,
     Manager,
 };
 
 pub struct AppState {
     pub db: Mutex<Database>,
     pub master_key: Mutex<Option<Vec<u8>>>,
-    pub unlock_attempts: Mutex<u32>,
+    pub unlock_attempts: Mutex<services::auth_service::UnlockThrottle>,
+    /// 锁定请求的代次：前端完成锁定或重新解锁后取消旧请求的超时兜底。
+    pub lock_epoch: std::sync::atomic::AtomicU64,
     /// 备份密钥只在解锁后驻留内存，锁屏即清
     pub backup_key: Mutex<Option<Vec<u8>>>,
     /// 同一时刻只跑一个备份任务（手动、退出、定时共用一把闸）
@@ -57,19 +58,23 @@ fn is_codex_command(cmd: &str) -> bool {
     .any(|c| c == cmd)
 }
 
-/// D11 的开关在后端的读法：状态未挂（极早期 invoke）或读不到都按关处理。
-fn codex_feature_open<R: tauri::Runtime>(message: &tauri::ipc::InvokeMessage<R>) -> bool {
+/// 模块启用与应用解锁必须同时成立，上游命令本身不接收 Desko 会话状态。
+fn authorize_codex(state: &AppState) -> Result<(), &'static str> {
+    let key = state.master_key.lock().map_err(|_| "应用已锁定")?;
+    if key.is_none() {
+        return Err("应用已锁定");
+    }
+    let db = state.db.lock().map_err(|_| "读取模块设置失败")?;
+    if db.get_meta("codex_enabled").ok().flatten().as_deref() != Some("true") {
+        return Err("Codex 模块未启用，请在设置—模块里打开开关");
+    }
+    Ok(())
+}
+
+fn codex_authorization<R: tauri::Runtime>(message: &tauri::ipc::InvokeMessage<R>) -> Result<(), &'static str> {
     let webview = message.webview();
-    let Some(state) = webview.try_state::<AppState>() else {
-        return false;
-    };
-    state
-        .db
-        .lock()
-        .ok()
-        .and_then(|db| db.get_meta("codex_enabled").ok().flatten())
-        .map(|v| v == "true")
-        .unwrap_or(false)
+    let state = webview.try_state::<AppState>().ok_or("应用已锁定")?;
+    authorize_codex(&state)
 }
 
 fn main() {
@@ -121,14 +126,15 @@ fn main() {
             }).expect("failed to convert database path");
 
             // 上次恢复中途断电留下的 .swap，先收拾干净再开库
-            backup::recover_swap(&paths::profile_root(), &paths::attachments_dir());
+            backup::recover_swap(&paths::profile_root(), &paths::attachments_dir()).expect("failed to recover interrupted restore");
 
             let db = Database::new(db_path_str).expect("failed to init database");
             
             app.manage(AppState {
                 db: Mutex::new(db),
                 master_key: Mutex::new(None),
-                unlock_attempts: Mutex::new(0),
+                unlock_attempts: Mutex::new(services::auth_service::UnlockThrottle::default()),
+                lock_epoch: std::sync::atomic::AtomicU64::new(0),
                 backup_key: Mutex::new(None),
                 backup_busy: AtomicBool::new(false),
                 fileshare: commands::fileshare::ProcState::default(),
@@ -169,15 +175,7 @@ fn main() {
                                 let _ = window.set_focus();
                             }
                         }
-                        "lock" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let state = app.state::<AppState>();
-                                if let Ok(mut key) = state.backup_key.lock() {
-                                    *key = None;
-                                }
-                                let _ = window.emit("tray-lock", ());
-                            }
-                        }
+                        "lock" => commands::auth::request_lock(app),
                         "quit" => {
                             app.exit(0);
                         }
@@ -222,19 +220,7 @@ fn main() {
                             .unwrap_or(false);
                         
                         if should_lock {
-                            // Clear master key and emit lock event
-                            let app_state = app_handle.state::<AppState>();
-                            if let Ok(mut master_key) = app_state.master_key.lock() {
-                                *master_key = None;
-                            }
-                            if let Ok(mut backup_key) = app_state.backup_key.lock() {
-                                *backup_key = None;
-                            }
-                            if let Ok(mut attempts) = app_state.unlock_attempts.lock() {
-                                *attempts = 0;
-                            }
-                            commands::note_lock::close_domain(&app_state);
-                            let _ = window_clone.emit("tray-lock", ());
+                            commands::auth::request_lock(&app_handle);
                         }
                         
                         let _ = window_clone.hide();
@@ -429,13 +415,11 @@ fn main() {
             // D11 闸门补到后端：模块开关关着时，全部 codex 命令一律拒绝——
             // 否则「已关闭」的模块仍留着直敲 invoke 改写官方凭据文件的后门。
             move |invoke| {
-                if is_codex_command(invoke.message.command())
-                    && !codex_feature_open(&invoke.message)
-                {
-                    invoke
-                        .resolver
-                        .reject("Codex 模块未启用，请在设置—通用里打开开关".to_string());
-                    return true;
+                if is_codex_command(invoke.message.command()) {
+                    if let Err(error) = codex_authorization(&invoke.message) {
+                        invoke.resolver.reject(error.to_string());
+                        return true;
+                    }
                 }
                 base_invoke(invoke)
             }
@@ -455,8 +439,35 @@ fn main() {
 }
 
 #[cfg(test)]
+pub(crate) fn test_state() -> AppState {
+    AppState {
+        db: Mutex::new(Database::new(":memory:").unwrap()),
+        master_key: Mutex::new(None),
+        unlock_attempts: Mutex::new(services::auth_service::UnlockThrottle::default()),
+        lock_epoch: std::sync::atomic::AtomicU64::new(0),
+        backup_key: Mutex::new(None),
+        backup_busy: AtomicBool::new(false),
+        fileshare: commands::fileshare::ProcState::default(),
+        tunnel: commands::tunnel::TunnelState::default(),
+        note_keys: Mutex::new(std::collections::HashMap::new()),
+        note_key: Mutex::new(None),
+    }
+}
+
+#[cfg(test)]
 mod gate_tests {
     use super::is_codex_command;
+
+    #[test]
+    fn codex_requires_both_enabled_module_and_unlocked_session() {
+        let state = super::test_state();
+        state.db.lock().unwrap().set_meta("codex_enabled", "true").unwrap();
+        assert_eq!(super::authorize_codex(&state), Err("应用已锁定"));
+        *state.master_key.lock().unwrap() = Some(vec![1; 32]);
+        assert!(super::authorize_codex(&state).is_ok());
+        state.db.lock().unwrap().set_meta("codex_enabled", "false").unwrap();
+        assert!(super::authorize_codex(&state).is_err());
+    }
 
     /// 从本文件源码里抠出注册进 invoke_handler 的命令名：
     /// 形如 `commands::notes::list_notes,` / `codex_core::commands::codex::xxx,` 的独占一行。

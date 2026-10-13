@@ -436,7 +436,6 @@ html.hover-suppressed .mfa-card:hover .card-del { opacity: 0; }
   font-weight: 650;
   letter-spacing: 0.08em;
   color: var(--text);
-  font-variant-numeric: tabular-nums;
   border-radius: var(--radius-sm);
 }
 /* 复制反馈：码区整块翻成「已复制」，1.2s 后转回——回执落在结果本身上 */
@@ -462,7 +461,6 @@ html.hover-suppressed .mfa-card:hover .card-del { opacity: 0; }
   font-size: var(--text-2xs);
   font-weight: 600;
   color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
 }
 .mfa-card.expiring { border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); }
 .mfa-card.expiring .card-code { color: var(--warning); }
@@ -496,7 +494,7 @@ html.hover-suppressed .mfa-card:hover .card-del { opacity: 0; }
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-ring);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
 }
 
 .qr-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }

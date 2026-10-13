@@ -7,7 +7,7 @@ import { useToastStore } from '../stores/toast'
 import { fileshareApi } from '../services/api/fileshare'
 import { tunnelApi } from '../services/api/tunnel'
 import { fsRefresh } from '../services/fileshareSettings'
-import { loadStoragePaths } from '../services/codexState'
+import { loadStoragePaths, clearCodexSession } from '../services/codexState'
 
 /** 页面模块的标识，与路由名、侧栏项一一对应 */
 export type ModuleId =
@@ -48,6 +48,8 @@ export interface ModuleDef {
   count?: () => number
   /** 解锁后要让计数和页面就位所需的那一次取数 */
   boot?: () => Promise<void>
+  /** 收回密钥前必须完成的写入 */
+  beforeLock?: () => Promise<void>
   /** 锁定时必须跟着收口的会话态 */
   onLock?: () => void
   /** 关闭时要收口的常驻副作用：入口消失而进程还活着，是最难查的一种残留 */
@@ -77,6 +79,7 @@ export const MODULES: ModuleDef[] = [
     core: true,
     count: () => useNotesStore().notes.length,
     boot: () => useNotesStore().fetchNotes(),
+    beforeLock: () => useNotesStore().flushNoteSave(),
     onLock: () => useNotesStore().clearUnlockedNotes(),
     view: async () => (await import('../views/NotesView.vue')).default,
     settings: {
@@ -171,15 +174,16 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'codex',
+    onLock: clearCodexSession,
     settingKey: 'codex_enabled',
-    title: 'Codex 账号',
+    title: 'Codex',
     desc: '管理多个 Codex 账号并切换官方凭据',
     icon: 'navCodex',
     defaultEnabled: false,
     core: false,
     view: async () => (await import('../views/CodexView.vue')).default,
     settings: {
-      label: 'Codex 账号',
+      label: 'Codex',
       icon: 'navCodex',
       pane: async () => (await import('./settings/CodexSettings.vue')).default,
       load: loadStoragePaths,

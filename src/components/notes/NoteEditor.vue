@@ -230,6 +230,7 @@ const canRedo = ref(false)
 const editor = useEditor({
   // 库里存的是 attachments/<名>，编辑器里要看到真图；存回去时再洗回相对形态
   content: resolveAssetHtml(props.initialContent || ''),
+  parseOptions: { preserveWhitespace: 'full' },
   // 胶囊输入不抢焦点：它默认收成一行，抢了焦点就等于永远是展开的，折叠态白做。
   // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
   autofocus: props.variant === 'composer' ? false : (isBlankContent(props.initialContent) ? 'start' : 'end'),
@@ -280,7 +281,8 @@ watch(() => props.initialContent, (val) => {
   // 两边要在同一个空间里比：库里是相对形态，编辑器里是 asset URL
   const shown = resolveAssetHtml(val || '')
   if (editor.value && shown !== editor.value.getHTML()) {
-    editor.value.commands.setContent(shown)
+    // 父层同步只更新这张书写面，不能再回写；后台 composer 也会订阅全屏正文。
+    editor.value.commands.setContent(shown, { emitUpdate: false, parseOptions: { preserveWhitespace: 'full' } })
   }
 })
 
@@ -586,7 +588,7 @@ defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, 
 .note-editor.v-full :deep(h2) { font-size: var(--text-lg); font-weight: 620; line-height: 1.42; letter-spacing: -0.02em; margin-top: 12px; }
 .note-editor.v-full :deep(h3) { font-size: 16px; font-weight: 600; }
 .note-editor.v-full :deep(blockquote) { border-left-width: 3px; padding-left: var(--space-4); }
-.note-editor.v-full :deep(pre) { font-size: 13.5px; line-height: 1.75; padding: var(--space-4); background: var(--panel-bg); border: none; box-shadow: var(--shadow-xs); }
+.note-editor.v-full :deep(pre) { font-size: 13.5px; line-height: 1.75; padding: var(--space-4); background: var(--bg-surface); border: none; box-shadow: var(--shadow-xs); }
 .note-editor.v-full :deep(hr) { border: none; height: 1px; background: linear-gradient(90deg, transparent, var(--border-strong), transparent); margin: var(--space-6) 0; }
 
 .note-editor :deep(.ProseMirror p.is-editor-empty:first-child::before) {
@@ -629,7 +631,7 @@ defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, 
   padding: 4px;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-pop);
@@ -693,7 +695,7 @@ defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, 
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-ib);
   font-size: var(--text-xs);
@@ -723,7 +725,7 @@ defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, 
   top: 100%;
   right: 0;
   margin-top: 4px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-pop);

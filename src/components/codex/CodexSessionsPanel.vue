@@ -395,7 +395,6 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
 }
 .mono-ish {
   font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
 }
 .grp-head {
   display: flex;

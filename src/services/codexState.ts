@@ -68,17 +68,38 @@ export const currentAccount = computed(
   () => accounts.value.find((a) => a.id === currentId.value) ?? null
 )
 
+let accountEpoch = 0
+
 export async function refreshAccounts(): Promise<void> {
+  const epoch = accountEpoch
   const toast = useToastStore()
   try {
     const [list, cur] = await Promise.all([codexApi.list(), codexApi.current()])
+    if (epoch !== accountEpoch) return
     accounts.value = list
     currentId.value = cur?.id ?? ''
   } catch (e) {
     toast.showToast(errText(e), 'error')
   } finally {
-    loaded.value = true
+    if (epoch === accountEpoch) loaded.value = true
   }
+}
+
+/** 应用锁定时收回账号凭据与后台轮询。 */
+export function clearCodexSession(): void {
+  accountEpoch++
+  stopQuotaTicker()
+  stopDeleteTicker()
+  accounts.value = []
+  currentId.value = ''
+  loaded.value = false
+  busyId.value = ''
+  switchStep.value = ''
+  storagePaths.value = null
+  recycledAccounts.value = []
+  recycledLoaded.value = false
+  batchDeleteDialogOpen.value = false
+  batchDeleteEmails.clear()
 }
 
 /** 配额刷新走后台批量：一次点击不该把整页冻在网络请求上。

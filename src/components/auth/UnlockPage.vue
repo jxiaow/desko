@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BrandLogo from '../shared/BrandLogo.vue'
+import AmbientBackground from '../shared/AmbientBackground.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '../../stores/auth'
@@ -75,7 +76,8 @@ const doUnlock = async () => {
   try {
     await unlock(unlockPwd.value, onUnlockSuccess)
   } catch (e: any) {
-    unlockErr.value = '主密码错误，请重试'
+    const message = String(e?.message ?? e)
+    unlockErr.value = message === '密码错误' ? '主密码错误，请重试' : message
     shake()
   }
 }
@@ -93,18 +95,7 @@ onUnmounted(() => {
 
 <template>
   <div class="unlock-page">
-    <!-- 静态微光底 -->
-    <div class="unlock-bg" aria-hidden="true"></div>
-
-    <!-- 呼吸光场：三团软斑超慢漂移，可读性全靠这一层 + 底 -->
-    <div class="lock-aura" aria-hidden="true">
-      <i class="lock-aura-blob a"></i>
-      <i class="lock-aura-blob b"></i>
-      <i class="lock-aura-blob c"></i>
-    </div>
-
-    <!-- 乳胶微噪波：压住大面积软斑的色带分层 -->
-    <div class="lock-grain" aria-hidden="true"></div>
+    <AmbientBackground />
 
     <main class="unlock-canvas">
       <!-- 题词海报在上、300px 锁块在下，两层合成后整体视口居中 -->
@@ -170,102 +161,7 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg);
-}
-
-/* ---------- 画布：中心偏上漫反射微光 ---------- */
-.unlock-bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(110% 85% at 50% 40%, var(--lock-wash-b) 0%, var(--bg) 65%),
-    var(--bg);
-}
-
-/* ---------- 光场：三团超慢漂移的软斑，重绘圈在 contain 里 ---------- */
-.lock-aura {
-  position: absolute;
-  inset: -18%;
-  width: 136%;
-  height: 136%;
-  z-index: 1;
-  overflow: hidden;
-  contain: strict;
-  pointer-events: none;
-}
-
-.lock-aura-blob {
-  position: absolute;
-  border-radius: 50%;
-  will-change: transform;
-  transform: translate3d(0, 0, 0);
-}
-
-/* 两团吃 accent 槽反推的透明度：切色盘锁页跟着换色相，深浅两档共用一条公式；
-   第三团只做中性提亮，不抢 accent 的色相 */
-.lock-aura-blob.a {
-  width: min(50vw, 520px);
-  height: min(50vw, 520px);
-  top: 6%;
-  left: 10%;
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  filter: blur(68px);
-  animation: aura-a 28s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
-}
-
-.lock-aura-blob.b {
-  width: min(44vw, 440px);
-  height: min(44vw, 440px);
-  right: 8%;
-  bottom: 4%;
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  filter: blur(60px);
-  animation: aura-b 32s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
-}
-
-.lock-aura-blob.c {
-  width: min(36vw, 360px);
-  height: min(36vw, 360px);
-  top: 38%;
-  left: 44%;
-  background: color-mix(in srgb, var(--panel-bg) 55%, transparent);
-  filter: blur(44px);
-  animation: aura-c 24s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
-}
-
-@keyframes aura-a {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to   { transform: translate3d(7%, 9%, 0) scale(1.08); }
-}
-
-@keyframes aura-b {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to   { transform: translate3d(-8%, -6%, 0) scale(1.06); }
-}
-
-@keyframes aura-c {
-  from { transform: translate3d(0, 0, 0) scale(0.96); }
-  to   { transform: translate3d(5%, -7%, 0) scale(1.04); }
-}
-
-/* 降动偏好下光场退成静止软斑贴图。global.css 那条通配 !important 会把动画压成
-   0.01ms 单趟（光团会停在漂移终点），所以这里必须同样带 !important，靠 scoped
-   选择器的属性段压过它 */
-@media (prefers-reduced-motion: reduce) {
-  .lock-aura-blob {
-    animation: none !important;
-  }
-}
-
-/* ---------- 乳胶微噪波：一张静态贴图，不参与任何补间 ---------- */
-.lock-grain {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='deskoGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23deskoGrain)' opacity='0.035'/%3E%3C/svg%3E");
+  background: var(--bg-lock);
 }
 
 /* ---------- 内容流：题词 + 锁块合成一体，视口真居中 ---------- */
@@ -344,7 +240,7 @@ onUnmounted(() => {
   height: 52px;
   flex-shrink: 0;
   border-radius: 14px;
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-xs);
   display: flex;
@@ -398,7 +294,7 @@ onUnmounted(() => {
   font-size: var(--text-sm);
   font-family: inherit;
   color: var(--text);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   outline: none;
   transition: border-color var(--transition), box-shadow var(--transition);
 }

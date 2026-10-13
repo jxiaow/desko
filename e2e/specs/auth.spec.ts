@@ -72,9 +72,10 @@ test.describe('认证流程', () => {
     expect((await e2e.snapshot(page)).unlocked).toBe(false)
   })
 
-  test('连续 5 次错误口令后，正确口令也被限流拒绝', async ({ page }) => {
+  test('连续 5 次错误口令后冷却，到期可用正确口令解锁', async ({ page }) => {
     await startApp(page)
     const auth = new AuthPage(page)
+    await page.clock.install()
     for (let i = 0; i < 5; i++) {
       await auth.unlock('bad-password')
       await expect(auth.unlockError).toHaveText('主密码错误，请重试')
@@ -82,8 +83,15 @@ test.describe('认证流程', () => {
     expect((await e2e.snapshot(page)).unlockAttempts).toBe(5)
 
     await auth.unlock(E2E_PASSWORD)
-    await expect(auth.unlockError).toHaveText('主密码错误，请重试')
+    await expect(auth.unlockError).toContainText('尝试次数过多')
     expect((await e2e.snapshot(page)).unlocked).toBe(false)
     await expect(auth.unlockInput).toBeVisible()
+    // 锁定命令不能清掉冷却时间。
+    await page.evaluate(() => import('/src/services/api/auth.ts').then(m => m.authApi.lock()))
+    await auth.unlock(E2E_PASSWORD)
+    await expect(auth.unlockError).toContainText('尝试次数过多')
+    await page.clock.fastForward(5000)
+    await auth.unlock(E2E_PASSWORD)
+    await auth.expectUnlocked()
   })
 })

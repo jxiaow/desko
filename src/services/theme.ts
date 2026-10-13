@@ -12,15 +12,17 @@
  * 库里可能还存着旧七套的 ID（light-cool/light-warm/…/jetbrains-dark，
  * 以及更早的 cool/white/classic/dark/dark-carbon/cyber-hacker），
  * 迁移只在读取时查一次表完成，不回写——用户下次切主题时自然落为新值。 */
+import { reactive, readonly } from 'vue'
 import { settingsApi } from './api/settings'
 
-export type ThemeId = 'paper' | 'snow' | 'ink' | 'slate'
-export type AccentId = 'ink' | 'celadon' | 'clay' | 'plum' | 'rose'
+export type ThemeId = (typeof THEMES)[number]['id']
+export type AccentId = (typeof ACCENTS)[number]['id']
 export type PolarityId = 'light' | 'dark'
 
 export interface Appearance {
   theme: ThemeId
   accent: AccentId
+  backgroundAtmosphere: boolean
 }
 
 /** 旧七套 + 更早的退役 ID → 底色。必须是同步查表：
@@ -54,38 +56,13 @@ const LEGACY_ACCENT: Record<string, AccentId> = {
   'linear-dark': 'plum',
 }
 
-export interface ThemePreview {
-  page: string
-  sidebar: string
-  card: string
-  rowHover: string
-  edge: string
-  accent: string
-  ink: string
-}
-
-export interface ThemeInfo {
-  id: ThemeId
-  name: string
-  /** 微缩预览卡用的色，取自 global.css 对应底色块 */
-  prev: ThemePreview
-}
-
-export interface AccentInfo {
-  id: AccentId
-  name: string
-  /** 色丸展示色（纸底档） */
-  dot: string
-  /** 墨底档的展示色，主题预览卡跟着底色走 */
-  dotInk: string
-}
-
-export const THEMES: ThemeInfo[] = [
-  { id: 'paper', name: '纸', prev: { page: '#f8f8f7', sidebar: '#edecea', card: '#fcfcfc', rowHover: '#f7f7f7', edge: '#e6e6e4', accent: '#3d5a80', ink: '#333230' } },
-  { id: 'snow', name: '雪', prev: { page: '#f8fbfe', sidebar: '#e5e8ee', card: '#fefefe', rowHover: '#f6f9fe', edge: '#dbdfe6', accent: '#3d5a80', ink: '#202123' } },
-  { id: 'ink', name: '墨', prev: { page: '#1d1c1a', sidebar: '#1a1917', card: '#22211e', rowHover: '#282622', edge: '#30302d', accent: '#89a8cd', ink: '#e6e4de' } },
-  { id: 'slate', name: '岩', prev: { page: '#191c20', sidebar: '#17191d', card: '#1f2328', rowHover: '#252a30', edge: '#2d333b', accent: '#89a8cd', ink: '#e3e6ec' } },
-]
+/** 注册表只保存身份；颜色由 global.css 提供，预览也消费同一套令牌。 */
+export const THEMES = [
+  { id: 'paper', name: '纸' },
+  { id: 'snow', name: '雪' },
+  { id: 'ink', name: '墨' },
+  { id: 'slate', name: '岩' },
+] as const
 
 /** 底色 → accent 覆盖层挂的那一极。新增底色只需在这里登记一行。 */
 export const POLARITY: Record<ThemeId, PolarityId> = {
@@ -95,45 +72,54 @@ export const POLARITY: Record<ThemeId, PolarityId> = {
   slate: 'dark',
 }
 
-export const ACCENTS: AccentInfo[] = [
-  { id: 'ink', name: '墨蓝', dot: '#3d5a80', dotInk: '#89a8cd' },
-  { id: 'celadon', name: '青瓷', dot: '#3d7355', dotInk: '#7fb89a' },
-  { id: 'clay', name: '赭石', dot: '#9a5b33', dotInk: '#d09a6a' },
-  { id: 'plum', name: '紫罗', dot: '#5f62b8', dotInk: '#9ba0e8' },
-  { id: 'rose', name: '暮瑰', dot: '#984c64', dotInk: '#d78aa0' },
-]
+export const ACCENTS = [
+  { id: 'ink', name: '墨蓝' },
+  { id: 'celadon', name: '青瓷' },
+  { id: 'clay', name: '赭石' },
+  { id: 'plum', name: '紫罗' },
+  { id: 'rose', name: '暮瑰' },
+] as const
 
-export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink' }
+export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink', backgroundAtmosphere: true }
+const state = reactive<Appearance>({ ...DEFAULT_APPEARANCE })
+/** 全应用共享的当前外观；只能通过选择入口更新，避免状态和根属性各自变化。 */
+export const appearance = readonly(state)
 
 const isThemeId = (v: string): v is ThemeId => THEMES.some((t) => t.id === v)
 const isAccentId = (v: string): v is AccentId => ACCENTS.some((a) => a.id === v)
 
 export const polarityOf = (theme: ThemeId): PolarityId => POLARITY[theme]
 
-export const applyTheme = (ap: Appearance) => {
+const applyAppearance = (ap: Appearance) => {
+  Object.assign(state, ap)
   const root = document.documentElement
   root.setAttribute('data-theme', ap.theme)
   root.setAttribute('data-base', polarityOf(ap.theme))
   root.setAttribute('data-accent', ap.accent)
+  root.setAttribute('data-atmosphere', ap.backgroundAtmosphere ? 'on' : 'off')
 }
 
-/** 从设置里读底色 + accent；旧 ID 走迁移表，读不到或不认识都回落到默认，不抛错。 */
-export const readAppearance = async (): Promise<Appearance> => {
+/** 从设置里读底色、accent 与背景氛围；旧 ID 走迁移表，读不到或不认识都回落到默认。 */
+const readAppearance = async (): Promise<Appearance> => {
   let theme: ThemeId | null = null
   let accent: AccentId | null = null
+  let backgroundAtmosphere = DEFAULT_APPEARANCE.backgroundAtmosphere
   try {
     const rawTheme = await settingsApi.getSetting('theme')
     theme = isThemeId(rawTheme) ? rawTheme : LEGACY_THEME[rawTheme] ?? null
     const rawAccent = await settingsApi.getSetting('accent')
     accent = isAccentId(rawAccent) ? rawAccent : LEGACY_ACCENT[rawTheme] ?? null
+    backgroundAtmosphere = await settingsApi.getSetting('background_atmosphere') !== 'false'
   } catch {
     /* 回落默认 */
   }
-  return { theme: theme ?? DEFAULT_APPEARANCE.theme, accent: accent ?? DEFAULT_APPEARANCE.accent }
+  return { theme: theme ?? DEFAULT_APPEARANCE.theme, accent: accent ?? DEFAULT_APPEARANCE.accent, backgroundAtmosphere }
 }
 
-/* 兼容旧调用名：readTheme 返回完整外观 */
-export const readTheme = readAppearance
+/** 仅在 bootstrap 首绘前恢复持久化外观；组件直接读取共享状态。 */
+export const initializeAppearance = async () => {
+  applyAppearance(await readAppearance())
+}
 
 /* 切换瞬间挂一次全局补间类（global.css 的 html.theme-anim），
    让新旧底色之间有 0.2s 过渡；类由这里摘除，冷启动首绘不经过。 */
@@ -148,38 +134,24 @@ const playThemeTransition = () => {
   }, 260)
 }
 
-const setSettingQuiet = async (key: string, value: string) => {
+const SETTING_KEYS: Record<keyof Appearance, string> = {
+  theme: 'theme',
+  accent: 'accent',
+  backgroundAtmosphere: 'background_atmosphere',
+}
+
+/** 统一更新当前外观并落盘；保存失败仍保留本次生效的选择。 */
+const chooseAppearance = async <K extends keyof Appearance>(key: K, value: Appearance[K]): Promise<boolean> => {
+  if (key !== 'backgroundAtmosphere') playThemeTransition()
+  applyAppearance({ ...state, [key]: value })
   try {
-    await settingsApi.setSetting(key, value)
+    await settingsApi.setSetting(SETTING_KEYS[key], String(value))
     return true
   } catch {
     return false
   }
 }
 
-/** 立刻生效，再落盘。落盘失败（比如非 Tauri 环境）不影响本次生效。 */
-export const chooseTheme = async (id: ThemeId): Promise<boolean> => {
-  playThemeTransition()
-  const ap = { ...(current ?? DEFAULT_APPEARANCE), theme: id }
-  applyTheme(ap)
-  current = ap
-  return setSettingQuiet('theme', id)
-}
-
-export const chooseAccent = async (id: AccentId): Promise<boolean> => {
-  playThemeTransition()
-  const ap = { ...(current ?? DEFAULT_APPEARANCE), accent: id }
-  applyTheme(ap)
-  current = ap
-  return setSettingQuiet('accent', id)
-}
-
-/** 当前生效的外观快照：chooseTheme/chooseAccent 各自只改一轴，另一轴要跟着现值。 */
-let current: Appearance | null = null
-export const currentAppearance = (): Appearance => current ?? DEFAULT_APPEARANCE
-
-/** bootstrap 挂完首绘外观后回填快照。 */
-export const primeAppearance = (ap: Appearance) => {
-  current = ap
-  applyTheme(ap)
-}
+export const chooseTheme = (id: ThemeId) => chooseAppearance('theme', id)
+export const chooseAccent = (id: AccentId) => chooseAppearance('accent', id)
+export const chooseBackgroundAtmosphere = (enabled: boolean) => chooseAppearance('backgroundAtmosphere', enabled)

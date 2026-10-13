@@ -5,8 +5,8 @@ import ProfilesPane from './ProfilesPane.vue'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { settingsApi } from '../../services/api/settings'
-import { THEMES, ACCENTS, DEFAULT_APPEARANCE, chooseTheme, chooseAccent, readTheme, polarityOf } from '../../services/theme'
-import type { ThemeId, AccentId, ThemeInfo } from '../../services/theme'
+import { THEMES, ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
+import type { ThemeId, AccentId } from '../../services/theme'
 import { moduleFlags, loadModuleFlags } from '../../modules/state'
 import { MODULES, moduleById, type ModuleId, type SettingsTabId } from '../../modules/registry'
 import { toggleModule } from '../../modules/runtime'
@@ -49,8 +49,7 @@ const autoLockEnabled = ref(false)
 const autoLockTimeout = ref(5)
 const lockOnClose = ref(false)
 const lockOnSystemLock = ref(false)
-const theme = ref<ThemeId>(DEFAULT_APPEARANCE.theme)
-const accent = ref<AccentId>(DEFAULT_APPEARANCE.accent)
+const savingAtmosphere = ref(false)
 /** 关于页的版本号取自运行时应用版本，取不到就不显示，别再写死一个假版本 */
 const appVersion = ref('')
 
@@ -79,9 +78,6 @@ watch(
 )
 
 const loadSettings = async () => {
-  const ap = await readTheme()
-  theme.value = ap.theme
-  accent.value = ap.accent
   await loadModuleFlags()
   // 如果当前页签属于一个已关掉的模块，回落到外观
   if (!(tab.value in FIXED_TAB_LABELS) && !moduleFlags[tab.value as ModuleId]) {
@@ -135,25 +131,22 @@ const saveLockOnSystemLock = async () => {
 }
 
 const pickTheme = async (id: ThemeId) => {
-  if (id === theme.value) return
-  theme.value = id
-  // chooseTheme 会先把 data-theme 挂上再落盘，所以这里失败只是"下次回来还是旧的"
+  if (id === appearance.theme) return
   const saved = await chooseTheme(id)
   toastStore.showToast(saved ? '已切换主题' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
 }
 
 const pickAccent = async (id: AccentId) => {
-  if (id === accent.value) return
-  accent.value = id
+  if (id === appearance.accent) return
   const saved = await chooseAccent(id)
   toastStore.showToast(saved ? '已切换强调色' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
 }
 
-/** 预览卡里的 accent 色丸跟着当前 accent 档走，按底色那一极取档 */
-const prevAccent = (t: ThemeInfo) => {
-  const a = ACCENTS.find((x) => x.id === accent.value)
-  if (!a) return t.prev.accent
-  return polarityOf(t.id) === 'dark' ? a.dotInk : a.dot
+const saveBackgroundAtmosphere = async (event: Event) => {
+  savingAtmosphere.value = true
+  const saved = await chooseBackgroundAtmosphere((event.target as HTMLInputElement).checked)
+  savingAtmosphere.value = false
+  toastStore.showToast(saved ? '设置已保存' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
 }
 
 /** 开关只有一条路径：落库成功才认，失败由状态层扳回；路由与页面跟着收 */
@@ -192,40 +185,53 @@ onMounted(() => {
             <BrandLogo />
             <h2>设置</h2>
           </div>
-          <button class="nav-tab" :class="{ on: tab === 'profiles' }" @click="tab = 'profiles'">
-            <AppIcon name="user" :size="16" />
-            <span>{{ FIXED_TAB_LABELS.profiles }}</span>
-          </button>
-          <button class="nav-tab" :class="{ on: tab === 'modules' }" @click="tab = 'modules'">
-            <AppIcon name="bulletlist" :size="16" />
-            <span>{{ FIXED_TAB_LABELS.modules }}</span>
-          </button>
-          <button
-            v-for="m in enabledSettingsModules"
-            :key="m.id"
-            class="nav-tab"
-            :class="{ on: tab === m.id }"
-            @click="tab = m.id"
-          >
-            <AppIcon :name="m.settings!.icon" :size="16" />
-            <span>{{ m.settings!.label }}</span>
-          </button>
-          <button class="nav-tab" :class="{ on: tab === 'appearance' }" @click="tab = 'appearance'">
-            <AppIcon name="palette" :size="16" />
-            <span>{{ FIXED_TAB_LABELS.appearance }}</span>
-          </button>
-          <button class="nav-tab" :class="{ on: tab === 'backup' }" @click="tab = 'backup'">
-            <AppIcon name="database" :size="16" />
-            <span>{{ FIXED_TAB_LABELS.backup }}</span>
-          </button>
-          <button class="nav-tab" :class="{ on: tab === 'security' }" @click="tab = 'security'">
-            <AppIcon name="lock" :size="16" />
-            <span>{{ FIXED_TAB_LABELS.security }}</span>
-          </button>
-          <button class="nav-tab" :class="{ on: tab === 'about' }" @click="tab = 'about'">
-            <AppIcon name="info" :size="16" />
-            <span>{{ FIXED_TAB_LABELS.about }}</span>
-          </button>
+          <div class="settings-nav-scroll">
+            <div class="nav-group" role="group" aria-label="通用">
+              <div class="nav-group-label">通用</div>
+              <button class="nav-tab" :class="{ on: tab === 'appearance' }" @click="tab = 'appearance'">
+                <AppIcon name="palette" :size="16" />
+                <span>{{ FIXED_TAB_LABELS.appearance }}</span>
+              </button>
+              <button class="nav-tab" :class="{ on: tab === 'modules' }" @click="tab = 'modules'">
+                <AppIcon name="bulletlist" :size="16" />
+                <span>{{ FIXED_TAB_LABELS.modules }}</span>
+              </button>
+            </div>
+            <div v-if="enabledSettingsModules.length" class="nav-group" role="group" aria-label="模块配置">
+              <div class="nav-group-label">模块配置</div>
+              <button
+                v-for="m in enabledSettingsModules"
+                :key="m.id"
+                class="nav-tab"
+                :class="{ on: tab === m.id }"
+                @click="tab = m.id"
+              >
+                <AppIcon :name="m.settings!.icon" :size="16" />
+                <span>{{ m.settings!.label }}</span>
+              </button>
+            </div>
+            <div class="nav-group" role="group" aria-label="数据与安全">
+              <div class="nav-group-label">数据与安全</div>
+              <button class="nav-tab" :class="{ on: tab === 'profiles' }" @click="tab = 'profiles'">
+                <AppIcon name="user" :size="16" />
+                <span>{{ FIXED_TAB_LABELS.profiles }}</span>
+              </button>
+              <button class="nav-tab" :class="{ on: tab === 'backup' }" @click="tab = 'backup'">
+                <AppIcon name="database" :size="16" />
+                <span>{{ FIXED_TAB_LABELS.backup }}</span>
+              </button>
+              <button class="nav-tab" :class="{ on: tab === 'security' }" @click="tab = 'security'">
+                <AppIcon name="lock" :size="16" />
+                <span>{{ FIXED_TAB_LABELS.security }}</span>
+              </button>
+            </div>
+            <div class="nav-footer">
+              <button class="nav-tab" :class="{ on: tab === 'about' }" @click="tab = 'about'">
+                <AppIcon name="info" :size="16" />
+                <span>{{ FIXED_TAB_LABELS.about }}</span>
+              </button>
+            </div>
+          </div>
         </aside>
 
         <div class="settings-main">
@@ -267,56 +273,83 @@ onMounted(() => {
 
           <!-- 外观 -->
           <section v-show="tab === 'appearance'" class="settings-pane">
-            <div class="pane-label">底色</div>
+            <div class="settings-section-label">底色</div>
             <div class="theme-row">
               <button
                 v-for="t in THEMES"
                 :key="t.id"
                 class="theme-chip"
-                :class="{ on: theme === t.id }"
+                :class="{ on: appearance.theme === t.id }"
                 type="button"
                 @click="pickTheme(t.id)"
               >
-                <span class="theme-prev" :style="{ background: t.prev.page, borderColor: t.prev.edge }">
-                  <span class="tp-rail" :style="{ background: t.prev.sidebar, borderColor: t.prev.edge }">
-                    <span class="tp-rail-dot" :style="{ background: prevAccent(t) }" />
-                    <span class="tp-rail-line" :style="{ background: t.prev.ink }" />
-                    <span class="tp-rail-line short" :style="{ background: t.prev.ink }" />
+                <span
+                  class="theme-prev theme-scope"
+                  :data-theme="t.id"
+                  :data-base="polarityOf(t.id)"
+                  :data-accent="appearance.accent"
+                  :data-atmosphere="appearance.backgroundAtmosphere ? 'on' : 'off'"
+                >
+                  <span class="tp-rail">
+                    <span class="tp-rail-dot" />
+                    <span class="tp-rail-line" />
+                    <span class="tp-rail-line short" />
                   </span>
                   <span class="tp-rows">
-                    <span class="tp-row" :style="{ background: t.prev.card, borderColor: t.prev.edge }">
-                      <span class="tp-row-ink" :style="{ background: t.prev.ink }" />
-                      <span class="tp-row-tag" :style="{ background: prevAccent(t) }" />
+                    <span class="tp-row">
+                      <span class="tp-row-ink" />
+                      <span class="tp-row-tag" />
                     </span>
-                    <span class="tp-row" :style="{ background: t.prev.rowHover, borderColor: t.prev.edge }">
-                      <span class="tp-row-ink" :style="{ background: t.prev.ink }" />
-                      <span class="tp-row-tag" :style="{ background: prevAccent(t) }" />
+                    <span class="tp-row">
+                      <span class="tp-row-ink" />
+                      <span class="tp-row-tag" />
                     </span>
-                    <span class="tp-row" :style="{ background: t.prev.card, borderColor: t.prev.edge }">
-                      <span class="tp-row-ink" :style="{ background: t.prev.ink }" />
-                      <span class="tp-row-tag" :style="{ background: prevAccent(t) }" />
+                    <span class="tp-row">
+                      <span class="tp-row-ink" />
+                      <span class="tp-row-tag" />
                     </span>
                   </span>
                 </span>
                 <span class="theme-chip-name">{{ t.name }}</span>
               </button>
             </div>
-            <div class="pane-label">强调色</div>
+            <div class="settings-section-label">强调色</div>
             <div class="accent-row" role="radiogroup" aria-label="强调色">
               <button
                 v-for="a in ACCENTS"
                 :key="a.id"
                 class="accent-pill"
-                :class="{ on: accent === a.id }"
+                :class="{ on: appearance.accent === a.id }"
                 type="button"
                 role="radio"
-                :aria-checked="accent === a.id"
+                :aria-checked="appearance.accent === a.id"
                 :data-accent-id="a.id"
                 @click="pickAccent(a.id)"
               >
-                <span class="accent-dot" :style="{ background: polarityOf(theme) === 'dark' ? a.dotInk : a.dot }" />
+                <span class="accent-dot" :data-base="polarityOf(appearance.theme)" :data-accent="a.id" />
                 <span class="accent-name">{{ a.name }}</span>
               </button>
+            </div>
+            <div class="settings-section-label">效果</div>
+            <div class="group-content">
+              <div class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">背景氛围</span>
+                  <span id="background-atmosphere-desc" class="setting-desc">显示柔光与细微纹理</span>
+                </div>
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="背景氛围"
+                    aria-describedby="background-atmosphere-desc"
+                    :checked="appearance.backgroundAtmosphere"
+                    :disabled="savingAtmosphere"
+                    @change="saveBackgroundAtmosphere"
+                  />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
             </div>
           </section>
 
@@ -407,12 +440,12 @@ onMounted(() => {
 
 .settings-dialog {
   display: flex;
-  background: var(--panel-bg);
+  background: var(--bg-dialog);
+  background-attachment: var(--floating-background-attachment);
   border-radius: var(--radius-xl);
-  width: min(640px, 92vw);
-  /* 定高：壳高不随页签内容变。实测六页内容 231..931，按内容收时壳顶在 y=95..197 之间跳
-     102px，左导航和关闭钮跟着跳位；短页的余量留在下方，长页由面板自己滚。 */
-  height: min(480px, 84vh);
+  width: min(760px, 92vw);
+  /* 固定高度，切页时壳体不跳动；小窗口自动收缩，长页在面板内滚动。 */
+  height: min(560px, 84vh);
   overflow: hidden;
   box-shadow: var(--shadow-pop);
   border: 1px solid var(--border);
@@ -421,36 +454,62 @@ onMounted(() => {
 /* 左菜单 / 右内容。菜单取侧栏那套令牌，跟应用主窗口的导航同构。 */
 .settings-nav {
   flex-shrink: 0;
-  width: 152px;
+  min-height: 0;
+  width: 176px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--space-3) var(--space-2);
-  background: var(--sidebar-bg);
+  padding: var(--space-4) var(--space-3);
+  background: var(--bg-sidebar);
   border-right: 1px solid var(--sidebar-border);
 }
 
 .nav-brand {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 var(--space-2) var(--space-3);
-  margin-bottom: var(--space-2);
-  border-bottom: 1px solid var(--sidebar-border);
+  padding: 0 var(--space-2);
+  margin-bottom: var(--space-5);
 }
 
 .nav-brand :deep(.brand-logo) {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
 
 .nav-brand h2 {
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text);
   margin: 0;
 }
+
+.settings-nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav-group + .nav-group { margin-top: var(--space-3); }
+.nav-group-label {
+  padding: 0 var(--space-2) var(--space-1);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--text-nav-section);
+}
+
+.nav-footer {
+  margin-top: var(--space-3);
+}
+.nav-footer .nav-tab { width: 100%; }
 
 .nav-tab {
   display: flex;
@@ -481,7 +540,7 @@ onMounted(() => {
 .nav-tab.on {
   /* 与主窗口侧栏同一套激活语言：同材质白块 + 贴地影，重音给整条。
      原先这里吃 --sidebar-active（accent 淡染），等于同一个 App 里两种"选中长这样" */
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   color: var(--accent);
   font-weight: 600;
   box-shadow: var(--shadow-card);
@@ -504,28 +563,27 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  height: 44px;
-  padding: 0 var(--space-4);
-  border-bottom: 1px solid var(--border);
+  height: 56px;
+  padding: 0 var(--space-6);
 }
 
 .settings-head h3 {
-  font-size: var(--text-base);
-  font-weight: 650;
+  font-size: var(--text-lg);
+  font-weight: 600;
   color: var(--text);
   margin: 0;
 }
 
 /* 面板用 v-show 而非 v-if：切页时 number-input 不卸载，@change 才不会被切页吞掉。
    弹窗定高，各页同高，切页不跳。
-   横向内距 16 是行组的对齐基准：行文字与分组标题同一条竖线，发丝线各侧多伸 8px。 */
+   横向内距 24 是标题、预览与设置行共同的对齐基准。 */
 .settings-pane {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-6) var(--space-6);
   display: flex;
   flex-direction: column;
 }
@@ -544,23 +602,16 @@ onMounted(() => {
 /* 主题选择：每块卡里画一个等比缩小的微缩界面——侧栏、三行行卡
    （中间一行是悬浮态底色）、行尾一枚强调色小块。所见即所得，不配文字解释。
    边框固定 2px 占位，选中只换颜色，切换时不跳布局。 */
-.pane-label {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-muted);
-  margin: var(--space-4) 0 var(--space-2);
-}
-.pane-label:first-child { margin-top: 0; }
-
 .theme-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 220px));
-  gap: var(--space-2);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
 }
 
 /* accent 色丸：一颗色点 + 名字，选中加 ring，尺寸落 28px action-btn 档 */
 .accent-row {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 .accent-pill {
@@ -571,7 +622,7 @@ onMounted(() => {
   padding: 0 12px;
   border-radius: 99px;
   border: 1px solid var(--border);
-  background: var(--panel-bg);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   font-size: var(--text-sm);
   font-weight: 600;
@@ -582,9 +633,10 @@ onMounted(() => {
 .accent-pill.on {
   border-color: var(--accent);
   color: var(--text);
-  box-shadow: 0 0 0 3px var(--accent-ring);
+  box-shadow: 0 0 0 2px var(--accent-ring);
 }
 .accent-dot {
+  background: var(--accent);
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -597,8 +649,8 @@ onMounted(() => {
   flex-direction: column;
   gap: 6px;
   padding: var(--space-2);
-  border: 2px solid var(--border);
-  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
   border-radius: var(--radius-md);
   cursor: pointer;
   text-align: left;
@@ -610,28 +662,31 @@ onMounted(() => {
 .theme-chip:hover { border-color: var(--border-strong); background: var(--hover); }
 .theme-chip.on {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-ring);
-  background: var(--panel-bg);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+  background: var(--bg-surface);
 }
 
 .theme-prev {
+  background: var(--bg-app);
   position: relative;
   display: block;
   height: 92px;
-  border: 1px solid;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
 /* 侧栏：占左边 30%，顶部一枚 accent 圆点当 logo，下面两条导航字条 */
 .tp-rail {
+  background: var(--bg-sidebar);
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
   width: 30%;
-  border-right: 1px solid;
+  border-right: 1px solid var(--border);
 }
 .tp-rail-dot {
+  background: var(--accent);
   position: absolute;
   left: 5px;
   top: 5px;
@@ -640,6 +695,7 @@ onMounted(() => {
   border-radius: 2px;
 }
 .tp-rail-line {
+  background: var(--text);
   position: absolute;
   left: 5px;
   top: 22px;
@@ -662,15 +718,17 @@ onMounted(() => {
   gap: 5px;
 }
 .tp-row {
+  background: var(--bg-surface);
   display: flex;
   align-items: center;
   gap: 4px;
   height: 14px;
   padding: 0 5px;
-  border: 1px solid;
+  border: 1px solid var(--border);
   border-radius: 3px;
 }
 .tp-row-ink {
+  background: var(--text);
   width: 46%;
   height: 3px;
   border-radius: 2px;
@@ -678,11 +736,13 @@ onMounted(() => {
   position: relative;
 }
 .tp-row-tag {
+  background: var(--accent);
   margin-left: auto;
   width: 9px;
   height: 5px;
   border-radius: var(--radius-pill);
 }
+.tp-row:nth-child(2) { background: var(--bg-surface-hover); }
 .theme-chip-name { font-size: var(--text-sm); font-weight: 600; color: var(--text); line-height: 1.3; }
 
 /* 关于面板只有三行内容，居中排成一块，比顶格加一屏空白更像介绍页。 */

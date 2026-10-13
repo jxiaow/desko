@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "identifier": "com.desko.app",
   "build": {
-    "beforeDevCommand": "node scripts/sync-fileshare-server.mjs && npm run dev",
+    "beforeDevCommand": "node scripts/sync-fileshare-server.mjs && node scripts/sync-netguard-helper.mjs && npm run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "node scripts/sync-fileshare-server.mjs --release && npm run build",
+    "beforeBuildCommand": "node scripts/sync-fileshare-server.mjs --release && node scripts/sync-netguard-helper.mjs --release && npm run build",
     "frontendDist": "../dist"
   },
   "app": {

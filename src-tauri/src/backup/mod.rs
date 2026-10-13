@@ -468,104 +468,206 @@ pub fn check_integrity(db_file: &Path) -> Result<(), AppError> {
     }
 }
 
-/// 整机替换：库文件 + 附件目录。调用方必须已经关掉旧连接（Windows 下句柄占用会挡住 rename）。
-/// 顺序：rename 现场 → 就位 → 校验；任何一步失败都把 rename 倒放回去。
-pub fn swap_live_files(
-    app_data_dir: &Path,
-    attachments_dir: &Path,
-    staging: &Path,
-) -> Result<(), AppError> {
-    let db_live = app_data_dir.join("data.db");
-    let db_swap = app_data_dir.join("data.db.swap");
-    let wal_live = app_data_dir.join("data.db-wal");
-    let shm_live = app_data_dir.join("data.db-shm");
-    let att_swap = app_data_dir.join("attachments.swap");
+/// 恢复事务的落盘记录：未提交时启动会回滚；已提交时只清理旧数据。
+#[derive(serde::Deserialize, Serialize)]
+struct RestoreState {
+    had_db: bool,
+    had_attachments: bool,
+    committed: bool,
+}
 
-    let _ = std::fs::remove_file(&db_swap);
-    let _ = std::fs::remove_dir_all(&att_swap);
+const RESTORE_STATE: &str = ".restore-state.json";
 
-    // 1) 现场挪开
-    if db_live.exists() {
-        std::fs::rename(&db_live, &db_swap)?;
-    }
-    let _ = std::fs::remove_file(&wal_live);
-    let _ = std::fs::remove_file(&shm_live);
-    if attachments_dir.exists() {
-        std::fs::rename(attachments_dir, &att_swap)?;
-    }
+fn write_restore_state(root: &Path, state: &RestoreState) -> Result<(), AppError> {
+    use std::io::Write;
+    let path = root.join(RESTORE_STATE);
+    let tmp = path.with_extension("json.tmp");
+    let json = serde_json::to_vec(state).map_err(|e| AppError::Backup(e.to_string()))?;
+    let mut file = std::fs::File::create(&tmp)?;
+    file.write_all(&json)?;
+    file.sync_all()?;
+    drop(file);
+    std::fs::rename(tmp, path)?;
+    Ok(())
+}
 
-    // 2) 新数据就位
-    let stage_db = staging.join("data.db");
-    let stage_att = staging.join("attachments");
-    let mut placed_db = false;
-    let mut placed_att = false;
-    if std::fs::rename(&stage_db, &db_live).is_ok() {
-        placed_db = true;
+fn remove_if_exists(path: &Path, directory: bool) -> Result<(), AppError> {
+    let result = if directory { std::fs::remove_dir_all(path) } else { std::fs::remove_file(path) };
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
     }
-    if stage_att.exists() {
-        if std::fs::rename(&stage_att, attachments_dir).is_ok() {
-            placed_att = true;
+}
+
+fn rollback_restore(root: &Path, attachments: &Path, state: &RestoreState) -> Result<(), AppError> {
+    for (live, saved, existed, directory) in [
+        (root.join("data.db"), root.join("data.db.swap"), state.had_db, false),
+        (attachments.to_path_buf(), root.join("attachments.swap"), state.had_attachments, true),
+    ] {
+        if saved.exists() {
+            remove_if_exists(&live, directory)?;
+            std::fs::rename(saved, live)?;
+        } else if !existed {
+            remove_if_exists(&live, directory)?;
         }
-    } else {
-        placed_att = true; // 包里没附件，空目录即可
-        let _ = std::fs::create_dir_all(attachments_dir);
     }
+    remove_if_exists(&root.join(RESTORE_STATE), false)
+}
 
-    // 3) 校验，失败回滚
-    let ok = placed_db && container_ok(&db_live);
-    if !ok {
-        let _ = std::fs::remove_file(&db_live);
-        let _ = std::fs::remove_dir_all(attachments_dir);
-        if db_swap.exists() {
-            let _ = std::fs::rename(&db_swap, &db_live);
-        }
-        if att_swap.exists() {
-            let _ = std::fs::rename(&att_swap, attachments_dir);
-        }
-        return Err(AppError::Backup("恢复失败，已回滚到原数据".to_string()));
+fn cleanup_restore(root: &Path) -> Result<(), AppError> {
+    remove_if_exists(&root.join("data.db.swap"), false)?;
+    remove_if_exists(&root.join("attachments.swap"), true)?;
+    remove_if_exists(&root.join(RESTORE_STATE), false)
+}
+
+/// 库与附件共用提交点；任何搬移/校验错误先回滚，再把原错误交给调用者。
+pub fn swap_live_files(root: &Path, attachments: &Path, staging: &Path) -> Result<(), AppError> {
+    recover_swap(root, attachments)?;
+    if root.join(RESTORE_STATE).exists() || root.join("data.db.swap").exists() || root.join("attachments.swap").exists() {
+        return Err(AppError::Backup("上次恢复的旧文件尚未清理，请解除文件占用后重试".into()));
     }
-    let _ = placed_att;
-
-    // 4) 落定后清场
-    let _ = std::fs::remove_file(&db_swap);
-    let _ = std::fs::remove_dir_all(&att_swap);
+    let db_live = root.join("data.db");
+    let mut state = RestoreState {
+        had_db: db_live.exists(),
+        had_attachments: attachments.exists(),
+        committed: false,
+    };
+    // 在挪走第一个文件之前写记录，断电后才能知道两份现场应一起回滚。
+    write_restore_state(root, &state)?;
+    let result = (|| -> Result<(), AppError> {
+        if state.had_db { std::fs::rename(&db_live, root.join("data.db.swap"))?; }
+        remove_if_exists(&root.join("data.db-wal"), false)?;
+        remove_if_exists(&root.join("data.db-shm"), false)?;
+        if state.had_attachments { std::fs::rename(attachments, root.join("attachments.swap"))?; }
+        std::fs::rename(staging.join("data.db"), &db_live)?;
+        let stage_att = staging.join("attachments");
+        if stage_att.exists() {
+            std::fs::rename(stage_att, attachments)?;
+        } else {
+            std::fs::create_dir_all(attachments)?;
+        }
+        check_integrity(&db_live)?;
+        state.committed = true;
+        write_restore_state(root, &state)
+    })();
+    if let Err(error) = result {
+        if let Err(rollback_error) = rollback_restore(root, attachments, &state) {
+            return Err(AppError::Backup(format!("恢复失败: {error}；回滚未完成: {rollback_error}，原文件保留在 .swap 中")));
+        }
+        return Err(AppError::Backup(format!("恢复失败，已回滚到原数据: {error}")));
+    }
+    // 提交后清理失败只留记录供下次启动重试，不把成功的恢复误报为失败。
+    let _ = cleanup_restore(root);
     let _ = std::fs::remove_dir_all(staging);
     Ok(())
 }
 
-fn container_ok(db_file: &Path) -> bool {
-    check_integrity(db_file).is_ok()
-}
-
-/// 启动时清理上次替换中途断电留下的 .swap（在打开数据库之前调用）
-pub fn recover_swap(app_data_dir: &Path, attachments_dir: &Path) {
-    let db_live = app_data_dir.join("data.db");
-    let db_swap = app_data_dir.join("data.db.swap");
-    if db_swap.exists() {
-        if !db_live.exists() {
-            let _ = std::fs::rename(&db_swap, &db_live);
+/// 必须在打开数据库之前调用。旧版没有事务记录的 .swap 优先保住原数据。
+pub fn recover_swap(root: &Path, attachments: &Path) -> Result<(), AppError> {
+    let journal = root.join(RESTORE_STATE);
+    if journal.exists() {
+        let state: RestoreState = serde_json::from_slice(&std::fs::read(&journal)?)
+            .map_err(|e| AppError::Backup(format!("恢复事务记录损坏: {e}")))?;
+        if state.committed {
+            let _ = cleanup_restore(root);
+            return Ok(());
+        }
+        return rollback_restore(root, attachments, &state);
+    }
+    // 兼容旧版中途失败遗留的文件，不能因当前路径被误建为空库就删掉原库。
+    if root.join("data.db.swap").exists() {
+        return rollback_restore(root, attachments, &RestoreState {
+            had_db: true, had_attachments: true, committed: false,
+        });
+    }
+    // 旧版可能已提交数据库、但还没清理旧附件；有现场就保留现场。
+    if root.join("attachments.swap").exists() {
+        if !attachments.exists() {
+            std::fs::rename(root.join("attachments.swap"), attachments)?;
         } else {
-            let _ = std::fs::remove_file(&db_swap);
+            remove_if_exists(&root.join("attachments.swap"), true)?;
         }
     }
-    let att_swap = app_data_dir.join("attachments.swap");
-    if att_swap.exists() {
-        let att_empty = !attachments_dir.exists()
-            || std::fs::read_dir(attachments_dir)
-                .map(|mut d| d.next().is_none())
-                .unwrap_or(true);
-        if att_empty {
-            let _ = std::fs::remove_dir_all(attachments_dir);
-            let _ = std::fs::rename(&att_swap, attachments_dir);
-        } else {
-            let _ = std::fs::remove_dir_all(&att_swap);
-        }
-    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn restore_fixture() -> (PathBuf, PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!("desko_swap_test_{}", uuid::Uuid::new_v4()));
+        let attachments = root.join("attachments");
+        let staging = root.join("staging");
+        std::fs::create_dir_all(&attachments).unwrap();
+        std::fs::create_dir_all(staging.join("attachments")).unwrap();
+        for (path, marker) in [(root.join("data.db"), "old"), (staging.join("data.db"), "new")] {
+            let conn = Connection::open(path).unwrap();
+            conn.execute_batch("CREATE TABLE marker(value TEXT)").unwrap();
+            conn.execute("INSERT INTO marker VALUES (?1)", [marker]).unwrap();
+        }
+        std::fs::write(attachments.join("old.bin"), b"old").unwrap();
+        std::fs::write(staging.join("attachments/new.bin"), b"new").unwrap();
+        (root, attachments, staging)
+    }
+
+    fn marker(root: &Path) -> String {
+        Connection::open(root.join("data.db")).unwrap()
+            .query_row("SELECT value FROM marker", [], |r| r.get(0)).unwrap()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn attachment_move_failure_rolls_back_database_and_attachments() {
+        use std::os::windows::fs::OpenOptionsExt;
+        for stage_blocked in [false, true] {
+            let (root, attachments, staging) = restore_fixture();
+            let path = if stage_blocked { staging.join("attachments/new.bin") } else { attachments.join("old.bin") };
+            let held = std::fs::OpenOptions::new().read(true).share_mode(0).open(path).unwrap();
+            assert!(swap_live_files(&root, &attachments, &staging).is_err());
+            assert_eq!(marker(&root), "old");
+            assert!(attachments.join("old.bin").exists());
+            assert!(!root.join("data.db.swap").exists());
+            drop(held);
+            recover_swap(&root, &attachments).unwrap();
+            assert_eq!(marker(&root), "old");
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn interrupted_restore_recovers_database_and_attachments_as_a_pair() {
+        let (root, attachments, staging) = restore_fixture();
+        write_restore_state(&root, &RestoreState { had_db: true, had_attachments: true, committed: false }).unwrap();
+        std::fs::rename(root.join("data.db"), root.join("data.db.swap")).unwrap();
+        std::fs::rename(&attachments, root.join("attachments.swap")).unwrap();
+        std::fs::rename(staging.join("data.db"), root.join("data.db")).unwrap();
+        // 新库已经就位、附件尚未搬入时断电。
+        recover_swap(&root, &attachments).unwrap();
+        assert_eq!(marker(&root), "old");
+        assert!(attachments.join("old.bin").exists());
+        assert!(!root.join(RESTORE_STATE).exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn committed_restore_cleanup_never_reinstates_old_attachments() {
+        let (root, attachments, staging) = restore_fixture();
+        write_restore_state(&root, &RestoreState { had_db: true, had_attachments: true, committed: true }).unwrap();
+        std::fs::rename(root.join("data.db"), root.join("data.db.swap")).unwrap();
+        std::fs::rename(&attachments, root.join("attachments.swap")).unwrap();
+        std::fs::rename(staging.join("data.db"), root.join("data.db")).unwrap();
+        std::fs::rename(staging.join("attachments"), &attachments).unwrap();
+        // 已提交但旧文件清理到一半时断电。
+        std::fs::remove_file(root.join("data.db.swap")).unwrap();
+        recover_swap(&root, &attachments).unwrap();
+        assert_eq!(marker(&root), "new");
+        assert!(attachments.join("new.bin").exists());
+        assert!(!attachments.join("old.bin").exists());
+        assert!(!root.join(RESTORE_STATE).exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     /// 迁移导出的包必须自足：附件本体在包里，换到一台没有 .enc 旁路的机器也解得开；
     /// 而且只装被引用的那些，目录里堆着的历史垃圾文件不能跟着搬家。

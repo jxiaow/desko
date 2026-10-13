@@ -164,6 +164,6 @@ onMounted(() => pathRef.value?.focus())
 }
 .path-add .add-label { flex: 0 0 96px; min-width: 96px }
 .path-add .add-path { flex: 1; min-width: 0 }
-.path-add input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg) }
+.path-add input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--bg-surface) }
 .url-mono { font-family: var(--font-mono) }
 </style>

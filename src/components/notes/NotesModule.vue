@@ -29,7 +29,7 @@ const toastStore = useToastStore()
 const { copyRichToClipboard } = useClipboard()
 const {
   notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, hasActiveFilters,
-  noteRailCollapsed,
+  noteRailCollapsed, noteDraftHtml: draftHtml,
   isBatchMode, hasNoteSelection, selectedNoteIds, noteAttachments, noteSaveState, notePlains, noteKey,
   tagCounts, viewCounts, filteredNotes, groupedNotes,
 } = storeToRefs(notesStore)
@@ -48,12 +48,9 @@ const fsRef = ref<InstanceType<typeof NoteFullscreen> | null>(null)
 const cardRefs = ref<InstanceType<typeof NoteCard>[]>([])
 
 /** 任何时刻只有一个书写面：草稿正文、就地展开的 note id、全屏层目标与其模式 */
-const draftHtml = ref('')
 const editingId = ref<string | null>(null)
 const fsTarget = ref<'new' | string | null>(null)
 const fsMode = ref<'edit' | 'view'>('edit')
-/** 打开编辑那一刻的正文快照：自动保存下「取消」靠它把这条写回原样 */
-const editSnapshot = ref('')
 /** 全库小记口令弹窗：mode 决定要输什么，thenLock 是口令到手后要补做的那次加密 */
 const keyDialog = ref<{ mode: 'setup' | 'unlock' | 'change'; thenLock?: string } | null>(null)
 
@@ -142,7 +139,6 @@ const openCard = (note: Note) => {
   if (fsTarget.value) return
   // 锁着的没有明文，编辑无从谈起
   if (note.encrypted && notePlains.value[note.id] == null) return
-  editSnapshot.value = note.content_html
   editingId.value = note.id
   loadAttachments(note.id)
 }
@@ -150,20 +146,9 @@ const closeCard = async () => {
   await flushNoteSave()
   editingId.value = null
 }
-/** 取消就地编辑：把正文写回打开前的快照，再落盘关闭 */
-const cancelCard = async () => {
-  if (!editingId.value) return
-  saveNoteContent(editingId.value, editSnapshot.value)
-  await flushNoteSave()
-  editingId.value = null
-}
-
 const openFullscreen = async (target: 'new' | string, mode: 'edit' | 'view' = 'edit') => {
   await flushNoteSave()
-  if (target !== 'new') {
-    loadAttachments(target)
-    editSnapshot.value = findNote(target)?.content_html ?? ''
-  }
+  if (target !== 'new') loadAttachments(target)
   editingId.value = null
   fsMode.value = mode
   fsTarget.value = target
@@ -178,16 +163,10 @@ const closeFullscreen = async () => {
     composerRef.value?.focus()
   }
 }
-/** 取消全屏编辑：已有小记写回快照；新草稿直接丢弃（本就没落库） */
-const cancelFullscreen = async () => {
-  if (!fsTarget.value) return
-  if (fsTarget.value === 'new') {
-    draftHtml.value = ''
-    fsTarget.value = null
-    return
-  }
-  saveNoteContent(fsTarget.value, editSnapshot.value)
-  await flushNoteSave()
+/** 放弃只针对尚未发布的内容；已有小记的修改通过编辑器历史回退。 */
+const discardFullscreen = () => {
+  if (fsTarget.value !== 'new') return
+  draftHtml.value = ''
   fsTarget.value = null
 }
 
@@ -281,7 +260,7 @@ onMounted(() => {
   observer.observe(root)
 })
 onBeforeUnmount(() => {
-  flushNoteSave()
+  void flushNoteSave().catch(() => {})
   document.removeEventListener('keydown', onKeyDown)
   observer?.disconnect()
   observer = null
@@ -394,7 +373,6 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
                 @open="openCard(note)"
                 @update="saveNoteContent(note.id, $event)"
                 @close="closeCard"
-                @cancel="cancelCard"
                 @fullscreen="openFullscreen(note.id)"
                 @view="openFullscreen(note.id, 'view')"
                 @encrypt="requestEncrypt(note.id)"
@@ -514,7 +492,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       :save-state="fsNote ? noteSaveState : ''"
       @update="onFsUpdate"
       @close="closeFullscreen"
-      @cancel="cancelFullscreen"
+      @discard="discardFullscreen"
       @publish="publishDraft"
       @edit="fsMode = 'edit'"
       @add-image="fsNote ? addImageToNote(fsNote.id) : addImageToDraft()"
@@ -583,16 +561,16 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
   gap: var(--space-2);
   font-size: var(--text-xs);
   font-weight: 650;
-  color: var(--text-muted);
+  color: var(--text-canvas-meta);
   letter-spacing: 0.02em;
   padding: var(--space-2) 0 var(--space-2) var(--space-1);
-  /* 与 .page-bar 同一条画布配方（global.css --canvas-bg）：吸顶件若铺平色（原先 var(--bg)）
+  /* 与 .page-bar 同一条画布配方（materials.css --bg-app）：吸顶件若铺平色（原先 var(--bg)）
      会把画布光晕压掉一档，静止时就显出一条亮带。fixed 附着让它取到身后那一小条视口切片 */
-  background: var(--canvas-bg);
+  background: var(--bg-app);
   background-attachment: fixed;
 }
 .day-head.pinned { color: var(--accent); }
-.day-count { font-variant-numeric: tabular-nums; font-weight: 400; color: var(--text-faint); }
+.day-count { font-weight: 400; color: var(--text-canvas-meta); }
 .day-list {
   display: flex;
   flex-direction: column;
@@ -616,7 +594,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
   width: var(--rail-w);
   flex-shrink: 0;
   border-left: 1px solid var(--border);
-  background: var(--sidebar-bg);
+  background: var(--bg-sidebar);
   overflow-y: auto;
   scrollbar-gutter: stable;
   padding: var(--space-4) var(--space-2) var(--space-4);
@@ -626,7 +604,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
 .rail-title {
   font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-nav-label);
   letter-spacing: 0.02em;
   padding: 0 var(--space-2) var(--space-2);
 }
@@ -660,6 +638,8 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
    通高从内容顶开始：与宽窗的停靠态同一口径，搜索行让到侧栏左沿（见 .rail-over .page-bar），
    「展开侧栏」那颗钮不会被盖住，开了关得掉 */
 .rail.overlay {
+  background: var(--bg-nav-overlay);
+  background-attachment: var(--nav-overlay-background-attachment);
   position: absolute;
   top: 0;
   right: 0;
@@ -671,7 +651,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
 /* .page-bar 的右沿本来停在 .stream-inner 的内距处，侧栏左沿比它再往左 var(--space-5) */
 .notes-page.rail-over .page-bar { padding-right: calc(var(--rail-w) - var(--space-5)); }
 .rail-sep { height: 1px; flex-shrink: 0; background: var(--border); margin: var(--space-3) var(--space-2); }
-.rail-empty { font-size: var(--text-sm); color: var(--text-muted); padding: 0 var(--space-2); }
+.rail-empty { font-size: var(--text-sm); color: var(--text-nav-label); padding: 0 var(--space-2); }
 .rail .tab-count { font-size: var(--text-xs); margin-left: 0; }
 
 /* 全库摘要压在侧栏末位：上面的列表再短它也守着底，读的是这一栏的口径 */
