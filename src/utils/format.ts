@@ -41,6 +41,14 @@ export function htmlToText(html: string): string {
   return containerToText(parseHtmlFragment(html))
 }
 
+/** 标签用的纯文本：代码块/行内代码里的 #xxx 是内容，不能当记号 */
+export function htmlToTagText(html: string): string {
+  if (!html) return ''
+  const div = parseHtmlFragment(html)
+  div.querySelectorAll('pre, code').forEach((el) => el.remove())
+  return containerToText(div)
+}
+
 /** 复制用纯文本轨：链接只留裸地址，标题走 text/html 那一轨；没有地址才退回链接文字 */
 export function htmlToLinkText(html: string): string {
   if (!html) return ''
@@ -102,15 +110,46 @@ export function formatAbsTime(ts: number): string {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-const TAG_IN_HTML = /(^|[\s>])(#([\w\u4e00-\u9fa5]+))/g
+const TAG_IN_TEXT = /(^|\s)(#[\w\u4e00-\u9fa5]+)/g
 
 /**
- * 把正文 HTML 里的 #标签 包成 span.ti（flomo 式内联着色）。
- * 标签字符集只允许字母数字下划线和汉字，拼进属性无需转义。
+ * 把正文里的 #标签 包成 span.tag-inline（flomo 式内联着色）。
+ * 走 DOM 而不是整串正则：代码块/行内代码里的 # 是内容，不该被染色成记号。
  */
 export function highlightTagsInHtml(html: string): string {
-  return html.replace(TAG_IN_HTML, (_m, pre: string, full: string, tag: string) =>
-    `${pre}<span class="tag-inline" data-tag="${tag}">${full}</span>`)
+  if (!html) return html
+  const div = parseHtmlFragment(html)
+  const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) =>
+      node.parentElement?.closest('pre, code') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  })
+  const nodes: Text[] = []
+  while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+
+  for (const node of nodes) {
+    const text = node.data
+    TAG_IN_TEXT.lastIndex = 0
+    if (!TAG_IN_TEXT.test(text)) continue
+
+    const frag = document.createDocumentFragment()
+    let last = 0
+    let m: RegExpExecArray | null
+    TAG_IN_TEXT.lastIndex = 0
+    while ((m = TAG_IN_TEXT.exec(text)) !== null) {
+      const pre = m[1]
+      const full = m[2]
+      frag.append(text.slice(last, m.index + pre.length))
+      const span = document.createElement('span')
+      span.className = 'tag-inline'
+      span.dataset.tag = full.slice(1)
+      span.textContent = full
+      frag.append(span)
+      last = m.index + pre.length + full.length
+    }
+    frag.append(text.slice(last))
+    node.replaceWith(frag)
+  }
+  return div.innerHTML
 }
 
 /** 卡片上只显示 host + 路径：协议和结尾斜杠是噪音，解析失败就原样显示 */

@@ -612,7 +612,7 @@ defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, 
 .note-editor :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
 .note-editor :deep(pre) { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .note-editor :deep(pre code) { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
-.note-editor :deep(hr) { border: none; border-top: 1px solid var(--border); margin: var(--space-3) 0; }
+.note-editor :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-3) 0; }
 .note-editor :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .note-editor :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
 /* 正文必须撑满剩余宽度：弹性项默认按内容收缩，空条目会缩成 0 宽，光标没有行盒可落 = 看不见光标 */

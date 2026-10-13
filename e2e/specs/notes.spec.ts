@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test'
+import { test, expect, Page, Locator } from '@playwright/test'
 import { bootUnlocked, e2e, expectToast, openSettings, tipButton, visiblePane, waitForToastGone } from '../helpers'
 
 /** 全库一把小记口令：立的时候卡位数，之后解锁照原样填 */
@@ -14,6 +14,14 @@ const SEED = {
 
 function memo(page: Page, text: string) {
   return page.locator('.memo').filter({ hasText: text })
+}
+
+/** 加密系与删除这些低频动作住在卡头 ⋯ 里：悬停露排 → 开菜单 → 按文字点。
+    菜单项前有图标，文字要用 :text-is 精确比（hasText 的正则不吃首尾空白） */
+async function noteMenu(page: Page, card: Locator): Promise<Locator> {
+  await card.hover()
+  await tipButton(card, '更多操作').first().click()
+  return page.locator('.popover')
 }
 
 /** Tiptap 3 的 TaskItem 结构：li[data-checked] + label>input + div>p */
@@ -408,12 +416,12 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.memo-locked')).toHaveCount(1)
     // 露标题上线前锁的那条：库里 title 是空的，本会话第一次解锁前只剩提示语
     await expect(sealed.locator('.memo-locked')).toContainText('已加密 · 单击解锁')
-    // 动作全平铺：⋯ 入口彻底没了
-    await expect(page.locator('.memo-acts button[title="更多"], .memo-acts button[data-tip="更多"]')).toHaveCount(0)
+    // 锁着的那条只剩一把解锁钮；加密动作在明文卡的 ⋯ 里
+    await expect(sealed.locator('.memo-acts button')).toHaveCount(1)
+    await expect(plain.locator('.memo-acts button')).toHaveCount(6)
 
     // 首次加密就是立全库口令，只有这一次要输两格
-    await plain.hover()
-    await tipButton(plain, '加密').click()
+    await (await noteMenu(page, plain)).locator('.pop-item:text-is("加密")').click()
     const dialog = page.locator('.note-lock-dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.locator('input[type="password"]')).toHaveCount(2)
@@ -431,10 +439,10 @@ test.describe('Notes 小记', () => {
     await expect(plain.locator('.memo-state')).toBeEmpty()
     await expect(sealed.locator('.memo-state')).toBeEmpty()
 
-    // 悬停时才由动作排说明加密状态：加密过的那条 hover 必须有「重新锁定」
-    await plain.hover()
-    await expect(tipButton(plain, '重新锁定')).toHaveCount(1)
-    await tipButton(plain, '重新锁定').click()
+    // 悬停时才由 ⋯ 菜单说明加密状态：加密过的那条露出「重新锁定」
+    const menu = await noteMenu(page, plain)
+    await expect(menu.locator('.pop-item:text-is("重新锁定")')).toHaveCount(1)
+    await menu.locator('.pop-item:text-is("重新锁定")').click()
     await expectToast(page, '已重新锁定')
     // 只收回这一条：另一条明文还在手
     await expect(page.locator('.memo-locked')).toHaveCount(1)

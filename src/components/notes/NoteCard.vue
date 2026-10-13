@@ -4,6 +4,7 @@ import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
 import AppIcon from '../shared/AppIcon.vue'
+import PopoverMenu from '../shared/PopoverMenu.vue'
 import { formatRelativeTime, highlightTagsInHtml } from '../../utils/format'
 import { resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
@@ -76,11 +77,20 @@ const applyClamp = async () => {
   const style = getComputedStyle(el)
   const budget = parseFloat(style.maxHeight) || Number.MAX_SAFE_INTEGER
   const lineH = parseFloat(style.lineHeight) || 23
+  const kids = Array.from(el.children) as HTMLElement[]
   let cut = 0
-  for (const child of Array.from(el.children) as HTMLElement[]) {
-    const bottom = child.offsetTop + child.offsetHeight
+  let cutIndex = -1
+  for (let i = 0; i < kids.length; i++) {
+    const bottom = kids[i].offsetTop + kids[i].offsetHeight
     if (bottom > budget + 1) break
     cut = bottom
+    cutIndex = i
+  }
+  // 孤行标题：最后一块正好是标题、后面还有正文，收起来就剩个头悬在「展开全文」上
+  const last = kids[cutIndex]
+  if (cutIndex >= 0 && cutIndex < kids.length - 1 && /^H[1-4]$/.test(last?.tagName ?? '')) {
+    const prev = kids[cutIndex - 1]
+    cut = prev ? prev.offsetTop + prev.offsetHeight : 0
   }
   // 首块就超预算时按整行切，至少露得出开头
   if (cut === 0) cut = Math.max(1, Math.floor(budget / lineH)) * lineH
@@ -105,6 +115,18 @@ const onCopy = () => {
   copied.value = true
   if (copiedTimer) window.clearTimeout(copiedTimer)
   copiedTimer = window.setTimeout(() => { copied.value = false }, 1200)
+}
+
+/* ⋯ 菜单：加密系与删除这些低频/危险动作收进来，快捷排只留高频 */
+const moreBtn = ref<HTMLElement | null>(null)
+const menuOpen = ref(false)
+const toggleMenu = () => { menuOpen.value = !menuOpen.value }
+const onMenu = (action: 'encrypt' | 'relock' | 'removeLock' | 'delete') => {
+  menuOpen.value = false
+  if (action === 'encrypt') emit('encrypt')
+  else if (action === 'relock') emit('relock')
+  else if (action === 'removeLock') emit('removeLock')
+  else emit('delete')
 }
 
 // 只读正文在编辑态会整个卸掉，回来时是一个新元素，组件本身不会重新挂载
@@ -250,6 +272,54 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         <span v-if="props.note.starred" class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
       </span>
       <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
+
+      <!-- hover 显形的动作排：压在卡头右侧（时间让位），实底不吃正文 -->
+      <span class="memo-acts">
+        <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
+          <AppIcon name="unlock" :size="14" />
+        </button>
+        <template v-if="!locked">
+          <button class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
+            <AppIcon name="eye" :size="14" />
+          </button>
+          <button class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
+            <AppIcon name="edit" :size="14" />
+          </button>
+          <button
+            class="ib"
+            type="button"
+            :class="{ on: props.note.pinned }"
+            :title="props.note.pinned ? '取消置顶' : '置顶'"
+            :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
+            @click.stop="emit('togglePin')"
+          >
+            <AppIcon name="pin" :size="14" />
+          </button>
+          <button
+            class="ib"
+            type="button"
+            :class="{ on: props.note.starred, warn: props.note.starred }"
+            :title="props.note.starred ? '取消收藏' : '收藏'"
+            :aria-label="props.note.starred ? '取消收藏' : '收藏'"
+            @click.stop="emit('toggleStar')"
+          >
+            <AppIcon name="star" :size="14" :filled="props.note.starred" />
+          </button>
+          <button class="ib" :class="{ copied }" type="button" :title="copied ? '已复制' : '复制正文'" aria-label="复制正文" @click.stop="onCopy">
+            <AppIcon :name="copied ? 'check' : 'copy'" :size="14" />
+          </button>
+          <button
+            ref="moreBtn"
+            class="ib"
+            type="button"
+            title="更多操作"
+            aria-label="更多操作"
+            @click.stop="toggleMenu"
+          >
+            <AppIcon name="dots" :size="14" />
+          </button>
+        </template>
+      </span>
     </div>
 
     <div v-if="locked" class="memo-locked">
@@ -298,55 +368,28 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       </span>
     </div>
 
-    <!-- hover 显形的右下动作 pill：压在卡角上，不占正文位置 -->
-    <span class="memo-acts">
-      <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
-        <AppIcon name="unlock" :size="14" />
+    <!-- 低频与危险动作收进 ⋯：快捷排只留高频五颗 -->
+    <PopoverMenu v-if="menuOpen" :anchor="moreBtn" :width="136" @close="menuOpen = false">
+      <button v-if="!props.note.encrypted" class="pop-item" type="button" @click="onMenu('encrypt')">
+        <AppIcon name="lock" :size="14" />
+        加密
       </button>
-      <template v-if="!locked">
-        <button class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
-          <AppIcon name="eye" :size="14" />
+      <template v-else>
+        <button class="pop-item" type="button" @click="onMenu('relock')">
+          <AppIcon name="lock" :size="14" />
+          重新锁定
         </button>
-        <button class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
-          <AppIcon name="edit" :size="14" />
+        <button class="pop-item" type="button" @click="onMenu('removeLock')">
+          <AppIcon name="lockOff" :size="14" />
+          解除加密
         </button>
       </template>
-      <button
-        class="ib"
-        type="button"
-        :class="{ on: props.note.pinned }"
-        :title="props.note.pinned ? '取消置顶' : '置顶'"
-        :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
-        @click.stop="emit('togglePin')"
-      >
-        <AppIcon name="pin" :size="14" />
-      </button>
-      <button
-        class="ib"
-        type="button"
-        :class="{ on: props.note.starred, warn: props.note.starred }"
-        :title="props.note.starred ? '取消收藏' : '收藏'"
-        :aria-label="props.note.starred ? '取消收藏' : '收藏'"
-        @click.stop="emit('toggleStar')"
-      >
-        <AppIcon name="star" :size="14" :filled="props.note.starred" />
-      </button>
-      <button v-if="!locked" class="ib" :class="{ copied }" type="button" :title="copied ? '已复制' : '复制正文'" aria-label="复制正文" @click.stop="onCopy">
-        <AppIcon :name="copied ? 'check' : 'copy'" :size="14" />
-      </button>
-      <button v-if="!locked && !props.note.encrypted" class="ib" type="button" title="加密" aria-label="加密" @click.stop="emit('encrypt')">
-        <AppIcon name="lock" :size="14" />
-      </button>
-      <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="重新锁定" aria-label="重新锁定" @click.stop="emit('relock')">
-        <AppIcon name="lock" :size="14" />
-      </button>
-      <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="解除加密" aria-label="解除加密" @click.stop="emit('removeLock')">
-        <AppIcon name="lockOff" :size="14" />
-      </button>
-      <button class="ib danger" type="button" title="删除" aria-label="删除" @click.stop="emit('delete')">
+      <span class="pop-sep"></span>
+      <button class="pop-item danger" type="button" @click="onMenu('delete')">
         <AppIcon name="trash" :size="14" />
+        删除
       </button>
-    </span>
+    </PopoverMenu>
   </article>
 
   <article v-else class="memo editing">
@@ -488,11 +531,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-body :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .memo-body :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
 .memo-body :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
-.memo-body :deep(hr) { border: none; border-top: 1px solid var(--border); }
+/* 正文分隔线不吃 --border（chrome 发丝档，纸底实测 1.15:1 等于没画），从字色反推 */
+.memo-body :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-3) 0; }
 .memo-body :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 34vh; object-fit: contain; border-radius: var(--radius); }
 
 /* 标题行：pin + 标题(粗) + 收藏标 + 时间(右)，对齐 mock .t */
 .memo-head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -512,7 +557,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.memo-time { font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.memo-time { font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; transition: opacity var(--transition); }
 /* 底部 meta 行：附件数 + 标签胶囊（对齐 mock .tags，从顶部 meta 行下移） */
 .memo-foot { display: flex; align-items: center; gap: 10px; margin-top: 2px; min-height: 20px; }
 .memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; }
@@ -538,29 +583,28 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
 .memo:hover .memo-state, .memo:focus-within .memo-state { opacity: 0; }
 .state-star { color: var(--warning); display: inline-flex; }
-/* hover 右下动作 pill：贴在卡角，半透卡底 + 发丝描边，压在正文上不糊字（对齐 mock .nacts） */
+/* 动作排就地顶替时间：底取悬停后的卡面档，看不出另贴了一块；正文永不被压 */
 .memo-acts {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 15;
   display: flex;
   gap: 2px;
   padding: 3px;
-  border: 1px solid var(--border);
   border-radius: 9px;
-  background: color-mix(in srgb, var(--panel-bg) 82%, transparent);
-  box-shadow: var(--shadow-card);
+  background: var(--bg-surface-hover);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition);
 }
 /* 悬停/聚焦才显形，且不吞正文点击（透明态 pointer-events 关） */
 .memo:hover .memo-acts, .memo:focus-within .memo-acts { opacity: 1; pointer-events: auto; }
+/* 时间让位给动作排：实底只有排这么宽，长标题会被右缘裁掉，留着时间就是叠字 */
+.memo:hover .memo-time, .memo:focus-within .memo-time { opacity: 0; }
 .memo-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
 .memo-acts .ib :deep(svg) { width: 15px; height: 15px; }
-/* 删除和其余动作拉开一格，别让人顺手滑过去 */
-.memo-acts .ib.danger { margin-left: var(--space-1); }
 
 .memo-check {
   position: absolute;

@@ -5,6 +5,7 @@ import {
   formatDate,
   stripHtml,
   htmlToText,
+  htmlToTagText,
   htmlToLinkText,
   deriveTitleFromHtml,
   headingTitle,
@@ -241,6 +242,26 @@ describe('highlightTagsInHtml', () => {
 
   it('should leave text without tags unchanged', () => {
     expect(highlightTagsInHtml('<p>没有标签</p>')).toBe('<p>没有标签</p>')
+  })
+
+  it('代码块与行内代码里的井号不染色', () => {
+    expect(highlightTagsInHtml('<pre><code>#!/bin/sh\necho #release</code></pre>')).toBe(
+      '<pre><code>#!/bin/sh\necho #release</code></pre>',
+    )
+    expect(highlightTagsInHtml('<p>跑 <code>#release</code> 然后 #tag</p>')).toBe(
+      '<p>跑 <code>#release</code> 然后 <span class="tag-inline" data-tag="tag">#tag</span></p>',
+    )
+  })
+})
+
+describe('htmlToTagText', () => {
+  it('剥掉代码内容，只留正文', () => {
+    expect(htmlToTagText('<p>发布 #release 计划</p><pre><code>#notatag</code></pre>')).toBe('发布 #release 计划')
+    expect(htmlToTagText('<p>调用 <code>#inline</code> 记号 #real</p>')).toBe('调用 记号 #real')
+  })
+
+  it('空串进空串出', () => {
+    expect(htmlToTagText('')).toBe('')
   })
 })
 

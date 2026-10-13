@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { notesApi as api } from '../services/api/notes'
 import { useToastStore } from './toast'
 import { useConfirmStore } from './confirm'
-import { extractTags, getDateGroupLabel, deriveTitleFromHtml, headingTitle, htmlToText } from '../utils/format'
+import { extractTags, getDateGroupLabel, deriveTitleFromHtml, headingTitle, htmlToTagText, htmlToText } from '../utils/format'
 import { collectAttachmentNames, ensureAttachmentBase, nameOf, normalizeAssetHtml } from '../services/attachmentSrc'
 import type { Note, Attachment } from '../types'
 import type { NoteKeyStatus, NotePlain } from '../services/api/notes'
@@ -29,7 +29,7 @@ export function noteMeta(html: string) {
   let meta = metaCache.get(html)
   if (!meta) {
     const text = htmlToText(html)
-    meta = { text, tags: extractTags(text) }
+    meta = { text, tags: extractTags(htmlToTagText(html)) }
     if (metaCache.size >= META_CACHE_LIMIT) metaCache.clear()
     metaCache.set(html, meta)
   }

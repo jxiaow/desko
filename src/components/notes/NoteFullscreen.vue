@@ -243,7 +243,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   gap: var(--space-2);
   font-size: var(--text-xs);
   color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
   margin-bottom: 8px;
 }
 .fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.5; }
@@ -296,7 +295,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 .fs-view :deep(ul[data-type='taskList'] input) { margin-top: 5px; }
 /* 只读层里的勾选框不接操作，别让人点了以为改了状态 */
 .fs-view :deep(input[type='checkbox']) { pointer-events: none; }
-.fs-view :deep(hr) { border: none; border-top: 1px solid var(--border); }
+/* 正文分隔线不吃 --border（chrome 发丝档，纸底实测 1.15:1 等于没画），从字色反推 */
+.fs-view :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-4) 0; }
 .fs-view :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 56vh; object-fit: contain; border-radius: var(--radius); }
 
 .fs-foot {
