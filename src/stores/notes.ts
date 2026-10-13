@@ -293,7 +293,7 @@ export const useNotesStore = defineStore('notes', () => {
 
   const doDeleteNote = (note: Note) => {
     const preview = noteMeta(note.content_html).text.slice(0, 20) || '无内容'
-    confirmStore.showConfirm('确认删除', `确定删除这条小记吗？\n\n“${preview}”`, async () => {
+    confirmStore.showConfirm('删除小记', `“${preview}”将被删除，此操作不可撤销。`, async () => {
       try {
         await api.deleteNote(note.id)
         notes.value = notes.value.filter(n => n.id !== note.id)
@@ -523,7 +523,7 @@ export const useNotesStore = defineStore('notes', () => {
   const batchDelete = () => {
     const ids = Array.from(selectedNoteIds.value)
     if (ids.length === 0) return
-    confirmStore.showConfirm('确认删除', `确定删除选中的 ${ids.length} 条小记吗？`, async () => {
+    confirmStore.showConfirm('删除所选', `${ids.length} 条小记将被删除，此操作不可撤销。`, async () => {
       try {
         await api.batchDeleteNotes(ids)
         notes.value = notes.value.filter(n => !ids.includes(n.id))

@@ -302,7 +302,7 @@ defineExpose({ save })
     </div>
 
     <div class="form-group notes-group">
-      <label>备注说明</label>
+      <label>备注</label>
       <textarea v-model="form.notes" placeholder="可选" rows="2"></textarea>
     </div>
 

@@ -52,14 +52,15 @@ useEscapeClose(close)
 <template>
   <Transition name="dialog">
     <div v-if="show" class="dialog-overlay">
-    <div class="dialog" role="dialog" aria-modal="true" aria-label="修改主密码">
+    <div class="dialog masterpw-dialog" role="dialog" aria-modal="true" aria-label="修改主密码">
       <div class="dialog-header">
         <h3>修改主密码</h3>
         <button  class="dialog-close" @click="close" title="关闭">
-          <AppIcon name="x" :size="18" />
+          <AppIcon name="x" :size="16" />
         </button>
       </div>
       <div class="dialog-body">
+        <p class="lead">修改会重加密整个库，期间窗口短暂无响应属正常。</p>
         <div class="form-group">
           <label>当前密码</label>
           <input v-model="form.oldPassword" type="password" placeholder="请输入当前密码" />
@@ -72,11 +73,11 @@ useEscapeClose(close)
           <label>确认新密码</label>
           <input v-model="form.confirmPassword" type="password" placeholder="再次输入新密码" @keyup.enter="doChangePassword" />
         </div>
-        <p v-if="err" class="auth-error">{{ err }}</p>
+        <p v-if="err" class="dialog-err">{{ err }}</p>
       </div>
       <div class="dialog-footer">
         <button class="btn-secondary" @click="close">取消</button>
-        <button class="btn-primary" @click="doChangePassword">确定</button>
+        <button class="btn-primary" @click="doChangePassword">修改</button>
       </div>
     </div>
     </div>
@@ -84,10 +85,6 @@ useEscapeClose(close)
 </template>
 
 <style scoped>
-.auth-error {
-  color: var(--danger);
-  font-size: var(--text-xs);
-  margin-top: 10px;
-  text-align: center;
-}
+/* 三格密码栈不需要 500px：与小记口令弹窗同宽，字段宽度也就跟着统一 */
+.masterpw-dialog { width: 380px; }
 </style>

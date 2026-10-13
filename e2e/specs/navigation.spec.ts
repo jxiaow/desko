@@ -14,8 +14,8 @@ test.describe('导航与布局', () => {
     await page.locator('.sidebar-toggle').click()
     // 验证码模块默认关着，侧栏只有三个常驻入口
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(3)
-    // 侧栏骨架：顶部品牌行 + 导航两块，别无他物
-    await expect(page.locator('.sidebar > *')).toHaveCount(2)
+    // 侧栏骨架：顶部品牌行 + 「模块」段标 + 导航三块，别无他物
+    await expect(page.locator('.sidebar > *')).toHaveCount(3)
     // 常驻三项的顺序钉死：小记打头（收藏/文件紧随），改顺序要连这条一起改
     expect(await page.locator('.sidebar-nav .nav-item').evaluateAll(
       (els) => els.map((el) => el.getAttribute('href')),
@@ -24,10 +24,10 @@ test.describe('导航与布局', () => {
     await expect(page.locator('.titlebar-crumb')).toHaveText('小记')
     await expect(page.locator('.notes-page')).toBeVisible()
 
-    // 激活态不铺底：图标轨档那层白块会读成图标的底，重音只给字色。
+    // 激活态=淡染行（Things 方言）：accent-soft 铺底 + 无投影。
     // 用当前项（已 active、指针没压着）来量——点过的那条会带 hover 填充，量不到激活态本身
     await expect(page.locator('a.nav-item[href="/notes"]')).toHaveClass(/active/)
-    await expect(page.locator('a.nav-item[href="/notes"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect(page.locator('a.nav-item[href="/notes"]')).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
     await expect(page.locator('a.nav-item[href="/notes"]')).toHaveCSS('box-shadow', 'none')
     expect(await e2e.count(page, 'list_notes')).toBe(1)
 

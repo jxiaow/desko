@@ -18,6 +18,7 @@ import {
 } from '../../services/fileshareSettings'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
+import { usePageHeadStore } from '../../stores/pageHead'
 
 const toastStore = useToastStore()
 
@@ -161,6 +162,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => unlistenDrag?.())
+
+usePageHeadStore().setHead('局域网传输')
 </script>
 
 <template>
@@ -189,34 +192,35 @@ onUnmounted(() => unlistenDrag?.())
           <AppIcon :name="running ? 'x' : 'upload'" :size="13" />
           {{ running ? '停止服务' : '启动服务' }}
         </button>
+        <button
+          class="ib manage-btn"
+          type="button"
+          aria-label="管理共享"
+          @click="requestOpenSettingsTab('fileshare')"
+        >
+          <AppIcon name="gear" :size="16" />
+        </button>
       </div>
 
-      <!-- 分组一：状态横幅（上半）+ 访问地址行（下半），一张卡说完地址这件事 -->
+      <!-- 分组一：状态行（谁能访问 + 访问地址）+ 本机地址行 + 警告行，一张卡说完地址这件事 -->
       <section class="clean-group-card">
         <div class="fs-banner">
-          <span class="banner-ico grid-slot" :class="{ on: running }" aria-hidden="true">
-            <AppIcon name="navLan" :size="18" />
+          <span class="banner-dot" :class="{ on: running }" aria-hidden="true"></span>
+          <span class="banner-title">{{ exposure }}</span>
+          <span
+            v-if="running"
+            class="banner-url mono"
+            role="button"
+            tabindex="0"
+            title="点击复制访问地址"
+            @click="copyUrl(bannerUrl)"
+            @keyup.enter="copyUrl(bannerUrl)"
+          >{{ bannerUrl }}</span>
+          <span v-if="running" class="banner-acts">
+            <!-- 口令只在已设时出现：没设的那句由下面唯一的警告行说，一处只说一件事 -->
+            <span v-if="fsHasPassword" class="badge ok">已设口令</span>
+            <button class="ib help" type="button" title="同网段设备打不开时，先在 Windows 防火墙放行本应用的专用网络">?</button>
           </span>
-          <div class="banner-main">
-            <div class="banner-title">{{ exposure }}</div>
-            <div v-if="running" class="banner-line">
-              <span
-                class="banner-url"
-                role="button"
-                tabindex="0"
-                title="点击复制访问地址"
-                @click="copyUrl(bannerUrl)"
-                @keyup.enter="copyUrl(bannerUrl)"
-              >
-                {{ bannerUrl }}
-              </span>
-              <button class="ib help" type="button" title="同网段设备打不开时，先在 Windows 防火墙放行本应用的专用网络">?</button>
-            </div>
-          </div>
-          <button class="btn-secondary manage-btn" type="button" @click="requestOpenSettingsTab('fileshare')">
-            <AppIcon name="gear" :size="13" />
-            管理共享
-          </button>
         </div>
         <div
           v-if="running && !fsLocalOnly"
@@ -303,7 +307,7 @@ onUnmounted(() => unlistenDrag?.())
       <section class="clean-group-card">
         <div class="group-head">共享目录</div>
         <div v-for="(d, i) in dirs" :key="d" class="group-row dir-row">
-          <span class="dir-ico grid-slot grid-slot--folder" aria-hidden="true"><AppIcon name="folder" :size="18" /></span>
+          <AppIcon class="dir-ico" name="folder" :size="16" />
           <span class="dir-path" :title="d">{{ d }}</span>
           <button class="ib danger dir-del" type="button" title="移除该目录" @click="removeDir(i)">
             <AppIcon name="trash" :size="14" />
@@ -335,6 +339,10 @@ onUnmounted(() => unlistenDrag?.())
 
 /* ── 顶栏：.page-bar 骨架在 global.css（磨砂吸顶），本页只留启停钮的皮；状态胶囊走 global .chip ── */
 .toggle-btn { margin-left: auto }
+/* 页条右侧的图标钮与 32px 主钮同高，别露出 24px 的小档 */
+.manage-btn { width: 32px; height: 32px }
+/* 它站在磨砂页栏上，hover 那层洗要吃 chrome 档，否则字被 --hover 洗淡 */
+.manage-btn:hover { background: var(--hover-chrome); color: var(--text) }
 
 /* 浅红幽灵态停止按钮：压在 .btn-primary 全局样式之上 */
 .toggle-btn.ghost-danger {
@@ -349,43 +357,45 @@ onUnmounted(() => unlistenDrag?.())
   color: var(--danger-hover);
 }
 
-/* ── 分组卡：一层框，行用细线分隔，不做卡中卡；外框与行卡同套发丝分层 ── */
+/* ── 分组卡：与穿透页 .tn-card 同一档面板方言（mock .wcard），一层框 + 发丝分行 ── */
 .clean-group-card {
   background: var(--panel-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border-radius: 12px;
   box-shadow: var(--shadow-card);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
 }
 .group-head {
-  padding: 10px 16px 9px;
-  font-size: var(--text-xs);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+  font-size: var(--text-base);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary);
+  color: var(--text);
   border-bottom: 1px solid var(--border);
 }
 .group-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 16px;
+  height: 44px;
+  padding: 0 14px;
 }
 .group-row + .group-row { border-top: 1px solid var(--border); }
-/* 行轨与收藏/文件页同档 60px；提示行（note）不受力，仍按内容收口 */
-.url-row, .dir-row, .dir-add-row { height: 60px; }
 .group-note {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: var(--text-xs);
   color: var(--text-muted);
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-top: 1px solid var(--border);
 }
 .group-note svg { flex-shrink: 0; }
 .group-note.chip-warn { background: var(--warning-soft); color: var(--warning); border-top: none; }
-.group-note.chip-warn:last-child { border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
 .link-btn {
   border: none;
   background: none;
@@ -400,41 +410,38 @@ onUnmounted(() => unlistenDrag?.())
 }
 .link-btn:hover { text-decoration-thickness: 2px }
 
-/* ── 状态横幅：40px 图标槽 + 状态标题 + 等宽地址；它替代原「访问地址」卡的表头 ── */
+/* ── 状态横幅：一行说完「谁能访问 + 访问地址」，与穿透页 .tn-head / mock .wh 同档 ── */
 .fs-banner {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  min-height: 64px;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--border);
 }
-/* 尺寸/圆角/中性底走 global.css .grid-slot（与收藏、文件、验证码的身份档同轴），这里只给状态色 */
-.banner-ico.on { background: var(--accent-soft); color: var(--accent); }
-.banner-main { flex: 1; min-width: 0; }
-.banner-title { font-size: var(--text-sm); font-weight: 600; color: var(--text); }
-.banner-line { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; max-width: 100%; }
-/* 访问地址是"读一条 URL"，与收藏页行内的 URL 同档 13px 等宽，不再单列一档 17px */
+.banner-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.banner-dot.on { background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent) }
+.banner-title { flex-shrink: 0; font-size: var(--text-base); font-weight: 600; color: var(--text) }
+/* 访问地址读起来是"一条 URL"，落收藏页行内 URL 同档：等宽 12 / --text-url */
 .banner-url {
   min-width: 0;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text);
+  font-size: var(--text-xs);
+  color: var(--text-url);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
 }
 .banner-url:hover { color: var(--text-brand); }
-.manage-btn {
-  flex-shrink: 0;
-  /* 与页条主钮同档 30px，别把横幅撑高 */
-  height: 30px;
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-ib);
-  font-size: var(--text-sm);
-}
+.ib.help { font-size: var(--text-sm); font-weight: 700 }
+/* 右端那一档：口令徽标 + 防火墙提示，与 mock .wh 的尾部 .chip 同位 */
+.banner-acts { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0 }
 
 /* 访问地址行：整行可点复制 */
 .url-row { cursor: pointer; }
@@ -445,26 +452,24 @@ onUnmounted(() => unlistenDrag?.())
   padding: 0;
   background: none;
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text);
+  font-size: var(--text-xs);
+  color: var(--text-url);
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-gutter: stable;
 }
-.ib.help { font-size: var(--text-sm); font-weight: 700; }
 
 /* 已投文件行：链接本身就在等宽里，名字不必再单列 */
 .recv-list { border-top: 1px solid var(--border); }
-.recv code { font-size: var(--text-sm); color: var(--text-url); }
 
 /* ── 拖拽直投卡：虚线是"可以丢东西进来"的唯一暗示，它自己就是那层卡皮，
    不再嵌进白卡里当第二层；行式排版，停止态收成一行。非可滚动容器，不受 scrollbar-gutter 约束 ── */
 .drop-card {
   border: 1.5px dashed var(--border-hover);
-  border-radius: var(--radius-card);
+  border-radius: 12px;
   background: var(--panel-bg);
   box-shadow: var(--shadow-card);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
   transition: border-color var(--transition), background var(--transition);
 }
 .well-body {
@@ -472,7 +477,7 @@ onUnmounted(() => unlistenDrag?.())
   align-items: center;
   gap: var(--space-3);
   min-height: 60px;
-  padding: 10px 16px;
+  padding: 8px 14px;
 }
 /* 能投的时候这块得像个井：居中三段（图标／题字／副字）、104px 高。
    行式那 60px 太扁，看着只是张说明卡，不像能丢东西的地方。停止态不跟着长 */
@@ -481,7 +486,7 @@ onUnmounted(() => unlistenDrag?.())
   justify-content: center;
   gap: 8px;
   min-height: 104px;
-  padding: 18px 16px;
+  padding: 18px 14px;
   text-align: center;
 }
 .drop-card:not(.off) .well-title { font-size: var(--text-md); letter-spacing: -0.01em }
@@ -536,20 +541,20 @@ onUnmounted(() => unlistenDrag?.())
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  padding: 0 16px var(--space-3);
-  border-top: 1px solid var(--border);
   min-height: 44px;
-  padding-top: 8px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
 }
 .dz-dirs-label { font-size: var(--text-xs); color: var(--text-muted); margin-right: 2px; }
 .dz-dirs .chip { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 
-/* 共享目录行的档面：与文件页快捷方式同一张目录档（global.css .grid-slot--folder，34px） */
+/* 目录行：图标裸走 16px 描边档，路径读起来是一条地址 */
+.dir-ico { flex-shrink: 0; color: var(--text-muted) }
 .dir-path {
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-url);
   overflow: hidden;
   text-overflow: ellipsis;

@@ -24,8 +24,8 @@ test.describe('Files 文件快捷', () => {
     await gotoFiles(page)
     const pdf = shortcutRow(page, '月度报告')
     // 路径列只留尾部两段，完整路径挂在 title 上
-    await expect(shortcutRow(page, '项目资料').locator('.cell-path')).toHaveText('…/e2e/project')
-    await expect(pdf.locator('.cell-path')).toHaveText('…/e2e/report.pdf')
+    await expect(shortcutRow(page, '项目资料').locator('.path-chip')).toHaveText('…/e2e/project')
+    await expect(pdf.locator('.path-chip')).toHaveText('…/e2e/report.pdf')
     await expect(pdf.locator('.ft-ico')).toHaveText('pdf')
     expect(await e2e.count(page, 'list_file_shortcuts')).toBe(1)
   })
@@ -100,7 +100,7 @@ test.describe('Files 文件快捷', () => {
     await tipButton(dialog, '选择文件夹').click()
     await expect(dialog.locator('input[placeholder="粘贴文件/文件夹路径，或点击右侧浏览"]')).toHaveValue('C:/e2e/queued-folder')
     // 选中文件夹后类型自动切到文件夹
-    await expect(dialog.locator('button.type-btn.active')).toHaveText('文件夹')
+    await expect(dialog.locator('button.seg-btn.on')).toHaveText('文件夹')
   })
 
   test('从剪贴板粘贴路径并自动判型', async ({ page }) => {
@@ -111,9 +111,8 @@ test.describe('Files 文件快捷', () => {
     await page.evaluate(() => navigator.clipboard.writeText('C:/e2e/pasted/archive'))
     await tipButton(dialog, '从剪贴板粘贴').click()
     await expect(dialog.locator('input[placeholder="粘贴文件/文件夹路径，或点击右侧浏览"]')).toHaveValue('C:/e2e/pasted/archive')
-    // 无扩展名 → 自动判为文件夹；分段控制器选中态滑到「文件夹」
-    await expect(dialog.locator('button.type-btn.active')).toHaveText('文件夹')
-    await expect(dialog.locator('.seg-thumb')).toHaveClass(/right/)
+    // 无扩展名 → 自动判为文件夹；段控件的选中块落在「文件夹」
+    await expect(dialog.locator('button.seg-btn.on')).toHaveText('文件夹')
   })
 
   test('新增快捷方式', async ({ page }) => {
@@ -129,7 +128,7 @@ test.describe('Files 文件快捷', () => {
     // 先填名称再填路径：路径输入框 @blur 的 onPathInput 只在名称为空时用文件名覆盖，反序会竞态
     await dialog.locator('input[placeholder="快捷方式名称"]').fill('E2E 笔记')
     await dialog.locator('input[placeholder="粘贴文件/文件夹路径，或点击右侧浏览"]').fill('C:/e2e/notes.txt')
-    await dialog.locator('button.type-btn:text-is("文件")').click()
+    await dialog.locator('button.seg-btn:text-is("文件")').click()
     await dialog.locator('button.btn-primary:text-is("添加")').click()
 
     await expect(page.locator('.shortcut-row')).toHaveCount(3)
@@ -162,7 +161,7 @@ test.describe('Files 文件快捷', () => {
     await menu.locator('.pop-item', { hasText: '删除' }).click()
 
     const confirm = page.locator('.confirm-dialog')
-    await expect(confirm.locator('.dialog-body p')).toHaveText('确定删除「项目资料」快捷方式？')
+    await expect(confirm.locator('.dialog-body p')).toHaveText('「项目资料」将被移除，本机文件不受影响。')
     await confirm.locator('button.btn-danger').click()
     await expectToast(page, '已删除')
     await expect(page.locator('.shortcut-row')).toHaveCount(1)
@@ -202,7 +201,7 @@ test.describe('Files 文件快捷', () => {
     await menu.locator('.pop-item', { hasText: '删除' }).click()
 
     const confirm = page.locator('.confirm-dialog')
-    await expect(confirm.locator('.dialog-body p')).toHaveText('确定删除「项目资料」快捷方式？')
+    await expect(confirm.locator('.dialog-body p')).toHaveText('「项目资料」将被移除，本机文件不受影响。')
     await confirm.locator('button.btn-danger').click()
     await expectToast(page, '已删除')
     await expect(page.locator('.shortcut-row')).toHaveCount(1)

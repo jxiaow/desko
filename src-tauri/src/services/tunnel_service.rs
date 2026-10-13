@@ -554,6 +554,23 @@ pub fn auth_url_from_line(line: &str) -> Option<String> {
     (!url.is_empty()).then_some(url)
 }
 
+/// 授权子进程的输出尾巴留几行、每行截到 120 字。
+/// 界面上这一格是给失败的授权说个原因，不是把整篇日志搬进弹窗。
+pub fn push_tail(prev: &str, line: &str) -> String {
+    const KEEP_LINES: usize = 4;
+    let clipped: String = line.chars().take(120).collect();
+    let trimmed = clipped.trim();
+    if trimmed.is_empty() {
+        return prev.to_string();
+    }
+    let mut kept: Vec<&str> = prev.split('\n').filter(|l| !l.trim().is_empty()).collect();
+    kept.push(trimmed);
+    while kept.len() > KEEP_LINES {
+        kept.remove(0);
+    }
+    kept.join("\n")
+}
+
 // ── 一次性 CLI：授权与建隧道 ─────────────────────────────────
 
 /// 参数分三层，位置错了只会得到一句 `flag provided but not defined`，而它**退 0**：
@@ -989,6 +1006,19 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("desko-tunnel-{}-{}", tag, std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn push_tail_keeps_the_last_lines_and_clips_each_one() {
+        let long = "x".repeat(300);
+        let one = push_tail("", &long);
+        assert_eq!(one.chars().count(), 120, "单行截到 120 字：界面那一格不是日志查看器");
+        let mut buf = String::new();
+        for i in 0..9 {
+            buf = push_tail(&buf, &format!("line {i}"));
+        }
+        assert_eq!(buf, "line 5\nline 6\nline 7\nline 8", "只留最后四行");
+        assert_eq!(push_tail(&buf, "   "), buf, "空行不占位");
     }
 
     #[test]

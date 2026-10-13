@@ -229,3 +229,107 @@ pub fn delete_recycled_account(id: &str) -> Result<(), String> {
     crate::modules::atomic_write::remove_file_locked(&path)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod recycle_bin_tests {
+    use super::*;
+
+    /// 留底目录是整个测试进程共享的临时目录，逐条用例都要往里写文件，
+    /// 所以共用一把锁：并发跑会互相看见对方的残留清单。
+    fn lock_recycle_dir() -> std::sync::MutexGuard<'static, ()> {
+        crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn recycle_test_account(label: &str) -> crate::models::codex::CodexAccount {
+        crate::models::codex::CodexAccount::new_api_key(
+            uuid::Uuid::new_v4().to_string(),
+            format!("{label}@example.invalid"),
+            "test-only".into(),
+            crate::models::codex::CodexApiProviderMode::Custom,
+            None,
+            None,
+            None,
+            Vec::new(),
+        )
+    }
+
+    #[test]
+    fn recycle_entry_ids_are_validated_before_any_path_is_built() {
+        assert!(codex_recycle_path("not-a-uuid").is_err());
+        assert!(validate_recycle_account_id("").is_err());
+        assert!(validate_recycle_account_id("../escape").is_err());
+        assert!(validate_recycle_account_id("9f6305d7-1111-2222-3333-444455556666").is_ok());
+    }
+
+    #[test]
+    fn archived_account_round_trips_through_the_recycle_bin() {
+        let _guard = lock_recycle_dir();
+        fs::create_dir_all(get_accounts_dir()).expect("账号目录准备失败");
+        fs::create_dir_all(codex_recycle_dir().expect("留底目录解析失败")).expect("留底目录准备失败");
+        let account = recycle_test_account("restore");
+
+        archive_codex_account(&account).expect("留底写入失败");
+        let entry = list_recycled_accounts()
+            .expect("清单读取失败")
+            .into_iter()
+            .find(|item| item.account_id == account.id)
+            .expect("刚写的留底不在清单里");
+        assert_eq!(entry.email, account.email);
+
+        // 活账号还在原位时恢复必须先拒，且留底一个字不动
+        save_account_unchecked(&account).expect("活账号详情写入失败");
+        let error = restore_recycled_account(&entry.id).expect_err("同 id 已在册时恢复应当被拒");
+        assert!(error.contains("already exists"), "拒因不如预期: {error}");
+        assert!(codex_recycle_path(&entry.id).expect("留底 id 非法").exists());
+
+        // 详情文件没了才谈得上恢复
+        delete_account_file_unlocked(&account.id).expect("详情文件清理失败");
+        restore_recycled_account(&entry.id).expect("恢复失败");
+        assert!(get_accounts_dir()
+            .join(format!("{}.json", account.id))
+            .exists());
+        assert!(!list_recycled_accounts()
+            .expect("清单读取失败")
+            .iter()
+            .any(|item| item.id == entry.id));
+
+        // 彻底删除对已经不存在的留底按已完成算
+        assert!(delete_recycled_account(&entry.id).is_ok());
+    }
+
+    #[test]
+    fn listing_skips_foreign_files_and_rejects_identity_mismatch() {
+        let _guard = lock_recycle_dir();
+        let dir = codex_recycle_dir().expect("留底目录解析失败");
+        fs::create_dir_all(&dir).expect("留底目录准备失败");
+        let foreign = dir.join("notes.txt");
+        fs::write(&foreign, "not a snapshot").expect("杂项文件写入失败");
+        let account = recycle_test_account("ignored");
+        archive_codex_account(&account).expect("留底写入失败");
+        assert!(list_recycled_accounts()
+            .expect("清单读取失败")
+            .iter()
+            .any(|item| item.account_id == account.id));
+        fs::remove_file(&foreign).ok();
+
+        let tampered = uuid::Uuid::new_v4().to_string();
+        let payload = serde_json::json!({
+            "summary": {
+                "id": uuid::Uuid::new_v4().to_string(),
+                "account_id": account.id,
+                "email": account.email,
+                "account_name": null,
+                "plan_type": null,
+                "deleted_at": 1_700_000_000_i64,
+            },
+            "encrypted_account": "not-an-envelope",
+        });
+        let tampered_path = dir.join(format!("{tampered}.json"));
+        fs::write(&tampered_path, payload.to_string()).expect("假留底写入失败");
+        let error = list_recycled_accounts().expect_err("身份不符的留底必须读不出");
+        assert!(error.contains("identity mismatch"), "拒因不如预期: {error}");
+        fs::remove_file(&tampered_path).ok();
+    }
+}

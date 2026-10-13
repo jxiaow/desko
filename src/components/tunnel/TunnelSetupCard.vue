@@ -57,6 +57,10 @@ const loginLeft = computed(() => {
 const shortId = computed(() => (props.provision?.tunnelId ?? '').slice(0, 8))
 const stepHint = computed(() => (nameTakenText.value ? '' : props.provision?.message ?? ''))
 const disabled = computed(() => acting.value || props.busy)
+/** 上一轮授权退了、凭据却没落位：把它最后那句原话摊开，别只把按钮退回「去授权」 */
+const loginNote = computed(() =>
+  !authDone.value && !waiting.value && props.login.state === 'timeout' ? props.login.note : null,
+)
 
 async function run<T>(fn: () => Promise<T>, done?: (value: T) => string) {
   if (acting.value || props.busy) return
@@ -145,9 +149,9 @@ function revokeAuth() {
           <AppIcon v-if="binDone" name="check" :size="11" />
           <template v-else>1</template>
         </span>
-        <span v-if="!binDone" class="lbl">穿透程序</span>
+        <span class="lbl">穿透程序</span>
         <span class="mid">
-          <span v-if="binDone" class="sub mono">已校验的 cloudflared {{ binary?.expectedVersion }}</span>
+          <span v-if="binDone" class="sub mono">cloudflared {{ binary?.expectedVersion }} · 已校验</span>
           <span v-else class="sub">按固定版本下载并校验哈希，产物只落本机目录</span>
         </span>
         <button v-if="reached === 0" class="btn-primary row-btn" type="button" :disabled="disabled" @click="fetchBinary">
@@ -161,7 +165,7 @@ function revokeAuth() {
           <AppIcon v-if="authDone" name="check" :size="11" />
           <template v-else>2</template>
         </span>
-        <span v-if="!authDone" class="lbl">授权</span>
+        <span class="lbl">授权</span>
         <span class="mid">
           <span v-if="waiting" class="sub">
             等待浏览器里登录 Cloudflare<span class="tn-count mono">{{ loginLeft }}</span>
@@ -185,13 +189,18 @@ function revokeAuth() {
         </button>
       </div>
 
+      <div v-if="loginNote" class="tn-note chip-warn">
+        <AppIcon name="alert" :size="12" />
+        <span class="note-text">{{ loginNote }}</span>
+      </div>
+
       <!-- 三：隧道。本机记录优先，同名而本机没记录时默认不认 -->
       <div class="tn-row row-tunnel" :class="tunnelDone ? 'done' : (reached === 2 ? 'cur' : 'todo')">
         <span class="step-dot" :class="{ done: tunnelDone }">
           <AppIcon v-if="tunnelDone" name="check" :size="11" />
           <template v-else>3</template>
         </span>
-        <span v-if="!tunnelDone" class="lbl">建隧道</span>
+        <span class="lbl">建隧道</span>
         <span class="mid">
           <template v-if="hasTunnel">
             <span class="sub mono ellipsis" :title="provision?.tunnelId ?? ''">
@@ -249,7 +258,7 @@ function revokeAuth() {
 <style scoped>
 /* --font-mono 由页面在 .content-inner 上覆盖，变量能穿过组件边界 */
 .mono { font-family: var(--font-mono); }
-.head-cnt { margin-left: 8px; font-size: var(--text-xs); color: var(--text-muted) }
+.head-cnt { font-size: var(--text-xs); font-weight: 400; color: var(--text-faint) }
 .row-btn { margin-left: auto; flex-shrink: 0 }
 .row-btn + .row-btn { margin-left: 8px }
 .note-text { flex: 1; min-width: 0 }
@@ -259,6 +268,10 @@ function revokeAuth() {
 .lbl.auto { width: auto; font-weight: 600 }
 .mid { flex: 1; min-width: 0 }
 .sub { font-size: var(--text-xs); color: var(--text-muted) }
+
+/* 授权失败的原话最多四行：按顶对齐展开，别让它居中堆成一坨 */
+.tn-note.chip-warn { align-items: flex-start }
+.tn-note.chip-warn .note-text { white-space: pre-line; line-height: 1.5 }
 
 /* 步骤圆点：实心勾 = 做完，数字 = 排到哪一步 */
 .step-dot {
@@ -276,10 +289,9 @@ function revokeAuth() {
 .step-dot.done { background: var(--accent); border-color: var(--accent); color: var(--accent-on) }
 .cur .step-dot { border-color: var(--accent); color: var(--accent) }
 
-/* 做完的收成 44px，当前那步 64px 并持有唯一一颗主行动钮 */
-.tn-row.done { height: 44px }
-.tn-row.cur { height: 64px }
-.tn-row.todo { height: 44px }
+/* 做完的与没轮到的收成 44（全局 .tn-row），当前那步 64 并持有唯一一颗主行动钮；
+   当前步整行吃 5% 主色水洗——三步里一眼看到卡在哪一格 */
+.tn-row.cur { height: 64px; background: color-mix(in srgb, var(--accent) 5%, transparent) }
 .tn-row.cur .sub { color: var(--text) }
 
 .tn-input {
@@ -300,7 +312,7 @@ function revokeAuth() {
 
 .tn-fold {
   align-self: flex-start;
-  padding: 6px 16px 8px;
+  padding: 6px 14px 8px;
   background: none;
   border: none;
   color: var(--text-muted);

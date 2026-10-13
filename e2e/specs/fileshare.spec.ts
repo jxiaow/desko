@@ -76,7 +76,7 @@ test.describe('局域网文件传输', () => {
     await expect(page.locator('.banner-url')).toHaveText('http://10.0.0.9:8000')
     await expect(page.locator('.url-row.local').locator('code')).toContainText('http://127.0.0.1:8000')
     await expect(page.locator('.page-bar .btn-primary')).toHaveText('停止服务')
-    await expect(page.locator('.manage-btn')).toHaveText('管理共享')
+    await expect(page.locator('.manage-btn')).toHaveAttribute('aria-label', '管理共享')
     await expect(page.locator('.dir-row')).toHaveCount(1)
   })
 

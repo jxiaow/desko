@@ -1,0 +1,22 @@
+[package]
+name = "netguard-core"
+version = "1.0.0"
+edition = "2021"
+description = "desko 直连落盘核心：hosts 托管区规则、任务书/回执协议、路由核验"
+
+[[bin]]
+name = "desko-netguard"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+# 版本与主程序对齐（0.61），只用到路由表与最优路由两个查询
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Networking_WinSock",
+] }

@@ -48,14 +48,17 @@ test.describe('Settings 设置', () => {
     expect(await e2e.count(page, 'get_setting')).toBeGreaterThanOrEqual(2)
   })
 
-  test('设置行组：内嵌凹槽 + 28px 控制轴 + 动作分三级', async ({ page }) => {
+  test('设置行组：纸面直排细线 + 28px 控制轴 + 动作分三级', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page)
     await settingsTab(dialog, 'backup')
     const pane = visiblePane(dialog)
 
-    // 行组吃内嵌凹槽底色（paper 的 --sunken），条目之间只留 1px 细线
-    await expect(pane.locator('.group-content').first()).toHaveCSS('background-color', 'rgb(241, 241, 240)')
+    // 行组拍平在纸面上：面板里不再套第二层凹槽卡，条目之间只留 1px 细线
+    await expect(pane.locator('.group-content').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    const row = pane.locator('.setting-item', { hasText: '数据库路径' })
+    await expect(row).toHaveCSS('border-bottom-width', '1px')
+    await expect(row).toHaveCSS('min-height', '44px')
     // 控制轴一档高：按钮与输入件同 28px，右缘成线
     await expect(pane.locator('.setting-item', { hasText: '数据库路径' }).locator('button.action-btn')).toHaveCSS('height', '28px')
     await expect(pane.locator('.setting-item', { hasText: '云端保留份数' }).locator('.number-input')).toHaveCSS('height', '28px')
@@ -230,7 +233,7 @@ test.describe('Settings 设置', () => {
     // WebDAV 没配置时，备份这一档每个控件都摆着看但点不动
     await expect(pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn')).toBeDisabled()
     await expect(pane.locator('.setting-item', { hasText: '自动备份' }).locator('button.opt-trigger')).toBeDisabled()
-    await expect(pane.locator('.setting-item', { hasText: '停笔即备' }).locator('input[type="checkbox"]')).toBeDisabled()
+    await expect(pane.locator('.setting-item', { hasText: '即时备份' }).locator('input[type="checkbox"]')).toBeDisabled()
     await expect(pane.locator('.setting-item', { hasText: '云端保留份数' }).locator('.number-input')).toBeDisabled()
     await expect(pane.locator('button', { hasText: '云端列表' })).toBeDisabled()
     // 本地包只是中转：不列文件、不让用户配本地保留份数
@@ -267,10 +270,10 @@ test.describe('Settings 设置', () => {
       settings: { auto_backup_interval: '0' },
     })
 
-    const realtime = pane.locator('.setting-item', { hasText: '停笔即备' }).locator('input[type="checkbox"]')
+    const realtime = pane.locator('.setting-item', { hasText: '即时备份' }).locator('input[type="checkbox"]')
     await expect(realtime).not.toBeChecked()
     // 复选框本身是隐藏的，点的是 label.switch 那层壳
-    await pane.locator('.setting-item', { hasText: '停笔即备' }).locator('label.switch').click()
+    await pane.locator('.setting-item', { hasText: '即时备份' }).locator('label.switch').click()
     await expect(realtime).toBeChecked()
     expect((await e2e.snapshot(page))).toMatchObject({
       settings: { auto_backup_realtime: 'true' },
@@ -287,12 +290,12 @@ test.describe('Settings 设置', () => {
     await expect(pwdDialog).toBeVisible()
     await pwdDialog.locator('input[type="password"]').first().fill('123')
     await pwdDialog.locator('.dialog-footer button.btn-primary').click()
-    await expect(pwdDialog.locator('.modal-error')).toContainText('至少 8 位')
+    await expect(pwdDialog.locator('.dialog-err')).toContainText('至少 8 位')
 
     await pwdDialog.locator('input[type="password"]').first().fill('backup-pass-1')
     await pwdDialog.locator('input[type="password"]').nth(1).fill('backup-pass-2')
     await pwdDialog.locator('.dialog-footer button.btn-primary').click()
-    await expect(pwdDialog.locator('.modal-error')).toContainText('不一致')
+    await expect(pwdDialog.locator('.dialog-err')).toContainText('不一致')
 
     await pwdDialog.locator('input[type="password"]').nth(1).fill('backup-pass-1')
     await pwdDialog.locator('.dialog-footer button.btn-primary').click()
@@ -370,7 +373,7 @@ test.describe('Settings 设置', () => {
     /** 全局 tooltip 会把被指针扫过的按钮的 title 摘成 data-tip（同 helpers.tipButton），两种都得认 */
     const tipOf = (l: Locator) => l.evaluate((el) => el.getAttribute('data-tip') ?? el.getAttribute('title') ?? '')
 
-    // 定时/停笔即备/退出那一档不经过这颗钮，只推进度事件：徽标得跟着转，tip 带步骤
+    // 定时/即时备份/退出那一档不经过这颗钮，只推进度事件：徽标得跟着转，tip 带步骤
     await e2e.emitEvent(page, 'backup-progress', { op: 'pack', text: '镜像附件 12/40', pct: 40 })
     await expect(badge).toHaveClass(/bb-sync/)
     await expect.poll(() => tipOf(badge)).toBe('云端同步中 · 镜像附件 12/40 40%')
@@ -419,7 +422,7 @@ test.describe('Settings 设置', () => {
     await listDialog.locator('.file-row button.row-btn', { hasText: '恢复' }).first().click()
     const restoreDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '从云端恢复' }) })
     await restoreDialog.locator('.dialog-footer button.btn-primary').click()
-    await expect(restoreDialog.locator('.modal-error')).toHaveText('请输入备份密码')
+    await expect(restoreDialog.locator('.dialog-err')).toHaveText('请输入备份密码')
     await restoreDialog.locator('input[type="password"]').fill('backup-pass-1')
     await restoreDialog.locator('.dialog-footer button.btn-primary').click()
     await expectToast(page, '恢复完成')
@@ -465,9 +468,9 @@ test.describe('Settings 设置', () => {
     await e2e.queueDialog(page, dest)
     await pane.locator('.setting-item', { hasText: '从文件恢复' }).locator('button.action-btn').click()
     const restoreDialog = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '从文件恢复' }) })
-    await expect(restoreDialog.locator('.modal-help b')).toHaveText(dest)
+    await expect(restoreDialog.locator('.lead b')).toHaveText(dest)
     await restoreDialog.locator('.dialog-footer button.btn-primary').click()
-    await expect(restoreDialog.locator('.modal-error')).toHaveText('请输入备份密码')
+    await expect(restoreDialog.locator('.dialog-err')).toHaveText('请输入备份密码')
     await restoreDialog.locator('input[type="password"]').fill('backup-pass-1')
     await restoreDialog.locator('.dialog-footer button.btn-primary').click()
     await expectToast(page, '恢复完成')
@@ -513,12 +516,12 @@ test.describe('Settings 设置', () => {
     await connRow.locator('button.action-btn', { hasText: '配置' }).click()
     const modal = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '连接坚果云' }) })
     await modal.locator('.dialog-footer button.btn-secondary', { hasText: '测试连接' }).click()
-    await expect(modal.locator('.modal-error')).toContainText('账号与应用密码')
+    await expect(modal.locator('.dialog-err')).toContainText('账号与应用密码')
 
     await modal.locator('input[placeholder="坚果云登录邮箱"]').fill('me@example.com')
     await modal.locator('input[type="password"]').fill('app-pass')
     await modal.locator('.dialog-footer button.btn-secondary', { hasText: '测试连接' }).click()
-    await expect(modal.locator('.modal-ok')).toHaveText('连接成功')
+    await expect(modal.locator('.dialog-ok')).toHaveText('连接成功')
     await modal.locator('.dialog-footer button.btn-primary').click()
     await expectToast(page, '已连接坚果云')
     await waitForToastGone(page)
@@ -561,8 +564,8 @@ test.describe('Settings 设置', () => {
     const modal = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '连接坚果云' }) })
     await expect(modal.locator('input[type="password"]')).toHaveValue('')
     await modal.locator('.dialog-footer button.btn-secondary', { hasText: '测试连接' }).click()
-    await expect(modal.locator('.modal-ok')).toHaveText('连接成功')
-    await expect(modal.locator('.modal-error')).toHaveCount(0)
+    await expect(modal.locator('.dialog-ok')).toHaveText('连接成功')
+    await expect(modal.locator('.dialog-err')).toHaveCount(0)
   })
 
   test('修改主密码：校验与成功路径，新口令生效', async ({ page }) => {
@@ -575,19 +578,19 @@ test.describe('Settings 设置', () => {
 
     // 空当前密码
     await pwdDialog.locator('.dialog-footer button.btn-primary').click()
-    await expect(pwdDialog.locator('.auth-error')).toHaveText('请输入当前密码')
+    await expect(pwdDialog.locator('.dialog-err')).toHaveText('请输入当前密码')
 
     // 新密码过短
     await pwdDialog.locator('input[placeholder="请输入当前密码"]').fill(E2E_PASSWORD)
     await pwdDialog.locator('input[placeholder="至少 6 位"]').fill('12345')
     await pwdDialog.locator('.dialog-footer button.btn-primary').click()
-    await expect(pwdDialog.locator('.auth-error')).toHaveText('新密码至少需要 6 位')
+    await expect(pwdDialog.locator('.dialog-err')).toHaveText('新密码至少需要 6 位')
 
     // 两次不一致
     await pwdDialog.locator('input[placeholder="至少 6 位"]').fill('brandnew1')
     await pwdDialog.locator('input[placeholder="再次输入新密码"]').fill('brandnew2')
     await pwdDialog.locator('.dialog-footer button.btn-primary').click()
-    await expect(pwdDialog.locator('.auth-error')).toHaveText('两次输入的新密码不一致')
+    await expect(pwdDialog.locator('.dialog-err')).toHaveText('两次输入的新密码不一致')
 
     // 成功
     await pwdDialog.locator('input[placeholder="再次输入新密码"]').fill('brandnew1')

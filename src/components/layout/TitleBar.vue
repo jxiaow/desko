@@ -5,6 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { releaseHover, suppressHover } from '../../utils/hoverGuard'
 import AppIcon from '../shared/AppIcon.vue'
 import BackupBadge from './BackupBadge.vue'
+import { usePageHeadStore } from '../../stores/pageHead'
 
 defineProps<{
   isLocked?: boolean
@@ -21,7 +22,8 @@ const emit = defineEmits<{
 const appWindow = getCurrentWindow()
 const isMaximized = ref(false)
 const route = useRoute()
-const crumb = computed(() => (route.meta.title as string) ?? 'Desko')
+const pageHead = usePageHeadStore()
+const crumb = computed(() => pageHead.label || (route.meta.title as string) || 'Desko')
 
 const updateMaximizedState = async () => {
   isMaximized.value = await appWindow.isMaximized()
@@ -96,6 +98,7 @@ onUnmounted(() => {
       </button>
       <div class="titlebar-brand">
         <span class="titlebar-crumb">{{ crumb }}</span>
+        <span v-if="pageHead.count" class="titlebar-count">{{ pageHead.count }}</span>
       </div>
     </div>
 
@@ -137,8 +140,9 @@ onUnmounted(() => {
 <style scoped>
 .titlebar {
   height: 42px;
-  /* 拆面轮：顶栏不再另起一层板——透明并入整窗微光画布，无底色无分割线 */
+  /* 停靠态：透明并入画布，但留一条发丝下界把顶栏与页面身份行分开 */
   background: transparent;
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   position: relative;
@@ -197,10 +201,20 @@ onUnmounted(() => {
 .titlebar-crumb {
   display: inline-flex;
   align-items: center;
-  font-size: var(--text-md);
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--text-title);
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 条数是要读的信息，不是装饰：--text-faint 在标题栏带上只有 2.7:1，走 muted 档 */
+.titlebar-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -209,12 +223,16 @@ onUnmounted(() => {
   display: flex;
   height: 100%;
   margin-left: auto;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
   z-index: 1;
 }
 
+/* 顶栏所有钮同档：30×28 圆角方块，常态隐形，hover 才吃 chrome 填充 */
 .titlebar-btn {
-  width: 40px;
-  align-self: stretch;
+  width: 30px;
+  height: 28px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -222,22 +240,22 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-ib);
   transition: all var(--transition);
   flex-shrink: 0;
 }
 
-/* 设置/锁定 32×28：圆角方块档，别吃满 36px 栏高 */
+/* 设置/锁定与窗口三钮同档 */
 .titlebar-btn.tb-util {
-  width: 32px;
+  width: 30px;
   height: 28px;
-  align-self: center;
-  border-radius: var(--radius-ib);
 }
 
-/* 顶栏底色本身就比 --hover 更暗（浅色主题 chrome≈#f7f6f4、--hover=#faf9f7），
-   用 --hover 等于没有反馈；按文字色反推半透填充，深浅两套自适应 */
+/* 侧栏收进 0 宽后唯一的恢复入口：与右端设置/锁定同档 */
+.sidebar-restore { margin-right: var(--space-1); }
+
 .titlebar-btn:hover {
-  background: color-mix(in srgb, var(--text) 9%, transparent);
+  background: var(--hover-chrome);
   color: var(--text);
 }
 
@@ -248,9 +266,9 @@ onUnmounted(() => {
 
 .titlebar-divider {
   width: 1px;
-  height: 14px;
+  height: 16px;
   background: var(--border);
-  margin: 0 var(--space-1);
+  margin: 0 4px;
   align-self: center;
 }
 </style>

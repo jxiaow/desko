@@ -17,6 +17,11 @@ const note = ref(props.account.account_note ?? '')
 const tagsText = ref((props.account.tags ?? []).join('，'))
 const busy = ref(false)
 
+/** 只有 API Key 账号能换凭据；密钥为空表示这次不动它，Base URL 预填当前值免被清空 */
+const isApiKey = computed(() => props.account.auth_mode === 'apikey')
+const newKey = ref('')
+const baseUrl = ref(props.account.api_base_url ?? '')
+
 const tagList = computed(() =>
   tagsText.value
     .split(/[,，\s]+/)
@@ -27,13 +32,19 @@ const tagList = computed(() =>
 async function save() {
   if (busy.value) return
   busy.value = true
-  const id = props.account.id
+  let id = props.account.id
   try {
+    const key = newKey.value.trim()
+    if (isApiKey.value && key) {
+      const updated = await codexApi.updateApiKey(id, key, baseUrl.value)
+      // 账号 ID 由密钥哈希得出，换密钥等于换一条档案，后续三条写操作必须跟到新 ID
+      id = updated.id
+    }
     await codexApi.setName(id, name.value.trim())
     await codexApi.setNote(id, note.value.trim())
     await codexApi.setTags(id, tagList.value)
     await refreshAccounts()
-    toastStore.showToast('账号信息已保存')
+    toastStore.showToast(key ? '已保存，账号凭据与档案已按新密钥重建' : '账号信息已保存')
     emit('close')
   } catch (e) {
     toastStore.showToast(errText(e), 'error')
@@ -48,27 +59,41 @@ async function save() {
     <div class="dialog edit-dialog" role="dialog" aria-modal="true" aria-label="编辑账号信息">
       <div class="dialog-header">
         <h3>编辑账号信息</h3>
+        <span class="sub mono" :title="account.email">{{ account.email }}</span>
         <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
           <AppIcon name="x" :size="16" />
         </button>
       </div>
       <div class="dialog-body">
-        <div class="mail mono" :title="account.email">{{ account.email }}</div>
-        <label class="field">
-          <span class="field-label">显示名称</span>
-          <input v-model="name" class="input" type="text" maxlength="40" placeholder="留空则显示邮箱" @keyup.enter="save" />
-        </label>
-        <label class="field">
-          <span class="field-label">标签（逗号分隔）</span>
-          <input v-model="tagsText" class="input" type="text" placeholder="如 主力，工作，备用" />
-        </label>
-        <label class="field">
-          <span class="field-label">备注</span>
-          <textarea v-model="note" class="input note-box" rows="4" placeholder="订阅档位、到期时间、注意事项…" />
-        </label>
+        <div class="form-group">
+          <label for="cx-name">显示名称</label>
+          <input id="cx-name" v-model="name" type="text" maxlength="40" placeholder="留空则显示邮箱" @keyup.enter="save" />
+        </div>
+        <div class="form-group">
+          <label for="cx-tags">标签（逗号分隔）</label>
+          <input id="cx-tags" v-model="tagsText" type="text" placeholder="如 主力，工作，备用" />
+        </div>
+        <div class="form-group">
+          <label for="cx-note">备注</label>
+          <textarea id="cx-note" v-model="note" class="note-box" :rows="isApiKey ? 3 : 4" placeholder="订阅档位、到期时间、注意事项…" />
+        </div>
         <p v-if="tagList.length" class="tag-preview">
           <span v-for="t in tagList" :key="t" class="chip">{{ t }}</span>
         </p>
+
+        <div v-if="isApiKey" class="key-box">
+          <p class="key-hint">
+            换密钥会重建这条档案（ID 由密钥哈希得出），若它是当前账号，官方凭据文件一并重写。留空表示这次只改名称、标签与备注。
+          </p>
+          <div class="form-group">
+            <label for="cx-newkey">新 API Key</label>
+            <input id="cx-newkey" v-model="newKey" class="mono" type="password" spellcheck="false" placeholder="sk-…，留空不改" />
+          </div>
+          <div class="form-group">
+            <label for="cx-baseurl">接口地址</label>
+            <input id="cx-baseurl" v-model="baseUrl" class="mono" type="text" spellcheck="false" placeholder="https://…/v1" />
+          </div>
+        </div>
       </div>
       <div class="dialog-footer">
         <button class="btn-secondary" type="button" @click="emit('close')">取消</button>
@@ -82,14 +107,19 @@ async function save() {
 .edit-dialog { width: 460px; --font-mono: Consolas, 'Cascadia Mono', monospace; }
 .mono { font-family: var(--font-mono); }
 
-.mail {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.field { display: flex; flex-direction: column; gap: 6px; margin-top: 12px }
-.field-label { font-size: var(--text-xs); color: var(--text-secondary) }
-.field .input { height: 32px }
-.note-box { height: auto; padding: 8px 10px; line-height: 1.7; resize: vertical; font-family: inherit }
+.note-box { line-height: 1.7; resize: vertical }
 .tag-preview { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0 }
+
+/* 凭据区与元信息区之间要有肉眼可见的分界：两件事重量不同 */
+.key-box {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-strong, var(--border));
+}
+.key-hint {
+  margin: 0 0 10px;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
 </style>

@@ -78,7 +78,10 @@ pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
             next_hop TEXT NOT NULL DEFAULT '',
             verdict TEXT NOT NULL DEFAULT '',
             stale INTEGER NOT NULL DEFAULT 0,
+            cdn_like INTEGER NOT NULL DEFAULT 0,
             note TEXT NOT NULL DEFAULT '',
+            apply_state TEXT NOT NULL DEFAULT 'none',
+            apply_batch TEXT NOT NULL DEFAULT '',
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             checked_at INTEGER NOT NULL DEFAULT 0
@@ -144,6 +147,33 @@ pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
 
     if !has_bp_input {
         conn.execute_batch("ALTER TABLE bypass_targets ADD COLUMN input TEXT NOT NULL DEFAULT '';")?;
+    }
+
+    // 迁移：落盘状态。「待写入」必须把它算进去，否则写过的条目永远挂在那个数字里，
+    // 计数就废了；apply_batch 是撤销时找回回滚点的关联键。
+    let has_bp_apply: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('bypass_targets') WHERE name='apply_state'",
+        [],
+        |r| r.get(0),
+    ).unwrap_or(0) > 0;
+
+    if !has_bp_apply {
+        conn.execute_batch(
+            "ALTER TABLE bypass_targets ADD COLUMN apply_state TEXT NOT NULL DEFAULT 'none';
+             ALTER TABLE bypass_targets ADD COLUMN apply_batch TEXT NOT NULL DEFAULT '';"
+        )?;
+    }
+
+    // 迁移：CDN 轮换特征要常驻行上。探测时只在结论弹窗里露一次，
+    // 用户之后看着一条「仅缺 DNS 固定」把它钉死，等于锁在一个会失效的节点上
+    let has_bp_cdn: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('bypass_targets') WHERE name='cdn_like'",
+        [],
+        |r| r.get(0),
+    ).unwrap_or(0) > 0;
+
+    if !has_bp_cdn {
+        conn.execute_batch("ALTER TABLE bypass_targets ADD COLUMN cdn_like INTEGER NOT NULL DEFAULT 0;")?;
     }
 
     // 迁移：穿透服务带上公网策略。口令只存摘要，且只对 desko 自己起的服务有意义——

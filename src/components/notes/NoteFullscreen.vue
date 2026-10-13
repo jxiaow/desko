@@ -234,7 +234,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 }
 .fs-exit:hover { color: var(--text); background: var(--hover-chrome); }
 .fs-exit .kbd { background: transparent; border-bottom-width: 1px; }
-/* 状态字跟着退出钮走左组，与五页 .bar-count 同位；原先孤悬右端像另一条栏 */
+/* 状态字跟着退出钮走左组，原先孤悬右端像另一条栏 */
 .fs-head .save-hint { margin-right: auto; padding-left: var(--space-1); }
 
 .fs-meta {

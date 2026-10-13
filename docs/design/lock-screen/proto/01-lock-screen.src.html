@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Desko · 锁页光场对拍稿</title>
+<style>
+<!--TOKENS-->
+
+/* 以下为 UnlockPage.vue 现档样式的逐条誊写（scoped 展平；html[data-theme] → [data-theme]） */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-ui);
+  background: #6f6f6f;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  align-items: flex-start;
+}
+.win {
+  position: relative;
+  width: 1040px;
+  height: 670px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  --font-serif: 'Songti SC', 'Source Han Serif SC', 'Noto Serif CJK SC', SimSun, serif;
+}
+.frame-tag {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  font: 500 12px/1 var(--font-ui);
+  color: #e8e8e8;
+}
+
+/* 锁定态顶栏：透明、无横梁、无微距阴影（底不再是照片） */
+.titlebar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 30;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+}
+.tb-btn {
+  width: 44px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-secondary);
+}
+
+.unlock-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background: radial-gradient(110% 85% at 50% 40%, var(--lock-wash-b) 0%, var(--bg) 65%), var(--bg);
+}
+
+/* ---------- 光场 ---------- */
+.lock-aura {
+  position: absolute;
+  inset: -18%;
+  width: 136%;
+  height: 136%;
+  z-index: 1;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
+}
+.lock-aura-blob {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+.lock-aura-blob.a {
+  width: min(50vw, 520px); height: min(50vw, 520px);
+  top: 6%; left: 10%;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  filter: blur(68px);
+  animation: aura-a 28s cubic-bezier(.4,0,.2,1) infinite alternate;
+}
+.lock-aura-blob.b {
+  width: min(44vw, 440px); height: min(44vw, 440px);
+  right: 8%; bottom: 4%;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  filter: blur(60px);
+  animation: aura-b 32s cubic-bezier(.4,0,.2,1) infinite alternate;
+}
+.lock-aura-blob.c {
+  width: min(36vw, 360px); height: min(36vw, 360px);
+  top: 38%; left: 44%;
+  background: color-mix(in srgb, var(--panel-bg) 55%, transparent);
+  filter: blur(44px);
+  animation: aura-c 24s cubic-bezier(.4,0,.2,1) infinite alternate;
+}
+@keyframes aura-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(7%, 9%, 0) scale(1.08); }
+}
+@keyframes aura-b {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-8%, -6%, 0) scale(1.06); }
+}
+@keyframes aura-c {
+  from { transform: translate3d(0, 0, 0) scale(0.96); }
+  to   { transform: translate3d(5%, -7%, 0) scale(1.04); }
+}
+
+/* ---------- 乳胶微噪波 ---------- */
+.lock-grain {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='deskoGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23deskoGrain)' opacity='0.035'/%3E%3C/svg%3E");
+}
+
+.unlock-canvas { position: relative; z-index: 10; flex: 1; display: flex; align-items: center; justify-content: center; }
+.lock-stage { display: flex; flex-direction: column; align-items: center; gap: 34px; }
+
+.lock-masthead { display: flex; flex-direction: column; align-items: center; max-width: 90vw; text-align: center; }
+.masthead-line {
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 3vw, 32px);
+  font-weight: 600; line-height: 1.4; letter-spacing: .22em;
+  white-space: nowrap; color: var(--text);
+}
+.lock-stack { width: 300px; display: flex; flex-direction: column; align-items: center; }
+.lock-tile {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 8px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+}
+.lock-tile svg { width: 38px; height: 38px; }
+.lock-title {
+  font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--text);
+  margin-bottom: 22px;
+}
+
+.unlock-field { position: relative; width: 100%; height: 40px; }
+.unlock-field-icon {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--text-faint);
+}
+.unlock-field.focused .unlock-field-icon { color: var(--accent); }
+.unlock-input {
+  width: 100%; height: 100%;
+  padding: 0 62px 0 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px; font-family: inherit; color: var(--text);
+  background: var(--panel-bg);
+  outline: none;
+}
+.unlock-input.focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.reveal-btn {
+  position: absolute; right: 33px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+}
+.unlock-btn {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--accent-on);
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.unlock-error-slot { height: 20px; margin-top: 4px; display: flex; align-items: center; justify-content: center; }
+.unlock-error { font-size: 11px; color: var(--danger); }
+
+/* D 帧：漂移中段姿态（把三团按 keyframe 的 to 值手摆，验的是同一条配方漂到别处时字还读不读） */
+.win.drift .lock-aura-blob { animation: none; }
+.win.drift .lock-aura-blob.a { transform: translate3d(7%, 9%, 0) scale(1.08); }
+.win.drift .lock-aura-blob.b { transform: translate3d(-8%, -6%, 0) scale(1.06); }
+.win.drift .lock-aura-blob.c { transform: translate3d(5%, -7%, 0) scale(1.04); }
+
+.brand { width: 38px; height: 38px; }
+</style>
+</head>
+<body>
+
+<div class="win" data-theme="paper" data-accent="ink">
+  <span class="frame-tag">A · 纸底 × 墨蓝（漂移起点，聚焦态）</span>
+  <div class="unlock-bg"></div>
+  <div class="lock-aura"><i class="lock-aura-blob a"></i><i class="lock-aura-blob b"></i><i class="lock-aura-blob c"></i></div>
+  <div class="lock-grain"></div>
+  <div class="titlebar">
+    <span class="tb-btn">{{i:min:12}}</span><span class="tb-btn">{{i:max:12}}</span><span class="tb-btn">{{i:x:12}}</span>
+  </div>
+  <main class="unlock-canvas">
+    <div class="lock-stage">
+      <header class="lock-masthead">
+        <p class="masthead-line">星光不问赶路人，时光不负有心人</p>
+      </header>
+      <section class="lock-stack">
+        <div class="lock-tile"><svg class="brand" viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="bg1" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+        <stop offset="0" style="stop-color: var(--brand-g1)"/><stop offset="0.48" style="stop-color: var(--brand-g2)"/><stop offset="1" style="stop-color: var(--brand-g3)"/>
+      </linearGradient></defs>
+      <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#bg1)"/>
+      <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#bg1)"/>
+      <circle cx="75" cy="79" r="5" style="fill: var(--brand-knob)"/>
+    </svg></div>
+        <h1 class="lock-title">Desko</h1>
+        <div class="unlock-field focused">
+          <span class="unlock-field-icon">{{i:lock:16}}</span>
+          <input class="unlock-input focused" value="••••••" readonly>
+          <span class="reveal-btn">{{i:eye:15}}</span>
+          <span class="unlock-btn">{{i:arrowRight:13}}</span>
+        </div>
+        <div class="unlock-error-slot"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="win" data-theme="paper" data-accent="celadon">
+  <span class="frame-tag">B · 纸底 × 青瓷（报错态，光团吃 accent 色相）</span>
+  <div class="unlock-bg"></div>
+  <div class="lock-aura"><i class="lock-aura-blob a"></i><i class="lock-aura-blob b"></i><i class="lock-aura-blob c"></i></div>
+  <div class="lock-grain"></div>
+  <div class="titlebar">
+    <span class="tb-btn">{{i:min:12}}</span><span class="tb-btn">{{i:max:12}}</span><span class="tb-btn">{{i:x:12}}</span>
+  </div>
+  <main class="unlock-canvas">
+    <div class="lock-stage">
+      <header class="lock-masthead">
+        <p class="masthead-line">生活不止眼前的苟且，还有诗和远方</p>
+      </header>
+      <section class="lock-stack">
+        <div class="lock-tile"><svg class="brand" viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="bg2" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+        <stop offset="0" style="stop-color: var(--brand-g1)"/><stop offset="0.48" style="stop-color: var(--brand-g2)"/><stop offset="1" style="stop-color: var(--brand-g3)"/>
+      </linearGradient></defs>
+      <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#bg2)"/>
+      <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#bg2)"/>
+      <circle cx="75" cy="79" r="5" style="fill: var(--brand-knob)"/>
+    </svg></div>
+        <h1 class="lock-title">Desko</h1>
+        <div class="unlock-field">
+          <span class="unlock-field-icon">{{i:lock:16}}</span>
+          <input class="unlock-input" value="••••" readonly>
+          <span class="reveal-btn">{{i:eye:15}}</span>
+          <span class="unlock-btn">{{i:arrowRight:13}}</span>
+        </div>
+        <div class="unlock-error-slot"><span class="unlock-error">主密码错误，请重试</span></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="win" data-theme="ink" data-accent="clay">
+  <span class="frame-tag">C · 墨底 × 赭石（漂移起点）</span>
+  <div class="unlock-bg"></div>
+  <div class="lock-aura"><i class="lock-aura-blob a"></i><i class="lock-aura-blob b"></i><i class="lock-aura-blob c"></i></div>
+  <div class="lock-grain"></div>
+  <div class="titlebar">
+    <span class="tb-btn">{{i:min:12}}</span><span class="tb-btn">{{i:max:12}}</span><span class="tb-btn">{{i:x:12}}</span>
+  </div>
+  <main class="unlock-canvas">
+    <div class="lock-stage">
+      <header class="lock-masthead">
+        <p class="masthead-line">不积跬步，无以至千里</p>
+      </header>
+      <section class="lock-stack">
+        <div class="lock-tile"><svg class="brand" viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="bg3" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+        <stop offset="0" style="stop-color: var(--brand-g1)"/><stop offset="0.48" style="stop-color: var(--brand-g2)"/><stop offset="1" style="stop-color: var(--brand-g3)"/>
+      </linearGradient></defs>
+      <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#bg3)"/>
+      <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#bg3)"/>
+      <circle cx="75" cy="79" r="5" style="fill: var(--brand-knob)"/>
+    </svg></div>
+        <h1 class="lock-title">Desko</h1>
+        <div class="unlock-field focused">
+          <span class="unlock-field-icon">{{i:lock:16}}</span>
+          <input class="unlock-input focused" value="••••••" readonly>
+          <span class="reveal-btn">{{i:eye:15}}</span>
+          <span class="unlock-btn">{{i:arrowRight:13}}</span>
+        </div>
+        <div class="unlock-error-slot"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="win drift" data-theme="ink" data-accent="plum">
+  <span class="frame-tag">D · 墨底 × 紫罗（漂移中段，光团压到字上）</span>
+  <div class="unlock-bg"></div>
+  <div class="lock-aura"><i class="lock-aura-blob a"></i><i class="lock-aura-blob b"></i><i class="lock-aura-blob c"></i></div>
+  <div class="lock-grain"></div>
+  <div class="titlebar">
+    <span class="tb-btn">{{i:min:12}}</span><span class="tb-btn">{{i:max:12}}</span><span class="tb-btn">{{i:x:12}}</span>
+  </div>
+  <main class="unlock-canvas">
+    <div class="lock-stage">
+      <header class="lock-masthead">
+        <p class="masthead-line">心若向阳，无畏悲伤</p>
+      </header>
+      <section class="lock-stack">
+        <div class="lock-tile"><svg class="brand" viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="bg4" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+        <stop offset="0" style="stop-color: var(--brand-g1)"/><stop offset="0.48" style="stop-color: var(--brand-g2)"/><stop offset="1" style="stop-color: var(--brand-g3)"/>
+      </linearGradient></defs>
+      <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#bg4)"/>
+      <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#bg4)"/>
+      <circle cx="75" cy="79" r="5" style="fill: var(--brand-knob)"/>
+    </svg></div>
+        <h1 class="lock-title">Desko</h1>
+        <div class="unlock-field">
+          <span class="unlock-field-icon">{{i:lock:16}}</span>
+          <input class="unlock-input" placeholder="输入主密码解锁" readonly>
+          <span class="reveal-btn">{{i:eye:15}}</span>
+          <span class="unlock-btn">{{i:arrowRight:13}}</span>
+        </div>
+        <div class="unlock-error-slot"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

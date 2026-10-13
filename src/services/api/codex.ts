@@ -50,6 +50,8 @@ export interface CodexAccount {
   api_provider_name?: string | null
   api_base_url?: string | null
   requires_reauth?: boolean
+  /** 为什么登不上：切号失败时后端把上游报错原样写进来（codex_account_runtime_switch.rs:129），只挂在徽标 title 上 */
+  reauth_reason?: string | null
   authorization_status?: string | null
   quota?: CodexQuota | null
   quota_error?: { code?: string; message: string; timestamp: number } | null
@@ -94,12 +96,151 @@ export interface FileImportResult {
   failed: { email: string; error: string }[]
 }
 
+/** 会话属于哪个 Codex 实例。desko 只有官方默认目录一份，running 恒 false（进程探针是桩） */
+export interface CodexSessionLocation {
+  instanceId: string
+  instanceName: string
+  running: boolean
+}
+
+/** codex_list_sessions_across_instances 的单条（后端 rename_all = "camelCase"） */
+export interface CodexSessionRecord {
+  sessionId: string
+  title: string
+  cwd: string
+  /** 官方客户端的项目名，缺失时前端回退到目录名 */
+  projectName?: string | null
+  /** unix 秒 */
+  updatedAt?: number | null
+  locationCount: number
+  locations: CodexSessionLocation[]
+  /** conversation / external / subagent，非 conversation 时行上加徽标 */
+  sessionKind: string
+}
+
+/** 每会话的官方累计 token；进「会话」档一次全量预取 */
+export interface CodexSessionTokenStats {
+  sessionId: string
+  /** 每轮重发的上下文累计，含缓存命中，不等于真实计费输入 */
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  /** 其中命中缓存的部分；净输入 = inputTokens - cachedInputTokens */
+  cachedInputTokens: number
+  cacheWriteInputTokens: number
+  /** 含在 outputTokens 里的那部分推理输出 */
+  reasoningOutputTokens: number
+}
+
+/** 用量图的一桶：一个本地日（key = 'YYYY-MM-DD'）或一个模型 */
+export interface CodexUsageBucket {
+  key: string
+  label: string
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  totalTokens: number
+  requestCount: number
+}
+
+/** 窗口内的总量；六键口径与 CodexSessionTokenStats 同源，多三位计数 */
+export interface CodexUsageTotals {
+  inputTokens: number
+  cachedInputTokens: number
+  cacheWriteInputTokens: number
+  outputTokens: number
+  reasoningOutputTokens: number
+  totalTokens: number
+  requestCount: number
+  sessionCount: number
+  fileCount: number
+}
+
+/** codex_query_session_usage 的返回（上游同名命令，desko 现扫现算、不建 sqlite 表） */
+export interface CodexSessionUsageReport {
+  totals: CodexUsageTotals
+  byDay: CodexUsageBucket[]
+  byModel: CodexUsageBucket[]
+  fromTimestamp?: number | null
+  toTimestamp?: number | null
+  scanMillis: number
+}
+
+/** 移进回收站的结果；留底目录住在 desko 自己的数据目录，不在 ~/.codex 里 */
+export interface CodexSessionTrashSummary {
+  requestedSessionCount: number
+  trashedSessionCount: number
+  trashedInstanceCount: number
+  trashDirs: string[]
+  message: string
+}
+
+/** codex_list_trashed_sessions_across_instances 的单条 */
+export interface CodexTrashedSessionRecord {
+  sessionId: string
+  title: string
+  cwd: string
+  /** unix 秒（清单里的 RFC3339 由后端换算） */
+  deletedAt?: number | null
+  sizeBytes: number
+  locationCount: number
+  locations: Array<{ instanceId: string; instanceName: string }>
+}
+
+/** 账号留底摘要：列目录不解密，所以只有这几样够认出一个号 */
+export interface CodexRecycledAccount {
+  id: string
+  account_id: string
+  email: string
+  account_name?: string | null
+  plan_type?: string | null
+  /** unix 秒 */
+  deleted_at: number
+}
+
+/** 后端逐条攒的失败明细，只带 accountId——邮箱得前端起作业时自己抄 */
+export interface CodexBatchDeleteError {
+  accountId: string
+  error: string
+}
+
+/**
+ * 批量删除作业快照。`completed` 是「已处理」计数：失败的那条也会 +1，
+ * 所以别把它读成「已删除 X 条」，删除数以 total - failed 算。
+ */
+export interface CodexBatchDeleteJobStatus {
+  jobId: string
+  status: 'running' | 'paused' | 'completed' | 'failed'
+  total: number
+  completed: number
+  failed: number
+  errors: CodexBatchDeleteError[]
+}
+
+export interface CodexSessionRestoreSummary {
+  requestedSessionCount: number
+  restoredSessionCount: number
+  restoredInstanceCount: number
+  message: string
+}
+
+export interface CodexSessionTrashDeleteSummary {
+  requestedSessionCount: number
+  deletedSessionCount: number
+  deletedEntryCount: number
+  freedSizeBytes: number
+  message: string
+}
+
 export const codexApi = {
   list: (): Promise<CodexAccount[]> => invoke('list_codex_accounts'),
   current: (): Promise<CodexAccount | null> => invoke('get_current_codex_account'),
 
   switch: (accountId: string): Promise<CodexAccount> =>
     invoke('switch_codex_account', { accountId, launchAfterSwitch: false }),
+  /** 切号有两个取消检查点：写凭据前取消=干净中止，写完后取消=报错但凭据已改，界面得按后者说实话 */
+  cancelSwitch: (accountId: string): Promise<void> =>
+    invoke('codex_cancel_account_switch', { accountId }),
 
   refreshQuota: (accountId: string): Promise<CodexQuota> =>
     invoke('refresh_codex_quota', { accountId }),
@@ -107,6 +248,9 @@ export const codexApi = {
     invoke('refresh_codex_quotas_batch', { accountIds, background: true }),
   refreshProfile: (accountId: string): Promise<CodexAccount> =>
     invoke('refresh_codex_account_profile', { accountId }),
+  /** 订阅档位与到期时间的权威刷新；后端对 API Key 账号直接拒，所以只有 OAuth 行走这条 */
+  refreshSubscription: (accountId: string): Promise<CodexAccount> =>
+    invoke('refresh_codex_subscription_info', { accountId }),
   forceRefreshTokens: (accountId: string): Promise<CodexAccount> =>
     invoke('force_refresh_codex_tokens', { accountId }),
 
@@ -125,8 +269,41 @@ export const codexApi = {
     invoke('update_codex_account_tags', { accountId, tags }),
 
   remove: (accountId: string): Promise<void> => invoke('delete_codex_account', { accountId }),
-  removeMany: (accountIds: string[]): Promise<void> =>
-    invoke('delete_codex_accounts', { accountIds }),
+
+  /**
+   * 批量删除作业：后端逐条走 remove_account，所以删掉的每一条都会在账号留底里（10 号稿 §2）。
+   * 这一族没有事件，进度只能轮询 get；start 拿到空选择时返回 `jobId: ''`，别拿它去轮询。
+   */
+  startBatchDelete: (accountIds: string[]): Promise<CodexBatchDeleteJobStatus> =>
+    invoke('start_codex_batch_delete', { accountIds }),
+  getBatchDelete: (jobId: string): Promise<CodexBatchDeleteJobStatus> =>
+    invoke('get_codex_batch_delete', { jobId }),
+  /** 暂停只拦下一条：正在删的那条会跑完 */
+  pauseBatchDelete: (jobId: string): Promise<CodexBatchDeleteJobStatus> =>
+    invoke('pause_codex_batch_delete', { jobId }),
+  /** 后端对已完成 / 失败的任务续跑是 no-op（原样返回状态），前端不用防重复点 */
+  resumeBatchDelete: (jobId: string): Promise<CodexBatchDeleteJobStatus> =>
+    invoke('resume_codex_batch_delete', { jobId }),
+  /** 重试会把任务换成失败那批并清空上一轮 errors，明细得前端自己留 */
+  retryFailedBatchDelete: (jobId: string): Promise<CodexBatchDeleteJobStatus> =>
+    invoke('retry_failed_codex_batch_delete', { jobId }),
+  /** 清任务只摘状态与盘快照，已删掉的账号不会回来（它们在留底里） */
+  clearBatchDelete: (jobId: string): Promise<void> =>
+    invoke('clear_codex_batch_delete', { jobId }),
+
+  /**
+   * 账号留底：删除时后端已把整条账号加密存进 desko 数据目录，这里只把它读回来。
+   * 键名保持后端结构体的 snake_case——同一结构体也是磁盘落盘格式，改驼峰会让旧留底读不出。
+   * 上游那条 export_codex_recycled_accounts（明文落盘）经裁定不接。
+   */
+  listRecycled: (): Promise<CodexRecycledAccount[]> => invoke('list_codex_recycled_accounts'),
+  restoreRecycled: (recycleId: string): Promise<void> =>
+    invoke('restore_codex_recycled_account', { recycleId }),
+  deleteRecycled: (recycleId: string): Promise<void> =>
+    invoke('delete_codex_recycled_account', { recycleId }),
+  /** 清空只删「刚看到的那批 id」，不扫目录一把清 */
+  emptyRecycled: (recycleIds: string[]): Promise<void> =>
+    invoke('empty_codex_recycle_bin', { recycleIds }),
 
   /** 授权码流程：后端起本地回调服务并给出 auth_url，回跳地址由用户从浏览器复制回来 */
   oauthStart: (reauthAccountId?: string): Promise<OAuthLoginStart> =>
@@ -144,11 +321,21 @@ export const codexApi = {
       apiKey,
       apiBaseUrl: apiBaseUrl && apiBaseUrl.trim() ? apiBaseUrl.trim() : null,
     }),
+  /** 改已入库 API Key 账号的凭据；后端其余参数都是 Option，留空即不动 */
+  updateApiKey: (accountId: string, apiKey: string, apiBaseUrl?: string): Promise<CodexAccount> =>
+    invoke('update_codex_api_key_credentials', {
+      accountId,
+      apiKey,
+      apiBaseUrl: apiBaseUrl && apiBaseUrl.trim() ? apiBaseUrl.trim() : null,
+    }),
 
   /** 读 ~/.codex/auth.json 落一条账号，不动官方凭据 */
   importLocal: (): Promise<CodexAccount> => invoke('import_codex_from_local', { instanceId: null }),
   importFiles: (filePath: string[]): Promise<FileImportResult> =>
     invoke('import_codex_from_files', { filePaths: filePath }),
+  /** 粘贴导出的 JSON 文本（一条或数组），与选文件同一条落库路径 */
+  importJson: (jsonContent: string): Promise<CodexAccount[]> =>
+    invoke('import_codex_from_json', { jsonContent }),
   exportJson: (accountIds: string[]): Promise<string> =>
     invoke('export_codex_accounts', { accountIds }),
 
@@ -160,4 +347,37 @@ export const codexApi = {
   /** 对默认 profile 做一次 quick 会话可见性修复（改前自动备份官方数据） */
   repairSessionVisibility: (): Promise<SessionVisibilityRepairSummary> =>
     invoke('codex_repair_session_visibility_for_launch_target'),
+
+  /** 官方目录里的会话列表（只读）。正文搜索暂不接，contentQuery 恒 null。 */
+  listSessions: (titleQuery?: string): Promise<CodexSessionRecord[]> =>
+    invoke('codex_list_sessions_across_instances', {
+      titleQuery: titleQuery && titleQuery.trim() ? titleQuery.trim() : null,
+      contentQuery: null,
+    }),
+  sessionTokenStats: (sessionIds: string[]): Promise<CodexSessionTokenStats[]> =>
+    invoke('codex_get_session_token_stats_across_instances', { sessionIds }),
+
+  /** 用量图：按本地日与模型聚合的逐轮增量；窗口留空即全量 */
+  querySessionUsage: (
+    fromTimestamp: number | null,
+    toTimestamp: number | null,
+  ): Promise<CodexSessionUsageReport> =>
+    invoke('codex_query_session_usage', { fromTimestamp, toTimestamp }),
+
+  /** 移进回收站：先留底进 desko 数据目录，再从官方会话目录删文件并重写索引 */
+  moveToTrash: (sessionIds: string[]): Promise<CodexSessionTrashSummary> =>
+    invoke('codex_move_sessions_to_trash_across_instances', { sessionIds }),
+  listTrash: (): Promise<CodexTrashedSessionRecord[]> =>
+    invoke('codex_list_trashed_sessions_across_instances'),
+  restoreFromTrash: (sessionIds: string[]): Promise<CodexSessionRestoreSummary> =>
+    invoke('codex_restore_sessions_from_trash_across_instances', { sessionIds }),
+  /** 永久删除留底（官方目录此时已经不含这条会话） */
+  deleteFromTrash: (sessionIds: string[]): Promise<CodexSessionTrashDeleteSummary> =>
+    invoke('codex_delete_trashed_sessions_across_instances', { sessionIds }),
+  emptyTrash: (): Promise<CodexSessionTrashDeleteSummary> =>
+    invoke('codex_empty_session_trash_across_instances'),
+  openSessionLocation: (sessionId: string): Promise<void> =>
+    invoke('codex_open_session_location', { sessionId }),
+  openSessionRollout: (sessionId: string): Promise<void> =>
+    invoke('codex_open_session_rollout', { sessionId }),
 }

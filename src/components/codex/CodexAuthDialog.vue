@@ -29,6 +29,7 @@ const apiBaseUrl = ref('')
 const busy = ref(false)
 const paths = ref<StoragePaths | null>(null)
 const importing = ref(false)
+const pasteJson = ref('')
 
 async function copy(text: string, label: string) {
   try {
@@ -194,6 +195,26 @@ async function importFromFile() {
   }
 }
 
+/** 粘贴导出的 JSON（单条对象或数组）走的是和选文件同一条落库路径，免去先存盘 */
+async function importFromPaste() {
+  const text = pasteJson.value.trim()
+  if (!text) {
+    toastStore.showToast('先把导出的 JSON 粘进来', 'error')
+    return
+  }
+  importing.value = true
+  try {
+    const list = await codexApi.importJson(text)
+    toastStore.showToast(`已导入 ${list.length} 条账号`)
+    await refreshAccounts()
+    emit('close')
+  } catch (e) {
+    toastStore.showToast(errText(e), 'error')
+  } finally {
+    importing.value = false
+  }
+}
+
 async function close() {
   if (loginId.value) {
     try {
@@ -241,79 +262,58 @@ onMounted(() => {
 
         <!-- 浏览器登录：官方 OAuth 授权码流程，desko 只在本机收回调 -->
         <template v-if="mode === 'oauth'">
-          <p v-if="!loginId" class="lead">
+          <p class="lead">
             点「开始登录」会打开 OpenAI 官方授权页。授权完成后 desko 自动收口；
             浏览器回跳失败时，把地址栏里的整条回调地址贴回下面这行。
           </p>
           <p v-if="portBusy && !loginId" class="note warn">
             回调端口已被占用，先退出其他正在登录的 Codex 客户端，或再点一次重试。
           </p>
-          <div v-if="!loginId" class="row">
-            <button class="btn-primary" type="button" :disabled="busy" @click="startOAuth">开始登录</button>
-          </div>
-          <template v-else>
+          <template v-if="loginId">
             <div class="line">
               <span class="chip"><span class="dot" aria-hidden="true"></span>{{ waiting ? '等待授权…' : '已发起' }}</span>
               <code class="mono url" :title="authUrl">{{ authUrl }}</code>
-              <button class="action-btn" type="button" @click="openInBrowser(authUrl)">
-                <AppIcon name="external" :size="13" />重新打开
-              </button>
-              <button class="action-btn" type="button" @click="copy(authUrl, '授权地址')">
-                <AppIcon name="copy" :size="13" />复制
-              </button>
             </div>
-            <div class="row cb-row">
-              <input
-                v-model="callbackUrl"
-                class="input"
-                type="text"
-                spellcheck="false"
-                placeholder="粘贴回跳地址，形如 http://localhost:1455/callback?code=…"
-                @keyup.enter="submitCallback"
-              />
-              <button class="action-btn primary" type="button" :disabled="busy" @click="submitCallback">提交</button>
+            <div class="cb-row">
+              <div class="form-group cb-field">
+                <input
+                  v-model="callbackUrl"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="粘贴回跳地址，形如 http://localhost:1455/callback?code=…"
+                  @keyup.enter="submitCallback"
+                />
+              </div>
+              <button class="btn-primary" type="button" :disabled="busy" @click="submitCallback">提交</button>
             </div>
           </template>
         </template>
 
         <!-- 设备码：不占回调端口，适合本机端口被占或远程桌面里没有浏览器的情况 -->
         <template v-else-if="mode === 'device'">
-          <p v-if="!loginId" class="lead">
+          <p class="lead">
             设备码流程不开本地端口：输一串 8 位码到 OpenAI 的验证页即可，本机没有浏览器也能完成。
           </p>
-          <div v-if="!loginId" class="row">
-            <button class="btn-primary" type="button" :disabled="busy" @click="startDevice">取设备码</button>
-          </div>
-          <template v-else>
+          <template v-if="loginId">
             <div class="code-box">
               <span class="code-label mono">{{ userCode }}</span>
-              <span class="code-hint">在浏览器里输入这串码完成授权</span>
             </div>
             <div class="line">
               <span class="chip"><span class="dot" aria-hidden="true"></span>{{ waiting ? '等待授权…' : '已发起' }}</span>
               <code class="mono url" :title="verifyUrl">{{ verifyUrl }}</code>
-              <button class="action-btn" type="button" @click="openInBrowser(verifyUrl)">
-                <AppIcon name="external" :size="13" />打开验证页
-              </button>
-              <button class="action-btn" type="button" @click="copy(userCode, '设备码')">
-                <AppIcon name="copy" :size="13" />复制码
-              </button>
             </div>
           </template>
         </template>
 
         <template v-else-if="mode === 'apikey'">
-          <p class="lead">API Key 账号不进官方登录链路，只在 desko 里保存，切号时写进 config.toml 的供应商段。</p>
-          <label class="field">
-            <span class="field-label">API Key</span>
-            <input v-model="apiKey" class="input mono" type="password" spellcheck="false" placeholder="sk-…" @keyup.enter="addApiKey" />
-          </label>
-          <label class="field">
-            <span class="field-label">自定义接口地址（可留空）</span>
-            <input v-model="apiBaseUrl" class="input mono" type="text" spellcheck="false" placeholder="https://…/v1" @keyup.enter="addApiKey" />
-          </label>
-          <div class="row">
-            <button class="btn-primary" type="button" :disabled="busy || !apiKey.trim()" @click="addApiKey">添加</button>
+          <p class="lead">API Key 账号不进官方登录链路，只在 Desko 里保存，切号时写进 config.toml 的供应商段。</p>
+          <div class="form-group">
+            <label for="cx-key">API Key</label>
+            <input id="cx-key" v-model="apiKey" class="mono" type="password" spellcheck="false" placeholder="sk-…" @keyup.enter="addApiKey" />
+          </div>
+          <div class="form-group">
+            <label for="cx-base">自定义接口地址（可留空）</label>
+            <input id="cx-base" v-model="apiBaseUrl" class="mono" type="text" spellcheck="false" placeholder="https://…/v1" @keyup.enter="addApiKey" />
           </div>
         </template>
 
@@ -327,18 +327,52 @@ onMounted(() => {
             <span class="k">本机凭据</span>
             <span class="v mono" :title="paths?.authPath">{{ paths?.authPath || '读取中…' }}</span>
           </div>
-          <div class="row">
-            <button class="action-btn" type="button" :disabled="importing" @click="importLocal">
-              <AppIcon name="download" :size="13" />导入本机账号
-            </button>
-            <button class="action-btn" type="button" :disabled="importing" @click="importFromFile">
-              <AppIcon name="folder" :size="13" />从 auth.json 导入…
-            </button>
+          <div class="form-group">
+            <label for="cx-paste">或直接粘贴导出的 JSON</label>
+            <textarea
+              id="cx-paste"
+              v-model="pasteJson"
+              class="paste-box mono"
+              rows="4"
+              spellcheck="false"
+              placeholder='形如 [{"email":"…","openai_api_key":"sk-…"}]，也可只粘一条对象'
+            />
+            <div class="paste-act">
+              <button class="action-btn" type="button" :disabled="importing || !pasteJson.trim()" @click="importFromPaste">
+                导入这段 JSON
+              </button>
+            </div>
           </div>
         </template>
       </div>
 
+      <!-- 每个页签的收口动作都在底栏，正文只留字段与状态；等待授权时底栏换成那条地址上的动作。 -->
       <div class="dialog-footer">
+        <template v-if="mode === 'import'">
+          <button class="btn-secondary" type="button" :disabled="importing" @click="importFromFile">
+            <AppIcon name="folder" :size="13" />从 auth.json 导入…
+          </button>
+          <button class="btn-primary" type="button" :disabled="importing" @click="importLocal">
+            <AppIcon name="download" :size="13" />导入本机账号
+          </button>
+        </template>
+        <template v-else-if="mode === 'apikey'">
+          <button class="btn-primary" type="button" :disabled="busy || !apiKey.trim()" @click="addApiKey">添加</button>
+        </template>
+        <template v-else-if="loginId && mode === 'device'">
+          <button class="btn-secondary" type="button" @click="copy(userCode, '设备码')">复制码</button>
+          <button class="btn-primary" type="button" @click="openInBrowser(verifyUrl)">
+            <AppIcon name="external" :size="13" />打开验证页
+          </button>
+        </template>
+        <template v-else-if="loginId">
+          <button class="btn-secondary" type="button" @click="copy(authUrl, '授权地址')">复制地址</button>
+          <button class="btn-secondary" type="button" @click="openInBrowser(authUrl)">
+            <AppIcon name="external" :size="13" />打开授权页
+          </button>
+        </template>
+        <button v-else-if="mode === 'oauth'" class="btn-primary" type="button" :disabled="busy" @click="startOAuth">开始登录</button>
+        <button v-else-if="mode === 'device'" class="btn-primary" type="button" :disabled="busy" @click="startDevice">取设备码</button>
         <button class="btn-secondary" type="button" @click="close">取消</button>
       </div>
     </div>
@@ -349,45 +383,30 @@ onMounted(() => {
 .auth-dialog { width: 520px; --font-mono: Consolas, 'Cascadia Mono', monospace; }
 .mono { font-family: var(--font-mono); }
 
-.seg {
-  display: inline-flex; gap: 2px; padding: 2px;
-  background: var(--fill); border-radius: var(--radius-pill);
-}
-.seg-btn {
-  height: 28px; padding: 0 12px; border: none; border-radius: var(--radius-pill);
-  background: transparent; color: var(--text-secondary);
-  font: inherit; font-size: var(--text-xs); font-weight: 600; cursor: pointer;
-}
-.seg-btn.on { background: var(--panel-bg); color: var(--text); box-shadow: var(--shadow-card) }
-
-.lead { margin: 12px 0 0; font-size: var(--text-xs); line-height: 1.7; color: var(--text-muted) }
+/* 页签分段控件与说明句（.lead）走 global.css 的弹窗档 */
 .note { margin: 10px 0 0; font-size: var(--text-xs); color: var(--warning) }
 .note.warn { background: var(--warning-soft); border-radius: var(--radius-sm); padding: 8px 10px }
 
-.row { display: flex; align-items: center; gap: 10px; margin-top: 14px }
-.cb-row { margin-top: 10px }
-.cb-row .input { flex: 1; min-width: 0; height: 32px }
+/* 回跳地址那一行：字段吃全局 .form-group 档，按钮贴在同一行右端 */
+.cb-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px }
+.cb-row .cb-field { flex: 1; min-width: 0; margin-bottom: 0 }
 
 .line { display: flex; align-items: center; gap: 8px; margin-top: 12px; min-width: 0 }
 .line .chip { flex-shrink: 0 }
+/* 整条地址要读得完：动作已收进底栏，这一行只剩状态与地址，不必再截断 */
 .url {
   flex: 1; min-width: 0;
-  font-size: var(--text-xs); color: var(--text-secondary);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--text-xs); line-height: 18px; color: var(--text-secondary);
+  word-break: break-all;
 }
-.line .action-btn { height: 28px; flex-shrink: 0 }
 
 .code-box {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  margin-top: 14px; padding: 16px;
-  background: var(--fill); border-radius: var(--radius-card);
+  margin-top: 14px; text-align: center;
 }
-.code-label { font-size: 26px; font-weight: 700; letter-spacing: 0.18em; color: var(--text) }
-.code-hint { font-size: var(--text-xs); color: var(--text-muted) }
+.code-label { font-size: 20px; font-weight: 700; letter-spacing: 0.12em; color: var(--text) }
 
 .pathline {
-  display: flex; align-items: center; gap: 8px; margin-top: 12px; height: 34px; padding: 0 10px;
-  background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  display: flex; align-items: center; gap: 8px; margin-top: 12px; height: 34px;
 }
 .pathline .k { flex-shrink: 0; font-size: var(--text-2xs); color: var(--text-faint) }
 .pathline .v {
@@ -395,7 +414,7 @@ onMounted(() => {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.field { display: flex; flex-direction: column; gap: 6px; margin-top: 14px }
-.field-label { font-size: var(--text-xs); color: var(--text-secondary) }
-.field .input { height: 32px }
+/* 粘贴导入：底栏已有两个收口动作，再塞第三颗会溢出 520px，动作贴着字段走右端 */
+.paste-box { line-height: 1.6; font-size: var(--text-xs); resize: vertical }
+.paste-act { display: flex; justify-content: flex-end; margin-top: 8px }
 </style>

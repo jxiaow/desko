@@ -269,7 +269,7 @@ describe('NotesModule', () => {
     await dialog.find('input[type="password"]').setValue('错的')
     await dialog.find('button.btn-primary').trigger('click')
     await flushPromises()
-    expect(dialog.find('.lock-error').text()).toContain('密码错误')
+    expect(dialog.find('.dialog-err').text()).toContain('密码错误')
 
     await dialog.find('input[type="password"]').setValue('note-pw-1234')
     await dialog.find('button.btn-primary').trigger('click')

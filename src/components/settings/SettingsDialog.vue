@@ -5,7 +5,7 @@ import ProfilesPane from './ProfilesPane.vue'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { settingsApi } from '../../services/api/settings'
-import { THEMES, ACCENTS, DEFAULT_APPEARANCE, chooseTheme, chooseAccent, readTheme } from '../../services/theme'
+import { THEMES, ACCENTS, DEFAULT_APPEARANCE, chooseTheme, chooseAccent, readTheme, polarityOf } from '../../services/theme'
 import type { ThemeId, AccentId, ThemeInfo } from '../../services/theme'
 import { moduleFlags, loadModuleFlags } from '../../modules/state'
 import { MODULES, moduleById, type ModuleId, type SettingsTabId } from '../../modules/registry'
@@ -149,11 +149,11 @@ const pickAccent = async (id: AccentId) => {
   toastStore.showToast(saved ? '已切换强调色' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
 }
 
-/** 预览卡里的 accent 色丸跟着当前 accent 档走，纸/墨各取一档 */
+/** 预览卡里的 accent 色丸跟着当前 accent 档走，按底色那一极取档 */
 const prevAccent = (t: ThemeInfo) => {
   const a = ACCENTS.find((x) => x.id === accent.value)
   if (!a) return t.prev.accent
-  return t.id === 'ink' ? a.dotInk : a.dot
+  return polarityOf(t.id) === 'dark' ? a.dotInk : a.dot
 }
 
 /** 开关只有一条路径：落库成功才认，失败由状态层扳回；路由与页面跟着收 */
@@ -238,7 +238,7 @@ onMounted(() => {
 
           <!-- 模块 -->
           <section v-show="tab === 'modules'" class="settings-pane">
-            <p class="module-hint">关一个模块只是收起它的侧栏入口，数据与口令都留在本机，重开即用。</p>
+            <p class="pane-hint">关一个模块只是收起它的侧栏入口，数据与口令都留在本机，重开即用。</p>
             <div class="group-content">
               <div v-for="m in MODULES" :key="m.id" class="setting-item">
                 <div class="setting-info">
@@ -314,7 +314,7 @@ onMounted(() => {
                 :data-accent-id="a.id"
                 @click="pickAccent(a.id)"
               >
-                <span class="accent-dot" :style="{ background: theme === 'ink' ? a.dotInk : a.dot }" />
+                <span class="accent-dot" :style="{ background: polarityOf(theme) === 'dark' ? a.dotInk : a.dot }" />
                 <span class="accent-name">{{ a.name }}</span>
               </button>
             </div>
@@ -408,7 +408,7 @@ onMounted(() => {
 .settings-dialog {
   display: flex;
   background: var(--panel-bg);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   width: min(640px, 92vw);
   /* 定高：壳高不随页签内容变。实测六页内容 231..931，按内容收时壳顶在 y=95..197 之间跳
      102px，左导航和关闭钮跟着跳位；短页的余量留在下方，长页由面板自己滚。 */
@@ -505,40 +505,35 @@ onMounted(() => {
   justify-content: space-between;
   gap: var(--space-3);
   height: 44px;
-  padding: 0 var(--space-3) 0 var(--space-5);
+  padding: 0 var(--space-4);
   border-bottom: 1px solid var(--border);
 }
 
 .settings-head h3 {
   font-size: var(--text-base);
-  font-weight: 600;
+  font-weight: 650;
   color: var(--text);
   margin: 0;
 }
 
 /* 面板用 v-show 而非 v-if：切页时 number-input 不卸载，@change 才不会被切页吞掉。
-   弹窗定高，各页同高，切页不跳。 */
+   弹窗定高，各页同高，切页不跳。
+   横向内距 16 是行组的对齐基准：行文字与分组标题同一条竖线，发丝线各侧多伸 8px。 */
 .settings-pane {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding: var(--space-5);
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
 }
 
-/* 面板是 flex column：行组作为直接子项会被压扁再裁（overflow: hidden），
-   「模块」页 8 行的末两行就是这么消失的。让它保持自然高度，超出交给面板滚。 */
-.settings-pane > .group-content {
+/* 面板是 flex column 滚动容器：直接子项会被压扁再溢出，「模块」页 8 行的末两行
+   就是这么消失的。子项一律保持自然高度，超出交给面板滚。 */
+.settings-pane > * {
   flex-shrink: 0;
-}
-
-.module-hint {
-  margin: 0 0 var(--space-4);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
 }
 
 .arrow-icon {

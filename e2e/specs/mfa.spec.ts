@@ -90,12 +90,12 @@ test.describe('MFA 验证码', () => {
   test('手输非法密钥：报后端文案且弹窗不关', async ({ page }) => {
     await gotoMfa(page)
     await page.locator('.page-bar .btn-primary').click()
-    await page.locator('.add-tab', { hasText: '手动密钥' }).click()
+    await page.locator('.seg-btn', { hasText: '手动密钥' }).click()
     await page.locator('.form-group input[placeholder="如 alice@example.com"]').fill('dave')
     await page.locator('.form-group input[placeholder*="JBSWY3DPEHPK3PXP"]').fill('0000!!')
     await page.locator('.dialog-footer .btn-primary').click()
     await expectToast(page, '密钥不是有效的 Base32 字符串')
-    await expect(page.locator('.dialog .add-tabs')).toBeVisible()
+    await expect(page.locator('.dialog .seg')).toBeVisible()
     expect(await e2e.count(page, 'mfa_codes')).toBeGreaterThanOrEqual(1)
   })
 

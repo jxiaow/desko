@@ -12,7 +12,7 @@ test.describe('认证流程', () => {
     await expect(auth.setupError).toHaveText('主密码至少需要 6 位')
 
     await auth.completeSetup('abcdef', 'abcdeg')
-    await expect(auth.setupError).toHaveText('两次输入的密码不一致')
+    await expect(auth.setupError).toHaveText('两次输入的主密码不一致')
 
     await auth.completeSetup('abcdef', 'abcdef')
     await auth.expectUnlocked()

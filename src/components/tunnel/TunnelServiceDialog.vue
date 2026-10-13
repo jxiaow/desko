@@ -109,7 +109,7 @@ async function save() {
       <div class="dialog-header">
         <h3>{{ row ? `${row.label} · 公网设置` : '添加一项本地服务' }}</h3>
         <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
-          <AppIcon name="x" :size="15" />
+          <AppIcon name="x" :size="16" />
         </button>
       </div>
 
@@ -120,10 +120,10 @@ async function save() {
             <button type="button" :class="{ on: preset === 'fileshare' }" @click="preset = 'fileshare'">局域网传输</button>
             <button type="button" :class="{ on: preset === '' }" @click="preset = ''">其它本机服务</button>
           </div>
-          <p class="field-hint">
+          <p class="lead">
             {{ isFileshare
-              ? 'desko 自己起的那个服务，公网侧能强制口令与只读。'
-              : '本机在听的任何 HTTP 服务。desko 不在它的请求链路上，鉴权由那台服务自己负责。' }}
+              ? 'Desko 自己起的那个服务，公网侧能强制口令与只读。'
+              : '本机在听的任何 HTTP 服务。Desko 不在它的请求链路上，鉴权由那台服务自己负责。' }}
           </p>
         </div>
 
@@ -143,7 +143,7 @@ async function save() {
             spellcheck="false"
             placeholder="files.example.com"
           />
-          <p class="field-hint">写完整主机名，不带协议和路径；一个子域只能指一个本机端口。</p>
+          <p class="lead">写完整主机名，不带协议和路径；一个子域只能指一个本机端口。</p>
         </div>
 
         <div class="form-group">
@@ -160,7 +160,7 @@ async function save() {
             />
             <button v-if="isFileshare" class="btn-secondary port-btn" type="button" @click="readPort">读实际端口</button>
           </div>
-          <p class="field-hint">
+          <p class="lead">
             {{ isFileshare
               ? '取本机正在监听的那个值：配置端口被占用会向上漂，照配置填必错。'
               : '只许指向本机 127.0.0.1，不接受别台机器的地址。' }}
@@ -180,10 +180,10 @@ async function save() {
               autocomplete="new-password"
               :placeholder="row?.hasPublicPassword ? '留空 = 不动现在这把' : '还没设过：不设就过不了门'"
             />
-            <p class="field-hint">
+            <p class="lead">
               {{ row?.hasPublicPassword
                 ? '改口令就填新的；只动开关不必填。'
-                : '这条门直接对着公网，没口令时 desko 不放它通：8–64 个字符，别用常见弱口令。' }}
+                : '这条门直接对着公网，没口令时 Desko 不放它通：8–64 个字符，别用常见弱口令。' }}
             </p>
           </div>
 
@@ -193,7 +193,7 @@ async function save() {
               <button type="button" :class="{ on: publicReadOnly }" @click="publicReadOnly = true">只读</button>
               <button type="button" :class="{ on: !publicReadOnly }" @click="publicReadOnly = false">放开上传</button>
             </div>
-            <p class="field-hint">
+            <p class="lead">
               只读＝公网侧只能浏览和下载，上传、存文本会被拒。局域网那扇门不受这里影响。
             </p>
           </div>
@@ -219,28 +219,15 @@ async function save() {
 .mono { font-family: var(--font-mono); }
 
 .tunnel-service-dialog { width: 520px }
-.tunnel-service-dialog .dialog-body { padding: 14px 20px 4px }
 
 /* 全局字段档就是本页要的档，这里只补等宽那一处 */
 .form-group input.mono { font-family: var(--font-mono); }
-.field-hint { margin: 5px 0 0; font-size: var(--text-xs); line-height: 1.5; color: var(--text-muted) }
 
-.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden }
-.seg button {
-  height: 28px;
-  padding: 0 12px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 13px;
-  cursor: pointer;
-}
-.seg button + button { border-left: 1px solid var(--border) }
-.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600 }
+/* 分段控件走 global.css 的 .dialog .seg */
 
 .port-line { display: flex; gap: 8px; align-items: center }
 .port-line input { flex: 1; min-width: 0 }
-.port-btn { height: 32px; flex-shrink: 0 }
+.port-btn { flex-shrink: 0; align-self: flex-start }
 
 /* 公网策略与基础字段之间只靠小标题+间距分层，不做卡中卡 */
 .policy-head {

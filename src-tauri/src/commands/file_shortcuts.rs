@@ -128,7 +128,7 @@ pub fn open_terminal(state: State<AppState>, path: String) -> Result<(), AppErro
         }
         if pref == "wt" {
             return Err(AppError::Io(
-                "未找到 Windows Terminal（便携版或商店版都没探测到），可在「设置 · 通用」改用命令提示符".to_string(),
+                "未找到 Windows Terminal（便携版或商店版都没探测到），可在「设置 · 文件快捷」改用命令提示符".to_string(),
             ));
         }
     }

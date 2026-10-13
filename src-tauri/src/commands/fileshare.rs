@@ -115,7 +115,7 @@ fn server_exe() -> Result<PathBuf, AppError> {
         return Ok(candidate);
     }
     Err(AppError::FileShare(
-        "找不到 desko-fileshare 服务程序，请重新安装或同步构建".to_string(),
+        "未找到局域网传输服务程序，请重新安装后重试".to_string(),
     ))
 }
 
@@ -477,7 +477,7 @@ fn import_one(dir_canon: &Path, raw: &str) -> Result<StoredFile, String> {
     let shown = base_name(src);
     let meta = std::fs::symlink_metadata(src).map_err(|_| format!("{}：读不到文件", shown))?;
     if !meta.is_file() {
-        return Err(format!("{}：只收文件，文件夹请先压缩", shown));
+        return Err(format!("{}：仅接收文件，文件夹请先压缩", shown));
     }
     if meta.len() > MAX_IMPORT_BYTES {
         return Err(format!("{}：超过单文件 {} GiB 上限", shown, MAX_IMPORT_BYTES >> 30));

@@ -43,7 +43,7 @@ useEscapeClose(() => emit('close'))
         <div class="dialog-header">
           <h3>{{ title }}</h3>
           <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
-            <AppIcon name="x" :size="18" />
+            <AppIcon name="x" :size="16" />
           </button>
         </div>
         <div class="dialog-body">
@@ -77,12 +77,10 @@ useEscapeClose(() => emit('close'))
   width: 520px;
   /* 上下各留 4.5vh：内容自然高在此内，绝不触发外层滚动 */
   max-height: 91vh;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-pop);
 }
 
 /* 表单正文自然高，不出外层滚动条；子路径已搬去独立弹窗 */
-.entry-form-dialog .dialog-body { overflow: hidden; padding: 16px 20px 12px; }
+.entry-form-dialog .dialog-body { overflow: hidden; }
 
 /* 46px 底栏浅底色 + 28px 按钮档、快捷键提示（.footer-hints/.kbd）均已上抬为全局；
    这里只留本弹窗的布局差量：左侧快捷键徽标把按钮推到右边 */

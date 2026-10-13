@@ -1,0 +1,273 @@
+<!doctype html>
+<!-- Toast 搬家对拍稿（2026-10-12）：右下角反色胶囊挪到「内容区顶沿居中」。
+     改完重跑：node scripts/mock-build.mjs docs/design/toast/01-top-center.src.html docs/design/toast/01-top-center.html
+     四帧 = 纸/墨 × 成功/失败。胶囊在 .main（侧栏以右的列）内水平居中，top = 标题栏 42 + 10 = 52px。 -->
+<html lang="zh"><head><meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "HarmonyOS Sans SC", "Segoe UI", sans-serif; }
+<!--TOKENS-->
+/* 别名槽（global.css 474 行块）不在注入口径里，mock 里手工指回源头。
+   必须连 data-theme 选择器一起重写：ink 帧的 data-theme 挂在 .win 元素上，
+   只写 :root 的话后代按选择器匹配到的仍是纸值（继承赢不了就近选择器）。 */
+:root, [data-theme="paper"] {
+  --sidebar-border: var(--border);
+  --bg-toolbar: var(--bg);
+  --radius-card: var(--radius-lg);
+  --hover-chrome: color-mix(in srgb, var(--text) 9%, transparent);
+}
+[data-theme="ink"] {
+  --sidebar-border: var(--border);
+  --bg-toolbar: var(--bg);
+  --radius-card: var(--radius-lg);
+  --hover-chrome: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+body { background: #6f6f6f; padding: 28px 28px 40px; display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
+.cap { color: #ededed; font-size: 13px; font-weight: 600; letter-spacing: .04em; margin-bottom: 10px; }
+.cap small { display: block; margin-top: 4px; font-weight: 400; font-size: 12px; color: #bdbdbd; }
+.cap code { font-family: Consolas, monospace; font-size: 11px; color: #d9d9d9; }
+
+.win { position: relative; width: 1040px; height: 670px; background: var(--bg-toolbar);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+  box-shadow: var(--shadow-pop); display: flex; }
+
+/* 侧栏全高贯通（解锁态），右列 = 标题栏 + 内容 */
+.rail { flex-shrink: 0; width: 56px; background: var(--sidebar-bg); border-right: 1px solid var(--sidebar-border);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; }
+.nav { width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center;
+  justify-content: center; color: var(--text-muted); }
+.nav.on { background: var(--panel-bg); color: var(--accent); box-shadow: var(--shadow-card); }
+.col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.tb { flex-shrink: 0; height: 42px; display: flex; align-items: center; padding: 0 20px 0 var(--space-5);
+  border-bottom: 1px solid var(--border); }
+.crumb { font-size: 13px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
+.cnt { margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.wctl { margin-left: auto; display: flex; align-items: center; gap: 2px; color: var(--text-secondary); }
+.wctl i { width: 30px; height: 28px; border-radius: var(--radius-ib); display: inline-flex;
+  align-items: center; justify-content: center; font-style: normal; color: var(--text-muted); }
+.wctl .sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+/* 窗口三钮按真程序口径：12px 盒、1px 实笔，不吃 AppIcon 的 max/min 对角箭头 */
+.wctl svg { width: 12px; height: 12px; }
+
+.main { flex: 1; min-height: 0; position: relative; padding: 0 var(--space-5) var(--space-5); }
+
+/* ══ 新 toast：内容区顶沿居中 ══
+   反色胶囊本体不动（--toast-bg + 三档字色），只搬位置：
+   .main 是「侧栏以右」的居中参考系，避开左上角模块名、右上六颗钮。 */
+.toast { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px; padding: 6px 14px; max-width: 360px;
+  border-radius: var(--radius-pill); background: var(--toast-bg);
+  font-size: var(--text-xs); font-weight: 500; box-shadow: var(--shadow-md); z-index: 50; }
+.toast svg { flex-shrink: 0; display: block; }
+.toast.success { color: var(--toast-ok); }
+.toast.error { color: var(--toast-err); }
+.toast.info { color: var(--toast-info); }
+.fallback { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  padding: 6px 14px; border-radius: var(--radius-pill); border: 1px dashed var(--border-strong);
+  font-size: var(--text-xs); color: var(--text-faint); background: transparent; }
+
+/* 页栏一行头（64px）＋搜索 */
+.pagebar { height: 64px; display: flex; align-items: center; gap: var(--space-2); }
+.sb { height: 32px; width: 260px; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text-faint); font-size: var(--text-sm); }
+.pb-r { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+.pbtn { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px;
+  border-radius: var(--radius-pill); font-size: var(--text-xs); font-weight: 600;
+  background: var(--accent); color: var(--accent-on); box-shadow: 0 4px 14px -3px var(--accent); }
+.sbtn { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px;
+  border-radius: var(--radius-pill); font-size: var(--text-xs); font-weight: 500;
+  background: var(--panel-bg); color: var(--text-secondary); border: 1px solid var(--border); }
+
+/* 收藏行卡：78 双行档 */
+.card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; padding: 0 16px; height: 78px; }
+.row + .row { border-top: 1px solid var(--border); }
+.tile { width: 34px; height: 34px; flex-shrink: 0; border-radius: var(--radius); display: flex;
+  align-items: center; justify-content: center; font-size: var(--text-sm); font-weight: 600;
+  color: var(--cat-text); }
+.t-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.t-title { font-size: var(--text-sm); font-weight: 500; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-sub { font-size: var(--text-xs); color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { font-size: var(--text-2xs); padding: 2px 8px; border-radius: var(--radius-pill);
+  background: var(--fill); color: var(--text-secondary); }
+.badge.enc { background: var(--accent-soft); color: var(--text-brand); }
+.hint { margin: 10px 2px 0; font-size: var(--text-xs); color: #cfcfcf; }
+</style></head>
+<body>
+
+<div class="frame">
+  <div class="cap">A 纸底 · 成功：动作的回执落在视线正前方<small>
+  位置 = 内容区（侧栏以右）水平居中，标题栏下沿留 10px（top 52px）。胶囊本体沿用现档：反色面 <code>--toast-bg</code>、pill、6×14、12/500，只新增一枚 13px 图形。成功/提示停留 800ms。</small></div>
+  <div class="win">
+    <div class="rail">
+      <div class="nav">{{i:navNotes:17}}</div><div class="nav on">{{i:navEntries:17}}</div>
+      <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navMfa:17}}</div>
+      <div class="nav">{{i:navLan:17}}</div><div class="nav">{{i:navBypass:17}}</div>
+    </div>
+    <div class="col">
+      <div class="tb"><span class="crumb">收藏</span><span class="cnt">23 条</span>
+        <div class="wctl"><i>{{i:refresh:15}}</i><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><span class="sep"></span><i><svg viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="1" fill="currentColor"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/></svg></i><i><svg viewBox="0 0 12 12"><path d="M2 2 10 10M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></i></div></div>
+      <div class="main">
+        <div class="toast success">{{i:check:13}}已复制密码</div>
+        <div class="pagebar">
+          <span class="sb">{{i:search:14}}搜索条目…</span>
+          <div class="pb-r"><span class="sbtn">{{i:copy:13}}导入</span><span class="pbtn">{{i:plus:13}}新建</span></div>
+        </div>
+        <section class="card">
+          <div class="row">
+            <span class="tile" style="background:var(--cat-1)">G</span>
+            <span class="t-mid"><span class="t-title">GitHub · jxiaow</span>
+            <span class="t-sub">github.com · 2026-10-08 更新</span></span>
+            <span class="badge enc">{{i:lock:11}}已加密</span>
+          </div>
+          <div class="row">
+            <span class="tile" style="background:var(--cat-5)">N</span>
+            <span class="t-mid"><span class="t-title">NetEase Music</span>
+            <span class="t-sub">music.163.com · 2026-09-30 更新</span></span>
+            <span class="badge">常用</span>
+          </div>
+          <div class="row">
+            <span class="tile" style="background:var(--cat-4)">J</span>
+            <span class="t-mid"><span class="t-title">Jenkins · 内网构建</span>
+            <span class="t-sub">192.168.1.40:8080 · 2026-10-11 更新</span></span>
+            <span class="badge enc">{{i:lock:11}}已加密</span>
+          </div>
+        </section>
+        <div class="hint">↑ 回执压不住也不要紧：它只活 800ms，落点正好在点「复制」后视线的停留区</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">B 纸底 · 失败：错误必须被看见，居中顶沿没有余光问题<small>
+  同一颗胶囊，字色走 <code>--toast-err</code>；停留 2400ms 不变，读得完一句失败原因。</small></div>
+  <div class="win">
+    <div class="rail">
+      <div class="nav">{{i:navNotes:17}}</div><div class="nav on">{{i:navEntries:17}}</div>
+      <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navMfa:17}}</div>
+      <div class="nav">{{i:navLan:17}}</div><div class="nav">{{i:navBypass:17}}</div>
+    </div>
+    <div class="col">
+      <div class="tb"><span class="crumb">收藏</span><span class="cnt">23 条</span>
+        <div class="wctl"><i>{{i:refresh:15}}</i><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><span class="sep"></span><i><svg viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="1" fill="currentColor"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/></svg></i><i><svg viewBox="0 0 12 12"><path d="M2 2 10 10M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></i></div></div>
+      <div class="main">
+        <div class="toast error">{{i:alert:13}}备份失败：云端目录不可写，稍后自动重试</div>
+        <div class="pagebar">
+          <span class="sb">{{i:search:14}}搜索条目…</span>
+          <div class="pb-r"><span class="sbtn">{{i:copy:13}}导入</span><span class="pbtn">{{i:plus:13}}新建</span></div>
+        </div>
+        <section class="card">
+          <div class="row">
+            <span class="tile" style="background:var(--cat-1)">G</span>
+            <span class="t-mid"><span class="t-title">GitHub · jxiaow</span>
+            <span class="t-sub">github.com · 2026-10-08 更新</span></span>
+            <span class="badge enc">{{i:lock:11}}已加密</span>
+          </div>
+          <div class="row">
+            <span class="tile" style="background:var(--cat-6)">D</span>
+            <span class="t-mid"><span class="t-title">DevOps 跳板机</span>
+            <span class="t-sub">10.20.3.7 · 2026-10-12 更新</span></span>
+            <span class="badge enc">{{i:lock:11}}已加密</span>
+          </div>
+          <div class="row">
+            <span class="tile" style="background:var(--cat-5)">N</span>
+            <span class="t-mid"><span class="t-title">NetEase Music</span>
+            <span class="t-sub">music.163.com · 2026-09-30 更新</span></span>
+            <span class="badge">常用</span>
+          </div>
+        </section>
+        <div class="hint">↑ 长文案上限 360px 一行读完；失败帧旁边就是同步钮，指向「点它发生了什么」</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">C 墨底 · 成功：反色配方在墨底翻成亮胶囊，搬家不改本体<small>
+  墨底 <code>--toast-bg</code> = #efede8 亮面、暗字 <code>--toast-ok</code> = #2f7d52，与现档右下角同款。</small></div>
+  <div class="win" data-theme="ink">
+    <div class="rail">
+      <div class="nav">{{i:navNotes:17}}</div><div class="nav on">{{i:navEntries:17}}</div>
+      <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navMfa:17}}</div>
+      <div class="nav">{{i:navLan:17}}</div><div class="nav">{{i:navBypass:17}}</div>
+    </div>
+    <div class="col">
+      <div class="tb"><span class="crumb">收藏</span><span class="cnt">23 条</span>
+        <div class="wctl"><i>{{i:refresh:15}}</i><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><span class="sep"></span><i><svg viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="1" fill="currentColor"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/></svg></i><i><svg viewBox="0 0 12 12"><path d="M2 2 10 10M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></i></div></div>
+      <div class="main">
+        <div class="toast success">{{i:check:13}}已复制密码</div>
+        <div class="pagebar">
+          <span class="sb">{{i:search:14}}搜索条目…</span>
+          <div class="pb-r"><span class="sbtn">{{i:copy:13}}导入</span><span class="pbtn">{{i:plus:13}}新建</span></div>
+        </div>
+        <section class="card">
+          <div class="row">
+            <span class="tile" style="background:var(--cat-1)">G</span>
+            <span class="t-mid"><span class="t-title">GitHub · jxiaow</span>
+            <span class="t-sub">github.com · 2026-10-08 更新</span></span>
+            <span class="badge enc">{{i:lock:11}}已加密</span>
+          </div>
+          <div class="row">
+            <span class="tile" style="background:var(--cat-4)">J</span>
+            <span class="t-mid"><span class="t-title">Jenkins · 内网构建</span>
+            <span class="t-sub">192.168.1.40:8080 · 2026-10-11 更新</span></span>
+            <span class="badge enc">{{i:lock:11}}已加密</span>
+          </div>
+          <div class="row">
+            <span class="tile" style="background:var(--cat-5)">N</span>
+            <span class="t-mid"><span class="t-title">NetEase Music</span>
+            <span class="t-sub">music.163.com · 2026-09-30 更新</span></span>
+            <span class="badge">常用</span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="cap">D 墨底 · 信息：三档字色同框核对（info 档走 <code>--toast-info</code>）<small>
+  信息档例：小记自动保存。落点与成功/失败完全一致，只有字色与图形不同。</small></div>
+  <div class="win" data-theme="ink">
+    <div class="rail">
+      <div class="nav">{{i:navNotes:17}}</div><div class="nav on">{{i:navEntries:17}}</div>
+      <div class="nav">{{i:navFiles:17}}</div><div class="nav">{{i:navMfa:17}}</div>
+      <div class="nav">{{i:navLan:17}}</div><div class="nav">{{i:navBypass:17}}</div>
+    </div>
+    <div class="col">
+      <div class="tb"><span class="crumb">收藏</span><span class="cnt">23 条</span>
+        <div class="wctl"><i>{{i:refresh:15}}</i><i>{{i:gear:15}}</i><i>{{i:lock:15}}</i><span class="sep"></span><i><svg viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="1" fill="currentColor"/></svg></i><i><svg viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/></svg></i><i><svg viewBox="0 0 12 12"><path d="M2 2 10 10M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></i></div></div>
+      <div class="main">
+        <div class="toast info">{{i:info:13}}小记已保存到本地</div>
+        <div class="pagebar">
+          <span class="sb">{{i:search:14}}搜索条目…</span>
+          <div class="pb-r"><span class="sbtn">{{i:copy:13}}导入</span><span class="pbtn">{{i:plus:13}}新建</span></div>
+        </div>
+        <section class="card">
+          <div class="row">
+            <span class="tile" style="background:var(--cat-2)">Q</span>
+            <span class="t-mid"><span class="t-title">Qoder 试用邀请</span>
+            <span class="t-sub">qoder.com · 2026-10-12 更新</span></span>
+            <span class="badge">常用</span>
+          </div>
+          <div class="row">
+            <span class="tile" style="background:var(--cat-1)">G</span>
+            <span class="t-mid"><span class="t-title">GitHub · jxiaow</span>
+            <span class="t-sub">github.com · 2026-10-08 更新</span></span>
+            <span class="badge enc">{{i:lock:11}}已加密</span>
+          </div>
+        </section>
+        <div class="hint">↑ 与批量底栏（居中、贴边 20px）分居上下两端，批量场景的回执不会撞栏</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body></html>

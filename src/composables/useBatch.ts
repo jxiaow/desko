@@ -48,7 +48,7 @@ export function useBatch() {
 
   const doBatchDelete = () => {
     if (selectedIds.value.size === 0) return
-    confirmStore.showConfirm('确认删除', `确定删除选中的 ${selectedIds.value.size} 条记录吗？`, async () => {
+    confirmStore.showConfirm('删除所选', `${selectedIds.value.size} 条记录将被删除，此操作不可撤销。`, async () => {
       try {
         const ids = Array.from(selectedIds.value)
         const count = await api.batchDeleteEntries(ids)

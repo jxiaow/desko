@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import type { Entry, Tab } from '../../types'
 import { splitUrlHostPath } from '../../utils/format'
 import { avatarLetter } from '../../utils/avatar'
@@ -8,6 +8,7 @@ import { useGridKeys } from '../../composables/useGridKeys'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import EntryActionMenu from './EntryActionMenu.vue'
+import { usePageHeadStore } from '../../stores/pageHead'
 
 const props = defineProps<{
   searchKeyword: string
@@ -61,6 +62,17 @@ const onGlobalKey = (e: KeyboardEvent) => {
 /** 行首 34px 档面：host 命中缓存/抓取到货后返回图标 URL，否则 null 走中性字母块
     （取字规则与详情弹窗共用 utils/avatar 的 avatarLetter） */
 const favOf = (item: Entry) => faviconSrcFor(item.url)
+
+/** 分类淡染：把 category 稳定哈希到六桶 hue（--cat-1..6），字母兜底档与分类点共用同一色，
+   同分类卡片一眼归堆。favicon 到货时档面改走中性亮底，此色只喂给分类点。 */
+const CAT_HUES = ['--cat-1', '--cat-2', '--cat-3', '--cat-4', '--cat-5', '--cat-6']
+const hueOf = (category?: string | null): string => {
+  const c = (category || '').trim()
+  if (!c) return 'var(--text-faint)'
+  let h = 0
+  for (const ch of c) h = (h * 31 + ch.codePointAt(0)!) >>> 0
+  return `var(${CAT_HUES[h % CAT_HUES.length]})`
+}
 
 /* ── 分类标签：全部 + 前 2 枚高频常驻，其余收进「更多」下拉（面板内可搜索） ── */
 const visibleTabs = computed(() => props.tabs.slice(0, 3))
@@ -162,11 +174,14 @@ onUnmounted(() => {
   window.removeEventListener('resize', syncThumb)
   if (copiedTimer) window.clearTimeout(copiedTimer)
 })
+
+const pageHead = usePageHeadStore()
+watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length ? `${props.filteredEntries.length} 条` : ''))
 </script>
 
 <template>
   <div class="content-inner">
-    <!-- 一块工具栏装下搜索、分类、计数和两个动作；分类超出宽度改为横向滚动 -->
+    <!-- 身份行 + 工具栏：搜索、分类、计数和两个动作；分类超出宽度改为横向滚动 -->
     <div class="page-bar">
       <div class="search-box">
         <span class="search-icon">
@@ -238,14 +253,13 @@ onUnmounted(() => {
 
     <div v-if="loading" class="card-grid">
       <div class="skeleton-card" v-for="n in 6" :key="n">
-        <div class="ec-top">
+        <div class="row1">
           <span class="skeleton-slot"></span>
-          <div class="ec-id">
-            <div class="skeleton-line name"></div>
-            <div class="skeleton-line note"></div>
-          </div>
+          <div class="skeleton-line name"></div>
         </div>
-        <div class="skeleton-line foot"></div>
+        <div class="row2">
+          <div class="skeleton-line foot"></div>
+        </div>
       </div>
     </div>
 
@@ -269,53 +283,54 @@ onUnmounted(() => {
           <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="12" />
         </span>
 
-        <!-- 头部：34px 档（favicon 到货前/抓不到落字母块）+ 右侧名 / URL（恒定一行，尾部省略） -->
-        <div class="ec-top">
-          <span class="grid-slot" :class="{ 'grid-slot--icon': !!favOf(item) }" aria-hidden="true">
+        <!-- 一行身份：24px 档（favicon 到货，否则分类淡染字母兜底）+ 名称 + 右对齐分类点 -->
+        <div class="row1">
+          <span
+            class="grid-slot"
+            :class="favOf(item) ? 'grid-slot--icon' : 'grid-slot--hue'"
+            :style="favOf(item) ? undefined : { '--gc-hue': hueOf(item.category) }"
+            aria-hidden="true"
+          >
             <img v-if="favOf(item)" :src="favOf(item)!" alt="" />
             <template v-else>{{ avatarLetter(item.category) }}</template>
           </span>
-          <div class="ec-id">
-            <div class="ec-name-row">
-              <span class="ec-name">{{ item.name }}</span>
-            </div>
-            <a
-              v-if="item.url"
-              class="ec-domain"
-              :title="item.url"
-              @click.prevent.stop="isBatchMode ? emit('toggleSelect', item.id) : emit('openUrl', item.url!)"
-              @contextmenu.prevent="emit('copyText', item.url!, '网址')"
-            ><span class="u-host">{{ splitUrlHostPath(item.url).host }}</span><span v-if="splitUrlHostPath(item.url).path"
-              class="u-path">{{ splitUrlHostPath(item.url).path }}</span></a>
-          </div>
+          <span class="ec-name">{{ item.name }}</span>
+          <span class="ec-cat"><i :style="{ background: hueOf(item.category) }"></i>{{ item.category || '未分类' }}</span>
         </div>
 
-        <!-- 凭证标记顶到卡角，不占名字行的宽度 -->
-        <span v-if="item.username || passwordCache[item.id]?.value" class="ec-cred" title="已存登录凭证">
-          <AppIcon name="lock" :size="13" />
-        </span>
-
-        <!-- 脚注：虚线分行，左分类胶囊，hover 显形动作列 -->
-        <div class="ec-foot grid-foot">
-          <span class="ec-cat grid-pill">{{ item.category || '未分类' }}</span>
-          <span class="ec-actions grid-acts">
-            <button v-if="item.url" class="ib ec-act" :class="{ copied: copiedId === item.id }" type="button" :title="copiedId === item.id ? '已复制' : '复制网址 (C)'" @click.stop="copyUrl(item)">
-              <AppIcon :name="copiedId === item.id ? 'check' : 'copy'" :size="15" />
-            </button>
-            <button v-if="item.url" class="ib ec-act" type="button" title="在浏览器打开" @click.stop="emit('openUrl', item.url!)">
-              <AppIcon name="external" :size="15" />
-            </button>
-            <button
-              class="ib ec-act ec-more"
-              type="button"
-              title="更多操作"
-              aria-label="更多操作"
-              @click.stop="openMenu($event.currentTarget as HTMLElement, item)"
-            >
-              <AppIcon name="dots" :size="15" />
-            </button>
+        <!-- 二行副址：等宽地址缩进到名称起笔；凭证锁标顶右，hover 让给动作浮岛 -->
+        <div class="row2">
+          <a
+            v-if="item.url"
+            class="ec-domain"
+            :title="item.url"
+            @click.prevent.stop="isBatchMode ? emit('toggleSelect', item.id) : emit('openUrl', item.url!)"
+            @contextmenu.prevent="emit('copyText', item.url!, '网址')"
+          ><span class="u-host">{{ splitUrlHostPath(item.url).host }}</span><span v-if="splitUrlHostPath(item.url).path"
+            class="u-path">{{ splitUrlHostPath(item.url).path }}</span></a>
+          <span v-if="item.username || passwordCache[item.id]?.value" class="ec-cred" title="已存登录凭据">
+            <AppIcon name="lock" :size="13" />
           </span>
         </div>
+
+        <!-- 右下动作浮岛：hover 才显形，与锁标同格交错 -->
+        <span class="ec-actions grid-acts">
+          <button v-if="item.url" class="ib ec-act" :class="{ copied: copiedId === item.id }" type="button" :title="copiedId === item.id ? '已复制' : '复制网址 (C)'" @click.stop="copyUrl(item)">
+            <AppIcon :name="copiedId === item.id ? 'check' : 'copy'" :size="15" />
+          </button>
+          <button v-if="item.url" class="ib ec-act" type="button" title="在浏览器打开" @click.stop="emit('openUrl', item.url!)">
+            <AppIcon name="external" :size="15" />
+          </button>
+          <button
+            class="ib ec-act ec-more"
+            type="button"
+            title="更多操作"
+            aria-label="更多操作"
+            @click.stop="openMenu($event.currentTarget as HTMLElement, item)"
+          >
+            <AppIcon name="dots" :size="15" />
+          </button>
+        </span>
 
         <EntryActionMenu
           v-if="menuEntry?.id === item.id"
@@ -340,7 +355,7 @@ onUnmounted(() => {
       <div class="empty-icon">
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navEntries'" :size="24" />
       </div>
-      <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无记录' }}</div>
+      <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无条目' }}</div>
       <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」添加' }}</div>
       <div v-if="!searchKeyword" class="empty-motto" aria-hidden="true">
         <span class="d"></span><span class="w">收一处 · 启一窗</span><span class="d mid"></span><span class="w">开一页</span><span class="d"></span>
@@ -432,43 +447,45 @@ onUnmounted(() => {
 .tab-pop-list .pop-item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .tab-pop-empty { padding: var(--space-2) 8px; font-size: var(--text-sm); color: var(--text-muted); text-align: center; }
 
-/* 卡皮、抬影、焦点环、勾选、脚注胶囊与动作显形全在 global.css 的 .grid-card 一节；
-   这里只留收藏卡自己的排版 */
+/* 卡皮、双行壳（.row1/.row2）、24px 档、右下动作浮岛与勾选全在 global.css 的 .grid-card 一节；
+   这里只留收藏卡自己的字档与配色 */
 .entry-card.selected .ec-name,
 .entry-card.selected .ec-cat { color: var(--text-brand); }
 
-/* 头部：34px 档 + 右侧「名 / URL / 子路径」；档面底色与 favicon 亮底见 global.css .grid-slot */
-.ec-top { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
-.ec-id { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-
-/* 名字行：13px/600 单行截断；右侧 18px 让给卡角的凭证标记 */
-.ec-name-row { display: flex; align-items: center; min-width: 0; padding-right: 18px; }
+/* 名字：14/600 单行截断，吃掉行宽；分类点靠右 */
 .ec-name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--text-base);
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text);
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color var(--transition);
 }
-.ec-cred {
-  position: absolute;
-  top: 15px;
-  right: 15px;
+/* 分类：右对齐 12px 淡字 + 7px hue 点（点色与字母兜底档同源） */
+.ec-cat {
+  margin-left: auto;
+  flex: none;
   display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
   color: var(--text-faint);
+  transition: color var(--transition);
 }
+.ec-cat i { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 
-/* URL 行：等宽 12px 灰字，恒定一行，尾部省略号（整条地址留在 title 与详情弹窗里） */
+/* 副址行：等宽 12px，缩进由 global .row2 给，尾部省略（整条地址留在 title 与详情弹窗） */
 .ec-domain {
-  display: block;
+  flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.35;
-  color: var(--text-muted);
+  color: var(--text-url);
   text-decoration: none;
   overflow: hidden;
   white-space: nowrap;
@@ -478,15 +495,25 @@ onUnmounted(() => {
 }
 .ec-domain:hover { color: var(--accent); }
 .ec-domain:hover .u-path { color: var(--accent-light); }
+/* 凭证锁标顶右、hover 让位给动作浮岛（同格交错，不叠字） */
+.ec-cred {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  color: var(--text-faint);
+  transition: opacity var(--transition);
+}
+.entry-card:hover .ec-cred,
+.entry-card:focus-within .ec-cred { opacity: 0; }
 
-/* 动作列的显隐与尺寸档在 global.css .grid-acts；这里只留复制回执态 */
+/* 动作浮岛的定位/尺寸/显隐在 global.css .grid-acts；这里只留复制回执态 */
 .ib.ec-act.copied { color: var(--success); }
 
 /* .empty-state/.empty-icon/.empty-title/.empty-desc 走 global.css 的统一规范，
    此处不再重复声明，避免局部副本和全局定义漂移 */
 
-/* 骨架卡的皮、虚线脚与呼吸在 global.css，此处只留本卡的宽度分配 */
+/* 骨架行的宽度分配（皮与呼吸在 global.css） */
 .skeleton-line.name { width: 132px; }
-.skeleton-line.note { width: 188px; height: 6px; }
-.skeleton-line.foot { width: 84px; }
+.skeleton-line.foot { width: 168px; }
+
 </style>

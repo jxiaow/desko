@@ -1993,19 +1993,6 @@ enum CodexBatchImportDraft {
     },
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CodexBatchImportSessionSnapshot {
-    version: u32,
-    status: String,
-    check_quota: bool,
-    source_items: Vec<CodexBatchImportSourceItem>,
-    next_index: usize,
-    total: usize,
-    items: Vec<CodexBatchImportCachedItem>,
-    updated_at: i64,
-}
-
 fn next_codex_batch_import_session_id() -> String {
     let id = CODEX_BATCH_IMPORT_COUNTER.fetch_add(1, Ordering::SeqCst);
     format!(
@@ -2041,87 +2028,17 @@ fn codex_batch_import_session_snapshot_path(session_id: &str) -> Result<PathBuf,
     Ok(get_codex_batch_import_sessions_dir().join(format!("{}.json", safe_id)))
 }
 
-fn ensure_codex_batch_import_sessions_dir(path: &Path) -> Result<(), String> {
-    if path.is_dir() {
-        return Ok(());
-    }
-    if path.exists() {
-        return Err(format!(
-            "创建导入会话目录失败: path={} 不是目录",
-            path.display()
-        ));
-    }
-    fs::create_dir(path).map_err(|error| {
-        format!(
-            "创建导入会话目录失败: path={}, error={}",
-            path.display(),
-            error
-        )
-    })
-}
-
-fn codex_batch_import_snapshot_from_session(
-    session: &CodexBatchImportSession,
-) -> CodexBatchImportSessionSnapshot {
-    CodexBatchImportSessionSnapshot {
-        version: 1,
-        status: session.status.clone(),
-        check_quota: session.check_quota,
-        source_items: session.source_items.clone(),
-        next_index: session.next_index,
-        total: session.total,
-        items: session.items.clone(),
-        updated_at: chrono::Utc::now().timestamp(),
-    }
-}
-
-fn codex_batch_import_session_from_snapshot(
-    snapshot: CodexBatchImportSessionSnapshot,
-) -> CodexBatchImportSession {
-    let status = if snapshot.status == "scanning" {
-        "cancelled".to_string()
-    } else {
-        snapshot.status
-    };
-    CodexBatchImportSession {
-        status,
-        check_quota: snapshot.check_quota,
-        cancel: Arc::new(AtomicBool::new(false)),
-        scan_lock: Arc::new(tokio::sync::Mutex::new(())),
-        source_items: snapshot.source_items,
-        next_index: snapshot.next_index,
-        total: snapshot.total,
-        items: snapshot.items,
-    }
-}
-
+/// desko 改动（docs/design/codex/11-batch-jobs-port.md §3.1）：导入会话不落盘。
+/// 上游那份快照 = 解析后的原始导出 JSON（refresh_token 逐字在内）+ draft 里的明文凭据，
+/// 且 `to_string_pretty` 直接写文件，与账号档案那条 `write_secret_string_atomic` 密文路相反；
+/// 清盘只发生在 confirm 收尾，cancel 反而再写一次，扫完不确认就关窗则明文永久留下。
+/// 加上这一族没有 list 命令、会话 id 只活在前端内存里，重启后那份快照谁也读不回来——
+/// 落盘唯一的作用就是泄，所以整个停掉。代价是跨重启的「继续导入」实质消失（本来也不可能）。
 fn save_codex_batch_import_session_snapshot(
-    session_id: &str,
-    session: &CodexBatchImportSession,
+    _session_id: &str,
+    _session: &CodexBatchImportSession,
 ) -> Result<(), String> {
-    let path = codex_batch_import_session_snapshot_path(session_id)?;
-    if let Some(parent) = path.parent() {
-        ensure_codex_batch_import_sessions_dir(parent)?;
-    }
-    let snapshot = codex_batch_import_snapshot_from_session(session);
-    let content = serde_json::to_string_pretty(&snapshot)
-        .map_err(|error| format!("序列化导入会话快照失败: {}", error))?;
-    let tmp_path = path.with_extension("json.tmp");
-    fs::write(&tmp_path, content).map_err(|error| {
-        format!(
-            "写入导入会话快照失败: path={}, error={}",
-            tmp_path.display(),
-            error
-        )
-    })?;
-    fs::rename(&tmp_path, &path).map_err(|error| {
-        let _ = fs::remove_file(&tmp_path);
-        format!(
-            "更新导入会话快照失败: path={}, error={}",
-            path.display(),
-            error
-        )
-    })
+    Ok(())
 }
 
 fn save_codex_batch_import_session_snapshot_best_effort(
@@ -2191,29 +2108,13 @@ impl CodexBatchImportUpdateBudget {
     }
 }
 
+/// desko 改动（11 号稿 §3.1）：盘上不再有导入会话快照，所以这里恒空。
+/// 后果：`ensure_codex_batch_import_session_loaded` 只在内存注册表里找，进程一重启会话就没了——
+/// 上游那条「从盘恢复」本来也没有任何界面拿得到 id（这一族没有 list 命令），停掉不改变可达行为。
 fn load_codex_batch_import_session_snapshot(
-    session_id: &str,
+    _session_id: &str,
 ) -> Result<Option<CodexBatchImportSession>, String> {
-    let path = codex_batch_import_session_snapshot_path(session_id)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let content = fs::read_to_string(&path).map_err(|error| {
-        format!(
-            "读取导入会话快照失败: path={}, error={}",
-            path.display(),
-            error
-        )
-    })?;
-    let snapshot: CodexBatchImportSessionSnapshot =
-        serde_json::from_str(&content).map_err(|error| {
-            format!(
-                "解析导入会话快照失败: path={}, error={}",
-                path.display(),
-                error
-            )
-        })?;
-    Ok(Some(codex_batch_import_session_from_snapshot(snapshot)))
+    Ok(None)
 }
 
 fn remove_codex_batch_import_session_snapshot(session_id: &str) {
@@ -3473,4 +3374,48 @@ fn extract_codex_tokens_from_credentials_value(
     }
 
     None
+}
+
+#[cfg(test)]
+mod desko_session_snapshot_tests {
+    use super::*;
+
+    /// 11 号稿 §3.1 的反向判据：导入会话的明文凭据一个字都不许落盘。
+    /// 断言落在「目录压根没被创建」上——上游的 save 是先 ensure 目录再写 `{id}.json`，
+    /// 而那份快照的内容就是解析后的原始导出 JSON（refresh_token 逐字在内）。
+    /// cfg(test) 下 `account::get_data_dir()` 走 `test_support::fallback_data_dir()`（进程私有临时根），
+    /// 所以这条断言不会碰到真实数据目录；拿 env_lock 是因为同进程别的用例会往同一个临时根里写。
+    #[test]
+    fn batch_import_session_never_reaches_disk() {
+        let _guard = crate::modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let session = CodexBatchImportSession {
+            status: "scanning".to_string(),
+            check_quota: false,
+            cancel: Arc::new(AtomicBool::new(false)),
+            scan_lock: Arc::new(tokio::sync::Mutex::new(())),
+            source_items: vec![CodexBatchImportSourceItem {
+                source: "unit-test.json".to_string(),
+                value: serde_json::json!({ "refresh_token": "plain-text-secret" }),
+            }],
+            next_index: 0,
+            total: 1,
+            items: Vec::new(),
+        };
+
+        save_codex_batch_import_session_snapshot("codex-import-unit-test", &session)
+            .expect("停盘后保存应当恒成，不得把写盘失败抛给扫描循环");
+        save_codex_batch_import_session_snapshot_best_effort("codex-import-unit-test", &session);
+
+        let dir = get_codex_batch_import_sessions_dir();
+        assert!(
+            !dir.exists(),
+            "导入会话目录被创建了，明文凭据又落盘了: {}",
+            dir.display()
+        );
+        assert!(load_codex_batch_import_session_snapshot("codex-import-unit-test")
+            .expect("读盘恒空不该报错")
+            .is_none());
+    }
 }

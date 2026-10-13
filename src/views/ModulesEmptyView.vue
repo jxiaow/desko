@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import AppIcon from '../components/shared/AppIcon.vue'
+import { usePageHeadStore } from '../stores/pageHead'
 
 /** 零模块态：所有页面模块都关掉时唯一的落脚点，自己不是模块、没有开关 */
+usePageHeadStore().setHead('')
 const openModules = () => {
   window.dispatchEvent(new CustomEvent('desko:open-settings-tab', { detail: 'modules' }))
 }

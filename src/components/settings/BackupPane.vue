@@ -487,8 +487,8 @@ const doRestoreFile = async () => {
       </div>
       <div class="setting-item">
         <div class="setting-info">
-          <span class="setting-name">停笔即备</span>
-          <span class="setting-desc">写入停止 8 秒即补跑一轮，不等定时器</span>
+          <span class="setting-name">即时备份</span>
+          <span class="setting-desc">最后一次写入 8 秒后备跑一轮，不等定时周期</span>
         </div>
         <label class="switch" :class="{ off: !schedulable }">
           <input type="checkbox" :checked="st.realtime" :disabled="!schedulable" @change="saveRealtime(($event.target as HTMLInputElement).checked)" />
@@ -555,20 +555,20 @@ const doRestoreFile = async () => {
           <div class="dialog-header">
             <h3>{{ st.hasPassword ? '修改备份密码' : '设置备份密码' }}</h3>
             <button class="dialog-close" title="关闭" @click="closePwd">
-              <AppIcon name="x" :size="18" />
+              <AppIcon name="x" :size="16" />
             </button>
           </div>
           <div class="dialog-body">
-            <p class="modal-help">备份密码独立于主密码，丢失后备份无法解密。修改密码只重新包裹数据密钥，已有备份不必重做。</p>
+            <p class="lead">备份密码独立于主密码，丢失后备份无法解密。改密只更新密钥，已有备份不必重做。</p>
             <div class="form-group">
               <label>备份密码</label>
-              <input v-model="pwd.pw" type="password" placeholder="至少 8 位，建议长短语" />
+              <input v-model="pwd.pw" type="password" placeholder="至少 8 位，可用一句短语" />
             </div>
             <div class="form-group">
               <label>确认备份密码</label>
               <input v-model="pwd.pw2" type="password" placeholder="再次输入" @keyup.enter="submitPwd" />
             </div>
-            <p v-if="pwdErr" class="modal-error">{{ pwdErr }}</p>
+            <p v-if="pwdErr" class="dialog-err">{{ pwdErr }}</p>
           </div>
           <div class="dialog-footer">
             <button class="btn-secondary" @click="closePwd">取消</button>
@@ -585,23 +585,23 @@ const doRestoreFile = async () => {
           <div class="dialog-header">
             <h3>{{ restoreMode === 'cloud' ? '从云端恢复' : '从文件恢复' }}</h3>
             <button class="dialog-close" title="关闭" @click="closeRestore">
-              <AppIcon name="x" :size="18" />
+              <AppIcon name="x" :size="16" />
             </button>
           </div>
           <div class="dialog-body">
-            <p class="modal-help">
-              将用 <b style="word-break: break-all">{{ restoreTarget?.name }}</b> 整机覆盖当前数据（库 + 附件）。
-              覆盖前自动备份现有数据，可回退；完成后需用备份当时的主密码重新解锁。
+            <p class="lead">
+              用 <b style="word-break: break-all">{{ restoreTarget?.name }}</b> 覆盖当前全部数据（库与附件）。
+              覆盖前自动留一份现状备份；完成后需用该备份当时的主密码解锁。
             </p>
             <div class="form-group">
               <label>备份密码</label>
-              <input v-model="restorePw" type="password" placeholder="该备份包加密时使用的备份密码" @keyup.enter="submitRestore" />
+              <input v-model="restorePw" type="password" placeholder="该备份加密时用的备份密码" @keyup.enter="submitRestore" />
             </div>
-            <p v-if="restoreErr" class="modal-error">{{ restoreErr }}</p>
+            <p v-if="restoreErr" class="dialog-err">{{ restoreErr }}</p>
           </div>
           <div class="dialog-footer">
             <button class="btn-secondary" @click="closeRestore">取消</button>
-            <button class="btn-primary" @click="submitRestore">恢 复</button>
+            <button class="btn-primary" @click="submitRestore">恢复</button>
           </div>
         </div>
       </div>
@@ -614,14 +614,14 @@ const doRestoreFile = async () => {
           <div class="dialog-header">
             <h3>连接坚果云</h3>
             <button class="dialog-close" title="关闭" @click="closeCloud">
-              <AppIcon name="x" :size="18" />
+              <AppIcon name="x" :size="16" />
             </button>
           </div>
           <div class="dialog-body">
             <div class="form-group">
               <label>服务器地址</label>
               <input v-model="cloudCfg.server" type="text" placeholder="https://dav.jianguoyun.com/dav/" />
-              <p class="modal-help">个人版保持默认即可；企业版改成自己的 WebDAV 域名，必须 https。</p>
+              <p class="lead">个人版保持默认即可；企业版改成自己的 WebDAV 域名，必须 https。</p>
             </div>
             <div class="form-group">
               <label>账号</label>
@@ -630,13 +630,13 @@ const doRestoreFile = async () => {
             <div class="form-group">
               <label>应用密码</label>
               <input v-model="cloudCfg.appPassword" type="password" :placeholder="st.cloud.configured ? '留空保持不变' : '不是你的登录密码'" />
-              <p class="modal-help">
+              <p class="lead">
                 用坚果云「账户信息 → 安全选项 → 添加应用」生成的应用密码，<b>不是登录密码</b>。
                 <a class="help-link" href="#" @click.prevent="openHelp">看官方说明</a>
               </p>
             </div>
-            <p v-if="cloudErr" class="modal-error">{{ cloudErr }}</p>
-            <p v-if="cloudOk" class="modal-ok">{{ cloudOk }}</p>
+            <p v-if="cloudErr" class="dialog-err">{{ cloudErr }}</p>
+            <p v-if="cloudOk" class="dialog-ok">{{ cloudOk }}</p>
           </div>
           <div class="dialog-footer">
             <button class="btn-secondary" :disabled="testing" @click="testConn">{{ testing ? '测试中…' : '测试连接' }}</button>
@@ -655,10 +655,10 @@ const doRestoreFile = async () => {
           <div class="dialog-header">
             <h3>云端备份 · {{ hostOf(st.cloud.server) }}</h3>
             <button class="dialog-close" title="关闭" @click="closeRemote">
-              <AppIcon name="x" :size="18" />
+              <AppIcon name="x" :size="16" />
             </button>
           </div>
-          <div class="dialog-body dialog-body-tight remote-list">
+          <div class="dialog-body remote-list">
             <div v-if="remoteLoading" class="empty-line">正在列出云端备份…</div>
             <div v-else-if="!remoteFiles.length" class="empty-line">云端还没有备份，先点一次「备份」。</div>
             <div v-for="f in remoteFiles" :key="f.name" class="file-row">
@@ -782,28 +782,17 @@ const doRestoreFile = async () => {
 
 .pane-note {
   margin: 0 0 var(--space-2);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   line-height: 1.6;
   color: var(--text-muted);
 }
 
 /* 叠在设置弹窗之上：同为 fixed z-1000，DOM 靠后自然压上 */
 .pane-overlay { z-index: 1100; }
-.dialog-sm { width: 420px; }
-.dialog-body-tight { padding-top: var(--space-2); padding-bottom: var(--space-2); }
-/* 预留列表高度：loading 一行 → 列表撑开会跳，固定住再滚动 */
-.remote-list { min-height: 240px; overflow-y: auto; scrollbar-gutter: stable; }
+/* 列表型正文上下收一档；预留列表高度，loading 一行 → 列表撑开会跳，固定住再滚动 */
+.remote-list { min-height: 240px; padding-top: var(--space-2); padding-bottom: var(--space-2); overflow-y: auto; scrollbar-gutter: stable; }
 
-.modal-help {
-  margin: 0 0 var(--space-3);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-  color: var(--text-muted);
-}
-.form-group .modal-help { margin: 6px 0 0; }
 .help-link { color: var(--accent); text-decoration: none; white-space: nowrap; }
 .help-link:hover { text-decoration: underline; }
-.modal-error { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--danger); }
-.modal-ok { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--accent); }
 .footer-spacer { flex: 1; }
 </style>

@@ -27,7 +27,7 @@ const emit = defineEmits<{
     </button>
     <button class="pop-item" type="button" @click="emit('duplicate')">
       <AppIcon name="copy" :size="14" />
-      复制副本
+      创建副本
     </button>
     <span class="pop-sep"></span>
     <button class="pop-item danger" type="button" @click="emit('delete')">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { tunnelApi } from '../../services/api/tunnel'
 import type { TunnelServiceRow, TunnelSplitReport } from '../../services/api/tunnel'
 import { errText } from '../../services/api/backup'
@@ -9,6 +10,7 @@ import {
   tnBinary as binary,
   tnProvision as provision,
   tnLogin as login,
+  tnPollError as pollError,
   tnServices as services,
   tnRefresh as refresh,
 } from '../../services/tunnelState'
@@ -17,6 +19,7 @@ import AppIcon from '../shared/AppIcon.vue'
 import TunnelSetupCard from './TunnelSetupCard.vue'
 import TunnelServicesCard from './TunnelServicesCard.vue'
 import TunnelServiceDialog from './TunnelServiceDialog.vue'
+import { usePageHeadStore } from '../../stores/pageHead'
 
 const toastStore = useToastStore()
 
@@ -82,6 +85,7 @@ async function probe() {
 
 // 注册要几秒，进程状态与服务列表又只在本地变化：只在页面活着时低频轮询，不常驻
 let timer: number | undefined
+let unlistenFocus: (() => void) | null = null
 
 async function refreshNow() {
   try {
@@ -96,16 +100,28 @@ onMounted(async () => {
   timer = window.setInterval(() => {
     if (!busy.value) void refresh().catch(() => undefined)
   }, 3000)
+  // 浏览器里点完授权回 desko 的那一刻必须当场补一次：窗口被盖住期间 WebView2 把
+  // 3 秒计时器节流到分钟级，只靠轮询就成了「授权完了界面一动不动」
+  try {
+    unlistenFocus = await getCurrentWindow().onFocusChanged(({ payload: hasFocus }) => {
+      if (hasFocus && !busy.value) void refreshNow()
+    })
+  } catch {
+    /* 拿不到窗口句柄时轮询照旧，只是少了那一次补刷 */
+  }
 })
 
 onUnmounted(() => {
   if (timer) window.clearInterval(timer)
+  unlistenFocus?.()
 })
+
+usePageHeadStore().setHead('内网穿透')
 </script>
 
 <template>
   <div class="content-inner">
-    <div v-if="!loaded" class="rowlist" aria-hidden="true">
+    <div v-if="!loaded" class="tn-card" aria-hidden="true">
       <div class="skeleton-row" v-for="n in 2" :key="n">
         <span class="skeleton-block"></span>
         <span class="skeleton-line w40"></span>
@@ -142,6 +158,11 @@ onUnmounted(() => {
         :busy="busy"
         @refresh="refreshNow"
       />
+
+      <div v-if="pollError" class="poll-err">
+        <AppIcon name="alert" :size="12" />
+        状态没读到：{{ pollError }}
+      </div>
 
       <!-- 主角：一条隧道挂着的 N 条服务 -->
       <TunnelServicesCard
@@ -229,11 +250,22 @@ onUnmounted(() => {
   color: var(--danger-hover);
 }
 .chip-warn-text { color: var(--warning) }
+/* 回读失败只说明"这一格这次没读到"，坏消息吃 warn 档，不抢主色的注意 */
+.poll-err {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -6px 0 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--warning);
+}
 
-/* 诊断卡：标题 + 一行摘要 + 展开钮 */
+/* 诊断卡：标题 + 一行摘要 + 展开钮（行高/内衬走全局 .tn-card 骨架） */
 .tn-foot .tn-head { border-bottom: none }
 .tn-foot.expanded .tn-head { border-bottom: 1px solid var(--border) }
-.tn-detail .tn-row { height: 44px }
 .diag-summary {
   margin-left: auto;
   font-size: var(--text-xs);

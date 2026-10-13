@@ -14,7 +14,7 @@ use crate::models::codex_local_access::{
     CodexLocalAccessTimeoutPreset, CodexLocalAccessTimeouts, CodexLocalAccessUsageEventPage,
     CodexInstanceGatewayView,
 };
-use crate::modules::{account, codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_visibility, codex_speed, codex_wakeup, codex_wakeup_scheduler, config, grok_account, hermes_auth, logger, openclaw_auth, opencode_auth, process};
+use crate::modules::{account, codex_account, codex_local_access, codex_oauth, codex_quota, codex_session_manager, codex_session_visibility, codex_speed, codex_wakeup, codex_wakeup_scheduler, config, grok_account, hermes_auth, logger, openclaw_auth, opencode_auth, process};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -31,7 +31,11 @@ use tauri_plugin_opener::OpenerExt;
 // - codex_model_provider_commands.rs：模型供应商配置、连接测试和用量查询命令。
 // - codex_local_access_commands.rs：本地 API 服务、API Key 与网关管理命令。
 // - codex_session_visibility_commands.rs：desko 新增的切号收尾会话可见性修复。
+// - codex_session_commands.rs：desko 新增的会话清单与 token 统计（只读）。
+// - codex_account_recycle_bin_commands.rs：desko 新增的账号留底入口（不接导出）。
 // 各片段中的公开命令仍由本模块统一导出，调用方无需改变。
 include!("codex_account_commands.rs");
 include!("codex_session_visibility_commands.rs");
+include!("codex_session_commands.rs");
+include!("codex_account_recycle_bin_commands.rs");
 

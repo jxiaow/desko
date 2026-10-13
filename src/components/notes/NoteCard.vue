@@ -57,15 +57,6 @@ const bodyEl = ref<HTMLElement | null>(null)
 const clipped = ref(false)
 const expanded = ref(false)
 
-/* 脱吸跟随：动作排 sticky 浮层。顶哨兵滚过吸顶栏下沿且卡片还没走完 → docked。 */
-const memoEl = ref<HTMLElement | null>(null)
-const sentinelTopEl = ref<HTMLElement | null>(null)
-const sentinelBottomEl = ref<HTMLElement | null>(null)
-const docked = ref(false)
-const ACTS_TOP = 88
-let streamEl: HTMLElement | null = null
-let actsIO: IntersectionObserver | null = null
-
 /** 截断容差：只藏掉这么多像素就不算截断，别为一行空隙冒出「展开全文」 */
 const CLAMP_TOL = 8
 
@@ -98,45 +89,12 @@ const applyClamp = async () => {
   if (clipped.value) el.style.maxHeight = `${Math.round(cut)}px`
 }
 
-const computeDocked = () => {
-  const m = memoEl.value, st = sentinelTopEl.value, sb = sentinelBottomEl.value
-  if (!m || !st || !sb || !streamEl) return
-  const line = streamEl.getBoundingClientRect().top + ACTS_TOP
-  const topPassed = st.getBoundingClientRect().top < line
-  const bottomPassed = sb.getBoundingClientRect().top < line
-  docked.value = topPassed && !bottomPassed
-}
-const setupActsDock = () => {
-  if (typeof IntersectionObserver === 'undefined') return
-  streamEl = memoEl.value?.closest('.stream') ?? null
-  if (!streamEl || !sentinelTopEl.value || !sentinelBottomEl.value) return
-  actsIO?.disconnect()
-  actsIO = new IntersectionObserver(computeDocked, {
-    root: streamEl,
-    rootMargin: `-${ACTS_TOP}px 0px 0px 0px`,
-    threshold: 0,
-  })
-  actsIO.observe(sentinelTopEl.value)
-  actsIO.observe(sentinelBottomEl.value)
-  computeDocked()
-}
-const teardownActsDock = () => { actsIO?.disconnect(); actsIO = null; docked.value = false }
-const onResize = () => { applyClamp(); computeDocked() }
+const onResize = () => applyClamp()
 
-onMounted(() => {
-  window.addEventListener('resize', onResize)
-  if (!props.editing) setupActsDock()
-})
+onMounted(() => window.addEventListener('resize', onResize))
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
-  teardownActsDock()
   if (copiedTimer) window.clearTimeout(copiedTimer)
-})
-
-// 就地编辑会卸掉只读卡、退出时重挂：哨兵换了元素，观察器要跟着重建
-watch(() => props.editing, (editing) => {
-  if (editing) teardownActsDock()
-  else nextTick(setupActsDock)
 })
 
 /* 复制 morph：钮面短暂翻成对勾做回执（写剪贴板与 toast 在父层） */
@@ -199,6 +157,25 @@ const toggleTask = (e: MouseEvent, box: HTMLInputElement) => {
 const locked = computed(() => props.note.encrypted && !props.unlocked)
 
 /**
+ * 首块是纯文本块（p / 标题 / 引用）时提升为标题行、正文里藏掉它，避免标题与正文重复；
+ * 列表 / 任务 / 图片等首块必须留在正文（任务勾选、配图都靠它），标题退化为库里的 label。
+ * 藏用 display:none 而非删节点：toggleTask 靠「渲染序 == 库序」对位，删了会错位。
+ */
+const PROMOTABLE = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE'])
+const firstBlock = computed(() => {
+  const div = document.createElement('div')
+  div.innerHTML = props.note.content_html
+  return div.firstElementChild as HTMLElement | null
+})
+const promote = computed(() => {
+  if (locked.value) return false
+  const el = firstBlock.value
+  return !!el && PROMOTABLE.has(el.tagName.toUpperCase()) && !!((el.textContent ?? '').trim())
+})
+const titleText = computed(() =>
+  promote.value ? (firstBlock.value?.textContent ?? '').trim() : props.note.title)
+
+/**
  * meta 行的标签胶囊取的是 noteMeta 那份缓存派生——和筛选、分类同一个来源，
  * 不会出现胶囊显示三个、点进去却筛出另一批。第五个之后正文里的内联标签仍可点。
  */
@@ -254,7 +231,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 <template>
   <article
     v-if="!props.editing"
-    ref="memoEl"
     class="memo"
     :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected }"
     tabindex="0"
@@ -267,81 +243,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       <AppIcon v-if="props.isSelected" name="check" :size="12" />
     </span>
 
-    <!-- 脱吸跟随：动作排从头部提出，做成卡片的 sticky 浮层。
-         顶部哨兵滚过吸顶栏下沿 → 浮层钉住并显形为磨砂 pill；滚过卡片末尾 → 随 sticky 自然释放。 -->
-    <span ref="sentinelTopEl" class="acts-sentinel top" aria-hidden="true"></span>
-    <div class="acts-dock">
-      <span class="memo-acts" :class="{ docked }">
-        <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
-          <AppIcon name="unlock" :size="14" />
-        </button>
-        <template v-if="!locked">
-          <button class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
-            <AppIcon name="eye" :size="14" />
-          </button>
-          <button class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
-            <AppIcon name="edit" :size="14" />
-          </button>
-        </template>
-        <button
-          class="ib"
-          type="button"
-          :class="{ on: props.note.pinned }"
-          :title="props.note.pinned ? '取消置顶' : '置顶'"
-          :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
-          @click.stop="emit('togglePin')"
-        >
-          <AppIcon name="pin" :size="14" />
-        </button>
-        <button
-          class="ib"
-          type="button"
-          :class="{ on: props.note.starred, warn: props.note.starred }"
-          :title="props.note.starred ? '取消收藏' : '收藏'"
-          :aria-label="props.note.starred ? '取消收藏' : '收藏'"
-          @click.stop="emit('toggleStar')"
-        >
-          <AppIcon name="star" :size="14" :filled="props.note.starred" />
-        </button>
-        <button v-if="!locked" class="ib" :class="{ copied }" type="button" :title="copied ? '已复制' : '复制正文'" aria-label="复制正文" @click.stop="onCopy">
-          <AppIcon :name="copied ? 'check' : 'copy'" :size="14" />
-        </button>
-        <button v-if="!locked && !props.note.encrypted" class="ib" type="button" title="加密" aria-label="加密" @click.stop="emit('encrypt')">
-          <AppIcon name="lock" :size="14" />
-        </button>
-        <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="重新锁定" aria-label="重新锁定" @click.stop="emit('relock')">
-          <AppIcon name="lock" :size="14" />
-        </button>
-        <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="解除加密" aria-label="解除加密" @click.stop="emit('removeLock')">
-          <AppIcon name="lockOff" :size="14" />
-        </button>
-        <button class="ib danger" type="button" title="删除" aria-label="删除" @click.stop="emit('delete')">
-          <AppIcon name="trash" :size="14" />
-        </button>
-      </span>
-    </div>
-
     <div class="memo-head" @click="onHeadClick">
-      <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
-      <span v-if="!locked && visibleAtts.length" class="memo-att" :title="`${visibleAtts.length} 个附件`">
-        <AppIcon name="clip" :size="12" />
-        {{ visibleAtts.length }}
-      </span>
-      <span v-if="!locked && noteTags.length" class="memo-tags">
-        <button
-          v-for="t in noteTags"
-          :key="t"
-          class="tag-pill"
-          :class="{ on: props.activeTags.has(t) }"
-          type="button"
-          :title="props.activeTags.has(t) ? `取消按 #${t} 筛选` : `按 #${t} 筛选`"
-          :aria-pressed="props.activeTags.has(t)"
-          @click.stop="emit('tagClick', t)"
-        >#{{ t }}</button>
-      </span>
+      <span v-if="props.note.pinned" class="head-pin"><AppIcon name="pin" :size="14" /></span>
+      <span class="memo-title">{{ titleText }}</span>
       <span class="memo-state">
         <span v-if="props.note.starred" class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
       </span>
+      <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
     </div>
 
     <div v-if="locked" class="memo-locked">
@@ -355,7 +263,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       <div
         ref="bodyEl"
         class="memo-body"
-        :class="{ expanded }"
+        :class="{ expanded, promoted: promote }"
         v-html="bodyHtml"
         @load.capture="applyClamp"
       />
@@ -370,7 +278,75 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         {{ expanded ? '收起' : '展开全文' }}
       </button>
     </template>
-    <span ref="sentinelBottomEl" class="acts-sentinel bottom" aria-hidden="true"></span>
+
+    <div v-if="!locked && (visibleAtts.length || noteTags.length)" class="memo-foot" @click="onHeadClick">
+      <span v-if="visibleAtts.length" class="memo-att" :title="`${visibleAtts.length} 个附件`">
+        <AppIcon name="clip" :size="12" />
+        {{ visibleAtts.length }}
+      </span>
+      <span v-if="noteTags.length" class="memo-tags">
+        <button
+          v-for="t in noteTags"
+          :key="t"
+          class="tag-pill"
+          :class="{ on: props.activeTags.has(t) }"
+          type="button"
+          :title="props.activeTags.has(t) ? `取消按 #${t} 筛选` : `按 #${t} 筛选`"
+          :aria-pressed="props.activeTags.has(t)"
+          @click.stop="emit('tagClick', t)"
+        >#{{ t }}</button>
+      </span>
+    </div>
+
+    <!-- hover 显形的右下动作 pill：压在卡角上，不占正文位置 -->
+    <span class="memo-acts">
+      <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
+        <AppIcon name="unlock" :size="14" />
+      </button>
+      <template v-if="!locked">
+        <button class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
+          <AppIcon name="eye" :size="14" />
+        </button>
+        <button class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
+          <AppIcon name="edit" :size="14" />
+        </button>
+      </template>
+      <button
+        class="ib"
+        type="button"
+        :class="{ on: props.note.pinned }"
+        :title="props.note.pinned ? '取消置顶' : '置顶'"
+        :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
+        @click.stop="emit('togglePin')"
+      >
+        <AppIcon name="pin" :size="14" />
+      </button>
+      <button
+        class="ib"
+        type="button"
+        :class="{ on: props.note.starred, warn: props.note.starred }"
+        :title="props.note.starred ? '取消收藏' : '收藏'"
+        :aria-label="props.note.starred ? '取消收藏' : '收藏'"
+        @click.stop="emit('toggleStar')"
+      >
+        <AppIcon name="star" :size="14" :filled="props.note.starred" />
+      </button>
+      <button v-if="!locked" class="ib" :class="{ copied }" type="button" :title="copied ? '已复制' : '复制正文'" aria-label="复制正文" @click.stop="onCopy">
+        <AppIcon :name="copied ? 'check' : 'copy'" :size="14" />
+      </button>
+      <button v-if="!locked && !props.note.encrypted" class="ib" type="button" title="加密" aria-label="加密" @click.stop="emit('encrypt')">
+        <AppIcon name="lock" :size="14" />
+      </button>
+      <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="重新锁定" aria-label="重新锁定" @click.stop="emit('relock')">
+        <AppIcon name="lock" :size="14" />
+      </button>
+      <button v-if="!locked && props.note.encrypted" class="ib" type="button" title="解除加密" aria-label="解除加密" @click.stop="emit('removeLock')">
+        <AppIcon name="lockOff" :size="14" />
+      </button>
+      <button class="ib danger" type="button" title="删除" aria-label="删除" @click.stop="emit('delete')">
+        <AppIcon name="trash" :size="14" />
+      </button>
+    </span>
   </article>
 
   <article v-else class="memo editing">
@@ -439,6 +415,9 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   word-break: break-word;
 }
 .memo-body.expanded { max-height: none; }
+/* 首块已提升为标题行：正文里藏掉它避免重复。用 display:none 而非删节点，
+   保住 toggleTask「渲染序 == 库序」的 checkbox 对位 */
+.memo-body.promoted :deep(> :first-child) { display: none; }
 
 /* 截断由 JS 收在整行边界，入口就是这一颗，不再靠渐隐暗示。
    28px = 卡上带文字按钮的档位（与 .action-btn 同轴），不另开 26 */
@@ -512,18 +491,32 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-body :deep(hr) { border: none; border-top: 1px solid var(--border); }
 .memo-body :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 34vh; object-fit: contain; border-radius: var(--radius); }
 
-/* 顶部一行：时间 / 附件 / 收藏标 + 操作按钮，正文区零遮挡 */
+/* 标题行：pin + 标题(粗) + 收藏标 + 时间(右)，对齐 mock .t */
 .memo-head {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
   margin-bottom: 3px;
   min-height: 20px;
   cursor: pointer;
 }
-.memo-time { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); color: var(--text-muted); }
-/* meta 行的标签胶囊：20px 档与卡片里的其余胶囊同高。
+.head-pin { color: var(--accent); display: inline-flex; flex-shrink: 0; }
+.memo-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memo-time { font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* 底部 meta 行：附件数 + 标签胶囊（对齐 mock .tags，从顶部 meta 行下移） */
+.memo-foot { display: flex; align-items: center; gap: 10px; margin-top: 2px; min-height: 20px; }
+.memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; }
+/* 标签胶囊：20px 档与卡片里的其余胶囊同高。
    命中的那颗转主色，点下去看得见自己生效了；悬停不跟着动作排一起淡掉——它是筛选入口不是状态标 */
 .memo-tags { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
 .tag-pill {
@@ -545,48 +538,27 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
 .memo:hover .memo-state, .memo:focus-within .memo-state { opacity: 0; }
 .state-star { color: var(--warning); display: inline-flex; }
-/* 脱吸浮层：动作排 sticky 在吸顶栏下沿（page-bar 54 + day-head 34），
-   随卡片高度一路跟到末尾再由 sticky 自然释放。height:0 让它不占正文位置。 */
-.acts-dock {
-  position: sticky; top: 88px; z-index: 15;
-  height: 0; display: flex; justify-content: flex-end; align-items: flex-start;
-  pointer-events: none;
-}
-.acts-sentinel { position: absolute; left: 0; right: 0; height: 1px; pointer-events: none; }
-.acts-sentinel.top { top: 0; }
-.acts-sentinel.bottom { bottom: 0; }
+/* hover 右下动作 pill：贴在卡角，半透卡底 + 发丝描边，压在正文上不糊字（对齐 mock .nacts） */
 .memo-acts {
-  display: flex; gap: 1px; padding: 5px 6px;
-  border: 1px solid transparent; border-radius: var(--radius-pill);
-  background: transparent;
-  opacity: 0; pointer-events: none;
-  transition: opacity var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition);
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 15;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--panel-bg) 82%, transparent);
+  box-shadow: var(--shadow-card);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
 }
-/* 原位：悬停/聚焦才显形，且不吞正文点击（透明态 pointer-events 关） */
-.memo:hover .memo-acts, .memo:focus-within .memo-acts, .memo-acts.docked { opacity: 1; pointer-events: auto; }
-/* 脱吸：磨砂浮岛 + 贴地轻影，压在正文上不糊字、不悬空 */
-.memo-acts.docked {
-  background: var(--frost-bg); backdrop-filter: blur(12px);
-  border-color: var(--frost-border); box-shadow: var(--shadow-sm);
-}
-/* 同屏只留一排：指针/焦点落到我后面任意一张卡上时，我的脱吸浮岛让位——两排同款按钮上下排开，
-   读起来像一排控件重了影。跨日期组要各写一条（`.memo ~ .memo` 只到同组为止）。
-   悬停浮岛自己那张卡时 :has(~ …) 不匹配自身，浮岛照旧。 */
-.memo:has(~ .memo:hover) .memo-acts.docked,
-.memo:has(~ .memo:focus-within) .memo-acts.docked,
-.day:has(~ .day:hover) .memo-acts.docked,
-.day:has(~ .day:focus-within) .memo-acts.docked { opacity: 0; pointer-events: none; }
-/* 纸底浮岛压在白卡上：默认 frost-bg 是透明白，既抬不起来又漏出底下正文。
-   换成近不透明的画布灰，靠色差抬起、把第一行字盖住，仍留 blur 与发丝描边。 */
-:root[data-theme="paper"] .memo-acts.docked {
-  background: rgba(241, 241, 240, 0.95);
-}
-.memo-acts .ib { width: 24px; height: 24px; }
+/* 悬停/聚焦才显形，且不吞正文点击（透明态 pointer-events 关） */
+.memo:hover .memo-acts, .memo:focus-within .memo-acts { opacity: 1; pointer-events: auto; }
+.memo-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
 .memo-acts .ib :deep(svg) { width: 15px; height: 15px; }
-/* 静息态收进 meta 行带：pill 无底，内衬归零、上移 2px，整排落在 24+2 高、
-   与 meta 文字同一光学中线。否则 36px 高的 pill 下沿比正文首行上沿低 12px，
-   首行只要写满一行就有半截字从按钮底下穿过去。脱吸态由 sticky 定位，不吃这条。 */
-.memo-acts:not(.docked) { padding: 0 2px; margin-top: -2px; }
 /* 删除和其余动作拉开一格，别让人顺手滑过去 */
 .memo-acts .ib.danger { margin-left: var(--space-1); }
 
@@ -621,8 +593,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   box-shadow: 0 0 0 1px var(--accent), var(--shadow-sm);
   transform: translateY(-1px);
 }
-/* 小记没有独立的标题节点，正文首块就是标题行，选中时跟着上主色 */
-.memo.is-sel .memo-body :deep(> :first-child) { color: var(--text-brand); }
+/* 小记标题在独立标题行，选中时跟着上主色 */
+.memo.is-sel .memo-title { color: var(--text-brand); }
 
 .edit-atts { margin-top: var(--space-3); }
 /* 动作条挪到卡顶：与只读态右上动作排同一位置语言，分隔线跟着翻成下沿虚线。

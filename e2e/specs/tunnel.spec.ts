@@ -118,6 +118,14 @@ test.describe('内网穿透', () => {
     await expect(page.locator('.tn-detail .tn-row', { hasText: 'SHA-256' })).toContainText('未校验')
   })
 
+  test('一个命令读失败：其余照读，页上留一句原因', async ({ page }) => {
+    await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE], pollFail: '数据库被占用' } })
+    await expect(page.locator('.poll-err')).toContainText('状态没读到：数据库被占用')
+    // 剩下四格照常更新：整页不许冻在上一帧，用户得能看出是哪一格读不到
+    await expect(page.locator('.tn-card.services')).toContainText('files.example.com')
+    await expect(page.locator('.tn-card.setup')).toContainText('desko-a')
+  })
+
   test.describe('服务列表', () => {
     test('空态只有一行添加：登记一条就上一行', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: READY })
@@ -149,7 +157,7 @@ test.describe('内网穿透', () => {
 
     test('换端口或换子域后回到未应用：旧记录不能替新指向作证', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE] } })
-      await svcRow(page, 'files.example.com').locator('.acts .action-btn').nth(1).click()
+      await svcRow(page, 'files.example.com').locator('.acts .ib').nth(1).click()
       await page.locator('.popover .pop-item', { hasText: '改公网设置' }).click()
       const dlg = page.locator('.tunnel-service-dialog')
       await dlg.locator('#tn-svc-port').fill('8500')
@@ -166,7 +174,7 @@ test.describe('内网穿透', () => {
       await expect(svcRow(page, 'files.example.com')).toContainText('公网没设口令')
 
       const openDialog = async () => {
-        await svcRow(page, 'files.example.com').locator('.acts .action-btn').nth(1).click()
+        await svcRow(page, 'files.example.com').locator('.acts .ib').nth(1).click()
         await page.locator('.popover .pop-item', { hasText: '改公网设置' }).click()
       }
       const dlg = page.locator('.tunnel-service-dialog')
@@ -251,7 +259,7 @@ test.describe('内网穿透', () => {
 
     test('删除说的是本机这一条，DNS 记录留在云上', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE] } })
-      await svcRow(page, 'files.example.com').locator('.acts .action-btn').nth(1).click()
+      await svcRow(page, 'files.example.com').locator('.acts .ib').nth(1).click()
       await page.locator('.popover .pop-item', { hasText: '移除这条' }).click()
       await expect(page.locator('.confirm-dialog .dialog-body')).toContainText('那条 DNS 记录还在 Cloudflare 上')
       await page.locator('.confirm-dialog .btn-danger').click()
@@ -266,7 +274,7 @@ test.describe('内网穿透', () => {
 
     test('复制的是 https 地址', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE] } })
-      await svcRow(page, 'files.example.com').locator('.acts .action-btn').first().click()
+      await svcRow(page, 'files.example.com').locator('.acts .ib').first().click()
       await expectToast(page, '已复制 https://files.example.com')
     })
   })
@@ -312,6 +320,17 @@ test.describe('内网穿透', () => {
       await row(page, 'auth').locator('.row-btn', { hasText: '取消' }).click()
       await expect(row(page, 'auth')).toContainText('在浏览器里登录 Cloudflare')
       expect(await e2e.count(page, 'tunnel_login_cancel')).toBe(1)
+    })
+
+    test('授权早退没落凭据：那句原因摊在行下，不是只把按钮退回「去授权」', async ({ page }) => {
+      await gotoTunnel(page, {
+        ...ROOT,
+        tunnel: { installed: true, authorized: false, loginFail: '这个 zone 不在你的账号里' },
+      })
+      await row(page, 'auth').locator('.row-btn').click()
+      await expect(page.locator('.tn-card.setup .tn-note.chip-warn')).toContainText('这个 zone 不在你的账号里')
+      // 失败不吞掉重试的入口：按钮退回「去授权」，用户当场能再来一轮
+      await expect(row(page, 'auth').locator('.row-btn', { hasText: '去授权' })).toHaveCount(1)
     })
 
     test('建好一条就不再给第二次入口', async ({ page }) => {

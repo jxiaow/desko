@@ -52,12 +52,12 @@ test.describe('Settings · 档案', () => {
     const dlg = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '新建档案' }) })
 
     await dlg.locator('.dialog-footer button.btn-primary').click()
-    await expect(dlg.locator('.modal-error')).toHaveText('请输入档案名')
+    await expect(dlg.locator('.dialog-err')).toHaveText('请输入档案名')
 
     await dlg.locator('input[placeholder="如：工作"]').fill('坏档')
     await dlg.locator('input[placeholder="留空则自动生成"]').fill('Bad NS')
     await dlg.locator('.dialog-footer button.btn-primary').click()
-    await expect(dlg.locator('.modal-error')).toContainText('小写字母')
+    await expect(dlg.locator('.dialog-err')).toContainText('小写字母')
     await expect(dlg).toBeVisible()
   })
 

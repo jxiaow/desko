@@ -75,7 +75,7 @@ const onFormSaved = (id: string) => {
 
 const doDelete = (entry: Entry, after?: () => void) => {
   const { showConfirm } = useConfirmStore()
-  showConfirm('确认删除', `确定删除「${entry.name}」？`, async () => {
+  showConfirm('删除条目', `「${entry.name}」的账号与密码将一并删除。`, async () => {
     try {
       await entriesStore.deleteEntry(entry.id)
       toastStore.showToast('已删除')
@@ -112,7 +112,7 @@ const duplicateEntry = async (entry: Entry) => {
       notes: entry.notes || undefined,
       category: entry.category || undefined,
     })
-    toastStore.showToast('已复制卡片')
+    toastStore.showToast('已创建副本')
   } catch (e: any) {
     toastStore.showToast(e.message || '复制失败', 'error')
   }

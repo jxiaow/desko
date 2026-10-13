@@ -331,7 +331,7 @@ pub fn extract_to(zip_bytes: &[u8], staging: &Path) -> Result<Manifest, AppError
         return Err(AppError::Backup("备份包缺少数据库".to_string()));
     }
     let manifest_raw = std::fs::read(staging.join("manifest.json"))?;
-    serde_json::from_slice(&manifest_raw).map_err(|e| AppError::Backup(format!("manifest 无效: {}", e)))
+    serde_json::from_slice(&manifest_raw).map_err(|e| AppError::Backup(format!("备份清单无法解析: {}", e)))
 }
 
 /// 只读回 manifest（列表展示用），不落盘
@@ -343,7 +343,7 @@ pub fn read_manifest(pkg_path: &Path, dek: &[u8]) -> Result<Manifest, AppError> 
     za.by_name("manifest.json")
         .map_err(|e| AppError::Backup(format!("备份包缺少 manifest: {}", e)))?
         .read_to_end(&mut buf)?;
-    serde_json::from_slice(&buf).map_err(|e| AppError::Backup(format!("manifest 无效: {}", e)))
+    serde_json::from_slice(&buf).map_err(|e| AppError::Backup(format!("备份清单无法解析: {}", e)))
 }
 
 #[cfg(test)]

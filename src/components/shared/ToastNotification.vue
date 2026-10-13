@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import AppIcon from './AppIcon.vue'
+
+const ICONS = { success: 'check', error: 'alert', info: 'info' } as const
+
 defineProps<{
   toast: { show: boolean; message: string; type: 'success' | 'error' | 'info' }
 }>()
@@ -7,18 +11,23 @@ defineProps<{
 <template>
   <Transition name="toast">
     <div v-if="toast.show" class="toast" :class="toast.type">
+      <AppIcon :name="ICONS[toast.type]" :size="13" />
       {{ toast.message }}
     </div>
   </Transition>
 </template>
 
 <style scoped>
-/* 右下角反色胶囊（V5.2 §7）：贴边 20px 与批量底栏同档，但底栏居中、两不相撞。
+/* 内容区顶沿居中的反色胶囊（2026-10-12 搬家轮，见 docs/design/toast/）：
+   右下角在余光区、800ms 根本捕不到；顶沿居中落在动作后的视线停留区。
+   居中参考系是「侧栏以右」：--toast-side 由 App.vue 按侧栏三态喂宽度，
+   左上角是模块名、右上是六颗钮，都不相干。top = 标题栏 42 + 10。
    反色面由主题给：--toast-bg 纸底是暗胶囊、墨底翻成亮胶囊，字色走 --toast-* 三档。 */
 .toast {
   position: fixed;
-  right: var(--space-5);
-  bottom: var(--space-5);
+  top: 52px;
+  left: calc(var(--toast-side, 56px) + (100vw - var(--toast-side, 56px)) / 2);
+  transform: translateX(-50%);
   padding: 6px 14px;
   border-radius: var(--radius-pill);
   font-size: var(--text-xs);
@@ -38,12 +47,12 @@ defineProps<{
 
 .toast-enter-active,
 .toast-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity 0.18s ease, translate 0.18s ease;
 }
 
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateY(8px);
+  translate: 0 8px;
 }
 </style>

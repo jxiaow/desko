@@ -27,6 +27,8 @@ export interface TunnelLogin {
   state: 'idle' | 'waiting' | 'authorized' | 'timeout'
   url: string | null
   secondsLeft: number
+  /** 授权进程最后说的话：它早退而凭据没落位时，这一句就是原因 */
+  note: string | null
 }
 
 /** 接入进度：由本机特征推导，每格对应一个下一步动作 */

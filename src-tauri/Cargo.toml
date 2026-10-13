@@ -1,5 +1,5 @@
 [workspace]
-members = ["fileshare-core", "codex-core"]
+members = ["fileshare-core", "codex-core", "netguard-core"]
 
 [package]
 name = "desko"
@@ -40,6 +40,8 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 ureq = "2"
 fileshare-core = { path = "fileshare-core" }
 codex-core = { path = "codex-core" }
+# 直连落盘：托管区解析规则与任务书/回执协议由主进程和提权 helper 共用同一份
+netguard-core = { path = "netguard-core" }
 
 [target.'cfg(windows)'.dependencies]
 # 版本与 tauri 传递依赖对齐（0.61），只给 session_lock 用
@@ -60,4 +62,8 @@ windows = { version = "0.61", features = [
     "Win32_System_JobObjects",
     "Win32_Security",
     "Win32_System_Threading",
+    # netguard_service 用 ShellExecuteExW("runas") 拉起提权 helper。
+    # SHELLEXECUTEINFOW 里有 HKEY 字段，windows crate 把整个结构体门控在 Registry 下
+    "Win32_UI_Shell",
+    "Win32_System_Registry",
 ] }

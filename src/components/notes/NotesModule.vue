@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useNotesStore } from '../../stores/notes'
 import { useToastStore } from '../../stores/toast'
@@ -14,6 +14,7 @@ import { attachmentSrc, collectAttachmentNames } from '../../services/attachment
 import type { IconName } from '../../utils/icons'
 import type { Note } from '../../types'
 import type { NoteView } from '../../stores/notes'
+import { usePageHeadStore } from '../../stores/pageHead'
 
 const VIEWS: { key: NoteView; label: string; icon: IconName }[] = [
   { key: 'all', label: '全部', icon: 'all' },
@@ -285,10 +286,13 @@ onBeforeUnmount(() => {
   observer?.disconnect()
   observer = null
 })
+
+const pageHead = usePageHeadStore()
+watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filteredNotes.value.length} / ${notes.value.length}` : notes.value.length} 条`))
 </script>
 
 <template>
-  <div ref="pageEl" class="notes-page">
+  <div ref="pageEl" class="notes-page" :class="{ 'rail-over': railOverlay }">
     <div class="stream">
       <div class="stream-inner" @keydown="onStreamKeydown">
         <div class="page-bar">
@@ -312,8 +316,6 @@ onBeforeUnmount(() => {
               <AppIcon name="x" :size="14" />
             </button>
           </div>
-          <!-- 计数是栏上的元信息，与收藏页同一位置（搜索框里只放搜索框自己的东西） -->
-          <span class="bar-count">{{ filteredNotes.length }} / {{ notes.length }} 条</span>
 
           <button
             class="bar-btn"
@@ -550,7 +552,7 @@ onBeforeUnmount(() => {
   /* 拆面轮：微光画布已上移到 .app-root，本页不再自铺 */
 }
 /* 一行一张：正常窗口铺满，最大化时收在 --stream-max 内居中。
-   顶部不留内边距：与其余四页同款——顶栏贴顶，滚动行不会从它上面露出来 */
+   顶部不留内边距：首行是吸顶的 .page-bar，呼吸在它自己栏内出 */
 .stream-inner {
   width: 100%;
   max-width: var(--stream-max);
@@ -560,11 +562,11 @@ onBeforeUnmount(() => {
 /* 书写框与吸顶栏拉开一档间距（列表页首行同款） */
 .stream-inner .composer { margin-top: var(--space-2); }
 
-/* ---------- 顶部工具条：吃 global.css 的 .page-bar 骨架（54px 吸顶画布），
+/* ---------- 顶部工具条：吃 global.css 的 .page-bar 骨架（64px 吸顶画布），
    本页只有一处与全宽页不同：搜索框随流伸缩（上限 320）。
-   计数用 global 的 .bar-count（margin-right: auto），把动作键推到右端，
-   与验证码页同一位置 ---------- */
+   栏内没有撑满剩余空间的左组，动作键得自己认领，否则全贴在搜索框右边、右端空一片 ---------- */
 .page-bar .search-box { flex: 1; min-width: 80px; max-width: 320px; }
+.page-bar .search-box + .bar-btn { margin-left: auto; }
 /* 右段动作键之间的分组线收成分居的短细线——通高的竖线在 54px 页栏里像表格线。
    margin 归零：.page-bar 本身已有 8px gap，global 那条又自带 4px，两侧各叠成 12px，
    分组线两侧净距 25px、邻钮之间只有 8px，读起来像断成了两截。 */
@@ -580,8 +582,8 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--space-2);
   font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 650;
+  color: var(--text-muted);
   letter-spacing: 0.02em;
   padding: var(--space-2) 0 var(--space-2) var(--space-1);
   /* 与 .page-bar 同一条画布配方（global.css --canvas-bg）：吸顶件若铺平色（原先 var(--bg)）
@@ -590,8 +592,7 @@ onBeforeUnmount(() => {
   background-attachment: fixed;
 }
 .day-head.pinned { color: var(--accent); }
-.day-head::after { content: ''; flex: 1; height: 1px; background: var(--border); opacity: 0.7; }
-.day-count { font-variant-numeric: tabular-nums; font-weight: 500; }
+.day-count { font-variant-numeric: tabular-nums; font-weight: 400; color: var(--text-faint); }
 .day-list {
   display: flex;
   flex-direction: column;
@@ -600,7 +601,7 @@ onBeforeUnmount(() => {
 
 .memo-skeleton {
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--space-3) var(--space-4);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
@@ -648,22 +649,27 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .rail-item:hover { background: var(--sidebar-hover); color: var(--text); }
-.rail-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+/* 右栏激活态比左导航更安静：吃 chrome hover 灰、正文色、加粗，不染主色
+   （左导航才是主色淡染行；两栏同为「选中」但层级不同，见 mock .rail-right a.on） */
+.rail-item.active { background: var(--hover-chrome); color: var(--text); font-weight: 600; }
 .rail-item.danger { color: var(--danger); }
 .rail-item.danger:hover { background: var(--danger-soft); }
 .rail-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 窄窗口下侧栏浮在流的上方，而不是把书写流挤扁。
-   从顶栏下面开始：盖住顶栏就等于把「收起侧栏」那颗按钮一起盖掉，开了关不上 */
+   通高从内容顶开始：与宽窗的停靠态同一口径，搜索行让到侧栏左沿（见 .rail-over .page-bar），
+   「展开侧栏」那颗钮不会被盖住，开了关得掉 */
 .rail.overlay {
   position: absolute;
-  top: var(--stream-bar-h);
+  top: 0;
   right: 0;
   bottom: 0;
   z-index: 40;
   box-shadow: var(--shadow-pop);
   border-left: 1px solid var(--border);
 }
+/* .page-bar 的右沿本来停在 .stream-inner 的内距处，侧栏左沿比它再往左 var(--space-5) */
+.notes-page.rail-over .page-bar { padding-right: calc(var(--rail-w) - var(--space-5)); }
 .rail-sep { height: 1px; flex-shrink: 0; background: var(--border); margin: var(--space-3) var(--space-2); }
 .rail-empty { font-size: var(--text-sm); color: var(--text-muted); padding: 0 var(--space-2); }
 .rail .tab-count { font-size: var(--text-xs); margin-left: 0; }

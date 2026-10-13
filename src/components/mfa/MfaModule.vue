@@ -1,24 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
 import jsQR from 'jsqr'
 import { mfaApi, type MfaCode } from '../../services/api/mfa'
+import { avatarLetter } from '../../utils/avatar'
 import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
+import { usePageHeadStore } from '../../stores/pageHead'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
 
-/* 发行方首字母块：与收藏/文件行的身份档同一配方（词首两枚，中文取前两字），
-   档面尺寸/圆角/底色走 global.css 的 .grid-slot，色彩不再按发行方哈希分浓淡 */
-const initials = (name: string) => {
-  const words = name.trim().split(/[\s._\-/@]+/).filter(Boolean)
-  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
-  return name.trim().slice(0, 2).toUpperCase()
-}
+/* 档面取发行方首字，与收藏/文件身份档同一配方（utils/avatar），24px 档只放得下一枚 */
 
 const codes = ref<MfaCode[]>([])
 const loading = ref(true)
@@ -86,8 +82,9 @@ const grouped = (c: MfaCode) => {
   return c.digits > half ? `${c.code.slice(0, half)} ${c.code.slice(half)}` : c.code
 }
 
-const pct = (c: MfaCode) =>
-  `${(Math.max(c.remaining, 0) / Math.max(c.period, 1)) * 100}%`
+/* 圆环倒计时：r=14 → 周长≈88，剩余越多描边越满（stroke-dashoffset 从 0 满环到 88 空环） */
+const RING = 88
+const ringOffset = (c: MfaCode) => RING * (1 - Math.max(c.remaining, 0) / Math.max(c.period, 1))
 
 const copyCode = async (c: MfaCode) => {
   try {
@@ -102,7 +99,7 @@ const copyCode = async (c: MfaCode) => {
 }
 
 const confirmDelete = (c: MfaCode) => {
-  confirmStore.showConfirm('确认删除', `确定删除「${c.issuer || c.label}」的验证码？密钥将一并丢失。`, async () => {
+  confirmStore.showConfirm('删除验证码', `「${c.issuer || c.label}」的密钥将一并丢失，站点侧需重新绑定。`, async () => {
     try {
       await mfaApi.remove(c.id)
       await refresh()
@@ -226,26 +223,31 @@ const onPaste = async (e: ClipboardEvent) => {
     uriInput.value = text.trim()
   }
 }
+
+const pageHead = usePageHeadStore()
+watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.value.length} 个账号` : ''))
 </script>
 
 <template>
   <div class="content-inner" @paste="onPaste">
     <div class="page-bar">
-      <span class="bar-count">{{ codes.length }} 个账号</span>
       <button class="btn-primary" @click="openAdd">
         <AppIcon name="plus" :size="14" />
         新增
       </button>
     </div>
 
-    <div v-if="loading" class="mfa-grid">
+    <div v-if="loading" class="card-grid">
       <div class="mfa-card skeleton" v-for="n in 3" :key="n">
-        <span class="skeleton-line w40"></span>
+        <div class="card-top">
+          <span class="skeleton-slot"></span>
+          <span class="skeleton-line w40"></span>
+        </div>
         <span class="skeleton-line w70 tall"></span>
       </div>
     </div>
 
-    <div v-else-if="codes.length > 0" class="mfa-grid">
+    <div v-else-if="codes.length > 0" class="card-grid">
       <div
         v-for="c in codes"
         :key="c.id"
@@ -259,19 +261,36 @@ const onPaste = async (e: ClipboardEvent) => {
         @keydown.enter.prevent="copyCode(c)"
         @keydown.space.prevent="copyCode(c)"
       >
+        <!-- 身份行：24px 档 + 发行方 + 账号（同行淡字）+ 右缘删除（hover 显形） -->
         <div class="card-top">
-          <span class="mfa-tile grid-slot" aria-hidden="true">{{ initials(c.issuer || c.label) }}</span>
+          <span class="mfa-tile grid-slot" aria-hidden="true">{{ avatarLetter(c.issuer || c.label) }}</span>
           <span class="card-issuer" :title="c.issuer || c.label">{{ c.issuer || c.label }}</span>
-          <button class="ib danger" type="button" title="删除" @click.stop="confirmDelete(c)">
+          <span v-if="c.issuer && c.label" class="card-label" :title="c.label">{{ c.label }}</span>
+          <button class="ib danger card-del" type="button" title="删除" @click.stop="confirmDelete(c)">
             <AppIcon name="trash" :size="14" />
           </button>
         </div>
-        <div v-if="c.issuer && c.label" class="card-label" :title="c.label">{{ c.label }}</div>
+        <!-- 码行：24px 等宽六位/八位码 + 右下圆环倒计时（环心读秒） -->
         <div class="card-code-row">
           <div class="card-code" :class="{ copied: copiedId === c.id }" aria-live="polite">{{ copiedId === c.id ? '已复制' : grouped(c) }}</div>
-          <span class="timer-text">{{ Math.max(c.remaining, 0) }}s</span>
+          <span class="ring" aria-hidden="true">
+            <svg width="32" height="32">
+              <circle cx="16" cy="16" r="14" fill="none" stroke="var(--fill)" stroke-width="2.5" />
+              <circle
+                class="ring-fg"
+                cx="16"
+                cy="16"
+                r="14"
+                fill="none"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                :stroke-dasharray="RING"
+                :stroke-dashoffset="ringOffset(c)"
+              />
+            </svg>
+            <b class="timer-text">{{ Math.max(c.remaining, 0) }}s</b>
+          </span>
         </div>
-        <div class="card-bottom"><div class="card-bottom-fill" :style="{ width: pct(c) }"></div></div>
       </div>
     </div>
 
@@ -290,13 +309,13 @@ const onPaste = async (e: ClipboardEvent) => {
               <h3>添加验证码</h3>
             </div>
             <button class="dialog-close" @click="closeAdd" title="关闭">
-              <AppIcon name="x" :size="18" />
+              <AppIcon name="x" :size="16" />
             </button>
           </div>
           <div class="dialog-body">
-            <div class="add-tabs">
-              <button class="add-tab" :class="{ active: addTab === 'uri' }" @click="addTab = 'uri'">otpauth 链接</button>
-              <button class="add-tab" :class="{ active: addTab === 'manual' }" @click="addTab = 'manual'">手动密钥</button>
+            <div class="seg" role="tablist">
+              <button class="seg-btn" :class="{ on: addTab === 'uri' }" type="button" role="tab" @click="addTab = 'uri'">otpauth 链接</button>
+              <button class="seg-btn" :class="{ on: addTab === 'manual' }" type="button" role="tab" @click="addTab = 'manual'">手动密钥</button>
             </div>
 
             <template v-if="addTab === 'uri'">
@@ -349,71 +368,79 @@ const onPaste = async (e: ClipboardEvent) => {
 /* .content-inner / .page-bar / 主按钮走 global.css 的页面骨架；本页计数顶左、动作钮顶右 */
 .page-bar .btn-primary { margin-left: auto; }
 
-.mfa-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--space-4);
-  padding-top: var(--space-2);
-}
-
+/* 96px 双行令牌卡（mock .otp）：身份行 + 码行（右下圆环倒计时），网格壳走全局 .card-grid */
 .mfa-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 96px;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border-radius: 12px;
   background: var(--bg-surface);
   box-shadow: var(--shadow-card);
-  padding: var(--space-3) var(--space-4);
+  padding: 13px 15px;
   cursor: pointer;
-  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
+  transition: transform var(--transition), border-color var(--transition),
+    box-shadow var(--transition), background-color var(--transition);
 }
-/* hover 与收藏/文件行卡、小记便签同一配方：描边显色 + 背景微沉（轻量化轮，抬影退役） */
+/* 与收藏/文件浮岛卡同一 hover 语言：抬 1px + md 影 + 描边升一档 */
 .mfa-card:hover {
-  border-color: var(--border-card-hover);
-  background: var(--bg-surface-hover);
+  transform: translateY(-1px);
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-md);
 }
-.mfa-card:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+[data-base="light"] .mfa-card:hover { background: var(--sunken); }
+[data-base="dark"] .mfa-card:hover { background: var(--hover); }
+.mfa-card:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-pop);
+}
 
-.card-top { display: flex; align-items: center; gap: var(--space-3); }
-/* 档面尺寸/圆角/中性底色走 global.css .grid-slot（34px 档），这里只留两枚字母的字面处理 */
+/* 身份行：24px 档 + 发行方 + 账号淡字同行 + 右缘删除 */
+.card-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* 档面收进 24px（与浮岛卡同一档），基座 .grid-slot 是 34px */
+.mfa-card .grid-slot { width: 24px; height: 24px; border-radius: 6px; font-size: var(--text-2xs) }
 .mfa-tile { font-weight: 700; letter-spacing: 0.02em; }
 .card-issuer {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.card-top .ib { opacity: 0; transition: opacity var(--transition); }
-.mfa-card:hover .ib, .mfa-card:focus-within .ib { opacity: 1; }
-html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
-
 .card-label {
-  margin-top: 2px;
-  /* 与图块右侧的发行方名左缘对齐（34px 档 + 12px 间距） */
-  margin-left: calc(34px + var(--space-3));
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.card-del { margin-left: auto; flex: none; opacity: 0; transition: opacity var(--transition); }
+.mfa-card:hover .card-del, .mfa-card:focus-within .card-del { opacity: 1; }
+html.hover-suppressed .mfa-card:hover .card-del { opacity: 0; }
 
-.card-code-row { display: flex; align-items: baseline; gap: var(--space-2); margin-top: var(--space-2); }
+/* 码行：大号等宽码 + 右下圆环 */
+.card-code-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .card-code {
   font-family: var(--font-mono);
-  font-size: var(--text-3xl);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: var(--text-2xl);
+  font-weight: 650;
+  letter-spacing: 0.08em;
   color: var(--text);
   font-variant-numeric: tabular-nums;
   border-radius: var(--radius-sm);
 }
 /* 复制反馈：码区整块翻成「已复制」，1.2s 后转回——回执落在结果本身上 */
-.card-code.copied { font-size: var(--text-xl); letter-spacing: 0.02em; color: var(--success); }
+.card-code.copied { font-size: var(--text-lg); letter-spacing: 0; color: var(--success); }
 /* 换码闪光：只在数字真换新的一瞬走一遍，是变化回执不是入场装饰 */
 @keyframes code-flash {
   0% { background: color-mix(in srgb, var(--cat-3) 22%, transparent); }
@@ -421,55 +448,37 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 }
 .mfa-card.flash .card-code { animation: code-flash 0.6s ease-out; }
 
-/* 通宽底缘进度线：2px 贴卡底沿，读秒收进码行右侧；剩余≤5s 整卡描边转警示色 */
-.card-bottom { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--fill); }
-.card-bottom-fill { height: 100%; background: var(--accent); transition: width 1s linear; }
-.timer-text { margin-left: auto; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.mfa-card.expiring { border-color: color-mix(in srgb, var(--warning) 55%, transparent); }
+/* 圆环倒计时：32px，环心读秒；描边随剩余收放，临期转警示色 */
+.ring { margin-left: auto; position: relative; width: 32px; height: 32px; flex: none; }
+.ring svg { transform: rotate(-90deg); display: block; }
+.ring-fg { stroke: var(--accent); transition: stroke-dashoffset 1s linear, stroke var(--transition); }
+.ring .timer-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.mfa-card.expiring { border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); }
 .mfa-card.expiring .card-code { color: var(--warning); }
-.mfa-card.expiring .card-bottom-fill { background: var(--warning); }
+.mfa-card.expiring .ring-fg { stroke: var(--warning); }
+.mfa-card.expiring .timer-text { color: var(--warning); }
 
 /* 加载骨架：呼吸走在容器上（与行卡页一致），条块只出静态色 */
 .mfa-card.skeleton {
   cursor: default;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
-.mfa-card.skeleton:hover { border-color: transparent; background: var(--bg-surface); box-shadow: var(--shadow-card); }
+.mfa-card.skeleton:hover { transform: none; border-color: var(--border); background: var(--bg-surface); box-shadow: var(--shadow-card); }
 .skeleton-line { height: 12px; border-radius: 5px; }
-.skeleton-line.tall { height: 26px; }
+.skeleton-line.tall { height: 26px; width: 120px; }
 
-/* 添加弹窗：分段轨道与快捷方式弹窗 type-seg 同一套浮卡语言（凹槽底 + 浮白选中块） */
-.add-tabs {
-  display: flex;
-  padding: 3px;
-  background: var(--sunken);
-  border-radius: var(--radius);
-  margin-bottom: var(--space-4);
-}
-.add-tab {
-  flex: 1;
-  padding: 6px 14px;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: inherit;
-  transition: all var(--transition);
-}
-.add-tab.active {
-  background: var(--bg-surface);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: var(--shadow-xs);
-}
-.add-tab:hover:not(.active) { color: var(--text-secondary); }
+/* 添加弹窗的页签走 global.css 的 .dialog .seg；凹槽+浮白药丸那一套已删 */
 
 .uri-box {
   width: 100%;
@@ -491,6 +500,5 @@ html.hover-suppressed .mfa-card:hover .ib { opacity: 0; }
 }
 
 .qr-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.qr-row .btn-secondary { height: 32px; } /* 正文动作钮落字段档，别高过底栏主钮 */
 .qr-hint { font-size: var(--text-xs); color: var(--text-muted); }
 </style>

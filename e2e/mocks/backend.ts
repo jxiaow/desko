@@ -91,6 +91,10 @@ export interface E2EConfig {
     applyFail?: string
     /** 别处在跑的 connector 处数 */
     external?: number
+    /** 这一轮授权当场退掉且没落凭据：把它那句原因交回界面 */
+    loginFail?: string
+    /** 让某一个读命令抛这句：演「一条读失败不许把整页冻住」 */
+    pollFail?: string
   }
   /**
    * 直连清单：真探测要联网，E2E 只演判定形状。
@@ -104,6 +108,28 @@ export interface E2EConfig {
     targets?: E2EBypassTargetSeed[]
     /** hosts 直连托管区的小账：不给就演成「区还没写过」 */
     hosts?: { managed?: number; error?: string }
+    /**
+     * 落盘链路。真提权不在 E2E 里跑，这里演的是「任务书 → 回执」的形状：
+     * 确认弹窗的账、等待授权那一帧、逐条成败、UAC 取消、helper 没回传。
+     */
+    apply?: {
+      /** >0：写入挂着一段时间，「等待授权」的界面态才拍得到 */
+      delayMs?: number
+      /** 演用户在 UAC 上按取消 */
+      cancel?: boolean
+      /** 演提权进程未回传结果，整批 error */
+      lost?: string
+      /** 这些 host 判不出出口：进确认弹窗的 blocked 行，不写系统 */
+      blocked?: string[]
+      /** 这些 host 写失败：整批回滚 */
+      failed?: string[]
+      /** 这些 host 系统里原本已就位（changed=false，算跳过） */
+      skipped?: string[]
+      /** 回滚自己失败：只有这种情况才留批次，界面才给「撤销本批」 */
+      rollbackFail?: boolean
+    }
+    /** >0：逐条重验挂时间，「重验 x/N」的进度与停止才拍得到 */
+    recheckDelayMs?: number
   }
   codex?: {
     accounts?: {
@@ -112,6 +138,8 @@ export interface E2EConfig {
       plan_type?: string
       auth_mode?: 'oauth' | 'apikey'
       reauth?: boolean
+      /** 与 reauth 配套：为什么登不上，只进徽标的悬停说明 */
+      reauth_reason?: string
       hourly?: number
       weekly?: number
       current?: boolean
@@ -127,6 +155,12 @@ export interface E2EConfig {
       api_base_url?: string
       /** 造一个带 auth_provider 的 id_token，验「使用 X 登录」的解码回显 */
       login_provider?: string
+      /** 授权中间态：给 'pending' 演「待授权」徽标 */
+      auth_status?: string
+      /** 非空 = 这条没配额且有失败原因，演「配额拉取失败」的悬停说明 */
+      quota_error?: string
+      /** 上次使用距今几天；不给就按种子顺序推 */
+      used_days_ago?: number
     }[]
     /** true 视为 OAuth 回调端口被占，演「先退出别的登录」那条提示 */
     portBusy?: boolean
@@ -134,6 +168,66 @@ export interface E2EConfig {
     repairFail?: boolean
     repairDelayMs?: number
     repairRows?: number
+    /** 切号演练：delayMs 让在途状态停住（取消钮与进度字都靠它截），cancel=true 演成写凭据前被中止 */
+    switchDelayMs?: number
+    switchCancel?: boolean
+    /** 官方会话目录的只读快照：cwd 决定分组，projectName 缺省时前端回退目录末段 */
+    sessions?: {
+      sessionId: string
+      title?: string
+      cwd: string
+      projectName?: string
+      /** 距今天数；不给按种子顺序推 */
+      daysAgo?: number
+      kind?: 'conversation' | 'external' | 'subagent'
+      input?: number
+      output?: number
+      /** input 里命中缓存的部分：官方口径把它整块算进 input，界面要能拆开 */
+      cached?: number
+      reasoning?: number
+      /** 会话文件体积：移到回收站后回收站那一行的体积字要靠它 */
+      sizeBytes?: number
+      /** 用量图这一条挂在哪个模型上；缺省按会话种类推 */
+      model?: string
+      /** 用量图这一条谈了几轮；缺省由 token 量推个像样的数 */
+      turns?: number
+    }[]
+    /** true：会话列表命令抛错，演「整页错误块 + 重试」而不是空列表 */
+    sessionsFail?: boolean
+    /** true：列表出得来但 token 统计抛错，演「这一格留空、不刷屏」 */
+    statsFail?: boolean
+    /** desko 回收站里已有的留底：恢复/彻底删除/清空三种走向的起点 */
+    trash?: {
+      sessionId: string
+      title?: string
+      cwd: string
+      /** 距今天数；不给按种子顺序推 */
+      daysAgo?: number
+      /** 留底体积；不给按 token 量折算 */
+      sizeBytes?: number
+    }[]
+    /** true：回收站五个命令一律抛错，演清单错误块与移动失败的红色 toast */
+    trashFail?: boolean
+    /** 账号回收站里已有的加密留底：恢复/彻底删除/清空三种走向的起点 */
+    recycled?: {
+      email: string
+      account_name?: string
+      plan_type?: string
+      /** 删除距今小时数；不给按种子顺序推 */
+      hoursAgo?: number
+    }[]
+    /** true：留底清单命令抛错，演「读不到回收站清单」而不是「回收站是空的」 */
+    recycledFail?: boolean
+    /** true：两条「打开」命令抛错，演失败 toast（成功侧只验 invoke 落到 mock） */
+    openFail?: boolean
+    /** true：用量图那条命令抛错，演「读不到用量」错误块 */
+    usageFail?: boolean
+    /** 用量图扫目录的耗时（毫秒），让「扫了 N 个文件 · X s」那一档可断言 */
+    usageScanMillis?: number
+    /** 批量删除作业逐条之间的延时（毫秒）；不给一口气跑完，暂停就抓不到中间态 */
+    deleteStepMs?: number
+    /** 这些邮箱第一轮删不动、重试才成功：演「失败明细 + 重试接着走」 */
+    deleteFailEmails?: string[]
   }
   /** 档案注册表：不给就用单个 default 档；activeId 缺省取列表首项 */
   profiles?: {
@@ -219,7 +313,11 @@ export interface E2EBypassTargetSeed {
   nextHop?: string
   verdict?: 'directOk' | 'hostsOnly' | 'needRoute' | 'unreachable' | 'egressUnknown'
   stale?: boolean
+  cdnLike?: boolean
   note?: string
+  /** 落盘状态。预置 applied 的行用来验「待写入」会不会把它摘出去 */
+  applyState?: 'none' | 'applied' | 'failed'
+  applyBatch?: string
 }
 
 /** 场景给的探测细节：不给就按 verdict 落一组通用值 */
@@ -256,7 +354,10 @@ interface BypassTargetRecord {
   nextHop: string
   verdict: string
   stale: boolean
+  cdnLike: boolean
   note: string
+  applyState: string
+  applyBatch: string
   createdAt: number
   updatedAt: number
   checkedAt: number
@@ -331,10 +432,16 @@ interface BackendState {
     loginState: 'idle' | 'waiting' | 'authorized' | 'timeout'
     loginUrl: string | null
     loginSecondsLeft: number
+    /** 授权进程早退而凭据没落位时它最后那句：界面照读，不自己编原因 */
+    loginNote: string | null
+    /** 设了它，login_start 就当这一轮当场失败并把这句带回 */
+    loginFail: string | null
+    /** 设了它，tunnel_status 就抛这句：演一条读炸了别的照读 */
+    pollFail: string | null
   }
   /** currentId 是显式指针，与后端 index.current_account_id 同构：导入/新增不动它，只有切号与登录落库才改 */
-  codex: { accounts: CodexAccountRecord[]; portBusy: boolean; loginId: string; currentId: string; repairFail: boolean; repairDelayMs: number; repairRows: number }
-  bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string }
+  codex: { accounts: CodexAccountRecord[]; portBusy: boolean; loginId: string; currentId: string; repairFail: boolean; repairDelayMs: number; repairRows: number; switchDelayMs: number; switchCancel: boolean; sessionsFail: boolean; statsFail: boolean; sessions: CodexSessionSeed[]; trash: CodexTrashSeed[]; trashFail: boolean; recycled: CodexRecycledSeed[]; recycledFail: boolean; openFail: boolean; usageFail: boolean; usageScanMillis: number; deleteStepMs: number; deleteFailEmails: string[]; deleteJobs: Record<string, CodexDeleteJob> }
+  bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string; applyDelay: number; applyCancel: boolean; applyLost: string; applyBlocked: string[]; applyFailed: string[]; applySkipped: string[]; applyRollbackFail: boolean; recheckDelay: number; rollbackBatch: string }
   profiles: { activeId: string; list: ProfileRecord[] }
 }
 
@@ -348,6 +455,67 @@ interface ProfileRecord {
 }
 
 /** 与 models/codex.rs 的线上形状对齐（serde 保持 snake_case） */
+/** 官方会话目录里的一条：token 各位不在列表 wire 上，只有统计命令给 */
+interface CodexSessionSeed {
+  sessionId: string
+  title: string
+  cwd: string
+  projectName: string | null
+  updatedAt: number
+  sessionKind: string
+  inputTokens: number
+  outputTokens: number
+  cachedInputTokens: number
+  reasoningOutputTokens: number
+  /** 会话文件体积：移到回收站后回收站行上显示的就是它 */
+  rolloutBytes: number
+  /** 用量图的模型档；缺省按 token 量落在两档演示模型上 */
+  model: string
+  /** 用量图的轮次；缺省由 token 量折算 */
+  turns: number
+}
+
+/** desko 回收站里的一条留底：deletedAt 是 unix 秒，与后端 parse_deleted_at 同口径 */
+interface CodexTrashSeed {
+  sessionId: string
+  title: string
+  cwd: string
+  deletedAt: number
+  sizeBytes: number
+  /** 移进来时那条会话的原样记录；种子给的条目没有，恢复时按空记录回官方列表 */
+  restored?: CodexSessionSeed
+}
+
+/** 与后端 format_bytes 同档：KB/MB/GB 一位小数，字节数原样 */
+function trashBytesText(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${bytes} B`
+}
+
+/** 一条账号留底：真机存的是 {summary, encrypted_account}，这里把整条号原样留着供恢复回写 */
+interface CodexRecycledSeed {
+  /** 后端的 recycle 条目 id 是 uuid，前端只当不透明串用 */
+  id: string
+  deleted_at: number
+  account: CodexAccountRecord
+}
+
+/** 批量删除作业：形状照后端的 CodexBatchDeleteJobStatus，队列与游标是 mock 自己的跑批现场 */
+interface CodexDeleteJob {
+  jobId: string
+  accountIds: string[]
+  nextIndex: number
+  total: number
+  completed: number
+  failed: number
+  errors: { accountId: string; error: string }[]
+  status: 'running' | 'paused' | 'completed' | 'failed'
+  /** 每条试过几次：第一轮按种子失败，重试那一轮放行，才有「重试接着走」可断言 */
+  attempts: Record<string, number>
+}
+
 interface CodexAccountRecord {
   id: string
   email: string
@@ -365,6 +533,11 @@ interface CodexAccountRecord {
   api_provider_name: string | null
   api_base_url: string | null
   requires_reauth: boolean
+  /** 切号失败时后端写入的原因串，前端只挂在徽标 title 上 */
+  reauth_reason: string | null
+  /** 授权中间态，Rust 常量是 'pending' */
+  authorization_status: string | null
+  quota_error: { code: string; message: string; timestamp: number } | null
   /** 只为解 id_token 的 auth_provider，行内「使用 X 登录」用 */
   tokens: { id_token: string | null } | null
   quota: {
@@ -377,6 +550,13 @@ interface CodexAccountRecord {
   usage_updated_at: number | null
   created_at: number
   last_used: number
+}
+
+/** 密钥的稳定小哈希：mock 里代替 Rust 的 md5，只为「换密钥即换 ID」这条契约 */
+function apiKeyHash(key: string): string {
+  let h = 5381
+  for (let i = 0; i < key.length; i++) h = ((h << 5) + h + key.charCodeAt(i)) | 0
+  return (h >>> 0).toString(16).padStart(8, '0')
 }
 
 /** 造一个只有根部 auth_provider 有用的假 id_token（base64url 分段） */
@@ -408,7 +588,7 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'theme', 'accent', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'fileshare_enabled', 'tunnel_enabled', 'codex_enabled', 'bypass_enabled']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'theme', 'accent', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'fileshare_enabled', 'tunnel_enabled', 'codex_enabled', 'bypass_enabled', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold']
 
 /** 与 Rust 端 backup::LOCAL_FLOOR 对齐：传上云的包本地只留这么几份兜底 */
 const LOCAL_FLOOR = 3
@@ -561,6 +741,9 @@ class MockBackend {
         loginState: 'idle',
         loginUrl: null,
         loginSecondsLeft: 0,
+        loginNote: null,
+        loginFail: null,
+        pollFail: null,
       },
       bypass: {
         targets: (config.bypass?.targets ?? []).map((t, i, all) =>
@@ -571,8 +754,17 @@ class MockBackend {
         probe: config.bypass?.probe ?? null,
         hostsManaged: config.bypass?.hosts?.managed ?? 0,
         hostsError: config.bypass?.hosts?.error ?? '',
+        applyDelay: config.bypass?.apply?.delayMs ?? 0,
+        applyCancel: config.bypass?.apply?.cancel ?? false,
+        applyLost: config.bypass?.apply?.lost ?? '',
+        applyBlocked: config.bypass?.apply?.blocked ?? [],
+        applyFailed: config.bypass?.apply?.failed ?? [],
+        applySkipped: config.bypass?.apply?.skipped ?? [],
+        applyRollbackFail: config.bypass?.apply?.rollbackFail ?? false,
+        recheckDelay: config.bypass?.recheckDelayMs ?? 0,
+        rollbackBatch: '',
       },
-      codex: { accounts: [], portBusy: false, loginId: '', currentId: '', repairFail: false, repairDelayMs: 0, repairRows: 3 },
+      codex: { accounts: [], portBusy: false, loginId: '', currentId: '', repairFail: false, repairDelayMs: 0, repairRows: 3, switchDelayMs: 0, switchCancel: false, sessionsFail: false, statsFail: false, sessions: [], trash: [], trashFail: false, recycled: [], recycledFail: false, openFail: false, usageFail: false, usageScanMillis: 0, deleteStepMs: 0, deleteFailEmails: [], deleteJobs: {} },
       profiles: { activeId: 'default', list: [{ id: 'default', name: '默认', cloudNs: '', createdAt: now, lastUsedAt: now }] },
     }
     if (config.profiles) {
@@ -613,6 +805,8 @@ class MockBackend {
       tn.sha = t.sha ?? null
       tn.fetchFail = t.fetchFail ?? null
       tn.authorized = t.authorized ?? Boolean(tn.tunnelId)
+      tn.loginFail = t.loginFail ?? null
+      tn.pollFail = t.pollFail ?? null
       tn.creds = tn.tunnelId ? !(t.credsMissing ?? false) : false
       tn.services = (t.services ?? []).map((s, i) => ({
         id: `e2e-svc-${i + 1}`,
@@ -635,12 +829,80 @@ class MockBackend {
       state.codex.repairFail = config.codex.repairFail ?? false
       state.codex.repairDelayMs = config.codex.repairDelayMs ?? 0
       state.codex.repairRows = config.codex.repairRows ?? 3
+      state.codex.switchDelayMs = config.codex.switchDelayMs ?? 0
+      state.codex.switchCancel = config.codex.switchCancel ?? false
+      state.codex.sessionsFail = config.codex.sessionsFail ?? false
+      state.codex.statsFail = config.codex.statsFail ?? false
+      state.codex.trashFail = config.codex.trashFail ?? false
+      state.codex.recycledFail = config.codex.recycledFail ?? false
+      state.codex.openFail = config.codex.openFail ?? false
+      state.codex.usageFail = config.codex.usageFail ?? false
+      state.codex.usageScanMillis = config.codex.usageScanMillis ?? 1681
+      state.codex.deleteStepMs = config.codex.deleteStepMs ?? 0
+      state.codex.deleteFailEmails = config.codex.deleteFailEmails ?? []
+      state.codex.sessions = (config.codex.sessions ?? []).map((s, i, arr) => ({
+        sessionId: s.sessionId,
+        title: s.title ?? '',
+        cwd: s.cwd,
+        projectName: s.projectName ?? null,
+        // 与账号种子同口径：unix 秒。这里不能用下面的 secs()，它在本语句之后才声明
+        updatedAt: Math.floor((now - (s.daysAgo ?? arr.length - i) * 86400_000) / 1000),
+        sessionKind: s.kind ?? 'conversation',
+        inputTokens: s.input ?? 0,
+        outputTokens: s.output ?? 0,
+        cachedInputTokens: s.cached ?? 0,
+        reasoningOutputTokens: s.reasoning ?? 0,
+        rolloutBytes: s.sizeBytes ?? 0,
+        model: s.model ?? (i % 2 ? 'gpt-5.1-codex-mini' : 'gpt-5.1-codex'),
+        turns: s.turns ?? Math.max(1, Math.round(((s.input ?? 0) + (s.output ?? 0)) / 20000)),
+      }))
+      state.codex.trash = (config.codex.trash ?? []).map((t, i, arr) => ({
+        sessionId: t.sessionId,
+        title: t.title ?? '',
+        cwd: t.cwd,
+        deletedAt: Math.floor((now - (t.daysAgo ?? arr.length - i) * 86400_000) / 1000),
+        sizeBytes: t.sizeBytes ?? 0,
+      }))
       const seed = config.codex.accounts ?? []
+      // created_at / last_used 与 Rust 一样是 unix 秒（chrono::timestamp），不是毫秒
+      const secs = (ms: number) => Math.floor(ms / 1000)
+      const nowSec = secs(now)
+      // 留底是「已经不在列表里的那批号」：种子只给行上要显示的列，恢复回写时得是条完整记录
+      state.codex.recycled = (config.codex.recycled ?? []).map((r, i, arr) => {
+        const deletedAt = secs(now - (r.hoursAgo ?? (arr.length - i) * 26) * 3600_000)
+        const account: CodexAccountRecord = {
+          id: nextId(),
+          email: r.email,
+          auth_mode: 'oauth',
+          account_name: r.account_name ?? null,
+          account_note: null,
+          tags: [],
+          plan_type: r.plan_type ?? null,
+          auth_file_plan_type: r.plan_type ?? null,
+          account_id: null,
+          user_id: null,
+          organization_id: null,
+          account_structure: null,
+          subscription_active_until: null,
+          api_provider_name: null,
+          api_base_url: null,
+          requires_reauth: false,
+          authorization_status: null,
+          quota_error: null,
+          tokens: null,
+          quota: null,
+          usage_updated_at: null,
+          created_at: deletedAt - 86400,
+          last_used: deletedAt,
+        }
+        return { id: nextId(), deleted_at: deletedAt, account }
+      })
+      let currentIdFromSeed = ''
       state.codex.accounts = seed.map((a, i) => {
-        const ts = now - (seed.length - i) * 1000
+        const ts = secs(now - (seed.length - i) * 1000)
         const hourly = a.hourly ?? 100
         const weekly = a.weekly ?? 100
-        return {
+        const rec = {
           id: nextId(),
           email: a.email,
           auth_mode: a.auth_mode ?? 'oauth',
@@ -657,20 +919,33 @@ class MockBackend {
           api_provider_name: a.api_provider_name ?? null,
           api_base_url: a.api_base_url ?? null,
           requires_reauth: a.reauth ?? false,
+          reauth_reason: a.reauth_reason ?? null,
+          authorization_status: a.auth_status ?? null,
+          quota_error: a.quota_error
+            ? { code: 'quota_unavailable', message: a.quota_error, timestamp: nowSec }
+            : null,
           tokens: a.login_provider ? { id_token: fakeIdToken(a.login_provider) } : null,
-          quota: {
-            hourly_percentage: hourly,
-            hourly_reset_time: hourly >= 100 ? null : now / 1000 + 3600,
-            weekly_percentage: weekly,
-            weekly_reset_time: weekly >= 100 ? null : now / 1000 + 7 * 86400,
-            reset_credits_available: hourly <= 20 ? 1 : 0,
-          },
-          usage_updated_at: now / 1000,
+          quota: a.quota_error
+            ? null
+            : {
+                hourly_percentage: hourly,
+                hourly_reset_time: hourly >= 100 ? null : now / 1000 + 3600,
+                weekly_percentage: weekly,
+                weekly_reset_time: weekly >= 100 ? null : now / 1000 + 7 * 86400,
+                reset_credits_available: hourly <= 20 ? 1 : 0,
+              },
+          // 「上次取数」与「上次使用」是两件事：都塞 now 会在底行读成重复字段
+          usage_updated_at: nowSec - (seed.length - i) * 3600,
           created_at: ts,
-          last_used: a.current ? now : ts,
+          last_used: a.used_days_ago ? nowSec - a.used_days_ago * 86400 : nowSec - (seed.length - i) * 86400,
         }
+        if (a.current) {
+          rec.last_used = nowSec
+          currentIdFromSeed = rec.id
+        }
+        return rec
       })
-      state.codex.currentId = state.codex.accounts.find((x) => x.last_used === now)?.id ?? ''
+      state.codex.currentId = currentIdFromSeed
     }
 
     // seed 数据按倒序时间戳，保证列表顺序确定（最新在前）
@@ -871,7 +1146,7 @@ class MockBackend {
 
   private tunnelLoginDto() {
     const t = this.state.tunnel
-    return { state: t.loginState, url: t.loginUrl, secondsLeft: t.loginSecondsLeft }
+    return { state: t.loginState, url: t.loginUrl, secondsLeft: t.loginSecondsLeft, note: t.loginNote }
   }
 
   /** 与 services::split_report 同式：本机注册了才把自己那一条扣掉 */
@@ -892,6 +1167,88 @@ class MockBackend {
     const a = this.state.codex.accounts.find((x) => x.id === id)
     if (!a) throw `账号不存在: ${id}`
     return a
+  }
+
+  /** 回收站一族都按 trim + 去重后的 id 集合行事，与后端一致 */
+  private trashIds(raw: unknown): Set<string> {
+    return new Set(((raw as string[]) ?? []).map((id) => String(id).trim()).filter(Boolean))
+  }
+
+  /** 删除 = 先留底再剔索引；当前选中的那条被删后指针落空，与后端同构 */
+  private codexRecycle(ids: string[]): void {
+    const hit = new Set(ids)
+    const removed = this.state.codex.accounts.filter((a) => hit.has(a.id))
+    if (!removed.length) return
+    const nowSec = Math.floor(Date.now() / 1000)
+    this.state.codex.recycled.push(
+      ...removed.map((a) => ({ id: nextId(), deleted_at: nowSec, account: { ...a } })),
+    )
+    this.state.codex.accounts = this.state.codex.accounts.filter((a) => !hit.has(a.id))
+    if (hit.has(this.state.codex.currentId)) this.state.codex.currentId = ''
+  }
+
+  /** 留底摘要就是快照头那几列，前端按 snake_case 直接读 */
+  private recycledSummary(r: CodexRecycledSeed) {
+    return {
+      id: r.id,
+      account_id: r.account.id,
+      email: r.account.email,
+      account_name: r.account.account_name,
+      plan_type: r.account.plan_type,
+      deleted_at: r.deleted_at,
+    }
+  }
+
+  /** 作业对外只露后端那份 DTO，队列与游标是 mock 自己的跑批现场 */
+  private deleteSnapshot(job: CodexDeleteJob) {
+    return {
+      jobId: job.jobId,
+      status: job.status,
+      total: job.total,
+      completed: job.completed,
+      failed: job.failed,
+      errors: job.errors.map((e) => ({ ...e })),
+    }
+  }
+
+  /** 后端每条走一次 spawn_blocking；这里用 setTimeout 串起来，删除才有中间态可断言 */
+  private scheduleDeleteStep(jobId: string): void {
+    setTimeout(() => this.runDeleteStep(jobId), this.state.codex.deleteStepMs)
+  }
+
+  private runDeleteStep(jobId: string): void {
+    const job = this.state.codex.deleteJobs[jobId]
+    // paused 的 job 也会被这颗定时器敲到，正好当闸：什么都不做，等 resume 重新排
+    if (!job || job.status !== 'running') return
+    if (job.nextIndex >= job.accountIds.length) {
+      job.status = job.failed > 0 ? 'failed' : 'completed'
+      return
+    }
+    const id = job.accountIds[job.nextIndex++]
+    const attempt = (job.attempts[id] ?? 0) + 1
+    job.attempts[id] = attempt
+    const email = this.state.codex.accounts.find((a) => a.id === id)?.email ?? ''
+    if (this.state.codex.deleteFailEmails.includes(email) && attempt === 1) {
+      job.failed += 1
+      job.errors.push({ accountId: id, error: '令牌已失效，这一条删不掉（e2e）' })
+    } else {
+      this.codexRecycle([id])
+    }
+    // completed 是「已处理」计数，失败的那条也 +1 —— 与后端同账
+    job.completed += 1
+    this.scheduleDeleteStep(jobId)
+  }
+
+  /** 「打开位置/打开会话文件」不真开系统程序：只按 id 在官方列表与留底里找得到 */
+  private codexLocateSession(rawId: unknown, missing: string): null {
+    if (this.state.codex.openFail) throw '打开系统程序失败（e2e）'
+    const id = String(rawId ?? '').trim()
+    if (!id) throw '请选择一条会话'
+    const known =
+      this.state.codex.sessions.some((s) => s.sessionId === id) ||
+      this.state.codex.trash.some((t) => t.sessionId === id)
+    if (!known) throw missing
+    return null
   }
 
   /** 官方 config.toml 里生效的 model_provider：OAuth 走 openai，API Key 走托管供应商 id。
@@ -915,7 +1272,7 @@ class MockBackend {
   }
 
   /** 新导入/新登录的账号：配额满格，与后端刚落库时的空配额同形 */
-  private codexPush(email: string, opts: { plan_type?: string; auth_mode?: 'oauth' | 'apikey'; activate?: boolean } = {}): CodexAccountRecord {
+  private codexPush(email: string, opts: { plan_type?: string; auth_mode?: 'oauth' | 'apikey'; activate?: boolean; api_base_url?: string | null } = {}): CodexAccountRecord {
     const now = Date.now()
     const rec: CodexAccountRecord = {
       id: nextId(),
@@ -932,8 +1289,10 @@ class MockBackend {
       account_structure: null,
       subscription_active_until: null,
       api_provider_name: null,
-      api_base_url: null,
+      api_base_url: opts.api_base_url ?? null,
       requires_reauth: false,
+      authorization_status: null,
+      quota_error: null,
       tokens: null,
       quota: {
         hourly_percentage: 100,
@@ -943,8 +1302,8 @@ class MockBackend {
         reset_credits_available: 0,
       },
       usage_updated_at: Math.floor(now / 1000),
-      created_at: now,
-      last_used: now,
+      created_at: Math.floor(now / 1000),
+      last_used: Math.floor(now / 1000),
     }
     this.state.codex.accounts.unshift(rec)
     if (opts.activate) this.state.codex.currentId = rec.id
@@ -968,6 +1327,9 @@ class MockBackend {
       nextHop: seed.nextHop ?? '',
       verdict,
       stale: seed.stale ?? false,
+      cdnLike: seed.cdnLike ?? false,
+      applyState: seed.applyState ?? 'none',
+      applyBatch: seed.applyBatch ?? '',
       note: seed.note ?? this.bypassCopy(verdict, kind, {
         host: seed.host,
         address: seed.address ?? '',
@@ -1088,7 +1450,11 @@ class MockBackend {
   }
 
   /** 与 Rust upsert_bypass_target 同形：同 host 覆盖回原行，建档时间不动 */
-  private bypassPush(report: BypassReport, existing?: BypassTargetRecord) {
+  private bypassPush(
+    report: BypassReport,
+    existing?: BypassTargetRecord,
+    applied?: { state: string; batch: string },
+  ) {
     const cur = existing ?? this.state.bypass.targets.find((t) => t.host === report.target.host)
     const now = Date.now()
     const row: BypassTargetRecord = {
@@ -1104,7 +1470,11 @@ class MockBackend {
       nextHop: report.egress?.nextHop ?? '',
       verdict: report.verdict,
       stale: report.stale,
+      cdnLike: report.cdnLike,
       note: report.headline,
+      // 建档与改原文归回「未写入」，只有原地重探把旧值带过来
+      applyState: applied?.state ?? 'none',
+      applyBatch: applied?.batch ?? '',
       createdAt: cur?.createdAt ?? now,
       updatedAt: now,
       checkedAt: now,
@@ -1114,6 +1484,92 @@ class MockBackend {
       row,
       ...this.state.bypass.targets.filter((t) => t.id !== row.id && t.host !== row.host),
     ]
+  }
+
+  /** 与 Rust needs_apply 同判据：写过的必须从「待写入」里摘出去，否则那个数字永远降不下来 */
+  private bypassPending(): BypassTargetRecord[] {
+    return this.state.bypass.targets.filter(
+      (t) =>
+        (t.verdict === 'hostsOnly' || t.verdict === 'needRoute') && t.applyState !== 'applied',
+    )
+  }
+
+  /** 与 netguard_service::cdn_gated 同判据：CDN 轮换的默认不进批次，除非这一条被显式坚持 */
+  private cdnGated(t: BypassTargetRecord, allowCdn: string[]): boolean {
+    return !!t.cdnLike && !allowCdn.includes(t.id)
+  }
+
+  /** 与 netguard_service::plan 同形：一条域名可以出两行（hosts 固定 + 持久路由） */
+  private bypassPlanRows(allowCdn: string[] = []): { id: string; label: string; action: string; blocked: string }[] {
+    const s = this.state.bypass
+    const rows: { id: string; label: string; action: string; blocked: string }[] = []
+    for (const t of this.bypassPending()) {
+      if (this.cdnGated(t, allowCdn)) {
+        rows.push({
+          id: t.id,
+          label: t.host,
+          action: '',
+          blocked: '带 CDN 轮换特征，固定后会随节点变化失效；确需固定请勾选本条',
+        })
+        continue
+      }
+      const isDomain = t.kind === 'domain'
+      if (isDomain) {
+        rows.push({
+          id: t.id,
+          label: t.host,
+          action: t.address ? `hosts 固定 ${t.host} → ${t.address}` : '',
+          blocked: '',
+        })
+      }
+      if (t.verdict !== 'needRoute') continue
+      const prefix = isDomain ? t.address : t.host
+      if (!prefix) {
+        if (!isDomain) {
+          rows.push({ id: t.id, label: t.host, action: '', blocked: '网段写法无法识别' })
+        }
+        continue
+      }
+      if (s.applyBlocked.includes(t.host)) {
+        rows.push({
+          id: t.id,
+          label: t.host,
+          action: '',
+          blocked: '路由表里没有可绑定的非接管接口，需人工确认出口',
+        })
+        continue
+      }
+      rows.push({
+        id: t.id,
+        label: t.host,
+        action: `持久路由 绑 ${t.nextHop || '链路本地'}（接口 ${t.interfaceName || '本机'}）`,
+        blocked: '',
+      })
+    }
+    return rows
+  }
+
+  /** 任务书里的那几笔：只有真有动作的行才落盘 */
+  private bypassWork(allowCdn: string[] = []): { id: string; host: string; op: string }[] {
+    return this.bypassPlanRows(allowCdn)
+      .filter((r) => !!r.action)
+      .map((r) => ({
+        id: r.id,
+        host: this.state.bypass.targets.find((t) => t.id === r.id)?.host ?? r.label,
+        op: r.action.startsWith('hosts') ? 'pin' : 'route',
+      }))
+  }
+
+  /** Tauri 传进来的 allowCdn 是 unknown，这里统一收成字符串数组 */
+  private allowCdnOf(v: unknown): string[] {
+    return Array.isArray(v) ? v.map((x) => String(x)) : []
+  }
+
+  /** 落盘状态单独回写：不动判定、不动探测结论，只记这批写过了 */
+  private bypassStateOf(id: string, state: string, batch: string) {
+    this.state.bypass.targets = this.state.bypass.targets.map((t) =>
+      t.id === id ? { ...t, applyState: state, applyBatch: batch, updatedAt: Date.now() } : t,
+    )
   }
 
   private entryResponse(e: EntryRecord, withPaths = false) {
@@ -2024,7 +2480,7 @@ class MockBackend {
         const s = String(raw)
         const base = s.split(/[\\/]/).filter(Boolean).pop() ?? s
         if (/[/\\]$/.test(s)) {
-          failed.push(`${base}：只收文件，文件夹请先压缩`)
+          failed.push(`${base}：仅接收文件，文件夹请先压缩`)
           continue
         }
         if (base.startsWith('big')) {
@@ -2075,6 +2531,14 @@ class MockBackend {
     tunnel_login_start: () => {
       const t = this.state.tunnel
       if (t.loginState !== 'waiting') {
+        if (t.loginFail) {
+          // 子进程早退那一轮：不进入 waiting，直接把原因交回界面
+          t.loginState = 'timeout'
+          t.loginUrl = null
+          t.loginSecondsLeft = 0
+          t.loginNote = t.loginFail
+          return this.tunnelLoginDto()
+        }
         t.loginState = 'waiting'
         t.loginUrl = 'https://dash.cloudflare.com/argotunnel?e2e=authorize'
         t.loginSecondsLeft = 300
@@ -2090,6 +2554,7 @@ class MockBackend {
         t.loginState = 'idle'
         t.loginUrl = null
         t.loginSecondsLeft = 0
+        t.loginNote = null
       }
     },
 
@@ -2206,6 +2671,7 @@ class MockBackend {
 
     tunnel_status: () => {
       const t = this.state.tunnel
+      if (t.pollFail) throw t.pollFail
       return {
         bound: t.bound,
         alive: t.alive,
@@ -2264,12 +2730,27 @@ class MockBackend {
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .map((t) => ({ ...t })),
 
-    bypass_recheck: ({ id }) => {
+    bypass_recheck: async ({ id }) => {
       const found = this.state.bypass.targets.find((t) => t.id === id)
       if (!found) throw '条目不存在，可能已被删除'
+      // 全量重验逐条调这里：挂一点时间，「重验 x/N」的进度与中途停止才拍得到
+      if (this.state.bypass.recheckDelay > 0) {
+        await new Promise((r) => setTimeout(r, this.state.bypass.recheckDelay))
+      }
       // 按原文重探：只有 host 会把带端口/路径/掩码的目标探成默认 443
-      const report = this.bypassProbeOrThrow(found.input || found.host)
-      this.bypassPush(report, found)
+      let report = this.bypassProbeOrThrow(found.input || found.host)
+      // 真写完以后系统已按钉住的地址解析/路由，重探该回「直连可用」。
+      // 只认 applied：回滚过的批次（failed）系统里什么都没留，判定不该跟着变好
+      if (found.applyState === 'applied') report = { ...report, verdict: 'directOk' }
+      // 与 Rust reconcile_apply 同判据：写过却仍判要写 = 失败，失败后不再要写 = 已了结
+      const needs = report.verdict === 'hostsOnly' || report.verdict === 'needRoute'
+      const next =
+        found.applyState === 'applied' && needs
+          ? 'failed'
+          : found.applyState === 'failed' && !needs
+            ? 'applied'
+            : found.applyState
+      this.bypassPush(report, found, { state: next, batch: found.applyBatch })
       return report
     },
 
@@ -2279,7 +2760,7 @@ class MockBackend {
       hostsError: this.state.bypass.hostsError,
       total: this.state.bypass.targets.length,
       pending: this.state.bypass.targets.filter(
-        (t) => t.verdict === 'hostsOnly' || t.verdict === 'needRoute',
+        (t) => (t.verdict === 'hostsOnly' || t.verdict === 'needRoute') && t.applyState !== 'applied',
       ).length,
       stale: this.state.bypass.targets.filter((t) => t.stale).length,
     }),
@@ -2287,6 +2768,90 @@ class MockBackend {
     bypass_delete: ({ id }) => {
       this.state.bypass.targets = this.state.bypass.targets.filter((t) => t.id !== id)
     },
+
+    /** 与 Rust bypass_plan 同形：ready 按条目计，不是按动作计 */
+    bypass_plan: ({ allowCdn }: { allowCdn?: unknown }) => {
+      const allow = this.allowCdnOf(allowCdn)
+      const rows = this.bypassPlanRows(allow)
+      const blocked = rows.filter((r) => !!r.blocked).length
+      const ready = this.bypassPending()
+        .filter((t) => !this.cdnGated(t, allow))
+        .filter((t) => !rows.some((r) => r.id === t.id && !!r.blocked))
+        .length
+      return { rows, ready, blocked }
+    },
+
+    /** 与 Rust bypass_apply 同形：一次 UAC 落完一批，任一条失败则整批回滚 */
+    bypass_apply: async ({ allowCdn }: { allowCdn?: unknown }) => {
+      const s = this.state.bypass
+      if (s.applyDelay > 0) await new Promise((r) => setTimeout(r, s.applyDelay))
+      const work = this.bypassWork(this.allowCdnOf(allowCdn))
+      if (!work.length) {
+        return { batchId: '', cancelled: false, rolledBack: false, items: [], error: '' }
+      }
+      const batch = nextId()
+      if (s.applyCancel) {
+        return { batchId: batch, cancelled: true, rolledBack: false, items: [], error: '' }
+      }
+      if (s.applyLost) {
+        return {
+          batchId: batch,
+          cancelled: false,
+          rolledBack: false,
+          items: [],
+          error: '提权进程未回传结果，系统状态未知，请重新探测后再试',
+        }
+      }
+      const items = work.map((w) => {
+        const failed = s.applyFailed.includes(w.host)
+        return {
+          id: w.id,
+          op: w.op,
+          ok: !failed,
+          changed: !failed && !s.applySkipped.includes(w.host),
+          error: failed
+            ? w.op === 'pin'
+              ? `写入后 hosts 托管区仍未包含 ${w.host}`
+              : '路由添加命令已执行，但路由表里查不到该条'
+            : '',
+        }
+      })
+      // 与 Rust 同规则：helper 半批必回滚，回滚干净了系统就是没写过的样子，
+      // 既不留「已写入」也不留撤销的余地；只有回滚自己失败才把批次留着给「撤销本批」
+      const anyFailed = items.some((i) => !i.ok)
+      const rolledBack = anyFailed
+      const rollbackError = rolledBack && s.applyRollbackFail ? '写入 hosts 失败：拒绝访问 (os error 5)' : ''
+      const keepBatch = !rolledBack || !!rollbackError
+      for (const i of items) {
+        const okItem = i.ok && keepBatch
+        this.bypassStateOf(i.id, okItem ? 'applied' : 'failed', keepBatch ? batch : '')
+      }
+      s.rollbackBatch = keepBatch ? batch : ''
+      return { batchId: batch, cancelled: false, rolledBack, items, error: rollbackError }
+    },
+
+    /** 与 Rust bypass_revert 同形：按回滚点退回，条目落盘状态归回未写入 */
+    bypass_revert: async ({ batch }: { batch?: unknown }) => {
+      const s = this.state.bypass
+      const b = String(batch ?? '')
+      if (s.applyDelay > 0) await new Promise((r) => setTimeout(r, s.applyDelay))
+      if (!b || s.rollbackBatch !== b) throw '找不到该批次的回滚点，可能已被清理'
+      const revertBatch = `${b}-revert`
+      if (s.applyCancel) {
+        return { batchId: revertBatch, cancelled: true, rolledBack: false, items: [], error: '' }
+      }
+      const items = this.state.bypass.targets
+        .filter((t) => t.applyBatch === b)
+        .map((t) => ({ id: t.id, op: 'route', ok: true, changed: true, error: '' }))
+      for (const t of this.state.bypass.targets.filter((x) => x.applyBatch === b)) {
+        this.bypassStateOf(t.id, 'none', '')
+      }
+      s.rollbackBatch = ''
+      return { batchId: revertBatch, cancelled: false, rolledBack: true, items, error: '' }
+    },
+
+    /** 与 Rust bypass_rollback_exists 同形：没有回滚点回空串 */
+    bypass_rollback_exists: () => this.state.bypass.rollbackBatch,
 
     /** 与 Rust bypass_edit 同形：按新原文重探、覆盖回原行；host 变了就删掉旧行 */
     bypass_edit: ({ id, input }) => {
@@ -2317,14 +2882,31 @@ class MockBackend {
       return cur ? { ...cur } : null
     },
 
-    switch_codex_account: ({ accountId }) => {
+    /** 切号在途：逐步发 codex:switch-progress，取消标志一旦置起就以同一错误码收口，
+     *  与后端「写凭据前后各一个检查点」的界面契约同形（desko 前端只认错误码，不猜有没有写过） */
+    switch_codex_account: async ({ accountId }) => {
       const a = this.codexFind(String(accountId))
+      const steps = ['credentials', 'accessToken', 'refreshTokens', 'writeCredentials', 'syncSettings']
+      for (const step of steps) {
+        this.emit('codex:switch-progress', { accountId: a.id, step, stepStatus: 'done' })
+        if (this.state.codex.switchDelayMs > 0) await sleep(this.state.codex.switchDelayMs / steps.length)
+        if (this.state.codex.switchCancel) {
+          this.state.codex.switchCancel = false
+          this.emit('codex:switch-progress', { accountId: a.id, type: 'error' })
+          throw 'CODEX_START_CANCELLED'
+        }
+      }
       this.state.codex.currentId = a.id
-      this.state.codex.accounts.forEach((x) => (x.last_used = x.id === a.id ? Date.now() : x.last_used - 1000))
+      const nowSec = Math.floor(Date.now() / 1000)
+      this.state.codex.accounts.forEach((x) => (x.last_used = x.id === a.id ? nowSec : x.last_used - 1))
+      this.emit('codex:switch-progress', { accountId: a.id, type: 'complete' })
       return { ...a }
     },
 
-    codex_cancel_account_switch: () => undefined,
+    codex_cancel_account_switch: () => {
+      this.state.codex.switchCancel = true
+      return undefined
+    },
 
     refresh_codex_quota: ({ accountId }) => ({ ...(this.codexFind(String(accountId)).quota as CodexAccountRecord['quota']) }),
 
@@ -2338,6 +2920,29 @@ class MockBackend {
 
     refresh_codex_account_profile: ({ accountId }) => ({ ...this.codexFind(String(accountId)) }),
     force_refresh_codex_tokens: ({ accountId }) => ({ ...this.codexFind(String(accountId)) }),
+
+    /** 后端对 API Key 账号直接拒订阅（它没有 ChatGPT 订阅可查） */
+    refresh_codex_subscription_info: ({ accountId }) => {
+      const a = this.codexFind(String(accountId))
+      if (a.auth_mode === 'apikey') throw 'API Key 账号没有订阅信息可刷新'
+      return { ...a }
+    },
+
+    /** 密钥哈希决定账号 ID：换密钥=换档案，旧 ID 之后必须读不到，前端后续写操作得跟着新 ID 走 */
+    update_codex_api_key_credentials: ({ accountId, apiKey, apiBaseUrl }) => {
+      const a = this.codexFind(String(accountId))
+      if (a.auth_mode !== 'apikey') throw '仅 API Key 账号支持编辑凭据'
+      const key = String(apiKey ?? '').trim()
+      if (!key) throw 'API Key 不能为空'
+      if (/^https?:\/\//i.test(key)) throw 'API Key 不能是 URL，请检查是否填反'
+      const base = String(apiBaseUrl ?? '').trim()
+      const oldId = a.id
+      a.id = `codex_apikey_${apiKeyHash(key)}`
+      a.api_base_url = base || null
+      a.last_used = Math.floor(Date.now() / 1000)
+      if (this.state.codex.currentId === oldId) this.state.codex.currentId = a.id
+      return { ...a }
+    },
 
     get_codex_history_visibility_provider: () => this.codexProviderFor(this.state.codex.currentId),
 
@@ -2353,6 +2958,264 @@ class MockBackend {
         message: `已修复 ${repairRows} 行`,
       }
     },
+
+    /** 会话列表：wire 是 camelCase（后端 serde rename_all），token 三项不在这一档 */
+    codex_list_sessions_across_instances: ({ titleQuery }) => {
+      if (this.state.codex.sessionsFail) throw '官方会话目录不可读（e2e）'
+      const q = String(titleQuery ?? '').trim().toLowerCase()
+      return this.state.codex.sessions
+        .filter((s) => !q || s.title.toLowerCase().includes(q) || s.sessionId.toLowerCase().includes(q))
+        .map((s) => ({
+          sessionId: s.sessionId,
+          title: s.title,
+          cwd: s.cwd,
+          projectName: s.projectName,
+          updatedAt: s.updatedAt,
+          locationCount: 1,
+          locations: [{ instanceId: '__default__', instanceName: '默认实例', running: false }],
+          sessionKind: s.sessionKind,
+        }))
+    },
+
+    codex_get_session_token_stats_across_instances: ({ sessionIds }) => {
+      if (this.state.codex.statsFail) throw 'token 统计读取失败（e2e）'
+      const ids = new Set((sessionIds as string[]).map((id) => String(id).trim()))
+      return this.state.codex.sessions
+        .filter((s) => ids.has(s.sessionId))
+        .map((s) => ({
+          sessionId: s.sessionId,
+          inputTokens: s.inputTokens,
+          outputTokens: s.outputTokens,
+          totalTokens: s.inputTokens + s.outputTokens,
+          cachedInputTokens: s.cachedInputTokens,
+          cacheWriteInputTokens: 0,
+          reasoningOutputTokens: s.reasoningOutputTokens,
+        }))
+    },
+
+    /** 用量图：按会话更新时间落进本地日，模型与轮次取种子值；移出官方目录的会话当天随之减账 */
+    codex_query_session_usage: ({ fromTimestamp, toTimestamp }) => {
+      if (this.state.codex.usageFail) throw 'token 用量统计失败（e2e）'
+      const from = Number(fromTimestamp ?? 0) || 0
+      const to = Number(toTimestamp ?? 0) || Math.floor(Date.now() / 1000)
+      const dayKey = (sec: number) => {
+        const d = new Date(sec * 1000)
+        const p = (n: number) => String(n).padStart(2, '0')
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+      }
+      type Bucket = {
+        key: string
+        label: string
+        inputTokens: number
+        cachedInputTokens: number
+        outputTokens: number
+        totalTokens: number
+        requestCount: number
+      }
+      const newBucket = (key: string): Bucket => ({
+        key,
+        label: key,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        requestCount: 0,
+      })
+      const add = (b: Bucket, s: CodexSessionSeed) => {
+        b.inputTokens += s.inputTokens
+        b.cachedInputTokens += s.cachedInputTokens
+        b.outputTokens += s.outputTokens
+        b.totalTokens += s.inputTokens + s.outputTokens
+        b.requestCount += s.turns
+      }
+      const byDay = new Map<string, Bucket>()
+      const byModel = new Map<string, Bucket>()
+      const inWindow = this.state.codex.sessions.filter((s) => s.updatedAt >= from && s.updatedAt <= to)
+      for (const s of inWindow) {
+        const dk = dayKey(s.updatedAt)
+        const day = byDay.get(dk) ?? newBucket(dk)
+        const model = byModel.get(s.model) ?? newBucket(s.model)
+        add(day, s)
+        add(model, s)
+        byDay.set(dk, day)
+        byModel.set(s.model, model)
+      }
+      const totals = {
+        ...inWindow.reduce(
+          (acc, s) => {
+            acc.inputTokens += s.inputTokens
+            acc.cachedInputTokens += s.cachedInputTokens
+            acc.outputTokens += s.outputTokens
+            acc.reasoningOutputTokens += s.reasoningOutputTokens
+            acc.totalTokens += s.inputTokens + s.outputTokens
+            acc.requestCount += s.turns
+            return acc
+          },
+          { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, requestCount: 0 },
+        ),
+        sessionCount: inWindow.length,
+        fileCount: this.state.codex.sessions.length,
+      }
+      const days = [...byDay.values()].sort((a, b) => a.key.localeCompare(b.key))
+      const models = [...byModel.values()].sort(
+        (a, b) => b.totalTokens - a.totalTokens || a.key.localeCompare(b.key),
+      )
+      return {
+        totals,
+        byDay: days,
+        byModel: models,
+        fromTimestamp: from,
+        toTimestamp: to,
+        scanMillis: this.state.codex.usageScanMillis,
+      }
+    },
+
+    /** 回收站一族：官方列表与留底清单是同一份内存的两个数组，移动就是从这里挪到那里 */
+    codex_move_sessions_to_trash_across_instances: ({ sessionIds }) => {
+      if (this.state.codex.trashFail) throw '会话移入回收站失败（e2e）'
+      const ids = this.trashIds(sessionIds)
+      const hits = this.state.codex.sessions.filter((s) => ids.has(s.sessionId))
+      if (!hits.length) {
+        return {
+          requestedSessionCount: ids.size,
+          trashedSessionCount: 0,
+          trashedInstanceCount: 0,
+          trashDirs: [],
+          message: '所选会话在当前 Codex 目录中不存在，无需处理',
+        }
+      }
+      const nowSec = Math.floor(Date.now() / 1000)
+      this.state.codex.trash = [
+        ...hits.map((s) => ({
+          sessionId: s.sessionId,
+          title: s.title,
+          cwd: s.cwd,
+          deletedAt: nowSec,
+          sizeBytes: s.rolloutBytes || (s.inputTokens + s.outputTokens) * 4 || 4096,
+          restored: s,
+        })),
+        ...this.state.codex.trash,
+      ]
+      this.state.codex.sessions = this.state.codex.sessions.filter((s) => !ids.has(s.sessionId))
+      return {
+        requestedSessionCount: ids.size,
+        trashedSessionCount: hits.length,
+        trashedInstanceCount: 1,
+        trashDirs: ['%LOCALAPPDATA%\\desko\\desko-codex-session-trash\\20261012-101010'],
+        message: `已将 ${hits.length} 条会话移到回收站，并从官方会话目录移除；Codex 若在运行，需重启后其侧栏才同步`,
+      }
+    },
+
+    /** 留底清单按删除时间倒序，与后端 list_trashed_sessions 的排序一致 */
+    codex_list_trashed_sessions_across_instances: () => {
+      if (this.state.codex.trashFail) throw '回收站清单不可读（e2e）'
+      return [...this.state.codex.trash]
+        .sort((a, b) => b.deletedAt - a.deletedAt || a.cwd.localeCompare(b.cwd))
+        .map((t) => ({
+          sessionId: t.sessionId,
+          title: t.title,
+          cwd: t.cwd,
+          deletedAt: t.deletedAt,
+          sizeBytes: t.sizeBytes,
+          locationCount: 1,
+          locations: [{ instanceId: '__default__', instanceName: '默认实例' }],
+        }))
+    },
+
+    codex_restore_sessions_from_trash_across_instances: ({ sessionIds }) => {
+      if (this.state.codex.trashFail) throw '会话恢复失败（e2e）'
+      const ids = this.trashIds(sessionIds)
+      const hits = this.state.codex.trash.filter((t) => ids.has(t.sessionId))
+      if (!hits.length) {
+        return {
+          requestedSessionCount: ids.size,
+          restoredSessionCount: 0,
+          restoredInstanceCount: 0,
+          message: '所选会话在回收站中不存在，无需恢复',
+        }
+      }
+      const nowSec = Math.floor(Date.now() / 1000)
+      this.state.codex.sessions = [
+        ...this.state.codex.sessions,
+        ...hits.map(
+          (t) =>
+            t.restored ?? {
+              sessionId: t.sessionId,
+              title: t.title,
+              cwd: t.cwd,
+              projectName: null,
+              updatedAt: nowSec,
+              sessionKind: 'conversation',
+              inputTokens: 0,
+              outputTokens: 0,
+              cachedInputTokens: 0,
+              reasoningOutputTokens: 0,
+              rolloutBytes: t.sizeBytes,
+              model: 'gpt-5.1-codex',
+              turns: 1,
+            },
+        ),
+      ]
+      this.state.codex.trash = this.state.codex.trash.filter((t) => !ids.has(t.sessionId))
+      return {
+        requestedSessionCount: ids.size,
+        restoredSessionCount: hits.length,
+        restoredInstanceCount: 1,
+        message: `已恢复 ${hits.length} 条会话；Codex 若在运行，需重启后其侧栏才显示`,
+      }
+    },
+
+    codex_delete_trashed_sessions_across_instances: ({ sessionIds }) => {
+      if (this.state.codex.trashFail) throw '回收站删除失败（e2e）'
+      const ids = this.trashIds(sessionIds)
+      const hits = this.state.codex.trash.filter((t) => ids.has(t.sessionId))
+      if (!hits.length) {
+        return {
+          requestedSessionCount: ids.size,
+          deletedSessionCount: 0,
+          deletedEntryCount: 0,
+          freedSizeBytes: 0,
+          message: '所选会话在回收站中不存在，无需删除',
+        }
+      }
+      const freed = hits.reduce((acc, t) => acc + t.sizeBytes, 0)
+      this.state.codex.trash = this.state.codex.trash.filter((t) => !ids.has(t.sessionId))
+      return {
+        requestedSessionCount: ids.size,
+        deletedSessionCount: hits.length,
+        deletedEntryCount: hits.length,
+        freedSizeBytes: freed,
+        message: `已永久删除 ${hits.length} 条回收站会话，释放约 ${trashBytesText(freed)}`,
+      }
+    },
+
+    /** 清空是整目录删除：释放量按目录算，这里用留底体积之和近似 */
+    codex_empty_session_trash_across_instances: () => {
+      if (this.state.codex.trashFail) throw '清空回收站失败（e2e）'
+      const entries = this.state.codex.trash
+      if (!entries.length) {
+        return {
+          requestedSessionCount: 0,
+          deletedSessionCount: 0,
+          deletedEntryCount: 0,
+          freedSizeBytes: 0,
+          message: '回收站为空，无需清理',
+        }
+      }
+      const freed = entries.reduce((acc, t) => acc + t.sizeBytes, 0)
+      this.state.codex.trash = []
+      return {
+        requestedSessionCount: entries.length,
+        deletedSessionCount: entries.length,
+        deletedEntryCount: entries.length,
+        freedSizeBytes: freed,
+        message: `已清空 Codex 会话回收站，永久删除 ${entries.length} 条会话，释放约 ${trashBytesText(freed)}`,
+      }
+    },
+
+    /** 打开命令在 mock 里只回成败：真机走 tauri-plugin-opener，这里不碰系统 */
+    codex_open_session_location: ({ sessionId }) => this.codexLocateSession(sessionId, '未找到该会话文件'),
+    codex_open_session_rollout: ({ sessionId }) => this.codexLocateSession(sessionId, '未找到该会话文件'),
 
     update_codex_account_name: ({ accountId, name }) => {
       const a = this.codexFind(String(accountId))
@@ -2372,15 +3235,119 @@ class MockBackend {
       return { ...a }
     },
 
+    /** 删除即留底：与 Rust 的 remove_accounts 一样先 archive 再剔索引，恢复才有东西可回 */
     delete_codex_account: ({ accountId }) => {
-      this.state.codex.accounts = this.state.codex.accounts.filter((x) => x.id !== accountId)
-      if (this.state.codex.currentId === accountId) this.state.codex.currentId = ''
+      this.codexRecycle([String(accountId)])
     },
 
     delete_codex_accounts: ({ accountIds }) => {
-      const ids = new Set((accountIds as string[]) ?? [])
-      this.state.codex.accounts = this.state.codex.accounts.filter((x) => !ids.has(x.id))
-      if (ids.has(this.state.codex.currentId)) this.state.codex.currentId = ''
+      this.codexRecycle(((accountIds as string[]) ?? []).map(String))
+    },
+
+    /** ===== 批量删除作业（6 条，语义逐字照后端，见 docs/design/codex/11-batch-jobs-port.md §5）===== */
+    start_codex_batch_delete: ({ accountIds }) => {
+      const ids = Array.from(this.trashIds(accountIds))
+      if (!ids.length) {
+        // 后端把空集合吞成「已完成 + 空 jobId」，不报错；前端拿这个空 id 轮询必撞「任务不存在」
+        return { jobId: '', status: 'completed', total: 0, completed: 0, failed: 0, errors: [] }
+      }
+      const jobId = `codex-delete-${nextId()}`
+      const job: CodexDeleteJob = {
+        jobId,
+        accountIds: ids,
+        nextIndex: 0,
+        total: ids.length,
+        completed: 0,
+        failed: 0,
+        errors: [],
+        status: 'running',
+        attempts: {},
+      }
+      this.state.codex.deleteJobs[jobId] = job
+      this.scheduleDeleteStep(jobId)
+      return this.deleteSnapshot(job)
+    },
+
+    /** 这一族没有事件，get 是唯一的进度来源；盘快照回落不需要演，内存就是全量 */
+    get_codex_batch_delete: ({ jobId }) => {
+      const job = this.state.codex.deleteJobs[String(jobId)]
+      if (!job) throw '批量删除任务不存在'
+      return this.deleteSnapshot(job)
+    },
+
+    /** 暂停不掐正在跑的那一条：循环下一轮才看闸 */
+    pause_codex_batch_delete: ({ jobId }) => {
+      const job = this.state.codex.deleteJobs[String(jobId)]
+      if (!job) throw '批量删除任务不存在'
+      if (job.status === 'running') job.status = 'paused'
+      return this.deleteSnapshot(job)
+    },
+
+    /** running 与终态都是原样返回、不报错，所以前端不用防重复点 */
+    resume_codex_batch_delete: ({ jobId }) => {
+      const key = String(jobId)
+      const job = this.state.codex.deleteJobs[key]
+      if (!job) throw '批量删除任务不存在'
+      if (job.status === 'paused') {
+        job.status = 'running'
+        this.scheduleDeleteStep(key)
+      }
+      return this.deleteSnapshot(job)
+    },
+
+    /** 只在非 running 且有失败项时重跑：待处理队列换成失败 id，计数与明细全部重置 */
+    retry_failed_codex_batch_delete: ({ jobId }) => {
+      const key = String(jobId)
+      const job = this.state.codex.deleteJobs[key]
+      if (!job) throw '批量删除任务不存在'
+      if (job.status !== 'running' && job.errors.length) {
+        job.accountIds = Array.from(new Set(job.errors.map((e) => e.accountId)))
+        job.total = job.accountIds.length
+        job.nextIndex = 0
+        job.completed = 0
+        job.failed = 0
+        job.errors = []
+        job.status = 'running'
+        this.scheduleDeleteStep(key)
+      }
+      return this.deleteSnapshot(job)
+    },
+
+    /** 摘内存条目 + 删盘快照，恒成功；已删掉的那几条不会因此回来 */
+    clear_codex_batch_delete: ({ jobId }) => {
+      delete this.state.codex.deleteJobs[String(jobId)]
+    },
+
+    /** ===== 账号回收站（4 条；上游第 5 条把解密凭据明文落盘，经裁定不接）===== */
+    list_codex_recycled_accounts: () => {
+      if (this.state.codex.recycledFail) throw '读取账号留底失败：账号回收目录不可读（e2e）'
+      return [...this.state.codex.recycled]
+        .sort((a, b) => b.deleted_at - a.deleted_at || a.id.localeCompare(b.id))
+        .map((r) => this.recycledSummary(r))
+    },
+
+    restore_codex_recycled_account: ({ recycleId }) => {
+      if (this.state.codex.recycledFail) throw '恢复留底账号失败（e2e）'
+      const r = this.state.codex.recycled.find((x) => x.id === String(recycleId))
+      if (!r) throw '恢复留底账号失败：Cannot read recycled account（e2e）'
+      if (this.state.codex.accounts.some((a) => a.id === r.account.id)) {
+        throw '这个账号已经在册，留底原样保留'
+      }
+      this.state.codex.accounts = [{ ...r.account }, ...this.state.codex.accounts]
+      this.state.codex.recycled = this.state.codex.recycled.filter((x) => x.id !== r.id)
+    },
+
+    delete_codex_recycled_account: ({ recycleId }) => {
+      if (this.state.codex.recycledFail) throw '删除留底账号失败（e2e）'
+      // 幂等：本就不存在的条目按已完成算，与后端同款
+      this.state.codex.recycled = this.state.codex.recycled.filter((x) => x.id !== String(recycleId))
+    },
+
+    /** 清空删的是确认过的那批 id，不是「目录里现在有什么」 */
+    empty_codex_recycle_bin: ({ recycleIds }) => {
+      if (this.state.codex.recycledFail) throw '清空账号留底失败（e2e）'
+      const ids = this.trashIds(recycleIds)
+      this.state.codex.recycled = this.state.codex.recycled.filter((x) => !ids.has(x.id))
     },
 
     export_codex_accounts: ({ accountIds }) =>
@@ -2397,6 +3364,38 @@ class MockBackend {
       const paths = (filePaths as string[]) ?? []
       const imported = paths.map((p) => this.codexPush(`${p.split(/[\\/]/).pop()?.replace(/\.json$/, '') || 'file'}@e2e.dev`))
       return { imported, failed: [] }
+    },
+
+    /** 与 Rust 同档的宽容入参：导出的 {accounts:[…]}、裸数组、单对象、以及整行的 sk- 密钥都能收 */
+    import_codex_from_json: ({ jsonContent }) => {
+      const text = String(jsonContent ?? '').trim()
+      if (!text) throw '内容为空'
+      const rows: { email?: string; auth_mode?: string; api_base_url?: string }[] = []
+      if (text.startsWith('{') || text.startsWith('[')) {
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(text)
+        } catch {
+          throw 'JSON 解析失败，请整段粘贴导出的内容'
+        }
+        const wrapped = (parsed as { accounts?: unknown })?.accounts
+        const list = Array.isArray(parsed) ? parsed : Array.isArray(wrapped) ? wrapped : [parsed]
+        list.forEach((item) => rows.push((item ?? {}) as { email?: string }))
+      } else {
+        text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .forEach((line) => rows.push({ auth_mode: 'apikey', email: `key@${line.slice(-6)}` }))
+      }
+      if (!rows.length) throw '没有可导入的账号'
+      return rows.map((item) => {
+        const rec = this.codexPush(item.email || 'pasted@e2e.dev', {
+          auth_mode: item.auth_mode === 'apikey' ? 'apikey' : 'oauth',
+          api_base_url: item.api_base_url ?? null,
+        })
+        return { ...rec }
+      })
     },
 
     is_codex_oauth_port_in_use: () => this.state.codex.portBusy,

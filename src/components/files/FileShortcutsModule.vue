@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
 import { fileShortcutsApi as api } from '../../services/api/fileShortcuts'
 import type { FileShortcut } from '../../types'
@@ -9,6 +9,7 @@ import { useEscapeClose } from '../../composables/useEscapeClose'
 import { useGridKeys } from '../../composables/useGridKeys'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
+import { usePageHeadStore } from '../../stores/pageHead'
 
 const props = defineProps<{
   searchKeyword: string
@@ -199,7 +200,7 @@ const runOnMenu = (fn: (shortcut: FileShortcut) => void) => {
 }
 
 const confirmDelete = (shortcut: FileShortcut) => {
-  confirmStore.showConfirm('确认删除', `确定删除「${shortcut.name}」快捷方式？`, () => {
+  confirmStore.showConfirm('删除快捷方式', `「${shortcut.name}」将被移除，本机文件不受影响。`, () => {
     emit('removeShortcut', shortcut.id)
     toastStore.showToast('已删除')
   })
@@ -312,6 +313,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', closeContextMenu)
   window.removeEventListener('keydown', onGlobalKey)
 })
+
+const pageHead = usePageHeadStore()
+watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.length ? `${props.filteredShortcuts.length} 项` : ''))
 </script>
 
 <template>
@@ -333,12 +337,12 @@ onBeforeUnmount(() => {
 
     <div v-if="loading" class="card-grid">
       <div class="skeleton-card" v-for="n in 6" :key="n">
-        <div class="sc-top">
+        <div class="row1">
           <span class="skeleton-slot"></span>
-          <div class="sc-id">
-            <div class="skeleton-line name"></div>
-            <div class="skeleton-line note"></div>
-          </div>
+          <div class="skeleton-line name"></div>
+        </div>
+        <div class="row2">
+          <div class="skeleton-line foot"></div>
         </div>
       </div>
     </div>
@@ -358,18 +362,22 @@ onBeforeUnmount(() => {
         @keydown.space.prevent="openShortcut(shortcut)"
         @contextmenu="onContextMenu($event, shortcut)"
       >
-        <!-- 头部：34px 类型档 + 名称/路径两行；动作列钉卡右上角，hover 显形 -->
-        <div class="sc-top">
+        <!-- 一行身份：24px 类型档 + 名称 + 右对齐类型标签；动作收进右下浮岛 -->
+        <div class="row1">
           <span v-if="shortcut.shortcut_type === 'folder'" class="ft-ico grid-slot grid-slot--folder" aria-hidden="true">
-            <AppIcon name="folder" :size="18" />
+            <AppIcon name="folder" :size="15" />
           </span>
           <span v-else class="ft-ico toned grid-slot" :style="{ '--ftc': extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
-          <div class="sc-id">
-            <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
-            <span class="cell-path"><span class="path-chip" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span></span>
-          </div>
+          <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
+          <span v-if="shortcut.shortcut_type === 'folder'" class="sc-type">目录</span>
         </div>
-        <div class="row-acts grid-acts sc-acts">
+
+        <!-- 二行副址：等宽路径缩进到名称起笔，尾部优先（保文件名） -->
+        <div class="row2">
+          <span class="path-chip" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span>
+        </div>
+
+        <div class="row-acts grid-acts">
           <button class="ib" :class="{ copied: copiedId === shortcut.id }" type="button" :title="copiedId === shortcut.id ? '已复制' : '复制地址 (C)'" @click.stop="copyPathToClipboard(shortcut)">
             <AppIcon :name="copiedId === shortcut.id ? 'check' : 'copy'" :size="15" />
           </button>
@@ -425,7 +433,7 @@ onBeforeUnmount(() => {
               <h3>{{ isEditing() ? '编辑快捷方式' : '添加快捷方式' }}</h3>
             </div>
             <button class="dialog-close" type="button" title="关闭" @click="cancelAdd">
-              <AppIcon name="x" :size="18" />
+              <AppIcon name="x" :size="16" />
             </button>
           </div>
           <div class="dialog-body">
@@ -452,10 +460,9 @@ onBeforeUnmount(() => {
             </div>
             <div class="form-group">
               <label>类型</label>
-              <div class="type-seg">
-                <span class="seg-thumb" :class="{ right: addForm.type === 'folder' }" aria-hidden="true"></span>
-                <button class="type-btn" :class="{ active: addForm.type === 'file' }" @click="addForm.type = 'file'">文件</button>
-                <button class="type-btn" :class="{ active: addForm.type === 'folder' }" @click="addForm.type = 'folder'">文件夹</button>
+              <div class="seg">
+                <button class="seg-btn" :class="{ on: addForm.type === 'file' }" type="button" @click="addForm.type = 'file'">文件</button>
+                <button class="seg-btn" :class="{ on: addForm.type === 'folder' }" type="button" @click="addForm.type = 'folder'">文件夹</button>
               </div>
             </div>
           </div>
@@ -506,43 +513,35 @@ onBeforeUnmount(() => {
    本页没有分类标签，动作钮顶到右缘 */
 .page-bar .btn-primary { margin-left: auto; }
 
-/* 卡皮、抬影、焦点环与动作显形都在 global.css 的 .grid-card 一节；
-   这里只留文件卡自己的排版与类型着色 */
+/* 卡皮、双行壳（.row1/.row2）、24px 档、右下动作浮岛全在 global.css 的 .grid-card 一节；
+   这里只留文件卡自己的类型着色与字档 */
 
-/* 头部：34px 类型档 + 名称/路径两行；只有名字行给动作列让位，路径行保整幅 */
-.sc-top { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
-.sc-id { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-
-/* 动作列：钉卡右上角、与名字行居中（15 内距 + (18−24)/2），不压路径行；hover 显形走 global.css */
-.sc-acts { position: absolute; top: 12px; right: 15px; }
-
-/* 档面的尺寸/圆角/中性底色走 global.css .grid-slot，目录档与局域网共享目录共用
-   .grid-slot--folder，这里只叠扩展名类型色。
-   选择器带 .grid-card 一层是为了压过 .grid-slot 的中性底（同名权重看先后，不赌构建顺序）。 */
+/* 类型档：尺寸/圆角/中性底走 global.css .grid-slot（卡内收 24px），目录档共用 .grid-slot--folder，
+   这里只叠扩展名类型色。选择器带 .grid-card 一层以压过 .grid-slot 的中性底。 */
 .grid-card .ft-ico {
   font-size: var(--text-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: -0.02em;
 }
-/* 扩展名色底：字色取 --ft-* 槽，底是同色的淡水洗——类型一眼可辨，又不炸成彩色贴纸 */
+/* 扩展名色底：字色取 --ft-* 槽，底是同色淡水洗（13% 掺卡面）——类型一眼可辨，又不炸成贴纸 */
 .grid-card .ft-ico.toned {
-  color: color-mix(in srgb, var(--ftc) 55%, var(--text));
-  background: color-mix(in srgb, var(--ftc) 10%, var(--panel-bg));
+  color: var(--ftc);
+  background: color-mix(in srgb, var(--ftc) 13%, var(--panel-bg));
 }
 
-.row-name { font-size: var(--text-base); font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 84px; }
+/* 名字：14/600 单行截断，吃掉行宽；类型标签靠右淡字 */
+.row-name { flex: 1 1 auto; min-width: 0; font-size: var(--text-base); font-weight: 600; letter-spacing: -0.01em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-type { margin-left: auto; flex: none; font-size: var(--text-xs); color: var(--text-faint); }
 
-/* 路径：等宽 12px 灰字，尾部优先截断（保文件名，盘符与上层目录是噪音） */
-.cell-path { min-width: 0; display: flex; align-items: center; }
+/* 路径：等宽 12px 灰字，缩进由 global .row2 给，尾部优先截断（保文件名，盘符与上层目录是噪音） */
 .path-chip {
-  display: inline-block;
   min-width: 0;
+  overflow: hidden;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.35;
-  color: var(--text-muted);
-  overflow: hidden;
+  color: var(--text-url);
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color var(--transition);
@@ -552,12 +551,14 @@ onBeforeUnmount(() => {
 /* 复制回执态：对勾 + 成功色，1.2s 后转回 */
 .row-acts .ib.copied { color: var(--success); }
 
-/* 骨架卡的皮与呼吸走 global.css，此处只留宽度分配 */
+/* 骨架行的宽度分配（皮与呼吸在 global.css） */
 .skeleton-line.name { width: 118px; }
-.skeleton-line.note { width: 172px; height: 6px; }
+.skeleton-line.foot { width: 156px; }
+
 
 /* ---------- 添加/编辑弹窗：与收藏表单弹窗同一套骨架 ----------
-   520px 壳、居中悬浮（遮罩走全局居中基线，只把磨砂提到 6px 与首页同档）、42px 头、46px 底栏（浅底 + 28px 钮走 global.css .dialog-footer） */
+   520px 壳、居中悬浮（遮罩走全局居中基线，只把磨砂提到 6px 与首页同档）、44px 头（无底描边）、
+   46px 透明底栏 + 一道顶线 + 28px 钮，壳/头/底全走 global.css 的 .dialog-* */
 .form-overlay {
   background: var(--overlay);
   backdrop-filter: blur(6px);
@@ -566,10 +567,8 @@ onBeforeUnmount(() => {
 .shortcut-dialog {
   width: 520px;
   max-height: 91vh;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-pop);
 }
-.shortcut-dialog .dialog-body { overflow: hidden; padding: 16px 20px 12px; }
+.shortcut-dialog .dialog-body { overflow: hidden; }
 .shortcut-dialog .dialog-footer { justify-content: space-between; }
 
 /* 字段轴：标签 12px/行高 14px 下距 6px，组距 12px（钉住全局 18px 行高防撑高） */
@@ -623,47 +622,6 @@ onBeforeUnmount(() => {
 .path-act + .path-act { border-left: 1px solid var(--border); }
 .path-act:hover { color: var(--accent); background: var(--accent-soft); }
 
-/* 分段控制器：凹槽轨道 + 浮白滑块（与页面 .tab / 侧栏同一套浮卡语言，无边框靠阴影）；
-   整体钉 32px 与输入框同轴 */
-.type-seg {
-  position: relative;
-  display: flex;
-  height: 32px;
-  padding: 3px;
-  background: var(--sunken);
-  border-radius: var(--radius);
-}
-.seg-thumb {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc(50% - 3px);
-  background: var(--bg-surface);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-xs);
-  transition: transform var(--transition);
-}
-.seg-thumb.right { transform: translateX(100%); }
-.type-btn {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color var(--transition);
-  font-family: inherit;
-}
-.type-btn.active { color: var(--text); font-weight: 600; }
-.type-btn:hover:not(.active) { color: var(--text-secondary); }
+/* 类型段控件走 global.css 的 .dialog .seg：凹槽+滑块那一套是第四种「哪个是选中的」读法 */
 
 </style>

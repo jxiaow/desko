@@ -65,6 +65,9 @@ pub struct LoginDto {
     pub state: &'static str,
     pub url: Option<String>,
     pub seconds_left: u64,
+    /// 授权子进程最后说了什么。早退又没落凭据时，这句就是唯一的原因；
+    /// 它自己解释得清（标签页被关、zone 选不了、token 创建被拒），我们替它猜只会猜错。
+    pub note: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -92,10 +95,11 @@ struct LiveProc {
     _job: ProcessJob,
 }
 
-/// 在途的授权子进程。`url` 由一条读线程填，界面轮询取。
+/// 在途的授权子进程。`url` 与 `tail` 由一条读线程填，界面轮询取。
 struct LoginProc {
     child: Child,
     url: Arc<Mutex<Option<String>>>,
+    tail: Arc<Mutex<String>>,
     started: std::time::Instant,
     _job: ProcessJob,
 }
@@ -403,7 +407,16 @@ fn login_snapshot(app: &AppHandle) -> Option<LoginDto> {
         state: "waiting",
         url,
         seconds_left: LOGIN_TIMEOUT_MS.saturating_sub(elapsed) / 1000,
+        note: None,
     })
+}
+
+/// 授权子进程此刻的输出尾巴（取走进程之前读，杀完就没得读了）
+fn login_tail(app: &AppHandle) -> Option<String> {
+    let state = app.state::<AppState>();
+    let guard = state.tunnel.login.lock().ok()?;
+    let text = guard.as_ref()?.tail.lock().ok()?.trim().to_string();
+    (!text.is_empty()).then_some(text)
 }
 
 /// 授权进程自己退了（用户没点开、被系统拦了都算），凭据又没落位——
@@ -435,26 +448,28 @@ fn login_status_inner(app: &AppHandle) -> LoginDto {
         if let Some(proc) = take_login(app) {
             tunnel_service::kill_child(proc.child);
         }
-        return LoginDto { state: "authorized", url: None, seconds_left: 0 };
+        return LoginDto { state: "authorized", url: None, seconds_left: 0, note: None };
     }
+    let tail = login_tail(app);
     match login_snapshot(app) {
         Some(dto) => {
             if dto.seconds_left == 0 {
                 if let Some(proc) = take_login(app) {
                     tunnel_service::kill_child(proc.child);
                 }
-                return LoginDto { state: "timeout", url: dto.url, seconds_left: 0 };
+                return LoginDto { state: "timeout", url: dto.url, seconds_left: 0, note: tail };
             }
             if login_child_exited(app) {
-                // 早退且没写出凭据：当场收尸，按超时口径回，用户可以立刻重来一轮
+                // 早退且没写出凭据：当场收尸，把它最后那句一起带回，用户可以立刻重来一轮
                 if let Some(proc) = take_login(app) {
                     tunnel_service::kill_child(proc.child);
                 }
-                return LoginDto { state: "timeout", url: dto.url, seconds_left: 0 };
+                let note = tail.or_else(|| Some("授权进程没等到回调就退了，本机没有落凭据".to_string()));
+                return LoginDto { state: "timeout", url: dto.url, seconds_left: 0, note };
             }
             dto
         }
-        None => LoginDto { state: "idle", url: None, seconds_left: 0 },
+        None => LoginDto { state: "idle", url: None, seconds_left: 0, note: None },
     }
 }
 
@@ -473,28 +488,42 @@ fn login_start_inner(app: &AppHandle) -> Result<LoginDto, AppError> {
         tunnel_service::spawn_login(&program, &args, &[("TUNNEL_ORIGIN_CERT", cert.as_str())], &job)?;
 
     let url: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let tail: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
     {
         let sink = Arc::clone(&url);
+        let tail_sink = Arc::clone(&tail);
         std::thread::spawn(move || {
             use std::io::BufRead;
+            // 一路读到 EOF：抓到 URL 就丢下管道，等于把子进程后面说的话全扔了，
+            // 而它失败那一次说的正是界面上唯一有用的原因。
             let reader = std::io::BufReader::new(stdout);
             for line in reader.lines().map_while(Result::ok) {
                 if let Some(found) = tunnel_service::auth_url_from_line(&line) {
                     if let Ok(mut slot) = sink.lock() {
-                        *slot = Some(found);
+                        if slot.is_none() {
+                            *slot = Some(found);
+                        }
                     }
-                    break;
+                }
+                if let Ok(mut buf) = tail_sink.lock() {
+                    *buf = tunnel_service::push_tail(&buf, &line);
                 }
             }
         });
     }
-    // stdout 已被读线程接管；这里只留进程句柄与 URL 槽
+    // stdout 已被读线程接管；这里只留进程句柄与输出槽
     let state = app.state::<AppState>();
     let Ok(mut guard) = state.tunnel.login.lock() else {
         tunnel_service::kill_child(child);
         return Err(AppError::Database("lock error".to_string()));
     };
-    *guard = Some(LoginProc { child, url, started: std::time::Instant::now(), _job: job });
+    *guard = Some(LoginProc {
+        child,
+        url,
+        tail,
+        started: std::time::Instant::now(),
+        _job: job,
+    });
     Ok(login_status_inner(app))
 }
 
@@ -611,7 +640,7 @@ fn apply_inner(app: &AppHandle) -> Result<ProvisionDto, AppError> {
     let naked = own_hostnames_without_password(app)?;
     if !naked.is_empty() {
         return Err(AppError::Tunnel(format!(
-            "先给「{}」设公网口令——desko 不把没设口令的服务挂上公网",
+            "先给「{}」设公网口令——Desko 不把没设口令的服务挂上公网",
             naked.join("」「")
         )));
     }
@@ -860,7 +889,7 @@ fn valid_public_password(pw: &str) -> Result<(), AppError> {
         d == 1 || d == -1
     });
     if stepped {
-        return Err(AppError::Tunnel("顺子或倒子（12345678 这类）在公网侧等于没设".to_string()));
+        return Err(AppError::Tunnel("连续或重复的数字（如 12345678）在公网侧形同未设置".to_string()));
     }
     Ok(())
 }
@@ -898,7 +927,7 @@ fn set_service_policy_inner(
             .ok_or_else(|| AppError::Tunnel("这条服务已经不在了".to_string()))?;
         if row.preset != PRESET_FILESHARE {
             return Err(AppError::Tunnel(format!(
-                "「{}」是本机别的服务，desko 不在它的请求链路上，设不了公网策略",
+                "「{}」是本机别的服务，Desko 不在它的请求链路上，设不了公网策略",
                 row.label
             )));
         }

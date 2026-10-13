@@ -10,6 +10,7 @@ pub mod cloud_service;
 pub mod mfa_service;
 pub mod profile_service;
 pub mod bypass_service;
+pub mod netguard_service;
 pub mod tunnel_service;
 
 use crate::error::AppError;

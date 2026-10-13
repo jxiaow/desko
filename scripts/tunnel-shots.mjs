@@ -20,7 +20,7 @@ const MIXED = [
 const setupRow = (name) => `.tn-card.setup .row-${name}`
 const svcRow = (host) => `.tn-card.services .svc-row:has-text("${host}")`
 /** 行末那颗 ⋯：第一颗是复制，第二颗才是动作菜单 */
-const dots = (host) => `${svcRow(host)} .acts .action-btn >> nth=1`
+const dots = (host) => `${svcRow(host)} .acts .ib >> nth=1`
 
 const scenes = [
   // 接入准备：缺哪一步就摊到哪一步，第 1 步到第 3 步各一张
@@ -124,6 +124,16 @@ const scenes = [
       await page.locator('.tn-foot .foot-btn').click()
     },
   ],
+
+  // 两个"说清为什么"的态：授权进程那句原话、某一格读不到的那一句
+  [
+    '19-auth-early-exit',
+    { installed: true, authorized: false, loginFail: '这个 zone 不在你的账号里' },
+    async (page) => {
+      await page.locator(`${setupRow('auth')} .row-btn`).click()
+    },
+  ],
+  ['20-one-read-fails', { ...READY, services: MIXED, pollFail: '数据库被占用' }],
 ]
 const EXPECTED = scenes.flatMap(([name]) => [`paper-${name}.png`, `ink-${name}.png`])
 

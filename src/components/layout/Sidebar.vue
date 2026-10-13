@@ -3,7 +3,6 @@ import { useRoute } from 'vue-router'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { enabledModules } from '../../modules/state'
 import { modulePath } from '../../modules/registry'
-import BrandLogo from '../shared/BrandLogo.vue'
 import AppIcon from '../shared/AppIcon.vue'
 
 defineProps<{
@@ -31,14 +30,13 @@ const onDragDblclick = (e: MouseEvent) => {
   <div class="sidebar" :class="{ collapsed }">
     <!-- 顶部品牌行：全高骨架里侧栏自己承担窗口拖拽 -->
     <div class="sidebar-top" @mousedown="startDrag" @dblclick="onDragDblclick">
-      <template v-if="!collapsed">
-        <span class="sidebar-brand"><BrandLogo /></span>
-        <span class="sidebar-name">Desko</span>
-      </template>
+      <span v-if="!collapsed" class="sidebar-name">Desko</span>
       <button class="sidebar-toggle" :title="collapsed ? '展开侧栏' : '收起侧栏'" @click="$emit('update:collapsed', !collapsed)">
         <AppIcon name="panel" :size="collapsed ? 20 : 18" />
       </button>
     </div>
+
+    <div v-if="!collapsed" class="sidebar-sec">模块</div>
 
     <div class="sidebar-nav">
       <router-link
@@ -67,30 +65,31 @@ const onDragDblclick = (e: MouseEvent) => {
 <style scoped>
 .sidebar {
   width: var(--sidebar-w);
-  /* V5.2 侧栏轮：恢复独立面（推翻拆面轮的"并入画布"）——列的体积感靠这一档底色，
-     只留发丝右界时它和画布同色，五枚导航像浮在页面上而不是站成一列 */
+  /* Things 式暖灰目录列：体积感靠这一档底色，右界只留发丝线 */
   background: var(--sidebar-bg);
-  border-right: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   position: relative;
   transition: width var(--transition-slow);
   height: 100%;
+  padding: 0 12px;
 }
 
 .sidebar.collapsed {
   width: var(--sidebar-rail-w);
+  padding: 0;
 }
 
-/* 顶部品牌行：与右列标题栏同高（42px）；拆面轮后画布贯通，不再补分割线 */
+/* 顶部品牌行：比右列标题栏略高，给品牌名一点呼吸 */
 .sidebar-top {
-  height: 42px;
+  height: 48px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 var(--space-1);
+  padding: 0 2px;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -111,26 +110,13 @@ const onDragDblclick = (e: MouseEvent) => {
   padding-left: calc(var(--space-2) + 9px);
 }
 
-.sidebar-brand {
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: var(--space-2);
-  border-radius: var(--radius-badge);
-  background: var(--accent-soft);
-}
-
-.sidebar-brand svg { width: 20px; height: 20px; }
-
 .sidebar-name {
   flex: 1;
-  font-size: var(--text-md);
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   letter-spacing: -0.01em;
-  color: var(--text-title);
+  color: var(--text);
+  padding-left: 10px;
   min-width: 0;
 }
 
@@ -155,62 +141,57 @@ const onDragDblclick = (e: MouseEvent) => {
   color: var(--text);
 }
 
+/* 段标：模块分组的小字眉题 */
+.sidebar-sec {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+  padding: 0 10px 6px;
+}
+
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding: 6px var(--space-2) var(--space-2);
+  padding: 0 0 var(--space-2);
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  height: 36px;
-  padding: 0 var(--space-2);
-  margin-bottom: var(--space-1);
-  border-radius: var(--radius);
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
   color: var(--sidebar-text);
   cursor: pointer;
-  transition: all var(--transition);
-  font-size: var(--text-base);
+  transition: background var(--transition), color var(--transition);
+  font-size: 13.5px;
   font-weight: 500;
-  gap: var(--space-3);
+  gap: 9px;
   white-space: nowrap;
   text-decoration: none;
   position: relative;
-  --h: var(--text-muted);
 }
-
-/* v2：模块不再各钉色相——导航退到中性灰阶，激活态统一吃 accent。
-   分类色只留在内容侧（头像/徽章/行内色相钉）。 */
-.nav-item.active { --h: var(--accent); }
-
-.nav-icon { color: inherit; }
 
 .nav-item:hover {
   background: var(--sidebar-hover);
   color: var(--text);
 }
 
+/* 激活=淡染行：accent-soft 底 + brand 字 + 600，图标转 accent */
 .nav-item.active {
-  /* 激活只改字色与字重，不铺底：V5.2 那版"同材质白块 + 抬影"在展开档读作一块
-     浮起的卡，到图标轨档就成了压在图标底下的白底——那颗白块被判定为异物，去掉。
-     整列只有一项是 accent 色 + 600 字重，重音够点得出来。 */
-  color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-brand);
   font-weight: 600;
 }
-.nav-item.active .nav-icon { color: var(--h); }
 
-.sidebar.collapsed .nav-item {
-  justify-content: center;
-  padding: 0;
-}
-
-/* 图标分两档：展开档文字打头，图标退到 18px 当锚点；图标轨档 22px，
-   那里图标是唯一线索，缩到 18 会显得空。AppIcon 的 size 决定实笔反算，
-   CSS 只负责盒子，两处必须同档 */
 .nav-icon {
+  color: var(--text-faint);
   width: 18px;
   height: 18px;
   display: flex;
@@ -224,6 +205,17 @@ const onDragDblclick = (e: MouseEvent) => {
   height: 18px;
 }
 
+.nav-item:hover .nav-icon { color: var(--text-secondary); }
+.nav-item.active .nav-icon { color: var(--accent); }
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 0;
+}
+
+/* 图标分两档：展开档文字打头，图标退到 18px 当锚点；图标轨档 22px，
+   那里图标是唯一线索，缩到 18 会显得空。AppIcon 的 size 决定实笔反算，
+   CSS 只负责盒子，两处必须同档 */
 .sidebar.collapsed .nav-icon {
   width: 22px;
   height: 22px;
@@ -239,25 +231,16 @@ const onDragDblclick = (e: MouseEvent) => {
   overflow: hidden;
 }
 
-/* 计数胶囊：圆形等宽数字，非激活走中性档，激活跟着整条转 accent */
+/* 计数：右对齐中性数字，不做胶囊——目录行保持安静 */
 .nav-count {
   flex-shrink: 0;
-  height: 18px;
-  min-width: 18px;
-  padding: 0 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
+  font-size: 12px;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  border-radius: var(--radius-pill);
-  background: var(--fill);
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
 .nav-item.active .nav-count {
-  background: color-mix(in srgb, var(--h) 14%, transparent);
-  color: var(--h);
+  color: var(--text-brand);
 }
 </style>

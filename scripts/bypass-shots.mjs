@@ -16,7 +16,14 @@ const listRows = [
   { host: 'registry.example-mirror.net', input: 'registry.example-mirror.net', address: '125.39.27.223', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'hostsOnly', note: '仅缺 DNS 固定', stale: true },
 ]
 
-/** 一帧要演什么：bypass 是判定形状，probe 是页栏动作，row 是点开的第几行 */
+/** 落盘链路的账：两条能自动定，一条带 CDN 特征默认不进批次 */
+const writeRows = [
+  { host: 'xtbg.xylink.com', input: 'http://xtbg.xylink.com:8443/agent', address: '172.30.2.109', interfaceName: 'vEthernet (TUN)', nextHop: '169.254.99.99', verdict: 'needRoute' },
+  { host: '172.33.0.0/16', input: '172.33.0.0/16', kind: 'cidr', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'needRoute' },
+  { host: 'registry.example-mirror.net', input: 'registry.example-mirror.net', address: '125.39.27.223', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'hostsOnly', cdnLike: true },
+]
+
+/** 一帧要演什么：bypass 是判定形状，probe 是页栏动作，row 是点开的第几行，flow 是落盘走到哪一步 */
 const scenes = [
   [
     // 页栏只有一颗「开始探测」：结论先摆出来，加入清单是弹窗里的下一步
@@ -72,6 +79,40 @@ const scenes = [
     '6-empty',
     { bypass: {} },
   ],
+  [
+    // 落盘第一步：确认弹窗逐条念要动什么，CDN 那条单独标出并给勾选位
+    '7-plan',
+    { bypass: { targets: writeRows, hosts: { managed: 3 } }, flow: 'plan' },
+  ],
+  [
+    // 勾上「仍要固定」：那条改念要写什么，头栏的「不写入」计数收掉
+    '8-plan-cdn',
+    { bypass: { targets: writeRows, hosts: { managed: 3 } }, flow: 'plan-cdn' },
+  ],
+  [
+    // 等待授权：helper 起来到用户答完 UAC 之间只能明说在等
+    '9-awaiting',
+    { bypass: { targets: writeRows, apply: { delayMs: 3000 } }, flow: 'awaiting' },
+  ],
+  [
+    // 结果弹窗：逐条账 + 回滚没成才留的批次，底部才有「撤销本批」
+    '10-result',
+    { bypass: { targets: writeRows, apply: { failed: ['172.33.0.0/16'], rollbackFail: true } }, flow: 'result' },
+  ],
+  [
+    // 写完并自动重验过：行上改念「已写入」，小账里不再有「待写入」
+    // 两条都是域名：mock 的重探只有一份固定探针数据，网段行会被套上别人的地址
+    '11-written',
+    {
+      bypass: {
+        targets: [
+          writeRows[0],
+          { host: 'nones.inc.example.net', input: 'nones.inc.example.net', address: '172.30.2.109', interfaceName: 'vEthernet (TUN)', nextHop: '169.254.99.99', verdict: 'hostsOnly' },
+        ],
+      },
+      flow: 'written',
+    },
+  ],
 ]
 const EXPECTED = scenes.flatMap(([name]) => [`paper-${name}.png`, `ink-${name}.png`])
 
@@ -111,6 +152,20 @@ for (const theme of ['paper', 'ink']) {
       await page.waitForSelector('.concl-dialog')
       if ((await page.locator('.row-card').count()) === 0) {
         console.log(`[${theme}/${name}] 越位：重探把那一行收走了`)
+      }
+    }
+    if (scene.flow) {
+      await page.locator('.page-bar .btn-secondary', { hasText: '写入落盘批次' }).click()
+      await page.waitForSelector('.dialog')
+      if (scene.flow === 'plan-cdn') {
+        await page.locator('.plan-cdn input').last().check()
+        await page.waitForTimeout(250)
+      }
+      if (['awaiting', 'result', 'written'].includes(scene.flow)) {
+        await page.locator('.dialog .btn-primary').click()
+        if (scene.flow === 'awaiting') await page.waitForTimeout(500)
+        if (scene.flow === 'result') await page.waitForSelector('.dialog:has-text("写入结果")')
+        if (scene.flow === 'written') await page.waitForSelector('.row-written')
       }
     }
     await page.mouse.move(1020, 660)

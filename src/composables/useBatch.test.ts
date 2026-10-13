@@ -186,8 +186,8 @@ describe('useBatch', () => {
       doBatchDelete()
 
       expect(mockConfirmStore.showConfirm).toHaveBeenCalledWith(
-        '确认删除',
-        '确定删除选中的 2 条记录吗？',
+        '删除所选',
+        '2 条记录将被删除，此操作不可撤销。',
         expect.any(Function)
       )
     })

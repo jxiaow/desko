@@ -4,7 +4,7 @@ use super::Database;
 use super::models::BypassTarget;
 
 const COLS: &str = "id, host, input, kind, port, path, scheme, address, interface_name, next_hop, \
-     verdict, stale, note, created_at, updated_at, checked_at";
+     verdict, stale, cdn_like, note, apply_state, apply_batch, created_at, updated_at, checked_at";
 
 impl Database {
     fn row_to_bypass_target(row: &rusqlite::Row) -> rusqlite::Result<BypassTarget> {
@@ -21,10 +21,13 @@ impl Database {
             next_hop: row.get(9)?,
             verdict: row.get(10)?,
             stale: row.get::<_, i64>(11)? != 0,
-            note: row.get(12)?,
-            created_at: row.get(13)?,
-            updated_at: row.get(14)?,
-            checked_at: row.get(15)?,
+            cdn_like: row.get::<_, i64>(12)? != 0,
+            note: row.get(13)?,
+            apply_state: row.get(14)?,
+            apply_batch: row.get(15)?,
+            created_at: row.get(16)?,
+            updated_at: row.get(17)?,
+            checked_at: row.get(18)?,
         })
     }
 
@@ -35,14 +38,41 @@ impl Database {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    pub fn bypass_target_by_id(&self, id: &str) -> Result<Option<BypassTarget>, AppError> {
+        let sql = format!("SELECT {COLS} FROM bypass_targets WHERE id = ?1");
+        let mut stmt = self.conn.prepare(&sql)?;
+        let found = stmt
+            .query_map(params![id], Self::row_to_bypass_target)?
+            .filter_map(|r| r.ok())
+            .next();
+        Ok(found)
+    }
+
+    /// 落盘结果单独回写：不动判定、不动探测时间，只记"这批写过了"
+    pub fn set_bypass_apply_state(
+        &self,
+        id: &str,
+        state: &str,
+        batch: &str,
+        now_ms: i64,
+    ) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE bypass_targets SET apply_state=?2, apply_batch=?3, updated_at=?4 WHERE id=?1",
+            params![id, state, batch, now_ms],
+        )?;
+        Ok(())
+    }
+
     /// 同一 host 只留一条：重探覆盖判定与地址，建档时间不动
     pub fn upsert_bypass_target(&self, target: &BypassTarget) -> Result<(), AppError> {
         self.conn.execute(
             "INSERT INTO bypass_targets (id, host, input, kind, port, path, scheme, address, \
-             interface_name, next_hop, verdict, stale, note, created_at, updated_at, checked_at) \
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16) \
+             interface_name, next_hop, verdict, stale, cdn_like, note, apply_state, apply_batch, \
+             created_at, updated_at, checked_at) \
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19) \
              ON CONFLICT(host) DO UPDATE SET id=?1, input=?3, kind=?4, port=?5, path=?6, scheme=?7, address=?8, \
-             interface_name=?9, next_hop=?10, verdict=?11, stale=?12, note=?13, updated_at=?15, checked_at=?16",
+             interface_name=?9, next_hop=?10, verdict=?11, stale=?12, cdn_like=?13, note=?14, \
+             apply_state=?15, apply_batch=?16, updated_at=?18, checked_at=?19",
             params![
                 target.id,
                 target.host,
@@ -56,7 +86,10 @@ impl Database {
                 target.next_hop,
                 target.verdict,
                 target.stale as i64,
+                target.cdn_like as i64,
                 target.note,
+                target.apply_state,
+                target.apply_batch,
                 target.created_at,
                 target.updated_at,
                 target.checked_at
@@ -90,7 +123,10 @@ mod tests {
             next_hop: String::new(),
             verdict: verdict.to_string(),
             stale: false,
+            cdn_like: false,
             note: String::new(),
+            apply_state: "none".to_string(),
+            apply_batch: String::new(),
             created_at: 100,
             updated_at: 200,
             checked_at: 200,

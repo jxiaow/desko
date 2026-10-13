@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Desko · 锁页光场对拍稿</title>
+<style>
+:root {
+  /* 间距系统 - 4px 基础 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* 圆角系统 */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  /* 控件档：图标按钮与小型按钮专用。原先它们跟着 --radius-sm 吃 6px，28px 的钮只占短边 21%，
+     是全场最方的一档（卡片 10/56≈18% 但有 14px 弹窗与胶囊压着）。抬到 9px≈32%，落回同一轨。
+     只给按钮——输入字段/标签/气泡仍走 --radius-sm，圆角轴一分为二，别互相牵连。 */
+  --radius-ib: 9px;
+  --radius: 10px;
+  --radius-md: 12px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 99px;
+
+  /* 字号阶梯：所有 UI 文本走这条轴，不再用 10.5/11.5/12.5/13.5/14.5/17.5 这种半像素。
+     编辑器/列表/标题等组件用一档；需要略大或略小时优先调字重，不挤字号档。
+     body 的 15px 走 --text-md。大方化轮整体上抬一档（docs/design/spacious/01-plan.md）。
+     2xs/3xl 是本轮补的两端：
+       · 2xs 只给"嵌在固定小盒子里的辅助信息"（键帽、单位、分组小标、卡脚标签），
+         正文与说明文字不许降到这一档以下（lighten 轮已把 11px 的说明文字抬到 12）；
+       · 3xl 只给"读一个大数值"的读数面（验证码），其余文本停在 2xl。 */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+
+  /* AppIcon :size 走这几档，不再 10/11/12/13/14/15/16/18/24 全谱散布。
+     组件传 :size 时按数值用，CSS 写 width/height 时引用 px 形式。
+     tile 档 18：34px 身份档里的图形，16 显小、20 顶边，与档内 favicon 的 22px 图取同一重量 */
+  --icon-xs-px: 12px;
+  --icon-sm-px: 14px;
+  --icon-md-px: 16px;
+  --icon-tile-px: 18px;
+  --icon-lg-px: 20px;
+  --icon-xl-px: 26px;
+
+  /* 批量浮底栏占位高度：所有列表容器底部要让出这块空间，避免最后一行被遮 */
+  --dock-clearance: 96px;
+
+  /* 过渡 */
+  --transition-fast: 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* 布局尺度 */
+  /* 侧栏三态（V5.2 收编轮 P2）：展开 208 / 图标轨 56 / 收起 0，
+     第三态不占宽，恢复入口在标题栏面包屑左侧 */
+  --sidebar-w: 208px;
+  --sidebar-rail-w: 56px;
+  /* 全屏书写栏宽度：正文越宽越要收着 */
+  --fs-max: 900px;
+  /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
+  --stream-max: 1200px;
+  /* 四个列表页的阅读列上限：按视口给，侧栏展开/折叠不跟着抖。
+     1235 常态窗与 1440 都还吃在 900 下限上，只有最大化（≥1920）才涨到 1120 */
+  --content-max: clamp(900px, calc(100vw - 800px), 1120px);
+  /* 小记卡片正文高度上限：短的小记按实际内容，长的由 JS 收在这里之上最近的整行边界 */
+  --memo-max-h: 144px;
+  --rail-w: 248px;
+  /* 小记顶栏的实际占位高度：粘性日期行和窄窗口下的浮层侧栏都要从它下面开始。
+     一行头方言（Things）后 .page-bar = padding-top 16 + 控件 32 + padding-bottom 16（border-box）= 64px 定高 */
+  --stream-bar-h: 64px;
+  /* 容器窄于此值时收起右栏，筛选降级为浮层 */
+  --rail-min-room: 900px;
+
+}
+:root, [data-theme="paper"] {
+  /* 品牌缺省：墨蓝（accent 覆盖层会按 data-accent 重填这一族） */
+  --accent: #3d5a80;
+  --accent-hover: #31496a;
+  --accent-active: #283d58;
+  --accent-on: #ffffff;
+  --accent-soft: #e8eef4;
+  --accent-light: #d3dfeb;
+  --accent-ring: rgba(61, 90, 128, 0.16);
+  --text-brand: #31496a;
+
+  /* 面：净灰五档。相邻档差一档色温，不做条纹
+     --panel-bg 不用纯白：卡片占窗面七成，255 会把眼睛适应点亮到顶，旁边 #f1f1f0 就显脏。
+     分层本来就由 --border 那条发丝线担（它比画布还深 11 级），收 3 级不掉分离度。
+     --hover 跟着重切，保持与卡片底约 5 级差，否则行悬停没有反馈。 */
+  --bg: #f8f8f7;
+  --panel-bg: #fcfcfc;
+  --chrome-bg: rgba(248, 248, 247, 0.78);
+  --sunken: #f1f1f0;
+  --fill: #eaeae8;
+  --hover: #f7f7f7;
+  --active: #eeedeb;
+  --overlay: rgba(29, 28, 26, 0.42);
+
+  /* 文字：四级近中性，深字浅底一眼可读 */
+  --text: #333230;
+  --text-secondary: #4d4c49;
+  --text-muted: #6b6a66;
+  --text-faint: #95948e;
+
+  /* 描边：层级靠边框，不靠色块 */
+  --border: #e6e6e4;
+  --border-strong: #d5d5d2;
+  --border-subtle: #f1f1f0;
+  --border-hover: #d5d5d2;
+
+  /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
+  --text-url: #4d4c49;
+  --badge-cat-bg: #f0f0ee;
+  --badge-cat-border: #e6e6e4;
+  --badge-cat-text: #4d4c49;
+  --badge-ver-bg: #e8eef4;
+  --badge-ver-text: #31496a;
+
+  /* 投影带暖褐，纯灰投影在米底上会显脏 */
+  --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  /* 轻量化轮：行卡不再靠宽大软影浮起，阴影只留一丝贴地感，分层交还发丝描边 */
+  --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d5d5d2;
+  --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  /* 批量药丸浮在列表之上，要比任何弹层都高：弥散更深、落点更远，只用当前主题的字色 */
+  --shadow-dock: 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14);
+
+  /* 状态色：一个语义一档强度，浅色下全部 ≥4.5:1 可读写。
+     危险取砖红（与暖纸同色温），成功取青瓷苔绿，警告取土黄。 */
+  --danger: #a9443c;
+  --danger-on: #ffffff;
+  --danger-hover: #8c362f;
+  --danger-soft: #f7ece9;
+  --danger-border: #eacfc8;
+  --success: #3d7355;
+  --success-soft: #ecf3ee;
+  --warning: #96682a;
+  --warning-soft: #f6efdf;
+
+  /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
+  --sidebar-bg: #edecea;
+  --sidebar-hover: #e5e5e3;
+
+  /* 品牌标渐变 */
+  --brand-g1: #6c88aa;
+  --brand-g2: #3d5a80;
+  --brand-g3: #283d58;
+  --brand-knob: #ffffff;
+
+  /* 锁屏 */
+  --lock-wash-a: #fbfbfa;
+  --lock-wash-b: #edecea;
+  --lock-orb-1: rgba(61, 90, 128, 0.07);
+  --lock-orb-2: rgba(61, 90, 128, 0.045);
+
+  /* 毛玻璃底栏 */
+  --frost-bg: rgba(255, 255, 255, 0.86);
+  --frost-border: #e6e6e4;
+
+  /* 深色面：气泡与 toast */
+  --tip-bg: #26241f;
+  --tip-fg: #f2f0ea;
+  --toast-bg: #26241f;
+  --toast-ok: #9cc4ae;
+  --toast-err: #e09a92;
+  --toast-info: #93aecb;
+
+  /* 滚动条与选区 */
+  --scrollbar: rgba(29, 28, 26, 0.16);
+  --scrollbar-hover: rgba(29, 28, 26, 0.28);
+  --selection: rgba(61, 90, 128, 0.18);
+
+  /* 头像：按分类取色，六档同明度同彩度（v2 起只服务内容侧） */
+  --cat-1: #5f62b8;
+  --cat-2: #7b5fb0;
+  --cat-3: #a85b7d;
+  --cat-4: #937042;
+  --cat-5: #46806b;
+  --cat-6: #457f8a;
+  --cat-text: #ffffff;
+
+  /* 文件类型：保留 pdf红/doc蓝/xls绿 的通用认知，只降饱和 */
+  --ft-pdf: #b8564f;
+  --ft-doc: #4a6d9c;
+  --ft-sheet: #3f7a5e;
+  --ft-deck: #a0603a;
+  --ft-arch: #6a5a99;
+  --ft-code: #8a7534;
+  --ft-mark: #5e6672;
+  --ft-img: #9a5a72;
+  --ft-unk: #7a7f88;
+
+  /* 代码块：与界面同一只手的色温（配色收口轮：整族在 --sunken 上顶住 4.5，
+     注释/标点保持"最静"档但不再是看不见） */
+  --code-fg: #1a1b20;
+  --code-kw: #9d5275;
+  --code-str: #3a7256;
+  --code-num: #96593a;
+  --code-type: #7d6a2f;
+  --code-fn: #4a6d9c;
+  --code-var: #5e6672;
+  --code-com: #686a73;
+  --code-tag: #6a5a99;
+  --code-pun: #5e6168;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  /* Consolas 没有中文字形：不在它后面接 UI 中文族，等宽件里的中文（占位符、子路径、代码注释）
+     就会回落到宋体，和同一行的无衬线文字明显两种笔形 */
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="ink"] {
+  --accent: #89a8cd;
+  --accent-hover: #a2bcda;
+  --accent-active: #6f92ba;
+  --accent-on: #171614;
+  --accent-soft: rgba(137, 168, 205, 0.15);
+  --accent-light: rgba(137, 168, 205, 0.26);
+  --accent-ring: rgba(137, 168, 205, 0.32);
+  --text-brand: #adc6e2;
+
+  --bg: #1d1c1a;
+  --panel-bg: #22211e;
+  --chrome-bg: rgba(29, 28, 26, 0.86);
+  --sunken: #181716;
+  --fill: #2a2927;
+  --hover: #282622;
+  --active: #343431;
+  --overlay: rgba(0, 0, 0, 0.62);
+
+  --text: #e6e4de;
+  --text-secondary: #c7c4bd;
+  --text-muted: #aeaba4;
+  --text-faint: #9c9992;
+
+  --border: #30302d;
+  --border-strong: #434340;
+  --border-subtle: #252421;
+  --border-hover: #434340;
+
+  --text-url: #c9c6bf;
+  --badge-cat-bg: #252421;
+  --badge-cat-border: #30302d;
+  --badge-cat-text: #c7c4bd;
+  --badge-ver-bg: rgba(137, 168, 205, 0.15);
+  --badge-ver-text: #adc6e2;
+
+  /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* 轻量化轮：墨色行卡去掉 18px 大投影与外圈环，只留顶部高光一丝 */
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* 深色下纯黑弥散等于没有：药丸靠那圈高光边浮起来 */
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+
+  --danger: #e08079;
+  --danger-on: #181716;
+  --danger-hover: #ea9d97;
+  --danger-soft: #271a17;
+  --danger-border: #462924;
+  --success: #6fbf95;
+  --success-soft: #17211c;
+  --warning: #d9a95f;
+  --warning-soft: #241e13;
+
+  --sidebar-bg: #1a1917;
+  --sidebar-hover: #282622;
+
+  --brand-g1: #adc6e2;
+  --brand-g2: #89a8cd;
+  --brand-g3: #6f92ba;
+  --brand-knob: #1d1c1a;
+
+  --lock-wash-a: #1d1c1a;
+  --lock-wash-b: #22211e;
+  --lock-orb-1: rgba(137, 168, 205, 0.14);
+  --lock-orb-2: rgba(137, 168, 205, 0.07);
+
+  --frost-bg: rgba(34, 33, 30, 0.88);
+  --frost-border: #30302d;
+
+  /* 深色界面的浮层反过来：亮底暗字 */
+  --tip-bg: #efede8;
+  --tip-fg: #1d1c1a;
+  --toast-bg: #efede8;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #4c6c92;
+
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(137, 168, 205, 0.30);
+
+  /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
+  --cat-1: #8a8fd8;
+  --cat-2: #ab8de6;
+  --cat-3: #de8fb8;
+  --cat-4: #d8b078;
+  --cat-5: #6fc0a0;
+  --cat-6: #6fb8c8;
+  --cat-text: #171614;
+
+  --ft-pdf: #f0716b;
+  --ft-doc: #7aa2f7;
+  --ft-sheet: #3fb950;
+  --ft-deck: #e0a45c;
+  --ft-arch: #a98be8;
+  --ft-code: #e0c060;
+  --ft-mark: #8c94a6;
+  --ft-img: #e08bb8;
+  --ft-unk: #6b7280;
+
+  --code-fg: #e4e2dc;
+  --code-kw: #de9ab8;
+  --code-str: #6fd0a8;
+  --code-num: #e0b072;
+  --code-type: #e0c060;
+  --code-fn: #8aa8e0;
+  --code-var: #b6b2a8;
+  --code-com: #9d9991;
+  --code-tag: #ab8de6;
+  --code-pun: #8c94a6;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="paper"][data-accent="ink"] {
+  --accent: #3d5a80; --accent-hover: #31496a; --accent-active: #283d58;
+  --accent-on: #ffffff; --accent-soft: #e8eef4; --accent-light: #d3dfeb;
+  --accent-ring: rgba(61, 90, 128, 0.16); --text-brand: #31496a;
+  --badge-ver-bg: #e8eef4; --badge-ver-text: #31496a;
+  --brand-g1: #6c88aa; --brand-g2: #3d5a80; --brand-g3: #283d58;
+  --lock-orb-1: rgba(61, 90, 128, 0.07); --lock-orb-2: rgba(61, 90, 128, 0.045);
+  --selection: rgba(61, 90, 128, 0.18); --toast-info: #93aecb;
+
+}
+[data-theme="ink"][data-accent="ink"] {
+  --accent: #89a8cd; --accent-hover: #a2bcda; --accent-active: #6f92ba;
+  --accent-on: #171614; --accent-soft: rgba(137, 168, 205, 0.15); --accent-light: rgba(137, 168, 205, 0.26);
+  --accent-ring: rgba(137, 168, 205, 0.32); --text-brand: #adc6e2;
+  --badge-ver-bg: rgba(137, 168, 205, 0.15); --badge-ver-text: #adc6e2;
+  --brand-g1: #adc6e2; --brand-g2: #89a8cd; --brand-g3: #6f92ba;
+  --lock-orb-1: rgba(137, 168, 205, 0.14); --lock-orb-2: rgba(137, 168, 205, 0.07);
+  --selection: rgba(137, 168, 205, 0.30); --toast-info: #4c6c92;
+
+}
+:root {
+  --sidebar-border: var(--border);
+  --sidebar-active: var(--accent-soft);
+  --sidebar-text: var(--text-secondary);
+  --sidebar-text-active: var(--accent);
+  --ft-bg: var(--fill);
+  --code-bg: var(--sunken);
+  --code-bd: var(--border);
+
+  --bg-app: var(--bg);
+  --bg-surface: var(--panel-bg);
+  --bg-surface-hover: var(--hover);
+  --bg-surface-active: var(--active);
+  /* 吸顶件/浮岛上的控件悬停填充：不吃 --hover。--hover 是按「行悬停在卡面上」切的浅灰，
+     而页栏铺的是画布 --sunken（纸 #f1f1f0），比 --hover（#f7f7f7）还深一档——
+     指过去等于把钮点亮，实测与周边只差 1.055:1，看不出是反馈。
+     改从文字色反推：纸底压暗、墨底提亮，同一条配方两套主题自适应（实测 1.17:1 / 1.25:1）。 */
+  --hover-chrome: color-mix(in srgb, var(--text) 9%, transparent);
+  --bg-sidebar: var(--sidebar-bg);
+  --border-focus: var(--accent);
+  --text-primary: var(--text);
+
+  /* 主列表页规格引入的语义名，一律 var() 指到既有物理槽，零新增 hex */
+  /* 画布底：两团 accent 光晕压在 sunken 上，几何按视口定位（.app-root 不滚动，天然 fixed）。
+     凡是浮在这层画布上的吸顶件（.page-bar / 小记 .day-head）必须复用同一条配方 +
+     background-attachment: fixed，否则平铺半透明底会把光晕压掉一档，静止时就显出一条亮带 */
+  --canvas-bg:
+    radial-gradient(760px 460px at 82% -120px, var(--lock-orb-1), transparent 70%),
+    radial-gradient(620px 420px at 6% -100px, var(--lock-orb-2), transparent 68%),
+    var(--sunken);
+  --bg-toolbar: var(--canvas-bg);
+  --bg-popover: var(--panel-bg);
+  --bg-tag-default: var(--badge-cat-bg);
+  --bg-mono-chip: var(--sunken);
+  --bg-statusbar: var(--panel-bg);
+  --border-line: var(--border);
+  --border-card-hover: var(--border-hover);
+  --border-input: var(--border);
+  --border-divider: var(--border-subtle);
+  --text-title: var(--text);
+  --text-body: var(--text-secondary);
+  /* --shadow-card 为主题槽位（轻量化轮起只给贴地一丝）：行卡分层靠发丝描边，
+     阴影抬升档（--shadow-card-hover）已退役，hover 反馈改背景+描边显色 */
+  --shadow-popover: var(--shadow-pop);
+  --radius-card: var(--radius-lg);
+  --radius-badge: var(--radius);
+  --radius-menu: var(--radius-lg);
+  --radius-tag: var(--radius-sm);
+  --radius-btn: var(--radius);
+
+}
+
+/* 以下为 UnlockPage.vue 现档样式的逐条誊写（scoped 展平；html[data-theme] → [data-theme]） */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-ui);
+  background: #6f6f6f;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  align-items: flex-start;
+}
+.win {
+  position: relative;
+  width: 1040px;
+  height: 670px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  --font-serif: 'Songti SC', 'Source Han Serif SC', 'Noto Serif CJK SC', SimSun, serif;
+}
+.frame-tag {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  font: 500 12px/1 var(--font-ui);
+  color: #e8e8e8;
+}
+
+/* 锁定态顶栏：透明、无横梁、无微距阴影（底不再是照片） */
+.titlebar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 30;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+}
+.tb-btn {
+  width: 44px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-secondary);
+}
+
+.unlock-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background: radial-gradient(110% 85% at 50% 40%, var(--lock-wash-b) 0%, var(--bg) 65%), var(--bg);
+}
+
+/* ---------- 光场 ---------- */
+.lock-aura {
+  position: absolute;
+  inset: -18%;
+  width: 136%;
+  height: 136%;
+  z-index: 1;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
+}
+.lock-aura-blob {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+.lock-aura-blob.a {
+  width: min(50vw, 520px); height: min(50vw, 520px);
+  top: 6%; left: 10%;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  filter: blur(68px);
+  animation: aura-a 28s cubic-bezier(.4,0,.2,1) infinite alternate;
+}
+.lock-aura-blob.b {
+  width: min(44vw, 440px); height: min(44vw, 440px);
+  right: 8%; bottom: 4%;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  filter: blur(60px);
+  animation: aura-b 32s cubic-bezier(.4,0,.2,1) infinite alternate;
+}
+.lock-aura-blob.c {
+  width: min(36vw, 360px); height: min(36vw, 360px);
+  top: 38%; left: 44%;
+  background: color-mix(in srgb, var(--panel-bg) 55%, transparent);
+  filter: blur(44px);
+  animation: aura-c 24s cubic-bezier(.4,0,.2,1) infinite alternate;
+}
+@keyframes aura-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(7%, 9%, 0) scale(1.08); }
+}
+@keyframes aura-b {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-8%, -6%, 0) scale(1.06); }
+}
+@keyframes aura-c {
+  from { transform: translate3d(0, 0, 0) scale(0.96); }
+  to   { transform: translate3d(5%, -7%, 0) scale(1.04); }
+}
+
+/* ---------- 乳胶微噪波 ---------- */
+.lock-grain {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='deskoGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23deskoGrain)' opacity='0.035'/%3E%3C/svg%3E");
+}
+
+.unlock-canvas { position: relative; z-index: 10; flex: 1; display: flex; align-items: center; justify-content: center; }
+.lock-stage { display: flex; flex-direction: column; align-items: center; gap: 34px; }
+
+.lock-masthead { display: flex; flex-direction: column; align-items: center; max-width: 90vw; text-align: center; }
+.masthead-line {
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 3vw, 32px);
+  font-weight: 600; line-height: 1.4; letter-spacing: .22em;
+  white-space: nowrap; color: var(--text);
+}
+.lock-stack { width: 300px; display: flex; flex-direction: column; align-items: center; }
+.lock-tile {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 8px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+}
+.lock-tile svg { width: 38px; height: 38px; }
+.lock-title {
+  font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--text);
+  margin-bottom: 22px;
+}
+
+.unlock-field { position: relative; width: 100%; height: 40px; }
+.unlock-field-icon {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--text-faint);
+}
+.unlock-field.focused .unlock-field-icon { color: var(--accent); }
+.unlock-input {
+  width: 100%; height: 100%;
+  padding: 0 62px 0 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px; font-family: inherit; color: var(--text);
+  background: var(--panel-bg);
+  outline: none;
+}
+.unlock-input.focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.reveal-btn {
+  position: absolute; right: 33px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+}
+.unlock-btn {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--accent-on);
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.unlock-error-slot { height: 20px; margin-top: 4px; display: flex; align-items: center; justify-content: center; }
+.unlock-error { font-size: 11px; color: var(--danger); }
+
+/* D 帧：漂移中段姿态（把三团按 keyframe 的 to 值手摆，验的是同一条配方漂到别处时字还读不读） */
+.win.drift .lock-aura-blob { animation: none; }
+.win.drift .lock-aura-blob.a { transform: translate3d(7%, 9%, 0) scale(1.08); }
+.win.drift .lock-aura-blob.b { transform: translate3d(-8%, -6%, 0) scale(1.06); }
+.win.drift .lock-aura-blob.c { transform: translate3d(5%, -7%, 0) scale(1.04); }
+
+.brand { width: 38px; height: 38px; }
+</style>
+</head>
+<body>
+
+<div class="win" data-theme="paper" data-accent="ink">
+  <span class="frame-tag">A · 纸底 × 墨蓝（漂移起点，聚焦态）</span>
+  <div class="unlock-bg"></div>
+  <div class="lock-aura"><i class="lock-aura-blob a"></i><i class="lock-aura-blob b"></i><i class="lock-aura-blob c"></i></div>
+  <div class="lock-grain"></div>
+  <div class="titlebar">
+    <span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></span><span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M9 15L2 22M2 16.1429V22H7.85714"/><path d="M15 9L22 2M22 7.85714V2H16.1429"/></g></svg></span><span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span>
+  </div>
+  <main class="unlock-canvas">
+    <div class="lock-stage">
+      <header class="lock-masthead">
+        <p class="masthead-line">星光不问赶路人，时光不负有心人</p>
+      </header>
+      <section class="lock-stack">
+        <div class="lock-tile"><svg class="brand" viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="bg1" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+        <stop offset="0" style="stop-color: var(--brand-g1)"/><stop offset="0.48" style="stop-color: var(--brand-g2)"/><stop offset="1" style="stop-color: var(--brand-g3)"/>
+      </linearGradient></defs>
+      <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#bg1)"/>
+      <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#bg1)"/>
+      <circle cx="75" cy="79" r="5" style="fill: var(--brand-knob)"/>
+    </svg></div>
+        <h1 class="lock-title">Desko</h1>
+        <div class="unlock-field focused">
+          <span class="unlock-field-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></span>
+          <input class="unlock-input focused" value="••••••" readonly>
+          <span class="reveal-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.27489 15.2957C2.42496 14.1915 2 13.6394 2 12C2 10.3606 2.42496 9.80853 3.27489 8.70433C4.97196 6.49956 7.81811 4 12 4C16.1819 4 19.028 6.49956 20.7251 8.70433C21.575 9.80853 22 10.3606 22 12C22 13.6394 21.575 14.1915 20.7251 15.2957C19.028 17.5004 16.1819 20 12 20C7.81811 20 4.97196 17.5004 3.27489 15.2957Z"/><path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z"/></g></svg></span>
+          <span class="unlock-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12H20M14 18L20 12L14 6"/></svg></span>
+        </div>
+        <div class="unlock-error-slot"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="win" data-theme="paper" data-accent="celadon">
+  <span class="frame-tag">B · 纸底 × 青瓷（报错态，光团吃 accent 色相）</span>
+  <div class="unlock-bg"></div>
+  <div class="lock-aura"><i class="lock-aura-blob a"></i><i class="lock-aura-blob b"></i><i class="lock-aura-blob c"></i></div>
+  <div class="lock-grain"></div>
+  <div class="titlebar">
+    <span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></span><span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M9 15L2 22M2 16.1429V22H7.85714"/><path d="M15 9L22 2M22 7.85714V2H16.1429"/></g></svg></span><span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span>
+  </div>
+  <main class="unlock-canvas">
+    <div class="lock-stage">
+      <header class="lock-masthead">
+        <p class="masthead-line">生活不止眼前的苟且，还有诗和远方</p>
+      </header>
+      <section class="lock-stack">
+        <div class="lock-tile"><svg class="brand" viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="bg2" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+        <stop offset="0" style="stop-color: var(--brand-g1)"/><stop offset="0.48" style="stop-color: var(--brand-g2)"/><stop offset="1" style="stop-color: var(--brand-g3)"/>
+      </linearGradient></defs>
+      <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#bg2)"/>
+      <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#bg2)"/>
+      <circle cx="75" cy="79" r="5" style="fill: var(--brand-knob)"/>
+    </svg></div>
+        <h1 class="lock-title">Desko</h1>
+        <div class="unlock-field">
+          <span class="unlock-field-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></span>
+          <input class="unlock-input" value="••••" readonly>
+          <span class="reveal-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.27489 15.2957C2.42496 14.1915 2 13.6394 2 12C2 10.3606 2.42496 9.80853 3.27489 8.70433C4.97196 6.49956 7.81811 4 12 4C16.1819 4 19.028 6.49956 20.7251 8.70433C21.575 9.80853 22 10.3606 22 12C22 13.6394 21.575 14.1915 20.7251 15.2957C19.028 17.5004 16.1819 20 12 20C7.81811 20 4.97196 17.5004 3.27489 15.2957Z"/><path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z"/></g></svg></span>
+          <span class="unlock-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12H20M14 18L20 12L14 6"/></svg></span>
+        </div>
+        <div class="unlock-error-slot"><span class="unlock-error">主密码错误，请重试</span></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="win" data-theme="ink" data-accent="clay">
+  <span class="frame-tag">C · 墨底 × 赭石（漂移起点）</span>
+  <div class="unlock-bg"></div>
+  <div class="lock-aura"><i class="lock-aura-blob a"></i><i class="lock-aura-blob b"></i><i class="lock-aura-blob c"></i></div>
+  <div class="lock-grain"></div>
+  <div class="titlebar">
+    <span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></span><span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M9 15L2 22M2 16.1429V22H7.85714"/><path d="M15 9L22 2M22 7.85714V2H16.1429"/></g></svg></span><span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span>
+  </div>
+  <main class="unlock-canvas">
+    <div class="lock-stage">
+      <header class="lock-masthead">
+        <p class="masthead-line">不积跬步，无以至千里</p>
+      </header>
+      <section class="lock-stack">
+        <div class="lock-tile"><svg class="brand" viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="bg3" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+        <stop offset="0" style="stop-color: var(--brand-g1)"/><stop offset="0.48" style="stop-color: var(--brand-g2)"/><stop offset="1" style="stop-color: var(--brand-g3)"/>
+      </linearGradient></defs>
+      <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#bg3)"/>
+      <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#bg3)"/>
+      <circle cx="75" cy="79" r="5" style="fill: var(--brand-knob)"/>
+    </svg></div>
+        <h1 class="lock-title">Desko</h1>
+        <div class="unlock-field focused">
+          <span class="unlock-field-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></span>
+          <input class="unlock-input focused" value="••••••" readonly>
+          <span class="reveal-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.27489 15.2957C2.42496 14.1915 2 13.6394 2 12C2 10.3606 2.42496 9.80853 3.27489 8.70433C4.97196 6.49956 7.81811 4 12 4C16.1819 4 19.028 6.49956 20.7251 8.70433C21.575 9.80853 22 10.3606 22 12C22 13.6394 21.575 14.1915 20.7251 15.2957C19.028 17.5004 16.1819 20 12 20C7.81811 20 4.97196 17.5004 3.27489 15.2957Z"/><path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z"/></g></svg></span>
+          <span class="unlock-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12H20M14 18L20 12L14 6"/></svg></span>
+        </div>
+        <div class="unlock-error-slot"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="win drift" data-theme="ink" data-accent="plum">
+  <span class="frame-tag">D · 墨底 × 紫罗（漂移中段，光团压到字上）</span>
+  <div class="unlock-bg"></div>
+  <div class="lock-aura"><i class="lock-aura-blob a"></i><i class="lock-aura-blob b"></i><i class="lock-aura-blob c"></i></div>
+  <div class="lock-grain"></div>
+  <div class="titlebar">
+    <span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></span><span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M9 15L2 22M2 16.1429V22H7.85714"/><path d="M15 9L22 2M22 7.85714V2H16.1429"/></g></svg></span><span class="tb-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.10" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span>
+  </div>
+  <main class="unlock-canvas">
+    <div class="lock-stage">
+      <header class="lock-masthead">
+        <p class="masthead-line">心若向阳，无畏悲伤</p>
+      </header>
+      <section class="lock-stack">
+        <div class="lock-tile"><svg class="brand" viewBox="0 0 124 124" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="bg4" x1="32" y1="24" x2="95" y2="108" gradientUnits="userSpaceOnUse">
+        <stop offset="0" style="stop-color: var(--brand-g1)"/><stop offset="0.48" style="stop-color: var(--brand-g2)"/><stop offset="1" style="stop-color: var(--brand-g3)"/>
+      </linearGradient></defs>
+      <path d="M94 35 L51 49 C47.8 50.1 46 52.4 46 56 L46 98 C33.7 91.0 26 77.9 26 63 C26 40.9 43.9 23 66 23 C73.5 23 80.2 24.8 85.9 28.1 L94 35 Z" fill="url(#bg4)"/>
+      <path d="M97 40 L65 51.8 C63 52.5 62 54.0 62 56.2 L62 105.5 C62 107.8 63.8 109.2 66 108.4 L95 98 C97.0 97.3 98 95.8 98 93.6 L98 42.5 C98 41.2 97.7 40.5 97 40 Z" fill="url(#bg4)"/>
+      <circle cx="75" cy="79" r="5" style="fill: var(--brand-knob)"/>
+    </svg></div>
+        <h1 class="lock-title">Desko</h1>
+        <div class="unlock-field">
+          <span class="unlock-field-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></span>
+          <input class="unlock-input" placeholder="输入主密码解锁" readonly>
+          <span class="reveal-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.27489 15.2957C2.42496 14.1915 2 13.6394 2 12C2 10.3606 2.42496 9.80853 3.27489 8.70433C4.97196 6.49956 7.81811 4 12 4C16.1819 4 19.028 6.49956 20.7251 8.70433C21.575 9.80853 22 10.3606 22 12C22 13.6394 21.575 14.1915 20.7251 15.2957C19.028 17.5004 16.1819 20 12 20C7.81811 20 4.97196 17.5004 3.27489 15.2957Z"/><path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z"/></g></svg></span>
+          <span class="unlock-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.94" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12H20M14 18L20 12L14 6"/></svg></span>
+        </div>
+        <div class="unlock-error-slot"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

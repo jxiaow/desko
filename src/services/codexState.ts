@@ -1,6 +1,17 @@
 import { computed, ref } from 'vue'
-import { codexApi, type CodexAccount } from './api/codex'
+import type { CodexSessionUsageReport } from './api/codex'
+import {
+  codexApi,
+  type CodexAccount,
+  type CodexBatchDeleteError,
+  type CodexBatchDeleteJobStatus,
+  type CodexRecycledAccount,
+  type CodexSessionRecord,
+  type CodexSessionTokenStats,
+  type CodexTrashedSessionRecord,
+} from './api/codex'
 import { errText } from './api/backup'
+import { settingsApi } from './api/settings'
 import { useToastStore } from '../stores/toast'
 
 /** Codex 官方凭据路径：模块页与设置页共用，设置弹窗打开时预热 */
@@ -44,7 +55,7 @@ export interface SwitchProgress {
 }
 
 export function applySwitchProgress(p: SwitchProgress): void {
-  if (p.type === 'complete' || p.type === 'error') {
+  if (p.type === 'complete' || p.type === 'error' || p.type === 'cancelled') {
     switchStep.value = ''
     return
   }
@@ -70,17 +81,30 @@ export async function refreshAccounts(): Promise<void> {
   }
 }
 
-/** 配额刷新走后台批量：一次点击不该把整页冻在网络请求上 */
-export async function refreshQuotas(ids: string[]): Promise<void> {
+/** 配额刷新走后台批量：一次点击不该把整页冻在网络请求上。
+ *  silent 给定时器与进页那一轮用——每轮都播「配额已刷新」是噪音，失败也不刷屏（行内已有 quota_error 事实位） */
+let lastQuotaAt = 0
+
+export async function refreshQuotas(ids: string[], opts: { silent?: boolean } = {}): Promise<void> {
   const toast = useToastStore()
   if (!ids.length) return
+  lastQuotaAt = Date.now()
   try {
     await codexApi.refreshAllQuotas(ids)
-    toast.showToast('配额已刷新')
+    if (!opts.silent) toast.showToast('配额已刷新')
     await refreshAccounts()
+    checkQuotaAlert()
   } catch (e) {
-    toast.showToast(errText(e), 'error')
+    if (!opts.silent) toast.showToast(errText(e), 'error')
   }
+}
+
+/** 进页那一轮：库里存的可能是几小时前的数，定时器又至少要等一个间隔才响，
+ *  所以先摆缓存值、再静默补一轮。60 s 闸门挡住「在别的页签间来回切就打一次网络」。 */
+export async function refreshQuotasOnEnter(): Promise<void> {
+  if (quotaRefreshMinutes.value <= 0) return
+  if (Date.now() - lastQuotaAt < 60_000) return
+  await refreshQuotas(accounts.value.map((a) => a.id), { silent: true })
 }
 
 /** 读官方 config.toml 生效的 model_provider；读不到就返回空串，绝不让它拖垮切号 */
@@ -122,12 +146,31 @@ export async function switchTo(id: string): Promise<boolean> {
     await finishSwitch(providerBefore, providerAfter)
     return true
   } catch (e) {
-    toast.showToast(errText(e), 'error')
+    const text = errText(e)
+    if (text.includes('CODEX_START_CANCELLED')) {
+      // 取消点有两处：写凭据前=没动过，写完之后=已经改完才报取消，所以只重读列表、不谎称未改动
+      await refreshAccounts()
+      toast.showToast('已取消切换，以列表里的「当前」为准')
+    } else {
+      toast.showToast(text, 'error')
+    }
     return false
   } finally {
     busyId.value = ''
     // 收口事件偶尔抢跑或漏发都不该把进度字留在页面上
     switchStep.value = ''
+  }
+}
+
+/** 切号中点「取消」：只发消歧信号，收口仍由 switchTo 的 catch 做，避免两处各报一次 */
+export async function cancelSwitch(id: string): Promise<void> {
+  const toast = useToastStore()
+  if (!busyId.value || busyId.value !== id) return
+  try {
+    await codexApi.cancelSwitch(id)
+    switchStep.value = '正在取消…'
+  } catch (e) {
+    toast.showToast(errText(e), 'error')
   }
 }
 
@@ -153,6 +196,94 @@ export function remaining(a: CodexAccount): number | null {
   return Math.min(q.hourly_percentage, q.weekly_percentage)
 }
 
+/** 配额自动刷新：0=关，间隔只在这页开着的时候跑，离开即停（desko 是小窗常驻型工作台） */
+export const QUOTA_REFRESH_CHOICES = [0, 5, 10, 30]
+/** 预警阈值：盯的是「当前」那条账号里更紧的那扇窗口 */
+export const QUOTA_ALERT_CHOICES = [10, 20, 30]
+const KEY_REFRESH_MINUTES = 'codex_quota_auto_refresh_minutes'
+const KEY_ALERT_THRESHOLD = 'codex_quota_alert_threshold'
+const DEFAULT_REFRESH_MINUTES = 10
+const DEFAULT_ALERT_THRESHOLD = 20
+
+export const quotaRefreshMinutes = ref(DEFAULT_REFRESH_MINUTES)
+export const quotaAlertThreshold = ref(DEFAULT_ALERT_THRESHOLD)
+
+const clampChoice = (raw: string, choices: number[], fallback: number) => {
+  const n = Number.parseInt(raw, 10)
+  return choices.includes(n) ? n : fallback
+}
+
+export async function loadQuotaSettings(): Promise<void> {
+  try {
+    const [minutes, threshold] = await Promise.all([
+      settingsApi.getSetting(KEY_REFRESH_MINUTES),
+      settingsApi.getSetting(KEY_ALERT_THRESHOLD),
+    ])
+    quotaRefreshMinutes.value = clampChoice(minutes, QUOTA_REFRESH_CHOICES, DEFAULT_REFRESH_MINUTES)
+    quotaAlertThreshold.value = clampChoice(threshold, QUOTA_ALERT_CHOICES, DEFAULT_ALERT_THRESHOLD)
+  } catch {
+    quotaRefreshMinutes.value = DEFAULT_REFRESH_MINUTES
+    quotaAlertThreshold.value = DEFAULT_ALERT_THRESHOLD
+  }
+}
+
+export async function saveQuotaSettings(minutes: number, threshold: number): Promise<void> {
+  quotaRefreshMinutes.value = minutes
+  quotaAlertThreshold.value = threshold
+  // 阈值改了要允许重新报一次，否则调低阈值永远静默
+  alerted.clear()
+  try {
+    await Promise.all([
+      settingsApi.setSetting(KEY_REFRESH_MINUTES, String(minutes)),
+      settingsApi.setSetting(KEY_ALERT_THRESHOLD, String(threshold)),
+    ])
+  } catch (e) {
+    useToastStore().showToast(errText(e), 'error')
+  }
+}
+
+/** 同一档位只报一次：每轮自动刷新都弹一次会把人训练成忽略 toast */
+const alerted = new Set<string>()
+
+/** 预警只有一条通道：刷新完在前端算。后端 quota:alert 由 codex_quota_alert_enabled 把关，
+ *  desko 从不写那个配置（默认 false），监听它等于挂个哑事件 */
+export function checkQuotaAlert(): void {
+  const cur = accounts.value.find((a) => a.id === currentId.value)
+  if (!cur?.quota) return
+  const left = Math.min(cur.quota.hourly_percentage, cur.quota.weekly_percentage)
+  if (left > quotaAlertThreshold.value) return
+  const key = `${cur.id}:${left <= 5 ? 'critical' : 'low'}`
+  if (alerted.has(key)) return
+  alerted.add(key)
+  useToastStore().showToast(
+    `${cur.email} 剩余 ${left}%，低于 ${quotaAlertThreshold.value}% 阈值`,
+    'error',
+  )
+}
+
+let ticker: ReturnType<typeof setInterval> | null = null
+
+/** 定时器和页同命：进 Codex 页起、离开即清；间隔为 0 或没有账号就不跑 */
+export function startQuotaTicker(): void {
+  stopQuotaTicker()
+  const minutes = quotaRefreshMinutes.value
+  if (minutes <= 0) return
+  ticker = setInterval(() => {
+    if (!accounts.value.length) return
+    void refreshQuotas(accounts.value.map((a) => a.id), { silent: true })
+  }, minutes * 60_000)
+}
+
+export function stopQuotaTicker(): void {
+  if (ticker) clearInterval(ticker)
+  ticker = null
+}
+
+/** 设置页改了间隔：只在定时器本来就在跑的时候按新值重启，否则等下次进 Codex 页起 */
+export function syncQuotaTicker(): void {
+  if (ticker) startQuotaTicker()
+}
+
 /** 官方重置时间只到分钟，直接给人话「x 小时 y 分后重置」，不摆 ISO 串 */
 export function resetsIn(ts: number | null | undefined): string {
   if (!ts) return ''
@@ -166,3 +297,374 @@ export function resetsIn(ts: number | null | undefined): string {
   }
   return `${Math.floor(h / 24)} 天后重置`
 }
+
+/** 会话视图的共享状态：官方目录的一次全扫是重 I/O，扫完留在内存——
+ *  页头计数与会话面板读同一份，切档、离页再进都不重扫，只有「刷新」才重取 */
+export const sessions = ref<CodexSessionRecord[]>([])
+export const sessionsLoaded = ref(false)
+export const sessionsBusy = ref(false)
+/** 非空表示整页读数失败：界面出错误块，不能让它读成「你没有会话」 */
+export const sessionsError = ref('')
+export const sessionQuery = ref('')
+/** 会话 ID → 官方 token 累计；进这一档一次全量预取，展开只补缺 */
+export const sessionTokens = ref<Record<string, CodexSessionTokenStats>>({})
+
+/** 全扫期间又来一次（边扫边改搜索词）：先记下，本轮结束立刻补一次，别让新词被吞掉 */
+let rescanQueued = false
+
+export async function loadSessions(): Promise<void> {
+  if (sessionsBusy.value) {
+    rescanQueued = true
+    return
+  }
+  sessionsBusy.value = true
+  sessionsError.value = ''
+  try {
+    sessions.value = await codexApi.listSessions(sessionQuery.value)
+    sessionsLoaded.value = true
+  } catch (e) {
+    sessions.value = []
+    sessionsLoaded.value = false
+    sessionsError.value = errText(e)
+  } finally {
+    sessionsBusy.value = false
+  }
+  // 列表一出来就把全部会话的 token 一次带走：本机实测 67 个 rollout 尾扫 218 ms，
+  // 等展开才取等于把合计量永远藏在水下。不 await，别让数字拖慢首屏的目录名。
+  if (sessionsLoaded.value) void loadSessionTokens(sessions.value.map((s) => s.sessionId))
+  if (rescanQueued) {
+    rescanQueued = false
+    await loadSessions()
+  }
+}
+
+/** 顶栏「刷新」：丢掉 token 缓存再重扫，取数由 loadSessions 的全量预取接手 */
+export async function reloadSessions(): Promise<void> {
+  sessionTokens.value = {}
+  await loadSessions()
+}
+
+/** 按 id 批量取 token，只问缺的那几条。列表已经出来了，所以失败只留空与 console.warn，不播 toast */
+export async function loadSessionTokens(ids: string[]): Promise<void> {
+  const missing = ids.filter((id) => !sessionTokens.value[id])
+  if (!missing.length) return
+  try {
+    const next = { ...sessionTokens.value }
+    for (const r of await codexApi.sessionTokenStats(missing)) next[r.sessionId] = r
+    sessionTokens.value = next
+  } catch (e) {
+    console.warn('会话 token 统计取数失败', e)
+  }
+}
+
+/** desko 回收站：留底清单的一次扫描，口径同会话列表——进档才扫，扫过留在内存 */
+export const trashSessions = ref<CodexTrashedSessionRecord[]>([])
+export const trashLoaded = ref(false)
+export const trashBusy = ref(false)
+export const trashError = ref('')
+
+export async function loadTrash(): Promise<void> {
+  if (trashBusy.value) return
+  trashBusy.value = true
+  trashError.value = ''
+  try {
+    trashSessions.value = await codexApi.listTrash()
+    trashLoaded.value = true
+  } catch (e) {
+    trashSessions.value = []
+    trashLoaded.value = false
+    trashError.value = errText(e)
+  } finally {
+    trashBusy.value = false
+  }
+}
+
+/** 移进回收站。成功后立刻把这条从列表与 token 缓存里摘掉：合计量不能拿着已删的数 */
+export async function moveSessionToTrash(sessionId: string): Promise<string> {
+  const summary = await codexApi.moveToTrash([sessionId])
+  sessions.value = sessions.value.filter((s) => s.sessionId !== sessionId)
+  const next = { ...sessionTokens.value }
+  delete next[sessionId]
+  sessionTokens.value = next
+  trashLoaded.value = false
+  invalidateUsage()
+  return summary.message
+}
+
+/** 恢复：留底这一行当场摘掉，官方目录多了一条要整页重扫才看得见；顺手丢掉 token 缓存 */
+export async function restoreTrashedSession(sessionId: string): Promise<string> {
+  const summary = await codexApi.restoreFromTrash([sessionId])
+  dropTrashRow(sessionId)
+  await reloadSessions()
+  // 文件回到官方目录，图上那一天就多这一笔；彻底删除/清空不动目录，无须标脏
+  invalidateUsage()
+  return summary.message
+}
+
+/** 彻底删除与清空动的都是留底自己，行上当场消失，不必回读目录 */
+export async function deleteTrashedSession(sessionId: string): Promise<string> {
+  const summary = await codexApi.deleteFromTrash([sessionId])
+  dropTrashRow(sessionId)
+  return summary.message
+}
+
+export async function emptySessionTrash(): Promise<string> {
+  const summary = await codexApi.emptyTrash()
+  trashSessions.value = []
+  return summary.message
+}
+
+function dropTrashRow(sessionId: string): void {
+  trashSessions.value = trashSessions.value.filter((t) => t.sessionId !== sessionId)
+}
+
+/**
+ * 账号留底。删除那一步后端早就在写密文快照（`remove_accounts` 先 archive 再剔索引），
+ * 这一族只是把已经在磁盘上的那份读回来——口径同会话留底：进档才扫，扫过留在内存。
+ */
+export const recycledAccounts = ref<CodexRecycledAccount[]>([])
+export const recycledLoaded = ref(false)
+export const recycledBusy = ref(false)
+export const recycledError = ref('')
+
+export async function loadRecycled(): Promise<void> {
+  if (recycledBusy.value) return
+  recycledBusy.value = true
+  recycledError.value = ''
+  try {
+    recycledAccounts.value = await codexApi.listRecycled()
+    recycledLoaded.value = true
+  } catch (e) {
+    recycledAccounts.value = []
+    recycledLoaded.value = false
+    recycledError.value = errText(e)
+  } finally {
+    recycledBusy.value = false
+  }
+}
+
+/** 恢复成功要把账号页重读一遍：那条号已经回到索引里，不重读就是假象 */
+export async function restoreRecycledAccount(recycleId: string): Promise<string> {
+  await codexApi.restoreRecycled(recycleId)
+  dropRecycledRow(recycleId)
+  await refreshAccounts()
+  return '已恢复到账号列表'
+}
+
+export async function deleteRecycledAccount(recycleId: string): Promise<string> {
+  await codexApi.deleteRecycled(recycleId)
+  dropRecycledRow(recycleId)
+  return '已彻底删除这条留底'
+}
+
+/** 清空的范围等于刚看到的那份清单，别处新删的号不在里面 */
+export async function emptyRecycledAccounts(): Promise<string> {
+  const ids = recycledAccounts.value.map((r) => r.id)
+  if (!ids.length) return '账号留底已经是空的'
+  await codexApi.emptyRecycled(ids)
+  recycledAccounts.value = []
+  return `已彻底删除 ${ids.length} 条留底`
+}
+
+function dropRecycledRow(recycleId: string): void {
+  recycledAccounts.value = recycledAccounts.value.filter((r) => r.id !== recycleId)
+}
+
+/**
+ * 批量删除作业。这一族后端没有事件，`get` 是唯一的进度来源，所以只能在 running 时轮询。
+ * jobId 住模块级 store 而不是弹窗里：关窗作业继续跑、切页面回来还接得上。应用重启作业随
+ * 进程一起没了——后端没有「列作业」的命令，不假装能恢复。
+ */
+export const batchDeleteJob = ref<CodexBatchDeleteJobStatus | null>(null)
+export const batchDeleteDialogOpen = ref(false)
+
+/** 后端失败明细只带 accountId，而删成功的号已不在列表里、反查必 miss：开局抄一份 id→邮箱 */
+const batchDeleteEmails = new Map<string, string>()
+
+/** retry_failed 会把上一轮 errors 抹掉，点下去之前先留一份，重试期间明细不至于凭空消失 */
+const batchDeleteErrorsBeforeRetry = ref<CodexBatchDeleteError[]>([])
+
+let deleteTicker: ReturnType<typeof setInterval> | null = null
+const DELETE_POLL_MS = 500
+
+/** 抄不到邮箱（作业不是本 store 起的）就退回 id，至少那一行认得出来是哪条号 */
+export function batchDeleteEmailOf(accountId: string): string {
+  return batchDeleteEmails.get(accountId) ?? accountId
+}
+
+/** 界面展示的失败明细：以后端为准，后端抹掉了才顶一份重试前的快照 */
+export const batchDeleteErrors = computed<CodexBatchDeleteError[]>(() => {
+  const job = batchDeleteJob.value
+  if (!job) return []
+  if (job.errors.length) return job.errors
+  return job.status === 'running' ? batchDeleteErrorsBeforeRetry.value : []
+})
+
+/** 只有 running 值得问：停在 paused 是等用户按继续，终态再问一遍纯属白问 */
+export function syncDeleteTicker(): void {
+  if (batchDeleteJob.value?.status === 'running') {
+    if (!deleteTicker) deleteTicker = setInterval(() => void pollBatchDelete(), DELETE_POLL_MS)
+    return
+  }
+  stopDeleteTicker()
+}
+
+export function stopDeleteTicker(): void {
+  if (deleteTicker) clearInterval(deleteTicker)
+  deleteTicker = null
+}
+
+async function pollBatchDelete(): Promise<void> {
+  const jobId = batchDeleteJob.value?.jobId
+  if (!jobId) {
+    stopDeleteTicker()
+    return
+  }
+  try {
+    applyBatchDeleteJob(await codexApi.getBatchDelete(jobId))
+  } catch {
+    // 读不回就是任务已经没了（clear 过 / 后端重启过），不能挂成永久「删除中」
+    stopDeleteTicker()
+    batchDeleteJob.value = null
+  }
+}
+
+function applyBatchDeleteJob(next: CodexBatchDeleteJobStatus): void {
+  const moved = next.completed !== batchDeleteJob.value?.completed
+  batchDeleteJob.value = next
+  // 每处理一条账号页少一条、回收站多一份留底，不重读就是「进度走了、列表没动」的假象
+  if (moved) void refreshAccounts()
+  recycledLoaded.value = false
+  if (next.status !== 'running') batchDeleteErrorsBeforeRetry.value = []
+  syncDeleteTicker()
+}
+
+/**
+ * 起作业。空选择挡在前面：后端会把它吞成 `status:"completed"` + 空 jobId，
+ * 拿那个空 id 去轮询只会撞上「批量删除任务不存在」。
+ */
+export async function startBatchDelete(ids: string[]): Promise<void> {
+  const targets = ids.map((id) => id.trim()).filter(Boolean)
+  if (!targets.length) return
+  const wanted = new Set(targets)
+  batchDeleteEmails.clear()
+  for (const a of accounts.value) {
+    if (wanted.has(a.id)) batchDeleteEmails.set(a.id, a.email)
+  }
+  batchDeleteErrorsBeforeRetry.value = []
+  try {
+    const job = await codexApi.startBatchDelete(targets)
+    // 后端把空集合吞成 completed + 空 jobId：不轮询、不弹窗，留着也是清不掉的幽灵任务
+    if (!job.jobId) return
+    batchDeleteDialogOpen.value = true
+    applyBatchDeleteJob(job)
+  } catch (e) {
+    useToastStore().showToast(errText(e), 'error')
+  }
+}
+
+async function runBatchDeleteJobOp(
+  op: () => Promise<CodexBatchDeleteJobStatus>,
+): Promise<void> {
+  try {
+    applyBatchDeleteJob(await op())
+  } catch (e) {
+    useToastStore().showToast(errText(e), 'error')
+  }
+}
+
+/** 暂停不是中断：正在跑的那一条会跑完，循环下一轮才看闸，所以文案不写「立即停止」 */
+export async function pauseBatchDelete(): Promise<void> {
+  const jobId = batchDeleteJob.value?.jobId
+  if (!jobId) return
+  await runBatchDeleteJobOp(() => codexApi.pauseBatchDelete(jobId))
+}
+
+/** 后端对 running/终态的任务是原样返回、不报错，所以这里不用防重复点 */
+export async function resumeBatchDelete(): Promise<void> {
+  const jobId = batchDeleteJob.value?.jobId
+  if (!jobId) return
+  await runBatchDeleteJobOp(() => codexApi.resumeBatchDelete(jobId))
+}
+
+export async function retryFailedBatchDelete(): Promise<void> {
+  const job = batchDeleteJob.value
+  if (!job?.jobId) return
+  batchDeleteErrorsBeforeRetry.value = job.errors
+  await runBatchDeleteJobOp(() => codexApi.retryFailedBatchDelete(job.jobId))
+}
+
+/** 收窗不等于收作业：只有终态才把 jobId 与盘快照一起清掉，dock 上那条入口随之消失 */
+export async function closeBatchDeleteDialog(): Promise<void> {
+  batchDeleteDialogOpen.value = false
+  const status = batchDeleteJob.value?.status
+  if (status === 'completed' || status === 'failed') await clearBatchDeleteJob()
+}
+
+/** 删除作业没有 cancel，暂停中的任务只能放弃；已删掉的那几条不会回来，它们在回收站里 */
+export async function abandonBatchDelete(): Promise<string> {
+  await clearBatchDeleteJob()
+  return '已放弃这个删除任务，删掉的账号在回收站里可以还原'
+}
+
+async function clearBatchDeleteJob(): Promise<void> {
+  const jobId = batchDeleteJob.value?.jobId
+  stopDeleteTicker()
+  batchDeleteJob.value = null
+  batchDeleteEmails.clear()
+  batchDeleteErrorsBeforeRetry.value = []
+  if (!jobId) return
+  try {
+    await codexApi.clearBatchDelete(jobId)
+  } catch {
+    // 清不掉也不能把入口卡在界面上：这一路只剩「任务已经不存在」
+  }
+}
+
+/**
+ * 用量图。图的数据来自官方 rollout 里逐轮累计快照的差值，
+ * 与「会话」档每条会话的合计同账；后端按 (len, mtime) 缓存事件，切窗口只重算不重扫。
+ */
+export const usageRange = ref<UsageRange>('month')
+export const usageReport = ref<CodexSessionUsageReport | null>(null)
+export const usageBusy = ref(false)
+export const usageError = ref('')
+
+export type UsageRange = 'week' | 'month' | 'all'
+
+const RANGE_DAYS: Record<Exclude<UsageRange, 'all'>, number> = { week: 7, month: 30 }
+
+/** 窗口起点取「N 天前的本地零点」，柱状也是本地日，两者错位会让最后一天看起来少半截 */
+function usageWindowFrom(range: UsageRange): number | null {
+  if (range === 'all') return null
+  const days = RANGE_DAYS[range]
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  return Math.floor(start.getTime() / 1000) - days * 86_400
+}
+
+export async function loadUsage(): Promise<void> {
+  if (usageBusy.value) return
+  usageBusy.value = true
+  usageError.value = ''
+  try {
+    usageReport.value = await codexApi.querySessionUsage(usageWindowFrom(usageRange.value), null)
+  } catch (e) {
+    usageError.value = errText(e)
+  } finally {
+    usageBusy.value = false
+  }
+}
+
+/** 切窗口只换过滤条件：后端的事件缓存还在，不该重读那几百 MB */
+export async function setUsageRange(range: UsageRange): Promise<void> {
+  if (usageRange.value === range) return
+  usageRange.value = range
+  await loadUsage()
+}
+
+/** 会话被移走或恢复，官方目录少了一份或多一份文件，图的账随之变；标脏后下次进档重扫 */
+export function invalidateUsage(): void {
+  usageReport.value = null
+}
+

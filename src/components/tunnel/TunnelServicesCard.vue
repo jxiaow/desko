@@ -71,7 +71,7 @@ function remove(row: TunnelServiceRow) {
   // 删本地这条不会收回公网记录：这句话必须说，否则用户以为地址一起没了
   confirmStore.showConfirm(
     '移除这条服务',
-    `移除后 desko 不再把 ${row.hostname} 指向本机，但那条 DNS 记录还在 Cloudflare 上，地址仍会解析到这里。`,
+    `移除后 Desko 不再把 ${row.hostname} 指向本机，但那条 DNS 记录还在 Cloudflare 上，地址仍会解析到这里。`,
     () => void run(() => tunnelApi.removeService(row.id), () => '已移除这条服务'),
   )
 }
@@ -94,28 +94,23 @@ function remove(row: TunnelServiceRow) {
     </div>
 
     <div v-for="s in services" :key="s.id" class="tn-row svc-row">
-      <div class="svc">
-        <div class="svc-l1">
-          <span class="svc-name ellipsis">{{ s.label }}</span>
-          <span class="svc-host mono ellipsis" :title="`https://${s.hostname}`">{{ s.hostname }}</span>
-        </div>
-        <div class="svc-l2">
-          <code class="mono">127.0.0.1:{{ s.port }}</code>
-          <span v-if="!s.routed" class="badge warn">子域没指过来</span>
-          <span v-if="!s.listening" class="badge warn">目标端口没在听</span>
-          <span v-else class="badge">本机正在监听</span>
-          <span v-if="s.preset === 'fileshare'" class="badge own">desko 的服务</span>
-          <!-- 有口令且只读是安全默认态，不占徽标；只把要留意的那两件事说出口 -->
-          <span v-if="s.preset === 'fileshare' && !s.hasPublicPassword" class="badge warn">公网没设口令</span>
-          <span v-else-if="s.preset === 'fileshare' && !s.publicReadOnly" class="badge warn">公网可上传</span>
-        </div>
-      </div>
+      <span class="svc-name ellipsis">{{ s.label }}</span>
+      <span
+        class="svc-host mono ellipsis"
+        :title="`https://${s.hostname} → 127.0.0.1:${s.port}`"
+      >{{ s.hostname }} <i aria-hidden="true">→</i> 127.0.0.1:{{ s.port }}</span>
+      <!-- 徽标只报要留意的事：「本机正在监听」是没事，不占位 -->
+      <span v-if="!s.routed" class="badge warn">子域没指过来</span>
+      <span v-if="!s.listening" class="badge warn">目标端口没在听</span>
+      <span v-if="s.preset === 'fileshare' && !s.hasPublicPassword" class="badge warn">公网没设口令</span>
+      <span v-else-if="s.preset === 'fileshare' && !s.publicReadOnly" class="badge warn">公网可上传</span>
+      <span v-if="s.preset === 'fileshare'" class="badge own">Desko 的服务</span>
       <div class="acts">
-        <button class="action-btn ghost" type="button" title="复制公网地址" @click="copyHost(s)">
-          <AppIcon name="copy" :size="12" />
+        <button class="ib" type="button" title="复制公网地址" @click="copyHost(s)">
+          <AppIcon name="copy" :size="13" />
         </button>
-        <button class="action-btn ghost" type="button" title="这条服务的动作" @click="openMenu(s, $event)">
-          <AppIcon name="dots" :size="13" />
+        <button class="ib" type="button" title="这条服务的动作" @click="openMenu(s, $event)">
+          <AppIcon name="dots" :size="14" />
         </button>
       </div>
     </div>
@@ -164,7 +159,7 @@ function remove(row: TunnelServiceRow) {
 <style scoped>
 /* --font-mono 由页面在 .content-inner 上覆盖，变量能穿过组件边界 */
 .mono { font-family: var(--font-mono); }
-.head-cnt { margin-left: 8px; font-size: var(--text-xs); color: var(--text-muted) }
+.head-cnt { font-size: var(--text-xs); font-weight: 400; color: var(--text-faint) }
 .head-btn { margin-left: auto }
 .row-btn { margin-left: auto; flex-shrink: 0 }
 
@@ -173,33 +168,25 @@ function remove(row: TunnelServiceRow) {
   align-items: center;
   gap: 8px;
   height: 44px;
-  padding: 0 16px;
+  padding: 0 14px;
   font-size: var(--text-sm);
   color: var(--accent);
   cursor: pointer;
+  border-top: 1px solid var(--border);
 }
 .tn-add:hover { background: var(--hover) }
 .tn-add.dim { color: var(--text-muted) }
 
-/* 56px 两行：上行名字 + 子域，下行本机端口 + 事实徽标 */
-.svc-row { height: 56px }
-.svc { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px }
-.svc-l1 { display: flex; align-items: baseline; gap: 10px; min-width: 0 }
-.svc-name { font-size: var(--text-base); font-weight: 600; color: var(--text) }
-.svc-host { font-size: var(--text-xs); color: var(--text-muted) }
-.svc-l2 { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--text-xs); color: var(--text-muted) }
-.svc-l2 code { font-size: var(--text-xs); color: var(--text-muted) }
-.badge {
-  flex-shrink: 0;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--text-muted);
+/* 单行 44：名字 + 等宽「子域 → 本机端口」一条链 + 事实徽标 + 动作 */
+.svc-name {
+  flex: none;
+  max-width: 30%;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text);
 }
-.badge.warn { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 32%, transparent); color: var(--warning) }
-.badge.own { background: var(--accent-soft); border-color: transparent; color: var(--accent) }
+.svc-host { flex: 1; min-width: 0; font-size: var(--text-xs); font-weight: 400; color: var(--text-url) }
+.svc-host i { font-style: normal; color: var(--text-faint); padding: 0 2px }
 
 .acts { display: flex; gap: 2px; flex-shrink: 0; margin-left: auto }
-.foot-row { border-top: 1px solid var(--border) }
 </style>

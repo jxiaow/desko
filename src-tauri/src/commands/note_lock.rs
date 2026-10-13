@@ -143,7 +143,7 @@ pub(crate) fn build_domain(
     let mut plains: Vec<NotePlain> = Vec::with_capacity(rows.len());
     for (id, lock) in rows {
         let dek = open_wrap(&lock.wrap_master, &crypto::note_wrap_key(master_key, id)).map_err(|_| {
-            AppError::Database(format!("小记 {} 的旧封条解不开，先解除它的加密再设口令", id))
+            AppError::Database(format!("小记 {} 无法解密，先解除它的加密再设口令", id))
         })?;
         let html = read_cipher(lock, &dek)?;
         // 改封顺手补上露出标题：旧模型锁着的时候标题被清了，现在能从明文重新认出来

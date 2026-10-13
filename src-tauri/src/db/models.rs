@@ -210,6 +210,12 @@ pub struct BypassTarget {
     /// 钉住的真址已不在 DoH 当前答案里，且指定它探活也失败
     pub stale: bool,
     pub note: String,
+    /// 真址带 CNAME 或多 A 轮换，钉死会锁在会失效的节点上
+    pub cdn_like: bool,
+    /// 最近一次落盘结果：none / applied / failed
+    pub apply_state: String,
+    /// 落盘批次 id，撤销靠它找回回滚点
+    pub apply_batch: String,
     pub created_at: i64,
     pub updated_at: i64,
     pub checked_at: i64,

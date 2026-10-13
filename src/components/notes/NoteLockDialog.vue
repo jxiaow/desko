@@ -69,37 +69,38 @@ useEscapeClose(() => emit('close'))
         </button>
       </div>
       <div class="dialog-body" @keyup.enter="submit">
-        <p v-if="props.mode === 'setup'" class="lock-tip">
-          全库共用这一把口令，设一次就好：以后加密不再逐条问，解锁也是一次开全部。忘了可用主密码兜底。
+        <p v-if="props.mode === 'setup'" class="lead">
+          小记全库共用一把口令。加密和解锁都只输这一把，忘了可用主密码找回。
         </p>
-        <p v-else-if="props.mode === 'change'" class="lock-tip">
-          换口令只改域密钥的封条，小记密文一条都不用动。
+        <p v-else-if="props.mode === 'change'" class="lead">
+          改口令不影响已加密的小记，旧口令立即失效。
         </p>
+        <p v-else class="lead">输错不计数，不会锁定窗口。</p>
 
         <div class="form-group">
           <label>{{ props.mode === 'unlock' ? '小记口令' : '新口令' }}</label>
           <input
             v-model="pw"
             type="password"
-            :placeholder="props.mode === 'unlock' ? '当初设的那把小记口令' : `至少 ${MIN_LEN} 位，建议长短语`"
+            :placeholder="props.mode === 'unlock' ? '输入口令' : `至少 ${MIN_LEN} 位，可用一句短语`"
             autocomplete="off"
           />
         </div>
         <div v-if="needsConfirm" class="form-group">
-          <label>确认口令</label>
+          <label>确认新口令</label>
           <input v-model="pw2" type="password" placeholder="再次输入" autocomplete="off" />
         </div>
-        <p v-if="needsConfirm && pw2 && pw !== pw2" class="lock-error">两次口令不一致</p>
+        <p v-if="needsConfirm && pw2 && pw !== pw2" class="dialog-err">两次口令不一致</p>
 
         <button v-if="props.mode === 'unlock'" class="link-btn" type="button" @click="recover">
-          忘了口令？用主密码解开
+          忘了口令？用主密码找回
         </button>
-        <p v-if="err" class="lock-error">{{ err }}</p>
+        <p v-if="err" class="dialog-err">{{ err }}</p>
       </div>
       <div class="dialog-footer">
         <button class="btn-secondary" type="button" @click="emit('close')">取消</button>
         <button class="btn-primary" type="button" :disabled="!canSubmit" @click="submit">
-          {{ props.mode === 'unlock' ? '解锁' : props.mode === 'setup' ? '设好口令' : '改好口令' }}
+          {{ props.mode === 'unlock' ? '解锁' : props.mode === 'setup' ? '设置口令' : '修改口令' }}
         </button>
       </div>
     </div>
@@ -108,7 +109,6 @@ useEscapeClose(() => emit('close'))
 
 <style scoped>
 .note-lock-dialog { width: 380px; }
-.lock-tip { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-3); }
 .link-btn {
   border: none;
   background: none;
@@ -120,5 +120,4 @@ useEscapeClose(() => emit('close'))
   font-family: inherit;
 }
 .link-btn:hover { text-decoration: underline; }
-.lock-error { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--danger); }
 </style>

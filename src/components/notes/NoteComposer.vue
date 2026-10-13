@@ -89,13 +89,20 @@ const discard = () => {
 </template>
 
 <style scoped>
+/* 安静态（空 + 失焦）是一枚灰底 inset pill，无描边无阴影——与搜索框同一 dialect。
+   聚焦或有草稿时 .open 升回白卡，把「唯一书写面」抬起来。 */
 .composer {
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
-  transition: all var(--transition);
+  box-shadow: none;
+  transition: background-color var(--transition), border-color var(--transition), box-shadow var(--transition);
   margin-bottom: var(--space-5);
+}
+.composer.open {
+  background: var(--panel-bg);
+  border-color: var(--border);
+  box-shadow: var(--shadow-xs);
 }
 /* 焦点态：容器描边转主色 + 3px 光圈，指明当前唯一的书写面 */
 .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }

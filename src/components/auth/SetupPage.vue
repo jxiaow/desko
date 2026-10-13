@@ -17,7 +17,7 @@ const doSetup = async () => {
     return
   }
   if (setupPwd.value !== setupPwd2.value) {
-    setupErr.value = '两次输入的密码不一致'
+    setupErr.value = '两次输入的主密码不一致'
     return
   }
   try {
@@ -41,7 +41,7 @@ const doSetup = async () => {
         class="auth-input"
         type="password"
         v-model="setupPwd"
-        placeholder="主密码（至少6位）"
+        placeholder="主密码（至少 6 位）"
         autofocus
       />
       <input
@@ -53,8 +53,8 @@ const doSetup = async () => {
         @keyup.enter="doSetup"
       />
       <p v-if="setupErr" class="auth-error">{{ setupErr }}</p>
-      <button class="auth-btn" @click="doSetup">确 定</button>
-      <p class="auth-tip">主密码用于加密所有保存的密码，请牢记！忘记密码将无法恢复数据。</p>
+      <button class="auth-btn" @click="doSetup">确定</button>
+      <p class="auth-tip">主密码加密本机保存的全部数据，遗失后无法恢复。</p>
     </div>
   </div>
 </template>

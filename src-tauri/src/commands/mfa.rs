@@ -55,7 +55,7 @@ pub fn mfa_read_image(path: String) -> Result<String, AppError> {
     }
     let meta = std::fs::metadata(&path)?;
     if meta.len() > MAX_BYTES {
-        return Err(AppError::Backup("图片超过 15 MB，先截个小点的图".to_string()));
+        return Err(AppError::Backup("图片超过 15 MB，请改用较小的截图".to_string()));
     }
     use base64::Engine;
     Ok(base64::engine::general_purpose::STANDARD.encode(std::fs::read(&path)?))

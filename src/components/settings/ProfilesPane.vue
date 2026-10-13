@@ -107,14 +107,14 @@ const doSwitch = (p: Profile) => {
 
 <template>
   <div class="profiles-pane">
-    <p class="intro">每个档案是一套独立的工作环境：收藏、小记、文件与云同步各自分开，互不混用。切换档案会重启应用。</p>
+    <p class="pane-hint">每个档案是一套独立的工作环境：收藏、小记、文件与云同步各自分开，互不混用。切换档案会重启应用。</p>
 
     <div class="plist">
       <div v-for="p in profiles" :key="p.id" class="prow">
         <div class="pinfo">
           <div class="pname-line">
             <span class="pname">{{ p.name }}</span>
-            <span v-if="p.isActive" class="badge">使用中</span>
+            <span v-if="p.isActive" class="badge own">使用中</span>
           </div>
           <div class="pns">云目录 <code>{{ p.cloudBase }}</code></div>
         </div>
@@ -158,7 +158,7 @@ const doSwitch = (p: Profile) => {
           <div class="dialog-header">
             <h3>{{ dlg.mode === 'create' ? '新建档案' : '重命名档案' }}</h3>
             <button class="dialog-close" title="关闭" @click="closeDlg">
-              <AppIcon name="x" :size="18" />
+              <AppIcon name="x" :size="16" />
             </button>
           </div>
           <div class="dialog-body">
@@ -169,9 +169,9 @@ const doSwitch = (p: Profile) => {
             <div v-if="dlg.mode === 'create'" class="form-group">
               <label>云命名空间<span class="field-opt">选填</span></label>
               <input v-model="dlg.ns" type="text" placeholder="留空则自动生成" maxlength="32" @keyup.enter="submitDlg" />
-              <p class="modal-help">用于区分各档案在云端的同步目录，建档后不可修改。仅小写字母、数字、连字符。</p>
+              <p class="lead">用于区分各档案在云端的同步目录，建档后不可修改。仅小写字母、数字、连字符。</p>
             </div>
-            <p v-if="dlgErr" class="modal-error">{{ dlgErr }}</p>
+            <p v-if="dlgErr" class="dialog-err">{{ dlgErr }}</p>
           </div>
           <div class="dialog-footer">
             <button class="btn-secondary" @click="closeDlg">取消</button>
@@ -199,27 +199,17 @@ const doSwitch = (p: Profile) => {
   flex-direction: column;
   gap: var(--space-3);
 }
-.intro {
-  margin: 0;
-  font-size: var(--text-xs);
-  line-height: 1.6;
-  color: var(--text-secondary);
-}
 
-/* 行列表：沿用 group-content 那套 56 行 + 发丝描边 */
-.plist {
-  background: var(--sunken);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
+/* 行列表：与 .setting-item 同一档——纸面直排、44px 行、通内容宽发丝线。
+   原先这里另抄了一份 56px 凹槽卡，和设置页其他页签不是一套。 */
 .prow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  min-height: 56px;
-  padding: 10px var(--space-4);
+  min-height: 44px;
+  padding: 8px var(--space-2);
+  margin: 0 calc(var(--space-2) * -1);
   border-bottom: 1px solid var(--border);
 }
 .pinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -231,15 +221,6 @@ const doSwitch = (p: Profile) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.badge {
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent-light);
 }
 .pns {
   font-size: var(--text-xs);
@@ -261,17 +242,19 @@ const doSwitch = (p: Profile) => {
 }
 .pacts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-/* 底部通栏新建行 */
+/* 底部通栏新建行：与行同宽同负边距，hover 填充才对得上上面的发丝线 */
 .add-row {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  width: 100%;
+  width: calc(100% + var(--space-4));
   min-height: 44px;
   padding: 10px;
-  background: transparent;
+  margin: 0 calc(var(--space-2) * -1);
   border: none;
+  border-radius: var(--radius-tag);
+  background: transparent;
   font-family: inherit;
   font-size: var(--text-sm);
   color: var(--text-secondary);
@@ -286,14 +269,6 @@ const doSwitch = (p: Profile) => {
 
 /* 叠在设置弹窗之上：同为 fixed z-1000，靠 z-index 抬一层压上主壳 */
 .pane-overlay { z-index: 1100; }
-.dialog-sm { width: 420px; }
-.modal-help {
-  margin: 6px 0 0;
-  font-size: var(--text-xs);
-  line-height: 1.6;
-  color: var(--text-muted);
-}
-.modal-error { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--danger); }
 
 /* 切换遮罩：盖住整块面板，随进程消失 */
 .switch-guard {

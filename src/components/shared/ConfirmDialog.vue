@@ -23,7 +23,7 @@ useEscapeClose(() => emit('cancel'), () => props.dialog.show)
       <div class="dialog-header">
         <h3>{{ dialog.title }}</h3>
         <button  class="dialog-close" @click="emit('cancel')" title="关闭">
-          <AppIcon name="x" :size="18" />
+          <AppIcon name="x" :size="16" />
         </button>
       </div>
       <div class="dialog-body">

@@ -71,9 +71,9 @@ onMounted(() => pathRef.value?.focus())
   <Transition name="dialog">
     <div class="dialog-overlay paths-overlay">
       <div class="dialog paths-dialog" role="dialog" aria-modal="true" :aria-label="`子路径管理：${entryName}`">
-        <div class="dialog-header paths-head">
+        <div class="dialog-header">
           <h3>子路径</h3>
-          <span class="paths-count">{{ headCount }}</span>
+          <span class="sub">{{ headCount }}</span>
           <button class="dialog-close" type="button" title="关闭 (Esc)" @click="emit('close')">
             <AppIcon name="x" :size="16" />
           </button>
@@ -125,19 +125,13 @@ onMounted(() => pathRef.value?.focus())
   -webkit-backdrop-filter: blur(6px);
 }
 
+/* 壳（宽高/描边/投影/头 44/底栏）全在 global.css，这里只留本页独有的列表行 */
 .paths-dialog {
   width: 520px;
   max-height: 91vh;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-pop);
 }
 
-.paths-head { gap: var(--space-2) }
-.paths-head h3 { font-size: var(--text-base) }
-.paths-count { font-size: var(--text-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums }
-.paths-head .dialog-close { margin-left: auto }
-
-.paths-body { padding: 10px 20px 12px; max-height: 46vh; overflow-y: auto; scrollbar-gutter: stable }
+.paths-body { max-height: 46vh }
 
 .path-row {
   display: flex; align-items: center; gap: 8px;
@@ -163,14 +157,13 @@ onMounted(() => pathRef.value?.focus())
 
 .path-add { min-height: 44px; padding: 4px 2px; border-bottom: none }
 .path-add input {
-  height: 30px; padding: 0 9px; font-size: var(--text-sm);
-  background: var(--panel-bg); color: var(--text);
+  height: 32px; padding: 0 11px; font-size: var(--text-sm);
+  background: var(--bg); color: var(--text);
   border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none;
+  transition: all var(--transition); font-family: inherit;
 }
 .path-add .add-label { flex: 0 0 96px; min-width: 96px }
 .path-add .add-path { flex: 1; min-width: 0 }
-.path-add input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring) }
+.path-add input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--panel-bg) }
 .url-mono { font-family: var(--font-mono) }
-/* 行内「添加」跟 30px 输入同档，不吃全局 36px 按钮 */
-.path-add .btn-primary { height: 28px; padding: 0 var(--space-3); font-size: var(--text-sm) }
 </style>

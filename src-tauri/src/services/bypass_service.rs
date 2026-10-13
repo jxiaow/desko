@@ -3,12 +3,12 @@
 //! 提权 helper 里。设计依据见 docs/design/bypass/01-bypass-module.md。
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
-const HOSTS_BEGIN: &str = "# BEGIN TUN-BYPASS-MANAGED";
-const HOSTS_END: &str = "# END TUN-BYPASS-MANAGED";
+// 托管区的解析规则与 netguard helper 共用一份：两边对块的认知必须逐字一致
+pub use netguard_core::{in_fake_ip, read_pinned, usable_v4};
+
 const DOH_ENDPOINTS: [&str; 2] = ["https://dns.alidns.com/resolve", "https://dns.google/resolve"];
 /// 一轮探测的总预算：DoH 两腿最坏 30s，剩下的全给候选探活与 stale 复核；
 /// 超预算就带着已有结论收口，不把 busy 锁在分钟级。
@@ -96,97 +96,6 @@ pub struct ProbeReport {
     pub headline: String,
     pub detail: String,
     pub pending: Vec<String>,
-}
-
-fn usable_v4(ip: IpAddr) -> bool {
-    let IpAddr::V4(v4) = ip else { return false };
-    let [a, b, ..] = v4.octets();
-    if a == 0 || a == 127 || a >= 224 {
-        return false;
-    }
-    if a == 169 && b == 254 {
-        return false;
-    }
-    !in_fake_ip(v4)
-}
-
-/// RFC 2544 基准段，各家 TUN 代理做 fake-IP 的共同选择——接管方靠它探，不点名软件
-fn in_fake_ip(v4: Ipv4Addr) -> bool {
-    let [a, b, ..] = v4.octets();
-    a == 198 && (b == 18 || b == 19)
-}
-
-fn hosts_path() -> std::path::PathBuf {
-    let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
-    std::path::Path::new(&root)
-        .join("System32")
-        .join("drivers")
-        .join("etc")
-        .join("hosts")
-}
-
-/// 读 hosts 管理区。必须在解析之前读：`getaddrinfo` 会读到我们自己钉的值，
-/// 不先分开就会把「已接管」误判成「直连可用」。
-/// 文件读不了≠没钉过：只有「文件本就不存在」才回空表，I/O 错误必须报错，
-/// 否则会拿着「未钉」的假设去判一个其实被接管的目标。
-pub fn read_pinned() -> Result<BTreeMap<String, String>, String> {
-    let bytes = match std::fs::read(hosts_path()) {
-        Ok(b) => b,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
-        Err(e) => return Err(format!("hosts 文件读取失败：{e}")),
-    };
-    // 一行 GBK 注释不该废掉整轮探测：按 lossy 解，管理区标记都是 ASCII，不受编码影响
-    let text = String::from_utf8_lossy(&bytes);
-    parse_hosts_managed(&text)
-}
-
-/// 管理区标记块解析（纯函数，供单测直灌文本）。嵌套、两个块、不配对一律报错，不猜。
-fn parse_hosts_managed(text: &str) -> Result<BTreeMap<String, String>, String> {
-    let mut pinned = BTreeMap::new();
-    let mut inside = false;
-    let mut opened = false;
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed == HOSTS_BEGIN {
-            // 第二次 BEGIN：要么是第二个块，要么是嵌套，两种都不该出现
-            if opened {
-                return Err("hosts 中的直连管理区标记出现多次".to_string());
-            }
-            inside = true;
-            opened = true;
-            continue;
-        }
-        if trimmed == HOSTS_END {
-            if !inside {
-                return Err("hosts 中的直连管理区缺少起始标记".to_string());
-            }
-            inside = false;
-            continue;
-        }
-        if !inside {
-            continue;
-        }
-        let content = trimmed.split('#').next().unwrap_or("").trim();
-        if content.is_empty() {
-            continue;
-        }
-        let mut parts = content.split_whitespace();
-        let Some(ip) = parts.next() else { continue };
-        let names: Vec<&str> = parts.collect();
-        if names.is_empty() {
-            continue;
-        }
-        if ip.parse::<IpAddr>().map(|v| !usable_v4(v)).unwrap_or(true) {
-            continue;
-        }
-        for name in names {
-            pinned.insert(name.to_lowercase(), ip.to_string());
-        }
-    }
-    if inside {
-        return Err("hosts 中的直连管理区标记不完整".to_string());
-    }
-    Ok(pinned)
 }
 
 fn local_resolve(host: &str, port: u16) -> Vec<IpAddr> {
@@ -865,23 +774,5 @@ mod tests {
         assert_eq!(decide(none, Some(&eg(false)), false, "cidr", None), Verdict::DirectOk);
         assert_eq!(decide(none, Some(&eg(true)), false, "cidr", None), Verdict::NeedRoute);
         assert_eq!(decide(none, None, false, "cidr", None), Verdict::EgressUnknown);
-    }
-
-    #[test]
-    fn hosts_marker_state_machine() {
-        let ok = "# comment\n127.0.0.1 localhost\n# BEGIN TUN-BYPASS-MANAGED\n172.30.2.109 a.test\n# END TUN-BYPASS-MANAGED\n";
-        let p = parse_hosts_managed(ok).unwrap();
-        assert_eq!(p.get("a.test").unwrap(), "172.30.2.109");
-
-        // 嵌套
-        assert!(parse_hosts_managed("# BEGIN TUN-BYPASS-MANAGED\n# BEGIN TUN-BYPASS-MANAGED\n# END TUN-BYPASS-MANAGED\n").is_err());
-        // 两个完整块（收编旧脚本产物的前提是一眼能看见全部账）
-        assert!(parse_hosts_managed(&format!("{ok}{ok}")).is_err());
-        // 有 END 无 BEGIN
-        assert!(parse_hosts_managed("# END TUN-BYPASS-MANAGED\n").is_err());
-        // 有 BEGIN 无 END
-        assert!(parse_hosts_managed("# BEGIN TUN-BYPASS-MANAGED\n1.2.3.4 a.test\n").is_err());
-        // 管理区外的一行不碍事
-        assert!(parse_hosts_managed("1.2.3.4 stray.test\n").unwrap().is_empty());
     }
 }

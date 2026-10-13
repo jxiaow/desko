@@ -33,7 +33,7 @@ test.describe('Notes 小记', () => {
   test('进入 /notes 自动拉取并渲染 seed 小记', async ({ page }) => {
     await gotoNotes(page)
     await expect(page.locator('.memo')).toHaveCount(3)
-    await expect(page.locator('.bar-count')).toHaveText('3 / 3 条')
+    await expect(page.locator('.titlebar-count')).toHaveText('3 条')
     expect(await e2e.count(page, 'list_notes')).toBe(1)
     // 窄栏默认收起，列表占满宽度
     await expect(page.locator('.rail')).toHaveCount(0)
@@ -81,7 +81,7 @@ test.describe('Notes 小记', () => {
 
     await expect(page.locator('.memo')).toHaveCount(4)
     await expect(memo(page, 'E2E 发布测试内容')).toBeVisible()
-    await expect(page.locator('.bar-count')).toHaveText('4 / 4 条')
+    await expect(page.locator('.titlebar-count')).toHaveText('4 条')
     expect(await e2e.count(page, 'create_note')).toBe(1)
     const created = (await e2e.snapshot(page)).notes.find((n: any) => n.title.startsWith('E2E 发布测试'))
     expect(created).toBeTruthy()
@@ -271,7 +271,7 @@ test.describe('Notes 小记', () => {
     const search = page.locator('.page-bar .search-box input')
     await search.fill('采购')
     await expect(page.locator('.memo')).toHaveCount(1)
-    await expect(page.locator('.bar-count')).toHaveText('1 / 3 条')
+    await expect(page.locator('.titlebar-count')).toHaveText('1 / 3 条')
     await page.locator('button[title="清空搜索"]').click()
     await expect(page.locator('.memo')).toHaveCount(3)
 
@@ -303,7 +303,7 @@ test.describe('Notes 小记', () => {
 
     await page.locator('button.dock-btn:text-is("删除")').click()
     const confirm = page.locator('.confirm-dialog')
-    await expect(confirm.locator('.dialog-body p')).toHaveText('确定删除选中的 2 条小记吗？')
+    await expect(confirm.locator('.dialog-body p')).toHaveText('2 条小记将被删除，此操作不可撤销。')
     await confirm.locator('button.btn-danger').click()
     await expectToast(page, '已删除 2 条小记')
     await expect(page.locator('.memo')).toHaveCount(1)
@@ -465,7 +465,7 @@ test.describe('Notes 小记', () => {
     await expect(dialog.locator('input[type="password"]')).toHaveCount(1)
     await dialog.locator('input[type="password"]').fill('错的口令')
     await dialog.locator('button.btn-primary').click()
-    await expect(dialog.locator('.lock-error')).toContainText('密码错误')
+    await expect(dialog.locator('.dialog-err')).toContainText('密码错误')
     await dialog.locator('input[type="password"]').fill(NOTE_PASS)
     await dialog.locator('button.btn-primary').click()
     await expect(dialog).toHaveCount(0)
@@ -508,7 +508,7 @@ test.describe('Notes 小记', () => {
     await expect(key).toHaveAttribute('aria-label', '解锁加密小记')
     await key.locator('input[type="password"]').fill('错位的口令')
     await key.locator('button.btn-primary').click()
-    await expect(key.locator('.lock-error')).toContainText('密码错误')
+    await expect(key.locator('.dialog-err')).toContainText('密码错误')
 
     // 解锁成功不返回设置页，而是直接续上改密格：两格输入
     await key.locator('input[type="password"]').fill(NOTE_PASS)
@@ -521,7 +521,7 @@ test.describe('Notes 小记', () => {
     await expect(key.locator('button.btn-primary')).toBeDisabled()
     await key.locator('input[type="password"]').first().fill(NEW_PASS)
     await key.locator('input[type="password"]').nth(1).fill('another-key-9')
-    await expect(key.locator('.lock-error')).toContainText('两次口令不一致')
+    await expect(key.locator('.dialog-err')).toContainText('两次口令不一致')
     await key.locator('input[type="password"]').nth(1).fill(NEW_PASS)
     await key.locator('button.btn-primary').click()
     await expectToast(page, '小记口令已修改')
@@ -539,7 +539,7 @@ test.describe('Notes 小记', () => {
     await expect(key).toBeVisible()
     await key.locator('input[type="password"]').fill(NOTE_PASS)
     await key.locator('button.btn-primary').click()
-    await expect(key.locator('.lock-error')).toContainText('密码错误')
+    await expect(key.locator('.dialog-err')).toContainText('密码错误')
     await key.locator('input[type="password"]').fill(NEW_PASS)
     await key.locator('button.btn-primary').click()
     await expect(key).toHaveCount(0)
@@ -666,9 +666,9 @@ test.describe('Notes 小记', () => {
     const pill = page.locator('.memo .tag-pill').first()
     await expect(pill).toHaveText('#产品')
     await pill.click()
-    await expect(page.locator('.bar-count')).toHaveText('1 / 3 条')
+    await expect(page.locator('.titlebar-count')).toHaveText('1 / 3 条')
     await expect(pill).toHaveClass(/on/)
     await pill.click()
-    await expect(page.locator('.bar-count')).toHaveText('3 / 3 条')
+    await expect(page.locator('.titlebar-count')).toHaveText('3 条')
   })
 })

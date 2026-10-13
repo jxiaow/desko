@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watchEffect } from 'vue'
 import {
   bypassApi,
+  inApplyBatch,
+  needsApply,
   VERDICT_LABEL,
+  type ApplyOutcome,
+  type ApplyPlan,
   type BypassStatus,
   type BypassTarget,
   type ProbeReport,
@@ -14,6 +18,7 @@ import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
+import { usePageHeadStore } from '../../stores/pageHead'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
@@ -84,6 +89,7 @@ async function loadStatus() {
 onMounted(async () => {
   loadTargets()
   loadStatus()
+  loadRollback()
 })
 
 /* 探测只出结论，不写库：加入清单是弹窗里的下一步，先看清判定 */
@@ -157,8 +163,208 @@ function toggleRow(t: BypassTarget) {
   draftInput.value = t.input || t.host
 }
 
+/* ---------- 落盘：判定已在清单里，写系统攒成一批、共用一次 UAC ---------- */
+const plan = ref<ApplyPlan | null>(null)
+const planOpen = ref(false)
+const busyApply = ref(false)
+/** helper 起来到用户答完 UAC 之间没有进度可报，只能明说在等授权 */
+const awaitingAuth = ref(false)
+const applyResult = ref<ApplyOutcome | null>(null)
+/** 有回滚点的那一批；空 = 没有可撤销的写入 */
+const rollbackBatch = ref('')
+/** 用户在确认弹窗里坚持要钉的 CDN 条目；改了要向后端重算一次账 */
+const allowCdn = ref<string[]>([])
+
+const pendingCount = computed(() => targets.value.filter(needsApply).length)
+/** 真会进批次的那部分：CDN 轮换的默认不钉，所以按钮不能念「待写入」那个更大的数 */
+const batchCount = computed(() => targets.value.filter(inApplyBatch).length)
+
+const resultSummary = computed(() => {
+  const items = applyResult.value?.items ?? []
+  return {
+    ok: items.filter((i) => i.ok && i.changed).length,
+    skip: items.filter((i) => i.ok && !i.changed).length,
+    bad: items.filter((i) => !i.ok).length,
+  }
+})
+
+const opLabel = (op: string) => (op === 'pin' ? 'hosts 固定' : '系统路由')
+
+/** 回滚自己没成时写进去的东西还在原地，批次留着让人再撤；回滚成了这些行就不算写过 */
+const rolledBackClean = computed(
+  () => !!applyResult.value?.rolledBack && !applyResult.value.error,
+)
+
+function rowLabelOf(id: string) {
+  const t = targets.value.find((x) => x.id === id)
+  return t ? hostOf(t) : id
+}
+
+/** 确认弹窗里哪一条带 CDN 轮换特征：只有这一种行给「仍要固定」的勾选位 */
+function isCdnRow(id: string) {
+  return !!targets.value.find((x) => x.id === id)?.cdnLike
+}
+
+function closePlan() {
+  planOpen.value = false
+  plan.value = null
+}
+
+useEscapeClose(closePlan, () => planOpen.value)
+useEscapeClose(() => {
+  applyResult.value = null
+}, () => !!applyResult.value)
+
+async function loadRollback() {
+  try {
+    rollbackBatch.value = await bypassApi.rollbackBatch()
+  } catch {
+    rollbackBatch.value = ''
+  }
+}
+
+async function openApplyPlan() {
+  if (busyApply.value || busyProbe.value || !pendingCount.value) return
+  try {
+    plan.value = await bypassApi.plan(allowCdn.value)
+    planOpen.value = true
+  } catch (e) {
+    toastStore.showToast(errText(e), 'error')
+  }
+}
+
+const cdnPinned = (id: string) => allowCdn.value.includes(id)
+
+/** 勾选「仍要固定」只影响这一条：批次账目由后端重算，界面不自己加减 */
+async function toggleCdn(id: string) {
+  allowCdn.value = cdnPinned(id)
+    ? allowCdn.value.filter((v) => v !== id)
+    : [...allowCdn.value, id]
+  try {
+    plan.value = await bypassApi.plan(allowCdn.value)
+  } catch (e) {
+    toastStore.showToast(errText(e), 'error')
+  }
+}
+
+async function runApply() {
+  if (busyApply.value || !plan.value || plan.value.ready === 0) return
+  busyApply.value = true
+  planOpen.value = false
+  awaitingAuth.value = true
+  let written: string[] = []
+  try {
+    const outcome = await bypassApi.apply(allowCdn.value)
+    written = [...new Set(outcome.items.map((i) => i.id))]
+    if (outcome.cancelled) {
+      toastStore.showToast('已取消授权，系统未改动')
+    } else if (!outcome.items.length) {
+      toastStore.showToast(outcome.error || '没有需要写入的条目', outcome.error ? 'error' : undefined)
+    } else if (outcome.items.every((i) => i.ok) && !outcome.rolledBack && !outcome.error) {
+      // 全批干净落盘不值得拦一只弹窗，一行 toast 就是完整的账
+      // 单位跟页栏和小账对齐，按清单条目数：一条域名可能落两个动作，数动作会和「本批写入 N 项」打架
+      const anyChanged = new Map<string, boolean>()
+      for (const i of outcome.items) anyChanged.set(i.id, (anyChanged.get(i.id) ?? false) || i.changed)
+      const changed = [...anyChanged.values()].filter(Boolean).length
+      const idle = anyChanged.size - changed
+      toastStore.showToast(`写入完成 ${changed} 项${idle ? `，${idle} 项原本已就位` : ''}`)
+    } else {
+      applyResult.value = outcome
+    }
+  } catch (e) {
+    toastStore.showToast(errText(e), 'error')
+  } finally {
+    awaitingAuth.value = false
+    busyApply.value = false
+    await Promise.all([loadTargets(), loadStatus(), loadRollback()])
+    // 写完不靠回执自证：这一批逐条重探一遍，判定变了才算真落定
+    if (written.length) await revalidateIds(written, true)
+  }
+}
+
+async function runRevert(batch: string) {
+  if (busyApply.value || !batch) return
+  busyApply.value = true
+  awaitingAuth.value = true
+  closeMenu()
+  // 撤销之前先记下这一批动了哪些行：撤销会把 applyBatch 抹掉，之后就问不着了
+  const ids = targets.value.filter((t) => t.applyBatch === batch).map((t) => t.id)
+  try {
+    const outcome = await bypassApi.revert(batch)
+    if (outcome.cancelled) toastStore.showToast('已取消授权，系统未改动')
+    else if (outcome.error) toastStore.showToast(`撤销未完成：${outcome.error}`, 'error')
+    else toastStore.showToast('已撤销上次写入')
+  } catch (e) {
+    toastStore.showToast(errText(e), 'error')
+  } finally {
+    awaitingAuth.value = false
+    busyApply.value = false
+    await Promise.all([loadTargets(), loadStatus(), loadRollback()])
+    // 退回原样以后判定该重新算一遍：不重探就会停在「已写入」那半句
+    if (ids.length) await revalidateIds(ids, true)
+  }
+}
+
+const askRevert = () => {
+  const batch = rollbackBatch.value
+  closeMenu()
+  if (!batch) return
+  confirmStore.showConfirm(
+    '撤销上次写入',
+    '将把 hosts 托管区还原到写入前的备份，并删掉那一批加过的持久路由。该操作需要管理员权限，将弹出一次系统确认。',
+    () => runRevert(batch),
+  )
+}
+
+/* 接管方那边的直连名单不归 desko 改：把待写入的目标连行给出去，粘过去就对齐了 */
+async function copyPendingList() {
+  closeMenu()
+  const list = targets.value.filter(needsApply)
+  if (!list.length) {
+    toastStore.showToast('当前没有待写入的条目')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(list.map((t) => t.host).join('\n'))
+    toastStore.showToast(`已复制 ${list.length} 条目标`)
+  } catch {
+    toastStore.showToast('复制失败', 'error')
+  }
+}
+
+/* ---------- 重验：逐条串行复用单条重探，出口漂移要整轮才看得出来 ---------- */
+const revalidating = ref<{ total: number; done: number } | null>(null)
+const stopRequested = ref(false)
+
+async function revalidateIds(ids: string[], quiet = false) {
+  if (revalidating.value) {
+    stopRequested.value = true
+    return
+  }
+  if (!ids.length) return
+  revalidating.value = { total: ids.length, done: 0 }
+  stopRequested.value = false
+  let failed = 0
+  for (const id of ids) {
+    if (stopRequested.value) break
+    try {
+      await bypassApi.recheck(id)
+    } catch {
+      // 单条探测失败不停整轮：一条挂了不代表其余目标也验不了
+      failed += 1
+    }
+    if (revalidating.value) revalidating.value.done += 1
+  }
+  revalidating.value = null
+  await Promise.all([loadTargets(), loadStatus()])
+  // 写完的那一批就地重验是收尾，不再念一遍「重验完成」压掉落盘那行账
+  if (!quiet) toastStore.showToast(failed ? `重验结束，${failed} 条探测失败` : '重验完成')
+}
+
+const revalidateAll = () => revalidateIds(targets.value.map((t) => t.id))
+
 const askDelete = (t: BypassTarget) => {
-  confirmStore.showConfirm('确认删除', `确定将「${hostOf(t)}」移出清单？`, async () => {
+  confirmStore.showConfirm('移出清单', `「${hostOf(t)}」将从直连清单移除。`, async () => {
     try {
       await bypassApi.remove(t.id)
       if (openRowId.value === t.id) openRowId.value = null
@@ -195,14 +401,8 @@ function deleteFromMenu() {
 }
 
 /* ---------- 结论读法 ---------- */
-const verdictClass = (v: string) =>
-  v === 'directOk'
-    ? 'live'
-    : v === 'unreachable'
-      ? 'bad'
-      : v === 'needRoute' || v === 'egressUnknown'
-        ? 'warn'
-        : 'key'
+/* 判定档只有三张脸：直连已可用（绿）、还差一步（警）、根本连不上（红） */
+const verdictClass = (v: string) => (v === 'directOk' ? 'ok' : v === 'unreachable' ? 'bad' : 'warn')
 
 const verdictLabel = (v: string) => VERDICT_LABEL[v as Verdict] ?? v
 
@@ -264,23 +464,35 @@ async function copyConclusion() {
 }
 
 const fmtTime = (ms: number) => (ms ? new Date(ms).toLocaleString() : '—')
+/* 行内只放得起「月/日 时:分」，完整时间留在 title 上 */
+const clockOf = (ms: number) => {
+  if (!ms) return '—'
+  const d = new Date(ms)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
 
 /* 行展开只念库里存的那句结论，不再跑一次网络；要新结论走行首的重新探测 */
 function rowNote(t: BypassTarget) {
   const head = t.note || '暂无探测结论'
-  // 「需要写入 hosts 或系统路由」只对缺固定/缺路由两态成立；不可达、出口未确定不给出写入建议
   if (t.verdict === 'hostsOnly' || t.verdict === 'needRoute') {
-    return `${head}。该条目需要写入 hosts 文件或系统路由，当前版本仅登记目标，不代为写入。`
+    // 写过的行不能再念「需要写入」：那条判定已被这一批落盘了
+    if (t.applyState === 'applied') return `${head}。已写入 hosts 或系统路由。`
+    if (t.applyState === 'failed') return `${head}。上次写入未通过校验，原因见结果弹窗，可修正后重新写入。`
+    return `${head}。该条目需要写入 hosts 文件或系统路由，可在页栏「写入落盘批次」一并落盘。`
   }
   return head
 }
+
+const pageHead = usePageHeadStore()
+watchEffect(() => pageHead.setHead('直连清单', targets.value.length ? `${targets.value.length} 项` : ''))
 </script>
 
 <template>
   <div class="content-inner">
     <div class="page-bar">
       <label class="probe-box">
-        <AppIcon name="search" :size="14" />
+        <AppIcon name="search" :size="15" />
         <input
           v-model="input"
           type="text"
@@ -294,18 +506,42 @@ function rowNote(t: BypassTarget) {
         <AppIcon name="globe" :size="13" />
         {{ busyProbe ? '正在探测' : '开始探测' }}
       </button>
+      <!-- 写入是这一页唯一改系统的动作：只有真有账要还时才出这颗钮 -->
+      <button
+        v-if="pendingCount"
+        class="btn-secondary"
+        type="button"
+        :disabled="busyApply || busyProbe || !!revalidating"
+        @click="openApplyPlan"
+      >
+        <AppIcon name="download" :size="13" />
+        {{ awaitingAuth ? '等待授权' : `写入落盘批次 ${batchCount}` }}
+      </button>
+      <button
+        v-if="targets.length"
+        class="btn-secondary"
+        type="button"
+        :disabled="busyApply || busyProbe || (busyRowId !== null && !revalidating)"
+        @click="revalidateAll"
+      >
+        <AppIcon name="refresh" :size="13" />
+        {{ revalidating ? (stopRequested ? '正在停止' : `重验 ${revalidating.done}/${revalidating.total}`) : '全量重验' }}
+      </button>
     </div>
 
-    <!-- 小账：本模块只登记目标，写入 hosts 与系统路由的链路尚未实现，所以「待写入」指清单里仍需人工处理的条数 -->
-    <div v-if="status" class="bp-status" :class="{ bad: !!status.hostsError }">
+    <!-- 小账：「待写入」= 判定指向写 hosts/路由且这批还没写成的条数，写过的从这里摘出去，
+         否则这个数字永远降不下来。待写入与失效是异常计数，为 0 就不占位；三项全空且清单也空时整条不出，别压着空态念零。 -->
+    <div v-if="status && (targets.length || status.managedHosts || status.hostsError)" class="bp-status" :class="{ bad: !!status.hostsError }">
       <span v-if="status.hostsError">hosts 托管区无法读取</span>
       <span v-else>hosts 托管区 {{ status.managedHosts }} 条</span>
-      <span class="sep">·</span>
-      <span>清单 {{ status.total }} 条</span>
-      <span class="sep">·</span>
-      <span>待写入 {{ status.pending }} 条</span>
-      <span class="sep">·</span>
-      <span>固定地址失效 {{ status.stale }} 条</span>
+      <template v-if="status.pending">
+        <span class="sep">·</span>
+        <span>待写入 {{ status.pending }} 条</span>
+      </template>
+      <template v-if="status.stale">
+        <span class="sep">·</span>
+        <span>固定地址失效 {{ status.stale }} 条</span>
+      </template>
       <span v-if="status.hostsError" class="bp-status-err">{{ status.hostsError }}</span>
       <label v-if="targets.length" class="bp-filter">
         <AppIcon name="search" :size="13" />
@@ -313,34 +549,34 @@ function rowNote(t: BypassTarget) {
       </label>
     </div>
 
-    <!-- 清单 -->
-    <div v-if="loading" class="rowlist" aria-hidden="true">
-      <div class="skeleton-row" v-for="n in 2" :key="n">
+    <!-- 清单：一条目标一颗浮岛，展开时同一颗岛下面接一段凹底明细 -->
+    <div v-if="loading" class="rcard-list" aria-hidden="true">
+      <div class="rcard rcard-row" v-for="n in 2" :key="n">
         <span class="skeleton-block"></span>
         <span class="skeleton-line w40"></span>
       </div>
     </div>
 
-    <div v-else-if="targets.length" class="rowlist">
-      <template v-for="t in shown" :key="t.id">
-        <div class="bp-row" :class="{ on: openRowId === t.id }">
+    <div v-else-if="targets.length" class="rcard-list">
+      <div v-for="t in shown" :key="t.id" class="rcard" :class="{ on: openRowId === t.id }">
+        <div class="rcard-row bp-row">
           <button class="row-main" type="button" :aria-expanded="openRowId === t.id" @click="toggleRow(t)">
             <span class="row-host mono" :title="t.host">{{ hostOf(t) }}</span>
-            <span class="chip" :class="verdictClass(t.verdict)">
-              <span class="dot" aria-hidden="true"></span>
-              {{ verdictLabel(t.verdict) }}
-            </span>
             <span class="row-meta mono" :title="`上次探测 ${fmtTime(t.checkedAt)}`">
-              {{ t.address || '—' }}
-              <span v-if="t.interfaceName">· 出口 {{ t.interfaceName }}</span>
-              <span v-if="t.stale" class="row-stale">· 固定地址已失效</span>
+              <span v-if="t.address">{{ t.address }}</span>
+              <span v-if="t.interfaceName">出口 {{ t.interfaceName }}</span>
+              <span v-if="t.applyState === 'applied'" class="row-written">已写入</span>
+              <span v-else-if="t.applyState === 'failed'" class="row-stale">写入失败</span>
+              <span v-if="t.cdnLike" title="真址带 CNAME 或多地址轮换，固定后会随节点变化失效">CDN 轮换</span>
+              <span v-if="t.stale" class="row-stale">固定地址已失效</span>
             </span>
+            <span class="badge" :class="verdictClass(t.verdict)">{{ verdictLabel(t.verdict) }}</span>
           </button>
           <div class="row-acts">
             <button class="ib" type="button" title="重新探测" :disabled="busyRowId !== null" @click="recheckRow(t)">
               <AppIcon name="refresh" :size="14" />
             </button>
-            <button class="ib" type="button" title="更多操作" @click="openMenu(t, $event)">
+            <button class="ib pin" type="button" title="更多操作" @click="openMenu(t, $event)">
               <AppIcon name="dots" :size="14" />
             </button>
           </div>
@@ -353,7 +589,7 @@ function rowNote(t: BypassTarget) {
             <span class="mono">实际地址 {{ t.address || '—' }}</span>
             <span>出口接口 {{ t.interfaceName || '—' }}</span>
             <span>网关 {{ t.nextHop || '—' }}</span>
-            <span :title="fmtTime(t.checkedAt)">探测时间 {{ fmtTime(t.checkedAt) }}</span>
+            <span :title="fmtTime(t.checkedAt)">探测时间 {{ clockOf(t.checkedAt) }}</span>
           </div>
           <div class="row-edit">
             <span class="row-edit-label">原始输入</span>
@@ -366,7 +602,7 @@ function rowNote(t: BypassTarget) {
               @keyup.enter="applyEdit(t)"
             />
             <button
-              class="action-btn"
+              class="action-btn primary"
               type="button"
               :disabled="busyRowId !== null || !draftInput.trim() || draftInput.trim() === t.input"
               @click="applyEdit(t)"
@@ -376,18 +612,23 @@ function rowNote(t: BypassTarget) {
             </button>
           </div>
         </div>
-      </template>
+      </div>
 
       <div v-if="!shown.length" class="bp-nohit">
         没有名称包含「{{ filter }}」的条目
       </div>
     </div>
 
-    <div v-else class="empty-state">
+    <div v-else class="rcard empty-state">
       <div class="empty-icon"><AppIcon name="navBypass" :size="24" /></div>
       <div class="empty-title">清单为空</div>
-      <div class="empty-desc">本模块用于让指定域名绕过代理直连。先输入目标进行探测，确认判定后再加入清单。</div>
+      <div class="empty-desc">让指定域名绕过代理直连。先在上方输入目标探测，确认后再加入清单。</div>
     </div>
+
+    <p v-if="!loading && targets.length" class="page-note">
+      <AppIcon name="info" :size="13" />
+      写入只改本机 hosts 与持久路由；接管方自己的直连名单需另行同步，行菜单可复制待写入清单。
+    </p>
 
     <!-- 探测结论：新开一只弹窗，页面上不留常驻结论位 -->
     <div v-if="report" class="dialog-overlay" @click.self="closeReport">
@@ -400,10 +641,7 @@ function rowNote(t: BypassTarget) {
         </div>
         <div class="dialog-body">
           <div class="concl-head">
-            <span class="chip" :class="verdictClass(report.verdict)">
-              <span class="dot" aria-hidden="true"></span>
-              {{ verdictLabel(report.verdict) }}
-            </span>
+            <span class="badge" :class="verdictClass(report.verdict)">{{ verdictLabel(report.verdict) }}</span>
             <span class="concl-title">{{ report.headline }}</span>
           </div>
           <p class="concl-target mono">{{ addrOf(report) }}</p>
@@ -422,7 +660,7 @@ function rowNote(t: BypassTarget) {
             </li>
             <li v-if="report.recommend">
               <AppIcon name="alert" :size="13" />
-              <span>该操作需要修改 hosts 文件或系统路由，当前版本仅登记目标，不代为写入。</span>
+              <span>该操作需要修改 hosts 文件或系统路由，加入清单后可在页栏一并写入。</span>
             </li>
           </ul>
         </div>
@@ -447,7 +685,100 @@ function rowNote(t: BypassTarget) {
       </div>
     </div>
 
-    <PopoverMenu v-if="menuId" :anchor="menuAnchor" :width="136" @close="closeMenu">
+    <!-- 写入确认：逐条念「要往系统里动什么」，账对得上才提权，一批共用一次 UAC -->
+    <div v-if="planOpen && plan" class="dialog-overlay" @click.self="closePlan">
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="写入确认">
+        <div class="dialog-header">
+          <h3>写入前确认</h3>
+          <span v-if="plan.blocked" class="plan-blocked">{{ plan.blocked }} 条不写入</span>
+          <button class="dialog-close" type="button" title="关闭" @click="closePlan">
+            <AppIcon name="x" :size="16" />
+          </button>
+        </div>
+        <div class="dialog-body">
+          <p class="lead">本批写入 {{ plan.ready }} 项，一次管理员授权落完。</p>
+          <ul class="plan-list">
+            <li v-for="(r, i) in plan.rows" :key="`${r.id}-${i}`" :class="{ blocked: !!r.blocked }">
+              <span class="plan-host mono">{{ r.label }}</span>
+              <span class="plan-action mono">{{ r.blocked || r.action }}</span>
+              <label v-if="isCdnRow(r.id)" class="plan-cdn">
+                <input type="checkbox" :checked="cdnPinned(r.id)" @change="toggleCdn(r.id)" />
+                <span>仍要固定</span>
+              </label>
+            </li>
+          </ul>
+        </div>
+        <div class="dialog-footer">
+          <div class="footer-hints">
+            <AppIcon name="lock" :size="12" />
+            <span>需要管理员权限，将弹出一次系统确认</span>
+          </div>
+          <button class="btn-secondary" type="button" @click="closePlan">取消</button>
+          <button class="btn-primary" type="button" :disabled="plan.ready === 0" @click="runApply">
+            确认并写入
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 结果弹窗只在有账要交的时候出：全成功走 toast，不拦人 -->
+    <div v-if="applyResult" class="dialog-overlay" @click.self="applyResult = null">
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="写入结果">
+        <div class="dialog-header">
+          <h3>写入结果</h3>
+          <button class="dialog-close" type="button" title="关闭" @click="applyResult = null">
+            <AppIcon name="x" :size="16" />
+          </button>
+        </div>
+        <div class="dialog-body">
+          <p class="lead">
+            成功 {{ resultSummary.ok }} · 跳过 {{ resultSummary.skip }} · 失败 {{ resultSummary.bad }}
+          </p>
+          <p v-if="applyResult.rolledBack" class="dialog-err">
+            <template v-if="rolledBackClean">本批有条目未通过校验，已回滚到写入前的状态。</template>
+            <template v-else
+              >本批有条目未通过校验，回滚未完成，已写入的部分仍在系统里，可点「撤销本批」重试。备注：{{
+                applyResult.error
+              }}</template
+            >
+          </p>
+          <p v-else-if="applyResult.error" class="dialog-err">{{ applyResult.error }}</p>
+          <ul class="plan-list">
+            <li v-for="i in applyResult.items" :key="`${i.op}-${i.id}`" :class="{ blocked: !i.ok }">
+              <span class="plan-host mono">{{ rowLabelOf(i.id) }}</span>
+              <span class="plan-action mono">
+                {{ opLabel(i.op) }}{{ i.ok ? (i.changed ? (rolledBackClean ? ' · 已回滚' : ' · 已写入') : ' · 系统里原本已就位') : ` · ${i.error}` }}
+              </span>
+            </li>
+          </ul>
+        </div>
+        <div class="dialog-footer">
+          <div class="footer-hints">
+            <span class="kbd">Esc</span><span>关闭</span>
+          </div>
+          <button
+            v-if="rollbackBatch"
+            class="btn-secondary"
+            type="button"
+            :disabled="busyApply"
+            @click="askRevert"
+          >
+            撤销本批
+          </button>
+          <button class="btn-primary" type="button" @click="applyResult = null">完成</button>
+        </div>
+      </div>
+    </div>
+
+    <PopoverMenu v-if="menuId" :anchor="menuAnchor" :width="152" @close="closeMenu">
+      <button v-if="rollbackBatch" class="pop-item" type="button" @click="askRevert">
+        <AppIcon name="undo" :size="14" />
+        撤销上次写入
+      </button>
+      <button class="pop-item" type="button" @click="copyPendingList">
+        <AppIcon name="copy" :size="14" />
+        复制待写入清单
+      </button>
       <button class="pop-item danger" type="button" @click="deleteFromMenu">
         <AppIcon name="trash" :size="14" />
         删除
@@ -457,23 +788,23 @@ function rowNote(t: BypassTarget) {
 </template>
 
 <style scoped>
-/* 页栏控件走 30px 栏内档；探测框与搜索框同形，宽度随窗口走 */
+/* 探测框走栏内灰底 inset 档（与 .page-bar .search-box 同配方）。
+   它是一页的主入口而不是筛选器，所以吃弹性宽、不设 220px 上限。 */
 .probe-box {
   flex: 1 1 320px;
   min-width: 160px;
-  height: 30px;
+  height: 32px;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-3);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0;
+  border-radius: var(--radius-ib);
   color: var(--text-muted);
-  transition: all var(--transition);
+  transition: box-shadow var(--transition);
 }
 .probe-box:focus-within {
-  border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 .probe-box input {
@@ -511,9 +842,9 @@ function rowNote(t: BypassTarget) {
   gap: var(--space-1);
   height: 24px;
   padding: 0 var(--space-2);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: none;
+  border-radius: 7px;
   color: var(--text-muted);
 }
 .bp-filter input {
@@ -587,17 +918,7 @@ function rowNote(t: BypassTarget) {
 }
 .concl-pending li svg { flex-shrink: 0; margin-top: 2px; }
 
-/* 行：52px 一行档，点开合与 ⋯ 同一排；发丝线由 .rowlist 骨架给 */
-.bp-row {
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 0 var(--space-4);
-  transition: background var(--transition);
-}
-.bp-row:hover { background: var(--bg-surface-hover); }
-.bp-row.on { background: var(--bg-surface-hover); }
+/* 岛内一行：64px 档与描边由 .rcard/.rcard-row 骨架给，这里只管行内配方 */
 .row-main {
   flex: 1;
   min-width: 0;
@@ -615,7 +936,8 @@ function rowNote(t: BypassTarget) {
 .row-host {
   flex: 0 1 40%;
   min-width: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
+  font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -624,25 +946,30 @@ function rowNote(t: BypassTarget) {
 .row-meta {
   flex: 1;
   min-width: 0;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.row-meta span { margin-left: 6px; }
+.row-meta > span + span::before {
+  content: '·'; margin: 0 6px; color: var(--text-faint);
+}
 .row-stale { color: var(--warning); }
 .row-acts { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
-.bp-row .ib { opacity: 0; transition: opacity var(--transition); }
-.bp-row:hover .ib,
-.bp-row:focus-within .ib,
-.bp-row.on .ib { opacity: 1; }
-html.hover-suppressed .bp-row:hover .ib { opacity: 0; }
+/* 浮岛上的快捷钮平时收着，⋯ 那颗常驻——它是这一行唯一的菜单入口 */
+.row-acts .ib { opacity: 0; transition: opacity var(--transition); }
+.rcard:hover .ib,
+.rcard:focus-within .ib,
+.rcard.on .ib { opacity: 1; }
+.row-acts .ib.pin { opacity: 1; }
+html.hover-suppressed .rcard:hover .ib:not(.pin) { opacity: 0; }
 
-/* 就地展开的那一档：与行同一面板内，靠浅底和内缩区分，不再套一层卡 */
+/* 展开的那一段：还在同一颗岛里，靠凹底与发丝顶线和行分开 */
 .row-card {
-  padding: var(--space-2) var(--space-4) var(--space-4);
+  padding: var(--space-3) 14px var(--space-4);
   background: var(--sunken);
+  border-top: 1px solid var(--border);
 }
 .row-note {
   margin: 0;
@@ -687,18 +1014,62 @@ html.hover-suppressed .bp-row:hover .ib { opacity: 0; }
 }
 
 .bp-nohit {
-  padding: var(--space-5) var(--space-4);
+  padding: var(--space-3) 2px;
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
 
-.mono { font-family: var(--font-mono); }
+/* 写入确认与结果共用同一份两行列法：目标在左、要写的动作或原因在右 */
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.plan-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+.plan-host {
+  flex: 0 1 42%;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.plan-action {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.plan-list li.blocked .plan-action {
+  color: var(--warning);
+}
+/* CDN 那条行的坚持勾选：贴在原因后面，勾上以后同一行改念要写什么 */
+.plan-cdn {
+  display: inline-flex;
+  align-self: center;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+/* 头栏右侧那一格计数：说清有几条这轮不写 */
+.plan-blocked {
+  margin-left: var(--space-2);
+  font-size: var(--text-2xs);
+  color: var(--warning);
+}
 
-/* 判定配色：可用=绿、要钉 hosts=主色、要加路由=警色、不可达=红 */
-.chip.key { background: var(--accent-soft); color: var(--accent); }
-.chip.key .dot { background: var(--accent); }
-.chip.warn { background: var(--warning-soft); color: var(--warning); }
-.chip.warn .dot { background: var(--warning); }
-.chip.bad { background: var(--danger-soft); color: var(--danger); }
-.chip.bad .dot { background: var(--danger); }
+/* 行上小字分档：写过的收口、失效与轮换的提醒 */
+.row-written { color: var(--success); }
+
+.mono { font-family: var(--font-mono); }
 </style>

@@ -107,12 +107,12 @@ test.describe('Entries 网址收藏', () => {
     const paths = page.locator('.paths-dialog')
     await expect(paths.locator('h3')).toHaveText('子路径')
     await expect(paths.locator('.path-row:not(.path-add)')).toHaveCount(0)
-    await expect(paths.locator('.paths-count')).toHaveText('0 个 · Notion')
+    await expect(paths.locator('.dialog-header .sub')).toHaveText('0 个 · Notion')
     await paths.locator('.add-label').fill('首页')
     await paths.locator('.add-path').fill('/web')
     await paths.locator('.add-path').press('Enter')
     await expect(paths.locator('.path-value')).toHaveCount(1)
-    await expect(paths.locator('.paths-count')).toHaveText('1 个 · Notion')
+    await expect(paths.locator('.dialog-header .sub')).toHaveText('1 个 · Notion')
     await paths.locator('.dialog-footer button.btn-primary').click()
     await expect(paths).toHaveCount(0)
     await expect(dialog.locator('.pm-sum')).toHaveText('首页 / web')
@@ -162,7 +162,7 @@ test.describe('Entries 网址收藏', () => {
   test('单条删除收在 ⋯ 菜单里，走确认对话框', async ({ page }) => {
     await bootEntries(page, SEED)
     await cardAction(page, '钉钉', '删除')
-    await confirmDialog(page, '确定删除「钉钉」？')
+    await confirmDialog(page, '「钉钉」的账号与密码将一并删除。')
     await expectToast(page, '已删除')
     await expect(page.locator('.entry-card')).toHaveCount(2)
     const snap = await e2e.snapshot(page)
@@ -198,7 +198,7 @@ test.describe('Entries 网址收藏', () => {
     await expect(page.locator('.dock-count')).toHaveText('已选 2 项')
 
     await page.locator('.dock-btn.danger').click()
-    await confirmDialog(page, '确定删除选中的 2 条记录吗？')
+    await confirmDialog(page, '2 条记录将被删除，此操作不可撤销。')
     await expectToast(page, '已删除 2 条记录')
     // 清空即收：删除后选中归零，批量条自动消失
     await expect(page.locator('.batch-dock')).toHaveCount(0)
@@ -263,7 +263,7 @@ test.describe('Entries 网址收藏', () => {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^https?:\/\//)
   })
 
-  test('toast 是贴右下的反色胶囊', async ({ page }) => {
+  test('toast 是内容区顶沿居中的反色胶囊', async ({ page }) => {
     await page.setViewportSize({ width: 1040, height: 670 })
     await bootEntries(page, SEED)
     await page.locator('.entry-card').first().focus()
@@ -273,11 +273,11 @@ test.describe('Entries 网址收藏', () => {
     // 等 0.18s 入场过渡落定，仍在 0.8s 驻留窗口内
     await page.waitForTimeout(220)
 
+    // 顶沿：标题栏 42 + 10；横向：侧栏以右那一片的正中
     const box = await toast.boundingBox()
-    expect(1040 - (box.x + box.width)).toBeLessThanOrEqual(21)
-    expect(1040 - (box.x + box.width)).toBeGreaterThanOrEqual(19)
-    expect(670 - (box.y + box.height)).toBeLessThanOrEqual(21)
-    expect(670 - (box.y + box.height)).toBeGreaterThanOrEqual(19)
+    expect(box.y).toBe(52)
+    const side = 57 // 图标轨 56 + 发丝线 1
+    expect(Math.abs(box.x + box.width / 2 - (side + (1040 - side) / 2))).toBeLessThanOrEqual(1)
 
     const style = await toast.evaluate((el) => {
       const cs = getComputedStyle(el)
@@ -317,8 +317,8 @@ test.describe('Entries 网址收藏', () => {
   test('复制卡片并查看/复制密码', async ({ page }) => {
     await bootEntries(page, SEED)
     const card = entryCard(page, 'GitHub')
-    await cardAction(page, 'GitHub', '复制副本')
-    await expectToast(page, '已复制卡片')
+    await cardAction(page, 'GitHub', '创建副本')
+    await expectToast(page, '已创建副本')
     await expect(entryCard(page, 'GitHub 副本')).toBeVisible()
     expect((await e2e.snapshot(page)).entries).toHaveLength(4)
 
@@ -346,14 +346,14 @@ test.describe('Entries 网址收藏', () => {
 
   test('工具条粘顶时贴住滚动容器上沿，不留能看见卡片的缝', async ({ page }) => {
     await bootEntries(page, {
-      entries: Array.from({ length: 9 }, (_, i) => ({
+      entries: Array.from({ length: 40 }, (_, i) => ({
         name: `条目 ${i}`,
         url: `http://10.0.0.65/builds/private/item_${i}`,
         notes: `备注 ${i}`,
         category: 'XYLink App',
       })),
     })
-    await expect(page.locator('.entry-card')).toHaveCount(9)
+    await expect(page.locator('.entry-card')).toHaveCount(40)
     const gap = () =>
       page.evaluate(() => {
         const bar = document.querySelector('.page-bar') as HTMLElement
