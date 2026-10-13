@@ -107,6 +107,6 @@ for (const [n, h] of TEXTS) {
   console.log(`  ${n.padEnd(18)} ${h}  ${contrast(h, CARD).toFixed(2)}  ${contrast(h, solve(CARD, '#ffffff', lab(CARD) + (lab('#3b382f') - lab(OLD_CARD)))).toFixed(2)}  ${contrast(h, sidebar).toFixed(2)}`)
 }
 const css = readFileSync(CSS, 'utf8')
-const inkAccents = [...css.matchAll(/\[data-theme="ink"\]\[data-accent="(\w+)"\]\s*\{\s*--accent:\s*(#\w{6})/g)]
-console.log('\naccent 四档在新卡面上的对比度（要求 ≥4.5）')
+const inkAccents = [...css.matchAll(/\[data-base="dark"\]\[data-accent="(\w+)"\]\s*\{\s*--accent:\s*(#\w{6})/g)]
+console.log('\naccent 各档在新卡面上的对比度（要求 ≥4.5）')
 for (const [, name, hexv] of inkAccents) console.log(`  ${name.padEnd(9)} ${hexv}  ${contrast(hexv, CARD).toFixed(2)}`)

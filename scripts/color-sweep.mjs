@@ -1,4 +1,4 @@
-// 全配色体检：8 组合 × 全页面，量三件事——
+// 全配色体检：底色 × accent 全组合 × 全页面，量三件事——
 // 1) 真实合成后的文字对比度（含 opacity 参与的）
 // 2) 画面上实际涂出来的面族（背景色 + 面积 + L*），看层级台阶
 // 3) 游离色：computed 出来的颜色不在当前主题的令牌集合里
@@ -7,6 +7,7 @@
 // 判据：可读文字 ≥4.5（装饰位除外）；--fill/--sunken 上的 muted 3.97~4.49 属既定豁免
 import { chromium } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { themeCombos } from './lib/theme-tokens.mjs'
 
 const BASE = 'http://127.0.0.1:1430'
 const CSS = readFileSync('src/styles/global.css', 'utf8')
@@ -40,8 +41,8 @@ const SEED = {
   ],
 }
 
-const COMBOS = []
-for (const theme of ['paper', 'ink']) for (const accent of ['ink', 'celadon', 'clay', 'plum']) COMBOS.push({ theme, accent })
+// 全窗走查跑满可见组合（底色 × accent，读 theme.ts）
+const COMBOS = themeCombos().map(({ theme, accent }) => ({ theme, accent }))
 
 const SWEEP = (TOKEN_NAMES) => {
   // 冻结动画，避免拍到淡入中途的假低对比
@@ -232,7 +233,8 @@ for (const combo of COMBOS) {
   const st = [...strays.values()].sort((a, b) => b.n - a.n)
   if (!st.length) console.log('  (none)')
   for (const x of st) console.log(`  ${x.kind} ${x.color.padEnd(22)} ×${String(x.n).padStart(3)}  ${x.sel}`)
-  if (id === 'paper-ink' || id === 'ink-ink') {
+  // 面族台阶只在基准档（墨蓝 accent）下打印——每套底色一份，换 accent 不动面族
+  if (combo.accent === 'ink') {
     console.log('-- 面族台阶（L* 升序，取该色最大涂覆块）--')
     const seen = new Map()
     for (const s of all) for (const f of s.faces) if (!seen.has(f.c) || seen.get(f.c).area < f.area) seen.set(f.c, f)

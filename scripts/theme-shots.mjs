@@ -1,7 +1,9 @@
 // 全部主题 × 九个界面实机截图（跑在 e2e 的 mock 后端上，不碰真实数据）。
 // 用法：先起 vite --mode e2e --port 1430，再 node scripts/theme-shots.mjs [themeId]
 import { chromium } from '@playwright/test'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { themeCombos } from './lib/theme-tokens.mjs'
 
 const BASE = 'http://127.0.0.1:1430'
 const OUT = 'design/theme-shots'
@@ -54,23 +56,22 @@ const SEED = {
   ],
 }
 
-// v2 双轴：2 底色 × 4 accent = 8 组配色
-const COMBOS = [
-  { id: 'paper-ink', name: '纸·墨蓝', theme: 'paper', accent: 'ink' },
-  { id: 'paper-celadon', name: '纸·青瓷', theme: 'paper', accent: 'celadon' },
-  { id: 'paper-clay', name: '纸·赭石', theme: 'paper', accent: 'clay' },
-  { id: 'paper-plum', name: '纸·紫罗', theme: 'paper', accent: 'plum' },
-  { id: 'ink-ink', name: '墨·墨蓝', theme: 'ink', accent: 'ink' },
-  { id: 'ink-celadon', name: '墨·青瓷', theme: 'ink', accent: 'celadon' },
-  { id: 'ink-clay', name: '墨·赭石', theme: 'ink', accent: 'clay' },
-  { id: 'ink-plum', name: '墨·紫罗', theme: 'ink', accent: 'plum' },
-]
+// 组合矩阵从 theme.ts 现读：底色 × accent，新增一档不用回来改这里
+const COMBOS = themeCombos()
+
+// 每组合 12 屏，收尾逐名核对——留在目录里的上一轮旧帧会被当成这轮的结果
+const SCREENS = ['1-unlock', '2-entries', '3-detail', '4-form', '5-notes', '6-editor', '7-files',
+  '8a-settings-appearance', '8b-settings-backup', '8c-settings-security', '8d-settings-about', '9-chpwd']
 
 const only = process.argv[2]
+const RUN = COMBOS.filter((t) => !only || only === t.id || only === t.theme)
+// 退役的旧主题 id 帧（white/cool/linear-dark/…）不在现在的组合表里，整轮跑时一律清掉
+if (RUN.length === COMBOS.length) {
+  for (const f of readdirSync(OUT)) if (f.endsWith('.png') && !f.startsWith('compare-')) rmSync(join(OUT, f), { force: true })
+}
 const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome' })
 
-for (const t of COMBOS) {
-  if (only && only !== t.id && only !== t.theme) continue
+for (const t of RUN) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5 })
   page.on('pageerror', (e) => console.log(`[${t.id}] pageerror: ${e.message}`))
   await page.addInitScript((cfg) => {
@@ -93,6 +94,9 @@ for (const t of COMBOS) {
   await page.waitForSelector('.app-layout')
   await page.locator('.sidebar-toggle').click() // 展开侧栏，看 logo 与导航文字
   await page.waitForTimeout(500) // 侧栏宽度有过渡，不等会拍到半宽
+  // 落地页是小记，收藏要自己点过去
+  await page.locator('a.nav-item[href="/entries"]').click()
+  await page.waitForSelector('.entry-card')
   await shot('2-entries')
 
   const card = page.locator('.entry-card').first()
@@ -152,3 +156,6 @@ for (const t of COMBOS) {
 }
 
 await browser.close()
+const missing = RUN.flatMap((t) => SCREENS.map((s) => `${t.id}-${s}.png`)).filter((n) => !existsSync(join(OUT, n)))
+if (missing.length) { console.error(`缺帧 ${missing.length} 张：${missing.join(', ')}`); process.exit(1) }
+console.log(`${RUN.length} 组 × ${SCREENS.length} 屏 → ${OUT}`)

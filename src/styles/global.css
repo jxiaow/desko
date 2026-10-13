@@ -80,8 +80,8 @@
   --memo-max-h: 144px;
   --rail-w: 248px;
   /* 小记顶栏的实际占位高度：粘性日期行和窄窗口下的浮层侧栏都要从它下面开始。
-     五页顶栏统一收编为 54px 定高后（V5.2 收编轮 P2），这里跟着 .page-bar 走 */
-  --stream-bar-h: 54px;
+     一行头方言（Things）后 .page-bar = padding-top 16 + 控件 32 + padding-bottom 16（border-box）= 64px 定高 */
+  --stream-bar-h: 64px;
   /* 容器窄于此值时收起右栏，筛选降级为浮层 */
   --rail-min-room: 900px;
 }
@@ -112,8 +112,9 @@
      v2 起分类色只服务内容侧（头像/徽章/色相钉），界面层只吃灰阶+accent。
 
    :root 上挂的是 paper+墨蓝 的值，作为属性缺失时的兜底。
-   纸与墨（2026-09 重设计 v2）：浅色=暖纸灰阶，深色=暖墨灰阶，
-   色温同族，accent 四档：墨蓝 ink / 青瓷 celadon / 赭石 clay / 紫罗 plum。
+   底色四套：纸 paper / 雪 snow（亮极性）、墨 ink / 板岩 slate（暗极性），
+   每套交出完全相同的 96 槽；accent 五档（墨蓝/青瓷/赭石/紫罗/暮瑰）只按极性覆盖
+   accent 族 17 槽，所以新增底色不必再配一轮 accent。
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ---------- paper：暖纸 v3（减黄提净）。灰阶抽掉大半黄味与 ink D1 同族，
@@ -388,11 +389,260 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ═══ accent 覆盖层：只填 accent 族 17 槽，底色不动。
-   浅档用实色水洗，深档用半透明；toast-info 在浅底 toast 上取 accent 深一档。 ═══ */
+/* ---------- snow：雪（冷白，2026-10 替换暖砂，同日第三版「白·留半档」）。
+   前两版的账都在注释里，别再走回头路：
+   · v1 照外部稿只把纸底整体提亮半档（面族平均 ΔRGB 3.9）→ 实机判「和纸基本一样」。
+   · v2 为了拉开距离把下陷/侧栏/填充整族压深（ΔRGB 10.6）→ 整窗读作冷灰台，且灰阶写成
+     R<G<B 单调递增带了绿分量（--border a*=−1.13），实机判「底色偏青涩」。
+   · v3（本块）方向改回「白」：画布 L*98.5 近白、卡面守中性 #fefefe（sRGB 高 L* 处装不下
+     冷度，白卡必然中性），冷度交给描边那圈（border b*=−3.9、a*≈0）。
+     分层深度取半档：下陷 ΔL*−6.4／侧栏 −7.7／填充 −8.8（纸 −3.8／−5.5／−6.3，v2 是 −8.5／−7.8／−12.0），
+     与纸底面族平均 ΔRGB 8.5——比"看得出方向"的 10 低、在 intake 的 8 线之上，
+     这一档是"白"和"拉得开"之间用户拍板的落点。文字 15.98:1、muted 6.34:1。
+   code 族沿用 v2 压暗的一档（#776422/#3a689e/#63656f…）：下陷面提亮后对 #e8ecf2 仍 4.78–4.89:1，
+   照纸底原值会掉到 4.46，所以不跟着回提。
+   accent 族 17 槽填的是亮极性的缺省档（墨蓝），底色块里这份一定会被 accent 覆盖层盖掉。 ---------- */
+[data-theme="snow"] {
+  --accent: #3d5a80;
+  --accent-hover: #31496a;
+  --accent-active: #283d58;
+  --accent-on: #ffffff;
+  --accent-soft: #e8eef4;
+  --accent-light: #d3dfeb;
+  --accent-ring: rgba(61, 90, 128, 0.16);
+  --text-brand: #31496a;
 
-/* ---- 墨蓝 ink（缺省，与底色块同值，显式列出保 8 组合齐全） ---- */
-[data-theme="paper"][data-accent="ink"] {
+  --bg: #f8fbfe;
+  --panel-bg: #fefefe;
+  --chrome-bg: rgba(248, 251, 254, 0.85);
+  --sunken: #e8ecf2;
+  --fill: #e2e5eb;
+  --hover: #f6f9fe;
+  --active: #e5e8ee;
+  --overlay: rgba(20, 22, 25, 0.40);
+
+  --text: #202123;
+  --text-secondary: #424346;
+  --text-muted: #5d5f63;
+  --text-faint: #8d8f93;
+
+  --border: #dbdfe6;
+  --border-strong: #c6c9d0;
+  --border-subtle: #eef2f9;
+  --border-hover: #c6c9d0;
+
+  --text-url: #424346;
+  --badge-cat-bg: #e5e8ee;
+  --badge-cat-border: #dbdfe6;
+  --badge-cat-text: #424346;
+  --badge-ver-bg: #e8eef4;
+  --badge-ver-text: #31496a;
+
+  --shadow-xs: 0 1px 2px 0 rgba(20, 22, 25, 0.03);
+  --shadow-card: 0 1px 2px 0 rgba(20, 22, 25, 0.03);
+  --shadow-sm: 0 1px 3px 0 rgba(20, 22, 25, 0.04);
+  --shadow: 0 4px 12px -2px rgba(20, 22, 25, 0.05), 0 0 0 1px #c6c9d0;
+  --shadow-md: 0 6px 16px -6px rgba(20, 22, 25, 0.08);
+  --shadow-lg: 0 12px 28px -8px rgba(20, 22, 25, 0.12);
+  --shadow-pop: 0 16px 36px -8px rgba(20, 22, 25, 0.10), 0 4px 10px -2px rgba(20, 22, 25, 0.03), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  --shadow-dock: 0 26px 60px -18px rgba(20, 22, 25, 0.28), 0 6px 18px rgba(20, 22, 25, 0.12);
+
+  --danger: #b83a30;
+  --danger-on: #ffffff;
+  --danger-hover: #992e26;
+  --danger-soft: #faecea;
+  --danger-border: #f0cfcb;
+  --success: #2e7a50;
+  --success-soft: #eaf4ee;
+  --warning: #9c681e;
+  --warning-soft: #f9f0df;
+
+  --sidebar-bg: #e5e8ee;
+  --sidebar-hover: #e2e5ec;
+
+  --brand-g1: #6c88aa;
+  --brand-g2: #3d5a80;
+  --brand-g3: #283d58;
+  --brand-knob: #ffffff;
+
+  --lock-wash-a: #fefefe;
+  --lock-wash-b: #e5e8ee;
+  --lock-orb-1: rgba(61, 90, 128, 0.07);
+  --lock-orb-2: rgba(61, 90, 128, 0.045);
+
+  --frost-bg: rgba(255, 255, 255, 0.88);
+  --frost-border: #dbdfe6;
+
+  /* 深色浮层跟着底色翻冷，别在冷白上留一颗暖黑 */
+  --tip-bg: #202225;
+  --tip-fg: #f7f8fa;
+  --toast-bg: #202225;
+  --toast-ok: #91c9a6;
+  --toast-err: #e28e84;
+  --toast-info: #93aecb;
+
+  --scrollbar: rgba(20, 22, 25, 0.14);
+  --scrollbar-hover: rgba(20, 22, 25, 0.24);
+  --selection: rgba(61, 90, 128, 0.18);
+
+  --cat-1: #5465c4;
+  --cat-2: #735eb8;
+  --cat-3: #a6587d;
+  --cat-4: #946e38;
+  --cat-5: #3f8067;
+  --cat-6: #3b808e;
+  --cat-text: #ffffff;
+
+  --ft-pdf: #be4e46;
+  --ft-doc: #3a689e;
+  --ft-sheet: #337d57;
+  --ft-deck: #a65e31;
+  --ft-arch: #6957a0;
+  --ft-code: #8c7324;
+  --ft-mark: #586374;
+  --ft-img: #9d5472;
+  --ft-unk: #6e7580;
+
+  --code-fg: #191a1d;
+  --code-kw: #a04975;
+  --code-str: #2f7351;
+  --code-num: #9b542e;
+  --code-type: #776422;
+  --code-fn: #3a689e;
+  --code-var: #586374;
+  --code-com: #63656f;
+  --code-tag: #6957a0;
+  --code-pun: #5b606a;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+}
+
+/* ---------- slate：冷板岩（2026-10 极性轴轮）。
+   墨底同族但色温往中性偏：卡面 L*13.5 → 画布 10.1 → 下陷 7.7，比墨底多走一档，
+   分层不再只靠发丝描边。accent 族填暗极性缺省档（墨蓝）。 ---------- */
+[data-theme="slate"] {
+  --accent: #89a8cd;
+  --accent-hover: #a2bcda;
+  --accent-active: #6f92ba;
+  --accent-on: #171614;
+  --accent-soft: rgba(137, 168, 205, 0.15);
+  --accent-light: rgba(137, 168, 205, 0.26);
+  --accent-ring: rgba(137, 168, 205, 0.32);
+  --text-brand: #adc6e2;
+
+  --bg: #191c20;
+  --panel-bg: #1f2328;
+  --chrome-bg: rgba(25, 28, 32, 0.86);
+  --sunken: #15171b;
+  --fill: #272c33;
+  --hover: #252a30;
+  --active: #313740;
+  --overlay: rgba(0, 0, 0, 0.65);
+
+  --text: #e3e6ec;
+  --text-secondary: #c3c8d2;
+  --text-muted: #abb1be;
+  --text-faint: #989fab;
+
+  --border: #2d333b;
+  --border-strong: #3f4752;
+  --border-subtle: #23272e;
+  --border-hover: #3f4752;
+
+  --text-url: #c5c9d4;
+  --badge-cat-bg: #23272e;
+  --badge-cat-border: #2d333b;
+  --badge-cat-text: #c3c8d2;
+  --badge-ver-bg: rgba(137, 168, 205, 0.15);
+  --badge-ver-text: #adc6e2;
+
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #3f4752;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+
+  --danger: #df817c;
+  --danger-on: #181517;
+  --danger-hover: #e89e99;
+  --danger-soft: #271a19;
+  --danger-border: #472927;
+  --success: #6cbd94;
+  --success-soft: #16221d;
+  --warning: #d9aa63;
+  --warning-soft: #251f15;
+
+  --sidebar-bg: #17191d;
+  --sidebar-hover: #252a30;
+
+  --brand-g1: #adc6e2;
+  --brand-g2: #89a8cd;
+  --brand-g3: #6f92ba;
+  --brand-knob: #191c20;
+
+  --lock-wash-a: #191c20;
+  --lock-wash-b: #1f2328;
+  --lock-orb-1: rgba(137, 168, 205, 0.14);
+  --lock-orb-2: rgba(137, 168, 205, 0.07);
+
+  --frost-bg: rgba(31, 35, 40, 0.88);
+  --frost-border: #2d333b;
+
+  --tip-bg: #eef0f5;
+  --tip-fg: #191c20;
+  --toast-bg: #eef0f5;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #4c6c92;
+
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(137, 168, 205, 0.30);
+
+  --cat-1: #8c90da;
+  --cat-2: #ac8fe6;
+  --cat-3: #dc91b8;
+  --cat-4: #d7b17c;
+  --cat-5: #70c1a2;
+  --cat-6: #71b9c9;
+  --cat-text: #14171c;
+
+  --ft-pdf: #ef726d;
+  --ft-doc: #7ca3f7;
+  --ft-sheet: #42ba54;
+  --ft-deck: #dfa561;
+  --ft-arch: #aa8ce8;
+  --ft-code: #dfc165;
+  --ft-mark: #8f96a7;
+  --ft-img: #df8cb8;
+  --ft-unk: #6d7481;
+
+  --code-fg: #e2e5eb;
+  --code-kw: #dd9cb8;
+  --code-str: #72d0a8;
+  --code-num: #deb177;
+  --code-type: #dec165;
+  --code-fn: #8ea9df;
+  --code-var: #b8b5ac;
+  --code-com: #9fa098;
+  --code-tag: #ac8fe6;
+  --code-pun: #8f96a7;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+}
+
+/* ═══ accent 覆盖层：挂极性轴 [data-base]，只填 accent 族 17 槽，底色不动。
+   极性由底色决定（paper/snow=light，ink/slate=dark），theme.ts 与 data-theme 同时挂上。
+   浅档用实色水洗（按纸底卡面切），深档用半透明（天然跟底走）；
+   toast-info 在浅底 toast 上取 accent 深一档。 ═══ */
+
+/* ---- 墨蓝 ink（缺省档：与底色块的 accent 族同值，显式列出保组合齐全） ---- */
+[data-base="light"][data-accent="ink"] {
   --accent: #3d5a80; --accent-hover: #31496a; --accent-active: #283d58;
   --accent-on: #ffffff; --accent-soft: #e8eef4; --accent-light: #d3dfeb;
   --accent-ring: rgba(61, 90, 128, 0.16); --text-brand: #31496a;
@@ -401,7 +651,7 @@
   --lock-orb-1: rgba(61, 90, 128, 0.07); --lock-orb-2: rgba(61, 90, 128, 0.045);
   --selection: rgba(61, 90, 128, 0.18); --toast-info: #93aecb;
 }
-[data-theme="ink"][data-accent="ink"] {
+[data-base="dark"][data-accent="ink"] {
   --accent: #89a8cd; --accent-hover: #a2bcda; --accent-active: #6f92ba;
   --accent-on: #171614; --accent-soft: rgba(137, 168, 205, 0.15); --accent-light: rgba(137, 168, 205, 0.26);
   --accent-ring: rgba(137, 168, 205, 0.32); --text-brand: #adc6e2;
@@ -412,7 +662,7 @@
 }
 
 /* ---- 青瓷 celadon（苔绿，承锁页第四轮母版 #3d7355） ---- */
-[data-theme="paper"][data-accent="celadon"] {
+[data-base="light"][data-accent="celadon"] {
   --accent: #3d7355; --accent-hover: #325f47; --accent-active: #284c39;
   --accent-on: #ffffff; --accent-soft: #e6f0ea; --accent-light: #cde4d7;
   --accent-ring: rgba(61, 115, 85, 0.16); --text-brand: #325f47;
@@ -421,7 +671,7 @@
   --lock-orb-1: rgba(61, 115, 85, 0.07); --lock-orb-2: rgba(61, 115, 85, 0.045);
   --selection: rgba(61, 115, 85, 0.18); --toast-info: #9cc4ae;
 }
-[data-theme="ink"][data-accent="celadon"] {
+[data-base="dark"][data-accent="celadon"] {
   --accent: #7fb89a; --accent-hover: #99c9af; --accent-active: #669b7e;
   --accent-on: #16211b; --accent-soft: rgba(127, 184, 154, 0.16); --accent-light: rgba(127, 184, 154, 0.28);
   --accent-ring: rgba(127, 184, 154, 0.32); --text-brand: #a3d4b8;
@@ -432,7 +682,7 @@
 }
 
 /* ---- 赭石 clay（陶土橙，接旧暖纸墨的血脉） ---- */
-[data-theme="paper"][data-accent="clay"] {
+[data-base="light"][data-accent="clay"] {
   --accent: #9a5b33; --accent-hover: #7f4a29; --accent-active: #673b21;
   --accent-on: #ffffff; --accent-soft: #f5ece4; --accent-light: #ecd9c6;
   --accent-ring: rgba(154, 91, 51, 0.16); --text-brand: #7f4a29;
@@ -441,7 +691,7 @@
   --lock-orb-1: rgba(154, 91, 51, 0.07); --lock-orb-2: rgba(154, 91, 51, 0.045);
   --selection: rgba(154, 91, 51, 0.18); --toast-info: #d9b08f;
 }
-[data-theme="ink"][data-accent="clay"] {
+[data-base="dark"][data-accent="clay"] {
   --accent: #d09a6a; --accent-hover: #dbb088; --accent-active: #b8854f;
   --accent-on: #211a12; --accent-soft: rgba(208, 154, 106, 0.16); --accent-light: rgba(208, 154, 106, 0.28);
   --accent-ring: rgba(208, 154, 106, 0.32); --text-brand: #e0bb92;
@@ -452,7 +702,7 @@
 }
 
 /* ---- 紫罗 plum（旧冷灰钢蓝与电光紫的过渡带） ---- */
-[data-theme="paper"][data-accent="plum"] {
+[data-base="light"][data-accent="plum"] {
   --accent: #5f62b8; --accent-hover: #4e519c; --accent-active: #3f4280;
   --accent-on: #ffffff; --accent-soft: #ececf8; --accent-light: #d9daf0;
   --accent-ring: rgba(95, 98, 184, 0.16); --text-brand: #4e519c;
@@ -461,7 +711,7 @@
   --lock-orb-1: rgba(95, 98, 184, 0.07); --lock-orb-2: rgba(95, 98, 184, 0.045);
   --selection: rgba(95, 98, 184, 0.18); --toast-info: #a9abdd;
 }
-[data-theme="ink"][data-accent="plum"] {
+[data-base="dark"][data-accent="plum"] {
   --accent: #9ba0e8; --accent-hover: #b2b6ef; --accent-active: #8389d6;
   --accent-on: #17162a; --accent-soft: rgba(155, 160, 232, 0.16); --accent-light: rgba(155, 160, 232, 0.28);
   --accent-ring: rgba(155, 160, 232, 0.32); --text-brand: #bcbff2;
@@ -469,6 +719,26 @@
   --brand-g1: #bcbff2; --brand-g2: #9ba0e8; --brand-g3: #7f85cf;
   --lock-orb-1: rgba(155, 160, 232, 0.14); --lock-orb-2: rgba(155, 160, 232, 0.07);
   --selection: rgba(155, 160, 232, 0.30); --toast-info: #4e519c;
+}
+
+/* ---- 暮瑰 rose（酒红玫瑰，四档里唯一走红调的） ---- */
+[data-base="light"][data-accent="rose"] {
+  --accent: #984c64; --accent-hover: #7d3d51; --accent-active: #642f3f;
+  --accent-on: #ffffff; --accent-soft: #f6eaee; --accent-light: #edd7e0;
+  --accent-ring: rgba(152, 76, 100, 0.16); --text-brand: #7d3d51;
+  --badge-ver-bg: #f6eaee; --badge-ver-text: #7d3d51;
+  --brand-g1: #b97a8e; --brand-g2: #984c64; --brand-g3: #642f3f;
+  --lock-orb-1: rgba(152, 76, 100, 0.07); --lock-orb-2: rgba(152, 76, 100, 0.045);
+  --selection: rgba(152, 76, 100, 0.18); --toast-info: #dca6b7;
+}
+[data-base="dark"][data-accent="rose"] {
+  --accent: #d78aa0; --accent-hover: #e3a3b5; --accent-active: #bd7287;
+  --accent-on: #241419; --accent-soft: rgba(215, 138, 160, 0.16); --accent-light: rgba(215, 138, 160, 0.28);
+  --accent-ring: rgba(215, 138, 160, 0.32); --text-brand: #ebb3c3;
+  --badge-ver-bg: rgba(215, 138, 160, 0.16); --badge-ver-text: #ebb3c3;
+  --brand-g1: #ebb3c3; --brand-g2: #d78aa0; --brand-g3: #b66a80;
+  --lock-orb-1: rgba(215, 138, 160, 0.14); --lock-orb-2: rgba(215, 138, 160, 0.07);
+  --selection: rgba(215, 138, 160, 0.30); --toast-info: #874356;
 }
 
 /* ---------- 别名槽位：不填 hex，只指向别的槽，所以四套主题不必各写一遍。
@@ -525,6 +795,14 @@
   --radius-menu: var(--radius-lg);
   --radius-tag: var(--radius-sm);
   --radius-btn: var(--radius);
+}
+
+/* 侧栏激活行不吃卡面洗底：--accent-soft 的浅洗是按卡面（L*99.0）切的，
+   侧栏底比卡面深 5~6 级，搬过去在侧栏上只是亮一丝，激活行分不出来。
+   亮极性改成按侧栏底现切（主色压 15%），激活行由"亮一档"翻成"暗一档"，
+   与 --sidebar-hover 拉开 ΔL* 5 级；暗极性沿用 α 洗，与侧栏底天然同族，不动。 */
+[data-base="light"] {
+  --sidebar-active: color-mix(in srgb, var(--accent) 15%, var(--sidebar-bg));
 }
 
 /* 切主题时挂一次性过渡类（services/theme.ts 负责摘除）：
@@ -685,9 +963,8 @@ body {
    这类两类别名，写在按钮系统里会被同权重的变体反过来盖掉。 */
 
 /* 对话框系统 */
-.dialog-enter-active, .dialog-leave-active { transition: all var(--transition-slow); }
+.dialog-enter-active, .dialog-leave-active { transition: opacity var(--transition-slow); }
 .dialog-enter-from, .dialog-leave-to { opacity: 0; }
-.dialog-enter-from .dialog, .dialog-leave-to .dialog { transform: scale(0.96) translateY(8px); }
 
 .dialog-overlay {
   position: fixed;
@@ -704,7 +981,8 @@ body {
 .dialog {
   background: var(--panel-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  /* 弹窗壳是全站圆角最大的一件，吃 --radius-xl（14）；卡/输入件各在下档。 */
+  border-radius: var(--radius-xl);
   width: 500px;
   max-height: 85vh;
   overflow: hidden;
@@ -713,15 +991,20 @@ body {
   flex-direction: column;
 }
 
+/* 窄档：设置页里的小弹窗（密码、连接、档案）共用一档，别各抄一份 420px。 */
+.dialog-sm { width: 420px; }
+
+/* 头 44：标题与关闭钮，不给底描边——壳里第一道线留给底栏，两头都有线就是三段式表格。
+   关闭钮一律靠右（margin-left:auto），标题右侧还能并一条副题或计数。 */
 .dialog-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-2);
   height: 44px;
   padding: 0 var(--space-4);
-  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+.dialog-header .dialog-close { margin-left: auto; }
 
 .dialog-header-left {
   display: flex;
@@ -734,18 +1017,20 @@ body {
 .dialog-logo svg { width: 100%; height: 100%; }
 .dialog-header h3 {
   font-size: var(--text-base);
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--text);
   margin: 0;
 }
 
+/* 关闭钮 28×28：24 档是行内 .ib 的尺寸，弹窗头上那颗要跟底栏 28px 按钮同档才不显小。
+   圆角 7 不并任何令牌——它落在 --radius-tag(6) 与 --radius-ib(9) 中间，是 mock 给弹窗件的专用档。 */
 .dialog-close {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border: none;
   background: transparent;
-  border-radius: var(--radius-ib);
+  border-radius: 7px;
   cursor: pointer;
   color: var(--text-muted);
   display: flex;
@@ -758,26 +1043,72 @@ body {
 .dialog-close:hover { background: var(--hover); color: var(--text-secondary); }
 .dialog-close:active { transform: scale(0.9); }
 
-.dialog-body { padding: var(--space-4) var(--space-5); overflow-y: auto; scrollbar-gutter: stable; flex: 1; }
-/* 弹窗底栏：全站一套 —— 46px 浅底条 + 28px 按钮档（收藏弹窗 r13 原型值上抬为全局），
-   原先只有 EntryFormDialog 自带这套，其余弹窗掉回 36px 全局按钮档，同一 App 两种底栏。 */
+.dialog-body { padding: var(--space-4); overflow-y: auto; scrollbar-gutter: stable; flex: 1; }
+/* 正文里的说明句（页签下方、字段组上方）全站一种档：12px / --text-muted / 行距 1.6。
+   原先每个弹窗各留一份，12 与 13px、muted 与 secondary 在同屏里高低不一。
+   不用 --text-faint：那档留给装饰，说明句是要读的。 */
+.dialog-body .lead { display: block; margin: 0 0 var(--space-3); font-size: var(--text-xs); line-height: 1.6; color: var(--text-muted); }
+/* 贴在字段下方的说明只留上距——它属于上面那个输入框，不是正文里独立的一段。 */
+.dialog-body .form-group .lead { margin: 6px 0 0 }
+/* 校验/提交失败的红色行与成功行：原先 .lock-error / .modal-error 各抄一份完全相同的八行。 */
+.dialog-body .dialog-err { margin: var(--space-2) 0 0; font-size: var(--text-xs); line-height: 1.6; color: var(--danger); }
+.dialog-body .dialog-ok { margin: var(--space-2) 0 0; font-size: var(--text-xs); line-height: 1.6; color: var(--accent); }
+/* 弹窗底栏：全站一套 —— 46px 透明条 + 一道顶线 + 28px 按钮档（mock .dlg-f）。
+   底栏不再吃 --fill 灰底：壳本身就是白卡，灰条把 46px 变成第二个面，读起来像表格页脚。
+   按钮三档：主=淡染（accent-soft + --text-brand，无描边无投影），次=裸文字（留透明描边防跳动），
+   危险=danger-soft。实底深蓝那颗全站只留给页条与设置类主操作，弹窗里的动作不许比字段重。 */
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: var(--space-2);
   min-height: 46px;
-  padding: 0 var(--space-5);
-  background: var(--fill);
+  padding: 0 var(--space-4);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
-.dialog-footer .btn-primary,
-.dialog-footer .btn-secondary,
-.dialog-footer .btn-danger {
+/* 正文里的动作（开始登录、添加子路径、读实际端口）与底栏同一档：
+   弹窗里的按钮一律不得比字段重。 */
+:is(.dialog-footer, .dialog-body) .btn-primary,
+:is(.dialog-footer, .dialog-body) .btn-secondary,
+:is(.dialog-footer, .dialog-body) .btn-danger {
   height: 28px;
   padding: 0 var(--space-3);
   font-size: var(--text-sm);
+  border-radius: 7px;
+  box-shadow: none;
+}
+:is(.dialog-footer, .dialog-body) .btn-primary {
+  background: var(--accent-soft);
+  color: var(--text-brand);
+  font-weight: 600;
+  border: none;
+}
+:is(.dialog-footer, .dialog-body) .btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text-brand);
+  transform: none;
+}
+:is(.dialog-footer, .dialog-body) .btn-primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+:is(.dialog-footer, .dialog-body) .btn-secondary {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+}
+:is(.dialog-footer, .dialog-body) .btn-secondary:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: transparent;
+  color: var(--text);
+}
+:is(.dialog-footer, .dialog-body) .btn-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-weight: 600;
+}
+:is(.dialog-footer, .dialog-body) .btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
 /* 底栏左侧的快捷键提示（原先在收藏表单弹窗里 scoped 一份，第二个弹窗要用就是副本）。
@@ -802,6 +1133,46 @@ body {
   color: var(--text-muted);
 }
 .hints-dot { margin: 0 4px; }
+
+/* 弹窗头行的副题（账号邮箱、条目名）：mock .dlg-h .sub。头 44px 只有一行文字的重量，
+   身份类信息塞进正文第一行会把字段整体下推一格。 */
+.dialog-header .sub {
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 弹窗内的分段选择：mock .seg 一套平铺语言 ----------
+   没有轨道底，选中项自己吃一层 chrome 灰。原先三个弹窗各抄了一种：Codex 是凹槽+浮白药丸、
+   验证码是通栏凹槽、穿透是描边框+accent 底——同一屏里三种「哪个是选中的」读法。
+   写在全局是因为 scoped 壳类跨不进子组件，各弹窗再抄一遍就又是三份。 */
+.dialog .seg { display: flex; align-items: center; gap: 2px; }
+.dialog .seg > button {
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background var(--transition), color var(--transition);
+}
+.dialog .seg > button:hover:not(.on) { color: var(--text-secondary); }
+.dialog .seg > button.on { background: var(--hover-chrome); color: var(--text); font-weight: 600; }
+/* 页签当正文第一行时，与下方字段留一档距离；嵌在字段组里（标签跟着它）不另加。 */
+.dialog-body > .seg { margin-bottom: var(--space-3) }
+/* 嵌在字段组里的段控件是「另一种输入」，必须与上面那颗 32px 输入同轴，否则一行里两个高度。 */
+.dialog .form-group .seg > button { height: 32px }
 
 /* 卡片元素 */
 .card-category {
@@ -928,29 +1299,37 @@ body {
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: var(--space-3); }
 .form-row .form-group { margin-bottom: 0; }
 
-/* ---------- 设置弹窗的行组（Inset Grouped Rows）：一组功能收进一块内嵌凹槽，
-   条目之间只靠 1px 细线断句，不再往凹槽里塞第二层圆角框。
-   原先这套在 SettingsDialog 与 BackupPane 里各抄了一份 scoped 副本，
-   两份漂成了 32px 和无定高两种控件高度——同一栏里自然高低不齐。 ---------- */
-.group-content {
-  background: var(--sunken);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
+/* ---------- 设置弹窗的行组：面板本身就是纸面，行与行之间只靠一道发丝线断句。
+   这里原先是一层 --sunken 圆角凹槽、凹槽里再分行——等于往纸面里塞第二层卡，
+   行文字也被凹槽的内距又推进了一档，和面板上的分组标题对不齐。
+   凹槽留给页首那句说明（.modhint），它才是需要和行列表区分开的一层。 ---------- */
 .setting-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  min-height: 52px;
-  padding: 10px var(--space-4);
+  min-height: 44px;
+  padding: 8px var(--space-2);
+  /* 负边距把发丝线推到行文字两侧之外：线几乎通栏，hover 填充却仍留 8px 内距，
+     不会把字贴在线边上。 */
+  margin: 0 calc(var(--space-2) * -1);
   border-bottom: 1px solid var(--border);
   transition: background var(--transition);
 }
 .setting-item:last-child { border-bottom: none; }
-.setting-item.clickable { cursor: pointer; }
+.setting-item.clickable { cursor: pointer; border-radius: var(--radius-tag); }
 .setting-item.clickable:hover { background: var(--hover); }
+
+/* 页签首行的说明：整页唯一的一处凹槽，用来把「读的话」和下面的行列表分开。 */
+.pane-hint {
+  margin: 0 0 var(--space-2);
+  padding: 10px 12px;
+  border-radius: var(--radius-ib);
+  background: var(--hover-chrome);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text-muted);
+}
 
 .setting-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .setting-name { font-size: var(--text-base); font-weight: 500; color: var(--text); }
@@ -1215,7 +1594,8 @@ body {
      以下一份为准，scoped 里的副本一律删除。 ---------- */
 
 /* 滚动容器：顶部不留内边距——sticky 的 top:0 会贴在 padding-top 下面，
-   露出一条能看见内容的缝。底部 22px 是常态呼吸，批量底栏浮起时换回净空。
+   露出一条能看见内容的缝。首行呼吸由 .page-bar 自己的 padding-top 出。
+   底部 22px 是常态呼吸，批量底栏浮起时换回净空。
    微光画布：页面顶部透一层 accent 微光，与锁屏同源（orb 槽随 accent 走）；
    背景钉在容器上，内容滚过时微光不动 */
 .content-inner {
@@ -1229,55 +1609,60 @@ body {
 }
 .content-inner:has(.batch-dock) { padding-bottom: var(--dock-clearance); }
 
-/* 吸顶工具栏：54px 定高，五页同一条（V5.2 收编轮 P2 由 48 抬到 54，仍保持单层——
-   搜索/分类段/新增钮都在这条里，不拆成 spec 的「身份条 + 控件条」两层）。
-   inset 轮起与内容列同宽同左缘（不再负边距吃满），底色取画布色半透——
-   行列表滚动到栏下时被同色磨砂糊住而不是顶出来 */
+/* 页面一行头（Things 方言）：页名与条数归标题栏，内容区只留工具栏行 .page-bar；
+   控件 32px 档，搜索/分类/动作都排在这一行，与内容同左缘。 */
+/* 工具栏行：吸顶，控件 32px 档，上下各一档呼吸（64px 定高）。首行呼吸放在栏内
+   而不是滚动容器 padding-top，否则吸顶时上沿会留一条能看见行卡的缝。
+   底色与 .app-root 同一条画布配方 + fixed 附着，行列表滚到栏下被同色盖住而不是顶出来
+   （沿用 V5.2 的吸顶约定）。 */
 .page-bar {
   position: sticky;
   top: 0;
   z-index: 20;
-  height: 54px;
-  /* 半透明平铺底会把画布那两团径向光晕压平成一条比四周亮的横带（静止时就看得见）。
-     改成与 .app-root 同一条画布配方（--bg-toolbar）+ fixed 附着：静止时与身后逐像素
-     重合，滚动时靠不透明底盖住行。background 简写会重置 attachment，故其后重申。 */
+  min-height: 64px;
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
   background: var(--bg-toolbar);
   background-attachment: fixed;
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
-/* 栏内控件一律 30px 档（54px 栏里上下各留 12px；全局 36px 是弹窗/表单档）。
-   搜索框可缩到 120：窄窗里先让搜索框让位，别叫分类行（.tabs）拿隐藏滚动条裁掉「更多」那颗。 */
-.page-bar .search-box { flex: 0 1 200px; min-width: 120px; height: 30px; margin-right: var(--space-2); }
+/* 栏内控件一律 32px 档；搜索框灰底无描边（Apple 方言），窄窗先让搜索让位。 */
+.page-bar .search-box {
+  flex: 0 1 220px;
+  min-width: 140px;
+  height: 32px;
+  margin-right: var(--space-2);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 0;
+  border-radius: 9px;
+}
 .page-bar .search-box input { font-size: var(--text-xs); }
 .page-bar .btn-primary,
 .page-bar .btn-secondary,
-.page-bar .bar-btn { height: 30px; }
-/* 栏内主钮（V5.2 §5）：胶囊圆角 + accent 彩色投影 + hover 抬 1px。
-   覆盖 P2 的「栏内主钮收白描边」——内容区改成浮岛网格后区内不再有实心色块，
-   视觉重点收回这颗入口钮（对拍稿即按实心 accent 拍板）。
-   高度仍锁 30px 栏内档：spec 的 padding:7px 15px 会涨到 ~32px，与弹窗 28px 尺寸轴冲突，
-   所以本节只改圆角与投影，不改 padding/height。 */
+.page-bar .bar-btn { height: 32px; }
+/* 栏内主钮改淡染方言：accent-soft 底 + brand 字，不做实心深蓝大胶囊。
+   圆角收到 8px 方角档，去掉彩色投影与 hover 抬升（ Things 静默控件）。 */
 .page-bar .btn-primary {
-  background: var(--accent);
-  color: var(--accent-on);
+  background: var(--accent-soft);
+  color: var(--text-brand);
   border: none;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-ib);
   font-weight: 600;
-  box-shadow: 0 4px 14px -3px var(--accent);
+  box-shadow: none;
 }
 .page-bar .btn-primary:hover {
-  background: var(--accent-hover);
-  color: var(--accent-on);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px -4px var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text-brand);
+  transform: none;
+  box-shadow: none;
 }
 .page-bar .btn-primary:active {
-  background: var(--accent-active);
-  color: var(--accent-on);
-  transform: translateY(0);
-  box-shadow: 0 3px 10px -3px var(--accent);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text-brand);
+  transform: none;
+  box-shadow: none;
 }
 
 /* 行列表（inset 轮）：一块白色圆角面板承托，面板内行间只剩发丝细线；
@@ -1295,33 +1680,44 @@ body {
 }
 .rowlist > * + * { border-top: 1px solid var(--border); }
 .rowlist .skeleton-row { border: none; border-radius: 0; box-shadow: none; background: transparent; }
+.tn-card .skeleton-row {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  height: 44px;
+  padding: 0 14px;
+}
+.tn-card .skeleton-row + .skeleton-row { border-top: 1px solid var(--border) }
 
-/* 穿透页行卡壳：一层卡 + 细线分行。同页两组件共用这一层，
+/* 面板卡（mock .wcard）：一层白卡 + 发丝分行，穿透/局域网两页共用这一层。
+   头 44、行 44、内衬 14——行高取 44 而非 mock 的 40，因为行里最厚的件是 32px 控件档。
    scoped 到组件就跨不进子组件，所以与 .rowlist/.card-grid 一起放骨架里。 */
 .tn-card {
   background: var(--panel-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border-radius: 12px;
   box-shadow: var(--shadow-card);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
 }
 .tn-head {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px 9px;
-  font-size: var(--text-xs);
+  height: 44px;
+  padding: 0 14px;
+  font-size: var(--text-base);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
+  color: var(--text);
   border-bottom: 1px solid var(--border);
 }
 .tn-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 16px;
-  height: 60px;
+  height: 44px;
+  padding: 0 14px;
 }
 /* 行与行之间只剩发丝线；夹在中间的是备注行，两侧都要有线 */
 .tn-row + .tn-row,
@@ -1340,11 +1736,116 @@ body {
   gap: 6px;
   font-size: var(--text-xs);
   color: var(--text-muted);
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-top: 1px solid var(--border);
 }
 .tn-note.chip-warn { background: var(--warning-soft); color: var(--warning); }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+
+/* 行内事实徽标（mock .chip.ok/.warn/.off）：20px 小圆角方牌，不是页条那颗胶囊。
+   坏消息一律 warn，红 .bad 只留给连动作都做不成的那一档（如目标不可达）；
+   绿色 .ok 只留给「安全侧已经做了」这一类需要正面确认的事实（如已设访问口令）。 */
+.badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-tag);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.badge.ok { background: var(--success-soft); color: var(--success) }
+.badge.warn { background: var(--warning-soft); color: var(--warning) }
+.badge.own { background: var(--accent-soft); color: var(--accent) }
+.badge.off { background: var(--fill); color: var(--text-secondary) }
+/* 红色只留给「这条路走不通」那一档：不可达的目标连清单都不该进。 */
+.badge.bad { background: var(--danger-soft); color: var(--danger) }
+
+/* 面板卡里的按钮（mock .btn-tint 与裸文字）：一行的主操作吃淡染档，其余收成裸文字。
+   实底那颗只留给页条——卡里再放一颗会把整页重心压进行内，一行只许一颗有底的。 */
+.tn-card .btn-primary {
+  background: var(--accent-soft);
+  border: none;
+  border-radius: var(--radius-ib);
+  color: var(--text-brand);
+  font-weight: 600;
+  box-shadow: none;
+}
+.tn-card .btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text-brand);
+  box-shadow: none;
+  transform: none;
+}
+.tn-card .btn-primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text-brand);
+}
+.tn-card .btn-secondary {
+  background: none;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+.tn-card .btn-secondary:hover:not(:disabled) { background: var(--hover); color: var(--text) }
+
+/* 单行浮岛（mock .rcard）：一行一颗独立白卡，直连清单与 Codex 账号两页共用这一层。
+   壳是列容器不是行——展开时同一颗岛下面接一段凹底明细，不再往岛里套第二层卡。
+   行档 64：岛里最厚的件是「主名 + 一句细字」，低于这一档两行字会顶到描边。 */
+.rcard {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.rcard:hover:not(.empty-state) { border-color: var(--border-hover); box-shadow: var(--shadow-md) }
+/* 空态那颗借同一层描边，但里面没有可点的东西，所以不抬影 */
+.rcard.empty-state { box-shadow: none }
+.rcard-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-3);
+  /* 顶部留 2px：抬起来的描边不被内容区上缘裁掉 */
+  padding-top: 2px;
+}
+.rcard-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: 0 14px;
+}
+/* 浮岛里的主操作沿面板卡同一档淡染：实底那颗只留给页条，一行的重心不许压进按钮 */
+.rcard .action-btn.primary {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--text-brand);
+  font-weight: 600;
+}
+.rcard .action-btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: transparent;
+  color: var(--text-brand);
+}
+.rcard .action-btn.primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* 列表下面的一行页脚注：把这一页不代做什么说清楚，不套卡也不抢行的视觉重量。
+   字色取 muted 不取 faint——这是要读的句子不是装饰，纸底上 faint 只有 2.7:1。 */
+.page-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 2px 0;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+.page-note svg { flex-shrink: 0; }
 
 /* 浮岛网格（V5.2 收编轮 P3，C1/C1b）：卡片直接浮在画布上，不包 .rowlist 白面板，
    否则卡中卡。列数由容器宽自适应——minmax 取 280px 而非 spec 的 310px：默认窗内容宽 928px
@@ -1353,46 +1854,54 @@ body {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  gap: 12px;
   margin-top: var(--space-3);
-  /* 顶部留 2px：hover 抬影的 -2px 与 3px 焦点环不被内容区上缘裁掉 */
+  /* 顶部留 2px：hover 抬影的 -1px 与 3px 焦点环不被内容区上缘裁掉 */
   padding-top: 2px;
 }
+/* 78px 双行浮岛卡（Things 参照）：一行身份、一行等宽副址，
+   动作收进右下角 hover 才显形的浮岛（与右下对勾同轴）。 */
 .grid-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  padding: 15px;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 78px;
+  padding: 12px 14px;
   cursor: pointer;
   background: var(--panel-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: 12px;
   box-shadow: var(--shadow-card);
   transition: transform var(--transition), background-color var(--transition),
     border-color var(--transition), box-shadow var(--transition), padding-left var(--transition);
 }
-/* 9-28「hover 不得抬影」对网格卡作废：抬 2px + md 影 + 描边升一档。
-   paper 下 spec 的 elevated==surface==纯白，hover 等于不换底（spec 自身的洞），这里换 --sunken。 */
+/* hover 抬 1px + md 影 + 描边升一档。
+   亮极性下卡面是整窗最亮的一档，hover 不洗底等于没换色，这里改吃 --sunken。 */
 .grid-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   border-color: var(--border-hover);
   box-shadow: var(--shadow-md);
 }
-[data-theme="paper"] .grid-card:hover:not(.selected) { background: var(--sunken); }
-[data-theme="ink"] .grid-card:hover:not(.selected) { background: var(--hover); }
+[data-base="light"] .grid-card:hover:not(.selected) { background: var(--sunken); }
+[data-base="dark"] .grid-card:hover:not(.selected) { background: var(--hover); }
 .grid-card:focus-visible {
   outline: none;
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-pop);
 }
 .grid-card.selected { background: var(--accent-soft); border-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
-  .grid-card:hover, .grid-card:focus-visible { transform: none; }
-}
+  .grid-card:hover, .grid-card:focus-visible { transform: none; } }
 
-/* 34px 图标槽：字母块只吃字色淡染（色彩留给 favicon / 扩展名色底） */
+/* 通用双行壳：身份行（档面 + 名称 + 右对齐类型/分类），副址行缩进到名称起笔
+   （24 档面 + 9 间距 = 33）。收藏 / 文件两页共用，skeleton 也走同一对行。 */
+.row1 { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.row2 { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: 33px; }
+
+/* 图标槽：字母块只吃字色淡染（色彩留给 favicon / 扩展名色底） */
 .grid-slot {
   width: 34px;
   height: 34px;
@@ -1414,19 +1923,29 @@ body {
   object-fit: contain;
   display: block;
 }
-/* favicon 档面：墨底上多数站点标是深标（GitHub 黑猫），垫一片暖白亮底才不隐身。
-   底色由字色与卡面混出，不另开色槽；纸底本身是亮底，只有墨底需要这层。 */
-[data-theme="ink"] .grid-slot--icon {
+/* favicon 档面：暗极性上多数站点标是深标（GitHub 黑猫），垫一片亮白底才不隐身。
+   底色由字色与卡面混出，不另开色槽；亮极性本身是亮底，只有暗极性需要这层。 */
+[data-base="dark"] .grid-slot--icon {
   background: color-mix(in srgb, var(--text) 92%, var(--panel-bg));
 }
 /* 目录档：任何列目录的行/卡都用这一张脸（文件页快捷方式、局域网共享目录）。
    只在此叠类型色，尺寸/圆角仍由 .grid-slot 给 */
 .grid-slot--folder { background: var(--warning-soft); color: var(--warning) }
 
+/* 卡内档面收进 24px（浮岛双行的身份块比行/弹窗的 34px 矮一档），img 跟着缩 */
+.grid-card .grid-slot { width: 24px; height: 24px; border-radius: 7px; font-size: var(--text-2xs) }
+.grid-card .grid-slot img { width: 16px; height: 16px }
+/* 分类淡染：favicon 到货前/抓不到时的字母兜底按分类 hue 上一点色（13% 底 + 色字），
+   --gc-hue 由页面按分类哈希给（收藏页）；到货后走 .grid-slot--icon 的中性/亮底 */
+.grid-card .grid-slot--hue {
+  background: color-mix(in srgb, var(--gc-hue) 13%, var(--panel-bg));
+  color: var(--gc-hue);
+}
+
 /* ---------- 胶囊：状态、行首标签、可选项的统一配方。
    原先局域网页三种并存（状态胶囊 fill 无框 / 行首标签 fill 2×9 / 目录选择 panel+描边），
-   同一个 App 里"小圆角标签"就有三种重量。卡脚的分类标签另走 .grid-pill（badge 令牌），
-   那是"这条数据属于哪类"，与此处"状态/可选"不是一回事。 ---------- */
+   同一个 App 里"小圆角标签"就有三种重量。卡内右下角是动作浮岛（.grid-acts），
+   分类/类型标签走卡片自己那行的淡染，与此处"状态/可选"不是一回事。 ---------- */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -1457,47 +1976,32 @@ body {
 button.chip { cursor: pointer; transition: background var(--transition), color var(--transition) }
 button.chip:hover { background: var(--hover); color: var(--text) }
 button.chip.on { background: var(--accent-soft); color: var(--accent) }
-/* 脚注：虚线分行（与卡皮的实描边区分），左标签右动作。
-   同排卡片等高（网格 stretch），margin-top:auto 把脚钉到卡底，虚线才在同一水平 */
-.grid-foot {
-  border-top: 1px dashed var(--border-subtle);
-  padding-top: 9px;
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-.grid-pill {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  font-size: var(--text-xs);
-  color: var(--badge-cat-text);
-  background: var(--badge-cat-bg);
-  border: 1px solid var(--badge-cat-border);
-  border-radius: var(--radius-pill);
-  padding: 1px 9px;
-}
-/* 动作列：hover/键盘聚焦才显形（可见才可点，杜绝隐形吞点击） */
+/* 动作浮岛：右下角贴地小胶囊，hover/键盘聚焦才显形（可见才可点，杜绝隐形吞点击）。
+   与副址行右下对齐——静息时那格是凭证锁标，显形时锁标淡出、浮岛接管。 */
 .grid-acts {
-  margin-left: auto;
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-sm);
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--transition);
 }
 .grid-card:hover .grid-acts,
-.grid-card:focus-within .grid-acts { opacity: 1; }
-.grid-acts .ib { width: 24px; height: 24px; }
+.grid-card:focus-within .grid-acts { opacity: 1; pointer-events: auto; }
+.grid-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
 
 /* 勾选位：hover 时浮在 34px 槽的点心上，批量态让出左栏位（与一行卡同一套手势） */
 .grid-card .card-check {
   position: absolute;
-  left: 23px; /* padding 15 + 34/2 − 18/2 */
-  top: 23px;
+  left: 15px; /* padding 12 + 24/2 − 18/2：浮在 24px 档面的点心 */
+  top: 15px;
   width: 18px;
   height: 18px;
   border: 1.5px solid var(--border-strong);
@@ -1523,20 +2027,21 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
 .grid-card.batching .card-check { left: 15px; }
 .grid-card.batching .grid-acts { display: none; }
 
-/* 骨架卡：与真卡同皮同高，加载完不跳版面；呼吸只走在容器上 */
+/* 骨架卡：与真卡同皮同高（78 双行），加载完不跳版面；呼吸只走在容器上 */
 .skeleton-card {
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  min-height: 104px;
-  padding: 15px;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 78px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: 12px;
   background: var(--panel-bg);
   box-shadow: var(--shadow-card);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
-.skeleton-slot { width: 34px; height: 34px; border-radius: var(--radius-ib); background: var(--fill); flex-shrink: 0; }
+.skeleton-slot { width: 24px; height: 24px; border-radius: 7px; background: var(--fill); flex-shrink: 0; }
 .card-grid .skeleton-line.foot { margin-top: auto; }
 
 /* 骨架屏：行形与行卡同尺寸（inset 轮 52px 行档），呼吸只走在容器上，条块是静的 */
@@ -1582,16 +2087,7 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   text-decoration-color: currentColor;
 }
 
-/* ---------- 页眉工具条：每个页面顶部唯一一条 chrome。
-     原先只有小记页有这套，收藏页和文件页各写各的，看起来像三个时代的东西。 ---------- */
-.bar-count {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  margin-right: auto;
-  padding-left: var(--space-1);
-}
+/* ---------- 页眉工具条：每个页面顶部唯一一条 chrome。 ---------- */
 /* 34px 见方、平时无底，靠 hover 才亮 —— 与同一行的主按钮拉开重量但不错成两个框 */
 .bar-btn {
   height: 34px;
@@ -1759,14 +2255,12 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
   box-shadow: var(--shadow-pop);
   padding: var(--space-1);
   min-width: 148px;
-  animation: pop-in var(--transition-fast) ease both;
 }
 .popover.wide { min-width: 260px; padding: 0; }
 /* 定宽档：盖掉 148px 下限，给规格化的窄菜单（136px 动作单） */
 .popover.fixed { min-width: 0; }
 /* 弹窗遮罩是 1000：设置页里的下拉浮层必须压在它上面，和 .app-tip 同一档 */
 .popover.modal { z-index: 1500; }
-@keyframes pop-in { from { opacity: 0; transform: translateY(-3px) scale(0.98); } }
 
 /* Teleport 到 body 的分类下拉：脱离组件作用域，样式只能挂全局。
    与 .popover 同一套浮层语言（大圆角 + pop 阴影 + 内衬间距），条目落 .pop-item 同档 */
@@ -1822,7 +2316,7 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
 .pop-item:hover { background: var(--hover); color: var(--text); }
 .pop-item.danger { color: var(--danger); }
 .pop-item.danger:hover { background: var(--danger-soft); }
-.pop-sep { height: 1px; background: var(--border-divider); margin: var(--space-1) 0; }
+.pop-sep { height: 1px; background: var(--border); margin: var(--space-1) 0; }
 .pop-sec { padding: var(--space-3) var(--space-4); }
 .pop-sec + .pop-sec { border-top: 1px solid var(--border); }
 .pop-label { font-size: var(--text-2xs); font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; margin-bottom: var(--space-2); }

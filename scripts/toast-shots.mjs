@@ -1,4 +1,4 @@
-// V5.2 P4 交付拍图：toast 右下反色胶囊（成功 0.8s / 错误 2.4s / 与批量底栏同屏）
+// V5.2 P4 交付拍图 → 10-12 搬家轮：toast 顶沿居中反色胶囊（成功 0.8s / 错误 2.4s / 与批量底栏同屏）
 // 用法：PW_CHANNEL=msedge node scripts/toast-shots.mjs   （需先起 vite --mode e2e --port 1430）
 import { chromium } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
@@ -59,7 +59,7 @@ for (const theme of ['paper', 'ink']) {
   await page.screenshot({ path: `${OUT}/${theme}-2-error.png` })
   await page.waitForTimeout(2600)
 
-  // 3. 与批量底栏同屏：底栏居中、胶囊右下，验互不占位（用错误类，2.4s 停留才拍得清）
+  // 3. 与批量底栏同屏：胶囊居上、底栏居中贴底，验互不占位（用错误类，2.4s 停留才拍得清）
   await page.locator('a.nav-item[href="/entries"]').click()
   await page.waitForSelector('.entry-card')
   await page.locator('.page-bar .bar-btn').first().click()
@@ -72,7 +72,7 @@ for (const theme of ['paper', 'ink']) {
   await page.waitForSelector('.toast.error')
   await page.keyboard.press('Escape')
   await page.waitForTimeout(120)
-  await page.screenshot({ path: `${OUT}/${theme}-3-with-dock.png`, clip: { x: 0, y: 470, width: 1040, height: 200 } })
+  await page.screenshot({ path: `${OUT}/${theme}-3-with-dock.png` })
 
   console.log(`${theme}: 3 shots`)
   await ctx.close()

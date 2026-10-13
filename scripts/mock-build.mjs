@@ -3,6 +3,9 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { readPolarity } from './lib/theme-tokens.mjs'
+
+const POLARITY = readPolarity()
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(here, '..')
@@ -17,9 +20,13 @@ if (!SRC || !OUT) {
 const CSS_SELECTORS = new Set([
   ':root',
   ':root, [data-theme="paper"]',
+  '[data-theme="snow"]',
   '[data-theme="ink"]',
-  '[data-theme="paper"][data-accent="ink"]',
-  '[data-theme="ink"][data-accent="ink"]',
+  '[data-theme="slate"]',
+  '[data-base="light"][data-accent="ink"]',
+  '[data-base="dark"][data-accent="ink"]',
+  // 侧栏激活行按侧栏底现切，写在别名块之后；漏摘这一条，mock 上的激活行还是旧的卡面洗底
+  '[data-base="light"]',
 ])
 
 /** 扫顶层规则，摘出选择器命中的整块（跳过注释，避免注释里出现的 ":root" 被当选择器） */
@@ -72,13 +79,17 @@ function svg(name, size, icons) {
 
 const globalCss = readFileSync(path.join(root, 'src/styles/global.css'), 'utf8')
 const tokens = pickTokenBlocks(globalCss)
-const missing = ['[data-theme="ink"]', '[data-theme="paper"][data-accent="ink"]'].filter(
+const missing = ['[data-theme="ink"]', '[data-base="light"][data-accent="ink"]'].filter(
   (s) => !tokens.includes(s),
 )
 if (missing.length) throw new Error(`token 块未命中: ${missing.join(', ')}`)
 
 const icons = iconPaths()
 let html = readFileSync(path.resolve(SRC), 'utf8')
+// accent 块与侧栏洗底都挂在极性轴上；老 mock 只挂 data-theme，这里按 theme.ts 的 POLARITY 当场补一个 data-base
+html = html.replace(/data-theme="([\w-]+)"(?![^>]*\bdata-base=)/g, (all, t) =>
+  POLARITY[t] ? `${all} data-base="${POLARITY[t]}"` : all,
+)
 html = html.replace(/<!--TOKENS-->/, tokens)
 html = html.replace(/\{\{i:([A-Za-z0-9]+):(\d+)\}\}/g, (_, n, s) => svg(n, s, icons))
 writeFileSync(path.resolve(OUT), html, 'utf8')

@@ -1,8 +1,11 @@
 /* 主题：颜色（和外设字体栈）会换，尺度（圆角/间距/字号）不动。
  *
- * v2 起是两轴结构：底色（paper 纸 / ink 墨）× accent（墨蓝/青瓷/赭石/紫罗）。
- * 色槽定义在 global.css：底色块填 96 槽，[data-accent] 覆盖层只填 accent 族 17 槽。
- * 这里负责把 data-theme / data-accent 两个属性挂到 <html> 上、以及存取用户的选择。
+ * v3 起是「底色 × 极性 × accent」三样两轴：
+ *   底色 paper 纸 / snow 雪 / ink 墨 / slate 岩，每套交出完全相同的 96 槽；
+ *   极性 light / dark 由底色决定（不是第三轴，用户不能单设），只用来挂 accent；
+ *   accent 五档墨蓝/青瓷/赭石/紫罗/暮瑰，覆盖层按 [data-base][data-accent] 填 accent 族 17 槽。
+ * 所以组合数 = 底色 4 × accent 5 = 20，但 accent 块只有 2×5=10 个——新增底色不必再配一轮 accent。
+ * 这里负责把 data-theme / data-base / data-accent 三个属性挂到 <html> 上、以及存取用户的选择。
  *
  * 读取用的是明文 meta 表，锁屏前也能拿到，所以 main.ts 可以在
  * 首次绘制之前 await 一次，避免"先闪纸色再跳到墨色"。
@@ -11,8 +14,9 @@
  * 迁移只在读取时查一次表完成，不回写——用户下次切主题时自然落为新值。 */
 import { settingsApi } from './api/settings'
 
-export type ThemeId = 'paper' | 'ink'
-export type AccentId = 'ink' | 'celadon' | 'clay' | 'plum'
+export type ThemeId = 'paper' | 'snow' | 'ink' | 'slate'
+export type AccentId = 'ink' | 'celadon' | 'clay' | 'plum' | 'rose'
+export type PolarityId = 'light' | 'dark'
 
 export interface Appearance {
   theme: ThemeId
@@ -32,6 +36,8 @@ const LEGACY_THEME: Record<string, ThemeId> = {
   'light-celadon': 'paper',
   'aluminum-pro': 'paper',
   'swiss-monochrome': 'paper',
+  /* 暖砂在 2026-10 冷白轮被雪取代，存着砂的选择就近落到雪 */
+  sand: 'snow',
   dark: 'ink',
   'dark-carbon': 'ink',
   'cyber-hacker': 'ink',
@@ -76,14 +82,25 @@ export interface AccentInfo {
 
 export const THEMES: ThemeInfo[] = [
   { id: 'paper', name: '纸', prev: { page: '#f8f8f7', sidebar: '#edecea', card: '#fcfcfc', rowHover: '#f7f7f7', edge: '#e6e6e4', accent: '#3d5a80', ink: '#333230' } },
+  { id: 'snow', name: '雪', prev: { page: '#f8fbfe', sidebar: '#e5e8ee', card: '#fefefe', rowHover: '#f6f9fe', edge: '#dbdfe6', accent: '#3d5a80', ink: '#202123' } },
   { id: 'ink', name: '墨', prev: { page: '#1d1c1a', sidebar: '#1a1917', card: '#22211e', rowHover: '#282622', edge: '#30302d', accent: '#89a8cd', ink: '#e6e4de' } },
+  { id: 'slate', name: '岩', prev: { page: '#191c20', sidebar: '#17191d', card: '#1f2328', rowHover: '#252a30', edge: '#2d333b', accent: '#89a8cd', ink: '#e3e6ec' } },
 ]
+
+/** 底色 → accent 覆盖层挂的那一极。新增底色只需在这里登记一行。 */
+export const POLARITY: Record<ThemeId, PolarityId> = {
+  paper: 'light',
+  snow: 'light',
+  ink: 'dark',
+  slate: 'dark',
+}
 
 export const ACCENTS: AccentInfo[] = [
   { id: 'ink', name: '墨蓝', dot: '#3d5a80', dotInk: '#89a8cd' },
   { id: 'celadon', name: '青瓷', dot: '#3d7355', dotInk: '#7fb89a' },
   { id: 'clay', name: '赭石', dot: '#9a5b33', dotInk: '#d09a6a' },
   { id: 'plum', name: '紫罗', dot: '#5f62b8', dotInk: '#9ba0e8' },
+  { id: 'rose', name: '暮瑰', dot: '#984c64', dotInk: '#d78aa0' },
 ]
 
 export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink' }
@@ -91,9 +108,12 @@ export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink' }
 const isThemeId = (v: string): v is ThemeId => THEMES.some((t) => t.id === v)
 const isAccentId = (v: string): v is AccentId => ACCENTS.some((a) => a.id === v)
 
+export const polarityOf = (theme: ThemeId): PolarityId => POLARITY[theme]
+
 export const applyTheme = (ap: Appearance) => {
   const root = document.documentElement
   root.setAttribute('data-theme', ap.theme)
+  root.setAttribute('data-base', polarityOf(ap.theme))
   root.setAttribute('data-accent', ap.accent)
 }
 

@@ -1,36 +1,44 @@
 #!/usr/bin/env node
 /*
- * 主题令牌覆盖检查（2 底色 × 4 accent 双轴版）
+ * 主题令牌覆盖检查（底色轴 × accent 轴，accent 按极性挂 版）
  *
  * 换主题时最怕的一种 bug：某套配色少填了一个槽位。
  * CSS 不会报错——那个槽位会静默地留着缺省值，切过去就是一块
  * "换了主题但没换颜色"的补丁，很难在满屏里找出来。
  *
- * 双轴契约：
- *   · 底色层 [data-theme="paper"|"ink"] 交出完全相同的 96 个槽位名；
- *   · accent 族 17 槽由 [data-theme=x][data-accent=y] 覆盖层填，
- *     8 种组合一个不许少，槽位名只许落在 accent 白名单内；
- *   · theme.ts 里声明的 THEMES/ACCENTS id 必须和 CSS 里出现的属性值一一对应。
+ * 三样两轴契约：
+ *   · 底色层 [data-theme="paper"|"snow"|"ink"|"slate"] 交出完全相同的 96 个槽位名；
+ *   · 极性 light/dark 由底色决定，theme.ts 的 POLARITY 是唯一登记处；
+ *   · accent 族 17 槽由 [data-base=x][data-accent=y] 覆盖层填，
+ *     2×5=10 个组合一个不许少（同极的几套底色共用同一档），
+ *     槽位名只许落在 accent 白名单内；
+ *   · 底色/accent 名单从 theme.ts 现读，CSS 里缺哪一块就报哪一块。
  *
- * 这个脚本做五件事：
- *   1. paper / ink 槽位名完全对齐（以 paper 为基准）
- *   2. 8 个 accent 组合齐全，组合之间槽位名一致且都在白名单内
- *   3. 主题块 / accent 块里不许出现 var() 引用（那是别名块的活）
+ * 这个脚本做六件事：
+ *   1. 每套底色槽位名完全对齐（以 paper 为基准）
+ *   2. 10 个 accent 组合齐全，组合之间槽位名一致且都在白名单内
+ *   3. 底色块里不许出现 var() 引用（那是别名块的活）；accent 块允许，
+ *      因为它按极性切、本来就要能引用 var(--panel-bg) 这类随底走的槽
  *   4. 别名块不许被主题/accent 块重复定义（顺序反转会互相盖值）
  *   5. 全项目 var(--x) 用到了但没人定义的槽位
+ *   6. theme.ts 的 POLARITY 必须覆盖每一套底色
  *
  * 用法：node scripts/check-theme-coverage.mjs
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { readThemeIds } from './lib/theme-tokens.mjs'
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
 const CSS_PATH = join(ROOT, 'src', 'styles', 'global.css')
 const THEME_TS_PATH = join(ROOT, 'src', 'services', 'theme.ts')
 
-const BASES = ['paper', 'ink']
+/* 轴名单以 theme.ts 为唯一出处：这里再抄一份，换档时就会漏改一处 */
+const { themes: THEME_INFOS, accents: ACCENT_INFOS } = readThemeIds(THEME_TS_PATH)
+const BASES = THEME_INFOS.map((t) => t.id)
 const BASELINE = 'paper'
-const ACCENTS = ['ink', 'celadon', 'clay', 'plum']
+const POLARITIES = ['light', 'dark']
+const ACCENTS = ACCENT_INFOS.map((a) => a.id)
 
 /* accent 覆盖层允许动的槽位族——新增跟随 accent 的槽位时先加进这里 */
 const ACCENT_SLOTS = new Set([
@@ -53,7 +61,7 @@ function parseDecls(body) {
 }
 
 const BASE_RE = /^:root(?:\s*,\s*\[data-theme="([\w-]+)"\])?$/
-const ACCENT_RE = /^\[data-theme="([\w-]+)"\]\[data-accent="([\w-]+)"\]$/
+const ACCENT_RE = /^\[data-base="([\w-]+)"\]\[data-accent="([\w-]+)"\]$/
 
 function collectBlocks(css) {
   const blocks = []
@@ -66,7 +74,7 @@ function collectBlocks(css) {
     if (base) {
       blocks.push({ kind: 'base', theme: base[1] ?? 'root', selector, decls: parseDecls(m[2]) })
     } else if (accent) {
-      blocks.push({ kind: 'accent', theme: accent[1], accent: accent[2], selector, decls: parseDecls(m[2]) })
+      blocks.push({ kind: 'accent', polarity: accent[1], accent: accent[2], selector, decls: parseDecls(m[2]) })
     } else if (/^\[data-theme="[\w-]+"\]$/.test(selector)) {
       const t = /\[data-theme="([\w-]+)"\]/.exec(selector)[1]
       blocks.push({ kind: 'base', theme: t, selector, decls: parseDecls(m[2]) })
@@ -84,7 +92,7 @@ const problems = []
 
 /* ---- 归并 ---- */
 const baseSlots = new Map()   // theme -> Map(slot -> [values])
-const comboSlots = new Map()  // "theme/accent" -> Map(slot -> [values])
+const comboSlots = new Map()  // "polarity/accent" -> Map(slot -> [values])
 const aliasDecls = []         // 其余块（别名块、尺度层等）
 for (const b of blocks) {
   if (b.kind === 'base' && b.theme !== 'root') {
@@ -95,7 +103,7 @@ for (const b of blocks) {
       baseSlots.get(b.theme).set(d.name, list)
     }
   } else if (b.kind === 'accent') {
-    const key = `${b.theme}/${b.accent}`
+    const key = `${b.polarity}/${b.accent}`
     if (!comboSlots.has(key)) comboSlots.set(key, new Map())
     for (const d of b.decls) {
       const list = comboSlots.get(key).get(d.name) || []
@@ -135,11 +143,11 @@ for (const t of baseSlots.keys()) {
   if (!BASES.includes(t)) problems.push(`CSS 里出现未知底色块 [data-theme="${t}"]，theme.ts/守护名单都没它`)
 }
 
-/* ---- 2. accent 覆盖层：8 组合齐全 + 白名单 + 组合间对齐 ---- */
-const comboKeys = ACCENTS.flatMap((a) => BASES.map((t) => `${t}/${a}`))
+/* ---- 2. accent 覆盖层：2 极性 × 5 档 = 10 组合齐全 + 白名单 + 组合间对齐 ---- */
+const comboKeys = ACCENTS.flatMap((a) => POLARITIES.map((p) => `${p}/${a}`))
 for (const key of comboKeys) {
   if (!comboSlots.has(key)) {
-    problems.push(`缺 accent 组合 [data-theme="${key.split('/')[0]}"][data-accent="${key.split('/')[1]}"]，切到这组配色时 accent 族会留着底色层的缺省值`)
+    problems.push(`缺 accent 组合 [data-base="${key.split('/')[0]}"][data-accent="${key.split('/')[1]}"]，切到这组配色时 accent 族会留着底色层的缺省值`)
   }
 }
 for (const key of comboSlots.keys()) {
@@ -168,21 +176,13 @@ for (const s of ACCENT_SLOTS) {
   }
 }
 
-/* ---- 3. 主题/accent 块里不许用 var()：那是别名块的职责 ---- */
+/* ---- 3. 底色块里不许用 var()：那是别名块的职责。
+       accent 块允许，因为它按极性切、本来就该能引用随底走的槽（如洗底掺 var(--panel-bg)）。 ---- */
 for (const [t, m] of baseSlots) {
   for (const [slot, values] of m) {
     for (const v of values) {
       if (v.includes('var(')) {
         problems.push(`${t}: ${slot} 写成了 ${v}\n        主题块里只放具体色值；跟随别的槽位走的请放进 :root 别名块`)
-      }
-    }
-  }
-}
-for (const [key, m] of comboSlots) {
-  for (const [slot, values] of m) {
-    for (const v of values) {
-      if (v.includes('var(')) {
-        problems.push(`${key}: ${slot} 写成了 ${v}\n        accent 块里只放具体色值`)
       }
     }
   }
@@ -198,14 +198,19 @@ for (const a of aliasDecls) {
   }
 }
 
-/* ---- 5. theme.ts 声明的 id 必须与 CSS 属性值一一对应 ---- */
+/* ---- 5. theme.ts 的极性表必须覆盖每一套底色（轴名单本身就从 theme.ts 读） ---- */
 try {
   const ts = readFileSync(THEME_TS_PATH, 'utf8')
-  const declaredThemes = [...ts.matchAll(/theme:\s*'([\w-]+)'/g)].map((m) => m[1])
-  const declaredAccents = [...ts.matchAll(/\bid:\s*'([\w-]+)',\s*name:/g)].map((m) => m[1])
-  const themesInTs = new Set([...declaredThemes, ...declaredAccents])
-  for (const a of ACCENTS) if (!themesInTs.has(a)) problems.push(`theme.ts 里没有 accent '${a}' 的条目`)
-  for (const t of BASES) if (!ts.includes(`'${t}'`)) problems.push(`theme.ts 里没有底色 '${t}' 的条目`)
+
+  /* 极性登记表：每套底色都要说清自己吃哪一极的 accent */
+  const pol = new RegExp(`export const POLARITY[\\s\\S]*?\\n\\}`).exec(ts)
+  const polMap = new Map((pol ? [...pol[0].matchAll(/(\w+):\s*'([\w-]+)'/g)] : []).map((m) => [m[1], m[2]]))
+  for (const t of BASES) {
+    const p = polMap.get(t)
+    if (!p) problems.push(`theme.ts 的 POLARITY 里没有底色 '${t}'，applyTheme 会给它挂出空 data-base`)
+    else if (!POLARITIES.includes(p)) problems.push(`theme.ts 里 ${t} 的极性 '${p}' 不是 ${POLARITIES.join('/')} 之一`)
+  }
+  for (const [t] of polMap) if (!BASES.includes(t)) problems.push(`theme.ts 的 POLARITY 里有未知底色 '${t}'，THEMES 里没有它`)
 } catch {
   problems.push(`读不到 ${relative(ROOT, THEME_TS_PATH)}，无法核对 theme.ts 与 CSS 的对应关系`)
 }
@@ -213,8 +218,9 @@ try {
 /* ---- 6. 全项目引用了没人定义的槽位 ---- */
 /* 定义集 = global.css 里出现过的所有 "--xxx:"，含尺度层、底色层、accent 层、别名块 */
 const defined = new Set(css.match(/--[\w-]+(?=\s*:)/g) || [])
-/* 组件局部变量：在 .vue 作用域里自定自用，不归全局主题管 */
-const LOCAL_SLOTS = new Set(['--h', '--ftc'])
+/* 组件局部变量：在 .vue / 页面作用域里自定自用，不归全局主题管
+   --h / --ftc 由组件内联给；--toast-side 由 App.vue 按侧栏三态喂；--gc-hue 由收藏页按分类哈希给 */
+const LOCAL_SLOTS = new Set(['--h', '--ftc', '--toast-side', '--gc-hue'])
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -252,4 +258,4 @@ if (problems.length) {
   console.log(`共 ${problems.length} 处。`)
   process.exit(1)
 }
-console.log(`主题覆盖检查通过：${BASES.length} 底色 × ${canonical.length} 槽位对齐，${comboSlots.size}/8 accent 组合 × ${comboCanonical.length} 槽在白名单内。`)
+console.log(`主题覆盖检查通过：${BASES.length} 底色 × ${canonical.length} 槽位对齐，${comboSlots.size}/${comboKeys.length} accent 组合（${POLARITIES.length} 极性 × ${ACCENTS.length} 档）× ${comboCanonical.length} 槽在白名单内。`)

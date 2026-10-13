@@ -10,6 +10,7 @@
 // 缺帧直接非零退出——上一轮的旧 PNG 留在原地会被当成这轮的结果。
 import { chromium } from '@playwright/test'
 import { mkdirSync, readdirSync, rmSync, existsSync } from 'node:fs'
+import { themeCombos } from './lib/theme-tokens.mjs'
 
 const BASE = 'http://127.0.0.1:1430'
 
@@ -25,11 +26,8 @@ const EXPECTED = [
   '20-empty-entries', '21-empty-notes', '22-empty-files', '23-empty-mfa',
 ]
 
-// v2 双轴：2 底色 × 4 accent = 8 组
-const COMBOS = [
-  'paper-ink', 'paper-celadon', 'paper-clay', 'paper-plum',
-  'ink-ink', 'ink-celadon', 'ink-clay', 'ink-plum',
-]
+// 底色 × accent 全部组合（读 theme.ts）
+const COMBOS = themeCombos().map((c) => c.id)
 const splitCombo = (c) => {
   const i = c.indexOf('-')
   return { theme: c.slice(0, i), accent: c.slice(i + 1) }

@@ -2,19 +2,11 @@
 // 用法：node scripts/theme-compare.mjs
 import { chromium } from '@playwright/test'
 import { readdirSync } from 'node:fs'
+import { themeCombos } from './lib/theme-tokens.mjs'
 
 const OUT = 'design/theme-shots'
-// v2 双轴：底色 × accent 的 8 组组合（与 theme-shots.mjs 同源）
-const COMBOS = [
-  { id: 'paper-ink', name: '纸·墨蓝' },
-  { id: 'paper-celadon', name: '纸·青瓷' },
-  { id: 'paper-clay', name: '纸·赭石' },
-  { id: 'paper-plum', name: '纸·紫罗' },
-  { id: 'ink-ink', name: '墨·墨蓝' },
-  { id: 'ink-celadon', name: '墨·青瓷' },
-  { id: 'ink-clay', name: '墨·赭石' },
-  { id: 'ink-plum', name: '墨·紫罗' },
-]
+// 底色 × accent 的全部组合（与 theme-shots.mjs 同源，两边都读 theme.ts）
+const COMBOS = themeCombos().map(({ id, name }) => ({ id, name }))
 
 const screens = [...new Set(readdirSync(OUT).filter((f) => f.endsWith('.png') && !f.startsWith('compare-')))];
 // 组合 id 本身带 '-'，屏名按前缀剥：'paper-celadon-entries.png' -> 'entries.png'

@@ -5,18 +5,11 @@
 // 输出：design/icon-board/<themeId>.png
 import { chromium } from '@playwright/test'
 import { readFileSync, mkdirSync } from 'node:fs'
+import { themeCombos, readPolarity } from './lib/theme-tokens.mjs'
 
-// v2 双轴：2 底色 × 4 accent = 8 块板
-const COMBOS = [
-  { id: 'paper-ink', theme: 'paper', accent: 'ink' },
-  { id: 'paper-celadon', theme: 'paper', accent: 'celadon' },
-  { id: 'paper-clay', theme: 'paper', accent: 'clay' },
-  { id: 'paper-plum', theme: 'paper', accent: 'plum' },
-  { id: 'ink-ink', theme: 'ink', accent: 'ink' },
-  { id: 'ink-celadon', theme: 'ink', accent: 'celadon' },
-  { id: 'ink-clay', theme: 'ink', accent: 'clay' },
-  { id: 'ink-plum', theme: 'ink', accent: 'plum' },
-]
+// 底色 × accent 的全部组合（读 theme.ts）；accent 块挂在极性上，靠 POLARITY 查该底色吃哪一极
+const COMBOS = themeCombos()
+const POLARITY = readPolarity()
 const SIZES = [14, 16, 20, 24]
 // 与 AppIcon.vue 同源：实笔宽按尺寸反算，全窗恒定 1.15px（写死 2 会让小板子和真界面不像）
 const STROKE_PX = 1.15
@@ -38,7 +31,7 @@ const blocks = COMBOS.map((c) => ({
   ...c,
   body:
     grab(new RegExp(`\\[data-theme="${c.theme}"\\]\\s*\\{([\\s\\S]*?)\\}`), `data-theme="${c.theme}"`) +
-    grab(new RegExp(`\\[data-theme="${c.theme}"\\]\\[data-accent="${c.accent}"\\] \\{([\\s\\S]*?)\\}`), `accent="${c.accent}"`),
+    grab(new RegExp(`\\[data-base="${POLARITY[c.theme]}"\\]\\[data-accent="${c.accent}"\\] \\{([\\s\\S]*?)\\}`), `data-accent="${c.accent}"（${POLARITY[c.theme]} 极）`),
 }))
 
 const cell = (icon) => {
