@@ -126,6 +126,31 @@ pub struct Manifest {
     pub files: Vec<FileEntry>,
 }
 
+pub const ACCOUNT_ENTRY: &str = "codex-accounts.json";
+
+pub fn safe_file_name(name: &str) -> bool {
+    let length_ok = if cfg!(windows) { name.encode_utf16().count() <= 255 } else { name.len() <= 255 };
+    !name.is_empty() && name != "." && name != ".." && length_ok
+        && !name.ends_with(['.', ' '])
+        && !name.chars().any(|c| c.is_control() || "/\\:<>\"|?*".contains(c))
+        && !matches!(name.split('.').next().unwrap_or("").to_ascii_uppercase().as_str(),
+            "CON"|"PRN"|"AUX"|"NUL"|"COM1"|"COM2"|"COM3"|"COM4"|"COM5"|"COM6"|"COM7"|"COM8"|"COM9"|"LPT1"|"LPT2"|"LPT3"|"LPT4"|"LPT5"|"LPT6"|"LPT7"|"LPT8"|"LPT9")
+}
+
+pub fn validate_manifest(manifest: &Manifest) -> Result<(), AppError> {
+    if manifest.app != "desko" || manifest.format != FORMAT_VERSION {
+        return Err(AppError::Backup("备份清单的应用或版本不正确".into()));
+    }
+    let mut names = std::collections::HashSet::new();
+    for file in &manifest.files {
+        if !safe_file_name(&file.name) || !names.insert(file.name.to_lowercase()) || file.size < 0
+            || (!file.sha256.is_empty() && (file.sha256.len() != 64 || !file.sha256.bytes().all(|b| b.is_ascii_hexdigit()))) {
+            return Err(AppError::Backup("备份清单含非法附件路径、大小或校验值".into()));
+        }
+    }
+    Ok(())
+}
+
 pub fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -147,6 +172,14 @@ pub fn build_zip(
     inline_dir: Option<&Path>,
     progress: &dyn Fn(&str, u8),
 ) -> Result<Vec<u8>, AppError> {
+    build_zip_with_accounts(db_file, manifest, inline_dir, None, progress)
+}
+
+pub fn build_zip_with_accounts(
+    db_file: &Path, manifest: &Manifest, inline_dir: Option<&Path>,
+    accounts: Option<&[u8]>, progress: &dyn Fn(&str, u8),
+) -> Result<Vec<u8>, AppError> {
+    validate_manifest(manifest)?;
     let mut zw = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let opts = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
@@ -158,6 +191,12 @@ pub fn build_zip(
     zw.start_file("data.db", opts)?;
     let mut db = std::fs::File::open(db_file)?;
     std::io::copy(&mut db, &mut zw)?;
+
+    if let Some(bytes) = accounts {
+        codex_core::modules::codex_account_backup::validate_account_backup(bytes).map_err(AppError::Backup)?;
+        zw.start_file(ACCOUNT_ENTRY, opts)?;
+        zw.write_all(bytes)?;
+    }
 
     if let Some(dir) = inline_dir {
         let total = manifest.files.len().max(1);
@@ -286,13 +325,37 @@ pub fn unpack_with_password(pkg_path: &Path, password: &str) -> Result<Vec<u8>, 
 
 /// 换备份密码时原地改写头部包裹区（76 字节），密文一个字节都不动
 pub fn rewrap(path: &Path, wrap: &Wrap) -> Result<(), AppError> {
-    let mut raw = std::fs::read(path)?;
-    let (_, _, _) = read_header(&raw)?;
-    if raw.len() < HEADER_LEN {
-        return Err(AppError::Backup("备份包不完整".to_string()));
+    let mut source = std::fs::File::open(path)?;
+    let mut header = [0; HEADER_LEN];
+    source.read_exact(&mut header)?;
+    let (_, _, length) = parse_header(&header)?;
+    if length < TAG_LEN as u64 || source.metadata()?.len() != HEADER_LEN as u64 + length {
+        return Err(AppError::Backup("备份包不完整".into()));
     }
-    raw[OFF_SALT..OFF_WRAPPED + WRAPPED_LEN].copy_from_slice(&wrap.to_bytes());
-    write_atomic(path, &raw)
+    header[OFF_SALT..OFF_WRAPPED + WRAPPED_LEN].copy_from_slice(&wrap.to_bytes());
+    let tmp = path.with_extension(format!("rewrap-{}.tmp", uuid::Uuid::new_v4()));
+    let result = (|| {
+        let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+        output.write_all(&header)?;
+        if std::io::copy(&mut source, &mut output)? != length { return Err(AppError::Backup("备份包在换密时发生变更".into())); }
+        output.sync_all()?;
+        drop(output);
+        drop(source);
+        std::fs::rename(&tmp, path).map_err(AppError::from)
+    })();
+    if result.is_err() { let _ = std::fs::remove_file(tmp); }
+    result
+}
+
+pub fn validate_complete_file(path: &Path) -> Result<(), AppError> {
+    let mut file = std::fs::File::open(path)?;
+    let mut header = [0; HEADER_LEN];
+    file.read_exact(&mut header)?;
+    let (_, _, length) = parse_header(&header)?;
+    if length < TAG_LEN as u64 || file.metadata()?.len() != (HEADER_LEN as u64).checked_add(length).ok_or_else(|| AppError::Backup("非法密文长度".into()))? {
+        return Err(AppError::Backup("备份包不完整".into()));
+    }
+    Ok(())
 }
 
 /// 单个附件文件 → 密文 .enc（附件天然不可变，存在即跳过）
@@ -304,7 +367,7 @@ pub fn encrypt_file_to(src: &Path, out: &Path, dek: &[u8], wrap: &Wrap) -> Resul
 /// .enc → 明文落盘并校验 sha256
 pub fn decrypt_file_to(enc: &Path, dst: &Path, expect_sha: &str, dek: &[u8]) -> Result<(), AppError> {
     let bytes = unpack(enc, dek)?;
-    if !expect_sha.is_empty() && sha256_hex(&bytes) != expect_sha {
+    if !expect_sha.is_empty() && !sha256_hex(&bytes).eq_ignore_ascii_case(expect_sha) {
         return Err(AppError::Backup(format!(
             "附件校验失败: {}",
             dst.file_name().unwrap_or_default().to_string_lossy()
@@ -319,36 +382,133 @@ pub fn decrypt_file_to(enc: &Path, dst: &Path, expect_sha: &str, dek: &[u8]) -> 
 
 /// zip 字节解到 staging 目录，返回 manifest
 pub fn extract_to(zip_bytes: &[u8], staging: &Path) -> Result<Manifest, AppError> {
-    let _ = std::fs::remove_dir_all(staging);
-    std::fs::create_dir_all(staging)?;
-
     let mut za = zip::ZipArchive::new(Cursor::new(zip_bytes))
         .map_err(|e| AppError::Backup(format!("备份包损坏: {}", e)))?;
-    za.extract(staging)
-        .map_err(|e| AppError::Backup(format!("解包失败: {}", e)))?;
-
-    if !staging.join("data.db").exists() {
-        return Err(AppError::Backup("备份包缺少数据库".to_string()));
+    let manifest = manifest_from_zip(&mut za)?;
+    // Validate every archive entry before deleting staging or writing any files.
+    let mut entries = std::collections::HashSet::new();
+    for i in 0..za.len() {
+        let entry = za.by_index(i)?;
+        let name = entry.name();
+        let attachment = name.strip_prefix("attachments/");
+        let allowed = matches!(name, "manifest.json" | "data.db" | ACCOUNT_ENTRY | "attachments/")
+            || attachment.is_some_and(|file| safe_file_name(file) && manifest.files.iter().any(|f| f.name == file));
+        if !allowed || !entries.insert(name.to_lowercase()) || entry.is_symlink() {
+            return Err(AppError::Backup("备份包含非法路径或非备份数据".into()));
+        }
     }
-    let manifest_raw = std::fs::read(staging.join("manifest.json"))?;
-    serde_json::from_slice(&manifest_raw).map_err(|e| AppError::Backup(format!("备份清单无法解析: {}", e)))
+    if !entries.contains("data.db") { return Err(AppError::Backup("备份包缺少数据库".into())); }
+    let _accounts = account_snapshot_from_zip(&mut za)?;
+    match std::fs::remove_dir_all(staging) {
+        Ok(()) => {},
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+        Err(error) => return Err(AppError::Backup(format!("无法清理上次恢复暂存目录: {error}"))),
+    }
+    std::fs::create_dir_all(staging)?;
+    for i in 0..za.len() {
+        let mut entry = za.by_index(i)?;
+        if entry.name() == ACCOUNT_ENTRY || entry.is_dir() { continue; }
+        let target = staging.join(entry.name());
+        if let Some(parent) = target.parent() { std::fs::create_dir_all(parent)?; }
+        let mut output = std::fs::File::create(target)?;
+        std::io::copy(&mut entry, &mut output)?;
+    }
+    Ok(manifest)
+}
+
+fn manifest_from_zip(za: &mut zip::ZipArchive<Cursor<&[u8]>>) -> Result<Manifest, AppError> {
+    let mut buf = Vec::new();
+    za.by_name("manifest.json")?.take(16 * 1024 * 1024 + 1).read_to_end(&mut buf)?;
+    if buf.len() > 16 * 1024 * 1024 { return Err(AppError::Backup("备份清单过大".into())); }
+    let manifest = serde_json::from_slice(&buf).map_err(|e| AppError::Backup(format!("备份清单无法解析: {e}")))?;
+    validate_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn account_snapshot_from_zip(za: &mut zip::ZipArchive<Cursor<&[u8]>>) -> Result<Option<Vec<u8>>, AppError> {
+    let file = match za.by_name(ACCOUNT_ENTRY) {
+        Ok(file) => file,
+        Err(zip::result::ZipError::FileNotFound) => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    if file.size() > 32 * 1024 * 1024 { return Err(AppError::Backup("账号快照过大".into())); }
+    let mut bytes = Vec::new();
+    file.take(32 * 1024 * 1024 + 1).read_to_end(&mut bytes)?;
+    codex_core::modules::codex_account_backup::validate_account_backup(&bytes).map_err(AppError::Backup)?;
+    Ok(Some(bytes))
+}
+
+pub fn read_account_snapshot(zip_bytes: &[u8]) -> Result<Option<Vec<u8>>, AppError> {
+    account_snapshot_from_zip(&mut zip::ZipArchive::new(Cursor::new(zip_bytes))?)
 }
 
 /// 只读回 manifest（列表展示用），不落盘
 pub fn read_manifest(pkg_path: &Path, dek: &[u8]) -> Result<Manifest, AppError> {
     let zip_bytes = unpack(pkg_path, dek)?;
-    let mut za = zip::ZipArchive::new(Cursor::new(zip_bytes))
+    let mut za = zip::ZipArchive::new(Cursor::new(zip_bytes.as_slice()))
         .map_err(|e| AppError::Backup(format!("备份包损坏: {}", e)))?;
-    let mut buf = Vec::new();
-    za.by_name("manifest.json")
-        .map_err(|e| AppError::Backup(format!("备份包缺少 manifest: {}", e)))?
-        .read_to_end(&mut buf)?;
-    serde_json::from_slice(&buf).map_err(|e| AppError::Backup(format!("备份清单无法解析: {}", e)))
+    manifest_from_zip(&mut za)
+}
+
+/// Self-contained exports and pre-restore safety copies already contain their
+/// attachments. Cloud restore must download only external sidecars.
+pub fn read_external_attachments_manifest(pkg_path: &Path, dek: &[u8]) -> Result<Manifest, AppError> {
+    let bytes = unpack(pkg_path, dek)?;
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes.as_slice()))?;
+    let mut manifest = manifest_from_zip(&mut archive)?;
+    let mut external = Vec::new();
+    for file in manifest.files {
+        match archive.by_name(&format!("attachments/{}", file.name)) {
+            Ok(entry) if !entry.is_dir() && !entry.is_symlink() => {},
+            Ok(_) => return Err(AppError::Backup("备份中的内联附件不是普通文件".into())),
+            Err(zip::result::ZipError::FileNotFound) => external.push(file),
+            Err(error) => return Err(error.into()),
+        }
+    }
+    manifest.files = external;
+    Ok(manifest)
 }
 
 #[cfg(test)]
 mod audit_tests {
     use super::*;
+
+    #[test]
+    fn manifest_paths_are_rejected_before_any_staging_or_external_write() {
+        let root = tmp("path_validation");
+        let victim = root.join("victim.txt"); std::fs::write(&victim, b"preserve-original").unwrap();
+        let staging = root.join("staging");
+        for name in ["../../victim.txt", "../victim.txt", "C:\\victim.txt", "/victim.txt", "victim.txt:stream", "..\\victim.txt"] {
+            let mut manifest = manifest();
+            manifest.files.push(FileEntry { name: name.into(), size: 0, sha256: String::new() });
+            let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            let opts = zip::write::SimpleFileOptions::default();
+            archive.start_file("manifest.json", opts).unwrap();
+            archive.write_all(&serde_json::to_vec(&manifest).unwrap()).unwrap();
+            archive.start_file("data.db", opts).unwrap(); archive.write_all(b"fixture").unwrap();
+            let bytes = archive.finish().unwrap().into_inner();
+            assert!(extract_to(&bytes, &staging).is_err(), "accepted malicious manifest: {name}");
+            assert_eq!(std::fs::read(&victim).unwrap(), b"preserve-original");
+            assert!(!staging.exists());
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn long_chinese_attachment_names_roundtrip_on_windows() {
+        let root = tmp("windows_names");
+        let name = format!("u9__{}.png", "档".repeat(90));
+        std::fs::write(root.join(&name), b"image-fixture").unwrap();
+        std::fs::write(root.join("fixture.db"), b"fixture").unwrap();
+        let mut manifest = manifest();
+        manifest.files.push(FileEntry { name: name.clone(), size: 13, sha256: sha256_hex(b"image-fixture") });
+        let bytes = build_zip(&root.join("fixture.db"), &manifest, Some(&root), &|_,_|{}).unwrap();
+        let staging = root.join("staging");
+        extract_to(&bytes, &staging).unwrap();
+        assert_eq!(std::fs::read(staging.join("attachments").join(name)).unwrap(), b"image-fixture");
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     fn tmp(tag: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!("desko_audit_{}_{}", tag, uuid::Uuid::new_v4()));

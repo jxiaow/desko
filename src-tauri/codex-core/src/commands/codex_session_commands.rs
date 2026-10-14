@@ -3,7 +3,7 @@
 // 由 modules::codex_session_manager 的切片把「多实例」收敛成官方默认目录一份。
 // 详见 docs/design/codex/07-session-list-port.md §3、§4 与 08 §7。
 
-/// 列出官方 CODEX_HOME 下的会话（标题搜索走后端，正文搜索恒传 null）。
+/// 列出官方 CODEX_HOME 下的会话，支持本地标题与正文搜索。
 #[tauri::command]
 pub async fn codex_list_sessions_across_instances(
     title_query: Option<String>,

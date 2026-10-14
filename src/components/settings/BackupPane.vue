@@ -545,7 +545,8 @@ const doRestoreFile = async () => {
     <p class="pane-note">
       云端备份：持续增量，日常灾备。<br />
       迁移导出：一次性全量，换机即用。<br />
-      全部数据在本机加密（AES-256-GCM）后才存出，云端只见密文。
+      Codex 只备份账号与账号配置；会话、历史和用量仅在本机，不参与坚果云备份、迁移导出或恢复。<br />
+      备份中的数据在本机加密（AES-256-GCM）后才存出，云端只见密文。
     </p>
 
     <!-- 备份密码弹窗 -->
@@ -559,7 +560,8 @@ const doRestoreFile = async () => {
             </button>
           </div>
           <div class="dialog-body">
-            <p class="lead">备份密码独立于主密码，丢失后备份无法解密。改密只更新密钥，已有备份不必重做。</p>
+            <p class="lead">备份密码独立于主密码，丢失后备份无法解密。</p>
+            <p v-if="st.hasPassword" class="lead">修改密码会更新本地和后续备份。已导出的文件、云端历史副本及已取得的数据密钥不会因此失效。</p>
             <div class="form-group">
               <label>备份密码</label>
               <input v-model="pwd.pw" type="password" placeholder="至少 8 位，可用一句短语" />
@@ -590,7 +592,7 @@ const doRestoreFile = async () => {
           </div>
           <div class="dialog-body">
             <p class="lead">
-              用 <b style="word-break: break-all">{{ restoreTarget?.name }}</b> 覆盖当前全部数据（库与附件）。
+              用 <b style="word-break: break-all">{{ restoreTarget?.name }}</b> 替换当前数据库与附件，并补回缺失的 Codex 账号。本机已有账号凭据和会话保持原样。
               覆盖前自动留一份现状备份；完成后需用该备份当时的主密码解锁。
             </p>
             <div class="form-group">

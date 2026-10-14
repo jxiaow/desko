@@ -254,24 +254,8 @@ fn reconcile_account_index_with_details_if_needed(
     };
 
     if detail_ids.is_empty() {
-        if !index.accounts.is_empty()
-            || index.detail_schema_version < CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION
-            || index.current_account_id.is_some()
-        {
-            logger::log_warn(&format!(
-                "[Codex Account][Repair] 账号详情目录为空，已清空索引缓存: reason={}, indexed_accounts={}",
-                reason,
-                index.accounts.len()
-            ));
-            let empty = empty_reconciled_account_index();
-            if let Err(error) = save_account_index(&empty) {
-                logger::log_warn(&format!(
-                    "[Codex Account][Repair] 清空 Codex 索引缓存失败: reason={}, error={}",
-                    reason, error
-                ));
-            }
-            return empty;
-        }
+        // A restore may be moving the detail directory, and filesystem failure
+        // is not an account deletion decision. Only explicit deletion removes IDs.
         return index;
     }
 
@@ -287,48 +271,27 @@ fn reconcile_account_index_with_details_if_needed(
         index.detail_schema_version
     ));
 
-    repair_account_index_from_details_with_previous(reason, Some(&index)).unwrap_or(index)
+    repair_account_index_from_details_with_previous_unlocked(reason, Some(&index)).unwrap_or(index)
 }
 
 /// 读取账号索引
 pub fn load_account_index() -> CodexAccountIndex {
-    let path = get_accounts_storage_path();
-    if !path.exists() {
-        return repair_account_index_from_details("索引文件不存在")
-            .unwrap_or_else(CodexAccountIndex::new);
-    }
-
-    match fs::read_to_string(&path) {
-        Ok(content) if content.trim().is_empty() => {
-            repair_account_index_from_details("索引文件为空").unwrap_or_else(CodexAccountIndex::new)
-        }
-        Ok(content) => match serde_json::from_str::<CodexAccountIndex>(&content) {
-            Ok(index) if index.detail_schema_version < CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION => {
-                reconcile_account_index_with_details_if_needed(index, "初始化账号详情数据")
-            }
-            Ok(index) => index,
-            Err(err) => {
-                logger::log_warn(&format!(
-                    "[Codex Account] 账号索引解析失败，尝试按详情文件自动修复: path={}, error={}",
-                    path.display(),
-                    err
-                ));
-                repair_account_index_from_details("索引文件损坏")
-                    .unwrap_or_else(CodexAccountIndex::new)
-            }
-        },
-        Err(_) => CodexAccountIndex::new(),
-    }
+    // Ordinary readers must not repair or publish an index snapshot. Checked
+    // listing and explicit mutations perform recovery under the mutation lock.
+    fs::read_to_string(get_accounts_storage_path()).ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+        .unwrap_or_else(CodexAccountIndex::new)
 }
 
-fn load_account_index_checked() -> Result<CodexAccountIndex, String> {
+// Caller owns CODEX_ACCOUNT_MUTATION_LOCK through any subsequent index write.
+fn load_account_index_checked_unlocked() -> Result<CodexAccountIndex, String> {
     let path = get_accounts_storage_path();
     if !path.exists() {
         logger::log_warn(&format!(
             "[Codex Account][Repair] 检测到账号索引文件不存在，准备尝试自动修复: path={}",
             path.display()
         ));
-        if let Some(index) = repair_account_index_from_details("索引文件不存在") {
+        if let Some(index) = repair_account_index_from_details_unlocked("索引文件不存在") {
             logger::log_info(&format!(
                 "[Codex Account][Repair] 索引文件不存在，已自动修复完成: recovered_accounts={}",
                 index.accounts.len()
@@ -349,7 +312,7 @@ fn load_account_index_checked() -> Result<CodexAccountIndex, String> {
                 path.display(),
                 err
             ));
-            if let Some(index) = repair_account_index_from_details("索引文件读取失败") {
+            if let Some(index) = repair_account_index_from_details_unlocked("索引文件读取失败") {
                 logger::log_info(&format!(
                     "[Codex Account][Repair] 索引读取失败，已自动修复完成: recovered_accounts={}",
                     index.accounts.len()
@@ -365,7 +328,7 @@ fn load_account_index_checked() -> Result<CodexAccountIndex, String> {
             "[Codex Account][Repair] 检测到账号索引文件为空，准备尝试自动修复: path={}",
             path.display()
         ));
-        if let Some(index) = repair_account_index_from_details("索引文件为空") {
+        if let Some(index) = repair_account_index_from_details_unlocked("索引文件为空") {
             logger::log_info(&format!(
                 "[Codex Account][Repair] 空索引文件已自动修复完成: recovered_accounts={}",
                 index.accounts.len()
@@ -389,7 +352,7 @@ fn load_account_index_checked() -> Result<CodexAccountIndex, String> {
                 path.display(),
                 err
             ));
-            if let Some(index) = repair_account_index_from_details("索引文件损坏") {
+            if let Some(index) = repair_account_index_from_details_unlocked("索引文件损坏") {
                 logger::log_info(&format!(
                     "[Codex Account][Repair] 损坏索引文件已自动修复完成: recovered_accounts={}",
                     index.accounts.len()
@@ -406,7 +369,7 @@ fn load_account_index_checked() -> Result<CodexAccountIndex, String> {
 }
 
 /// 保存账号索引
-pub fn save_account_index(index: &CodexAccountIndex) -> Result<(), String> {
+fn save_account_index_unlocked(index: &CodexAccountIndex) -> Result<(), String> {
     let path = get_accounts_storage_path();
     let mut index = index.clone();
     if index.detail_schema_version < CODEX_ACCOUNT_DETAIL_SCHEMA_VERSION {
@@ -417,15 +380,15 @@ pub fn save_account_index(index: &CodexAccountIndex) -> Result<(), String> {
     Ok(())
 }
 
-fn repair_account_index_from_details(reason: &str) -> Option<CodexAccountIndex> {
+fn repair_account_index_from_details_unlocked(reason: &str) -> Option<CodexAccountIndex> {
     let index_path = get_accounts_storage_path();
     let previous_index = fs::read_to_string(&index_path)
         .ok()
         .and_then(|content| serde_json::from_str::<CodexAccountIndex>(&content).ok());
-    repair_account_index_from_details_with_previous(reason, previous_index.as_ref())
+    repair_account_index_from_details_with_previous_unlocked(reason, previous_index.as_ref())
 }
 
-fn repair_account_index_from_details_with_previous(
+fn repair_account_index_from_details_with_previous_unlocked(
     reason: &str,
     previous_index: Option<&CodexAccountIndex>,
 ) -> Option<CodexAccountIndex> {
@@ -523,7 +486,7 @@ fn repair_account_index_from_details_with_previous(
             None
         });
 
-    if let Err(err) = save_account_index(&index) {
+    if let Err(err) = save_account_index_unlocked(&index) {
         logger::log_warn(&format!(
             "[Codex Account] 自动修复索引保存失败，将以内存结果继续运行: reason={}, recovered_accounts={}, error={}",
             reason,
@@ -873,6 +836,7 @@ fn clear_bound_oauth_local_gateway_flag(account: &mut CodexAccount) -> bool {
 }
 
 fn load_account_after_index_repair(account_id: &str) -> Option<CodexAccount> {
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().ok()?;
     if let Some(account) = load_account(account_id) {
         return Some(account);
     }
@@ -881,7 +845,7 @@ fn load_account_after_index_repair(account_id: &str) -> Option<CodexAccount> {
         "[Codex Account][Repair] 切号目标账号详情缺失，尝试按详情文件重建索引后重试: account_id={}",
         account_id
     ));
-    let repaired = repair_account_index_from_details("切号目标账号不存在")?;
+    let repaired = repair_account_index_from_details_unlocked("切号目标账号不存在")?;
     if !repaired
         .accounts
         .iter()
@@ -1024,17 +988,17 @@ fn save_account_with_tombstone_guard(account: &CodexAccount) -> Result<(), Strin
 }
 
 fn save_account_unchecked(account: &CodexAccount) -> Result<(), String> {
-    let path = get_accounts_dir().join(format!("{}.json", &account.id));
+    let accounts_dir = get_accounts_dir();
+    fs::create_dir_all(&accounts_dir).map_err(|e| format!("创建账号目录失败: {e}"))?;
+    let path = accounts_dir.join(format!("{}.json", &account.id));
     let content = crate::modules::secure_account_storage::serialize_account_file("codex",
         &crate::modules::codex_account_proxy::storage_value(account)?)?;
     write_string_atomic(&path, &content).map_err(|e| format!("写入账号详情失败: {}", e))?;
     Ok(())
 }
 
-fn save_account_from_user_action(account: &mut CodexAccount) -> Result<(), String> {
-    let _guard = CODEX_ACCOUNT_MUTATION_LOCK
-        .lock()
-        .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+// Caller owns the account transaction, including its index update.
+fn save_account_from_user_action_unlocked(account: &mut CodexAccount) -> Result<(), String> {
     let tombstone = read_account_tombstone(&account.id);
     if let Some(tombstone) = tombstone.as_ref() {
         account.token_generation = account
@@ -1210,7 +1174,7 @@ pub fn filter_account_ids_by_quota_refresh_policy(account_ids: &[String]) -> Vec
 
 /// 列出所有账号
 pub fn list_accounts() -> Vec<CodexAccount> {
-    let mut index = load_account_index();
+    let index = load_account_index();
     let accounts: Vec<CodexAccount> = index
         .accounts
         .iter()
@@ -1227,19 +1191,12 @@ pub fn list_accounts() -> Vec<CodexAccount> {
             },
         )
         .collect();
-    if sync_loaded_accounts_to_index_cache(&mut index, &accounts) {
-        if let Err(error) = save_account_index(&index) {
-            logger::log_warn(&format!(
-                "[Codex Account] 同步账号详情摘要到索引缓存失败: error={}",
-                error
-            ));
-        }
-    }
     accounts
 }
 
 pub fn list_accounts_checked() -> Result<Vec<CodexAccount>, String> {
-    let mut index = load_account_index_checked()?;
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = load_account_index_checked_unlocked()?;
     let mut accounts = Vec::new();
     let mut failed = Vec::new();
     let mut missing_detail_ids = Vec::new();
@@ -1262,13 +1219,10 @@ pub fn list_accounts_checked() -> Result<Vec<CodexAccount>, String> {
     if !index.accounts.is_empty() && accounts.is_empty() {
         if !has_non_missing_failure && missing_detail_ids.len() == index.accounts.len() {
             logger::log_warn(&format!(
-                "[Codex Account] 账号索引仅剩缺失详情文件的孤儿记录，已清空索引: {}",
+                "[Codex Account] 账号索引引用的详情文件暂时缺失，已保留索引: {}",
                 missing_detail_ids.join(", ")
             ));
-            index.accounts.clear();
-            index.current_account_id = None;
-            save_account_index(&index)?;
-            return Ok(Vec::new());
+            return Err("账号详情暂时不可用，已保留原索引，请稍后重试".into());
         }
         return Err(format!(
             "Codex 账号索引中有 {} 个账号，但详情文件均无法读取；已保留前端缓存，请从账号备份或本地账号文件恢复。{}",
@@ -1286,7 +1240,7 @@ pub fn list_accounts_checked() -> Result<Vec<CodexAccount>, String> {
     }
 
     if sync_loaded_accounts_to_index_cache(&mut index, &accounts) {
-        save_account_index(&index)?;
+        save_account_index_unlocked(&index)?;
     }
 
     Ok(accounts)
@@ -1294,7 +1248,8 @@ pub fn list_accounts_checked() -> Result<Vec<CodexAccount>, String> {
 
 /// Destructive proxy-source deletion must see every indexed account before unbinding.
 pub fn list_accounts_for_proxy_removal() -> Result<Vec<CodexAccount>, String> {
-    let index = load_account_index_checked().map_err(|_| "CATALOG_ACCOUNT_READ")?;
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let index = load_account_index_checked_unlocked().map_err(|_| "CATALOG_ACCOUNT_READ")?;
     index.accounts.iter().map(|summary| {
         load_account_with_summary(&summary.id, Some(summary))
             .map_err(|_| "CATALOG_ACCOUNT_READ")?

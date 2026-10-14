@@ -278,58 +278,22 @@ async fn resolve_reauth_egress_proxy(account_id: &str) -> Result<Option<String>,
 }
 
 /// 出口外观复用账号响应的脱敏摘要；资源绑定快照含凭据且可能很大，绝不回传前端。
-fn oauth_proxy_use(source: &str, value: &str) -> CodexOAuthLoginProxyUse {
-    struct Redacted<'a>(&'a str);
-    impl Serialize for Redacted<'_> {
-        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            crate::modules::codex_account_proxy::serialize_summary(
-                &Some(self.0.to_string()),
-                serializer,
-            )
-        }
-    }
-    let summary = serde_json::to_value(Redacted(value))
-        .unwrap_or_else(|_| serde_json::json!({ "protocol": "UNKNOWN" }));
-    let input = (!value.starts_with(crate::modules::codex_proxy_catalog_binding::PREFIX))
-        .then(|| value.to_string());
+// desko deliberately excludes the upstream proxy engine. Keep these boundaries
+// fail-closed and never echo imported proxy credentials back into OAuth state.
+fn oauth_proxy_use(source: &str, _value: &str) -> CodexOAuthLoginProxyUse {
     CodexOAuthLoginProxyUse {
         source: source.to_string(),
-        summary,
-        input,
+        summary: serde_json::json!({ "protocol": "UNSUPPORTED" }),
+        input: None,
     }
 }
 
-fn oauth_proxy_matches_request(requested: Option<&str>, normalized: &str) -> bool {
-    requested.is_some_and(|value| {
-        crate::modules::codex_proxy_runtime::normalize_binding(value)
-            .is_ok_and(|value| value == normalized)
-    })
+fn oauth_proxy_matches_request(_requested: Option<&str>, _normalized: &str) -> bool {
+    false
 }
 
-async fn prepare_proxy(login_id: String, input: String) -> Result<PendingOAuthProxy, String> {
-    let raw_url = crate::modules::codex_proxy_runtime::normalize_binding(&input)?;
-    let parsed = Url::parse(&raw_url).map_err(|_| "PROXY_INVALID_URL")?;
-    if matches!(parsed.scheme(), "http" | "socks5")
-        && parsed.username().is_empty()
-        && parsed.password().is_none()
-    {
-        return Ok(PendingOAuthProxy {
-            login_id,
-            raw_url: raw_url.clone(),
-            browser_url: raw_url.clone(),
-            request_url: raw_url,
-            tunnel: None,
-        });
-    }
-    let tunnel = crate::modules::codex_proxy_engine::start_desktop(&raw_url).await?;
-    let loopback = tunnel.proxy_url().to_string();
-    Ok(PendingOAuthProxy {
-        login_id,
-        raw_url,
-        browser_url: loopback.clone(),
-        request_url: loopback,
-        tunnel: Some(tunnel),
-    })
+async fn prepare_proxy(_login_id: String, _input: String) -> Result<PendingOAuthProxy, String> {
+    Err("CODEX_OAUTH_PROXY_UNSUPPORTED".into())
 }
 
 fn ensure_callback_listener_for_state(app_handle: &AppHandle, state: &OAuthState) {
@@ -952,10 +916,8 @@ pub async fn start_oauth_login(
     let proxy_use = requested_proxy
         .as_deref()
         .map(|value| oauth_proxy_use(proxy_source.unwrap_or("explicit"), value));
-    if requested_proxy.is_some() && cfg!(target_os = "macos") {
-        // The current macOS build lacks Tauri's macos-proxy feature. Using its
-        // WebView would silently bypass the selected route.
-        return Err("PROXY_OAUTH_BROWSER_UNSUPPORTED".into());
+    if requested_proxy.is_some() {
+        return Err("CODEX_OAUTH_PROXY_UNSUPPORTED".into());
     }
     hydrate_oauth_state_if_missing();
     {
@@ -1926,27 +1888,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn explicit_http_oauth_proxy_needs_no_node_engine() {
-        let prepared = super::prepare_proxy("login-1".into(), "http://127.0.0.1:18080".into())
-            .await
-            .expect("direct proxy");
-        assert_eq!(prepared.login_id, "login-1");
-        assert_eq!(prepared.browser_url, prepared.request_url);
-        assert!(prepared.browser_url.starts_with("http://127.0.0.1:18080"));
-        assert!(prepared.tunnel.is_none());
+    async fn removed_oauth_proxy_is_rejected_before_network_or_state_changes() {
+        for input in ["http://127.0.0.1:18080", "socks5://user:TOPSECRET@127.0.0.1:1080"] {
+            let result = super::prepare_proxy("login-1".into(), input.into()).await;
+            assert_eq!(result.err().as_deref(), Some("CODEX_OAUTH_PROXY_UNSUPPORTED"));
+        }
     }
 
-    #[tokio::test]
-    async fn oauth_proxy_session_reuse_compares_normalized_addresses() {
-        let prepared = super::prepare_proxy("login-1".into(), "http://127.0.0.1:18080".into())
-            .await
-            .expect("direct proxy");
-        assert_eq!(prepared.raw_url, "http://127.0.0.1:18080/");
-        for requested in ["http://127.0.0.1:18080", "http://127.0.0.1:18080/"] {
-            assert!(super::oauth_proxy_matches_request(Some(requested), &prepared.raw_url));
-        }
-        for requested in [None, Some("http://127.0.0.1:18081"), Some("invalid")] {
-            assert!(!super::oauth_proxy_matches_request(requested, &prepared.raw_url));
+    #[test]
+    fn removed_oauth_proxy_cannot_reuse_a_legacy_proxy_session() {
+        for requested in [Some("http://127.0.0.1:18080"), Some("invalid"), None] {
+            assert!(!super::oauth_proxy_matches_request(requested, "http://127.0.0.1:18080/"));
         }
     }
 
@@ -1962,22 +1914,16 @@ mod tests {
         )
     }
 
-    /// 重新授权默认出口的优先级：账号独立绑定 > 统一代理 > 原有默认出口。
+    /// Imported proxy metadata cannot reactivate a removed capability.
     #[test]
-    fn reauth_proxy_priority_matches_account_proxy_policy() {
+    fn reauth_does_not_revive_imported_proxy_or_shared_proxy_settings() {
         use crate::modules::codex_account_proxy::{configured_url, has_effective_proxy};
-        // 有独立绑定：直接使用账号代理，统一代理不会覆盖它。
         let mut bound = reauth_proxy_account();
         bound.egress_proxy_url = Some("socks5://127.0.0.1:1080".into());
-        assert_eq!(
-            configured_url(&bound).unwrap().as_deref(),
-            Some("socks5://127.0.0.1:1080")
-        );
-        assert!(has_effective_proxy(&bound, true));
-        // 无独立绑定：只有统一代理开启时才解析出统一出口。
+        assert_eq!(configured_url(&bound).unwrap(), None);
+        assert!(!has_effective_proxy(&bound, true));
         let unbound = reauth_proxy_account();
-        assert!(has_effective_proxy(&unbound, true));
-        // 两者都没有：保持原有默认授权路径，不借用其他账号的代理。
+        assert!(!has_effective_proxy(&unbound, true));
         assert!(!has_effective_proxy(&unbound, false));
         assert_eq!(crate::modules::codex_account_proxy::resolve_effective(&unbound, None), None);
     }
@@ -1989,51 +1935,18 @@ mod tests {
     }
 
     #[test]
-    fn oauth_proxy_use_redacts_direct_proxy_credentials() {
+    fn unsupported_oauth_proxy_never_returns_direct_credentials() {
         let proxy = super::oauth_proxy_use("account", "http://user:TOPSECRET@proxy.example:8080");
-        assert_eq!(proxy.source, "account");
-        assert_eq!(proxy.summary["protocol"], "HTTP");
-        assert_eq!(proxy.summary["server"], "proxy.example");
-        assert_eq!(proxy.summary["port"], 8080);
+        assert_eq!(proxy.summary["protocol"], "UNSUPPORTED");
         assert!(!proxy.summary.to_string().contains("TOPSECRET"));
-        // 直接地址可以回填输入框，用户随后可改。
-        assert_eq!(
-            proxy.input.as_deref(),
-            Some("http://user:TOPSECRET@proxy.example:8080")
-        );
+        assert!(proxy.input.is_none());
     }
 
     #[test]
-    fn oauth_proxy_use_keeps_resource_snapshots_backend_side() {
-        let catalog = crate::modules::codex_proxy_subscription_parser::ParsedCatalog {
-            nodes: vec![crate::modules::codex_proxy_subscription_parser::ParsedNode {
-                id: "node-1".into(),
-                name: "Alpha".into(),
-                protocol: "HTTP".into(),
-                outbound: Some(serde_json::json!({
-                    "type": "http",
-                    "server": "proxy.example",
-                    "server_port": 8080,
-                    "username": "user",
-                    "password": "TOP_SECRET",
-                })),
-                error: None,
-            }],
-            groups: Vec::new(),
-        };
-        let snapshot = crate::modules::codex_proxy_catalog_binding::encode(
-            "source-1",
-            "Demo",
-            "node-1",
-            &catalog,
-            &std::collections::BTreeMap::new(),
-        )
-        .expect("binding snapshot");
-        let proxy = super::oauth_proxy_use("account", &snapshot);
-        assert_eq!(proxy.summary["protocol"], "RESOURCE");
-        assert_eq!(proxy.summary["name"], "Alpha");
+    fn unsupported_oauth_proxy_never_returns_resource_snapshots() {
+        let proxy = super::oauth_proxy_use("account", "resource:TOP_SECRET_SNAPSHOT");
+        assert_eq!(proxy.summary["protocol"], "UNSUPPORTED");
         assert!(!proxy.summary.to_string().contains("TOP_SECRET"));
-        // 资源快照可能很大且不是可编辑地址，只显示摘要，实际出口由后端按会话使用。
         assert!(proxy.input.is_none());
     }
 

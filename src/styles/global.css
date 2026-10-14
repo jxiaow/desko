@@ -71,12 +71,17 @@
      第三态不占宽，恢复入口在标题栏面包屑左侧 */
   --sidebar-w: 208px;
   --sidebar-rail-w: 56px;
-  /* 全屏书写栏宽度：正文越宽越要收着 */
-  --fs-max: 900px;
+  /* 内容列与侧栏之间那条 gutter：标题栏页名、.page-bar、卡片左缘共用这一档 */
+  --page-gutter: 24px;
+  /* 经典滚动条占位宽度，::-webkit-scrollbar 与侧栏的槽补偿都取它 */
+  --scrollbar-track: 9px;
+  /* 全屏书写栏宽度：大窗口适度放宽，保留居中留白与阅读行长 */
+  --fs-max: 1200px;
   /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
   --stream-max: 1200px;
   /* 四个列表页的阅读列上限：按视口给，侧栏展开/折叠不跟着抖。
-     1235 常态窗与 1440 都还吃在 900 下限上，只有最大化（≥1920）才涨到 1120 */
+     1235 常态窗与 1440 都还吃在 900 下限上，只有最大化（≥1920）才涨到 1120。
+     上限之外的余量整份落在右侧，不再两侧均摊（见 .content-inner） */
   --content-max: clamp(900px, calc(100vw - 800px), 1120px);
   /* 小记卡片正文高度上限：短的小记按实际内容，长的由 JS 收在这里之上最近的整行边界 */
   --memo-max-h: 144px;
@@ -99,12 +104,12 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   第 2 层 · 主题 —— 两轴结构：底色（paper / ink）× accent（四档）。
+   第 2 层 · 主题 —— 两轴结构：四种底色 × 五种强调色。
 
-   · [data-theme] 两块交出**完全相同**的 96 个槽位名。少填一个，切过去
+   · [data-theme] 四块交出**完全相同**的 96 个槽位名。少填一个，切过去
      那个位置就留着上一套的值，变成一块切换后不动的颜色。
-   · accent 族 17 槽由 [data-theme=x][data-accent=y] 覆盖层填，
-     8 个组合必须齐全（缺省态 = 墨蓝，与底色块内的值保持一致）。
+   · accent 族 17 槽由 [data-base=x][data-accent=y] 覆盖层填，
+     10 个组合必须齐全（缺省态 = 墨蓝，与底色块内的值保持一致）。
    · 改槽位时跑 scripts/check-theme-coverage.mjs，它会比对键集。
 
    槽位分两类：
@@ -119,30 +124,27 @@
    accent 族 17 槽，所以新增底色不必再配一轮 accent。
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ---------- paper：暖纸 v3（减黄提净）。灰阶抽掉大半黄味与 ink D1 同族，
-   白面浮在净灰底上，层差拉开一档，字色微收更 crisp ---------- */
+/* ---------- paper：暖纸。象牙白内容面与暖灰画布，在柔光下仍保留纸的色温。
+   与雪的净白分开；文字沿用暖炭灰，层级由浅色差与描边共同承接。 ---------- */
 :root, [data-theme="paper"] {
   /* 品牌缺省：墨蓝（accent 覆盖层会按 data-accent 重填这一族） */
-  --accent: #3d5a80;
-  --accent-hover: #31496a;
-  --accent-active: #283d58;
+  --accent: #315f9b;
+  --accent-hover: #264c80;
+  --accent-active: #1e3d68;
   --accent-on: #ffffff;
-  --accent-soft: #e8eef4;
-  --accent-light: #d3dfeb;
-  --accent-ring: rgba(61, 90, 128, 0.16);
-  --text-brand: #31496a;
+  --accent-soft: #e7eef8;
+  --accent-light: #cfdef1;
+  --accent-ring: rgba(49, 95, 155, 0.16);
+  --text-brand: #264c80;
 
-  /* 面：净灰五档。相邻档差一档色温，不做条纹
-     --panel-bg 不用纯白：卡片占窗面七成，255 会把眼睛适应点亮到顶，旁边 #f1f1f0 就显脏。
-     分层本来就由 --border 那条发丝线担（它比画布还深 11 级），收 3 级不掉分离度。
-     --hover 跟着重切，保持与卡片底约 5 级差，否则行悬停没有反馈。 */
-  --bg: #f8f8f7;
-  --panel-bg: #fcfcfc;
-  --chrome-bg: rgba(248, 248, 247, 0.78);
-  --sunken: #f1f1f0;
-  --fill: #eaeae8;
-  --hover: #f7f7f7;
-  --active: #eeedeb;
+  /* 面：暖白五档。卡面不上纯白，悬停比卡面暗一档，避免柔光盖掉反馈。 */
+  --bg: #f8f5f0;
+  --panel-bg: #fcfaf7;
+  --chrome-bg: rgba(248, 245, 240, 0.78);
+  --sunken: #f1ede7;
+  --fill: #e8e2d9;
+  --hover: #f6f3ee;
+  --active: #eae4db;
   --overlay: rgba(29, 28, 26, 0.42);
 
   /* 文字：四级近中性，深字浅底一眼可读 */
@@ -152,25 +154,25 @@
   --text-faint: #95948e;
 
   /* 描边：层级靠边框，不靠色块 */
-  --border: #e6e6e4;
-  --border-strong: #d5d5d2;
-  --border-subtle: #f1f1f0;
-  --border-hover: #d5d5d2;
+  --border: #e2dbd1;
+  --border-strong: #cec5b8;
+  --border-subtle: #f1ede7;
+  --border-hover: #cec5b8;
 
   /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
   --text-url: #4d4c49;
-  --badge-cat-bg: #f0f0ee;
-  --badge-cat-border: #e6e6e4;
+  --badge-cat-bg: #eee8df;
+  --badge-cat-border: #e2dbd1;
   --badge-cat-text: #4d4c49;
-  --badge-ver-bg: #e8eef4;
-  --badge-ver-text: #31496a;
+  --badge-ver-bg: #e7eef8;
+  --badge-ver-text: #264c80;
 
   /* 投影带暖褐，纯灰投影在米底上会显脏 */
   --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   /* 轻量化轮：行卡不再靠宽大软影浮起，阴影只留一丝贴地感，分层交还发丝描边 */
   --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
-  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d5d5d2;
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #cec5b8;
   --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
   --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -190,24 +192,24 @@
   --warning-soft: #f6efdf;
 
   /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
-  --sidebar-bg: #edecea;
-  --sidebar-hover: #e5e5e3;
+  --sidebar-bg: #eae4db;
+  --sidebar-hover: #e2dbd1;
 
   /* 品牌标渐变 */
-  --brand-g1: #6c88aa;
-  --brand-g2: #3d5a80;
-  --brand-g3: #283d58;
+  --brand-g1: #668cbd;
+  --brand-g2: #315f9b;
+  --brand-g3: #1e3d68;
   --brand-knob: #ffffff;
 
   /* 锁屏 */
-  --lock-wash-a: #fbfbfa;
-  --lock-wash-b: #edecea;
-  --lock-orb-1: rgba(61, 90, 128, 0.07);
-  --lock-orb-2: rgba(61, 90, 128, 0.045);
+  --lock-wash-a: #fcfaf7;
+  --lock-wash-b: #eae4db;
+  --lock-orb-1: rgba(49, 95, 155, 0.07);
+  --lock-orb-2: rgba(49, 95, 155, 0.045);
 
   /* 毛玻璃底栏 */
-  --frost-bg: rgba(255, 255, 255, 0.86);
-  --frost-border: #e6e6e4;
+  --frost-bg: rgba(252, 250, 247, 0.86);
+  --frost-border: #e2dbd1;
 
   /* 深色面：气泡与 toast */
   --tip-bg: #26241f;
@@ -215,12 +217,12 @@
   --toast-bg: #26241f;
   --toast-ok: #9cc4ae;
   --toast-err: #e09a92;
-  --toast-info: #93aecb;
+  --toast-info: #96b7df;
 
   /* 滚动条与选区 */
   --scrollbar: rgba(29, 28, 26, 0.16);
   --scrollbar-hover: rgba(29, 28, 26, 0.28);
-  --selection: rgba(61, 90, 128, 0.18);
+  --selection: rgba(49, 95, 155, 0.18);
 
   /* 头像：按分类取色，六档同明度同彩度（v2 起只服务内容侧） */
   --cat-1: #5f62b8;
@@ -272,14 +274,14 @@
    连带槽沿用旧的对应关系而不是另取：--chrome-bg / --brand-knob / --lock-wash-a 跟 --bg，
    --lock-wash-b 跟 --panel-bg，--danger-on 跟 --sunken，--shadow 的 1px 环跟 --border-strong。 ---------- */
 [data-theme="ink"] {
-  --accent: #89a8cd;
-  --accent-hover: #a2bcda;
-  --accent-active: #6f92ba;
-  --accent-on: #171614;
-  --accent-soft: rgba(137, 168, 205, 0.15);
-  --accent-light: rgba(137, 168, 205, 0.26);
-  --accent-ring: rgba(137, 168, 205, 0.32);
-  --text-brand: #adc6e2;
+  --accent: #7faeee;
+  --accent-hover: #a0c3f5;
+  --accent-active: #6692d0;
+  --accent-on: #121e30;
+  --accent-soft: rgba(127, 174, 238, 0.16);
+  --accent-light: rgba(127, 174, 238, 0.28);
+  --accent-ring: rgba(127, 174, 238, 0.32);
+  --text-brand: #b0cef8;
 
   --bg: #1d1c1a;
   --panel-bg: #22211e;
@@ -304,8 +306,8 @@
   --badge-cat-bg: #252421;
   --badge-cat-border: #30302d;
   --badge-cat-text: #c7c4bd;
-  --badge-ver-bg: rgba(137, 168, 205, 0.15);
-  --badge-ver-text: #adc6e2;
+  --badge-ver-bg: rgba(127, 174, 238, 0.16);
+  --badge-ver-text: #b0cef8;
 
   /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -332,15 +334,15 @@
   --sidebar-bg: #1a1917;
   --sidebar-hover: #282622;
 
-  --brand-g1: #adc6e2;
-  --brand-g2: #89a8cd;
-  --brand-g3: #6f92ba;
+  --brand-g1: #b0cef8;
+  --brand-g2: #7faeee;
+  --brand-g3: #6692d0;
   --brand-knob: #1d1c1a;
 
   --lock-wash-a: #1d1c1a;
   --lock-wash-b: #22211e;
-  --lock-orb-1: rgba(137, 168, 205, 0.14);
-  --lock-orb-2: rgba(137, 168, 205, 0.07);
+  --lock-orb-1: rgba(127, 174, 238, 0.14);
+  --lock-orb-2: rgba(127, 174, 238, 0.07);
 
   --frost-bg: rgba(34, 33, 30, 0.88);
   --frost-border: #30302d;
@@ -351,11 +353,11 @@
   --toast-bg: #efede8;
   --toast-ok: #2f7d52;
   --toast-err: #b23c37;
-  --toast-info: #4c6c92;
+  --toast-info: #315f9b;
 
   --scrollbar: rgba(255, 255, 255, 0.16);
   --scrollbar-hover: rgba(255, 255, 255, 0.26);
-  --selection: rgba(137, 168, 205, 0.30);
+  --selection: rgba(127, 174, 238, 0.30);
 
   /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
   --cat-1: #8a8fd8;
@@ -391,33 +393,18 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- snow：雪（瓷白，2026-10 第四版「中性亮白」，替换第三版「白·留半档」）。
-   第三版实机判读三条：蓝味仍重／与纸仍分不出／层次太软 → 本轮换性格不是调档。
-   前两版的账也在注释里，别再走回头路：
-   · v1 照外部稿只把纸底整体提亮半档（面族平均 ΔRGB 3.9）→ 实机判「和纸基本一样」。
-   · v2 为了拉开距离把下陷/侧栏/填充整族压深（ΔRGB 10.6）→ 整窗读作冷灰台，且灰阶写成
-     R<G<B 单调递增带了绿分量（--border a*=−1.13），实机判「底色偏青涩」。
-   · 本块（v4）三件事：
-     温度：冷度从描边那圈整个撤走（v3 border b*=−3.9 → 本块 −2.2），全族 a* 守在 ±0.43、
-       b* 不超过 −3.0，读作中性灰而非蓝灰；与纸的对照由「暖白↔冷白」改成「暖白↔净白」。
-     分层：卡面顶到 intake 上限 #fefefe，画布 ΔL*−4.2／下陷 −6.3／侧栏 −8.8／填充 −11.6
-       （纸 −1.4／−3.8／−5.5／−6.3）——纸靠发丝线分层，雪靠明度台阶段差分层，这是两底的性格差。
-     对比：描边 ΔL*−14.4（纸 −7.7），文字 17.09／二级 10.44／muted 6.54／faint 3.53。
-     与纸底面族平均 ΔRGB 10.7（v3 是 8.5），过「看得出方向」的 10 线。
-   下陷面停在 −6.3 不再往深压，是 color-sweep 逮出来的：再深一档，clay/plum 两档 accent 的
-     12px 小字（.tab.active .tab-count、小记 .day-head）对 --sunken 从 4.52 掉到 4.37，破 4.5。
-   code 族沿用 v2 压暗的一档（#776422/#3a689e/#63656f…）：新下陷面 #ebecee 上 4.80–5.34:1，
-     照纸底原值会掉到 4.4 档，所以不跟着回提。
-   accent 族 17 槽填的是亮极性的缺省档（墨蓝），底色块里这份一定会被 accent 覆盖层盖掉。 ---------- */
+/* ---------- snow：净白。保留中性瓷白卡面与灰色台阶，不用蓝色染白底。
+   画布与卡面以明度分层，代码色维持下陷面上 ≥4.5 的对比。
+   accent 族填亮极性缺省档（墨蓝）。 ---------- */
 [data-theme="snow"] {
-  --accent: #3d5a80;
-  --accent-hover: #31496a;
-  --accent-active: #283d58;
+  --accent: #315f9b;
+  --accent-hover: #264c80;
+  --accent-active: #1e3d68;
   --accent-on: #ffffff;
-  --accent-soft: #e8eef4;
-  --accent-light: #d3dfeb;
-  --accent-ring: rgba(61, 90, 128, 0.16);
-  --text-brand: #31496a;
+  --accent-soft: #e7eef8;
+  --accent-light: #cfdef1;
+  --accent-ring: rgba(49, 95, 155, 0.16);
+  --text-brand: #264c80;
 
   --bg: #f1f2f3;
   --panel-bg: #fefefe;
@@ -442,8 +429,8 @@
   --badge-cat-bg: #ebecee;
   --badge-cat-border: #d3d5d9;
   --badge-cat-text: #3e3f42;
-  --badge-ver-bg: #e8eef4;
-  --badge-ver-text: #31496a;
+  --badge-ver-bg: #e7eef8;
+  --badge-ver-text: #264c80;
 
   --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
@@ -467,15 +454,15 @@
   --sidebar-bg: #e3e5e8;
   --sidebar-hover: #dadee1;
 
-  --brand-g1: #6c88aa;
-  --brand-g2: #3d5a80;
-  --brand-g3: #283d58;
+  --brand-g1: #668cbd;
+  --brand-g2: #315f9b;
+  --brand-g3: #1e3d68;
   --brand-knob: #ffffff;
 
   --lock-wash-a: #fefefe;
   --lock-wash-b: #e3e5e8;
-  --lock-orb-1: rgba(61, 90, 128, 0.07);
-  --lock-orb-2: rgba(61, 90, 128, 0.045);
+  --lock-orb-1: rgba(49, 95, 155, 0.07);
+  --lock-orb-2: rgba(49, 95, 155, 0.045);
 
   --frost-bg: rgba(254, 254, 254, 0.88);
   --frost-border: #d3d5d9;
@@ -486,11 +473,11 @@
   --toast-bg: #1f2124;
   --toast-ok: #91c9a6;
   --toast-err: #e28e84;
-  --toast-info: #93aecb;
+  --toast-info: #96b7df;
 
   --scrollbar: rgba(18, 19, 22, 0.16);
   --scrollbar-hover: rgba(18, 19, 22, 0.28);
-  --selection: rgba(61, 90, 128, 0.18);
+  --selection: rgba(49, 95, 155, 0.18);
 
   --cat-1: #5465c4;
   --cat-2: #735eb8;
@@ -525,49 +512,49 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- slate：冷板岩（2026-10 极性轴轮）。
-   墨底同族但色温往中性偏：卡面 L*13.5 → 画布 10.1 → 下陷 7.7，比墨底多走一档，
-   分层不再只靠发丝描边。accent 族填暗极性缺省档（墨蓝）。 ---------- */
+/* ---------- slate：蓝灰板岩。比暖墨更亮，内容面、悬停与描边同步抬升。
+   字阶随新卡面提亮，避免强调色和柔光叠加后损失可读性。
+   accent 族填暗极性缺省档（墨蓝）。 ---------- */
 [data-theme="slate"] {
-  --accent: #89a8cd;
-  --accent-hover: #a2bcda;
-  --accent-active: #6f92ba;
-  --accent-on: #171614;
-  --accent-soft: rgba(137, 168, 205, 0.15);
-  --accent-light: rgba(137, 168, 205, 0.26);
-  --accent-ring: rgba(137, 168, 205, 0.32);
-  --text-brand: #adc6e2;
+  --accent: #7faeee;
+  --accent-hover: #a0c3f5;
+  --accent-active: #6692d0;
+  --accent-on: #121e30;
+  --accent-soft: rgba(127, 174, 238, 0.16);
+  --accent-light: rgba(127, 174, 238, 0.28);
+  --accent-ring: rgba(127, 174, 238, 0.32);
+  --text-brand: #b0cef8;
 
-  --bg: #191c20;
-  --panel-bg: #1f2328;
-  --chrome-bg: rgba(25, 28, 32, 0.86);
-  --sunken: #15171b;
-  --fill: #272c33;
-  --hover: #252a30;
-  --active: #313740;
+  --bg: #252932;
+  --panel-bg: #2b303a;
+  --chrome-bg: rgba(37, 41, 50, 0.86);
+  --sunken: #1f232b;
+  --fill: #323844;
+  --hover: #323844;
+  --active: #3b4351;
   --overlay: rgba(0, 0, 0, 0.65);
 
-  --text: #e3e6ec;
-  --text-secondary: #c3c8d2;
-  --text-muted: #abb1be;
-  --text-faint: #989fab;
+  --text: #edf0f6;
+  --text-secondary: #d2d7e1;
+  --text-muted: #bbc3d0;
+  --text-faint: #adb6c5;
 
-  --border: #2d333b;
-  --border-strong: #3f4752;
-  --border-subtle: #23272e;
-  --border-hover: #3f4752;
+  --border: #3e4654;
+  --border-strong: #535f71;
+  --border-subtle: #303743;
+  --border-hover: #535f71;
 
-  --text-url: #c5c9d4;
-  --badge-cat-bg: #23272e;
-  --badge-cat-border: #2d333b;
-  --badge-cat-text: #c3c8d2;
-  --badge-ver-bg: rgba(137, 168, 205, 0.15);
-  --badge-ver-text: #adc6e2;
+  --text-url: #d2d7e1;
+  --badge-cat-bg: #303743;
+  --badge-cat-border: #3e4654;
+  --badge-cat-text: #d2d7e1;
+  --badge-ver-bg: rgba(127, 174, 238, 0.16);
+  --badge-ver-text: #b0cef8;
 
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #3f4752;
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #535f71;
   --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
   --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
   --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -583,32 +570,32 @@
   --warning: #d9aa63;
   --warning-soft: #251f15;
 
-  --sidebar-bg: #17191d;
-  --sidebar-hover: #252a30;
+  --sidebar-bg: #22262e;
+  --sidebar-hover: #303743;
 
-  --brand-g1: #adc6e2;
-  --brand-g2: #89a8cd;
-  --brand-g3: #6f92ba;
-  --brand-knob: #191c20;
+  --brand-g1: #b0cef8;
+  --brand-g2: #7faeee;
+  --brand-g3: #6692d0;
+  --brand-knob: #252932;
 
-  --lock-wash-a: #191c20;
-  --lock-wash-b: #1f2328;
-  --lock-orb-1: rgba(137, 168, 205, 0.14);
-  --lock-orb-2: rgba(137, 168, 205, 0.07);
+  --lock-wash-a: #252932;
+  --lock-wash-b: #2b303a;
+  --lock-orb-1: rgba(127, 174, 238, 0.14);
+  --lock-orb-2: rgba(127, 174, 238, 0.07);
 
-  --frost-bg: rgba(31, 35, 40, 0.88);
-  --frost-border: #2d333b;
+  --frost-bg: rgba(43, 48, 58, 0.88);
+  --frost-border: #3e4654;
 
   --tip-bg: #eef0f5;
-  --tip-fg: #191c20;
+  --tip-fg: #252932;
   --toast-bg: #eef0f5;
   --toast-ok: #2f7d52;
   --toast-err: #b23c37;
-  --toast-info: #4c6c92;
+  --toast-info: #315f9b;
 
   --scrollbar: rgba(255, 255, 255, 0.16);
   --scrollbar-hover: rgba(255, 255, 255, 0.26);
-  --selection: rgba(137, 168, 205, 0.30);
+  --selection: rgba(127, 174, 238, 0.30);
 
   --cat-1: #8c90da;
   --cat-2: #ac8fe6;
@@ -626,7 +613,7 @@
   --ft-code: #dfc165;
   --ft-mark: #8f96a7;
   --ft-img: #df8cb8;
-  --ft-unk: #6d7481;
+  --ft-unk: #8f96a7;
 
   --code-fg: #e2e5eb;
   --code-kw: #dd9cb8;
@@ -650,102 +637,102 @@
 
 /* ---- 墨蓝 ink（缺省档：与底色块的 accent 族同值，显式列出保组合齐全） ---- */
 [data-base="light"][data-accent="ink"] {
-  --accent: #3d5a80; --accent-hover: #31496a; --accent-active: #283d58;
-  --accent-on: #ffffff; --accent-soft: #e8eef4; --accent-light: #d3dfeb;
-  --accent-ring: rgba(61, 90, 128, 0.16); --text-brand: #31496a;
-  --badge-ver-bg: #e8eef4; --badge-ver-text: #31496a;
-  --brand-g1: #6c88aa; --brand-g2: #3d5a80; --brand-g3: #283d58;
-  --lock-orb-1: rgba(61, 90, 128, 0.07); --lock-orb-2: rgba(61, 90, 128, 0.045);
-  --selection: rgba(61, 90, 128, 0.18); --toast-info: #93aecb;
+  --accent: #315f9b; --accent-hover: #264c80; --accent-active: #1e3d68;
+  --accent-on: #ffffff; --accent-soft: #e7eef8; --accent-light: #cfdef1;
+  --accent-ring: rgba(49, 95, 155, 0.16); --text-brand: #264c80;
+  --badge-ver-bg: #e7eef8; --badge-ver-text: #264c80;
+  --brand-g1: #668cbd; --brand-g2: #315f9b; --brand-g3: #1e3d68;
+  --lock-orb-1: rgba(49, 95, 155, 0.07); --lock-orb-2: rgba(49, 95, 155, 0.045);
+  --selection: rgba(49, 95, 155, 0.18); --toast-info: #96b7df;
 }
 [data-base="dark"][data-accent="ink"] {
-  --accent: #89a8cd; --accent-hover: #a2bcda; --accent-active: #6f92ba;
-  --accent-on: #171614; --accent-soft: rgba(137, 168, 205, 0.15); --accent-light: rgba(137, 168, 205, 0.26);
-  --accent-ring: rgba(137, 168, 205, 0.32); --text-brand: #adc6e2;
-  --badge-ver-bg: rgba(137, 168, 205, 0.15); --badge-ver-text: #adc6e2;
-  --brand-g1: #adc6e2; --brand-g2: #89a8cd; --brand-g3: #6f92ba;
-  --lock-orb-1: rgba(137, 168, 205, 0.14); --lock-orb-2: rgba(137, 168, 205, 0.07);
-  --selection: rgba(137, 168, 205, 0.30); --toast-info: #4c6c92;
+  --accent: #7faeee; --accent-hover: #a0c3f5; --accent-active: #6692d0;
+  --accent-on: #121e30; --accent-soft: rgba(127, 174, 238, 0.16); --accent-light: rgba(127, 174, 238, 0.28);
+  --accent-ring: rgba(127, 174, 238, 0.32); --text-brand: #b0cef8;
+  --badge-ver-bg: rgba(127, 174, 238, 0.16); --badge-ver-text: #b0cef8;
+  --brand-g1: #b0cef8; --brand-g2: #7faeee; --brand-g3: #6692d0;
+  --lock-orb-1: rgba(127, 174, 238, 0.14); --lock-orb-2: rgba(127, 174, 238, 0.07);
+  --selection: rgba(127, 174, 238, 0.30); --toast-info: #315f9b;
 }
 
-/* ---- 青瓷 celadon（苔绿，承锁页第四轮母版 #3d7355） ---- */
+/* ---- 青瓷 celadon（玉石青绿） ---- */
 [data-base="light"][data-accent="celadon"] {
-  --accent: #3d7355; --accent-hover: #325f47; --accent-active: #284c39;
-  --accent-on: #ffffff; --accent-soft: #e6f0ea; --accent-light: #cde4d7;
-  --accent-ring: rgba(61, 115, 85, 0.16); --text-brand: #325f47;
-  --badge-ver-bg: #e6f0ea; --badge-ver-text: #325f47;
-  --brand-g1: #6f9c85; --brand-g2: #3d7355; --brand-g3: #284c39;
-  --lock-orb-1: rgba(61, 115, 85, 0.07); --lock-orb-2: rgba(61, 115, 85, 0.045);
-  --selection: rgba(61, 115, 85, 0.18); --toast-info: #9cc4ae;
+  --accent: #246e60; --accent-hover: #1c594d; --accent-active: #16483f;
+  --accent-on: #ffffff; --accent-soft: #e4f1ec; --accent-light: #c6e5d9;
+  --accent-ring: rgba(36, 110, 96, 0.16); --text-brand: #1c594d;
+  --badge-ver-bg: #e4f1ec; --badge-ver-text: #1c594d;
+  --brand-g1: #62a291; --brand-g2: #246e60; --brand-g3: #16483f;
+  --lock-orb-1: rgba(36, 110, 96, 0.07); --lock-orb-2: rgba(36, 110, 96, 0.045);
+  --selection: rgba(36, 110, 96, 0.18); --toast-info: #92ccb8;
 }
 [data-base="dark"][data-accent="celadon"] {
-  --accent: #7fb89a; --accent-hover: #99c9af; --accent-active: #669b7e;
-  --accent-on: #16211b; --accent-soft: rgba(127, 184, 154, 0.16); --accent-light: rgba(127, 184, 154, 0.28);
-  --accent-ring: rgba(127, 184, 154, 0.32); --text-brand: #a3d4b8;
-  --badge-ver-bg: rgba(127, 184, 154, 0.16); --badge-ver-text: #a3d4b8;
-  --brand-g1: #a3d4b8; --brand-g2: #7fb89a; --brand-g3: #5f9377;
-  --lock-orb-1: rgba(127, 184, 154, 0.14); --lock-orb-2: rgba(127, 184, 154, 0.07);
-  --selection: rgba(127, 184, 154, 0.30); --toast-info: #3f7a5e;
+  --accent: #73c5ad; --accent-hover: #95d6c4; --accent-active: #57a88f;
+  --accent-on: #10251e; --accent-soft: rgba(115, 197, 173, 0.16); --accent-light: rgba(115, 197, 173, 0.28);
+  --accent-ring: rgba(115, 197, 173, 0.32); --text-brand: #a4dfce;
+  --badge-ver-bg: rgba(115, 197, 173, 0.16); --badge-ver-text: #a4dfce;
+  --brand-g1: #a4dfce; --brand-g2: #73c5ad; --brand-g3: #57a88f;
+  --lock-orb-1: rgba(115, 197, 173, 0.14); --lock-orb-2: rgba(115, 197, 173, 0.07);
+  --selection: rgba(115, 197, 173, 0.30); --toast-info: #246e60;
 }
 
 /* ---- 赭石 clay（陶土橙，接旧暖纸墨的血脉） ---- */
 [data-base="light"][data-accent="clay"] {
-  --accent: #9a5b33; --accent-hover: #7f4a29; --accent-active: #673b21;
-  --accent-on: #ffffff; --accent-soft: #f5ece4; --accent-light: #ecd9c6;
-  --accent-ring: rgba(154, 91, 51, 0.16); --text-brand: #7f4a29;
-  --badge-ver-bg: #f5ece4; --badge-ver-text: #7f4a29;
-  --brand-g1: #b98a63; --brand-g2: #9a5b33; --brand-g3: #673b21;
-  --lock-orb-1: rgba(154, 91, 51, 0.07); --lock-orb-2: rgba(154, 91, 51, 0.045);
-  --selection: rgba(154, 91, 51, 0.18); --toast-info: #d9b08f;
+  --accent: #9b562b; --accent-hover: #804422; --accent-active: #69361b;
+  --accent-on: #ffffff; --accent-soft: #f8ede2; --accent-light: #eed7bf;
+  --accent-ring: rgba(155, 86, 43, 0.16); --text-brand: #804422;
+  --badge-ver-bg: #f8ede2; --badge-ver-text: #804422;
+  --brand-g1: #be8655; --brand-g2: #9b562b; --brand-g3: #69361b;
+  --lock-orb-1: rgba(155, 86, 43, 0.07); --lock-orb-2: rgba(155, 86, 43, 0.045);
+  --selection: rgba(155, 86, 43, 0.18); --toast-info: #dbb489;
 }
 [data-base="dark"][data-accent="clay"] {
-  --accent: #d09a6a; --accent-hover: #dbb088; --accent-active: #b8854f;
-  --accent-on: #211a12; --accent-soft: rgba(208, 154, 106, 0.16); --accent-light: rgba(208, 154, 106, 0.28);
-  --accent-ring: rgba(208, 154, 106, 0.32); --text-brand: #e0bb92;
-  --badge-ver-bg: rgba(208, 154, 106, 0.16); --badge-ver-text: #e0bb92;
-  --brand-g1: #e0bb92; --brand-g2: #d09a6a; --brand-g3: #b8854f;
-  --lock-orb-1: rgba(208, 154, 106, 0.14); --lock-orb-2: rgba(208, 154, 106, 0.07);
-  --selection: rgba(208, 154, 106, 0.30); --toast-info: #8a5a2f;
+  --accent: #e1a15f; --accent-hover: #edbb87; --accent-active: #c78848;
+  --accent-on: #2b1b0d; --accent-soft: rgba(225, 161, 95, 0.16); --accent-light: rgba(225, 161, 95, 0.28);
+  --accent-ring: rgba(225, 161, 95, 0.32); --text-brand: #f2c799;
+  --badge-ver-bg: rgba(225, 161, 95, 0.16); --badge-ver-text: #f2c799;
+  --brand-g1: #f2c799; --brand-g2: #e1a15f; --brand-g3: #c78848;
+  --lock-orb-1: rgba(225, 161, 95, 0.14); --lock-orb-2: rgba(225, 161, 95, 0.07);
+  --selection: rgba(225, 161, 95, 0.30); --toast-info: #9b562b;
 }
 
-/* ---- 紫罗 plum（旧冷灰钢蓝与电光紫的过渡带） ---- */
+/* ---- 紫罗 plum（紫调，与墨蓝保持明确的色相距离） ---- */
 [data-base="light"][data-accent="plum"] {
-  --accent: #5f62b8; --accent-hover: #4e519c; --accent-active: #3f4280;
-  --accent-on: #ffffff; --accent-soft: #ececf8; --accent-light: #d9daf0;
-  --accent-ring: rgba(95, 98, 184, 0.16); --text-brand: #4e519c;
-  --badge-ver-bg: #ececf8; --badge-ver-text: #4e519c;
-  --brand-g1: #8b8ecd; --brand-g2: #5f62b8; --brand-g3: #3f4280;
-  --lock-orb-1: rgba(95, 98, 184, 0.07); --lock-orb-2: rgba(95, 98, 184, 0.045);
-  --selection: rgba(95, 98, 184, 0.18); --toast-info: #a9abdd;
+  --accent: #7951a8; --accent-hover: #63418d; --accent-active: #503473;
+  --accent-on: #ffffff; --accent-soft: #f0eaf8; --accent-light: #e0d1f0;
+  --accent-ring: rgba(121, 81, 168, 0.16); --text-brand: #63418d;
+  --badge-ver-bg: #f0eaf8; --badge-ver-text: #63418d;
+  --brand-g1: #a17bc7; --brand-g2: #7951a8; --brand-g3: #503473;
+  --lock-orb-1: rgba(121, 81, 168, 0.07); --lock-orb-2: rgba(121, 81, 168, 0.045);
+  --selection: rgba(121, 81, 168, 0.18); --toast-info: #c3a4e2;
 }
 [data-base="dark"][data-accent="plum"] {
-  --accent: #9ba0e8; --accent-hover: #b2b6ef; --accent-active: #8389d6;
-  --accent-on: #17162a; --accent-soft: rgba(155, 160, 232, 0.16); --accent-light: rgba(155, 160, 232, 0.28);
-  --accent-ring: rgba(155, 160, 232, 0.32); --text-brand: #bcbff2;
-  --badge-ver-bg: rgba(155, 160, 232, 0.16); --badge-ver-text: #bcbff2;
-  --brand-g1: #bcbff2; --brand-g2: #9ba0e8; --brand-g3: #7f85cf;
-  --lock-orb-1: rgba(155, 160, 232, 0.14); --lock-orb-2: rgba(155, 160, 232, 0.07);
-  --selection: rgba(155, 160, 232, 0.30); --toast-info: #4e519c;
+  --accent: #bd9ae0; --accent-hover: #d1b7ed; --accent-active: #a37bc9;
+  --accent-on: #26162f; --accent-soft: rgba(189, 154, 224, 0.16); --accent-light: rgba(189, 154, 224, 0.28);
+  --accent-ring: rgba(189, 154, 224, 0.32); --text-brand: #dcc6f2;
+  --badge-ver-bg: rgba(189, 154, 224, 0.16); --badge-ver-text: #dcc6f2;
+  --brand-g1: #dcc6f2; --brand-g2: #bd9ae0; --brand-g3: #a37bc9;
+  --lock-orb-1: rgba(189, 154, 224, 0.14); --lock-orb-2: rgba(189, 154, 224, 0.07);
+  --selection: rgba(189, 154, 224, 0.30); --toast-info: #7951a8;
 }
 
-/* ---- 暮瑰 rose（酒红玫瑰，四档里唯一走红调的） ---- */
+/* ---- 暮瑰 rose（玫红） ---- */
 [data-base="light"][data-accent="rose"] {
-  --accent: #984c64; --accent-hover: #7d3d51; --accent-active: #642f3f;
-  --accent-on: #ffffff; --accent-soft: #f6eaee; --accent-light: #edd7e0;
-  --accent-ring: rgba(152, 76, 100, 0.16); --text-brand: #7d3d51;
-  --badge-ver-bg: #f6eaee; --badge-ver-text: #7d3d51;
-  --brand-g1: #b97a8e; --brand-g2: #984c64; --brand-g3: #642f3f;
-  --lock-orb-1: rgba(152, 76, 100, 0.07); --lock-orb-2: rgba(152, 76, 100, 0.045);
-  --selection: rgba(152, 76, 100, 0.18); --toast-info: #dca6b7;
+  --accent: #9b3f68; --accent-hover: #813255; --accent-active: #692846;
+  --accent-on: #ffffff; --accent-soft: #f8e8ef; --accent-light: #efcedf;
+  --accent-ring: rgba(155, 63, 104, 0.16); --text-brand: #813255;
+  --badge-ver-bg: #f8e8ef; --badge-ver-text: #813255;
+  --brand-g1: #c27394; --brand-g2: #9b3f68; --brand-g3: #692846;
+  --lock-orb-1: rgba(155, 63, 104, 0.07); --lock-orb-2: rgba(155, 63, 104, 0.045);
+  --selection: rgba(155, 63, 104, 0.18); --toast-info: #e4a3c0;
 }
 [data-base="dark"][data-accent="rose"] {
-  --accent: #d78aa0; --accent-hover: #e3a3b5; --accent-active: #bd7287;
-  --accent-on: #241419; --accent-soft: rgba(215, 138, 160, 0.16); --accent-light: rgba(215, 138, 160, 0.28);
-  --accent-ring: rgba(215, 138, 160, 0.32); --text-brand: #ebb3c3;
-  --badge-ver-bg: rgba(215, 138, 160, 0.16); --badge-ver-text: #ebb3c3;
-  --brand-g1: #ebb3c3; --brand-g2: #d78aa0; --brand-g3: #b66a80;
-  --lock-orb-1: rgba(215, 138, 160, 0.14); --lock-orb-2: rgba(215, 138, 160, 0.07);
-  --selection: rgba(215, 138, 160, 0.30); --toast-info: #874356;
+  --accent: #e991b6; --accent-hover: #f2afcb; --accent-active: #cc7399;
+  --accent-on: #301321; --accent-soft: rgba(233, 145, 182, 0.16); --accent-light: rgba(233, 145, 182, 0.28);
+  --accent-ring: rgba(233, 145, 182, 0.32); --text-brand: #f6bfd7;
+  --badge-ver-bg: rgba(233, 145, 182, 0.16); --badge-ver-text: #f6bfd7;
+  --brand-g1: #f6bfd7; --brand-g2: #e991b6; --brand-g3: #cc7399;
+  --lock-orb-1: rgba(233, 145, 182, 0.14); --lock-orb-2: rgba(233, 145, 182, 0.07);
+  --selection: rgba(233, 145, 182, 0.30); --toast-info: #9b3f68;
 }
 
 /* ---------- 别名槽位：不填 hex，只指向别的槽，所以四套主题不必各写一遍。
@@ -1473,7 +1460,7 @@ body {
 
 /* 滚动条：轨道透明，thumb 是浮在 9px 槽中的一根 3px 细胶囊（3px 透明内衬 + padding-box 裁切），
    hover 只变亮不变粗。贴边的方条和浮岛卡+发丝描边不是同一只手 */
-::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar { width: var(--scrollbar-track); height: var(--scrollbar-track); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar);
@@ -1591,10 +1578,11 @@ body {
   flex: 1;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding: 0 var(--space-5) 22px;
-  /* inset 轮：居中阅读列——窄窗时保持 space-5 常态边距，宽窗两侧对称加宽，
-     行长不再随窗口无限拉大。上限走 --content-max（视口驱动，最大化才放宽到 1120） */
-  padding-inline: max(var(--space-5), calc(50% - var(--content-max) / 2));
+  padding: 0 var(--page-gutter) 22px;
+  /* gutter 轮：阅读列从侧栏边起算，--content-max 之外的余量整份落到右侧。
+     原先两侧均摊（max(space-5, 50%−content-max/2)），在 1187 窗上给侧栏边上摊出
+     39.5px、1440 窗 165px 的空带，换页时还会和小记页的 20px 打架 */
+  padding-inline: var(--page-gutter) max(var(--page-gutter), calc(100% - var(--page-gutter) - var(--content-max)));
 }
 .content-inner:has(.batch-dock) { padding-bottom: var(--dock-clearance); }
 
@@ -2366,9 +2354,11 @@ input[type="datetime-local"]:focus-visible {
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 /* 环画在容器上，容器里的输入件本体不再叠第二圈。
+   直连页的 .probe-box 是 .search-box 的同配方变体（环在 label 上），走同一条豁免。
    书写区两条同理：列表页的环归 .composer:focus-within（描边+环一体），全屏页整块纸面就是唯一
    书写件、光标本身即焦点回执，套 3px accent 环等于给正文框一道"输入框边"，压回 none。 */
-.search-box input:focus-visible { box-shadow: none; }
+.search-box input:focus-visible,
+.probe-box input:focus-visible { box-shadow: none; }
 .ProseMirror:focus-visible { box-shadow: none; }
 
 /* ---------- 弹簧微反馈：只给 transform 换弹性曲线 ----------

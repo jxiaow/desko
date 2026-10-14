@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { fileshareApi } from '../../services/api/fileshare'
 import { tunnelApi } from '../../services/api/tunnel'
-import type { TunnelServiceRow } from '../../services/api/tunnel'
+import type { TunnelDomain, TunnelServiceRow } from '../../services/api/tunnel'
 import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
@@ -11,13 +11,17 @@ const props = defineProps<{
   /** null = 新增一条 */
   row: TunnelServiceRow | null
   busy: boolean
+  domain: TunnelDomain | null
+  domainLoading: boolean
+  domainError: string
 }>()
-const emit = defineEmits<{ close: []; saved: [] }>()
+const emit = defineEmits<{ close: []; saved: []; retryDomain: [] }>()
 
 const toastStore = useToastStore()
 
 const label = ref('')
-const hostname = ref('')
+const hostInput = ref('')
+const manualHost = ref(false)
 const port = ref('')
 /** 只有新增时能选种类：改一条已登记的服务不能偷换它指向的是谁 */
 const preset = ref('')
@@ -31,7 +35,8 @@ watch(
   () => props.row,
   (row) => {
     label.value = row?.label ?? ''
-    hostname.value = row?.hostname ?? ''
+    hostInput.value = row?.hostname ?? ''
+    manualHost.value = Boolean(row)
     port.value = row ? String(row.port) : ''
     preset.value = row?.preset ?? ''
     publicPassword.value = ''
@@ -40,13 +45,38 @@ watch(
   { immediate: true },
 )
 
+function useAuthorizedDomain() {
+  const suffix = props.domain ? `.${props.domain.name}` : ''
+  if (suffix && hostInput.value.toLowerCase().endsWith(suffix)) {
+    hostInput.value = hostInput.value.slice(0, -suffix.length)
+  } else if (manualHost.value) {
+    hostInput.value = ''
+  }
+  manualHost.value = false
+}
+
+watch(() => props.domain?.name, (name) => {
+  if (name && hostInput.value.toLowerCase().endsWith(`.${name}`)) useAuthorizedDomain()
+}, { immediate: true })
+
+const prefixOk = computed(() => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(hostInput.value.trim()))
+const hostname = computed(() => manualHost.value ? hostInput.value.trim().toLowerCase()
+  : props.domain && prefixOk.value ? `${hostInput.value.trim().toLowerCase()}.${props.domain.name}` : '')
+const hostOk = computed(() => manualHost.value ? Boolean(hostname.value)
+  : props.domain?.status === 'active' && prefixOk.value)
+
+function useManualHost() {
+  hostInput.value = hostname.value || hostInput.value
+  manualHost.value = true
+}
+
 const isFileshare = computed(() => preset.value === 'fileshare')
 /** 只有改一条已登记的 fileshare 才谈得上公网策略：新建那条门还没上公网 */
 const showsPolicy = computed(() => Boolean(props.row) && isFileshare.value)
 const portNumber = computed(() => Number.parseInt(port.value, 10))
 const portOk = computed(() => Number.isInteger(portNumber.value) && portNumber.value >= 1 && portNumber.value <= 65535)
 const canSave = computed(
-  () => hostname.value.trim().length > 0 && portOk.value && !acting.value && !props.busy,
+  () => hostOk.value && portOk.value && !acting.value && !props.busy,
 )
 const passwordWritten = computed(() => publicPassword.value.trim().length > 0)
 const readOnlyWritten = computed(() => props.row ? publicReadOnly.value !== props.row.publicReadOnly : false)
@@ -56,7 +86,7 @@ async function readPort() {
   try {
     const s = await fileshareApi.status()
     if (s.boundPort == null) {
-      toastStore.showToast('局域网传输此刻没在本机监听，读不到实际端口：先启动它，或照实手填', 'error')
+      toastStore.showToast('未检测到监听端口，请先启动局域网传输。', 'error')
       return
     }
     port.value = String(s.boundPort)
@@ -92,7 +122,7 @@ async function save() {
         preset: preset.value,
       })
     }
-    toastStore.showToast('已记下：点「应用」把子域指过来')
+    toastStore.showToast('服务已保存')
     emit('saved')
     emit('close')
   } catch (e) {
@@ -107,7 +137,7 @@ async function save() {
   <div class="dialog-overlay form-overlay">
     <div class="dialog tunnel-service-dialog" role="dialog" aria-modal="true" :aria-label="row ? '公网设置' : '添加本地服务'">
       <div class="dialog-header">
-        <h3>{{ row ? `${row.label} · 公网设置` : '添加一项本地服务' }}</h3>
+        <h3>{{ row ? `${row.label} · 公网设置` : '添加本地服务' }}</h3>
         <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
           <AppIcon name="x" :size="16" />
         </button>
@@ -115,35 +145,47 @@ async function save() {
 
       <div class="dialog-body">
         <div v-if="!row" class="form-group">
-          <label>挂哪一类</label>
+          <label>服务类型</label>
           <div class="seg">
             <button type="button" :class="{ on: preset === 'fileshare' }" @click="preset = 'fileshare'">局域网传输</button>
-            <button type="button" :class="{ on: preset === '' }" @click="preset = ''">其它本机服务</button>
+            <button type="button" :class="{ on: preset === '' }" @click="preset = ''">其他服务</button>
           </div>
           <p class="lead">
             {{ isFileshare
-              ? 'Desko 自己起的那个服务，公网侧能强制口令与只读。'
-              : '本机在听的任何 HTTP 服务。Desko 不在它的请求链路上，鉴权由那台服务自己负责。' }}
+              ? '通过隧道发布 Desko 文件传输服务。'
+              : '通过隧道发布本机 HTTP 服务。' }}
           </p>
         </div>
 
         <div class="form-group">
-          <label for="tn-svc-name">名字</label>
-          <input id="tn-svc-name" v-model="label" type="text" maxlength="40" placeholder="局域网传输" />
+          <label for="tn-svc-name">服务名称</label>
+          <input id="tn-svc-name" v-model="label" type="text" maxlength="40" :placeholder="isFileshare ? '局域网传输' : '例如：Web 服务'" />
         </div>
 
         <div class="form-group">
-          <label for="tn-svc-host">公网子域</label>
-          <input
-            id="tn-svc-host"
-            v-model="hostname"
-            class="mono"
-            type="text"
-            maxlength="253"
-            spellcheck="false"
-            placeholder="files.example.com"
-          />
-          <p class="lead">写完整主机名，不带协议和路径；一个子域只能指一个本机端口。</p>
+          <label>主域名</label>
+          <p v-if="domain" class="domain-name mono">{{ domain.name }}</p>
+          <p v-else-if="domainLoading" class="lead">正在读取主域名…</p>
+          <p v-else class="lead">{{ domainError || '完成 Cloudflare 授权后自动获取。' }}</p>
+          <button v-if="domainError || (domain && domain.status !== 'active')" class="btn-secondary" type="button" :disabled="domainLoading" @click="emit('retryDomain')">重试读取主域名</button>
+          <p v-if="domain && domain.status !== 'active'" class="lead">域名尚未启用，请检查 Cloudflare 配置。</p>
+        </div>
+
+        <div class="form-group">
+          <label for="tn-svc-host">{{ manualHost ? '完整域名' : '子域名前缀' }}</label>
+          <div class="host-line">
+            <input id="tn-svc-host" v-model="hostInput" class="mono" type="text"
+              :maxlength="manualHost ? 253 : 63" spellcheck="false"
+              :placeholder="manualHost ? 'files.example.com' : 'files'" />
+            <span v-if="!manualHost && domain" class="host-suffix mono">.{{ domain.name }}</span>
+          </div>
+          <p v-if="hostname" class="host-preview mono">公网地址：https://{{ hostname }}</p>
+          <div class="host-help">
+            <p class="lead">{{ manualHost ? '填写完整域名，不含协议或路径。' : '仅填写前缀，例如 files。' }}</p>
+            <button v-if="manualHost && domain" class="host-mode" type="button" @click="useAuthorizedDomain">使用主域名</button>
+            <button v-else-if="!manualHost" class="host-mode" type="button" @click="useManualHost">手动填写完整域名</button>
+          </div>
+          <p v-if="!manualHost && hostInput.trim() && !prefixOk" class="dialog-err">前缀须为 1–63 位字母、数字或连字符，且首尾不能为连字符。</p>
         </div>
 
         <div class="form-group">
@@ -158,55 +200,55 @@ async function save() {
               maxlength="5"
               placeholder="8421"
             />
-            <button v-if="isFileshare" class="btn-secondary port-btn" type="button" @click="readPort">读实际端口</button>
+            <button class="btn-secondary port-btn" :class="{ 'port-btn-hidden': !isFileshare }"
+              :aria-hidden="!isFileshare" type="button" @click="readPort">获取端口</button>
           </div>
           <p class="lead">
             {{ isFileshare
-              ? '取本机正在监听的那个值：配置端口被占用会向上漂，照配置填必错。'
-              : '只许指向本机 127.0.0.1，不接受别台机器的地址。' }}
+              ? '自动获取服务当前监听端口。'
+              : '连接至本机 127.0.0.1。' }}
           </p>
         </div>
 
         <template v-if="showsPolicy">
-          <div class="policy-head">谁能进、能做什么</div>
+          <div class="policy-head">访问控制</div>
 
           <div class="form-group">
-            <label for="tn-svc-pw">公网口令</label>
+            <label for="tn-svc-pw">访问口令</label>
             <input
               id="tn-svc-pw"
               v-model="publicPassword"
               type="password"
               maxlength="64"
               autocomplete="new-password"
-              :placeholder="row?.hasPublicPassword ? '留空 = 不动现在这把' : '还没设过：不设就过不了门'"
+              :placeholder="row?.hasPublicPassword ? '留空保留原口令' : '8–64 位字符'"
             />
             <p class="lead">
               {{ row?.hasPublicPassword
-                ? '改口令就填新的；只动开关不必填。'
-                : '这条门直接对着公网，没口令时 Desko 不放它通：8–64 个字符，别用常见弱口令。' }}
+                ? '填写新口令可更新访问凭据。'
+                : '未设置口令时，公网访问将被拒绝。' }}
             </p>
           </div>
 
           <div class="form-group">
-            <label>公网动作</label>
+            <label>访问权限</label>
             <div class="seg">
               <button type="button" :class="{ on: publicReadOnly }" @click="publicReadOnly = true">只读</button>
-              <button type="button" :class="{ on: !publicReadOnly }" @click="publicReadOnly = false">放开上传</button>
+              <button type="button" :class="{ on: !publicReadOnly }" @click="publicReadOnly = false">允许上传</button>
             </div>
             <p class="lead">
-              只读＝公网侧只能浏览和下载，上传、存文本会被拒。局域网那扇门不受这里影响。
+              只读模式允许浏览和下载，不影响局域网访问。
             </p>
           </div>
         </template>
 
-        <p v-if="!isFileshare" class="plain-note">
-          desko 只负责把这条子域转到你填的本机端口。谁能进、能做什么，由那台服务自己判断；
-          要 desko 来挡，得引 Cloudflare Access（本页不提供）。
+        <p v-if="!showsPolicy" class="service-note">
+          {{ isFileshare ? '公网访问需设置口令，可在服务设置中配置。' : '访问权限由原服务管理。' }}
         </p>
       </div>
 
       <div class="dialog-footer">
-        <span class="foot-note">{{ row ? '改动即刻生效，无需重启隧道' : '记下后点「应用」才会上公网' }}</span>
+        <span class="foot-note">{{ row ? '地址或端口变更需重新应用' : '保存后点击「应用」发布服务' }}</span>
         <button class="btn-secondary" type="button" @click="emit('close')">取消</button>
         <button class="btn-primary" type="button" :disabled="!canSave" @click="save">保存</button>
       </div>
@@ -227,7 +269,17 @@ async function save() {
 
 .port-line { display: flex; gap: 8px; align-items: center }
 .port-line input { flex: 1; min-width: 0 }
-.port-btn { flex-shrink: 0; align-self: flex-start }
+.port-btn { width: 80px; flex-shrink: 0; align-self: flex-start }
+.port-btn-hidden { visibility: hidden; pointer-events: none }
+
+.domain-name { margin: 0; color: var(--text); font-size: var(--text-sm) }
+.host-line { display: flex; align-items: center; gap: 8px }
+.host-line input { flex: 1; min-width: 0 }
+.host-suffix { max-width: 60%; overflow-wrap: anywhere; color: var(--text-muted); font-size: var(--text-xs) }
+.host-preview { margin: 6px 0 0; overflow-wrap: anywhere; color: var(--text-url); font-size: var(--text-xs) }
+.host-help { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px }
+.form-group .host-help .lead { margin: 0 }
+.host-mode { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; font-size: var(--text-xs) }
 
 /* 公网策略与基础字段之间只靠小标题+间距分层，不做卡中卡 */
 .policy-head {
@@ -237,15 +289,12 @@ async function save() {
   color: var(--text-muted);
 }
 
-.plain-note {
+.service-note {
   margin: 2px 0 10px;
-  padding: 8px 10px;
-  background: var(--warning-soft);
-  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent);
-  border-radius: var(--radius-sm);
+  min-height: 1.6em;
   font-size: var(--text-xs);
   line-height: 1.6;
-  color: var(--text);
+  color: var(--text-muted);
 }
 
 .foot-note { margin-right: auto; font-size: var(--text-xs); color: var(--text-muted) }

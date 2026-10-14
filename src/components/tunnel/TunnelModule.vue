@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { tunnelApi } from '../../services/api/tunnel'
 import type { TunnelServiceRow, TunnelSplitReport } from '../../services/api/tunnel'
@@ -13,6 +13,11 @@ import {
   tnPollError as pollError,
   tnServices as services,
   tnRefresh as refresh,
+  tnDomain as domain,
+  tnDomainLoading as domainLoading,
+  tnDomainError as domainError,
+  tnLoadDomain as loadDomain,
+  tnClearDomain as clearDomain,
 } from '../../services/tunnelState'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
@@ -29,6 +34,11 @@ const showDetail = ref(false)
 const report = ref<TunnelSplitReport | null>(null)
 const probing = ref(false)
 const dialogRow = ref<TunnelServiceRow | null | undefined>(undefined)
+
+watch(() => provision.value?.authorized, (authorized) => {
+  if (authorized) void loadDomain()
+  else if (authorized === false) clearDomain()
+}, { immediate: true })
 
 /** 三态分开说：进程起来了 ≠ 连上了边缘，把中间那格洗成"运行中"是骗人 */
 const state = computed(() => {
@@ -86,6 +96,7 @@ async function probe() {
 // 注册要几秒，进程状态与服务列表又只在本地变化：只在页面活着时低频轮询，不常驻
 let timer: number | undefined
 let unlistenFocus: (() => void) | null = null
+let disposed = false
 
 async function refreshNow() {
   try {
@@ -95,24 +106,40 @@ async function refreshNow() {
   }
 }
 
-onMounted(async () => {
-  await refresh()
+function refreshOnFocus() {
+  if (!busy.value) void refreshNow()
+}
+
+function refreshOnVisible() {
+  if (document.visibilityState === 'visible') refreshOnFocus()
+}
+
+onMounted(() => {
+  void refreshNow()
   timer = window.setInterval(() => {
     if (!busy.value) void refresh().catch(() => undefined)
   }, 3000)
+  window.addEventListener('focus', refreshOnFocus)
+  document.addEventListener('visibilitychange', refreshOnVisible)
   // 浏览器里点完授权回 desko 的那一刻必须当场补一次：窗口被盖住期间 WebView2 把
   // 3 秒计时器节流到分钟级，只靠轮询就成了「授权完了界面一动不动」
   try {
-    unlistenFocus = await getCurrentWindow().onFocusChanged(({ payload: hasFocus }) => {
-      if (hasFocus && !busy.value) void refreshNow()
-    })
+    void getCurrentWindow().onFocusChanged(({ payload: hasFocus }) => {
+      if (hasFocus) refreshOnFocus()
+    }).then((unlisten) => {
+      if (disposed) unlisten()
+      else unlistenFocus = unlisten
+    }).catch(() => undefined)
   } catch {
-    /* 拿不到窗口句柄时轮询照旧，只是少了那一次补刷 */
+    /* 拿不到原生窗口句柄时仍由 DOM 聚焦、可见性变化与轮询补刷 */
   }
 })
 
 onUnmounted(() => {
+  disposed = true
   if (timer) window.clearInterval(timer)
+  window.removeEventListener('focus', refreshOnFocus)
+  document.removeEventListener('visibilitychange', refreshOnVisible)
   unlistenFocus?.()
 })
 
@@ -156,7 +183,11 @@ usePageHeadStore().setHead('内网穿透')
         :login="login"
         :binary="binary"
         :busy="busy"
+        :domain="domain"
+        :domain-loading="domainLoading"
+        :domain-error="domainError"
         @refresh="refreshNow"
+        @retry-domain="loadDomain(true)"
       />
 
       <div v-if="pollError" class="poll-err">
@@ -223,6 +254,10 @@ usePageHeadStore().setHead('内网穿透')
         v-if="dialogRow !== undefined"
         :row="dialogRow"
         :busy="busy"
+        :domain="domain"
+        :domain-loading="domainLoading"
+        :domain-error="domainError"
+        @retry-domain="loadDomain(true)"
         @close="dialogRow = undefined"
         @saved="refreshNow"
       />

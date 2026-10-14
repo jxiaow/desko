@@ -1,5 +1,5 @@
-// 直连清单页出图：探测结论弹窗 × 清单行展开 × 两主题。
-// 用法：先起 vite --mode e2e --port 1430，再 PW_CHANNEL=msedge node scripts/bypass-shots.mjs
+// 网络直连页出图：健康度反转骨架（概览 → 需要处理的卡 → 直连可用的 chip）× 落盘链路 × 两主题。
+// 用法：先起 npm run dev -- --mode e2e --port 1430，再 PW_CHANNEL=msedge node scripts/bypass-shots.mjs
 import { chromium } from '@playwright/test'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 
@@ -8,12 +8,13 @@ const OUT = 'shots/bypass'
 rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 
-/** 清单预置行：三态各一条，行展开与重探两帧共用 */
-const listRows = [
-  { host: 'gitlab.inc.example.net', input: 'gitlab.inc.example.net', address: '10.18.4.11', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'directOk', note: '直连已可用' },
+/** 混排清单：三条异常升格成卡（不可达 / 固定地址异常 / 缺路由），两条直连可用收成 chip */
+const mixedRows = [
+  { host: 'gitlab.inc.example.net', input: 'gitlab.inc.example.net', address: '10.18.4.11', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'directOk' },
   { host: 'xtbg.xylink.com', input: 'http://xtbg.xylink.com:8443/agent', address: '172.30.2.109', interfaceName: 'vEthernet (TUN)', nextHop: '169.254.99.99', verdict: 'needRoute', note: '缺少绑定的路由' },
-  { host: '172.33.0.0/16', input: '172.33.0.0/16', kind: 'cidr', address: '', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'directOk', note: '路由已通，无需处理' },
-  { host: 'registry.example-mirror.net', input: 'registry.example-mirror.net', address: '125.39.27.223', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'hostsOnly', note: '仅缺 DNS 固定', stale: true, applyState: 'applied' },
+  { host: '172.33.0.0/16', input: '172.33.0.0/16', kind: 'cidr', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'directOk' },
+  { host: 'registry.example-mirror.net', input: 'registry.example-mirror.net', address: '125.39.27.223', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'hostsOnly', stale: true, applyState: 'applied' },
+  { host: 'old-build.inc.example.net', input: 'old-build.inc.example.net', address: '10.18.6.7', verdict: 'unreachable' },
 ]
 
 /** 落盘链路的账：两条能自动定，一条带 CDN 特征默认不进批次 */
@@ -23,7 +24,14 @@ const writeRows = [
   { host: 'registry.example-mirror.net', input: 'registry.example-mirror.net', address: '125.39.27.223', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'hostsOnly', cdnLike: true },
 ]
 
-/** 一帧要演什么：bypass 是判定形状，probe 是页栏动作，row 是点开的第几行，flow 是落盘走到哪一步 */
+/** 全绿清单：需要处理那一段不出，页面只剩概览与 chip 行 */
+const cleanRows = [
+  { host: 'gitlab.inc.example.net', input: 'gitlab.inc.example.net', address: '10.18.4.11', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'directOk' },
+  { host: 'nexus.inc.example.net', input: 'nexus.inc.example.net', address: '10.18.5.20', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'directOk' },
+  { host: '172.33.0.0/16', input: '172.33.0.0/16', kind: 'cidr', interfaceName: '以太网', nextHop: '192.168.1.1', verdict: 'directOk' },
+]
+
+/** 一帧要演什么：probe 是页栏探测，open 是展开哪张卡，chip 是点开哪枚，flow 是落盘走到哪一步 */
 const scenes = [
   [
     // 页栏只有一颗「开始探测」：结论先摆出来，加入清单是弹窗里的下一步
@@ -37,7 +45,7 @@ const scenes = [
     },
   ],
   [
-    // 点了「加入清单」：按钮收起，行同时出现在清单里
+    // 点了「加入清单」：按钮收起，这条同时进「需要处理」那张卡
     '2-dialog-recorded',
     {
       bypass: {
@@ -48,36 +56,31 @@ const scenes = [
     },
   ],
   [
-    // 不可达：加入那颗钮在位但按不动
+    // 不可达：加入那颗钮在位但按不动，清单里那条死地址仍挂在最前
     '3-dialog-unreachable',
     {
       bypass: {
         verdict: 'unreachable',
         probe: { host: 'old-build.inc.example.net', realIps: ['10.18.6.7', '10.18.6.8'] },
-        targets: [{ host: 'xtbg.xylink.com', address: '172.30.2.109', interfaceName: 'vEthernet (TUN)', nextHop: '169.254.99.99', verdict: 'needRoute' }],
+        targets: [{ host: 'old-build.inc.example.net', address: '10.18.6.7', verdict: 'unreachable' }],
       },
       probe: { input: 'old-build.inc.example.net' },
     },
   ],
   [
-    '4-rows-and-open',
-    {
-      bypass: { targets: listRows, hosts: { managed: 3 } },
-      row: 1,
-    },
+    // 主体帧：概览的大数字 + 出口分布，下面三张卡、一枚 chip 行
+    '4-overview',
+    { bypass: { targets: mixedRows, hosts: { managed: 3 } } },
   ],
   [
-    // 行首「重新探测」开的是那只弹窗：结论不留页面，那一行也不许被收走
-    '5-recheck-dialog',
-    {
-      bypass: { verdict: 'needRoute', probe: { host: 'xtbg.xylink.com', address: '172.30.2.109', interfaceName: 'vEthernet (TUN)', source: '198.18.0.55', nextHop: '169.254.99.99' }, targets: listRows },
-      row: 1,
-      recheck: true,
-    },
+    // 就地展开：同一颗岛下面接凹底，念库里那句结论
+    '5-card-open',
+    { bypass: { targets: mixedRows, hosts: { managed: 3 } }, open: 'xtbg.xylink.com' },
   ],
   [
-    '6-empty',
-    { bypass: {} },
+    // chip 点开的详情弹窗：直连可用的目标不占行，动作与结论都在这里
+    '6-chip-detail',
+    { bypass: { targets: mixedRows, hosts: { managed: 3 } }, chip: 'gitlab.inc.example.net' },
   ],
   [
     // 落盘第一步：确认弹窗逐条念要动什么，CDN 那条单独标出并给勾选位
@@ -95,13 +98,13 @@ const scenes = [
     { bypass: { targets: writeRows, apply: { delayMs: 3000 } }, flow: 'awaiting' },
   ],
   [
-    // 结果弹窗：逐条账 + 回滚没成才留的批次，底部才有「撤销本批」
+    // 结果弹窗：逐条账 + 回滚没成才留的批次，底部才有「撤销本次配置」
     '10-result',
     { bypass: { targets: writeRows, apply: { failed: ['172.33.0.0/16'], rollbackFail: true } }, flow: 'result' },
   ],
   [
-    // 写完并自动重验过：行上改念「已写入」，小账里不再有「待写入」
-    // 两条都是域名：mock 的重探只有一份固定探针数据，网段行会被套上别人的地址
+    // 写完并自动重验过：三条都收进 chip，需要处理那一段整块消失
+    // 域名与网段混着会被 mock 的重探套上别人的地址，这里只留能对上形的
     '11-written',
     {
       bypass: {
@@ -113,6 +116,12 @@ const scenes = [
       flow: 'written',
     },
   ],
+  [
+    // 全绿：概览即 3 / 3，页面收成一屏干净
+    '12-all-clean',
+    { bypass: { targets: cleanRows, hosts: { managed: 3 } } },
+  ],
+  ['13-empty', { bypass: {} }],
 ]
 const EXPECTED = scenes.flatMap(([name]) => [`paper-${name}.png`, `ink-${name}.png`])
 
@@ -141,21 +150,16 @@ for (const theme of ['paper', 'ink']) {
         await page.waitForTimeout(300)
       }
     }
-    if (scene.row != null) {
-      await page.locator('.bp-row .row-main').nth(scene.row).click()
+    if (scene.open) {
+      await page.locator('.bp-card', { hasText: scene.open }).locator('.card-main').click()
       await page.waitForSelector('.row-card')
     }
-    if (scene.recheck) {
-      const row = page.locator('.bp-row').nth(scene.row)
-      await row.hover()
-      await row.locator('.ib[title="重新探测"]').click()
-      await page.waitForSelector('.concl-dialog')
-      if ((await page.locator('.row-card').count()) === 0) {
-        console.log(`[${theme}/${name}] 越位：重探把那一行收走了`)
-      }
+    if (scene.chip) {
+      await page.locator('.chip', { hasText: scene.chip }).click()
+      await page.waitForSelector('.detail-dialog')
     }
     if (scene.flow) {
-      await page.locator('.page-bar .btn-secondary', { hasText: '写入落盘批次' }).click()
+      await page.locator('.hero .btn-primary').click()
       await page.waitForSelector('.dialog')
       if (scene.flow === 'plan-cdn') {
         await page.locator('.plan-cdn input').last().check()
@@ -163,9 +167,9 @@ for (const theme of ['paper', 'ink']) {
       }
       if (['awaiting', 'result', 'written'].includes(scene.flow)) {
         await page.locator('.dialog .btn-primary').click()
-        if (scene.flow === 'awaiting') await page.waitForTimeout(500)
-        if (scene.flow === 'result') await page.waitForSelector('.dialog:has-text("写入结果")')
-        if (scene.flow === 'written') await page.waitForSelector('.bp-row .bp-flag')
+        if (scene.flow === 'awaiting') await page.waitForTimeout(600)
+        if (scene.flow === 'result') await page.waitForSelector('.dialog:has-text("配置结果")')
+        if (scene.flow === 'written') await page.waitForSelector('.chip')
       }
     }
     await page.mouse.move(1020, 660)

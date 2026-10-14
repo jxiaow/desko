@@ -8,6 +8,10 @@ export const notesApi = {
     invoke('create_note', { input }),
   updateNote: (id: string, input: UpdateNoteInput): Promise<void> =>
     invoke('update_note', { id, input }),
+  stageDrafts: (drafts: NoteDraft[]): Promise<void> =>
+    invoke('stage_note_drafts', { drafts }),
+  recoverDrafts: (): Promise<NoteDraft[]> =>
+    invoke('recover_note_drafts'),
   deleteNote: (id: string): Promise<void> =>
     invoke('delete_note', { id }),
   batchDeleteNotes: (ids: string[]): Promise<number> =>
@@ -75,4 +79,9 @@ export interface NoteKeyStatus {
 export interface NotePlain {
   id: string
   html: string
+}
+
+export interface NoteDraft {
+  id: string
+  input: UpdateNoteInput
 }

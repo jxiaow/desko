@@ -80,21 +80,22 @@ test.describe('Codex 账号', () => {
     expect(await e2e.count(page, 'codex_repair_session_visibility_for_launch_target')).toBe(0)
   })
 
-  test('行内三行事实：等级、团队、登录方式、用户 ID、有效期与标签都看得见', async ({ page }) => {
+  test('账号身份区显示等级和属性，使用记录与标签位于页脚', async ({ page }) => {
     await gotoCodex(page)
     const main = accountRow(page, 'main@e2e.dev')
-    await expect(main.locator('.tier')).toHaveText('PRO')
-    await expect(main.locator('.acc-l2')).toContainText('团队：个人账户')
-    await expect(main.locator('.acc-l2')).toContainText('Google 登录')
-    await expect(main.locator('.acc-l2')).toContainText('用户 ID：9f6305d7…')
-    await expect(main.locator('.acc-l3')).toContainText('有效期至 2027-01-01 10:18')
+    await expect(main.locator('.tier')).toHaveText('PRO 200')
+    await expect(main.locator('.acc-l2')).toContainText('工作区：个人账户')
+    await expect(main.locator('.acc-l2')).toContainText('登录方式：Google')
+    await expect(main).not.toContainText('用户 ID')
+    await expect(main).not.toContainText('9f6305d7')
+    await expect(main.locator('.acc-l2')).toContainText('有效期至 2027-01-01 10:18')
     await expect(main.locator('.acc-l3')).toContainText('标签：工作')
 
     // 另一条：无 login_provider 时登录方式退回 OAuth；到期走 unix 秒串也解得出来
     const back = accountRow(page, 'back@e2e.dev')
     await expect(back.locator('.tier')).toHaveText('PLUS')
-    await expect(back.locator('.acc-l2')).toContainText('OAuth 登录')
-    await expect(back.locator('.acc-l3')).toContainText(/有效期至 202\d-/)
+    await expect(back.locator('.acc-l2')).toContainText('登录方式：OAuth')
+    await expect(back.locator('.acc-l2')).toContainText(/有效期至 202\d-/)
   })
 
   test('换凭据形态切号：写完凭据顺手把侧栏会话修回来', async ({ page }) => {    await gotoCodex(page, {
@@ -207,7 +208,7 @@ test.describe('Codex 账号', () => {
     await dialog.locator('button', { hasText: '添加' }).click()
     await expectToast(page, /已添加 key@e2e.dev/)
     expect(await e2e.count(page, 'add_codex_account_with_api_key')).toBe(1)
-    await expect(accountRow(page, 'key@e2e.dev').locator('.badge', { hasText: 'API Key' })).toBeVisible()
+    await expect(accountRow(page, 'key@e2e.dev').locator('.tier', { hasText: 'API Key' })).toBeVisible()
   })
 
   test('回调端口被占：给出可执行的提示', async ({ page }) => {
@@ -254,7 +255,7 @@ test.describe('Codex 账号', () => {
     expect(await e2e.count(page, 'consume_codex_reset_credit')).toBe(0)
 
     await rowMenu(page, 'back@e2e.dev', /重置 5 小时额度/)
-    await page.locator('.reset-credit-dialog .dialog-footer button', { hasText: '重置' }).click()
+    await page.getByRole('button', { name: '确认重置', exact: true }).click()
     await expectToast(page, '已使用一次额度重置')
     expect(await e2e.count(page, 'consume_codex_reset_credit')).toBe(1)
   })
@@ -367,7 +368,7 @@ test.describe('Codex 账号', () => {
     await expect(row.locator('.acc-l2')).toContainText('Base URL：https://api.e2e.dev/v1')
 
     await row.locator('.acc-more').click()
-    await page.locator('.popover .pop-item', { hasText: '名称与备注' }).click()
+    await page.locator('.popover .pop-item', { hasText: '账号与密钥' }).click()
     const dlg = page.locator('.edit-dialog')
     await expect(dlg.locator('.key-box')).toBeVisible()
     // Base URL 预填当前值：留空提交会把它清掉，真实后端按 None 重建供应商配置
@@ -379,10 +380,19 @@ test.describe('Codex 账号', () => {
     expect(await e2e.count(page, 'update_codex_api_key_credentials')).toBe(0)
 
     await accountRow(page, 'key@e2e.dev').locator('.acc-more').click()
-    await page.locator('.popover .pop-item', { hasText: '名称与备注' }).click()
+    await page.locator('.popover .pop-item', { hasText: '账号与密钥' }).click()
     await page.locator('.edit-dialog #cx-newkey').fill('sk-e2e-9999')
     await page.locator('.edit-dialog #cx-name').fill('换过密钥的')
     await page.locator('.edit-dialog .dialog-footer button', { hasText: '保存' }).click()
+    const confirm = page.locator('.confirm-dialog')
+    await expect(confirm).toContainText('还会改写官方凭据文件')
+    await expect(confirm).not.toContainText('sk-e2e-9999')
+    expect(await e2e.count(page, 'update_codex_api_key_credentials')).toBe(0)
+    await confirm.getByRole('button', { name: '取消', exact: true }).click()
+    expect(await e2e.count(page, 'update_codex_api_key_credentials')).toBe(0)
+    await expect(page.locator('.edit-dialog #cx-newkey')).toHaveValue('sk-e2e-9999')
+    await page.locator('.edit-dialog .dialog-footer button', { hasText: '保存' }).click()
+    await confirm.getByRole('button', { name: '确定', exact: true }).click()
     await expectToast(page, /凭据与档案已按新密钥重建/)
     expect(await e2e.count(page, 'update_codex_api_key_credentials')).toBe(1)
 
@@ -488,8 +498,7 @@ const SEED_SESSIONS = {
       { sessionId: 'sess-a1b2c3d4e5', title: '修全屏小记的排版', cwd: 'C:\ws\demo-notes', projectName: 'demo-notes', daysAgo: 0, input: 12300, cached: 11000, output: 1400, reasoning: 400, sizeBytes: 1536 },
       { sessionId: 'sess-f6g7h8i9j0', title: '查配额刷新链路', cwd: 'C:\ws\demo-notes', projectName: 'demo-notes', daysAgo: 2, input: 800, output: 120 },
       { sessionId: 'sess-k1l2m3n4o5', title: 'desko 侧栏图标盘点', cwd: 'C:\ws\demo-icons', daysAgo: 5, input: 45000, cached: 40000, output: 3200, reasoning: 900 },
-      // 没标题的一条 + 子代理：验截断 ID 与徽标两档
-      // 真机口径：后端没标题时把整条 UUID 原样填进 title（64 条里 16 条如此），行上要收成短 ID
+      // 没标题的一条 + 子代理：完整 ID 与徽标同时可见。
       { sessionId: 'sess-p6q7r8s9t0', title: 'sess-p6q7r8s9t0', cwd: 'C:\ws\demo-notes', projectName: 'demo-notes', kind: 'subagent', daysAgo: 9, input: 2000, cached: 300, output: 300 },
     ],
   },
@@ -504,6 +513,13 @@ async function argOf(page: Page, cmd: string, key: string) {
     cmd,
   )
   return calls[calls.length - 1]?.args[key]
+}
+
+/** 进档会播种最近那一组：要点开别的组，先看清它是不是已经开着，别把展开点成折叠 */
+async function expandGroup(page: Page, name: string) {
+  const head = page.locator('.grp-head', { hasText: name })
+  if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
+  await expect(head).toHaveAttribute('aria-expanded', 'true')
 }
 
 test.describe('Codex 会话档', () => {
@@ -533,10 +549,14 @@ test.describe('Codex 会话档', () => {
     expect(await e2e.count(page, LIST_CMD)).toBe(1)
   })
 
-  test('首屏按项目全折叠，进档即按全量 id 预取 token，展开不再补取', async ({ page }) => {
+  test('首屏播种最近一组，进档即按全量 id 预取 token，展开不再补取', async ({ page }) => {
     await gotoSessions(page)
     await expect(page.locator('.grp-head')).toHaveCount(2)
-    await expect(page.locator('.sess-row')).toHaveCount(0)
+    // 一排壳不算内容：最近活动那组进档即摊开，另一组仍归用户自己翻
+    const notes = page.locator('.grp-head', { hasText: 'demo-notes' })
+    await expect(notes).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('.grp-head', { hasText: 'demo-icons' })).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator('.sess-row')).toHaveCount(3)
     // 本机实测 67 个 rollout 全量尾扫 218 ms：等展开才取会让合计量沉在水下
     await expect.poll(() => e2e.count(page, STATS_CMD)).toBe(1)
     expect((await argOf(page, STATS_CMD, 'sessionIds')).slice().sort()).toEqual([
@@ -546,48 +566,67 @@ test.describe('Codex 会话档', () => {
       'sess-p6q7r8s9t0',
     ])
 
-    const notes = page.locator('.grp-head', { hasText: 'demo-notes' })
-    await expect(notes).toHaveAttribute('aria-expanded', 'false')
     await notes.click()
-    await expect(notes).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('.sess-row')).toHaveCount(0)
+    await notes.click()
     await expect(page.locator('.sess-row')).toHaveCount(3)
     expect(await e2e.count(page, STATS_CMD)).toBe(1)
-    // 净输入：官方累计的 12.3K 输入里 11K 是缓存重发，行上只报 1.3K
-    await expect(page.locator('.sess-l2').first()).toContainText('输入 1.3K · 输出 1.4K')
-    // 无标题那条：短 ID 上屏，完整 UUID 只在悬停里
+    // 净输入：官方累计的 12.3K 输入里 11K 是缓存重发；行上不摆数，整行悬停给五口径
+    await expect(page.locator('.sess-row').first()).toHaveAttribute(
+      'title',
+      '修全屏小记的排版\n净输入 1,300 · 缓存命中 11,000 · 输出 1,400（含推理 400）· 官方累计 13,700',
+    )
+    // 无标题那条：完整 ID 上屏，悬停保留用量明细。
     const idRow = page.locator('.sess-row').last()
-    await expect(idRow.locator('.sess-title')).toHaveText('sess-p6q…')
-    await expect(idRow.locator('.sess-title')).toHaveAttribute('title', 'sess-p6q7r8s9t0')
+    await expect(idRow.locator('.sess-title')).toHaveText('sess-p6q7r8s9t0')
+    await expect(idRow).toHaveAttribute('title', /^sess-p6q7r8s9t0\n净输入 1,700/)
     await expect(idRow.locator('.badge')).toHaveText('子代理')
-
-    await notes.click()
-    await notes.click()
-    expect(await e2e.count(page, STATS_CMD)).toBe(1)
   })
 
-  test('合计量上屏：页一条、组头一位，展开行给六个口径', async ({ page }) => {
+  test('搜索命中即展开：折叠的组不把结果藏在水下，清空回到用户态', async ({ page }) => {
     await gotoSessions(page)
-    await expect(page.locator('.sess-sum')).toHaveText(
-      '累计 65.1K tokens（净输入 8.8K · 输出 5K · 缓存命中 51.3K）',
-    )
-    await expect(page.locator('.grp-head').first().locator('.grp-tok')).toHaveText(
-      '累计 16.9K tokens（净输入 3.8K · 输出 1.8K）',
-    )
+    const icons = page.locator('.grp-head', { hasText: 'demo-icons' })
+    await expect(icons).toHaveAttribute('aria-expanded', 'false')
 
-    await page.locator('.grp-head', { hasText: 'demo-notes' }).click()
+    await page.locator('.page-bar .search-box input').fill('图标')
+    await expect(icons).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]')).toBeVisible()
+
+    await page.locator('.search-clear').click()
+    await expect(page.locator('.grp-head')).toHaveCount(2)
+    await expect(icons).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator('.sess-row')).toHaveCount(3)
+  })
+
+  test('切到别的档再回来：翻开的组不丢', async ({ page }) => {
+    await gotoSessions(page)
+    const icons = page.locator('.grp-head', { hasText: 'demo-icons' })
+    await icons.click()
+    await expect(page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]')).toBeVisible()
+
+    await page.locator('.cx-tab', { hasText: '回收站' }).click()
+    await page.locator('.cx-tab', { hasText: '会话' }).click()
+    await expect(page.locator('.grp-head')).toHaveCount(2)
+    await expect(icons).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]')).toBeVisible()
+    // 面板卸挂重挂不该重扫目录，也不该重新播种把用户翻开的组抢走
+    expect(await e2e.count(page, LIST_CMD)).toBe(1)
+  })
+
+  test('合计量上屏：hero 一笔、组头一位，展开行给六个口径', async ({ page }) => {
+    await gotoSessions(page)
+    await expect(page.locator('.hero-num')).toHaveText('65.1K')
+    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 4 条会话 · 净输入 8.8K · 输出 5K · 缓存命中 51.3K')
+    await expect(page.locator('.grp-head').first().locator('.grp-tok > span')).toHaveText(['累计 16.9K Token', '净输入 3.8K', '输出 1.8K'])
+
+    await expandGroup(page, 'demo-notes')
     const row = page.locator('.sess-row').first()
-    // 行上只有两位，其余进悬停
-    await expect(row.locator('.sess-l2 span').last()).toHaveAttribute(
-      'title',
-      '净输入 1,300 · 缓存命中 11,000 · 输出 1,400（含推理 400）· 官方累计 13,700',
-    )
+    // 行上只有标题与时间，用量进悬停；展开档才逐位铺开
+    await expect(row.locator('.sess-time')).toBeVisible()
     await row.click()
     const facts = page.locator('.sess-card .sess-facts')
-    await expect(facts).toContainText('净输入 1,300')
-    await expect(facts).toContainText('缓存命中 11,000')
-    await expect(facts).toContainText('缓存写入 0')
-    await expect(facts).toContainText('其中推理 400')
-    await expect(facts).toContainText('官方累计 13,700')
+    await expect(facts.locator('dt')).toHaveText(['净输入', '缓存命中', '缓存写入', '输出', '其中推理', '官方累计'])
+    await expect(facts.locator('dd')).toHaveText(['1,300', '11,000', '0', '1,400', '400', '13,700'])
   })
 
   test('标题搜索走后端：只填 trim 后的 titleQuery，contentQuery 恒 null', async ({ page }) => {
@@ -601,7 +640,6 @@ test.describe('Codex 会话档', () => {
     expect(await argOf(page, LIST_CMD, 'titleQuery')).toBe('查配额')
     expect(await argOf(page, LIST_CMD, 'contentQuery')).toBeNull()
 
-    await page.locator('.grp-head').first().click()
     await expect(page.locator('.sess-title')).toHaveCount(1)
     await expect(page.locator('.sess-title')).toHaveText('查配额刷新链路')
 
@@ -661,10 +699,9 @@ test.describe('Codex 会话回收站', () => {
   test('移到回收站：先确认，官方列表与合计量同时收掉这条', async ({ page }) => {
     await bootUnlocked(page, SEED_SESSIONS)
     await gotoTab(page, '会话', '.grp-head')
-    await page.locator('.grp-head', { hasText: 'demo-notes' }).click()
-    await expect(page.locator('.sess-sum')).toHaveText(
-      '累计 65.1K tokens（净输入 8.8K · 输出 5K · 缓存命中 51.3K）',
-    )
+    await expandGroup(page, 'demo-notes')
+    await expect(page.locator('.hero-num')).toHaveText('65.1K')
+    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 4 条会话 · 净输入 8.8K · 输出 5K · 缓存命中 51.3K')
 
     const row = page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')
     await row.click()
@@ -684,9 +721,8 @@ test.describe('Codex 会话回收站', () => {
     expect(await argOf(page, MOVE_CMD, 'sessionIds')).toEqual(['sess-a1b2c3d4e5'])
     await expect(page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')).toHaveCount(0)
     // 合计量不能拿着已删的那条：65.1K 掉到 51.4K，缓存命中同步少 11K
-    await expect(page.locator('.sess-sum')).toHaveText(
-      '累计 51.4K tokens（净输入 7.5K · 输出 3.6K · 缓存命中 40.3K）',
-    )
+    await expect(page.locator('.hero-num')).toHaveText('51.4K')
+    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 3 条会话 · 净输入 7.5K · 输出 3.6K · 缓存命中 40.3K')
     await expect(page.locator('.titlebar-count')).toHaveText('3 条')
 
     await page.locator('.cx-tab', { hasText: '回收站' }).click()
@@ -705,7 +741,7 @@ test.describe('Codex 会话回收站', () => {
 
     await page.locator('.cx-tab', { hasText: '会话' }).click()
     await expect(page.locator('.titlebar-count')).toHaveText('4 条')
-    await page.locator('.grp-head', { hasText: 'demo-notes' }).click()
+    await expandGroup(page, 'demo-notes')
     await expect(page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')).toBeVisible()
   })
 
@@ -760,8 +796,8 @@ test.describe('Codex 会话回收站', () => {
   test('打开位置与打开会话文件：按 sessionId 调用，成功不播 toast', async ({ page }) => {
     await bootUnlocked(page, SEED_SESSIONS)
     await gotoTab(page, '会话', '.grp-head')
-    await page.locator('.grp-head', { hasText: 'demo-icons' }).click()
-    await page.locator('.sess-row').first().click()
+    await expandGroup(page, 'demo-icons')
+    await page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]').click()
 
     await page.locator('.sess-acts .action-btn').first().click()
     expect(await e2e.count(page, OPEN_DIR_CMD)).toBe(1)
@@ -777,7 +813,7 @@ test.describe('Codex 会话回收站', () => {
   test('系统程序打不开：一条红色 toast，列表一条不少', async ({ page }) => {
     await bootUnlocked(page, { ...SEED_TRASH, codex: { ...SEED_TRASH.codex, openFail: true } })
     await gotoTab(page, '会话', '.grp-head')
-    await page.locator('.grp-head', { hasText: 'demo-notes' }).click()
+    await expandGroup(page, 'demo-notes')
     await page.locator('.sess-row').first().click()
     await page.locator('.sess-acts .action-btn').first().click()
     await expectToast(page, '打开系统程序失败（e2e）')
@@ -796,7 +832,7 @@ test.describe('Codex 会话回收站', () => {
   test('移到回收站失败：红色 toast，官方列表与留底都不动', async ({ page }) => {
     await bootUnlocked(page, { ...SEED_SESSIONS, codex: { ...SEED_SESSIONS.codex, trashFail: true } })
     await gotoTab(page, '会话', '.grp-head')
-    await page.locator('.grp-head', { hasText: 'demo-notes' }).click()
+    await expandGroup(page, 'demo-notes')
     await page.locator('.sess-row').first().click()
     await page.locator('.sess-card .trash-btn').click()
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
@@ -1076,6 +1112,14 @@ test.describe('Codex 批量删除作业', () => {
     const done = Number(await dialog.locator('.bd-done').innerText())
 
     await dialog.locator('.dialog-footer button', { hasText: '放弃任务' }).click()
+    const confirm = page.locator('.confirm-dialog')
+    await expect(confirm).toContainText('已删掉的账号仍在回收站中')
+    expect(await e2e.count(page, DELETE_CLEAR_CMD)).toBe(0)
+    await confirm.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(dialog).toHaveAttribute('data-status', 'paused')
+    expect(await e2e.count(page, DELETE_CLEAR_CMD)).toBe(0)
+    await dialog.locator('.dialog-footer button', { hasText: '放弃任务' }).click()
+    await confirm.getByRole('button', { name: '确定', exact: true }).click()
     await expectToast(page, '已放弃这个删除任务，删掉的账号在回收站里可以还原')
     await expect(page.locator('.batch-delete-dialog')).toHaveCount(0)
     await expect(page.locator('.batch-dock')).toHaveCount(0)
@@ -1096,6 +1140,7 @@ test.describe('Codex 用量图', () => {
     await page.locator('a.nav-item[href="/codex"]').click()
     await expect(page.locator('.acc-row').first()).toBeVisible()
     await page.locator('.cx-tab', { hasText: '用量' }).click()
+    await page.getByRole('navigation', { name: '统计窗口' }).getByRole('button', { name: '近 30 天', exact: true }).click()
     await expect(page.locator(until).first()).toBeVisible()
   }
 
@@ -1125,17 +1170,17 @@ test.describe('Codex 用量图', () => {
     await gotoUsage(page)
     // 会话档那一页报的是 65.1K，图上必须落在同一个数
     await expect(page.locator('.usg-num')).toHaveText('65,120')
-    await expect(page.locator('.usg-chip').nth(0)).toHaveText('净输入 8,800')
-    await expect(page.locator('.usg-chip').nth(1)).toHaveText('缓存命中 51,300')
-    await expect(page.locator('.usg-chip').nth(2)).toHaveText('输出 5,020')
-    await expect(page.locator('.usg-chip').nth(3)).toHaveText('其中推理 1,300')
-    await expect(page.locator('.usg-chip').nth(4)).toHaveText('5 轮 · 4 条会话')
+    await expect(page.locator('[data-metric="fresh"] dd')).toHaveText('8,800')
+    await expect(page.locator('[data-metric="cached"] dd')).toHaveText('51,300')
+    await expect(page.locator('[data-metric="output"] dd')).toHaveText('5,020')
+    await expect(page.locator('.usg-facts')).toContainText('输出中含推理 1,300')
+    await expect(page.locator('.usg-count')).toHaveText('5 轮 · 4 条会话')
     await expect(page.locator('.titlebar-count')).toHaveText('5 轮')
 
-    // 四条会话落在四个本地日上，柱子按当天输入标定：最满那天（输入 45K）两段拉满
+    // 四条会话落在四个本地日上，最满那天按输入 + 输出 = 48.2K 标定。
     await expect(page.locator('.usg-col')).toHaveCount(4)
     await expect(page.locator('.usg-bars')).toHaveAttribute('data-days', '4')
-    await expect(page.locator('.usg-bars')).toHaveAttribute('data-max', '45000')
+    await expect(page.locator('.usg-bars')).toHaveAttribute('data-max', '48200')
     const seg = async (index: number) =>
       page
         .locator('.usg-col')
@@ -1144,10 +1189,10 @@ test.describe('Codex 用量图', () => {
           fresh: (el.querySelector('.usg-fresh') as HTMLElement).style.height,
           cached: (el.querySelector('.usg-cached') as HTMLElement).style.height,
         }))
-    // 输入最大的一天（5 天前，净 5K + 缓存 40K = 45K）拉满整柱
-    expect(await seg(1)).toEqual({ fresh: '11.1%', cached: '88.9%' })
-    // 最早的一天两头都够不到 2%，靠下限留出可见的一段而不是零
-    expect(await seg(0)).toEqual({ fresh: '3.8%', cached: '2%' })
+    expect(await seg(1)).toEqual({ fresh: '10.4%', cached: '83%' })
+    expect(await seg(0)).toEqual({ fresh: '3.5%', cached: '0.6%' })
+    await expect(page.locator('.usg-day-row')).toHaveCount(4)
+    await expect(page.locator('.usg-day-total').first()).toHaveText('13,700')
     await expect(page.locator('.usg-scan')).toHaveText('扫了 4 个文件 · 1.7 s')
 
     await expect(page.locator('.usg-model-row')).toHaveCount(2)
@@ -1161,12 +1206,12 @@ test.describe('Codex 用量图', () => {
 
   test('切窗口只换起点：周档筛掉 9 天前那条，全部档不带起点', async ({ page }) => {
     await gotoUsage(page)
-    expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(localMidnightSec() - 30 * 86_400)
-    expect(await argOf(page, USAGE_CMD, 'toTimestamp')).toBe(null)
+    expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(localMidnightSec() - 29 * 86_400)
+    expect(Math.abs(await argOf(page, USAGE_CMD, 'toTimestamp') - Math.floor(Date.now() / 1000))).toBeLessThanOrEqual(1)
 
     await page.locator('.cx-tab', { hasText: '近 7 天' }).click()
     await expect(page.locator('.usg-num')).toHaveText('62,820')
-    expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(localMidnightSec() - 7 * 86_400)
+    expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(localMidnightSec() - 6 * 86_400)
     await expect(page.locator('.usg-col')).toHaveCount(3)
     // 文件还在那儿：筛掉的是窗口，不是扫过的目录
     await expect(page.locator('.usg-scan')).toHaveText('扫了 4 个文件 · 1.7 s')
@@ -1191,10 +1236,10 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('.empty-desc')).toHaveAttribute('title', /用量统计失败/)
     await expect(page.locator('.usg-chart')).toHaveCount(0)
     await page.locator('.empty-state .action-btn').click()
-    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(3)
   })
 
-  test('窗口里没有记录：出空态块而不是一排零，换到全部档才上屏', async ({ page }) => {
+  test('范围里没有记录：明确显示零与空态，切换全部可以查看旧记录', async ({ page }) => {
     await gotoUsage(page, {
       ...SEED_SESSIONS,
       codex: {
@@ -1202,8 +1247,8 @@ test.describe('Codex 用量图', () => {
         sessions: [{ sessionId: 'sess-old12345', title: '一个月前的旧账', cwd: 'C:\\ws\\demo-notes', daysAgo: 40, input: 5000, output: 500 }],
       },
     }, '.empty-state')
-    await expect(page.locator('.empty-title')).toHaveText('这个窗口里没有 token 记录')
-    await expect(page.locator('.usg-sum')).toHaveCount(0)
+    await expect(page.locator('.empty-title')).toHaveText('这段时间没有用量记录')
+    await expect(page.locator('.usg-num')).toHaveText('0')
     await expect(page.locator('.usg-chart')).toHaveCount(0)
 
     await page.locator('.cx-tab', { hasText: '全部' }).click()
@@ -1216,7 +1261,7 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('.usg-num')).toHaveText('65,120')
 
     await page.locator('.cx-tab', { hasText: '会话' }).click()
-    await page.locator('.grp-head', { hasText: 'demo-notes' }).click()
+    await expandGroup(page, 'demo-notes')
     await page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]').click()
     await page.locator('.sess-card .trash-btn').click()
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
@@ -1227,18 +1272,18 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('.usg-col')).toHaveCount(3)
     await expect(page.locator('.titlebar-count')).toHaveText('4 轮')
     // 图是官方目录的镜子：只有这一次移动值得重扫，来回切档不再打第二次
-    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(3)
   })
 
   test('只动留底的彻底删除与清空不碰图：回用量档不发网络', async ({ page }) => {
     await gotoUsage(page)
-    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
 
     await page.locator('.cx-tab', { hasText: '回收站' }).click()
     await expect(page.locator('.empty-title')).toHaveText('回收站是空的')
 
     await page.locator('.cx-tab', { hasText: '用量' }).click()
     await expect(page.locator('.usg-sum')).toBeVisible()
-    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
   })
 })

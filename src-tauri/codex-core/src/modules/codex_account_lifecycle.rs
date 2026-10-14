@@ -121,7 +121,8 @@ pub fn upsert_agent_identity_account(identity: CodexAgentIdentity) -> Result<Cod
         .clone()
         .ok_or("Agent Identity 凭据为空")?;
     let account_storage_id = draft.id.clone();
-    let mut index = load_account_index();
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = load_account_index_checked_unlocked()?;
     let legacy_account_storage_id = build_legacy_agent_identity_account_id(&identity.account_id);
     let legacy_account = load_account(&legacy_account_storage_id).filter(|account| {
         account.agent_identity.as_ref().is_some_and(|stored| {
@@ -157,7 +158,7 @@ pub fn upsert_agent_identity_account(identity: CodexAgentIdentity) -> Result<Cod
     account.last_client_launch_at = None;
     account.last_client_auth_instance_id = None;
     account.update_last_used();
-    save_account_from_user_action(&mut account)?;
+    save_account_from_user_action_unlocked(&mut account)?;
 
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
         summary.email = account.email.clone();
@@ -173,7 +174,7 @@ pub fn upsert_agent_identity_account(identity: CodexAgentIdentity) -> Result<Cod
             last_used: account.last_used,
         });
     }
-    save_account_index(&index)?;
+    save_account_index_unlocked(&index)?;
     Ok(account)
 }
 
@@ -216,7 +217,8 @@ pub fn upsert_api_key_account(
     )?;
     let account_id = build_api_key_account_id(&api_key);
     let account_name = normalize_optional_value(account_name);
-    let mut index = load_account_index();
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = load_account_index_checked_unlocked()?;
 
     let mut account = if let Some(mut acc) = load_account(&account_id) {
         let sync_model_catalog_to_codex =
@@ -274,7 +276,7 @@ pub fn upsert_api_key_account(
             &account.api_model_mappings,
         );
     }
-    save_account_from_user_action(&mut account)?;
+    save_account_from_user_action_unlocked(&mut account)?;
 
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
         summary.email = account.email.clone();
@@ -292,7 +294,7 @@ pub fn upsert_api_key_account(
         });
     }
 
-    save_account_index(&index)?;
+    save_account_index_unlocked(&index)?;
 
     logger::log_info(&format!(
         "Codex API Key 账号已保存: account_id={}, email={}, has_base_url={}",
@@ -404,7 +406,8 @@ fn upsert_account_with_hints_and_reauth_target(
             .or(organization_id_hint),
     );
 
-    let mut index = load_account_index();
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = load_account_index_checked_unlocked()?;
     let generated_id =
         build_account_storage_id(&email, account_id.as_deref(), organization_id.as_deref());
     let reauth_target = resolve_reauth_target_account_id(reauth_target_account_id, &email)?;
@@ -508,7 +511,7 @@ fn upsert_account_with_hints_and_reauth_target(
             if index.current_account_id.as_deref() == Some(generated_id.as_str()) {
                 index.current_account_id = Some(account.id.clone());
             }
-            if let Err(err) = delete_account_file(&generated_id) {
+            if let Err(err) = delete_account_file_unlocked(&generated_id) {
                 logger::log_warn(&format!(
                     "清理 Codex 重新授权重复账号详情失败: duplicate_id={}, target_id={}, error={}",
                     generated_id, account.id, err
@@ -523,7 +526,7 @@ fn upsert_account_with_hints_and_reauth_target(
     }
 
     // 显式导入/授权可以重新创建用户刚刚删除过的同一账号。
-    save_account_from_user_action(&mut account)?;
+    save_account_from_user_action_unlocked(&mut account)?;
 
     // 更新索引中的摘要信息
     if let Some(summary) = index.accounts.iter_mut().find(|a| a.id == account.id) {
@@ -542,7 +545,7 @@ fn upsert_account_with_hints_and_reauth_target(
         });
     }
 
-    save_account_index(&index)?;
+    save_account_index_unlocked(&index)?;
 
     logger::log_info(&format!(
         "Codex 账号已保存: email={}, account_id={:?}, organization_id={:?}",
@@ -575,11 +578,12 @@ pub fn update_account_plan_type_in_index(
     plan_type: &Option<String>,
     subscription_active_until: &Option<String>,
 ) -> Result<(), String> {
-    let mut index = load_account_index();
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = load_account_index_checked_unlocked()?;
     if let Some(summary) = index.accounts.iter_mut().find(|a| a.id == account_id) {
         summary.plan_type = plan_type.clone();
         summary.subscription_active_until = subscription_active_until.clone();
-        save_account_index(&index)?;
+        save_account_index_unlocked(&index)?;
     }
     Ok(())
 }
@@ -605,7 +609,7 @@ pub fn remove_accounts(account_ids: &[String]) -> Result<(), String> {
         .lock()
         .map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
 
-    let mut index = load_account_index_checked()?;
+    let mut index = load_account_index_checked_unlocked()?;
     let accounts_dir = get_accounts_dir();
     // Stage every recoverable snapshot before deleting any account. A failed
     // read/encryption/write leaves the original account available.
@@ -660,7 +664,7 @@ pub fn remove_accounts(account_ids: &[String]) -> Result<(), String> {
     {
         index.current_account_id = None;
     }
-    save_account_index(&index)?;
+    save_account_index_unlocked(&index)?;
 
     let deleted_account_ids = remove_ids.iter().cloned().collect::<Vec<_>>();
     for account_id in remove_ids {

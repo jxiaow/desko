@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use crate::error::AppError;
 
-const PBKDF2_ITERATIONS: u32 = 10_000;
+pub const LEGACY_ITERATIONS: u32 = 10_000;
+pub const PASSWORD_ITERATIONS: u32 = 600_000;
 // 备份口令长期躺在云上，离线爆破窗口以年计，迭代次数单独拉高
 pub const BACKUP_ITERATIONS: u32 = 600_000;
 const SALT_LENGTH: usize = 16;
@@ -35,8 +36,12 @@ pub fn generate_iv() -> Vec<u8> {
 }
 
 pub fn derive_key(password: &str, salt: &[u8]) -> Vec<u8> {
+    derive_password_key(password, salt, LEGACY_ITERATIONS)
+}
+
+pub fn derive_password_key(password: &str, salt: &[u8], iterations: u32) -> Vec<u8> {
     let mut key = vec![0u8; KEY_LENGTH];
-    pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, PBKDF2_ITERATIONS, &mut key);
+    pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, iterations, &mut key);
     key
 }
 

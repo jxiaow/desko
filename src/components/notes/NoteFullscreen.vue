@@ -6,6 +6,7 @@ import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatAbsTime, highlightTagsInHtml, htmlToText, wordCount } from '../../utils/format'
+import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { collectAttachmentNames, resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import type { NoteSaveState } from '../../stores/notes'
@@ -44,7 +45,7 @@ const viewMode = computed(() => props.mode === 'view')
 /** 查看态直接跟库里的正文走，不走编辑草稿的本地快照 */
 const contentHtml = computed(() =>
   viewMode.value ? props.note?.content_html ?? '' : html.value)
-const displayHtml = computed(() => resolveAssetHtml(highlightTagsInHtml(contentHtml.value)))
+const displayHtml = computed(() => resolveAssetHtml(highlightTagsInHtml(sanitizeNoteHtml(contentHtml.value))))
 
 const text = computed(() => htmlToText(contentHtml.value))
 // 只有图的小记也算有内容：正文引用了附件就不空
@@ -207,7 +208,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   margin: 0 auto;
   padding-inline: var(--space-6);
 }
-/* 首尾栏铺满区域：按钮贴左右边缘，只有书写列收在 --fs-max 内 */
+/* 首尾栏铺满区域：按钮贴左右边缘，书写列在 --fs-max 内居中 */
 .fs-head {
   height: 54px;
   flex-shrink: 0;

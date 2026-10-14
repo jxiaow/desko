@@ -92,7 +92,7 @@ pub fn start(
             Some(p) if p > 0 => p,
             _ => break,
         };
-        match tiny_http::Server::http((bind_ip, port)) {
+        match tiny_http::Server::http_with_timeout((bind_ip, port), std::time::Duration::from_secs(15)) {
             Ok(server) => {
                 let lan_ip = if cfg.local_only {
                     "127.0.0.1".to_string()

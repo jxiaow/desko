@@ -141,6 +141,21 @@ fn base_from_config_path(path: &Path) -> PathBuf {
 
 /// 原子写：临时文件 + rename
 pub fn save_file(path: &Path, cfg: &ShareConfig) -> Result<(), String> {
+    let _lock = config_lock(path)?;
+    save_file_locked(path, cfg)
+}
+
+// 锁独立于被 rename 替换的配置 inode，两个进程也始终锁同一个文件。
+// 不删除锁文件：删除后新旧写者可能锁住两个不同 inode。File drop 释放系统锁。
+fn config_lock(path: &Path) -> Result<std::fs::File, String> {
+    let lock = std::fs::OpenOptions::new().create(true).truncate(false).read(true).write(true)
+        .open(path.with_extension("json.lock"))
+        .map_err(|e| format!("打开配置锁失败: {e}"))?;
+    lock.lock().map_err(|e| format!("获取配置锁失败: {e}"))?;
+    Ok(lock)
+}
+
+fn save_file_locked(path: &Path, cfg: &ShareConfig) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
     let text = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
     std::fs::write(&tmp, text).map_err(|e| format!("写配置失败: {}", e))?;
@@ -148,19 +163,20 @@ pub fn save_file(path: &Path, cfg: &ShareConfig) -> Result<(), String> {
     Ok(())
 }
 
-/// 读-改-写合一：写前紧贴 rename 重读现盘，mutate 只动自己负责的字段。
+/// 跨进程串行读-改-写：锁住完整事务，mutate 只动自己负责的字段。
 /// 主程序与网页 /settings 都会写这份文件，整对象盲写会互相吞字段。
 /// 文件不存在时用 fallback 兜底。返回落盘后的最终配置。
 pub fn update_file<F>(path: &Path, fallback: &ShareConfig, mutate: F) -> Result<ShareConfig, String>
 where
     F: FnOnce(&mut ShareConfig),
 {
+    let _lock = config_lock(path)?;
     let mut cfg = match load_file(path)? {
         Some(c) => c,
         None => fallback.clone(),
     };
     mutate(&mut cfg);
-    save_file(path, &cfg)?;
+    save_file_locked(path, &cfg)?;
     Ok(cfg)
 }
 
@@ -274,4 +290,34 @@ mod tests {
         let p = tmp_config("absent");
         assert!(load_file(&p).unwrap().is_none());
     }
+    #[test]
+    fn locked_update_worker() {
+        let Some(path) = std::env::var_os("DESKO_CONFIG_LOCK_TEST_PATH") else { return };
+        let host = std::env::var("DESKO_CONFIG_LOCK_TEST_HOST").unwrap();
+        update_file(Path::new(&path), &ShareConfig::default(), |cfg| {
+            // 放大旧快照覆盖窗口；无跨进程锁时会丢失其他 worker 的修改。
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            cfg.public.push(PublicPolicy { hostname: host, ..Default::default() });
+        }).unwrap();
+    }
+
+    #[test]
+    fn updates_from_separate_processes_keep_every_field_change() {
+        let path = tmp_config("process-lock");
+        save_file(&path, &ShareConfig::default()).unwrap();
+        let children: Vec<_> = (0..4).map(|i| {
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "config::tests::locked_update_worker"])
+                .env("DESKO_CONFIG_LOCK_TEST_PATH", &path)
+                .env("DESKO_CONFIG_LOCK_TEST_HOST", format!("worker-{i}.example.com"))
+                .stdout(std::process::Stdio::null()).spawn().unwrap()
+        }).collect();
+        for mut child in children { assert!(child.wait().unwrap().success()); }
+        let cfg = load_file(&path).unwrap().unwrap();
+        assert_eq!(cfg.public.len(), 4);
+        for i in 0..4 { assert!(cfg.public_policy(&format!("worker-{i}.example.com")).is_some()); }
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_file(path.with_extension("json.lock")).unwrap();
+    }
+
 }

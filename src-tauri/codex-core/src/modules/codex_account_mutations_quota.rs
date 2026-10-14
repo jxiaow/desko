@@ -291,7 +291,8 @@ pub fn create_pending_oauth_account(
 ) -> Result<CodexAccount, String> {
     let email =
         normalize_optional_value(Some(email)).ok_or_else(|| "账号邮箱不能为空".to_string())?;
-    let mut index = load_account_index();
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = load_account_index_checked_unlocked()?;
 
     if let Some(summary) = index
         .accounts
@@ -306,14 +307,14 @@ pub fn create_pending_oauth_account(
             apply_account_note_update(&mut account, update);
             account.email = email.clone();
             account.last_used = chrono::Utc::now().timestamp();
-            save_account_from_user_action(&mut account)?;
+            save_account_from_user_action_unlocked(&mut account)?;
             if let Some(item) = index.accounts.iter_mut().find(|item| item.id == account.id) {
                 item.email = account.email.clone();
                 item.plan_type = account.plan_type.clone();
                 item.subscription_active_until = account.subscription_active_until.clone();
                 item.last_used = account.last_used;
             }
-            save_account_index(&index)?;
+            save_account_index_unlocked(&index)?;
             return Ok(account);
         }
     }
@@ -354,8 +355,8 @@ pub fn create_pending_oauth_account(
     index.accounts.retain(|item| item.id != account_id);
     index.accounts.push(account_summary_from_account(&account));
 
-    save_account_from_user_action(&mut account)?;
-    save_account_index(&index)?;
+    save_account_from_user_action_unlocked(&mut account)?;
+    save_account_index_unlocked(&index)?;
     logger::log_info(&format!(
         "Codex 待授权 OAuth 账号已保存: account_id={}, email={}",
         account.id, account.email

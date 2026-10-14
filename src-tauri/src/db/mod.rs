@@ -119,6 +119,15 @@ impl Database {
         }
     }
 
+    pub fn set_meta_batch(&self, values: &[(&str, &str)]) -> Result<(), AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        for (key, value) in values {
+            tx.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)", rusqlite::params![key, value])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn get_db_path(&self) -> String {
         self.conn.path().unwrap_or("").to_string()
     }
@@ -131,9 +140,25 @@ impl Database {
         attachments_dir: &std::path::Path,
         staging: &std::path::Path,
     ) -> Result<(), AppError> {
+        self.swap_into_restored_with_accounts(app_data_dir, attachments_dir, staging, None)
+    }
+
+    pub fn swap_into_restored_with_accounts(
+        &mut self, app_data_dir: &std::path::Path, attachments_dir: &std::path::Path,
+        staging: &std::path::Path, accounts: Option<&[u8]>,
+    ) -> Result<(), AppError> {
+        // Reject incompatible snapshots while the live connection and files are
+        // still intact. Migration/normalization errors must precede journal commit.
+        let staged_db = staging.join("data.db");
+        if !staged_db.is_file() {
+            return Err(AppError::Backup("恢复暂存数据库不存在".into()));
+        }
+        let staged_path = staged_db.to_str().ok_or_else(|| AppError::Backup("恢复数据库路径无效".into()))?;
+        drop(Database::new(staged_path)?);
+        crate::backup::check_integrity(&staged_db)?;
         let old = std::mem::replace(&mut self.conn, Connection::open_in_memory()?);
         drop(old);
-        let swapped = crate::backup::swap_live_files(app_data_dir, attachments_dir, staging);
+        let swapped = crate::backup::swap_live_files_with_accounts(app_data_dir, attachments_dir, staging, accounts);
         let db_file = app_data_dir.join("data.db");
         // 回滚失败时宁可停在错误态，也不能在旧文件之外悄悄新建一个空库。
         if !db_file.exists() {

@@ -149,7 +149,8 @@ pub fn upsert_grok_provider_account(
             .filter(|models| !models.is_empty())
             .unwrap_or_else(grok_provider_model_catalog),
     );
-    let mut index = load_account_index();
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = load_account_index_checked_unlocked()?;
     let mut account = load_account(&account_id).unwrap_or_else(|| {
         CodexAccount::new_api_key(
             account_id.clone(),
@@ -183,7 +184,7 @@ pub fn upsert_grok_provider_account(
         account.account_name = Some(name);
     }
     account.update_last_used();
-    save_account_from_user_action(&mut account)?;
+    save_account_from_user_action_unlocked(&mut account)?;
 
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
         summary.email = account.email.clone();
@@ -200,7 +201,7 @@ pub fn upsert_grok_provider_account(
             last_used: account.last_used,
         });
     }
-    save_account_index(&index)?;
+    save_account_index_unlocked(&index)?;
 
     logger::log_info(&format!(
         "Codex Grok 供应商账号已保存: account_id={}, grok_account_id={}",

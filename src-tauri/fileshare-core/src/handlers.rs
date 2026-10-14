@@ -75,7 +75,7 @@ impl Face {
 }
 
 /// 每请求取一次配置快照，改目录/口令下一个请求即生效（"热加载"等价物）
-pub fn handle(request: Request, state: Arc<RuntimeState>) {
+pub fn handle(mut request: Request, state: Arc<RuntimeState>) {
     let cfg = state.snapshot();
     let url = request.url().to_string();
     let method = request.method().as_str().to_string();
@@ -86,6 +86,8 @@ pub fn handle(request: Request, state: Arc<RuntimeState>) {
         None => (url.clone(), String::new()),
     };
     let query = parse_pairs(&query_raw);
+    // 未通过鉴权的正文最多占用 30 秒；连接另有 15 秒无进展超时。
+    request.set_body_timeout(std::time::Duration::from_secs(30));
 
     // 边界防串：Host 只认 IP/localhost（挡 DNS 重绑——rebind 后 Host 是攻击者域名），
     // 外加服务表里逐条登记过的公网子域；POST 再查 Origin 同源与 Sec-Fetch-Site
@@ -402,6 +404,8 @@ fn handle_upload(
         return fail(request, text_resp(StatusCode(400), "Expected multipart form upload"));
     };
     let dir = cfg.share_dirs[share_index].clone();
+    // 只有通过鉴权、动作权限与上传格式校验后才给大文件传输窗口。
+    request.set_body_timeout(std::time::Duration::from_secs(4 * 3600));
     let saved_result = multipart::read_multipart(request.as_reader(), &boundary, &dir, MAX_UPLOAD_BYTES);
     let saved = match saved_result {
         Ok(v) => v,
@@ -1225,4 +1229,38 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         d
     }
+    #[test]
+    fn stalled_login_bodies_release_request_slots_without_a_password() {
+        use std::{io::Write, time::{Duration, Instant}};
+        let dir = temp_dir();
+        let state = test_state_with(vec![dir.clone()], vec![public("files.example.com", Some("sesame"), true)]);
+        let server = tiny_http::Server::http_with_timeout("127.0.0.1:0", Duration::from_secs(1)).unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = stop.clone();
+        let worker = std::thread::spawn(move || crate::server::accept_loop(server, state, flag));
+        let mut held = Vec::new();
+        for _ in 0..8 {
+            let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            stream.write_all(b"POST /login HTTP/1.1\r\nHost: files.example.com\r\nContent-Length: 2048\r\nConnection: close\r\n\r\np").unwrap();
+            held.push(stream);
+        }
+        // 让八个 handler 进入读正文，再证明它们会自行回收，客户端连接仍保持打开。
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(status_of(&get_as(port, "files.example.com", "/login", "")), 503);
+        let deadline = Instant::now() + Duration::from_secs(4);
+        let mut available = false;
+        while Instant::now() < deadline {
+            if status_of(&get_as(port, "files.example.com", "/login", "")) == 200 {
+                available = true; break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(available, "匿名慢正文不能永久占住所有请求槽");
+        drop(held);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        worker.join().unwrap();
+        fs::remove_dir_all(dir).unwrap();
+    }
+
 }

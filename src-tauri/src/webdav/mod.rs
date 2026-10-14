@@ -233,24 +233,40 @@ impl Client {
     }
 
     pub fn get(&self, rel: &str, dst: &Path) -> Result<(), AppError> {
+        self.get_validated(rel, dst, |_| Ok(()))
+    }
+
+    /// 下载先落同目录独立临时件，长度/内容验证完成后才发布；旧缓存不被半截正文覆盖。
+    pub fn get_validated(
+        &self, rel: &str, dst: &Path,
+        validate: impl FnOnce(&Path) -> Result<(), AppError>,
+    ) -> Result<(), AppError> {
         self.gate();
-        let resp = Self::agent()?
-            .request("GET", &self.url(rel))
-            .set("Authorization", &self.auth)
-            .call();
-        match resp {
-            Ok(r) => {
-                if let Some(parent) = dst.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                let mut f = std::fs::File::create(dst)?;
-                let mut reader = r.into_reader();
-                std::io::copy(&mut reader, &mut f).map_err(|e| AppError::Io(e.to_string()))?;
-                Ok(())
+        let response = Self::agent()?.request("GET", &self.url(rel))
+            .set("Authorization", &self.auth).set("Accept-Encoding", "identity").call();
+        let response = match response {
+            Ok(response) => response,
+            Err(ureq::Error::Status(code, _)) => return Err(self.friendly(code, rel)),
+            Err(error) => return Err(AppError::Backup(format!("下载失败 {rel}: {error}"))),
+        };
+        let expected = response.header("Content-Length").map(|value| value.parse::<u64>())
+            .transpose().map_err(|_| AppError::Backup("下载响应长度不合法".into()))?;
+        if let Some(parent) = dst.parent() { std::fs::create_dir_all(parent)?; }
+        let tmp = dst.with_extension(format!("download-{}.tmp", uuid::Uuid::new_v4()));
+        let result = (|| {
+            let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+            let written = std::io::copy(&mut response.into_reader(), &mut output)?;
+            if expected.is_some_and(|expected| expected != written) {
+                return Err(AppError::Backup("下载正文不完整，请重新下载".into()));
             }
-            Err(ureq::Error::Status(code, _)) => Err(self.friendly(code, rel)),
-            Err(e) => Err(AppError::Backup(format!("下载失败 {}: {}", rel, e))),
-        }
+            output.sync_all()?;
+            drop(output);
+            validate(&tmp)?;
+            std::fs::rename(&tmp, dst)?;
+            Ok(())
+        })();
+        if result.is_err() { let _ = std::fs::remove_file(tmp); }
+        result
     }
 
     pub fn delete(&self, rel: &str) -> Result<(), AppError> {
@@ -310,4 +326,37 @@ mod tests {
         assert_eq!(entries[0].size, 312);
         assert_eq!(entries[1].name, "desko-20260919-0911.dsbk");
     }
+    #[test]
+    fn incomplete_download_keeps_the_old_cache_and_can_be_retried() {
+        use std::io::{Read, Write};
+        let root = std::env::temp_dir().join(format!("desko-dav-download-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let dst = root.join("cache.enc");
+        std::fs::write(&dst, b"old verified cache").unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            for complete in [false, true] {
+                let (mut socket, _) = listener.accept().unwrap();
+                let mut request = [0; 8192]; socket.read(&mut request).unwrap();
+                if complete {
+                    socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\ncomplete").unwrap();
+                } else {
+                    socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nshort").unwrap();
+                }
+            }
+        });
+        let client = Client::new(&format!("http://{address}"), "test", "test");
+        assert!(client.get("cache.enc", &dst).is_err());
+        assert_eq!(std::fs::read(&dst).unwrap(), b"old verified cache");
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1, "失败临时件应清理");
+        client.get_validated("cache.enc", &dst, |tmp| {
+            assert_eq!(std::fs::read(tmp).unwrap(), b"complete"); Ok(())
+        }).unwrap();
+        assert_eq!(std::fs::read(&dst).unwrap(), b"complete");
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+        server.join().unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
 }

@@ -1,4 +1,4 @@
-// Codex 账号模块：Codex home paths, storage migration and mutation/refresh locks。
+// Codex 账号模块：Codex home paths and mutation/refresh locks。
 // 通过 include! 保持原 modules::codex_account 作用域，完整保留私有调用关系。
 pub(crate) fn client_instance_id_for_profile_dir(base_dir: &Path) -> String {
     base_dir
@@ -10,100 +10,21 @@ pub(crate) fn client_instance_id_for_profile_dir(base_dir: &Path) -> String {
         .to_string()
 }
 
-/// 旧版数据目录（~/Library/Application Support/com.antigravity.cockpit-tools/）
-fn get_old_codex_data_dir() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| dirs::home_dir().expect("无法获取用户目录"))
-        .join("com.antigravity.cockpit-tools")
-}
-
-/// 将旧目录中的 codex 数据迁移到新目录（一次性，迁移成功后删除旧文件）
-fn migrate_codex_data_if_needed(new_data_dir: &PathBuf) {
-    let old_dir = get_old_codex_data_dir();
-    if !old_dir.exists() {
-        return;
-    }
-
-    // 迁移 codex_accounts.json
-    let old_index = old_dir.join("codex_accounts.json");
-    let new_index = new_data_dir.join("codex_accounts.json");
-    if old_index.exists() && !new_index.exists() {
-        match fs::copy(&old_index, &new_index) {
-            Ok(_) => {
-                logger::log_info("[Codex Migration] codex_accounts.json 迁移成功，清理旧文件");
-                let _ = fs::remove_file(&old_index);
-            }
-            Err(e) => {
-                logger::log_warn(&format!(
-                    "[Codex Migration] codex_accounts.json 迁移失败: {}",
-                    e
-                ));
-            }
-        }
-    }
-
-    // 迁移 codex_accounts/ 目录
-    let old_accounts_dir = old_dir.join("codex_accounts");
-    let new_accounts_dir = new_data_dir.join("codex_accounts");
-    if old_accounts_dir.exists() && old_accounts_dir.is_dir() {
-        if let Ok(entries) = fs::read_dir(&old_accounts_dir) {
-            for entry in entries.flatten() {
-                let old_path = entry.path();
-                if !old_path.is_file() {
-                    continue;
-                }
-                if let Some(fname) = old_path.file_name() {
-                    let new_path = new_accounts_dir.join(fname);
-                    if new_path.exists() {
-                        // 新目录已有同名文件，跳过（不覆盖）
-                        continue;
-                    }
-                    match fs::copy(&old_path, &new_path) {
-                        Ok(_) => {
-                            logger::log_info(&format!(
-                                "[Codex Migration] 账号文件迁移成功: {:?}",
-                                fname
-                            ));
-                            let _ = fs::remove_file(&old_path);
-                        }
-                        Err(e) => {
-                            logger::log_warn(&format!(
-                                "[Codex Migration] 账号文件迁移失败: {:?}, error={}",
-                                fname, e
-                            ));
-                        }
-                    }
-                }
-            }
-            // 如果旧目录已空，尝试删除它
-            if fs::read_dir(&old_accounts_dir)
-                .map(|mut d| d.next().is_none())
-                .unwrap_or(false)
-            {
-                let _ = fs::remove_dir(&old_accounts_dir);
-            }
-        }
-    }
-}
-
-/// 获取我们的多账号存储路径（使用公共数据目录入口 ~/.cockpit_tools/，兼容旧目录）
+/// Resolve this profile only. Reading desko accounts must never migrate or delete another app's store.
 fn get_accounts_storage_path() -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
         crate::modules::data_paths::fallback_data_dir()
     });
     fs::create_dir_all(&data_dir).ok();
-    migrate_codex_data_if_needed(&data_dir);
     data_dir.join("codex_accounts.json")
 }
 
-/// 获取账号详情存储目录（使用公共数据目录入口 ~/.cockpit_tools/，兼容旧目录；账号文件位于 codex_accounts/）
+/// 获取当前档案的账号详情目录；外部旧账号只允许通过显式导入进入。
 fn get_accounts_dir() -> PathBuf {
     let data_dir = account::get_data_dir().unwrap_or_else(|_| {
         crate::modules::data_paths::fallback_data_dir()
     });
-    let accounts_dir = data_dir.join("codex_accounts");
-    fs::create_dir_all(&accounts_dir).ok();
-    accounts_dir
+    data_dir.join("codex_accounts")
 }
 
 fn account_tombstone_path(account_id: &str) -> PathBuf {
@@ -123,7 +44,7 @@ struct CodexAccountTombstone {
     credential_hash: String,
 }
 
-fn account_credential_hash(account: &CodexAccount) -> String {
+pub(crate) fn account_credential_hash(account: &CodexAccount) -> String {
     let value = serde_json::json!({
         "auth_mode": &account.auth_mode,
         "tokens": &account.tokens,

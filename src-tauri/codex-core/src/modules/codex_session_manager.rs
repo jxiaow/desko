@@ -48,6 +48,8 @@ const UNKNOWN_MODEL_INDEX: usize = usize::MAX;
 const UNKNOWN_MODEL_LABEL: &str = "未标注模型";
 
 
+static SESSION_TRASH_MUTATION_LOCK: Mutex<()> = Mutex::new(());
+
 static TOKEN_STATS_CACHE: LazyLock<Mutex<HashMap<PathBuf, TokenStatsCacheEntry>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -625,7 +627,7 @@ pub fn get_session_token_stats_across_instances(
 }
 
 
-/// 「用量」图的一桶：一个本地日，或一个模型
+/// 「用量」图的一桶：本地日、小时（key 为 Unix 秒）或模型。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexUsageBucket {
@@ -659,6 +661,7 @@ pub struct CodexUsageTotals {
 pub struct CodexSessionUsageReport {
     pub totals: CodexUsageTotals,
     pub by_day: Vec<CodexUsageBucket>,
+    pub by_hour: Vec<CodexUsageBucket>,
     pub by_model: Vec<CodexUsageBucket>,
     pub from_timestamp: Option<i64>,
     pub to_timestamp: Option<i64>,
@@ -872,11 +875,17 @@ fn usage_delta(
 }
 
 
-fn local_day_key(timestamp: i64) -> Option<String> {
-    Local
-        .timestamp_opt(timestamp, 0)
-        .single()
-        .map(|value| value.format("%Y-%m-%d").to_string())
+fn local_usage_keys(timestamp: i64) -> Option<(String, i64, String)> {
+    let local = Local.timestamp_opt(timestamp, 0).single()?;
+    let midnight = local.date_naive().and_hms_opt(0, 0, 0)?;
+    // 部分时区在零点跳时，从当天第一个有效本地时刻起算。
+    let day_start = (0..1440).find_map(|minute| {
+        Local.from_local_datetime(&(midnight + chrono::Duration::minutes(minute))).earliest()
+    })?.timestamp();
+    // 以实际经过的小时分桶：夏令时回拨的两个同名小时有各自的时间戳。
+    let hour = day_start + (timestamp - day_start).div_euclid(3600) * 3600;
+    let label = Local.timestamp_opt(hour, 0).single()?.format("%H:%M").to_string();
+    Some((local.format("%Y-%m-%d").to_string(), hour, label))
 }
 
 
@@ -886,6 +895,7 @@ pub fn query_session_usage(
 ) -> Result<CodexSessionUsageReport, String> {
     let started = Instant::now();
     let mut by_day = HashMap::<String, CodexUsageBucket>::new();
+    let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
     let mut by_model = HashMap::<String, CodexUsageBucket>::new();
     let mut totals = CodexUsageTotals::default();
     let mut active_sessions = 0_u64;
@@ -898,6 +908,7 @@ pub fn query_session_usage(
             from_timestamp,
             to_timestamp,
             &mut by_day,
+            &mut by_hour,
             &mut by_model,
             &mut totals,
         ) {
@@ -909,6 +920,8 @@ pub fn query_session_usage(
 
     let mut by_day = by_day.into_values().collect::<Vec<_>>();
     by_day.sort_by(|left, right| left.key.cmp(&right.key));
+    let mut by_hour = by_hour.into_iter().collect::<Vec<_>>();
+    by_hour.sort_by_key(|(timestamp, _)| *timestamp);
     let mut by_model = by_model.into_values().collect::<Vec<_>>();
     by_model.sort_by(|left, right| {
         right
@@ -920,6 +933,7 @@ pub fn query_session_usage(
     Ok(CodexSessionUsageReport {
         totals,
         by_day,
+        by_hour: by_hour.into_iter().map(|(_, bucket)| bucket).collect(),
         by_model,
         from_timestamp,
         to_timestamp,
@@ -935,6 +949,7 @@ fn accumulate_usage_entry(
     from_timestamp: Option<i64>,
     to_timestamp: Option<i64>,
     by_day: &mut HashMap<String, CodexUsageBucket>,
+    by_hour: &mut HashMap<i64, CodexUsageBucket>,
     by_model: &mut HashMap<String, CodexUsageBucket>,
     totals: &mut CodexUsageTotals,
 ) -> bool {
@@ -956,7 +971,7 @@ fn accumulate_usage_entry(
         totals.total_tokens += event.usage.total_tokens;
         totals.request_count += 1;
 
-        let Some(day) = local_day_key(event.timestamp) else {
+        let Some((day, hour, hour_label)) = local_usage_keys(event.timestamp) else {
             continue;
         };
         let model_label = model_label_of(entry, event.model_index);
@@ -970,6 +985,12 @@ fn accumulate_usage_entry(
             by_day
                 .entry(day.clone())
                 .or_insert_with(|| new_bucket(day.clone(), day)),
+            event.usage,
+        );
+        add_to_bucket(
+            by_hour
+                .entry(hour)
+                .or_insert_with(|| new_bucket(hour.to_string(), hour_label)),
             event.usage,
         );
         add_to_bucket(
@@ -1463,14 +1484,15 @@ struct TrashedSessionManifest {
 struct TrashedSessionEntry {
     entry_dir: PathBuf,
     manifest: TrashedSessionManifest,
-    trashed_rollout_path: PathBuf,
 }
 
 
-/// 把选中的会话移进回收站：先留底到 desko 数据目录，再从官方目录删文件、重写索引。
+/// 原子移动选中会话到 desko 回收站，然后更新索引；不对活跃文件执行 copy/delete。
 pub fn move_sessions_to_trash_across_instances(
     session_ids: Vec<String>,
 ) -> Result<CodexSessionTrashSummary, String> {
+    let _guard = SESSION_TRASH_MUTATION_LOCK.lock()
+        .map_err(|_| "会话回收站操作锁已损坏".to_string())?;
     let requested_ids = session_ids
         .into_iter()
         .map(|item| item.trim().to_string())
@@ -1576,6 +1598,8 @@ pub fn list_trashed_sessions_across_instances() -> Result<Vec<CodexTrashedSessio
 pub fn delete_trashed_sessions_across_instances(
     session_ids: Vec<String>,
 ) -> Result<CodexSessionTrashDeleteSummary, String> {
+    let _guard = SESSION_TRASH_MUTATION_LOCK.lock()
+        .map_err(|_| "会话回收站操作锁已损坏".to_string())?;
     let requested_ids = session_ids
         .into_iter()
         .map(|item| item.trim().to_string())
@@ -1616,6 +1640,8 @@ pub fn delete_trashed_sessions_across_instances(
 }
 
 pub fn empty_session_trash_across_instances() -> Result<CodexSessionTrashDeleteSummary, String> {
+    let _guard = SESSION_TRASH_MUTATION_LOCK.lock()
+        .map_err(|_| "会话回收站操作锁已损坏".to_string())?;
     let entries = match load_trash_entries() {
         Ok(entries) => entries,
         Err(error) => {
@@ -1662,6 +1688,8 @@ pub fn empty_session_trash_across_instances() -> Result<CodexSessionTrashDeleteS
 pub fn restore_sessions_from_trash_across_instances(
     session_ids: Vec<String>,
 ) -> Result<CodexSessionRestoreSummary, String> {
+    let _guard = SESSION_TRASH_MUTATION_LOCK.lock()
+        .map_err(|_| "会话回收站操作锁已损坏".to_string())?;
     let requested_ids = session_ids
         .into_iter()
         .map(|item| item.trim().to_string())
@@ -1748,18 +1776,16 @@ fn trash_snapshots_for_instance(
     trash_root: &Path,
     snapshots: &[ThreadSnapshot],
 ) -> Result<(), String> {
-    // 先备份：下一步会移除实例目录下的原始会话文件。
+    // Move the file identity, not a copied snapshot: an active append handle must
+    // continue writing to the retained file. Cross-volume moves fail safely.
     for snapshot in snapshots {
-        copy_snapshot_rollout_to_trash(instance, trash_root, snapshot)?;
-    }
-    for snapshot in snapshots {
-        remove_snapshot_rollout_file(snapshot)?;
+        move_snapshot_rollout_to_trash(instance, trash_root, snapshot)?;
     }
     rewrite_session_index_without_ids(&instance.data_dir, snapshots)
 }
 
 fn create_trash_root_dir() -> Result<PathBuf, String> {
-    let root = get_session_trash_base_dir()?.join(Utc::now().format("%Y%m%d-%H%M%S").to_string());
+    let root = get_session_trash_base_dir()?.join(format!("{}-{}", Utc::now().format("%Y%m%d-%H%M%S"), uuid::Uuid::new_v4()));
     fs::create_dir_all(&root)
         .map_err(|error| format!("创建会话回收站目录失败 ({}): {}", root.display(), error))?;
     Ok(root)
@@ -1773,8 +1799,9 @@ fn get_session_trash_roots_for_read() -> Result<Vec<PathBuf>, String> {
     Ok(vec![get_session_trash_base_dir()?])
 }
 
-/// 把会话文件复制进回收站（保留修改时间）；原文件的移除由 `remove_snapshot_rollout_file` 完成。
-fn copy_snapshot_rollout_to_trash(
+/// Atomically move a rollout into its own recovery entry. Never copy + unlink:
+/// that loses messages appended between the two operations.
+fn move_snapshot_rollout_to_trash(
     instance: &CodexSyncInstance,
     trash_root: &Path,
     snapshot: &ThreadSnapshot,
@@ -1786,11 +1813,15 @@ fn copy_snapshot_rollout_to_trash(
     let relative_path = snapshot
         .rollout_path
         .strip_prefix(&snapshot.source_root)
-        .unwrap_or(snapshot.rollout_path.as_path());
+        .map_err(|_| "会话文件不在实例目录内，已保留原文件".to_string())?;
+    if relative_path.components().any(|component| !matches!(component, std::path::Component::Normal(_))) {
+        return Err("会话相对路径无效，已保留原文件".into());
+    }
     let entry_dir = trash_root.join(format!(
-        "{}--{}",
+        "{}--{}--{}",
         sanitize_for_file_name(&instance.id),
-        sanitize_for_file_name(&snapshot.id)
+        sanitize_for_file_name(&snapshot.id),
+        uuid::Uuid::new_v4()
     ));
     let file_target = entry_dir.join("files").join(relative_path);
     if let Some(parent) = file_target.parent() {
@@ -1829,29 +1860,47 @@ fn copy_snapshot_rollout_to_trash(
             )
         },
     )?;
-    let modified_at = modules::codex_session_file_time::read_modified_time(&snapshot.rollout_path);
-    fs::copy(&snapshot.rollout_path, &file_target).map_err(|error| {
-        format!(
-            "复制会话文件到回收站失败 ({} -> {}): {}",
-            snapshot.rollout_path.display(),
-            file_target.display(),
-            error
-        )
-    })?;
-    modules::codex_session_file_time::restore_modified_time(&file_target, modified_at)
+    move_rollout_without_replacing(&snapshot.rollout_path, &file_target).map_err(|error| {
+        // Only this newly allocated manifest/empty directory may be removed on
+        // failure. The source file is deliberately left intact, including when
+        // the directories are on different volumes or a writer denies sharing.
+        let _ = fs::remove_dir_all(&entry_dir);
+        format!("无法安全移动会话到回收站，原文件已保留（请关闭占用程序，并确保回收站与会话位于同一磁盘）: {}", error)
+    })
 }
 
-fn remove_snapshot_rollout_file(snapshot: &ThreadSnapshot) -> Result<(), String> {
-    if !snapshot.rollout_path.exists() {
-        return Ok(());
+/// Preserve the open file identity, and atomically refuse an existing target.
+/// A normal std::fs::rename may replace a file created after an exists check.
+fn move_rollout_without_replacing(source: &Path, target: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PCWSTR;
+        use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVE_FILE_FLAGS};
+        // canonicalize the parent to obtain Windows' extended-length prefix;
+        // recovery paths include UUIDs and can exceed the legacy MAX_PATH.
+        let wide_path = |path: &Path| -> std::io::Result<Vec<u16>> {
+            let name = path.file_name().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "rollout path has no file name"))?;
+            let parent = path.parent().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "rollout path has no parent"))?;
+            Ok(fs::canonicalize(parent)?.join(name).as_os_str().encode_wide().chain(Some(0)).collect())
+        };
+        let source = wide_path(source)?;
+        let target = wide_path(target)?;
+        // Neither REPLACE_EXISTING nor COPY_ALLOWED: same-volume move or refusal.
+        unsafe { MoveFileExW(PCWSTR(source.as_ptr()), PCWSTR(target.as_ptr()), MOVE_FILE_FLAGS(0)) }
+            .map_err(|_| std::io::Error::last_os_error())
     }
-    fs::remove_file(&snapshot.rollout_path).map_err(|error| {
-        format!(
-            "删除原始会话文件失败 ({}): {}",
-            snapshot.rollout_path.display(),
-            error
-        )
-    })
+    #[cfg(not(windows))]
+    {
+        // hard_link atomically claims an absent destination on the same volume.
+        // Both names point to the same inode, so active appends cannot be lost.
+        fs::hard_link(source, target)?;
+        if let Err(error) = fs::remove_file(source) {
+            let _ = fs::remove_file(target);
+            return Err(error);
+        }
+        Ok(())
+    }
 }
 
 fn rewrite_session_index_without_ids(
@@ -1933,6 +1982,9 @@ fn load_trash_entries_from_root(root: &Path) -> Result<Vec<TrashedSessionEntry>,
     if !root.exists() {
         return Ok(Vec::new());
     }
+    if session_restore_link(&fs::symlink_metadata(root).map_err(|error| error.to_string())?) {
+        return Err("会话回收站根目录不能是链接".into());
+    }
 
     let mut entries = Vec::new();
     let batch_dirs = fs::read_dir(root)
@@ -1942,7 +1994,8 @@ fn load_trash_entries_from_root(root: &Path) -> Result<Vec<TrashedSessionEntry>,
             format!("读取会话回收站目录项失败 ({}): {}", root.display(), error)
         })?;
         let batch_path = batch_dir.path();
-        if !batch_dir.file_type().map(|value| value.is_dir()).unwrap_or(false) {
+        let metadata = fs::symlink_metadata(&batch_path).map_err(|error| error.to_string())?;
+        if !metadata.is_dir() || session_restore_link(&metadata) {
             continue;
         }
 
@@ -1962,7 +2015,8 @@ fn load_trash_entries_from_root(root: &Path) -> Result<Vec<TrashedSessionEntry>,
                 )
             })?;
             let entry_path = entry.path();
-            if !entry.file_type().map(|value| value.is_dir()).unwrap_or(false) {
+            let metadata = fs::symlink_metadata(&entry_path).map_err(|error| error.to_string())?;
+            if !metadata.is_dir() || session_restore_link(&metadata) {
                 continue;
             }
 
@@ -1970,6 +2024,16 @@ fn load_trash_entries_from_root(root: &Path) -> Result<Vec<TrashedSessionEntry>,
             if !manifest_path.exists() {
                 continue;
             }
+            if session_restore_link(&fs::symlink_metadata(&manifest_path).map_err(|error| error.to_string())?) {
+                continue;
+            }
+            let files_root = entry_path.join("files");
+            let metadata = match fs::symlink_metadata(&files_root) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.to_string()),
+            };
+            if !metadata.is_dir() || session_restore_link(&metadata) { continue; }
             let manifest_content = fs::read_to_string(&manifest_path).map_err(|error| {
                 format!(
                     "读取会话回收站清单失败 ({}): {}",
@@ -1985,13 +2049,23 @@ fn load_trash_entries_from_root(root: &Path) -> Result<Vec<TrashedSessionEntry>,
                         error
                     )
                 })?;
+            let relative = Path::new(&manifest.relative_rollout_path);
+            if relative.as_os_str().is_empty()
+                || relative.components().any(|part| !matches!(part, std::path::Component::Normal(_)))
+            {
+                continue;
+            }
             let trashed_rollout_path = entry_path
                 .join("files")
                 .join(PathBuf::from(&manifest.relative_rollout_path));
+            if !trashed_rollout_path.exists()
+                && list_trash_restore_files(&entry_path.join("files"))?.is_empty()
+            {
+                continue;
+            }
             entries.push(TrashedSessionEntry {
                 entry_dir: entry_path,
                 manifest,
-                trashed_rollout_path,
             });
         }
     }
@@ -1999,117 +2073,7 @@ fn load_trash_entries_from_root(root: &Path) -> Result<Vec<TrashedSessionEntry>,
     Ok(entries)
 }
 
-fn restore_trashed_session_entry(entry: &TrashedSessionEntry) -> Result<(), String> {
-    if !entry.trashed_rollout_path.exists() {
-        return Err(format!(
-            "回收站中的会话文件不存在，无法恢复 ({}): {}",
-            entry.manifest.session_id,
-            entry.trashed_rollout_path.display()
-        ));
-    }
-
-    let session_id = entry.manifest.session_id.clone();
-    if let Some(trashed_session_id) = rollout_session_id(&entry.trashed_rollout_path)? {
-        if trashed_session_id != session_id {
-            return Err(format!(
-                "回收站中的会话文件与清单不一致，无法恢复 (清单: {}, 文件: {}): {}",
-                session_id,
-                trashed_session_id,
-                entry.trashed_rollout_path.display()
-            ));
-        }
-    }
-
-    let target_rollout_path = entry.manifest.original_rollout_path.clone();
-    let original_session_index_content = read_session_index_content(&entry.manifest.instance_root)?;
-    let target_existed_before_restore = target_rollout_path.exists();
-
-    if target_existed_before_restore {
-        match rollout_session_id(&target_rollout_path)? {
-            Some(existing_session_id) if existing_session_id == session_id => {}
-            Some(existing_session_id) => {
-                return Err(format!(
-                    "目标位置已存在不同会话文件，为避免覆盖，无法恢复 (待恢复: {}, 已存在: {}): {}",
-                    session_id,
-                    existing_session_id,
-                    target_rollout_path.display()
-                ));
-            }
-            None => {
-                return Err(format!(
-                    "目标位置已存在无法确认会话 ID 的文件，为避免覆盖，无法恢复 ({}): {}",
-                    session_id,
-                    target_rollout_path.display()
-                ));
-            }
-        }
-    } else {
-        if let Some(parent) = target_rollout_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|error| format!("创建会话恢复目录失败 ({}): {}", parent.display(), error))?;
-        }
-        fs::copy(&entry.trashed_rollout_path, &target_rollout_path).map_err(|error| {
-            format!(
-                "恢复会话文件失败 ({} -> {}): {}",
-                entry.trashed_rollout_path.display(),
-                target_rollout_path.display(),
-                error
-            )
-        })?;
-        modules::codex_session_file_time::restore_modified_time(
-            &target_rollout_path,
-            modules::codex_session_file_time::read_modified_time(&entry.trashed_rollout_path),
-        )?;
-    }
-
-    let restore_result = (|| {
-        let session_index_entry = build_restored_session_index_entry(entry, &target_rollout_path);
-        upsert_session_index_with_entry(
-            &entry.manifest.instance_root,
-            &original_session_index_content,
-            &session_id,
-            &session_index_entry,
-        )
-    })();
-
-    if let Err(error) = restore_result {
-        if !target_existed_before_restore {
-            let _ = fs::remove_file(&target_rollout_path);
-        }
-        let _ = restore_session_index_content(
-            &entry.manifest.instance_root,
-            original_session_index_content.as_deref(),
-        );
-        return Err(error);
-    }
-
-    if let Err(error) = fs::remove_dir_all(&entry.entry_dir) {
-        modules::logger::log_warn(&format!(
-            "会话已恢复，但清理回收站条目失败 ({}): {}",
-            entry.entry_dir.display(),
-            error
-        ));
-    } else {
-        cleanup_empty_trash_ancestors(&entry.entry_dir);
-    }
-
-    Ok(())
-}
-
-fn read_session_index_content(root_dir: &Path) -> Result<Option<String>, String> {
-    let path = root_dir.join(SESSION_INDEX_FILE);
-    if !path.exists() {
-        return Ok(None);
-    }
-    let content = fs::read_to_string(&path).map_err(|error| {
-        format!(
-            "读取 session_index.jsonl 失败 ({}): {}",
-            path.display(),
-            error
-        )
-    })?;
-    Ok(Some(content))
-}
+include!("codex_session_trash_restore.rs");
 
 fn rollout_session_id(path: &Path) -> Result<Option<String>, String> {
     Ok(read_rollout_session_meta(path)?.and_then(|meta| session_meta_id(&meta)))
@@ -2154,102 +2118,6 @@ fn build_restored_session_index_entry(
         );
     }
     restored
-}
-
-fn merge_session_index_entry(existing: JsonValue, restored: &JsonValue) -> JsonValue {
-    let (JsonValue::Object(mut existing_object), JsonValue::Object(restored_object)) =
-        (existing, restored)
-    else {
-        return restored.clone();
-    };
-    for (key, value) in restored_object {
-        existing_object.insert(key.clone(), value.clone());
-    }
-    JsonValue::Object(existing_object)
-}
-
-fn upsert_session_index_with_entry(
-    root_dir: &Path,
-    original_content: &Option<String>,
-    session_id: &str,
-    entry: &JsonValue,
-) -> Result<(), String> {
-    let path = root_dir.join(SESSION_INDEX_FILE);
-    let serialized_entry = serde_json::to_string(entry)
-        .map_err(|error| format!("序列化 session_index 条目失败 ({}): {}", session_id, error))?;
-    let lines = original_content
-        .as_deref()
-        .unwrap_or_default()
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
-    let mut next_lines = Vec::with_capacity(lines.len() + 1);
-    let mut replaced = false;
-    for line in lines {
-        let parsed = serde_json::from_str::<JsonValue>(&line);
-        let Ok(parsed) = parsed else {
-            next_lines.push(line);
-            continue;
-        };
-        let current_id = parsed.get("id").and_then(JsonValue::as_str);
-        if current_id != Some(session_id) {
-            next_lines.push(line);
-            continue;
-        }
-        if replaced {
-            continue;
-        }
-        let merged = merge_session_index_entry(parsed, entry);
-        next_lines.push(serde_json::to_string(&merged).map_err(|error| {
-            format!("序列化 session_index 条目失败 ({}): {}", session_id, error)
-        })?);
-        replaced = true;
-    }
-    if !replaced {
-        next_lines.push(serialized_entry);
-    }
-    let next_content = if next_lines.is_empty() {
-        String::new()
-    } else {
-        format!("{}\n", next_lines.join("\n"))
-    };
-    modules::atomic_write::write_string_atomic(&path, &next_content).map_err(|error| {
-        format!(
-            "写入 session_index.jsonl 失败 ({}): {}",
-            path.display(),
-            error
-        )
-    })?;
-    Ok(())
-}
-
-fn restore_session_index_content(root_dir: &Path, content: Option<&str>) -> Result<(), String> {
-    let path = root_dir.join(SESSION_INDEX_FILE);
-    match content {
-        Some(value) => {
-            modules::atomic_write::write_string_atomic(&path, value).map_err(|error| {
-                format!(
-                    "恢复 session_index.jsonl 失败 ({}): {}",
-                    path.display(),
-                    error
-                )
-            })?
-        }
-        None => {
-            if path.exists() {
-                fs::remove_file(&path).map_err(|error| {
-                    format!(
-                        "删除恢复失败的 session_index.jsonl 失败 ({}): {}",
-                        path.display(),
-                        error
-                    )
-                })?;
-            }
-        }
-    }
-    Ok(())
 }
 
 fn delete_trash_entries(
@@ -2421,10 +2289,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn make_temp_dir(prefix: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time should be after unix epoch")
-            .as_nanos();
+        let unique = uuid::Uuid::new_v4();
         let base_dir =
             std::env::temp_dir().join(format!("{}-{}-{}", prefix, std::process::id(), unique));
         if base_dir.exists() {
@@ -2589,7 +2454,7 @@ mod tests {
             entries[0].manifest.relative_rollout_path,
             "rollout-session-1.jsonl"
         );
-        assert!(entries[0].trashed_rollout_path.exists(), "留底文件必须还在");
+        assert!(primary_trash_rollout_path(&entries[0]).exists(), "留底文件必须还在");
 
         restore_trashed_session_entry(&entries[0]).expect("restore session");
         assert!(rollout_path.exists(), "会话文件应回到原位置");
@@ -2694,9 +2559,10 @@ mod tests {
         );
 
         let mut by_day = HashMap::<String, CodexUsageBucket>::new();
+        let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
         let mut by_model = HashMap::<String, CodexUsageBucket>::new();
         let mut totals = CodexUsageTotals::default();
-        assert!(accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_model, &mut totals));
+        assert!(accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_hour, &mut by_model, &mut totals));
 
         // 图的账必须等于「会话」档那条累计值，否则同屏两个数互相打脸
         assert_eq!(totals.input_tokens, 150);
@@ -2734,9 +2600,10 @@ mod tests {
         );
 
         let mut by_day = HashMap::<String, CodexUsageBucket>::new();
+        let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
         let mut by_model = HashMap::<String, CodexUsageBucket>::new();
         let mut totals = CodexUsageTotals::default();
-        accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_model, &mut totals);
+        accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_hour, &mut by_model, &mut totals);
 
         assert_eq!(by_model.len(), 2);
         // 头两条快照都还是 gpt-sol：累计起算那一条整笔归它
@@ -2763,9 +2630,10 @@ mod tests {
         );
 
         let mut by_day = HashMap::<String, CodexUsageBucket>::new();
+        let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
         let mut by_model = HashMap::<String, CodexUsageBucket>::new();
         let mut totals = CodexUsageTotals::default();
-        accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_model, &mut totals);
+        accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_hour, &mut by_model, &mut totals);
 
         assert_eq!(totals.input_tokens, 120);
         assert_eq!(totals.output_tokens, 7);
@@ -2793,6 +2661,7 @@ mod tests {
         )
         .expect("窗口起点");
         let mut by_day = HashMap::<String, CodexUsageBucket>::new();
+        let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
         let mut by_model = HashMap::<String, CodexUsageBucket>::new();
         let mut totals = CodexUsageTotals::default();
         assert!(accumulate_usage_entry(
@@ -2800,6 +2669,7 @@ mod tests {
             Some(from),
             None,
             &mut by_day,
+            &mut by_hour,
             &mut by_model,
             &mut totals
         ));
@@ -2817,4 +2687,151 @@ mod tests {
         assert_eq!(totals.input_tokens, 500);
         fs::remove_dir_all(&dir).expect("cleanup temp dir");
     }
+
+    #[test]
+    fn usage_hour_buckets_use_event_time_and_preserve_totals() {
+        let dir = make_temp_dir("codex-usage-hours");
+        let at = |hour, minute| Local.with_ymd_and_hms(2026, 10, 13, hour, minute, 0)
+            .earliest().expect("有效的本地时间");
+        let entry = scan_usage_lines(&dir, &[
+            usage_snapshot_line(&at(8, 15).to_rfc3339(), 100, 80, 5),
+            usage_snapshot_line(&at(8, 45).to_rfc3339(), 130, 110, 7),
+            usage_snapshot_line(&at(9, 15).to_rfc3339(), 180, 160, 12),
+            usage_snapshot_line(&at(10, 0).to_rfc3339(), 240, 180, 20),
+        ]);
+        let mut by_day = HashMap::<String, CodexUsageBucket>::new();
+        let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
+        let mut by_model = HashMap::<String, CodexUsageBucket>::new();
+        let mut totals = CodexUsageTotals::default();
+        accumulate_usage_entry(&entry, Some(at(8, 0).timestamp()), Some(at(10, 0).timestamp()),
+            &mut by_day, &mut by_hour, &mut by_model, &mut totals);
+        assert_eq!(by_hour.len(), 2);
+        assert_eq!(by_hour[&at(8, 0).timestamp()].total_tokens, 137);
+        assert_eq!(by_hour[&at(8, 0).timestamp()].request_count, 2);
+        assert_eq!(by_hour[&at(9, 0).timestamp()].total_tokens, 55);
+        assert_eq!(by_hour.values().map(|bucket| bucket.total_tokens).sum::<u64>(), totals.total_tokens);
+        assert_eq!(by_hour.values().map(|bucket| bucket.input_tokens).sum::<u64>(), totals.input_tokens);
+        assert_eq!(by_hour.values().map(|bucket| bucket.cached_input_tokens).sum::<u64>(), totals.cached_input_tokens);
+        assert_eq!(totals.request_count, 3);
+        fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    }
+
+    fn trash_fixture(label: &str) -> (PathBuf, CodexSyncInstance, PathBuf) {
+        let root = make_temp_dir(label);
+        let home = root.join("codex");
+        fs::create_dir_all(&home).unwrap();
+        let trash = root.join(SESSION_TRASH_ROOT_DIR);
+        let batch = trash.join(uuid::Uuid::new_v4().to_string());
+        fs::create_dir_all(&batch).unwrap();
+        (root, CodexSyncInstance {
+            id: DEFAULT_INSTANCE_ID.into(), name: DEFAULT_INSTANCE_NAME.into(),
+            data_dir: home, last_pid: None,
+        }, batch)
+    }
+
+    #[test]
+    fn move_never_replaces_an_existing_rollout() {
+        let root = make_temp_dir("codex-no-replace");
+        let source = root.join("source.jsonl");
+        let target = root.join("target.jsonl");
+        fs::write(&source, "source-version").unwrap();
+        fs::write(&target, "target-version").unwrap();
+        assert!(super::move_rollout_without_replacing(&source, &target).is_err());
+        assert_eq!(fs::read_to_string(source).unwrap(), "source-version");
+        assert_eq!(fs::read_to_string(target).unwrap(), "target-version");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn trash_rejects_a_rollout_outside_its_source_root() {
+        let (root, instance, batch) = trash_fixture("codex-outside-source");
+        let path = instance.data_dir.join("sessions/rollout-live.jsonl");
+        write_rollout(&path, "live", "retained");
+        let mut snapshots = load_thread_snapshots(&instance).unwrap();
+        snapshots[0].source_root = root.join("different-root");
+        assert!(trash_snapshots_for_instance(&instance, &batch, &snapshots).is_err());
+        assert!(fs::read_to_string(path).unwrap().contains("retained"));
+        assert!(fs::read_dir(batch).unwrap().next().is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn trash_preserves_messages_from_an_open_writer_after_the_move() {
+        let (root, instance, batch) = trash_fixture("codex-live-writer");
+        let path = instance.data_dir.join("sessions/rollout-live.jsonl");
+        write_rollout(&path, "live", "before");
+        let mut writer = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        let snapshots = load_thread_snapshots(&instance).unwrap();
+        trash_snapshots_for_instance(&instance, &batch, &snapshots).unwrap();
+        writer.write_all(b"{\"type\":\"event_msg\",\"payload\":\"MESSAGE_AFTER_MOVE\"}\n").unwrap();
+        writer.sync_all().unwrap();
+        drop(writer);
+        assert!(!path.exists());
+        let entries = load_trash_entries_from_root(&root.join(SESSION_TRASH_ROOT_DIR)).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(fs::read_to_string(&primary_trash_rollout_path(&entries[0])).unwrap().contains("MESSAGE_AFTER_MOVE"));
+        restore_trashed_session_entry(&entries[0]).unwrap();
+        assert!(fs::read_to_string(&path).unwrap().contains("MESSAGE_AFTER_MOVE"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn same_session_id_in_multiple_rollouts_keeps_every_version() {
+        let (root, instance, batch) = trash_fixture("codex-multiple-rollouts");
+        let first = instance.data_dir.join("sessions/rollout-a.jsonl");
+        let second = instance.data_dir.join("archived_sessions/rollout-b.jsonl");
+        write_rollout(&first, "same-id", "FIRST_VERSION");
+        write_rollout(&second, "same-id", "SECOND_VERSION");
+        let snapshots = load_thread_snapshots(&instance).unwrap();
+        trash_snapshots_for_instance(&instance, &batch, &snapshots).unwrap();
+        let entries = load_trash_entries_from_root(&root.join(SESSION_TRASH_ROOT_DIR)).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_ne!(entries[0].entry_dir, entries[1].entry_dir);
+        for entry in &entries { restore_trashed_session_entry(entry).unwrap(); }
+        assert!(fs::read_to_string(first).unwrap().contains("FIRST_VERSION"));
+        assert!(fs::read_to_string(second).unwrap().contains("SECOND_VERSION"));
+        assert!(load_trash_entries_from_root(&root.join(SESSION_TRASH_ROOT_DIR)).unwrap().is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn restore_never_discards_a_different_version_with_the_same_id() {
+        let (root, instance, batch) = trash_fixture("codex-restore-conflict");
+        let path = instance.data_dir.join("sessions/rollout-a.jsonl");
+        write_rollout(&path, "same-id", "BACKUP_VERSION");
+        trash_snapshots_for_instance(&instance, &batch, &load_thread_snapshots(&instance).unwrap()).unwrap();
+        let entries = load_trash_entries_from_root(&root.join(SESSION_TRASH_ROOT_DIR)).unwrap();
+        write_rollout(&path, "same-id", "LIVE_VERSION");
+        assert!(restore_trashed_session_entry(&entries[0]).is_err());
+        assert!(fs::read_to_string(&path).unwrap().contains("LIVE_VERSION"));
+        assert!(fs::read_to_string(&primary_trash_rollout_path(&entries[0])).unwrap().contains("BACKUP_VERSION"));
+        // Legacy entries may already contain more than one rollout behind one
+        // manifest. Never recursively delete those remaining recovery copies.
+        let legacy_extra = entries[0].entry_dir.join("files/sessions/rollout-extra.jsonl");
+        write_rollout(&legacy_extra, "same-id", "LEGACY_EXTRA");
+        fs::remove_file(&path).unwrap();
+        restore_trashed_session_entry(&entries[0]).unwrap();
+        assert!(!legacy_extra.exists());
+        assert!(fs::read_to_string(&path).unwrap().contains("BACKUP_VERSION"));
+        assert!(fs::read_to_string(instance.data_dir.join("sessions/rollout-extra.jsonl")).unwrap().contains("LEGACY_EXTRA"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn incompatible_writer_leaves_the_original_session_intact() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let (root, instance, batch) = trash_fixture("codex-exclusive-writer");
+        let path = instance.data_dir.join("sessions/rollout-a.jsonl");
+        write_rollout(&path, "locked", "UNCHANGED");
+        let snapshots = load_thread_snapshots(&instance).unwrap();
+        let writer = fs::OpenOptions::new().append(true).share_mode(1).open(&path).unwrap();
+        assert!(trash_snapshots_for_instance(&instance, &batch, &snapshots).is_err());
+        drop(writer);
+        assert!(fs::read_to_string(path).unwrap().contains("UNCHANGED"));
+        assert!(load_trash_entries_from_root(&root.join(SESSION_TRASH_ROOT_DIR)).unwrap().is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    include!("codex_session_trash_restore_tests.rs");
 }

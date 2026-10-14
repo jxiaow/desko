@@ -335,7 +335,7 @@ onMounted(() => {
               <div class="setting-item">
                 <div class="setting-info">
                   <span class="setting-name">背景氛围</span>
-                  <span id="background-atmosphere-desc" class="setting-desc">显示柔光与细微纹理</span>
+                  <span id="background-atmosphere-desc" class="setting-desc">随强调色变化的柔光与纹理</span>
                 </div>
                 <label class="switch">
                   <input

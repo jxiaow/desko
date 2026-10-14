@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { tunnelApi } from './api/tunnel'
-import type { TunnelBinary, TunnelLogin, TunnelProvision, TunnelServiceRow, TunnelStatus } from './api/tunnel'
+import type { TunnelBinary, TunnelDomain, TunnelLogin, TunnelProvision, TunnelServiceRow, TunnelStatus } from './api/tunnel'
 import { errText } from './api/backup'
 
 /** 隧道状态单例：跨页面挂载存活。重进页面首帧直接沿用上次的回读值，
@@ -11,25 +11,59 @@ export const tnBinary = ref<TunnelBinary | null>(null)
 export const tnProvision = ref<TunnelProvision | null>(null)
 export const tnLogin = ref<TunnelLogin>({ state: 'idle', url: null, secondsLeft: 0, note: null })
 export const tnServices = ref<TunnelServiceRow[]>([])
-/** 某一格回读失败：其余格照常更新，这一句留在页面上说清是哪格坏了。
- *  整批 Promise.all 的写法会让一个失败把全页冻在上一次的快照上，还不报错——
- *  「浏览器里授权完了，desko 一动不动」就是这么来的 */
+/** 每格返回即更新；慢请求与失败都不能挡住已经读到的授权状态。 */
 export const tnPollError = ref('')
+export const tnDomain = ref<TunnelDomain | null>(null)
+export const tnDomainLoading = ref(false)
+export const tnDomainError = ref('')
+let domainVersion = 0
+
+/** 授权后读一次，失败由用户重试；不把外网请求塞进每三秒的本地状态轮询。 */
+export async function tnLoadDomain(force = false): Promise<void> {
+  if (tnDomainLoading.value || (tnDomain.value && !force)) return
+  const version = domainVersion
+  tnDomainLoading.value = true
+  tnDomainError.value = ''
+  try {
+    const domain = await tunnelApi.authorizedDomain()
+    if (version === domainVersion) tnDomain.value = domain
+  } catch (error) {
+    if (version === domainVersion) tnDomainError.value = errText(error)
+  } finally {
+    if (version === domainVersion) tnDomainLoading.value = false
+  }
+}
+
+export function tnClearDomain(): void {
+  domainVersion++
+  tnDomain.value = null
+  tnDomainLoading.value = false
+  tnDomainError.value = ''
+}
+
+let refreshVersion = 0
+const appliedVersions = { status: 0, binary: 0, provision: 0, login: 0, services: 0, error: 0 }
 
 export async function tnRefresh(): Promise<void> {
+  const version = ++refreshVersion
+  async function read<T>(field: keyof typeof appliedVersions, request: Promise<T>, apply: (value: T) => void) {
+    const value = await request
+    if (version < appliedVersions[field]) return
+    appliedVersions[field] = version
+    apply(value)
+    tnLoaded.value = true
+  }
+  const login = read('login', tunnelApi.loginStatus(), value => { tnLogin.value = value })
   const settled = await Promise.allSettled([
-    tunnelApi.status(),
-    tunnelApi.binaryStatus(),
-    tunnelApi.provisionStatus(),
-    tunnelApi.loginStatus(),
-    tunnelApi.listServices(),
+    read('status', tunnelApi.status(), value => { tnStatus.value = value }),
+    read('binary', tunnelApi.binaryStatus(), value => { tnBinary.value = value }),
+    // loginStatus 会领取登录目录里的 cert.pem；进度须在领取后读取，才能同轮认到授权。
+    read('provision', login.catch(() => undefined).then(() => tunnelApi.provisionStatus()), value => { tnProvision.value = value }),
+    login,
+    read('services', tunnelApi.listServices(), value => { tnServices.value = value }),
   ])
-  const [s, b, p, l, sv] = settled
-  if (s.status === 'fulfilled') tnStatus.value = s.value
-  if (b.status === 'fulfilled') tnBinary.value = b.value
-  if (p.status === 'fulfilled') tnProvision.value = p.value
-  if (l.status === 'fulfilled') tnLogin.value = l.value
-  if (sv.status === 'fulfilled') tnServices.value = sv.value
+  if (version < appliedVersions.error) return
+  appliedVersions.error = version
   const failed = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
   tnPollError.value = failed ? errText(failed.reason) : ''
   tnLoaded.value = true

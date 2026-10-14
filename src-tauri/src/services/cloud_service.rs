@@ -33,6 +33,9 @@ pub struct CloudCreds {
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct SyncState {
+    /// normalized endpoint + account + 当前档案云命名空间，不包含应用密码。
+    #[serde(default)]
+    pub target: String,
     #[serde(default)]
     pub packages: Vec<String>,
     #[serde(default)]
@@ -72,6 +75,24 @@ pub fn load_cfg(db: &Database, master_key: &[u8]) -> Result<Option<CloudCreds>, 
     let sealed: EncryptedData = serde_json::from_str(&json).map_err(|e| AppError::Crypto(e.to_string()))?;
     let plain = crypto::decrypt_password(&sealed, master_key)?;
     Ok(Some(serde_json::from_str(&plain).map_err(|e| AppError::Crypto(e.to_string()))?))
+}
+
+pub fn target_id(cfg: &CloudCreds) -> Result<String, AppError> {
+    use sha2::{Digest, Sha256};
+    let normalized = normalize_server(&cfg.server)?;
+    let server = reqwest::Url::parse(&normalized)
+        .map_err(|_| AppError::Backup("服务器地址格式不正确".into()))?;
+    let namespace = crate::paths::cloud_base();
+    let identity = serde_json::to_vec(&(server.as_str().trim_end_matches('/'), &cfg.account, namespace))
+        .map_err(|e| AppError::Backup(e.to_string()))?;
+    Ok(Sha256::digest(identity).iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn record_for_target(record: &SyncState, cfg: &CloudCreds) -> Result<SyncState, AppError> {
+    let target = target_id(cfg)?;
+    if record.target == target { return Ok(record.clone()); }
+    // 无 target 的旧记录没有目的地证据；换账号/服务器也必须重新上传。
+    Ok(SyncState { target, ..Default::default() })
 }
 
 /// 同步记录：`backups/.sync-state.json`。读写都在后台线程里做，不碰库。
@@ -115,7 +136,10 @@ pub(crate) fn keep_remote(db: &Database) -> i64 {
 
 pub fn status(db: &Database, master_key: &[u8], backups: &Path) -> Result<CloudStatus, AppError> {
     let cfg = load_cfg(db, master_key)?;
-    let state = load_state(backups);
+    let state = match &cfg {
+        Some(cfg) => record_for_target(&load_state(backups), cfg)?,
+        None => SyncState::default(),
+    };
     Ok(CloudStatus {
         configured: cfg.is_some(),
         server: cfg.as_ref().map(|c| c.server.clone()).unwrap_or_default(),
@@ -131,7 +155,16 @@ pub fn status(db: &Database, master_key: &[u8], backups: &Path) -> Result<CloudS
 /// 凭据没了轮次自然就停。
 pub fn disconnect(db: &Database, backups: &Path) -> Result<(), AppError> {
     db.set_meta(META_CFG, "")?;
-    clear_state(backups)
+    clear_sync_baseline(backups)
+}
+
+pub fn clear_sync_baseline(backups: &Path) -> Result<(), AppError> {
+    clear_state(backups)?;
+    match std::fs::remove_file(crate::services::auto_backup::watch_path(backups)) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 /* ---------- 网络部分（后台线程，不碰数据库） ---------- */
@@ -199,7 +232,18 @@ fn local_inventory(backups: &Path) -> (Vec<String>, Vec<String>) {
 
 /// 本地还欠云端多少东西（没传的包 + 没传的附件密文）。纯本地比对，不发请求。
 pub fn pending_count(backups: &Path) -> usize {
-    let record = load_state(backups);
+    let mut record = load_state(backups);
+    if record.target.is_empty() { record = SyncState::default(); }
+    pending_with_record(backups, &record)
+}
+
+pub fn pending_count_for(backups: &Path, cfg: Option<&CloudCreds>) -> usize {
+    // 目的地未知/损坏时没有任何可复用的上传证据，保守计为待上传。
+    let record = cfg.and_then(|cfg| record_for_target(&load_state(backups), cfg).ok()).unwrap_or_default();
+    pending_with_record(backups, &record)
+}
+
+fn pending_with_record(backups: &Path, record: &SyncState) -> usize {
     let (packages, attachments) = local_inventory(backups);
     packages.iter().filter(|n| !record.packages.contains(n)).count()
         + attachments.iter().filter(|n| !record.attachments.contains(n)).count()
@@ -212,6 +256,10 @@ pub fn has_backlog(backups: &Path) -> bool {
         return true;
     }
     crate::backup::list_packages(backups).len() > crate::backup::LOCAL_FLOOR
+}
+
+pub fn has_backlog_for(backups: &Path, cfg: Option<&CloudCreds>) -> bool {
+    pending_count_for(backups, cfg) > 0 || crate::backup::list_packages(backups).len() > crate::backup::LOCAL_FLOOR
 }
 
 /// 云端凭据在不在。手动「立即备份」看这条：配了云就该传，跟自动开关无关
@@ -255,6 +303,8 @@ pub fn sync_core(
     backups: &Path,
     progress: &dyn Fn(&str, u8),
 ) -> Result<SyncState, AppError> {
+    let bound_record = record_for_target(record, cfg)?;
+    let record = &bound_record;
     let (packages, attachments) = local_inventory(backups);
 
     let att_todo: Vec<&String> = attachments.iter().filter(|n| !record.attachments.contains(n)).collect();
@@ -311,6 +361,7 @@ pub fn sync_core(
 
     progress("完成", 100);
     Ok(SyncState {
+        target: record.target.clone(),
         packages: pruned(&uploaded_pkgs, &packages),
         attachments: pruned(&uploaded_atts, &attachments),
         last_sync_at: chrono::Utc::now().timestamp_millis(),
@@ -329,33 +380,65 @@ pub fn list_remote(cfg: &CloudCreds) -> Result<Vec<crate::webdav::DavEntry>, App
     Ok(entries)
 }
 
-/// 把云端的一个包拉到本地 backups 目录。这一步不需要任何密钥。
-pub fn download_package(cfg: &CloudCreds, backups: &Path, name: &str) -> Result<PathBuf, AppError> {
-    if !crate::backup::is_package(name) {
-        return Err(AppError::Backup("非法的备份文件名".to_string()));
-    }
-    let local_pkg = backups.join(name);
-    if local_pkg.exists() {
-        return Ok(local_pkg);
-    }
-    client_for(cfg).get(&format!("{}/{}", pkg_dir(), name), &local_pkg)?;
-    Ok(local_pkg)
+/// 恢复下载与本地待上传 spool 隔离；同名本地包不能证明是所选远端对象。
+#[cfg(test)]
+fn download_root(cfg: &CloudCreds, backups: &Path) -> Result<PathBuf, AppError> {
+    Ok(backups.join(".downloads").join(target_id(cfg)?))
 }
 
-/// 按 manifest 把缺的附件密文补到本地（清单已在本地，包已解过）
+#[derive(Clone)]
+pub struct RestoreDownload {
+    pub package: PathBuf,
+    cache: std::sync::Arc<super::cloud_restore_cache::RestoreCache>,
+}
+
+impl RestoreDownload {
+    pub fn cache_root(&self) -> &Path { self.cache.root() }
+}
+
+pub fn download_package(cfg: &CloudCreds, backups: &Path, name: &str, password: &str) -> Result<RestoreDownload, AppError> {
+    download_package_with_client(cfg, backups, name, password, &client_for(cfg))
+}
+
+fn download_package_with_client(cfg: &CloudCreds, backups: &Path, name: &str, password: &str, client: &Client) -> Result<RestoreDownload, AppError> {
+    if !crate::backup::is_package(name) { return Err(AppError::Backup("非法的备份文件名".into())); }
+    let cache = super::cloud_restore_cache::RestoreCache::new(backups, &target_id(cfg)?)?;
+    let local = cache.root().join(name);
+    // 同一目标的对象也可能被另一台机器覆盖；每次恢复都 GET，再验证后原子发布。
+    client.get_validated(&format!("{}/{}", pkg_dir(), name), &local, |path| {
+        crate::backup::container::validate_complete_file(path)?;
+        let (dek, _) = crate::backup::container::open_package(path, password)?;
+        crate::backup::container::read_manifest(path, &dek).map(|_| ())
+    })?;
+    Ok(RestoreDownload { package: local, cache: std::sync::Arc::new(cache) })
+}
+
+fn validate_attachment(path: &Path, entry: &crate::backup::container::FileEntry, dek: &[u8]) -> Result<(), AppError> {
+    crate::backup::container::validate_complete_file(path)?;
+    let bytes = crate::backup::container::unpack(path, dek)?;
+    if bytes.len() as u64 != entry.size as u64
+        || (!entry.sha256.is_empty() && !crate::backup::container::sha256_hex(&bytes).eq_ignore_ascii_case(&entry.sha256)) {
+        return Err(AppError::Backup(format!("附件内容校验失败: {}", entry.name)));
+    }
+    Ok(())
+}
+
+/// 按 manifest 把附件密文补到本次恢复的 download_root（不改待上传附件 spool）
 pub fn fetch_attachments(
     cfg: &CloudCreds,
-    backups: &Path,
+    download_root: &Path,
     manifest: &crate::backup::Manifest,
+    dek: &[u8],
     progress: &dyn Fn(&str, u8),
 ) -> Result<(), AppError> {
-    let local_dir = backups.join("attachments");
+    crate::backup::container::validate_manifest(manifest)?;
+    let local_dir = download_root.join("attachments");
     std::fs::create_dir_all(&local_dir)?;
     let client = client_for(cfg);
     let missing: Vec<_> = manifest
         .files
         .iter()
-        .filter(|f| !local_dir.join(format!("{}.enc", f.name)).exists())
+        .filter(|f| validate_attachment(&local_dir.join(format!("{}.enc", f.name)), f, dek).is_err())
         .collect();
     let total = missing.len().max(1);
     for (i, f) in missing.iter().enumerate() {
@@ -363,9 +446,10 @@ pub fn fetch_attachments(
             &format!("下载附件 {}/{}", i + 1, total),
             (i as f64 / total as f64 * 60.0) as u8,
         );
-        client.get(
+        client.get_validated(
             &format!("{}/{}.enc", att_dir(), f.name),
             &local_dir.join(format!("{}.enc", f.name)),
+            |path| validate_attachment(path, f, dek),
         )?;
     }
     Ok(())
@@ -409,6 +493,7 @@ mod tests {
 
     fn full_record() -> SyncState {
         SyncState {
+            target: "test-target".into(),
             packages: vec!["desko-20260921-120000.dsbk".to_string()],
             attachments: vec!["a__x.png".to_string()],
             last_sync_at: 777,
@@ -462,6 +547,7 @@ mod tests {
         write_state(
             &root,
             &SyncState {
+                target: "test-target".into(),
                 packages: all.clone(),
                 attachments: vec!["a__x.png".to_string()],
                 last_sync_at: 1,
@@ -481,12 +567,13 @@ mod tests {
     #[test]
     fn nothing_to_upload_means_no_requests() {
         let root = fake_backups("skip");
-        let record = full_record();
+        let mut record = full_record();
         let cfg = CloudCreds {
             server: "https://127.0.0.1:9/dav".to_string(),
             account: "nobody".to_string(),
             app_password: "nope".to_string(),
         };
+        record.target = target_id(&cfg).unwrap();
         let out = sync_core(&cfg, &record, 20, &root, &|_, _| {}).unwrap();
         assert_eq!(out.last_sync_at, 777, "空轮不该刷新上次同步时间");
         assert_eq!(out.packages, record.packages);
@@ -506,4 +593,145 @@ mod tests {
         // 记录里不能留下本地根本没有的东西
         assert!(pruned(&vec!["ghost.dsbk".to_string()], &local).is_empty());
     }
+    #[test]
+    fn upload_evidence_is_specific_to_the_remote_target() {
+        let root = fake_backups("target");
+        let cfg = CloudCreds { server: "https://DAV.example.com/dav/".into(), account: "one".into(), app_password: "old".into() };
+        let mut record = full_record();
+        record.target = target_id(&cfg).unwrap();
+        write_state(&root, &record).unwrap();
+        assert_eq!(pending_count_for(&root, Some(&cfg)), 0);
+        let rotated = CloudCreds { server: "https://dav.example.com/dav".into(), app_password: "new".into(), ..cfg.clone() };
+        assert_eq!(pending_count_for(&root, Some(&rotated)), 0, "同一目的地换密码不重传");
+        let other = CloudCreds { account: "two".into(), ..cfg.clone() };
+        assert_eq!(pending_count_for(&root, Some(&other)), 2);
+        assert!(has_backlog_for(&root, Some(&other)));
+        assert_eq!(pending_count_for(&root, None), 2);
+        record.target.clear();
+        write_state(&root, &record).unwrap();
+        assert_eq!(pending_count_for(&root, Some(&cfg)), 2, "旧无target记录不能当上传证据");
+        assert_eq!(pending_count(&root), 2);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn remote_bytes(bytes: Vec<u8>, requests: usize) -> (CloudCreds, std::thread::JoinHandle<()>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            for _ in 0..requests {
+                let (mut socket, _) = listener.accept().unwrap();
+                let mut request = [0; 8192]; socket.read(&mut request).unwrap();
+                socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", bytes.len()).as_bytes()).unwrap();
+                socket.write_all(&bytes).unwrap();
+            }
+        });
+        (CloudCreds { server: format!("http://{address}"), account: "test".into(), app_password: "test".into() }, server)
+    }
+
+    fn cache_manifest() -> crate::backup::Manifest {
+        crate::backup::Manifest {
+            app: "desko".into(), format: crate::backup::container::FORMAT_VERSION,
+            created_at: 0, app_version: "test".into(),
+            counts: crate::backup::container::Counts { notes: 0, entries: 0, attachments: 1 },
+            files: vec![crate::backup::container::FileEntry {
+                name: "file.txt".into(), size: 5, sha256: crate::backup::container::sha256_hex(b"hello"),
+            }],
+        }
+    }
+
+    #[test]
+    fn truncated_and_unauthenticated_attachment_caches_are_downloaded_again() {
+        let root = fake_backups("attachment-cache");
+        let dek = vec![7; 32];
+        let wrap = crate::backup::container::Wrap::seal(&dek, "backup-password").unwrap();
+        let remote = root.join("remote.enc");
+        crate::backup::container::pack(b"hello", &remote, &dek, &wrap).unwrap();
+        let bytes = std::fs::read(&remote).unwrap();
+        let (cfg, server) = remote_bytes(bytes.clone(), 2);
+        let download_root = root.join(".downloads/test-target");
+        std::fs::create_dir_all(download_root.join("attachments")).unwrap();
+        let cache = download_root.join("attachments/file.txt.enc");
+        let spool_attachment = root.join("attachments/file.txt.enc");
+        std::fs::write(&spool_attachment, b"local-spool-must-stay").unwrap();
+        std::fs::write(&cache, &bytes[..bytes.len() - 1]).unwrap();
+        let manifest = cache_manifest();
+        fetch_attachments(&cfg, &download_root, &manifest, &dek, &|_, _| {}).unwrap();
+        assert_eq!(crate::backup::container::unpack(&cache, &dek).unwrap(), b"hello");
+        let mut corrupt = bytes; *corrupt.last_mut().unwrap() ^= 1;
+        std::fs::write(&cache, corrupt).unwrap();
+        assert!(crate::backup::container::validate_complete_file(&cache).is_ok(), "长度完整但GCM损坏");
+        fetch_attachments(&cfg, &download_root, &manifest, &dek, &|_, _| {}).unwrap();
+        server.join().unwrap();
+        // 已验证缓存不再发网络，监听已关闭仍可成功。
+        fetch_attachments(&cfg, &download_root, &manifest, &dek, &|_, _| {}).unwrap();
+        assert_eq!(crate::backup::container::unpack(&cache, &dek).unwrap(), b"hello");
+        assert!(std::fs::read_dir(download_root.join("attachments")).unwrap().all(|entry|
+            !entry.unwrap().file_name().to_string_lossy().contains("download-")));
+        assert_eq!(std::fs::read(spool_attachment).unwrap(), b"local-spool-must-stay");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn remote_restore_downloads_again_and_keeps_local_spool_and_other_targets_untouched() {
+        let root = fake_backups("package-cache");
+        let dek = vec![9; 32];
+        let password = "backup-password";
+        let wrap = crate::backup::container::Wrap::seal(&dek, password).unwrap();
+        let db = root.join("input.db"); std::fs::write(&db, b"database").unwrap();
+        let zip = crate::backup::container::build_zip(&db, &cache_manifest(), None, &|_, _| {}).unwrap();
+        let remote = root.join("remote.enc");
+        crate::backup::container::pack(&zip, &remote, &dek, &wrap).unwrap();
+        let bytes = std::fs::read(remote).unwrap();
+        let name = "desko-20260921-120000.dsbk";
+        // 有效同名本地包仍不能替代本次远端对象；它也不能被恢复下载覆盖。
+        std::fs::write(root.join(name), &bytes).unwrap();
+        let spool_before = std::fs::read(root.join(name)).unwrap();
+        let spool_att_before = std::fs::read(root.join("attachments/a__x.png.enc")).unwrap();
+        let (endpoint, server) = remote_bytes(bytes.clone(), 3);
+        let client = client_for(&endpoint); // 仅测试传输用 loopback HTTP，身份仍按生产 HTTPS 计算。
+        let cfg = CloudCreds { server: "https://dav.example.com/dav".into(), ..endpoint.clone() };
+        let cache = download_root(&cfg, &root).unwrap().join(name);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        let mut corrupt = bytes.clone(); *corrupt.last_mut().unwrap() ^= 1;
+        std::fs::write(&cache, corrupt).unwrap();
+        let first = download_package_with_client(&cfg, &root, name, password, &client).unwrap();
+        assert_ne!(first.package, cache, "旧版缓存不得代替新的远端下载");
+        assert_eq!(std::fs::read(&first.package).unwrap(), bytes);
+        // 已验证 cache 仍发 GET；同一目标同名对象可在其他机器上发生替换。
+        let repeated = download_package_with_client(&cfg, &root, name, password, &client).unwrap();
+        assert_ne!(first.package, repeated.package, "每轮恢复独立持有缓存");
+        let other = CloudCreds { account: "another-account".into(), ..cfg.clone() };
+        let other_download = download_package_with_client(&other, &root, name, password, &client).unwrap();
+        assert_ne!(first.package.parent().unwrap().parent(), other_download.package.parent().unwrap().parent());
+        server.join().unwrap();
+        assert_eq!(std::fs::read(&first.package).unwrap(), bytes);
+        assert_eq!(std::fs::read(&other_download.package).unwrap(), bytes);
+        let first_cache = first.package.parent().unwrap().to_path_buf();
+        drop(first);
+        assert!(!first_cache.exists());
+        assert!(other_download.package.exists() && repeated.package.exists());
+        drop(other_download);
+        drop(repeated);
+        assert_eq!(std::fs::read(root.join(name)).unwrap(), spool_before);
+        assert_eq!(std::fs::read(root.join("attachments/a__x.png.enc")).unwrap(), spool_att_before);
+        assert_eq!(crate::backup::list_packages(&root).len(), 1, "下载缓存不能进入上传清单");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejected_remote_package_removes_its_download_job_cache() {
+        let root = fake_backups("rejected-download-cleanup");
+        let (endpoint, server) = remote_bytes(b"incomplete-backup".to_vec(), 1);
+        let client = client_for(&endpoint);
+        let cfg = CloudCreds { server: "https://dav.example.com/dav".into(), ..endpoint };
+        assert!(download_package_with_client(
+            &cfg, &root, "desko-20261014-120000.dsbk", "backup-password", &client,
+        ).is_err());
+        server.join().unwrap();
+        assert!(!root.join(".downloads").exists());
+        assert_eq!(std::fs::read(root.join("attachments/a__x.png.enc")).unwrap(), b"enc");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
 }

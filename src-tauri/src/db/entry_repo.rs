@@ -124,6 +124,7 @@ impl Database {
         salt_b64: &str,
         verify_hash: &str,
         extra_meta: &[(&str, &str)],
+        legacy_note_updates: &[(String, String)],
     ) -> Result<(), AppError> {
         let tx = self.conn.unchecked_transaction()?;
         for (id, encrypted_password) in updates {
@@ -134,6 +135,9 @@ impl Database {
         }
         for (id, secret_enc) in mfa_updates {
             tx.execute("UPDATE mfa_tokens SET secret_enc=?2 WHERE id=?1", params![id, secret_enc])?;
+        }
+        for (id, wrap) in legacy_note_updates {
+            tx.execute("UPDATE notes SET wrap_master=?2 WHERE id=?1 AND enc=1", params![id, wrap])?;
         }
         tx.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('salt', ?1)", params![salt_b64])?;
         tx.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('verify_hash', ?1)", params![verify_hash])?;

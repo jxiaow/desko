@@ -9,6 +9,115 @@ import type { CodexAccount } from '../api/codex'
 
 const mockInvoke = vi.mocked(invoke)
 
+describe('Codex 锁屏与异步请求', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('锁屏清掉账号、会话、token 统计、留底与用量，重新进入需要重新读取', async () => {
+    const s = await loadState()
+    s.accounts.value = [account()]
+    s.sessions.value = [sessionRec('a')]
+    s.sessionTokens.value = { a: { sessionId: 'a', totalTokens: 1 } as any }
+    s.sessionsLoaded.value = true
+    s.trashLoaded.value = true
+    s.recycledLoaded.value = true
+    s.sessionQuery.value = '内容'
+    s.sessionSearchMode.value = 'content'
+    s.usageReport.value = usageReportFixture()
+    s.clearCodexSession()
+    expect(s.accounts.value).toEqual([])
+    expect(s.sessions.value).toEqual([])
+    expect(s.sessionTokens.value).toEqual({})
+    expect(s.usageReport.value).toBeNull()
+    expect(s.sessionsLoaded.value || s.trashLoaded.value || s.recycledLoaded.value).toBe(false)
+    expect(s.sessionQuery.value).toBe('')
+    expect(s.sessionSearchMode.value).toBe('title')
+  })
+
+  for (const method of ['loadSessions', 'loadTrash', 'loadRecycled', 'loadUsage'] as const) {
+    it(`${method} 在锁屏后返回，不得重新填回旧会话数据`, async () => {
+      const s = await loadState()
+      let finish!: (result: any) => void
+      mockInvoke.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+      const request = s[method]()
+      s.clearCodexSession()
+      finish(method === 'loadUsage' ? usageReportFixture() : [sessionRec('old')])
+      await request
+      expect(s.sessions.value).toEqual([])
+      expect(s.trashSessions.value).toEqual([])
+      expect(s.recycledAccounts.value).toEqual([])
+      expect(s.usageReport.value).toBeNull()
+    })
+  }
+
+  it('只给真实切号显示取消状态，其他账号操作不能发切号取消命令', async () => {
+    const s = await loadState()
+    let finish!: () => void
+    const request = s.runOn('a', () => new Promise<void>(resolve => { finish = resolve }), '')
+    expect(s.busyId.value).toBe('a')
+    expect(s.switchingId.value).toBe('')
+    await s.cancelSwitch('a')
+    expect(mockInvoke).not.toHaveBeenCalledWith('codex_cancel_account_switch', expect.anything())
+    mockInvoke.mockImplementation(async cmd => cmd === 'list_codex_accounts' ? [] : null)
+    finish()
+    await request
+  })
+
+  it('正文搜索传 contentQuery，标题搜索保持原来的 titleQuery 契约', async () => {
+    const s = await loadState()
+    mockInvoke.mockResolvedValue([])
+    s.sessionQuery.value = '  修复记录  '
+    s.sessionSearchMode.value = 'content'
+    await s.loadSessions()
+    expect(mockInvoke).toHaveBeenCalledWith('codex_list_sessions_across_instances', { titleQuery: null, contentQuery: '修复记录' })
+  })
+
+  it('配额刷新在锁屏后完成，不弹提示、不重读账号', async () => {
+    const s = await loadState()
+    let finish!: (value: number) => void
+    mockInvoke.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const request = s.refreshQuotas(['a'])
+    s.clearCodexSession()
+    finish(1)
+    await request
+    expect(useToastStore().toast.show).toBe(false)
+    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === 'list_codex_accounts')).toBe(false)
+  })
+
+  it('锁屏之后返回的路径不能重新写回缓存', async () => {
+    const s = await loadState()
+    let finish!: (value: unknown) => void
+    mockInvoke.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const request = s.loadStoragePaths()
+    s.clearCodexSession()
+    finish({ authPath: 'old-profile/auth.json' })
+    await request
+    expect(s.storagePaths.value).toBeNull()
+  })
+
+  it('切号第二次 provider 读取期间锁屏，不能继续刷新列表或显示修复提示', async () => {
+    const s = await loadState()
+    let finish!: (value: string) => void
+    let reads = 0
+    mockInvoke.mockImplementation(async cmd => {
+      if (cmd === 'get_codex_history_visibility_provider') {
+        if (++reads === 1) return 'openai'
+        return new Promise(resolve => { finish = resolve })
+      }
+      return account()
+    })
+    const request = s.switchTo('a')
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    s.clearCodexSession()
+    finish('openai_api_key')
+    await request
+    expect(useToastStore().toast.show).toBe(false)
+    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === 'list_codex_accounts' || cmd === 'codex_repair_session_visibility_for_launch_target')).toBe(false)
+  })
+})
+
 /** codexState 是模块级单例（列表、阈值、定时器都挂在模块上），每条用例重新加载 */
 async function loadState() {
   vi.resetModules()
@@ -94,6 +203,26 @@ describe('codexState 配额自动刷新', () => {
     s.currentId.value = ''
     s.checkQuotaAlert()
     expect(toast.toast.message).toMatch(/剩余 18%/)
+  })
+
+  it('预警忽略不存在的窗口，Credits 耗尽时仍提示', async () => {
+    const s = await loadState()
+    const toast = useToastStore()
+    s.currentId.value = 'a1'
+    const show = vi.spyOn(toast, 'showToast')
+    s.accounts.value = [account({ quota: {
+      hourly_percentage: 0, weekly_percentage: 80, hourly_reset_time: null, weekly_reset_time: null,
+      hourly_window_present: false, weekly_window_present: true,
+    } })]
+    s.checkQuotaAlert()
+    expect(show).not.toHaveBeenCalled()
+    s.accounts.value[0]!.quota = {
+      hourly_percentage: 100, weekly_percentage: 100, hourly_reset_time: null, weekly_reset_time: null,
+      hourly_window_present: false, weekly_window_present: false,
+      raw_data: { spend_control: { individual_limit: { limit: 100, remaining: 0 } } },
+    }
+    s.checkQuotaAlert()
+    expect(show).toHaveBeenCalledWith(expect.stringContaining('剩余 0%'), 'error')
   })
 
   it('进页那一轮静默补一次配额，60 s 内再进不重复打网络', async () => {
@@ -204,7 +333,7 @@ describe('codexState 会话档', () => {
     expect(s.sessionsError.value).toBe('官方会话目录不可读')
     expect(s.sessionsLoaded.value).toBe(false)
 
-    mockInvoke.mockResolvedValueOnce([sessionRec('a')])
+    mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [sessionRec('a')] : [])
     await s.loadSessions()
     expect(s.sessionsError.value).toBe('')
     expect(s.sessionsLoaded.value).toBe(true)
@@ -482,6 +611,7 @@ const usageReportFixture = (totalTokens = 1000) => ({
       requestCount: 3,
     },
   ],
+  byHour: [],
   byModel: [],
   fromTimestamp: null,
   toTimestamp: null,
@@ -500,26 +630,30 @@ describe('codexState 用量档', () => {
     return Math.floor(d.getTime() / 1000)
   }
 
-  it('切窗口只换起点：默认 30 天、周档 7 天、同档重复点不发网络、全部不带窗口', async () => {
+  it('默认当天零点，近 7/30 天包含今天且同档重复点不重扫，全部不带起点', async () => {
     const s = await loadState()
     mockInvoke.mockResolvedValue(usageReportFixture())
 
     await s.loadUsage()
     const [, firstArgs] = callsOf(USAGE_CMD)[0] as any
-    expect(firstArgs.fromTimestamp).toBe(localMidnightSec() - 30 * 86_400)
-    expect(firstArgs.toTimestamp).toBe(null)
+    expect(s.usageRange.value).toBe('today')
+    expect(firstArgs.fromTimestamp).toBe(localMidnightSec())
+    expect(Math.abs(firstArgs.toTimestamp - Math.floor(Date.now() / 1000))).toBeLessThanOrEqual(1)
+
+    await s.setUsageRange('month')
+    expect((callsOf(USAGE_CMD)[1][1] as any).fromTimestamp).toBe(localMidnightSec() - 29 * 86_400)
 
     await s.setUsageRange('week')
-    expect(callsOf(USAGE_CMD)).toHaveLength(2)
-    const [, weekArgs] = callsOf(USAGE_CMD)[1] as any
-    expect(weekArgs.fromTimestamp).toBe(localMidnightSec() - 7 * 86_400)
+    expect(callsOf(USAGE_CMD)).toHaveLength(3)
+    const [, weekArgs] = callsOf(USAGE_CMD)[2] as any
+    expect(weekArgs.fromTimestamp).toBe(localMidnightSec() - 6 * 86_400)
 
     // 再点同一档：账没变，不该重扫那几百 MB
     await s.setUsageRange('week')
-    expect(callsOf(USAGE_CMD)).toHaveLength(2)
+    expect(callsOf(USAGE_CMD)).toHaveLength(3)
 
     await s.setUsageRange('all')
-    const [, allArgs] = callsOf(USAGE_CMD)[2] as any
+    const [, allArgs] = callsOf(USAGE_CMD)[3] as any
     expect(allArgs.fromTimestamp).toBe(null)
   })
 
@@ -530,7 +664,7 @@ describe('codexState 用量档', () => {
     expect(s.usageReport.value?.totals.totalTokens).toBe(1000)
 
     mockInvoke.mockRejectedValueOnce('用量统计失败')
-    await s.setUsageRange('all')
+    await s.loadUsage()
     expect(s.usageError.value).toBe('用量统计失败')
     expect(s.usageReport.value?.totals.totalTokens).toBe(1000)
 
@@ -548,6 +682,69 @@ describe('codexState 用量档', () => {
     expect(callsOf(USAGE_CMD).filter(([c]) => c === USAGE_CMD)).toHaveLength(4)
     release(usageReportFixture())
     await first
+  })
+
+  for (const failed of [false, true]) {
+    it(`扫描在途改范围只发布最后选中的账，旧请求${failed ? '失败' : '成功'}也不覆盖新范围`, async () => {
+      const s = await loadState()
+      let finish!: (value: unknown) => void
+      let fail!: (reason: unknown) => void
+      mockInvoke.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject }))
+      mockInvoke.mockResolvedValue(usageReportFixture(50))
+      const pending = s.loadUsage()
+      await s.setUsageRange('week')
+      await s.setUsageRange('month')
+      expect(s.usageReport.value).toBeNull()
+      expect(callsOf(USAGE_CMD)).toHaveLength(1)
+      if (failed) fail('过时请求的错误')
+      else finish(usageReportFixture(1000))
+      await pending
+      expect(callsOf(USAGE_CMD)).toHaveLength(2)
+      expect((callsOf(USAGE_CMD)[1][1] as any).fromTimestamp).toBe(localMidnightSec() - 29 * 86_400)
+      expect(s.usageReport.value?.totals.totalTokens).toBe(50)
+      expect(s.usageError.value).toBe('')
+      expect(s.usageBusy.value).toBe(false)
+    })
+  }
+
+  it('扫描跨过本地午夜时丢弃昨天的起点，补查当天再发布', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(2026, 9, 13, 23, 59, 59))
+      const s = await loadState()
+      let finish!: (value: unknown) => void
+      mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      mockInvoke.mockResolvedValue(usageReportFixture(50))
+      const pending = s.loadUsage()
+      vi.setSystemTime(new Date(2026, 9, 14, 0, 0, 2))
+      finish(usageReportFixture(1000))
+      await pending
+      expect(callsOf(USAGE_CMD)).toHaveLength(2)
+      expect((callsOf(USAGE_CMD)[1][1] as any).fromTimestamp).toBe(localMidnightSec())
+      expect(s.usageReport.value?.totals.totalTokens).toBe(50)
+      expect(s.usageUpdatedAt.value).toBe(Date.now())
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('统计截止与显示时间固定在请求开始，扫描期间的新时间不冒充数据截止', async () => {
+    vi.useFakeTimers()
+    try {
+      const queryAt = new Date(2026, 9, 13, 12, 30, 0, 250).getTime()
+      vi.setSystemTime(queryAt)
+      const s = await loadState()
+      let finish!: (value: unknown) => void
+      mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      const pending = s.loadUsage()
+      expect((callsOf(USAGE_CMD)[0][1] as any).toTimestamp).toBe(Math.floor(queryAt / 1000) + 1)
+      vi.setSystemTime(new Date(2026, 9, 13, 12, 45))
+      finish(usageReportFixture())
+      await pending
+      expect(s.usageUpdatedAt.value).toBe(queryAt)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('动过官方目录的两条路把图作废，只动留底的两条路不碰图', async () => {
@@ -676,6 +873,73 @@ describe('codexState 批量删除作业', () => {
     const gets = callsOf(DELETE_GET_CMD).length
     await vi.advanceTimersByTimeAsync(3000)
     expect(callsOf(DELETE_GET_CMD)).toHaveLength(gets)
+  })
+
+  it('slow poll is single-flight and cannot overwrite a job while the app is locked', async () => {
+    vi.useFakeTimers()
+    const s = await loadState()
+    let finishPoll!: (value: unknown) => void
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === DELETE_START_CMD) return jobDto()
+      if (cmd === DELETE_GET_CMD) return new Promise(resolve => { finishPoll = resolve })
+      return []
+    })
+    await s.startBatchDelete(['a1'])
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(callsOf(DELETE_GET_CMD)).toHaveLength(1)
+    s.clearCodexSession()
+    finishPoll(jobDto({ completed: 1, status: 'completed' }))
+    await Promise.resolve()
+    expect(s.batchDeleteJob.value?.status).toBe('running')
+    expect(s.batchDeleteJob.value?.completed).toBe(0)
+    expect(s.batchDeleteDialogOpen.value).toBe(false)
+  })
+
+  it('rejects a second delete job without stopping the active job poller', async () => {
+    vi.useFakeTimers()
+    deleteAnswers([jobDto({ completed: 1 })])
+    const s = await loadState()
+    await s.startBatchDelete(['a1'])
+    await s.startBatchDelete(['a2'])
+    expect(callsOf(DELETE_START_CMD)).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(callsOf(DELETE_GET_CMD)).toHaveLength(1)
+    expect(s.batchDeleteJob.value?.completed).toBe(1)
+  })
+
+  it('poll started before pause cannot overwrite paused status', async () => {
+    vi.useFakeTimers()
+    const s = await loadState()
+    let finishPoll!: (value: unknown) => void
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === DELETE_START_CMD) return jobDto()
+      if (cmd === DELETE_GET_CMD) return new Promise(resolve => { finishPoll = resolve })
+      if (cmd === DELETE_PAUSE_CMD) return jobDto({ status: 'paused' })
+      return []
+    })
+    await s.startBatchDelete(['a1'])
+    await vi.advanceTimersByTimeAsync(500)
+    await s.pauseBatchDelete()
+    finishPoll(jobDto({ status: 'running' }))
+    await Promise.resolve()
+    expect(s.batchDeleteJob.value?.status).toBe('paused')
+  })
+
+  it('poll resolving after abandon cannot recreate the discarded job', async () => {
+    vi.useFakeTimers()
+    const s = await loadState()
+    let finishPoll!: (value: unknown) => void
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === DELETE_START_CMD) return jobDto()
+      if (cmd === DELETE_GET_CMD) return new Promise(resolve => { finishPoll = resolve })
+      return []
+    })
+    await s.startBatchDelete(['a1'])
+    await vi.advanceTimersByTimeAsync(500)
+    await s.abandonBatchDelete()
+    finishPoll(jobDto({ completed: 1 }))
+    await Promise.resolve()
+    expect(s.batchDeleteJob.value).toBeNull()
   })
 
   it('收窗不停作业，终态收窗才 clear：jobId 一清，dock 入口随之消失', async () => {

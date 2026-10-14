@@ -30,24 +30,28 @@ fn app_data_dir(_app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
 #[tauri::command]
 pub fn backup_status(app: AppHandle, state: State<AppState>) -> Result<backup_service::BackupStatus, AppError> {
     let busy = state.backup_busy.load(std::sync::atomic::Ordering::SeqCst);
+    let master = state.master_key.lock().map_err(|_| AppError::Database("lock error".into()))?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    backup_service::status(&db, &app_data_dir(&app)?, busy)
+    backup_service::status(&db, &app_data_dir(&app)?, busy, master.as_deref())
 }
 
 #[tauri::command]
 pub async fn backup_set_password(app: AppHandle, state: State<'_, AppState>, password: String) -> Result<Vec<String>, AppError> {
-    let master = services::get_master_key(&state)?;
-    let (dek, wrap, changed) = {
-        let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-        backup_service::set_backup_password(&db, &master, &password)?
+    let _guard = auto_backup::BusyGuard::try_acquire(&state)
+        .ok_or_else(|| AppError::Backup("已有备份或恢复任务在进行中，请稍后修改密码".into()))?;
+    let (wrap, changed) = {
+        let master_guard = state.master_key.lock().map_err(|_| AppError::Database("lock error".into()))?;
+        let master = master_guard.as_ref().ok_or(AppError::NotUnlocked)?;
+        let result = {
+            let db = state.db.lock().map_err(|_| AppError::Database("lock error".into()))?;
+            backup_service::set_backup_password(&db, master, &password)?
+        };
+        // Keep the master-key lifecycle guard through installing the cache.
+        // A concurrent lock/password change cannot leave an old-key seal behind.
+        let (dek, wrap, changed) = result;
+        *state.backup_key.lock().map_err(|_| AppError::Database("lock error".into()))? = Some(dek);
+        (wrap, changed)
     };
-    {
-        let mut cached = state
-            .backup_key
-            .lock()
-            .map_err(|_| AppError::Database("lock error".to_string()))?;
-        *cached = Some(dek);
-    }
     if !changed {
         return Ok(vec![]);
     }
@@ -151,9 +155,24 @@ pub(crate) async fn restore_package(
 ) -> Result<(), AppError> {
     let _guard = auto_backup::BusyGuard::try_acquire(&state)
         .ok_or_else(|| AppError::Backup("已有备份或恢复任务在进行中".into()))?;
-    let db_path = {
+    restore_package_while_busy(app, state.clone(), pkg, dek, wrap, &_guard, None).await
+}
+
+pub(crate) async fn restore_package_while_busy(
+    app: AppHandle, state: State<'_, AppState>, pkg: std::path::PathBuf,
+    dek: Vec<u8>, wrap: backup::container::Wrap, _guard: &auto_backup::BusyGuard<'_>,
+    attachment_cache: Option<services::cloud_service::RestoreDownload>,
+) -> Result<(), AppError> {
+    let (db_path, safety_keys) = {
+        let master = state.master_key.lock().map_err(|_| AppError::Database("lock error".into()))?;
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-        db.get_db_path()
+        let safety_keys = if let Some(master) = master.as_ref() {
+            match backup_service::unwrap_backup_key(&db, master)? {
+                Some(key) => Some((key, backup_service::current_wrap(&db)?)),
+                None => None,
+            }
+        } else { None };
+        (db.get_db_path(), safety_keys)
     };
     let data_dir = app_data_dir(&app)?;
     let attachments = attachment_service::attachments_dir();
@@ -165,28 +184,36 @@ pub(crate) async fn restore_package(
     let handle = app.clone();
     let staging = backup::staging_dir(&data_dir);
     let backups = backup::backups_dir(&data_dir);
-    let (staging_out, attachments_out, db_path_out, dek_out, wrap_out, pkg_out, backups_out) = {
-        (staging.clone(), attachments.clone(), db_path, dek.clone(), wrap.clone(), pkg, backups.clone())
+    let attachment_cache_path = attachment_cache.as_ref()
+        .map(|download| download.cache_root().to_path_buf()).unwrap_or_else(|| backups.clone());
+    let (safety_dek, safety_wrap) = safety_keys.unwrap_or_else(|| (dek.clone(), wrap.clone()));
+    let (staging_out, attachments_out, db_path_out, dek_out, pkg_out, backups_out) = {
+        (staging.clone(), attachments.clone(), db_path, dek.clone(), pkg, backups.clone())
     };
-    tauri::async_runtime::spawn_blocking(move || {
-        let _manifest = backup::unpack_to_staging(
+    let accounts = tauri::async_runtime::spawn_blocking(move || {
+        let _cache_owner = attachment_cache;
+        let (_manifest, accounts) = backup::unpack_to_staging_with_accounts(
             &pkg_out,
             &dek_out,
             &staging_out,
-            &backups_out,
+            &attachment_cache_path,
             &|text, pct| emit_progress(&handle, "restore", text, pct),
         )?;
         emit_progress(&handle, "restore", "先备份当前数据", 70);
-        backup::create_package(
+        std::fs::create_dir_all(&backups_out)?;
+        let safety_path = backups_out.join(backup::unique_package_name(&backups_out, chrono::Utc::now().timestamp_millis())?);
+        // Safety copies are self-contained: importing another DEK must never
+        // pair today's database with sidecar attachments encrypted by an old key.
+        backup::export_package(
             &db_path_out,
             &attachments_out,
-            &backups_out,
-            &dek_out,
-            &wrap_out,
+            &safety_path,
+            &safety_dek,
+            &safety_wrap,
             env!("CARGO_PKG_VERSION"),
             &|_, _| {},
         )?;
-        Ok::<(), AppError>(())
+        Ok::<_, AppError>(accounts)
     })
     .await
     .map_err(|e| AppError::Backup(format!("恢复任务失败: {}", e)))??;
@@ -194,18 +221,18 @@ pub(crate) async fn restore_package(
     // 阶段二（持锁）：关连接 → 换文件 → 重开
     emit_progress(&app, "restore", "替换数据库", 92);
     {
+        let mut master = state.master_key.lock().map_err(|_| AppError::Database("lock error".into()))?;
         let mut db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-        db.swap_into_restored(&data_dir, &attachments, &staging)?;
+        db.swap_into_restored_with_accounts(&data_dir, &attachments, &staging, accounts.as_deref())?;
+        *master = None;
+        state.lock_epoch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        *state.backup_key.lock().map_err(|_| AppError::Database("lock error".into()))? = None;
+        crate::commands::note_lock::close_domain(&state);
+        state.note_drafts.lock().map_err(|_| AppError::Database("lock error".into()))?.clear();
     }
     // 库是备份当时的库：主密码若在那之后改过，内存里的主密钥就和库里封存的东西不再配对，
     // 备份密码校验位同理。清掉两把密钥强制重新解锁，别让半对半错的密钥留在内存里继续写数据。
-    if let Ok(mut k) = state.backup_key.lock() {
-        *k = None;
-    }
-    if let Ok(mut k) = state.master_key.lock() {
-        *k = None;
-    }
-    let _ = app.emit("tray-lock", ());
+    let _ = app.emit("tray-lock", serde_json::json!({"forced": true, "resetDrafts": true}));
     emit_progress(&app, "restore", "完成", 100);
     Ok(())
 }
@@ -237,17 +264,11 @@ pub async fn backup_export(
         .ok_or_else(|| AppError::Backup("已有备份任务在进行中".to_string()))?;
     let job = auto_backup::Job::prepare(&app, &state)?
         .ok_or_else(|| AppError::Backup("尚未设置备份密码".to_string()))?;
-    // 只装这份库真认领、且确实还在附件目录里的文件，不连无引用历史文件一起带走
-    let names = {
-        let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-        attachment_service::export_names(&db, &job.attachments)?
-    };
     let dest = std::path::PathBuf::from(&path);
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || backup::export_package(
         &job.db_path,
         &job.attachments,
-        &names,
         &dest,
         &job.dek,
         &job.wrap,

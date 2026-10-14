@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, openSettings, visiblePane } from '../helpers'
+import { bootUnlocked, e2e, E2E_PASSWORD, expectToast, openSettings, visiblePane } from '../helpers'
+import { AuthPage } from '../pages/auth-page'
 
 const ROOT = { settings: { tunnel_enabled: 'true' } }
 
@@ -29,7 +30,7 @@ async function addService(page: Page, host: string, port: string, label = '') {
   await page.locator('.tn-card.services .head-btn').click()
   const dlg = page.locator('.tunnel-service-dialog')
   if (label) await dlg.locator('#tn-svc-name').fill(label)
-  await dlg.locator('#tn-svc-host').fill(host)
+  await dlg.locator('#tn-svc-host').fill(host.replace(/\.example\.com$/i, ''))
   await dlg.locator('#tn-svc-port').fill(port)
   await dlg.locator('.dialog-footer .btn-primary').click()
 }
@@ -127,12 +128,41 @@ test.describe('内网穿透', () => {
   })
 
   test.describe('服务列表', () => {
+    for (const viewport of [{ width: 1040, height: 670 }, { width: 800, height: 600 }]) {
+      test(`切换服务类型保持弹窗与字段位置（${viewport.width}×${viewport.height}）`, async ({ page }) => {
+        await page.setViewportSize(viewport)
+        await gotoTunnel(page, { ...ROOT, tunnel: READY })
+        await page.locator('.tn-card.services .head-btn').click()
+        const dlg = page.locator('.tunnel-service-dialog')
+        const empty = await dlg.boundingBox()
+        await dlg.locator('.seg button', { hasText: '局域网传输' }).click()
+        expect(await dlg.boundingBox()).toEqual(empty)
+        await dlg.locator('.seg button').last().click()
+        expect(await dlg.boundingBox()).toEqual(empty)
+        await dlg.locator('#tn-svc-name').fill('文档服务')
+        await dlg.locator('#tn-svc-host').fill('docs')
+        await dlg.locator('#tn-svc-port').fill('9090')
+        const selectors = ['.tunnel-service-dialog', '.dialog-header', '#tn-svc-name', '#tn-svc-host', '#tn-svc-port', '.dialog-footer']
+        const before = await Promise.all(selectors.map(selector => page.locator(selector).boundingBox()))
+        await dlg.locator('.seg button', { hasText: '局域网传输' }).click()
+        const fileshare = await Promise.all(selectors.map(selector => page.locator(selector).boundingBox()))
+        expect(fileshare).toEqual(before)
+        await dlg.locator('.seg button').last().click()
+        const thirdParty = await Promise.all(selectors.map(selector => page.locator(selector).boundingBox()))
+        expect(thirdParty).toEqual(before)
+        await expect(dlg.locator('#tn-svc-name')).toHaveValue('文档服务')
+        await expect(dlg.locator('#tn-svc-host')).toHaveValue('docs')
+        await expect(dlg.locator('#tn-svc-port')).toHaveValue('9090')
+        await dlg.screenshot({ path: `.tmp/tunnel-dialog-${viewport.width}-${viewport.height}.png` })
+      })
+    }
+
     test('空态只有一行添加：登记一条就上一行', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: READY })
       await expect(page.locator('.tn-card.services .tn-add')).toBeVisible()
 
       await addService(page, 'Desk.Example.com', '9090', '文档站')
-      await expectToast(page, '已记下')
+      await expectToast(page, '服务已保存')
       const row = svcRow(page, 'desk.example.com')
       await expect(row).toContainText('127.0.0.1:9090')
       await expect(row).toContainText('文档站')
@@ -179,14 +209,14 @@ test.describe('内网穿透', () => {
       }
       const dlg = page.locator('.tunnel-service-dialog')
       await openDialog()
-      await dlg.locator('.seg button', { hasText: '放开上传' }).click()
+      await dlg.locator('.seg button', { hasText: '允许上传' }).click()
       await dlg.locator('.dialog-footer .btn-primary').click()
       await expectToast(page, '公网侧必须有口令')
       // 被拒后弹窗留人：口令就在下一格，填了就能同窗补上
       await expect(dlg).toBeVisible()
       await dlg.locator('#tn-svc-pw').fill('tr0ubador-9')
       await dlg.locator('.dialog-footer .btn-primary').click()
-      await expectToast(page, '已记下')
+      await expectToast(page, '服务已保存')
       await expect(dlg).toHaveCount(0)
       let snap = await e2e.snapshot(page)
       expect(snap.tunnel.services[0].hasPassword).toBe(true)
@@ -196,7 +226,7 @@ test.describe('内网穿透', () => {
       // 只翻开关不填口令：开关落新值，口令保持原样
       await openDialog()
       await expect(dlg.locator('#tn-svc-pw')).toHaveValue('')
-      await expect(dlg.locator('.seg button.on')).toHaveText('放开上传')
+      await expect(dlg.locator('.seg button.on')).toHaveText('允许上传')
       await dlg.locator('.seg button', { hasText: '只读' }).click()
       await dlg.locator('.dialog-footer .btn-primary').click()
       snap = await e2e.snapshot(page)
@@ -225,7 +255,7 @@ test.describe('内网穿透', () => {
       await gotoTunnel(page, { ...ROOT, tunnel: READY })
       await page.locator('.tn-card.services .head-btn').click()
       const dlg = page.locator('.tunnel-service-dialog')
-      await dlg.locator('#tn-svc-host').fill('a.example.com')
+      await dlg.locator('#tn-svc-host').fill('a')
       const save = dlg.locator('.dialog-footer .btn-primary')
       await expect(save).toBeDisabled()
       await dlg.locator('#tn-svc-port').fill('99999')
@@ -235,13 +265,14 @@ test.describe('内网穿透', () => {
       expect(await e2e.count(page, 'tunnel_add_service')).toBe(0)
     })
 
-    test('第三方那一条写清 desko 不在请求链路上', async ({ page }) => {
+    test('服务类型说明与端口获取入口准确', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: READY })
       await page.locator('.tn-card.services .head-btn').click()
       const dlg = page.locator('.tunnel-service-dialog')
-      await expect(dlg.locator('.plain-note')).toContainText('由那台服务自己判断')
+      await expect(dlg.locator('.service-note')).toHaveText('访问权限由原服务管理。')
+      await expect(dlg.locator('.port-line .port-btn')).toBeHidden()
       await dlg.locator('.seg button', { hasText: '局域网传输' }).click()
-      await expect(dlg.locator('.plain-note')).toHaveCount(0)
+      await expect(dlg.locator('.service-note')).toHaveText('公网访问需设置口令，可在服务设置中配置。')
       await expect(dlg.locator('.port-line .port-btn')).toBeVisible()
     })
 
@@ -294,6 +325,39 @@ test.describe('内网穿透', () => {
     test('未授权：授权行没有撤销入口', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { installed: true, authorized: false } })
       await expect(row(page, 'auth').locator('.row-btn', { hasText: '撤销本机授权' })).toHaveCount(0)
+      expect(await e2e.count(page, 'tunnel_authorized_domain')).toBe(0)
+    })
+
+    test('授权后自动展示主域名，新增服务只填前缀即可得到公网地址', async ({ page }) => {
+      await gotoTunnel(page, { ...ROOT, tunnel: { installed: true, authorized: true, domain: 'demo.example.net' } })
+      await expect(row(page, 'auth')).toContainText('demo.example.net')
+      await page.locator('.tn-card.services .head-btn').click()
+      const dlg = page.locator('.tunnel-service-dialog')
+      await expect(dlg.locator('.domain-name')).toHaveText('demo.example.net')
+      await dlg.locator('#tn-svc-host').fill('files')
+      await dlg.locator('#tn-svc-port').fill('8421')
+      await expect(dlg.locator('.host-preview')).toContainText('https://files.demo.example.net')
+      await dlg.locator('.dialog-footer .btn-primary').click()
+      await expectToast(page, '服务已保存')
+      await expect(svcRow(page, 'files.demo.example.net')).toBeVisible()
+      expect((await e2e.snapshot(page)).tunnel.services[0].hostname).toBe('files.demo.example.net')
+      await page.locator('a.nav-item[href="/notes"]').click()
+      await page.locator('a.nav-item[href="/tunnel"]').click()
+      expect(await e2e.count(page, 'tunnel_authorized_domain')).toBe(1)
+    })
+
+    test('域名读取失败不撤回授权，提供重试并阻止生成不完整地址', async ({ page }) => {
+      await gotoTunnel(page, { ...ROOT, tunnel: { installed: true, authorized: true, domainFail: '无法连接 Cloudflare' } })
+      await expect(row(page, 'auth')).toContainText('本机已有授权凭据')
+      await expect(page.locator('.tn-card.setup .tn-note.chip-warn')).toContainText('主域名没读到：无法连接 Cloudflare')
+      await page.locator('.tn-card.setup .row-btn', { hasText: '重试读取主域名' }).click()
+      await expect.poll(() => e2e.count(page, 'tunnel_authorized_domain')).toBe(2)
+      await page.locator('.tn-card.services .head-btn').click()
+      const dlg = page.locator('.tunnel-service-dialog')
+      await dlg.locator('#tn-svc-host').fill('files')
+      await dlg.locator('#tn-svc-port').fill('8421')
+      await expect(dlg.locator('.dialog-footer .btn-primary')).toBeDisabled()
+      expect(await e2e.count(page, 'tunnel_add_service')).toBe(0)
     })
 
     test('已授权：撤销入口把状态回到未授权，但保留隧道记录', async ({ page }) => {
@@ -320,6 +384,31 @@ test.describe('内网穿透', () => {
       await row(page, 'auth').locator('.row-btn', { hasText: '取消' }).click()
       await expect(row(page, 'auth')).toContainText('在浏览器里登录 Cloudflare')
       expect(await e2e.count(page, 'tunnel_login_cancel')).toBe(1)
+    })
+
+    test('浏览器授权后刷新页面，主密码解锁后识别授权且其他页面仍可操作', async ({ page }) => {
+      await gotoTunnel(page, { ...ROOT, tunnel: { installed: true, authorized: false } })
+      await row(page, 'auth').locator('.row-btn').click()
+      await expect(row(page, 'auth')).toContainText('等待浏览器里登录')
+      // 模拟浏览器完成授权后，后端已有凭据；WebView 刷新不会重新发起登录。
+      await page.addInitScript(() => {
+        const config = (window as any).__E2E_CONFIG__
+        config.tunnel.authorized = true
+      })
+      await page.reload()
+      const auth = new AuthPage(page)
+      await auth.expectUnlockPage()
+      await auth.unlockInput.fill(E2E_PASSWORD)
+      await auth.unlockInput.press('Enter')
+      await auth.expectUnlocked()
+      await expect(row(page, 'auth')).toContainText('本机已有授权凭据')
+      await expect(row(page, 'auth')).toContainText('example.com')
+      expect(await e2e.count(page, 'unlock')).toBe(1)
+      expect(await e2e.count(page, 'tunnel_login_start')).toBe(0)
+      await page.locator('a.nav-item[href="/notes"]').click()
+      await expect(page).toHaveURL(/\/notes$/)
+      await page.locator('a.nav-item[href="/tunnel"]').click()
+      await expect(row(page, 'auth')).toContainText('本机已有授权凭据')
     })
 
     test('授权早退没落凭据：那句原因摊在行下，不是只把按钮退回「去授权」', async ({ page }) => {

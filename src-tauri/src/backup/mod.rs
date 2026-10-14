@@ -1,4 +1,6 @@
 pub mod container;
+#[cfg(test)]
+mod account_tests;
 
 use std::path::{Path, PathBuf};
 
@@ -38,7 +40,7 @@ pub fn package_name(ts_ms: i64) -> Result<String, AppError> {
 
 /// 时间戳只到秒。串行闸挡住了并发，但挡不住"上一秒刚打完、这一秒又点一次"：
 /// 写包是原子改名，同名会把上一个包直接覆盖掉，等于悄悄少一份备份。撞名就往后挪一秒。
-fn unique_package_name(backups: &Path, ts_ms: i64) -> Result<String, AppError> {
+pub(crate) fn unique_package_name(backups: &Path, ts_ms: i64) -> Result<String, AppError> {
     let mut ts = ts_ms;
     for _ in 0..120 {
         let name = package_name(ts)?;
@@ -54,6 +56,7 @@ fn unique_package_name(backups: &Path, ts_ms: i64) -> Result<String, AppError> {
 pub fn is_package(name: &str) -> bool {
     name.starts_with("desko-")
         && name.ends_with(".dsbk")
+        && container::safe_file_name(name)
         && !name.contains('/')
         && !name.contains('\\')
         && !name.contains("..")
@@ -143,7 +146,7 @@ pub fn reclaim_enc(backups: &Path, attachments_dir: &Path, dek: &[u8], uploaded:
 }
 
 /// 换备份密码后，把磁盘上所有包和附件密文的头部换成新包裹。
-/// 定长头部、原地改写，密文不动，所以几百个文件也只是几百次小写。
+/// 流式复制到临时文件后原子替换，只改包裹区，密文不动；内存占用不随文件大小增长。
 /// 解不开的（旧格式、损坏）跳过并计数：一颗坏文件不该让整批换头中断，
 /// 否则排在它后面的附件密文会全部留在旧包裹下，换完密码就再也解不开。
 pub fn rewrap_all(backups: &Path, wrap: &container::Wrap) -> (usize, Vec<String>) {
@@ -174,13 +177,14 @@ pub fn rewrap_all(backups: &Path, wrap: &container::Wrap) -> (usize, Vec<String>
 fn snapshot_db(db_path: &str, tmp_file: &Path) -> Result<Counts, AppError> {
     let _ = std::fs::remove_file(tmp_file);
     let src = Connection::open(db_path)?;
-    let counts = Counts {
-        notes: src.query_row("SELECT COUNT(*) FROM notes", [], |r| r.get(0))?,
-        entries: src.query_row("SELECT COUNT(*) FROM entries", [], |r| r.get(0))?,
-        attachments: src.query_row("SELECT COUNT(*) FROM note_attachments", [], |r| r.get(0))?,
-    };
     src.backup(rusqlite::DatabaseName::Main, tmp_file, None)?;
     drop(src);
+    let snapshot = Connection::open(tmp_file)?;
+    let counts = Counts {
+        notes: snapshot.query_row("SELECT COUNT(*) FROM notes", [], |r| r.get(0))?,
+        entries: snapshot.query_row("SELECT COUNT(*) FROM entries", [], |r| r.get(0))?,
+        attachments: snapshot.query_row("SELECT COUNT(*) FROM note_attachments", [], |r| r.get(0))?,
+    };
     Ok(counts)
 }
 
@@ -206,7 +210,7 @@ pub fn fingerprint(db_path: &str, attachments_dir: &Path) -> String {
                 m.modified()
                     .ok()
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs())
+                    .map(|d| d.as_nanos())
                     .unwrap_or(0)
             ),
             Err(_) => "-".to_string(),
@@ -230,6 +234,23 @@ pub fn fingerprint(db_path: &str, attachments_dir: &Path) -> String {
         items.sort();
         s.push_str("|att=");
         s.push_str(&items.join(","));
+    }
+    // Only managed account storage affects backup scheduling. Session and usage
+    // directories intentionally never participate in this fingerprint.
+    if let Some(root) = db.parent() {
+        let account_dir = root.join("codex/codex_accounts");
+        let mut accounts = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(account_dir) {
+            for entry in entries.flatten() {
+                if entry.path().extension().is_some_and(|e| e == "json") {
+                    accounts.push(format!("{}:{}", entry.file_name().to_string_lossy(), stat_of(&entry.path())));
+                }
+            }
+        }
+        accounts.sort();
+        s.push_str("|codex-accounts=");
+        s.push_str(&accounts.join(","));
+        s.push_str(&stat_of(&root.join("codex/codex_account_tombstones")));
     }
     s
 }
@@ -322,7 +343,10 @@ pub fn create_package(
         files,
     };
 
-    let zip_bytes = container::build_zip(&tmp, &manifest, None, progress)?;
+    let accounts = codex_core::modules::codex_account_backup::export_account_backup_at(
+        &Path::new(db_path).parent().ok_or_else(|| AppError::Backup("数据库路径无效".into()))?.join("codex")
+    ).map_err(AppError::Backup)?;
+    let zip_bytes = container::build_zip_with_accounts(&tmp, &manifest, None, Some(&accounts), progress)?;
     let _ = std::fs::remove_file(&tmp);
 
     progress("打包并加密（AES-256-GCM）", 82);
@@ -356,13 +380,12 @@ pub fn create_package(
 
 /// 导出一个**自足的迁移包**：库快照 + 清单里那些附件的本体，一起装进包再整体加密。
 /// 和定时备份的切分相反 —— 备份省流量所以把附件拆到旁边增量传，迁移要的是"拷一个文件
-/// 就能在别的电脑恢复"。附件只装这份库真认领的（`names` 由调用方从库里算出来），
+/// 就能在别的电脑恢复"。附件清单从同一份数据库快照计算，
 /// 不然目录里堆的无引用历史文件会被一起打包带走。
 #[allow(clippy::too_many_arguments)]
 pub fn export_package(
     db_path: &str,
     attachments_dir: &Path,
-    names: &[String],
     dest: &Path,
     dek: &[u8],
     wrap: &container::Wrap,
@@ -384,8 +407,14 @@ pub fn export_package(
     progress("导出库快照", 6);
     let counts = snapshot_db(db_path, &tmp)?;
 
+    // The live database may change while a package is prepared. Derive the
+    // attachment list from this exact immutable snapshot, never an earlier read.
+    let snapshot = crate::db::Database::new(tmp.to_str().ok_or_else(|| AppError::Backup("快照路径无效".into()))?)?;
+    let names = crate::services::attachment_service::export_names(&snapshot, attachments_dir)?;
+    drop(snapshot);
+
     let mut files: Vec<container::FileEntry> = Vec::with_capacity(names.len());
-    for name in names {
+    for name in &names {
         let bytes = std::fs::read(attachments_dir.join(name))?;
         files.push(container::FileEntry {
             name: name.clone(),
@@ -403,7 +432,10 @@ pub fn export_package(
         files,
     };
 
-    let zip_bytes = container::build_zip(&tmp, &manifest, Some(attachments_dir), progress)?;
+    let accounts = codex_core::modules::codex_account_backup::export_account_backup_at(
+        &Path::new(db_path).parent().ok_or_else(|| AppError::Backup("数据库路径无效".into()))?.join("codex")
+    ).map_err(AppError::Backup)?;
+    let zip_bytes = container::build_zip_with_accounts(&tmp, &manifest, Some(attachments_dir), Some(&accounts), progress)?;
     let _ = std::fs::remove_file(&tmp);
 
     progress("加密（AES-256-GCM）", 88);
@@ -430,22 +462,38 @@ pub fn unpack_to_staging(
     backups: &Path,
     progress: &dyn Fn(&str, u8),
 ) -> Result<Manifest, AppError> {
+    Ok(unpack_to_staging_with_accounts(pkg_path, dek, staging, backups, progress)?.0)
+}
+
+pub fn unpack_to_staging_with_accounts(
+    pkg_path: &Path, dek: &[u8], staging: &Path, backups: &Path, progress: &dyn Fn(&str, u8),
+) -> Result<(Manifest, Option<Vec<u8>>), AppError> {
     progress("解密备份包", 20);
     let zip_bytes = container::unpack(pkg_path, dek)?;
     progress("还原文件", 40);
     let manifest = container::extract_to(&zip_bytes, staging)?;
+    let accounts = container::read_account_snapshot(&zip_bytes)?;
 
     // v2：附件不在 zip 里，按清单从本地 enc 目录解密
     let staged_att = staging.join("attachments");
-    if !staged_att.exists() && !manifest.files.is_empty() {
+    if !manifest.files.is_empty() {
         let enc_dir = backups.join("attachments");
         let total = manifest.files.len();
         for (i, f) in manifest.files.iter().enumerate() {
-            let enc = enc_dir.join(format!("{}.enc", f.name));
-            if !enc.exists() {
-                return Err(AppError::Backup(format!("缺少附件密文: {}", f.name)));
+            let target = staged_att.join(&f.name);
+            if !target.exists() {
+                let enc = enc_dir.join(format!("{}.enc", f.name));
+                if !enc.exists() {
+                    return Err(AppError::Backup(format!("缺少附件密文: {}", f.name)));
+                }
+                container::decrypt_file_to(&enc, &target, &f.sha256, dek)?;
             }
-            container::decrypt_file_to(&enc, &staged_att.join(&f.name), &f.sha256, dek)?;
+            let content = std::fs::read(&target)?;
+            if content.len() as u64 != f.size as u64
+                || (!f.sha256.is_empty() && !container::sha256_hex(&content).eq_ignore_ascii_case(&f.sha256))
+            {
+                return Err(AppError::Backup(format!("附件完整性校验失败: {}", f.name)));
+            }
             progress(
                 &format!("还原附件 {}/{}", i + 1, total),
                 40 + (((i + 1) as f64 / total as f64) * 18.0) as u8,
@@ -455,7 +503,7 @@ pub fn unpack_to_staging(
 
     progress("校验数据库完整性", 60);
     check_integrity(&staging.join("data.db"))?;
-    Ok(manifest)
+    Ok((manifest, accounts))
 }
 
 pub fn check_integrity(db_file: &Path) -> Result<(), AppError> {
@@ -474,6 +522,18 @@ struct RestoreState {
     had_db: bool,
     had_attachments: bool,
     committed: bool,
+    #[serde(default)]
+    account_items: Vec<AccountRestoreItem>,
+}
+
+#[derive(serde::Deserialize, Serialize)]
+struct AccountRestoreItem { name: String, existed: bool, directory: bool }
+
+fn account_items_valid(items: &[AccountRestoreItem]) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    items.iter().all(|item| codex_core::modules::codex_account_backup::ACCOUNT_STORAGE_COMPONENTS.contains(&item.name.as_str())
+        && seen.insert(&item.name)
+        && item.directory == matches!(item.name.as_str(), "codex_accounts" | "codex_account_tombstones"))
 }
 
 const RESTORE_STATE: &str = ".restore-state.json";
@@ -501,6 +561,17 @@ fn remove_if_exists(path: &Path, directory: bool) -> Result<(), AppError> {
 }
 
 fn rollback_restore(root: &Path, attachments: &Path, state: &RestoreState) -> Result<(), AppError> {
+    if !account_items_valid(&state.account_items) { return Err(AppError::Backup("账号恢复事务记录无效".into())); }
+    for item in &state.account_items {
+        let live = root.join("codex").join(&item.name);
+        let saved = root.join("codex-account-swap").join(&item.name);
+        if saved.exists() {
+            remove_if_exists(&live, item.directory)?;
+            std::fs::rename(saved, live)?;
+        } else if !item.existed {
+            remove_if_exists(&live, item.directory)?;
+        }
+    }
     for (live, saved, existed, directory) in [
         (root.join("data.db"), root.join("data.db.swap"), state.had_db, false),
         (attachments.to_path_buf(), root.join("attachments.swap"), state.had_attachments, true),
@@ -512,26 +583,54 @@ fn rollback_restore(root: &Path, attachments: &Path, state: &RestoreState) -> Re
             remove_if_exists(&live, directory)?;
         }
     }
+    remove_if_exists(&root.join("codex-account-swap"), true)?;
     remove_if_exists(&root.join(RESTORE_STATE), false)
 }
 
 fn cleanup_restore(root: &Path) -> Result<(), AppError> {
     remove_if_exists(&root.join("data.db.swap"), false)?;
     remove_if_exists(&root.join("attachments.swap"), true)?;
+    remove_if_exists(&root.join("codex-account-swap"), true)?;
     remove_if_exists(&root.join(RESTORE_STATE), false)
 }
 
 /// 库与附件共用提交点；任何搬移/校验错误先回滚，再把原错误交给调用者。
 pub fn swap_live_files(root: &Path, attachments: &Path, staging: &Path) -> Result<(), AppError> {
+    swap_live_files_with_accounts(root, attachments, staging, None)
+}
+
+pub fn swap_live_files_with_accounts(root: &Path, attachments: &Path, staging: &Path, accounts: Option<&[u8]>) -> Result<(), AppError> {
+    if let Some(bytes) = accounts {
+        return codex_core::modules::codex_account_backup::prepare_and_publish_account_restore_with_preflight_at(
+            &root.join("codex"), &staging.join("codex-account-restore"), bytes,
+            || recover_and_check_swap(root, attachments).map_err(|e| e.to_string()),
+            |components| publish_restored_files(root, attachments, staging, components).map_err(|e| e.to_string()),
+        ).map_err(AppError::Backup);
+    }
+    codex_core::modules::codex_account_backup::with_account_restore_lock(|| {
+        recover_and_check_swap(root, attachments).map_err(|e| e.to_string())?;
+        publish_restored_files(root, attachments, staging, &[]).map_err(|e| e.to_string())
+    }).map_err(AppError::Backup)
+}
+
+fn recover_and_check_swap(root: &Path, attachments: &Path) -> Result<(), AppError> {
     recover_swap(root, attachments)?;
-    if root.join(RESTORE_STATE).exists() || root.join("data.db.swap").exists() || root.join("attachments.swap").exists() {
+    if root.join(RESTORE_STATE).exists() || root.join("data.db.swap").exists() || root.join("attachments.swap").exists() || root.join("codex-account-swap").exists() {
         return Err(AppError::Backup("上次恢复的旧文件尚未清理，请解除文件占用后重试".into()));
     }
+    Ok(())
+}
+
+fn publish_restored_files(root: &Path, attachments: &Path, staging: &Path, components: &[String]) -> Result<(), AppError> {
     let db_live = root.join("data.db");
     let mut state = RestoreState {
         had_db: db_live.exists(),
         had_attachments: attachments.exists(),
         committed: false,
+        account_items: components.iter().map(|name| AccountRestoreItem {
+            name: name.clone(), existed: root.join("codex").join(name).exists(),
+            directory: matches!(name.as_str(), "codex_accounts" | "codex_account_tombstones"),
+        }).collect(),
     };
     // 在挪走第一个文件之前写记录，断电后才能知道两份现场应一起回滚。
     write_restore_state(root, &state)?;
@@ -548,6 +647,15 @@ pub fn swap_live_files(root: &Path, attachments: &Path, staging: &Path) -> Resul
             std::fs::create_dir_all(attachments)?;
         }
         check_integrity(&db_live)?;
+        if !state.account_items.is_empty() {
+            std::fs::create_dir_all(root.join("codex"))?;
+            std::fs::create_dir_all(root.join("codex-account-swap"))?;
+            for item in &state.account_items {
+                let live = root.join("codex").join(&item.name);
+                if item.existed { std::fs::rename(&live, root.join("codex-account-swap").join(&item.name))?; }
+                std::fs::rename(staging.join("codex-account-restore").join(&item.name), live)?;
+            }
+        }
         state.committed = true;
         write_restore_state(root, &state)
     })();
@@ -569,6 +677,7 @@ pub fn recover_swap(root: &Path, attachments: &Path) -> Result<(), AppError> {
     if journal.exists() {
         let state: RestoreState = serde_json::from_slice(&std::fs::read(&journal)?)
             .map_err(|e| AppError::Backup(format!("恢复事务记录损坏: {e}")))?;
+        if !account_items_valid(&state.account_items) { return Err(AppError::Backup("账号恢复事务记录无效".into())); }
         if state.committed {
             let _ = cleanup_restore(root);
             return Ok(());
@@ -578,7 +687,7 @@ pub fn recover_swap(root: &Path, attachments: &Path) -> Result<(), AppError> {
     // 兼容旧版中途失败遗留的文件，不能因当前路径被误建为空库就删掉原库。
     if root.join("data.db.swap").exists() {
         return rollback_restore(root, attachments, &RestoreState {
-            had_db: true, had_attachments: true, committed: false,
+            had_db: true, had_attachments: true, committed: false, account_items: vec![],
         });
     }
     // 旧版可能已提交数据库、但还没清理旧附件；有现场就保留现场。
@@ -639,7 +748,7 @@ mod tests {
     #[test]
     fn interrupted_restore_recovers_database_and_attachments_as_a_pair() {
         let (root, attachments, staging) = restore_fixture();
-        write_restore_state(&root, &RestoreState { had_db: true, had_attachments: true, committed: false }).unwrap();
+        write_restore_state(&root, &RestoreState { had_db: true, had_attachments: true, committed: false, account_items: vec![] }).unwrap();
         std::fs::rename(root.join("data.db"), root.join("data.db.swap")).unwrap();
         std::fs::rename(&attachments, root.join("attachments.swap")).unwrap();
         std::fs::rename(staging.join("data.db"), root.join("data.db")).unwrap();
@@ -654,7 +763,7 @@ mod tests {
     #[test]
     fn committed_restore_cleanup_never_reinstates_old_attachments() {
         let (root, attachments, staging) = restore_fixture();
-        write_restore_state(&root, &RestoreState { had_db: true, had_attachments: true, committed: true }).unwrap();
+        write_restore_state(&root, &RestoreState { had_db: true, had_attachments: true, committed: true, account_items: vec![] }).unwrap();
         std::fs::rename(root.join("data.db"), root.join("data.db.swap")).unwrap();
         std::fs::rename(&attachments, root.join("attachments.swap")).unwrap();
         std::fs::rename(staging.join("data.db"), root.join("data.db")).unwrap();
@@ -677,15 +786,12 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let db_path = root.join("data.db");
         {
-            let conn = Connection::open(&db_path).unwrap();
-            conn.execute_batch(
-                "CREATE TABLE notes(id TEXT PRIMARY KEY, content_html TEXT);
-                 CREATE TABLE entries(id TEXT);
-                 CREATE TABLE note_attachments(id TEXT);
-                 INSERT INTO notes VALUES('n1','<p><img src=\"asset://localhost/u9__a.png\"></p>'),
-                                        ('n2','<p>纯文字</p>');",
-            )
-            .unwrap();
+            let db = crate::db::Database::new(db_path.to_str().unwrap()).unwrap();
+            for html in ["<p><img src=\"attachments/u9__a.png\"></p>", "<p>纯文字</p>"] {
+                crate::services::note_service::create_note(&db, crate::db::CreateNoteInput {
+                    title: String::new(), content_html: html.into(), category: None,
+                }).unwrap();
+            }
         }
         let att = root.join("attachments");
         std::fs::create_dir_all(&att).unwrap();
@@ -700,7 +806,6 @@ mod tests {
         let info = export_package(
             db_path.to_str().unwrap(),
             &att,
-            &["u9__a.png".to_string()],
             &dest,
             &dek,
             &wrap,
@@ -731,7 +836,6 @@ mod tests {
         assert!(export_package(
             db_path.to_str().unwrap(),
             &att,
-            &[],
             &out.join("wrong.txt"),
             &dek,
             &wrap,

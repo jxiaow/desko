@@ -11,10 +11,12 @@ import {
   retryFailedBatchDelete,
 } from '../../services/codexState'
 import { useToastStore } from '../../stores/toast'
+import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
 
 const toast = useToastStore()
+const confirmStore = useConfirmStore()
 /** 关掉是收窗不是收作业：终态才顺手把 jobId 与盘快照清掉 */
 useEscapeClose(() => void closeBatchDeleteDialog())
 
@@ -41,8 +43,17 @@ const stateLine = computed(() => {
   }
 })
 
-async function onAbandon() {
-  toast.showToast(await abandonBatchDelete())
+function onAbandon() {
+  const current = job.value
+  if (current?.status !== 'paused') return
+  confirmStore.showConfirm(
+    '放弃删除任务',
+    `确定放弃这批删除任务？剩余 ${Math.max(0, current.total - current.completed)} 条账号将不再继续删除。已删掉的账号仍在回收站中，可以恢复。`,
+    async () => {
+      if (job.value?.jobId !== current.jobId || job.value.status !== 'paused') return
+      toast.showToast(await abandonBatchDelete())
+    },
+  )
 }
 </script>
 
@@ -112,7 +123,6 @@ async function onAbandon() {
 .batch-delete-dialog {
   width: 460px;
   height: min(480px, 84vh);
-  --font-mono: Consolas, 'Cascadia Mono', monospace;
 }
 .num { font-family: var(--font-mono); font-weight: 600; color: var(--text) }
 .num.bad { color: var(--danger) }
@@ -136,7 +146,7 @@ async function onAbandon() {
 
 .bd-details { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border) }
 .bd-details-title {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: .04em;
   color: var(--text-muted);

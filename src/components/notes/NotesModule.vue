@@ -529,13 +529,14 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
   scroll-behavior: smooth;
   /* 拆面轮：微光画布已上移到 .app-root，本页不再自铺 */
 }
-/* 一行一张：正常窗口铺满，最大化时收在 --stream-max 内居中。
-   顶部不留内边距：首行是吸顶的 .page-bar，呼吸在它自己栏内出 */
+/* 一行一张：正常窗口铺满，宽窗把正文收在 --stream-max 内。
+   顶部不留内边距：首行是吸顶的 .page-bar，呼吸在它自己栏内出。
+   左右内距吃 .content-inner 同一条 gutter 契约（贴侧栏起算，余量落右侧），
+   否则换页时侧栏边上的空带会跳宽 */
 .stream-inner {
   width: 100%;
-  max-width: var(--stream-max);
-  margin-inline: auto;
-  padding: 0 var(--space-5) var(--dock-clearance);
+  padding: 0 var(--page-gutter) var(--dock-clearance);
+  padding-inline-end: max(var(--page-gutter), calc(100% - var(--page-gutter) - var(--stream-max)));
 }
 /* 书写框与吸顶栏拉开一档间距（列表页首行同款） */
 .stream-inner .composer { margin-top: var(--space-2); }
@@ -648,8 +649,8 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
   box-shadow: var(--shadow-pop);
   border-left: 1px solid var(--border);
 }
-/* .page-bar 的右沿本来停在 .stream-inner 的内距处，侧栏左沿比它再往左 var(--space-5) */
-.notes-page.rail-over .page-bar { padding-right: calc(var(--rail-w) - var(--space-5)); }
+/* .page-bar 的右沿本来停在 .stream-inner 的内距处，侧栏左沿比它再往左 var(--page-gutter) */
+.notes-page.rail-over .page-bar { padding-right: calc(var(--rail-w) - var(--page-gutter)); }
 .rail-sep { height: 1px; flex-shrink: 0; background: var(--border); margin: var(--space-3) var(--space-2); }
 .rail-empty { font-size: var(--text-sm); color: var(--text-nav-label); padding: 0 var(--space-2); }
 .rail .tab-count { font-size: var(--text-xs); margin-left: 0; }

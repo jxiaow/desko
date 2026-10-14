@@ -22,7 +22,8 @@ pub fn create_note(state: State<AppState>, input: CreateNoteInput) -> Result<Not
 
 #[tauri::command]
 pub fn update_note(state: State<AppState>, id: String, input: UpdateNoteInput) -> Result<(), AppError> {
-    let _key = services::get_master_key(&state)?;
+    let master = state.master_key.lock().map_err(|_| AppError::NotUnlocked)?;
+    let key = master.as_ref().ok_or(AppError::NotUnlocked)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     if db.get_note_lock(&id)?.is_some() {
         // 加密行：明文只进密文，正文与分类一个字节都不落；标题按新正文重新算
@@ -30,9 +31,22 @@ pub fn update_note(state: State<AppState>, id: String, input: UpdateNoteInput) -
         let enc = crate::crypto::encrypt_password(&input.content_html, &dek)?;
         let title = note_service::heading_title(&input.content_html);
         let now = chrono::Utc::now().timestamp_millis();
-        return db.update_note_cipher(&id, &enc.ciphertext, &enc.iv, &title, now);
+        db.update_note_cipher(&id, &enc.ciphertext, &enc.iv, &title, now)?;
+    } else {
+        note_service::update_note(&db, &id, input.clone())?;
     }
-    note_service::update_note(&db, &id, input)
+    state.note_drafts.lock().map_err(|_| AppError::Database("lock error".into()))?.saved(&id, &input, key)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stage_note_drafts(state: State<AppState>, drafts: Vec<services::note_draft_service::NoteDraft>) -> Result<(), AppError> {
+    services::note_draft_service::stage(&state, drafts)
+}
+
+#[tauri::command]
+pub fn recover_note_drafts(state: State<AppState>) -> Result<Vec<services::note_draft_service::NoteDraft>, AppError> {
+    services::note_draft_service::recover(&state)
 }
 
 #[tauri::command]
@@ -41,7 +55,8 @@ pub fn delete_note(state: State<AppState>, id: String) -> Result<(), AppError> {
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     let paths = db.attachment_paths_for_notes(std::slice::from_ref(&id))?;
     db.delete_note(&id)?;
-    attachment_service::delete_files(&paths);
+    attachment_service::delete_unreferenced_files(&db, &paths)?;
+    state.note_drafts.lock().map_err(|_| AppError::Database("lock error".into()))?.remove(&id);
     crate::commands::note_lock::drop_dek(&state, &id);
     Ok(())
 }
@@ -52,9 +67,10 @@ pub fn batch_delete_notes(state: State<AppState>, ids: Vec<String>) -> Result<us
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     let paths = db.attachment_paths_for_notes(&ids)?;
     let n = db.batch_delete_notes(&ids)?;
-    attachment_service::delete_files(&paths);
+    attachment_service::delete_unreferenced_files(&db, &paths)?;
     for id in &ids {
         crate::commands::note_lock::drop_dek(&state, id);
+        state.note_drafts.lock().map_err(|_| AppError::Database("lock error".into()))?.remove(id);
     }
     Ok(n)
 }

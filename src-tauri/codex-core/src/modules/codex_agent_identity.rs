@@ -39,7 +39,7 @@ pub(crate) async fn build_authentication_headers_with_base_url(
     expected_task_id: Option<&str>,
     base_url: &str,
 ) -> Result<(CodexAccount, HeaderMap, String), String> {
-    Err(String::from("该能力已在裁剪版中移除"))
+    Err(String::from("CODEX_AGENT_IDENTITY_UNSUPPORTED"))
 }
 
 

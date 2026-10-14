@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   codexApi,
   type CodexAccount,
@@ -15,7 +15,9 @@ import AppIcon from '../shared/AppIcon.vue'
 const props = defineProps<{ account: CodexAccount }>()
 const emit = defineEmits<{ close: [] }>()
 const toastStore = useToastStore()
-useEscapeClose(() => emit('close'))
+useEscapeClose(close)
+let active = true
+onUnmounted(() => { active = false })
 
 const snapshot = ref<CodexResetCreditsSnapshot | null>(null)
 const loading = ref(true)
@@ -28,16 +30,26 @@ const left = computed(
 )
 const credits = computed(() => snapshot.value?.credits ?? [])
 const nextExpiry = computed(() => snapshot.value?.next_expires_at ?? null)
+const canConsume = computed(() => !loading.value && !busy.value && !loadError.value && (snapshot.value?.available_count ?? 0) > 0)
 
-onMounted(async () => {
+function close() {
+  if (!busy.value) emit('close')
+}
+
+async function load() {
+  if (!active || busy.value) return
+  loading.value = true
+  loadError.value = ''
   try {
-    snapshot.value = await codexApi.resetCredits(props.account.id)
+    const result = await codexApi.resetCredits(props.account.id)
+    if (active) snapshot.value = result
   } catch (e) {
-    loadError.value = errText(e)
+    if (active) loadError.value = errText(e)
   } finally {
-    loading.value = false
+    if (active) loading.value = false
   }
-})
+}
+onMounted(load)
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const clockOf = (sec?: number | null) => {
@@ -64,26 +76,32 @@ const usedAt = (c: CodexResetCredit) =>
   statusOf(c).label === '已使用' && c.redeemed_at ? clockOf(c.redeemed_at) : ''
 
 async function consume() {
-  if (busy.value || loading.value) return
+  if (!active || !canConsume.value) return
   busy.value = true
   try {
     await codexApi.consumeResetCredit(props.account.id)
+    if (!active) return
     toastStore.showToast('已使用一次额度重置')
     await refreshAccounts()
+    if (!active) return
     emit('close')
   } catch (e) {
+    if (!active) return
     toastStore.showToast(errText(e), 'error')
     busy.value = false
+    // 请求报错也可能已被服务端执行，重新核对余次后才允许用户再次确认。
+    snapshot.value = null
+    await load()
   }
 }
 </script>
 
 <template>
-  <div class="dialog-overlay" @click.self="emit('close')">
+  <div class="dialog-overlay" @click.self="close">
     <div class="dialog reset-credit-dialog" role="dialog" aria-modal="true" aria-label="重置 5 小时额度">
       <div class="dialog-header">
         <h3>重置 5 小时额度</h3>
-        <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
+        <button class="dialog-close" type="button" title="关闭" :disabled="busy" @click="close">
           <AppIcon name="x" :size="16" />
         </button>
       </div>
@@ -98,8 +116,11 @@ async function consume() {
         <div class="rc-details">
           <div class="rc-details-title">重置次数明细</div>
           <div v-if="loading" class="rc-empty"><AppIcon name="refresh" :size="13" />加载中…</div>
-          <div v-else-if="loadError" class="rc-error">加载重置记录失败：{{ loadError }}</div>
-          <div v-else-if="!credits.length" class="rc-empty">暂无重置记录</div>
+          <div v-else-if="loadError" class="rc-error">
+            加载重置记录失败：{{ loadError }}
+            <button class="btn-secondary" type="button" @click="load">重试</button>
+          </div>
+          <div v-else-if="!credits.length" class="rc-empty">{{ left <= 0 ? '当前没有可用的重置次数' : '暂无重置记录' }}</div>
           <div v-else class="rc-list">
             <div
               v-for="(c, i) in credits"
@@ -121,8 +142,8 @@ async function consume() {
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="btn-secondary" type="button" :disabled="busy" @click="emit('close')">取消</button>
-        <button class="btn-danger" type="button" :disabled="loading || busy" @click="consume">重置</button>
+        <button class="btn-secondary" type="button" :disabled="busy" @click="close">取消</button>
+        <button class="btn-danger" type="button" :disabled="!canConsume" @click="consume">{{ busy ? '重置中…' : '确认重置' }}</button>
       </div>
     </div>
   </div>
@@ -131,9 +152,8 @@ async function consume() {
 <style scoped>
 .reset-credit-dialog {
   width: 420px;
-  --font-mono: Consolas, 'Cascadia Mono', monospace;
 }
-.mono { font-family: var(--font-mono); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
 
 .rc-meta { font-size: var(--text-xs); line-height: 1.7; color: var(--text-secondary) }
 .rc-meta b { font-weight: 600; color: var(--text) }
@@ -146,7 +166,7 @@ async function consume() {
 
 .rc-details { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border) }
 .rc-details-title {
-  font-size: var(--text-2xs); font-weight: 600; letter-spacing: .04em; color: var(--text-muted);
+  font-size: var(--text-xs); font-weight: 600; letter-spacing: .04em; color: var(--text-muted);
 }
 .rc-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 168px; overflow: auto; scrollbar-gutter: stable }
 .rc-row {

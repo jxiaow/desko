@@ -1,5 +1,6 @@
 [workspace]
 members = ["fileshare-core", "codex-core", "netguard-core"]
+exclude = ["vendor/tiny_http"]
 
 [package]
 name = "desko"
@@ -38,6 +39,9 @@ chrono = "0.4"
 open = "5"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 ureq = "2"
+# 与 codex-core 共用已锁定的异步网络依赖，直连探测取消时可丢弃在途请求。
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["net", "sync", "time", "macros"] }
 fileshare-core = { path = "fileshare-core" }
 codex-core = { path = "codex-core" }
 # 直连落盘：托管区解析规则与任务书/回执协议由主进程和提权 helper 共用同一份
@@ -67,3 +71,6 @@ windows = { version = "0.61", features = [
     "Win32_UI_Shell",
     "Win32_System_Registry",
 ] }
+
+[patch.crates-io]
+tiny_http = { path = "vendor/tiny_http" }

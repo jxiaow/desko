@@ -5,6 +5,8 @@ import type { Profile } from '../../services/api/profiles'
 import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
+import { useNotesStore } from '../../stores/notes'
+import { htmlHasContent } from '../../utils/format'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
 
@@ -94,10 +96,15 @@ const doSwitch = (p: Profile) => {
     async () => {
       switching.value = p.name
       try {
+        const notesStore = useNotesStore()
+        if (htmlHasContent(notesStore.noteDraftHtml)) {
+          throw new Error('请先发布或放弃未发布的小记，再切换档案')
+        }
+        await notesStore.flushNoteSave()
         await profilesApi.switchTo(p.id)
       } catch (e) {
         switching.value = ''
-        toastStore.showToast(errText(e), 'error')
+        toastStore.showToast('切换已取消：' + errText(e), 'error')
       }
       // 成功即分叉重启，这里不恢复遮罩，让它一路到进程消失
     },

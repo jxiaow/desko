@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 
-/** 四态判定：后端 bypass_service::Verdict 的 as_str() 与此一一对应 */
+/** 五态判定：后端 bypass_service::Verdict 的 as_str() 与此一一对应 */
 export type Verdict = 'directOk' | 'hostsOnly' | 'needRoute' | 'unreachable' | 'egressUnknown'
 
 export interface Egress {
@@ -118,14 +118,15 @@ export interface BypassStatus {
 
 export const bypassApi = {
   /** 只探不写：结论弹窗用 */
-  probe: (input: string): Promise<ProbeReport> => invoke('bypass_probe', { input }),
+  probe: (input: string, requestId?: string): Promise<ProbeReport> => invoke('bypass_probe', { input, requestId }),
+  cancelProbe: (requestId: string): Promise<void> => invoke('bypass_cancel_probe', { requestId }),
   /** 把探过的目标加入清单：命中后端缓存，不再跑第二遍网络 */
   save: (input: string): Promise<ProbeReport> => invoke('bypass_save', { input }),
   list: (): Promise<BypassTarget[]> => invoke('bypass_list'),
   status: (): Promise<BypassStatus> => invoke('bypass_status'),
-  recheck: (id: string): Promise<ProbeReport> => invoke('bypass_recheck', { id }),
+  recheck: (id: string, requestId?: string): Promise<ProbeReport> => invoke('bypass_recheck', { id, requestId }),
   /** 改这条的原文，按新原文重探并覆盖回原行 */
-  edit: (id: string, input: string): Promise<ProbeReport> => invoke('bypass_edit', { id, input }),
+  edit: (id: string, input: string, requestId?: string): Promise<ProbeReport> => invoke('bypass_edit', { id, input, requestId }),
   remove: (id: string): Promise<void> => invoke('bypass_delete', { id }),
   /** 落盘计划：逐条列出要往系统里写什么，只读路由表，不提权。allowCdn = 用户坚持要钉的 CDN 条目 */
   plan: (allowCdn: string[]): Promise<ApplyPlan> => invoke('bypass_plan', { allowCdn }),
@@ -141,13 +142,10 @@ export const bypassApi = {
 export const needsApply = (t: BypassTarget) =>
   (t.verdict === 'hostsOnly' || t.verdict === 'needRoute') && t.applyState !== 'applied'
 
-/** 这条会不会真的进落盘批次：CDN 轮换的域名默认不钉，除非在确认弹窗里显式坚持 */
-export const inApplyBatch = (t: BypassTarget) => needsApply(t) && !t.cdnLike
-
 export const VERDICT_LABEL: Record<Verdict, string> = {
   directOk: '直连可用',
-  hostsOnly: '仅缺 DNS 固定',
-  needRoute: '缺少路由',
+  hostsOnly: '需配置 hosts',
+  needRoute: '需配置路由',
   unreachable: '目标不可达',
   egressUnknown: '出口未确定',
 }

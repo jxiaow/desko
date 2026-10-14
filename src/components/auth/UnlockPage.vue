@@ -10,6 +10,7 @@ const { unlock } = useAuthStore()
 
 const unlockPwd = ref('')
 const unlockErr = ref('')
+const unlocking = ref(false)
 const stackEl = ref<HTMLElement | null>(null)
 const revealed = ref(false)
 
@@ -72,6 +73,8 @@ const shake = () => {
 }
 
 const doUnlock = async () => {
+  if (unlocking.value) return
+  unlocking.value = true
   unlockErr.value = ''
   try {
     await unlock(unlockPwd.value, onUnlockSuccess)
@@ -79,6 +82,8 @@ const doUnlock = async () => {
     const message = String(e?.message ?? e)
     unlockErr.value = message === '密码错误' ? '主密码错误，请重试' : message
     shake()
+  } finally {
+    unlocking.value = false
   }
 }
 
@@ -116,7 +121,7 @@ onUnmounted(() => {
         <div class="lock-tile"><BrandLogo /></div>
         <h1 class="lock-title">Desko</h1>
 
-        <form class="lock-form" @submit.prevent="doUnlock">
+        <form class="lock-form" :aria-busy="unlocking" @submit.prevent="doUnlock">
           <div class="unlock-field">
             <AppIcon class="unlock-field-icon" name="lock" :size="16" />
             <input
@@ -125,7 +130,6 @@ onUnmounted(() => {
               v-model="unlockPwd"
               placeholder="输入主密码解锁"
               @input="unlockErr = ''"
-              @keyup.enter="doUnlock"
               autofocus
             />
             <button
@@ -137,7 +141,7 @@ onUnmounted(() => {
             >
               <AppIcon :name="revealed ? 'eyeOff' : 'eye'" :size="15" />
             </button>
-            <button class="unlock-btn" type="submit" title="解锁" aria-label="解锁">
+            <button class="unlock-btn" type="submit" title="解锁" aria-label="解锁" :disabled="unlocking">
               <AppIcon name="arrowRight" :size="13" />
             </button>
           </div>

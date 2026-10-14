@@ -3,7 +3,7 @@
 //! 提权 helper 里。设计依据见 docs/design/bypass/01-bypass-module.md。
 
 use serde::{Deserialize, Serialize};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
 // 托管区的解析规则与 netguard helper 共用一份：两边对块的认知必须逐字一致
@@ -98,34 +98,28 @@ pub struct ProbeReport {
     pub pending: Vec<String>,
 }
 
-fn local_resolve(host: &str, port: u16) -> Vec<IpAddr> {
-    let netloc = format!("{host}:{port}");
-    netloc
-        .to_socket_addrs()
+async fn local_resolve(host: &str, port: u16) -> Vec<IpAddr> {
+    tokio::net::lookup_host((host, port)).await
         .map(|iter| iter.map(|a| a.ip()).collect())
         .unwrap_or_default()
 }
 
 /// 强制只走 IPv4：解析到 AAAA 黑洞时请求会先卡死在 v6 上（旧脚本同款教训）
-fn v4_agent(connect: Duration, total: Duration) -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(connect)
-        .timeout(total)
-        .resolver(move |netloc: &str| {
-            let addrs: Vec<SocketAddr> = netloc
-                .to_socket_addrs()
-                .map(|iter| iter.filter(|a| a.is_ipv4()).collect())
-                .unwrap_or_default();
-            if addrs.is_empty() {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::AddrNotAvailable,
-                    format!("没有可用的 IPv4 地址：{netloc}"),
-                ))
-            } else {
-                Ok(addrs)
+struct V4Resolver;
+
+impl reqwest::dns::Resolve for V4Resolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let host = name.as_str().to_string();
+            let addresses: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), 0)).await?
+                .filter(|address| address.is_ipv4()).collect();
+            if addresses.is_empty() {
+                return Err(std::io::Error::new(std::io::ErrorKind::AddrNotAvailable,
+                    format!("没有可用的 IPv4 地址：{host}")).into());
             }
+            Ok(Box::new(addresses.into_iter()) as reqwest::dns::Addrs)
         })
-        .build()
+    }
 }
 
 #[derive(Deserialize)]
@@ -145,13 +139,21 @@ struct DohResponse {
 
 /// DoH 取真实地址。端点域名本身也可能被接管，但请求照样经代理送到真解析器，
 /// 所以要信的是答案而不是通道；答案里落 fake-IP 的一律丢弃。
-fn doh_lookup(host: &str) -> (Vec<IpAddr>, bool, Option<String>) {
-    let agent = v4_agent(Duration::from_secs(3), Duration::from_secs(15));
+async fn doh_lookup(host: &str) -> (Vec<IpAddr>, bool, Option<String>) {
+    let agent = match reqwest::Client::builder().no_proxy()
+        .connect_timeout(Duration::from_secs(3)).timeout(Duration::from_secs(15))
+        .dns_resolver(std::sync::Arc::new(V4Resolver)).build() {
+        Ok(agent) => agent,
+        Err(error) => return (Vec::new(), false, Some(format!("请求初始化失败：{error}"))),
+    };
     let mut last_err = None;
     for endpoint in DOH_ENDPOINTS {
         let url = format!("{endpoint}?name={}&type=A", url_encode(host));
-        let text = match agent.get(&url).call() {
-            Ok(resp) => resp.into_string().unwrap_or_default(),
+        let text = match async {
+            let response = agent.get(&url).send().await?.error_for_status()?;
+            response.text().await
+        }.await {
+            Ok(text) => text,
             Err(e) => {
                 last_err = Some(format!("请求失败：{e}"));
                 continue;
@@ -207,35 +209,31 @@ fn url_encode(s: &str) -> String {
 
 /// 指定真址探活＝`curl --resolve` 的等价物：把 host 强制解析到候选 IP，
 /// TLS 的 SNI 与证书校验仍按原域名走。
-fn probe_endpoint(target: &Target, ip: Ipv4Addr) -> Result<(u16, u64), String> {
-    let netloc = format!("{}:{}", target.host, target.port);
+async fn probe_endpoint(target: &Target, ip: Ipv4Addr) -> Result<(u16, u64), String> {
     let addr = SocketAddr::from((ip, target.port));
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(5))
+    let agent = reqwest::Client::builder().no_proxy()
+        .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(12))
-        .resolver(move |req: &str| {
-            if req == netloc {
-                Ok(vec![addr])
-            } else {
-                req.to_socket_addrs().map(|i| i.collect())
-            }
-        })
-        .build();
+        // 重定向到别的域名不代表当前候选地址可达；3xx 本身已经是探活成功。
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve(&target.host, addr)
+        .pool_max_idle_per_host(0)
+        .build().map_err(|error| error.to_string())?;
     let started = Instant::now();
-    let outcome = match agent.get(&target.url()).call() {
+    let outcome = match agent.get(target.url()).send().await {
         // 拿到 HTTP 状态码就说明 TCP+TLS+HTTP 全通了，4xx/5xx 也算可达
-        Ok(resp) => Ok(resp.status()),
-        Err(ureq::Error::Status(code, _)) => Ok(code),
+        Ok(resp) => Ok(resp.status().as_u16()),
         Err(e) => Err(format!("{e}")),
     };
     let ms = started.elapsed().as_millis() as u64;
     outcome.map(|code| (code, ms))
 }
 
-fn probe_tcp(target: &Target, ip: Ipv4Addr) -> Result<(u16, u64), String> {
+async fn probe_tcp(target: &Target, ip: Ipv4Addr) -> Result<(u16, u64), String> {
     let started = Instant::now();
     let addr = SocketAddr::from((ip, target.port));
-    TcpStream::connect_timeout(&addr, Duration::from_secs(5))
+    tokio::time::timeout(Duration::from_secs(5), tokio::net::TcpStream::connect(addr)).await
+        .map_err(|_| "TCP 连接超时".to_string())?
         .map_err(|e| format!("TCP 连接失败：{e}"))
         .map(|_| (0u16, started.elapsed().as_millis() as u64))
 }
@@ -320,13 +318,14 @@ fn reject_reserved_v4(v4: Ipv4Addr) -> Result<(), String> {
 }
 
 pub fn parse_target(raw: &str) -> Result<Target, String> {
-    let entry = raw.trim().to_lowercase();
+    let entry = raw.trim();
     if entry.is_empty() {
         return Err("输入内容为空".to_string());
     }
-    if entry.starts_with("http://") || entry.starts_with("https://") {
+    let lower = entry.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
         let rest = entry.split_once("://").map(|(_, r)| r).unwrap_or("");
-        return parse_url(&entry, rest);
+        return parse_url(&lower, rest);
     }
     if entry.contains("://") {
         return Err("仅支持 http 与 https 协议".to_string());
@@ -346,7 +345,7 @@ pub fn parse_target(raw: &str) -> Result<Target, String> {
             kind: "cidr",
             // 掩码必须留在 host 里：去掉它，/16 和 /24 会在 UNIQUE(host) 上互相覆盖，
             // 行上也就会把一段网显示成一台单机
-            host: format!("{pref}/{len}"),
+            host: format!("{}/{len}", Ipv4Addr::from(u32::from(pref) & u32::from(netguard_core::prefix_len_to_mask(len as u8)))),
             port: 0,
             path: String::new(),
             scheme: "http",
@@ -362,10 +361,10 @@ pub fn parse_target(raw: &str) -> Result<Target, String> {
             scheme: "https",
         });
     }
-    validate_domain(&entry)?;
+    validate_domain(entry)?;
     Ok(Target {
         kind: "domain",
-        host: entry.trim_end_matches('.').to_string(),
+        host: entry.trim_end_matches('.').to_ascii_lowercase(),
         port: 443,
         path: String::new(),
         scheme: "https",
@@ -374,10 +373,11 @@ pub fn parse_target(raw: &str) -> Result<Target, String> {
 
 fn parse_url(entry: &str, authority_and_path: &str) -> Result<Target, String> {
     let scheme = if entry.starts_with("https") { "https" } else { "http" };
-    let (authority, path) = match authority_and_path.find('/') {
-        Some(i) => (&authority_and_path[..i], &authority_and_path[i..]),
-        None => (authority_and_path, "/"),
-    };
+    let without_fragment = authority_and_path.split('#').next().unwrap_or("");
+    let at = without_fragment.find(['/', '?']).unwrap_or(without_fragment.len());
+    let authority = &without_fragment[..at];
+    let suffix = &without_fragment[at..];
+    let path = if suffix.starts_with('/') { suffix.to_string() } else { format!("/{suffix}") };
     if authority.contains('@') {
         return Err("URL 中不应包含用户名与密码".to_string());
     }
@@ -386,6 +386,9 @@ fn parse_url(entry: &str, authority_and_path: &str) -> Result<Target, String> {
             let Ok(p) = p.parse::<u16>() else {
                 return Err("端口应为数字".to_string());
             };
+            if p == 0 {
+                return Err("端口需在 1 到 65535 之间".to_string());
+            }
             (h, p)
         }
         _ => (
@@ -406,7 +409,7 @@ fn parse_url(entry: &str, authority_and_path: &str) -> Result<Target, String> {
     validate_domain(host)?;
     Ok(Target {
         kind: "domain",
-        host: host.to_string(),
+        host: host.trim_end_matches('.').to_ascii_lowercase(),
         port,
         path: path.to_string(),
         scheme,
@@ -415,11 +418,12 @@ fn parse_url(entry: &str, authority_and_path: &str) -> Result<Target, String> {
 
 fn validate_domain(host: &str) -> Result<(), String> {
     let name = host.trim_end_matches('.');
-    if name.len() < 3 || !name.contains('.') {
+    if name.len() < 3 || name.len() > 253 || !name.contains('.') {
         return Err("域名至少需要 3 个字符并包含一个点".to_string());
     }
     for label in name.split('.') {
         if label.is_empty()
+            || label.len() > 63
             || !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
             || label.starts_with('-')
             || label.ends_with('-')
@@ -454,7 +458,7 @@ fn decide(
         (Some(_), Some(e)) if e.is_taker => Verdict::NeedRoute,
         (Some(ip), Some(_)) => {
             let pinned_here = pinned == Some(ip.to_string().as_str());
-            if kind != "domain" || !hijacked || pinned_here {
+            if kind != "domain" || (!hijacked && pinned.is_none()) || pinned_here {
                 Verdict::DirectOk
             } else {
                 Verdict::HostsOnly
@@ -464,7 +468,19 @@ fn decide(
     }
 }
 
-pub fn probe(raw: &str) -> Result<ProbeReport, String> {
+pub async fn probe(raw: &str) -> Result<ProbeReport, String> {
+    tokio::time::timeout(PROBE_BUDGET, probe_report(raw)).await
+        .map_err(|_| "探测时间已用尽，请稍后重新探测".to_string())?
+}
+
+fn direct_domain_detail(host: &str, pinned: Option<&str>, egress: &str) -> String {
+    match pinned {
+        Some(address) => format!("{host} 的 hosts 记录指向 {address}，出口为 {egress}，当前无需更改。"),
+        None => format!("{host} 的实际地址可通过 {egress} 直连，当前无需新增 hosts 或路由配置。"),
+    }
+}
+
+async fn probe_report(raw: &str) -> Result<ProbeReport, String> {
     let started = Instant::now();
     let target = parse_target(raw)?;
     let pinned_map = read_pinned()?;
@@ -475,7 +491,7 @@ pub fn probe(raw: &str) -> Result<ProbeReport, String> {
     } else if target.kind == "cidr" {
         Vec::new()
     } else {
-        local_resolve(&target.host, target.port)
+        local_resolve(&target.host, target.port).await
     };
     let hijacked = local.iter().any(|ip| match ip {
         IpAddr::V4(v4) => in_fake_ip(*v4),
@@ -493,14 +509,20 @@ pub fn probe(raw: &str) -> Result<ProbeReport, String> {
             None,
         ),
         "cidr" => (Vec::new(), false, None),
-        _ => doh_lookup(&target.host),
+        _ => doh_lookup(&target.host).await,
     };
 
+    // 已固定且仍可达的节点优先续用，避免 CDN 换答案后把可用固定地址误判成待重写。
+    let mut candidates = real_ips.clone();
+    if let Some(ip) = pinned.as_ref().and_then(|p| p.parse::<IpAddr>().ok()).filter(|ip| usable_v4(*ip)) {
+        candidates.retain(|candidate| *candidate != ip);
+        candidates.insert(0, ip);
+    }
     let mut chosen: Option<Ipv4Addr> = None;
     let mut status = None;
     let mut ms = None;
     let mut probe_err = String::new();
-    for ip in &real_ips {
+    for ip in &candidates {
         let IpAddr::V4(v4) = ip else { continue };
         if started.elapsed() > PROBE_BUDGET {
             probe_err = "探测时间已用尽，剩余候选地址未试".to_string();
@@ -508,9 +530,9 @@ pub fn probe(raw: &str) -> Result<ProbeReport, String> {
         }
         // ip 目标走裸 TCP：没有域名可校验 TLS，也无需 HTTP 语义
         let attempt = if target.kind == "ip" {
-            probe_tcp(&target, *v4)
+            probe_tcp(&target, *v4).await
         } else {
-            probe_endpoint(&target, *v4)
+            probe_endpoint(&target, *v4).await
         };
         match attempt {
             Ok((code, took)) => {
@@ -545,14 +567,14 @@ pub fn probe(raw: &str) -> Result<ProbeReport, String> {
     let stale = match (target.kind, pinned.as_ref()) {
         ("domain", Some(p)) => {
             let in_answers = real_ips.iter().any(|ip| ip.to_string() == *p);
-            if in_answers {
+            if in_answers || real_ips.is_empty() || chosen.map(|ip| ip.to_string()).as_ref() == Some(p) {
                 false
             } else if started.elapsed() > PROBE_BUDGET {
                 // 预算内没机会复核第二腿，宁可不下「过期」结论
                 false
             } else {
                 match p.parse::<Ipv4Addr>() {
-                    Ok(v4) => probe_endpoint(&target, v4).is_err(),
+                    Ok(v4) => probe_endpoint(&target, v4).await.is_err(),
                     Err(_) => true,
                 }
             }
@@ -570,29 +592,24 @@ pub fn probe(raw: &str) -> Result<ProbeReport, String> {
     let (headline, detail) = match verdict {
         Verdict::DirectOk if target.kind == "domain" => (
             "直连已可用".to_string(),
-            format!(
-                "{} 已固定到 {}，出口为 {}，本模块无需处理。",
-                target.host,
-                pinned.clone().unwrap_or_else(|| "本机 DNS 解析结果".to_string()),
-                egress_name
-            ),
+            direct_domain_detail(&target.host, pinned.as_deref(), &egress_name),
         ),
         Verdict::DirectOk => (
-            "路由已通，无需处理".to_string(),
+            "出口可直连".to_string(),
             format!("{} 的出口为 {}，无需处理。", target.host, egress_name),
         ),
         Verdict::HostsOnly => (
-            "仅缺 DNS 固定".to_string(),
+            "需配置 hosts".to_string(),
             format!(
-                "实际地址 {} 可由 {} 直达，路由不缺，只需将域名固定到 hosts。",
+                "实际地址 {} 可通过 {} 直连。需要添加 hosts 记录，让该域名解析到此地址。",
                 chosen.map(|c| c.to_string()).unwrap_or_default(),
                 egress_name
             ),
         ),
         Verdict::NeedRoute => (
-            "缺少绑定的路由".to_string(),
+            "需配置路由".to_string(),
             format!(
-                "实际地址 {} 仍从接管方网卡 {} 发出（源地址 {}）。仅固定 hosts 不足，需添加绑定该接口的持久路由。",
+                "实际地址 {} 当前通过代理接口 {} 发出（源地址 {}）。需要添加持久路由，改用非代理接口。",
                 chosen.map(|c| c.to_string()).unwrap_or_else(|| target.host.clone()),
                 taker_name,
                 egress.as_ref().map(|e| e.source.clone()).unwrap_or_default()
@@ -620,7 +637,7 @@ pub fn probe(raw: &str) -> Result<ProbeReport, String> {
         Verdict::EgressUnknown => (
             "出口路由无法判定".to_string(),
             format!(
-                "{} 连通性正常，但出口路由查询无结果（系统瞬时故障或探测接口不可用）。本轮不给出写入建议，请稍后重新探测。",
+                "未查询到 {} 的出口路由，暂时无法确定直连配置。请稍后重新探测。",
                 target.host
             ),
         ),
@@ -629,12 +646,12 @@ pub fn probe(raw: &str) -> Result<ProbeReport, String> {
     let mut pending = Vec::new();
     if recommend {
         pending.push(
-            "写入后仍需将该域名加入代理客户端的直连名单，本模块不修改代理配置。".to_string(),
+            "配置后，如使用代理客户端，还需将该目标加入其直连规则。".to_string(),
         );
     }
     if cdn_like {
         // 不挂在 recommend 分支里：CDN 域名 recommend 恒 false，这条警示恰恰要说给它们听
-        pending.push("该域名带 CDN 轮换特征，固定后会锁定在会失效的节点上，不建议写入。".to_string());
+        pending.push("该域名的地址可能随 CDN 节点变化。不建议固定；确需固定时，请定期重新探测并更新配置。".to_string());
     }
 
     Ok(ProbeReport {
@@ -661,6 +678,17 @@ pub fn probe(raw: &str) -> Result<ProbeReport, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn direct_report_distinguishes_existing_hosts_from_unpinned_access() {
+        let unpinned = direct_domain_detail("public.test", None, "Ethernet");
+        assert!(unpinned.contains("无需新增"));
+        assert!(!unpinned.contains("hosts 记录指向"));
+        assert!(!unpinned.contains("已固定"));
+        let pinned = direct_domain_detail("internal.test", Some("10.0.0.2"), "VPN");
+        assert!(pinned.contains("hosts 记录指向 10.0.0.2"));
+        assert!(pinned.contains("VPN"));
+    }
 
     #[test]
     fn cidr_host_keeps_its_mask() {
@@ -717,6 +745,28 @@ mod tests {
     }
 
     #[test]
+    fn url_preserves_case_query_and_removes_fragment() {
+        let t = parse_target("HTTPS://Example.COM.:8443/Api/Token?Key=AbC#section").unwrap();
+        assert_eq!(t.host, "example.com");
+        assert_eq!(t.path, "/Api/Token?Key=AbC");
+        assert_eq!(t.port, 8443);
+        assert_eq!(parse_target("https://example.com?Key=AbC").unwrap().path, "/?Key=AbC");
+        assert!(parse_target("http://example.com:0/").is_err());
+    }
+
+    #[test]
+    fn cidr_is_normalized_to_network_address() {
+        assert_eq!(parse_target("10.20.3.7/16").unwrap().host, "10.20.0.0/16");
+        assert!(parse_target(&format!("{}.com", "a".repeat(64))).is_err());
+    }
+
+    #[test]
+    fn a_different_managed_pin_still_needs_repair_without_fake_ip() {
+        let ip = "10.20.0.2".parse().ok();
+        assert_eq!(decide(ip, Some(&eg(false)), false, "domain", Some("10.20.0.1")), Verdict::HostsOnly);
+    }
+
+    #[test]
     fn rejects_reserved_and_fake_ip_targets() {
         assert!(parse_target("198.18.0.5").is_err());
         assert!(parse_target("127.0.0.1").is_err());
@@ -725,6 +775,53 @@ mod tests {
         assert!(parse_target("198.18.0.0/16").is_err());
         assert!(parse_target("http://198.19.0.7:8080/").is_err());
         assert!(parse_target("172.30.2.109").is_ok());
+    }
+
+    #[tokio::test]
+    async fn async_probe_preserves_url_and_accepts_redirect_without_following() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 4096];
+            let len = stream.read(&mut request).await.unwrap();
+            stream.write_all(b"HTTP/1.1 302 Found\r\nLocation: http://unreachable.example.invalid/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+            String::from_utf8_lossy(&request[..len]).to_string()
+        });
+        let target = parse_target(&format!("HTTP://Example.COM:{port}/Api?Key=AbC")).unwrap();
+        let (status, _) = probe_endpoint(&target, Ipv4Addr::LOCALHOST).await.unwrap();
+        assert_eq!(status, 302);
+        let request = server.await.unwrap();
+        assert!(request.starts_with("GET /Api?Key=AbC HTTP/1.1"));
+        assert!(request.to_lowercase().contains(&format!("host: example.com:{port}")));
+    }
+
+    #[tokio::test]
+    async fn cancelling_closes_an_inflight_http_probe_connection() {
+        use tokio::io::AsyncReadExt;
+        use tokio::sync::oneshot;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (started, ready) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 4096];
+            stream.read(&mut request).await.unwrap();
+            started.send(()).unwrap();
+            let mut byte = [0; 1];
+            tokio::time::timeout(Duration::from_secs(2), stream.read(&mut byte)).await.unwrap().unwrap()
+        });
+        let id = uuid::Uuid::new_v4().to_string();
+        let job_id = id.clone();
+        let target = parse_target(&format!("http://example.com:{port}/")).unwrap();
+        let probe = tokio::spawn(async move {
+            crate::services::bypass_probe_job::run(Some(job_id), probe_endpoint(&target, Ipv4Addr::LOCALHOST)).await
+        });
+        ready.await.unwrap();
+        crate::services::bypass_probe_job::cancel(&id).unwrap();
+        assert!(probe.await.unwrap().is_err());
+        assert_eq!(server.await.unwrap(), 0, "取消后 TCP 连接必须关闭，不能继续等待 HTTP 超时");
     }
 
     fn eg(taker: bool) -> Egress {

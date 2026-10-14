@@ -12,13 +12,35 @@ mod webdav;
 
 use db::Database;
 use services::attachment_service;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     Manager,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+
+fn request_quit(app: &tauri::AppHandle) {
+    // 托盘入口在窗口隐藏、应用锁定时也要能确认；连续点击只打开一个原生弹窗。
+    static PENDING: AtomicBool = AtomicBool::new(false);
+    if PENDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    app.dialog()
+        .message("确定退出 Desko？退出后，局域网文件传输和内网穿透服务将停止。")
+        .title("退出 Desko")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom("确认退出".into(), "取消".into()))
+        .show(move |confirmed| {
+            if confirmed {
+                app.exit(0);
+            } else {
+                PENDING.store(false, Ordering::SeqCst);
+            }
+        });
+}
 
 pub struct AppState {
     pub db: Mutex<Database>,
@@ -38,6 +60,7 @@ pub struct AppState {
     pub note_keys: Mutex<std::collections::HashMap<String, Vec<u8>>>,
     /// 小记域密钥：全库一把口令解出来的那份，只驻内存；应用锁定即清
     pub note_key: Mutex<Option<Vec<u8>>>,
+    pub note_drafts: Mutex<services::note_draft_service::DraftCache>,
 }
 
 /// codex 命令判定：名字含 codex 一律算，再看裁剪边界名单（D10 的 keep_cmds.json，编译期内嵌）。
@@ -141,6 +164,7 @@ fn main() {
                 tunnel: commands::tunnel::TunnelState::default(),
                 note_keys: Mutex::new(std::collections::HashMap::new()),
                 note_key: Mutex::new(None),
+                note_drafts: Mutex::new(Default::default()),
             });
 
             // 正文里的图片走 asset: 协议读附件目录，只放行那一个目录
@@ -176,9 +200,7 @@ fn main() {
                             }
                         }
                         "lock" => commands::auth::request_lock(app),
-                        "quit" => {
-                            app.exit(0);
-                        }
+                        "quit" => request_quit(app),
                         _ => {}
                     }
                 })
@@ -264,6 +286,8 @@ fn main() {
             commands::notes::list_notes,
             commands::notes::create_note,
             commands::notes::update_note,
+            commands::notes::stage_note_drafts,
+            commands::notes::recover_note_drafts,
             commands::notes::delete_note,
             commands::notes::batch_delete_notes,
             commands::notes::toggle_pin_note,
@@ -304,6 +328,7 @@ fn main() {
             commands::tunnel::tunnel_provision_status,
             commands::tunnel::tunnel_login_start,
             commands::tunnel::tunnel_login_status,
+            commands::tunnel::tunnel_authorized_domain,
             commands::tunnel::tunnel_login_cancel,
             commands::tunnel::tunnel_ensure_tunnel,
             commands::tunnel::tunnel_apply,
@@ -319,6 +344,7 @@ fn main() {
             commands::tunnel::tunnel_revoke,
             // ── 直连清单（P1：只探测判定，不写系统）──
             commands::bypass::bypass_probe,
+            commands::bypass::bypass_cancel_probe,
             commands::bypass::bypass_save,
             commands::bypass::bypass_list,
             commands::bypass::bypass_recheck,
@@ -451,6 +477,7 @@ pub(crate) fn test_state() -> AppState {
         tunnel: commands::tunnel::TunnelState::default(),
         note_keys: Mutex::new(std::collections::HashMap::new()),
         note_key: Mutex::new(None),
+        note_drafts: Mutex::new(Default::default()),
     }
 }
 

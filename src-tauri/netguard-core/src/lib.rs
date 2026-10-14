@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
 
+mod hosts_bytes;
+pub use hosts_bytes::{apply_pins_bytes, restore_managed_bytes};
+
 pub const HOSTS_BEGIN: &str = "# BEGIN TUN-BYPASS-MANAGED";
 pub const HOSTS_END: &str = "# END TUN-BYPASS-MANAGED";
 
@@ -97,6 +100,11 @@ pub struct ReceiptFile {
     pub items: Vec<ItemResult>,
     pub rolled_back: bool,
     pub rollback_error: String,
+    /// 自动回滚已经恢复的部分，重试时不能再删除一遍已恢复的路由。
+    #[serde(default)]
+    pub reverted_routes: Vec<String>,
+    #[serde(default)]
+    pub hosts_restored: bool,
     /// helper 自己炸了（读不到任务书等），items 此时可能为空
     pub fatal: String,
 }
@@ -221,6 +229,11 @@ pub fn apply_pins(text: &str, pins: &[Pin]) -> Result<(String, usize), String> {
         if host.trim().is_empty() || pin.address.trim().is_empty() {
             return Err(format!("待固定条目不完整：{pin:?}"));
         }
+        if host.len() > 253 || host.split('.').any(|label| label.is_empty() || label.len() > 63
+            || label.starts_with('-') || label.ends_with('-')
+            || !label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')) {
+            return Err(format!("待固定域名格式不合法：{host}"));
+        }
         if !pin.address.parse::<IpAddr>().map(usable_v4).unwrap_or(false) {
             return Err(format!("待固定地址不可用：{host} → {}", pin.address));
         }
@@ -293,7 +306,7 @@ pub fn route_add_args(
     ]
 }
 
-pub fn route_delete_args(prefix: &str, prefix_len: u8, gateway: &str) -> Vec<String> {
+pub fn route_delete_args(prefix: &str, prefix_len: u8, gateway: &str, interface_index: u32) -> Vec<String> {
     vec![
         "-p".into(),
         "delete".into(),
@@ -301,6 +314,8 @@ pub fn route_delete_args(prefix: &str, prefix_len: u8, gateway: &str) -> Vec<Str
         "mask".into(),
         prefix_len_to_mask(prefix_len).to_string(),
         gateway.into(),
+        "if".into(),
+        interface_index.to_string(),
     ]
 }
 
@@ -392,6 +407,26 @@ pub mod net {
             Some(hit) => hit.interface_index == interface_index && hit.next_hop == Ipv4Addr::UNSPECIFIED,
             None => false,
         }
+    }
+
+    fn on_link_prefix_covers(
+        row_prefix: Ipv4Addr, row_len: u8, hop: Ipv4Addr,
+        prefix: Ipv4Addr, prefix_len: u8,
+    ) -> bool {
+        hop == Ipv4Addr::UNSPECIFIED && row_len > 0 && row_len <= 32
+            && row_len <= prefix_len && prefix_len <= 32 && covers_prefix(row_prefix, row_len, prefix)
+    }
+
+    /// 计划与 helper 共用的最后一道闸。0.0.0.0 表示 on-link，没有下一跳可查；
+    /// 核验目标前缀确实落在指定接口上，而非查询 0.0.0.0 的默认出口。
+    pub fn route_binding_valid(prefix: Ipv4Addr, prefix_len: u8, gateway: Ipv4Addr, interface_index: u32) -> bool {
+        if prefix_len > 32 || interface_index == 0 { return false; }
+        if gateway != Ipv4Addr::UNSPECIFIED { return gateway_on_link(interface_index, gateway); }
+        #[cfg(windows)]
+        { forward_rows().map(|rows| rows.iter().any(|(net, len, hop, idx, _)|
+            *idx == interface_index && on_link_prefix_covers(*net, *len, *hop, prefix, prefix_len))).unwrap_or(false) }
+        #[cfg(not(windows))]
+        { false }
     }
 
     /// 整张 IPv4 路由表摊成元组：一次读表，多处用
@@ -495,14 +530,10 @@ pub mod net {
         let rows = forward_rows()?;
         let mut best: Option<(u8, u32, u32)> = None; // (前缀长度, metric, 接口)
         for (net, len, next_hop, if_index, metric) in rows.iter() {
-            if *next_hop != Ipv4Addr::UNSPECIFIED || *len == 0 || *len > 32 {
+            if !on_link_prefix_covers(*net, *len, *next_hop, prefix, prefix_len) {
                 continue;
             }
             if Some(*if_index) == exclude_interface {
-                continue;
-            }
-            // 接口段比目标还窄就盖不住目标：/24 的段承载不了 /16 的网段
-            if *len > prefix_len || !covers_prefix(*net, *len, prefix) {
                 continue;
             }
             let better = match best {
@@ -541,6 +572,22 @@ pub mod net {
         _exclude_interface: Option<u32>,
     ) -> Option<RoutePlan> {
         None
+    }
+
+    #[cfg(test)]
+    mod binding_tests {
+        use super::*;
+        #[test]
+        fn on_link_binding_checks_the_target_prefix_instead_of_a_default_gateway() {
+            let row = "10.20.0.0".parse().unwrap();
+            let target = "10.20.0.25".parse().unwrap();
+            assert!(on_link_prefix_covers(row, 24, Ipv4Addr::UNSPECIFIED, target, 32));
+            assert!(on_link_prefix_covers(row, 24, Ipv4Addr::UNSPECIFIED, row, 24));
+            assert!(!on_link_prefix_covers(row, 24, Ipv4Addr::UNSPECIFIED, row, 16));
+            assert!(!on_link_prefix_covers(row, 24, "10.20.0.1".parse().unwrap(), target, 32));
+            assert!(!on_link_prefix_covers(row, 24, Ipv4Addr::UNSPECIFIED, "10.21.0.25".parse().unwrap(), 32));
+            assert!(!on_link_prefix_covers(Ipv4Addr::UNSPECIFIED, 0, Ipv4Addr::UNSPECIFIED, target, 32));
+        }
     }
 
     /// 纯函数版归属判断，供单测直灌
@@ -630,8 +677,8 @@ mod tests {
             "-p add 172.33.0.0 mask 255.255.0.0 26.0.48.1 if 42"
         );
         assert_eq!(
-            route_delete_args("172.33.0.0", 16, "26.0.48.1").join(" "),
-            "-p delete 172.33.0.0 mask 255.255.0.0 26.0.48.1"
+            route_delete_args("172.33.0.0", 16, "26.0.48.1", 42).join(" "),
+            "-p delete 172.33.0.0 mask 255.255.0.0 26.0.48.1 if 42"
         );
         // 默认路由单独一档：/0 的掩码是 0.0.0.0
         assert_eq!(prefix_len_to_mask(0), Ipv4Addr::UNSPECIFIED);

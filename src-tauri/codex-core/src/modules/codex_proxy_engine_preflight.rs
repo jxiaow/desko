@@ -30,6 +30,8 @@ use crate::models::workbuddy::*;
 use crate::models::zcode::*;
 use crate::models::zed::*;
 
+/// Classify persisted errors from older imports without reviving the removed engine.
 pub(crate) fn is_prerequisite_error(error: &str) -> bool {
-    false
+    matches!(error, "PROXY_ENGINE_TIMEOUT" | "PROXY_ENGINE_START_FAILED"
+        | "PROXY_ENGINE_MISSING" | "ENGINE_INSTALL_BUSY")
 }

@@ -2,18 +2,20 @@
    组件选择材质角色，不读取 data-atmosphere；新增表面应接入这里的角色。
    --bg-surface / --bg-input 保持实底，导航透出画布，浮层独立承接较轻的光场。 */
 :root, .theme-scope {
+  /* 氛围色独立于控件色：保留清晰色相，再以透明度控制强度。
+     主光与辅光取邻近色，避免同一低彩度强调色反复叠加后趋于灰白。 */
+  --material-tint-primary: #387ed1;
+  --material-tint-secondary: #6d94d4;
   --material-grain-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='deskoGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23deskoGrain)' opacity='0.035'/%3E%3C/svg%3E");
   --material-grain-size: 180px 180px;
   --material-field-primary-size: 68vw 74vh;
   --material-field-secondary-size: 62vw 68vh;
-  --material-field-neutral-size: 58vw 64vh;
   --material-field:
     var(--material-grain-image) 0 0 / var(--material-grain-size) repeat,
-    radial-gradient(ellipse var(--material-field-primary-size) at 14% 28%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 72%),
-    radial-gradient(ellipse var(--material-field-secondary-size) at 86% 82%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 72%),
-    radial-gradient(ellipse var(--material-field-neutral-size) at 62% 34%, color-mix(in srgb, var(--panel-bg) 55%, transparent), transparent 72%);
+    radial-gradient(ellipse var(--material-field-primary-size) at 14% 28%, color-mix(in srgb, var(--material-tint-primary) 24%, transparent), transparent 72%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at 86% 82%, color-mix(in srgb, var(--material-tint-secondary) 24%, transparent), transparent 72%);
   --material-floating-field:
-    linear-gradient(color-mix(in srgb, var(--panel-bg) 60%, transparent), color-mix(in srgb, var(--panel-bg) 60%, transparent)),
+    linear-gradient(color-mix(in srgb, var(--panel-bg) 25%, transparent), color-mix(in srgb, var(--panel-bg) 25%, transparent)),
     var(--material-field), var(--panel-bg);
 
   --bg-app: var(--material-field), var(--sunken);
@@ -44,10 +46,28 @@
 
   --bg-lock: linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%);
   --bg-lock-wash: radial-gradient(110% 85% at 50% 40%, var(--lock-wash-b) 0%, var(--bg) 65%), var(--bg);
-  --bg-lock-aura-primary: color-mix(in srgb, var(--accent) 13%, transparent);
-  --bg-lock-aura-secondary: color-mix(in srgb, var(--accent) 7%, transparent);
-  --bg-lock-aura-neutral: color-mix(in srgb, var(--panel-bg) 55%, transparent);
+  --bg-lock-aura-primary: color-mix(in srgb, var(--material-tint-primary) 24%, transparent);
+  --bg-lock-aura-secondary: color-mix(in srgb, var(--material-tint-secondary) 18%, transparent);
+  --bg-lock-aura-neutral: color-mix(in srgb, var(--panel-bg) 35%, transparent);
   --material-decoration-display: block;
+}
+
+/* 五组氛围色与强调色同源切换；局部预览覆盖自身颜色，不继承当前主题的光场。 */
+:root[data-accent="celadon"], .theme-scope[data-accent="celadon"] {
+  --material-tint-primary: #198c74;
+  --material-tint-secondary: #6ebc95;
+}
+:root[data-accent="clay"], .theme-scope[data-accent="clay"] {
+  --material-tint-primary: #cf7836;
+  --material-tint-secondary: #dcae50;
+}
+:root[data-accent="plum"], .theme-scope[data-accent="plum"] {
+  --material-tint-primary: #8946c6;
+  --material-tint-secondary: #9a6bd0;
+}
+:root[data-accent="rose"], .theme-scope[data-accent="rose"] {
+  --material-tint-primary: #ce4f83;
+  --material-tint-secondary: #e68b9d;
 }
 
 /* 局部主题按自己的画布缩放，避免窗口大小的光斑在微缩预览里变成整块强调色。 */
@@ -55,7 +75,6 @@
   --material-grain-size: 18% auto;
   --material-field-primary-size: 68% 74%;
   --material-field-secondary-size: 62% 68%;
-  --material-field-neutral-size: 58% 64%;
 }
 
 :root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"] {

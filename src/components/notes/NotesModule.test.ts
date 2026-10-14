@@ -29,6 +29,8 @@ vi.mock('../../services/api/notes', () => ({
     listNotes: vi.fn(),
     createNote: vi.fn(),
     updateNote: vi.fn(),
+    stageDrafts: vi.fn(),
+    recoverDrafts: vi.fn(),
     deleteNote: vi.fn(),
     batchDeleteNotes: vi.fn(),
     togglePinNote: vi.fn(),
@@ -114,6 +116,8 @@ describe('NotesModule', () => {
     })
     vi.mocked(notesApi.listAttachments).mockResolvedValue([])
     vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
+    vi.mocked(notesApi.stageDrafts).mockResolvedValue(undefined)
+    vi.mocked(notesApi.recoverDrafts).mockResolvedValue([])
     vi.mocked(notesApi.togglePinNote).mockResolvedValue(true)
     vi.mocked(notesApi.batchDeleteNotes).mockResolvedValue(0)
   })
@@ -340,6 +344,17 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
+  it('renders imported note markup without executable attributes or tags', async () => {
+    stageNotes([makeNote({
+      content_html: '<p>safe<script>evil()</script></p><img src="attachments/p.png" onerror="evil()"><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><label><input type="checkbox" checked></label><div><p>task</p></div></li></ul>',
+    })])
+    const wrapper = await mountModule()
+    expect(wrapper.find('.memo-body script').exists()).toBe(false)
+    expect(wrapper.find('.memo-body img').attributes('onerror')).toBeUndefined()
+    expect((wrapper.find('.memo-body input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true)
+    wrapper.unmount()
+  })
+
   it('flushes a pending edit when the page unmounts', async () => {
     stageNotes([makeNote()])
     const wrapper = await mountModule()
@@ -348,6 +363,7 @@ describe('NotesModule', () => {
     await flushPromises()
 
     wrapper.unmount()
+    await flushPromises()
     expect(notesApi.updateNote).toHaveBeenCalledTimes(1)
     expect(vi.mocked(notesApi.updateNote).mock.calls[0][1]).toMatchObject({
       content_html: '<p>切换模块前最后一笔</p>',

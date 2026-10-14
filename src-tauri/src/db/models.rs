@@ -114,7 +114,7 @@ pub struct CreateNoteInput {
     pub category: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UpdateNoteInput {
     pub title: String,
     pub content_html: String,

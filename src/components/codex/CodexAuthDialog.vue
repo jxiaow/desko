@@ -30,6 +30,33 @@ const busy = ref(false)
 const paths = ref<StoragePaths | null>(null)
 const importing = ref(false)
 const pasteJson = ref('')
+const tokenMode = ref<'access' | 'tokens'>('access')
+const tokenName = ref('')
+const accessToken = ref('')
+const idToken = ref('')
+const refreshToken = ref('')
+let active = true
+
+async function importFromToken() {
+  if (importing.value) return
+  const access = accessToken.value.trim()
+  if (!access || (tokenMode.value === 'access' ? !tokenName.value.trim() : !idToken.value.trim())) return
+  importing.value = true
+  try {
+    const account = tokenMode.value === 'access'
+      ? await codexApi.importAccessToken(tokenName.value.trim(), access)
+      : await codexApi.addTokens(idToken.value.trim(), access, refreshToken.value)
+    if (!active) return
+    await refreshAccounts()
+    if (!active) return
+    toastStore.showToast(`已导入 ${account.email}`)
+    emit('close')
+  } catch (e) {
+    if (active) toastStore.showToast(errText(e), 'error')
+  } finally {
+    importing.value = false
+  }
+}
 
 async function copy(text: string, label: string) {
   try {
@@ -227,7 +254,10 @@ async function close() {
   emit('close')
 }
 
-onUnmounted(() => unlisten.forEach((f) => f()))
+onUnmounted(() => {
+  active = false
+  unlisten.forEach((f) => f())
+})
 
 // 端口占用要在点「开始登录」之前就说出来，不是等发起失败之后
 onMounted(() => {
@@ -343,6 +373,30 @@ onMounted(() => {
               </button>
             </div>
           </div>
+          <details class="token-import">
+            <summary>从 Token 导入账号</summary>
+            <div class="token-modes" role="group" aria-label="Token 类型">
+              <button class="action-btn" type="button" :aria-pressed="tokenMode === 'access'" @click="tokenMode = 'access'">Access Token</button>
+              <button class="action-btn" type="button" :aria-pressed="tokenMode === 'tokens'" @click="tokenMode = 'tokens'">Token 组合</button>
+            </div>
+            <div v-if="tokenMode === 'access'" class="form-group">
+              <label for="cx-token-name">账号名称</label>
+              <input id="cx-token-name" v-model="tokenName" type="text" placeholder="用于识别这条 Token 账号" />
+            </div>
+            <div v-else class="form-group">
+              <label for="cx-id-token">ID Token</label>
+              <input id="cx-id-token" v-model="idToken" type="password" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="form-group">
+              <label for="cx-access-token">Access Token</label>
+              <input id="cx-access-token" v-model="accessToken" type="password" autocomplete="off" spellcheck="false" />
+            </div>
+            <div v-if="tokenMode === 'tokens'" class="form-group">
+              <label for="cx-refresh-token">Refresh Token（可选）</label>
+              <input id="cx-refresh-token" v-model="refreshToken" type="password" autocomplete="off" spellcheck="false" />
+            </div>
+            <button class="action-btn" type="button" :disabled="importing || !accessToken.trim() || (tokenMode === 'access' ? !tokenName.trim() : !idToken.trim())" @click="importFromToken">导入 Token</button>
+          </details>
         </template>
       </div>
 
@@ -380,8 +434,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.auth-dialog { width: 520px; --font-mono: Consolas, 'Cascadia Mono', monospace; }
-.mono { font-family: var(--font-mono); }
+.token-import { margin-top: var(--space-4); border-top: 1px solid var(--border); padding-top: var(--space-3); }
+.token-import summary { color: var(--text-secondary); font-size: var(--text-sm); cursor: pointer; }
+.token-modes { display: flex; gap: var(--space-2); margin-block: var(--space-3); }
+.token-modes button[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); }
+.auth-dialog { width: 520px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
 
 /* 页签分段控件与说明句（.lead）走 global.css 的弹窗档 */
 .note { margin: 10px 0 0; font-size: var(--text-xs); color: var(--warning) }
@@ -403,12 +461,12 @@ onMounted(() => {
 .code-box {
   margin-top: 14px; text-align: center;
 }
-.code-label { font-size: 20px; font-weight: 700; letter-spacing: 0.12em; color: var(--text) }
+.code-label { font-size: var(--text-xl); font-weight: 600; letter-spacing: 0.12em; color: var(--text) }
 
 .pathline {
   display: flex; align-items: center; gap: 8px; margin-top: 12px; height: 34px;
 }
-.pathline .k { flex-shrink: 0; font-size: var(--text-2xs); color: var(--text-faint) }
+.pathline .k { flex-shrink: 0; font-size: var(--text-xs); color: var(--text-faint) }
 .pathline .v {
   flex: 1; min-width: 0; font-size: var(--text-xs); color: var(--text-secondary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

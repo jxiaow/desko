@@ -1,11 +1,11 @@
 use tauri::{AppHandle, State};
 
 use crate::error::AppError;
-use crate::services::cloud_service;
+use crate::services::{cloud_service, auto_backup::BusyGuard};
 use crate::webdav::DavEntry;
 use crate::AppState;
 
-use super::backup::{check_package_name, emit_progress, restore_package};
+use super::backup::{check_package_name, emit_progress, restore_package_while_busy};
 
 fn master_key(state: &AppState) -> Result<Vec<u8>, AppError> {
     crate::services::get_master_key(state)
@@ -58,6 +58,8 @@ pub async fn cloud_save_config(
     account: String,
     app_password: String,
 ) -> Result<(), AppError> {
+    let _guard = BusyGuard::try_acquire(state.inner())
+        .ok_or_else(|| AppError::Backup("备份或同步正在进行，请稍后修改云配置".into()))?;
     let app_password = resolve_app_password(&state, app_password)?;
     let creds = cloud_service::CloudCreds {
         server: cloud_service::normalize_server(&server)?,
@@ -72,11 +74,20 @@ pub async fn cloud_save_config(
     let master = state.master_key.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     let master = master.as_ref().ok_or(AppError::NotUnlocked)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    let changed = cloud_service::load_cfg(&db, master)?.as_ref()
+        .map(cloud_service::target_id).transpose()? != Some(cloud_service::target_id(&creds)?);
+    // 先清本地证据再提交新凭据；清理失败时仍保留旧配置，远端对象一律不动。
+    if changed {
+        let backups = crate::backup::backups_dir(&crate::paths::profile_root());
+        cloud_service::clear_sync_baseline(&backups)?;
+    }
     cloud_service::save_cfg(&db, master, &creds)
 }
 
 #[tauri::command]
 pub fn cloud_disconnect(state: State<AppState>, app: AppHandle) -> Result<(), AppError> {
+    let _guard = BusyGuard::try_acquire(state.inner())
+        .ok_or_else(|| AppError::Backup("备份或同步正在进行，请稍后断开云服务".into()))?;
     let backups = crate::backup::backups_dir(&app_data_dir(&app)?);
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     cloud_service::disconnect(&db, &backups)
@@ -102,6 +113,8 @@ pub async fn cloud_restore(
     name: String,
     password: String,
 ) -> Result<(), AppError> {
+    let _guard = BusyGuard::try_acquire(state.inner())
+        .ok_or_else(|| AppError::Backup("备份或同步正在进行，请稍后恢复".into()))?;
     check_package_name(&name)?;
     let master = master_key(&state)?;
     let creds = {
@@ -111,37 +124,44 @@ pub async fn cloud_restore(
     };
     let backups = crate::backup::backups_dir(&app_data_dir(&app)?);
 
-    // 1) 先把包拉下来（不需要密钥）
+    // 1) 下载当前远端对象到 target 隔离目录，并验证完整包
     let name_for_dl = name.clone();
     let backups_for_dl = backups.clone();
     let creds_for_dl = creds.clone();
-    let pkg = tauri::async_runtime::spawn_blocking(move || {
-        cloud_service::download_package(&creds_for_dl, &backups_for_dl, &name_for_dl)
+    let password_for_dl = password.clone();
+    let downloaded = tauri::async_runtime::spawn_blocking(move || {
+        cloud_service::download_package(&creds_for_dl, &backups_for_dl, &name_for_dl, &password_for_dl)
     })
     .await
     .map_err(|e| AppError::Backup(format!("下载任务失败: {}", e)))??;
 
+    let pkg = downloaded.package.clone();
     // 2) 用包自带的包裹块 + 备份密码取出数据密钥（新机器上也能成）
     emit_progress(&app, "restore", "校验备份密码", 10);
-    let (dek, wrap) = {
-        let p = pkg.clone();
+    let (dek, wrap, manifest) = {
+        let cache_owner = downloaded.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            crate::backup::container::open_package(&p, &password)
+            let (dek, wrap) = crate::backup::container::open_package(&cache_owner.package, &password)?;
+            let manifest = crate::backup::container::read_external_attachments_manifest(&cache_owner.package, &dek)?;
+            Ok::<_, AppError>((dek, wrap, manifest))
         })
         .await
         .map_err(|e| AppError::Backup(format!("任务失败: {}", e)))??
     };
 
     // 3) 按清单补齐缺失的附件密文
-    let manifest = crate::backup::container::read_manifest(&pkg, &dek)?;
     let handle = app.clone();
+    let attachment_dek = dek.clone();
+    let attachment_cache = downloaded.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        cloud_service::fetch_attachments(&creds, &backups, &manifest, &|text, pct| {
+        cloud_service::fetch_attachments(&creds, attachment_cache.cache_root(), &manifest, &attachment_dek, &|text, pct| {
             emit_progress(&handle, "restore", text, pct)
         })
     })
     .await
     .map_err(|e| AppError::Backup(format!("下载任务失败: {}", e)))??;
 
-    restore_package(app, state, pkg, dek, wrap).await
+    let result = restore_package_while_busy(app, state, pkg, dek, wrap, &_guard, Some(downloaded.clone())).await;
+    drop(downloaded); // Release after unpack/publication; errors also remove this job's download files.
+    result
 }

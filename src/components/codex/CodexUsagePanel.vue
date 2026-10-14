@@ -1,68 +1,75 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import type { CodexUsageBucket } from '../../services/api/codex'
-import { loadUsage, usageBusy, usageError, usageReport } from '../../services/codexState'
+import { loadUsage, usageBusy, usageError, usageRange, usageReport, usageUpdatedAt } from '../../services/codexState'
+import { localDayKey, usageWindowFrom } from '../../utils/codexUsage'
 import AppIcon from '../shared/AppIcon.vue'
+import CodexTodayUsageChart from './CodexTodayUsageChart.vue'
 
-/** 进这一档才扫：首扫要读完官方目录那几百 MB，留在别的页不该替它买单 */
 onMounted(() => {
-  if (!usageReport.value && !usageBusy.value) void loadUsage()
+  const lastDay = usageUpdatedAt.value ? localDayKey(new Date(usageUpdatedAt.value)) : ''
+  const wrongWindow = usageReport.value?.fromTimestamp !== usageWindowFrom(usageRange.value)
+  if ((!usageReport.value || wrongWindow || lastDay !== localDayKey(new Date())) && !usageBusy.value) void loadUsage()
+  scheduleDayRefresh()
 })
 
-/** 千分位自己插：toLocaleString 会随运行时 locale 换分隔符，断言与真机就不一个样了 */
+let dayTimer: ReturnType<typeof setTimeout>
+function scheduleDayRefresh() {
+  const now = new Date()
+  const next = new Date(now)
+  next.setDate(next.getDate() + 1)
+  next.setHours(0, 0, 0, 0)
+  dayTimer = setTimeout(() => {
+    void loadUsage()
+    scheduleDayRefresh()
+  }, next.getTime() - now.getTime() + 100)
+}
+onUnmounted(() => clearTimeout(dayTimer))
+
 const num = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-
-/** 柱子只画窗口内最近 30 天；总量行仍报整窗口 */
-const days = computed<CodexUsageBucket[]>(() => usageReport.value?.byDay.slice(-30) ?? [])
-/** 柱子画的是输入的两段（净输入 + 缓存命中），所以标定高度也按输入，不然最满的一天只到七八成 */
-const maxInput = computed(() => days.value.reduce((m, d) => Math.max(m, d.inputTokens), 0))
+const days = computed(() => usageReport.value?.byDay.slice(-30) ?? [])
+const dailyRows = computed(() => [...days.value].reverse())
+const maxTotal = computed(() => days.value.reduce((max, d) => Math.max(max, d.totalTokens), 0))
 const models = computed(() => usageReport.value?.byModel ?? [])
+const totals = computed(() => usageReport.value?.totals ?? null)
+const scope = computed(() => ({ today: '今日用量', week: '近 7 天用量', month: '近 30 天用量', all: '全部用量' })[usageRange.value])
+const updatedDay = computed(() => localDayKey(new Date(usageUpdatedAt.value ?? Date.now())))
+const period = computed(() => {
+  const from = usageReport.value?.fromTimestamp
+  if (usageRange.value === 'all') return '全部本地会话记录'
+  const start = from == null ? updatedDay.value : localDayKey(new Date(from * 1000))
+  const startClock = from == null ? '00:00' : new Date(from * 1000).toTimeString().slice(0, 5)
+  return usageRange.value === 'today' ? `${start} · 本地时间 ${startClock} 起` : `${start} 至 ${updatedDay.value} · 本地时间`
+})
+const updatedTime = computed(() => {
+  const date = new Date(usageUpdatedAt.value ?? Date.now())
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+})
+const scanSeconds = computed(() => ((usageReport.value?.scanMillis ?? 0) / 1000).toFixed(1))
 
-/** 净输入：官方把每轮重发的上下文全记进 input，减掉缓存命中才是真正新烧的钱 */
-function freshInput(bucket: CodexUsageBucket): number {
+function freshInput(bucket: Pick<CodexUsageBucket, 'inputTokens' | 'cachedInputTokens'>): number {
   return Math.max(0, bucket.inputTokens - bucket.cachedInputTokens)
 }
 
-/** 收成一位小数：条的宽度与旁边的百分比必须同一个数，不然看着就对不上账 */
 function pct(part: number, whole: number): number {
   return whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0
 }
 
-/** 一段至少留 2%，不然「净输入只有几千」的日子看起来像零用量；小数收一位，悬停与断言读同一个数 */
 function barHeight(tokens: number): string {
-  if (maxInput.value <= 0 || tokens <= 0) return '0px'
-  const scaled = Math.round((tokens / maxInput.value) * 1000) / 10
-  return `${Math.max(scaled, 2)}%`
+  return `${pct(tokens, maxTotal.value)}%`
 }
 
 function dayTitle(d: CodexUsageBucket): string {
-  return [
-    d.key,
-    `输入 ${num(d.inputTokens)}（净 ${num(freshInput(d))} + 缓存 ${num(d.cachedInputTokens)}，柱子画的就是这两段）`,
-    `输出 ${num(d.outputTokens)}`,
-    `合计 ${num(d.totalTokens)}`,
-    `${num(d.requestCount)} 轮`,
-  ].join(' · ')
+  return `${d.key} · 合计 ${num(d.totalTokens)} Token · 净输入 ${num(freshInput(d))} · 缓存 ${num(d.cachedInputTokens)} · 输出 ${num(d.outputTokens)} · ${num(d.requestCount)} 轮`
 }
 
-/** 只给首末和整周标日期，密了就读不出数 */
 function showLabel(index: number, length: number): boolean {
-  if (length <= 8) return true
-  if (index === 0 || index === length - 1) return true
-  return (length - 1 - index) % 7 === 0
+  return length <= 8 || index === 0 || index === length - 1 || (length - 1 - index) % 7 === 0
 }
-
-function labelOf(d: CodexUsageBucket): string {
-  return d.key.slice(5)
-}
-
-const totals = computed(() => usageReport.value?.totals ?? null)
-const scanSeconds = computed(() => ((usageReport.value?.scanMillis ?? 0) / 1000).toFixed(1))
-const hasChart = computed(() => days.value.length > 0)
 </script>
 
 <template>
-  <div class="usg-view">
+  <div class="usg-view" :aria-busy="usageBusy">
     <div v-if="usageError" class="rcard empty-state">
       <div class="empty-icon"><AppIcon name="alert" :size="24" /></div>
       <div class="empty-title">读不到用量</div>
@@ -70,256 +77,161 @@ const hasChart = computed(() => days.value.length > 0)
       <button class="action-btn primary" type="button" @click="loadUsage()">重试</button>
     </div>
 
-    <div v-else-if="usageBusy && !totals" class="rcard usg-wait">
-      <AppIcon name="refresh" :size="13" />
-      正在读官方会话目录…
+    <div v-else-if="!totals" class="rcard usg-wait">
+      <AppIcon name="refresh" :size="13" />正在统计用量…
     </div>
 
-    <div v-else-if="!hasChart" class="rcard empty-state">
-      <div class="empty-icon"><AppIcon name="clock" :size="24" /></div>
-      <div class="empty-title">这个窗口里没有 token 记录</div>
-      <div class="empty-desc">换一档统计窗口，或者先在 Codex 里跑几轮会话</div>
-    </div>
-
-    <template v-else-if="totals">
-      <div class="rcard usg-sum">
-        <span class="usg-sum-main">
-          <span class="usg-num mono-ish">{{ num(totals.totalTokens) }}</span>
-          <span class="usg-sum-label">总 token</span>
-        </span>
-        <span class="usg-chips">
-          <span class="usg-chip">净输入 <b class="mono-ish">{{ num(totals.inputTokens - totals.cachedInputTokens) }}</b></span>
-          <span class="usg-chip">缓存命中 <b class="mono-ish">{{ num(totals.cachedInputTokens) }}</b></span>
-          <span class="usg-chip">输出 <b class="mono-ish">{{ num(totals.outputTokens) }}</b></span>
-          <span class="usg-chip">其中推理 <b class="mono-ish">{{ num(totals.reasoningOutputTokens) }}</b></span>
-          <span class="usg-chip">{{ num(totals.requestCount) }} 轮 · {{ num(totals.sessionCount) }} 条会话</span>
-        </span>
-      </div>
-
-      <div class="rcard usg-chart">
-        <div class="usg-bars" :data-days="days.length" :data-max="maxInput">
-          <div v-for="(d, i) in days" :key="d.key" class="usg-col" :title="dayTitle(d)">
-            <div class="usg-stack">
-              <div class="usg-cached" :style="{ height: barHeight(d.cachedInputTokens) }"></div>
-              <div class="usg-fresh" :style="{ height: barHeight(freshInput(d)) }"></div>
-            </div>
-            <span class="usg-x" :class="{ shown: showLabel(i, days.length) }">{{ labelOf(d) }}</span>
+    <template v-else>
+      <section class="rcard usg-sum" :aria-label="scope">
+        <div class="usg-heading">
+          <h3>{{ scope }}</h3>
+          <span class="usg-period">{{ period }}</span>
+        </div>
+        <div class="usg-overview">
+          <div class="usg-sum-main">
+            <span class="usg-num">{{ num(totals.totalTokens) }}</span>
+            <span class="usg-sum-label">总 Token</span>
           </div>
+          <dl class="usg-metrics">
+            <div class="usg-metric" data-metric="fresh"><dt>净输入</dt><dd>{{ num(freshInput(totals)) }}</dd></div>
+            <div class="usg-metric" data-metric="cached"><dt>缓存命中</dt><dd>{{ num(totals.cachedInputTokens) }}</dd></div>
+            <div class="usg-metric" data-metric="output"><dt>输出</dt><dd>{{ num(totals.outputTokens) }}</dd></div>
+          </dl>
         </div>
-        <div class="usg-legend">
-          <span class="usg-key"><i class="usg-swatch sw-fresh"></i>净输入</span>
-          <span class="usg-key"><i class="usg-swatch sw-cached"></i>缓存命中</span>
-          <span class="usg-hint">柱高按当天输入，输出看悬停与上面的总量行</span>
-          <span class="usg-scan mono-ish">
-            扫了 {{ num(totals.fileCount) }} 个文件 · {{ scanSeconds }} s
-          </span>
+        <div class="usg-facts">
+          <span class="usg-count">{{ num(totals.requestCount) }} 轮 · {{ num(totals.sessionCount) }} 条会话</span>
+          <span>输出中含推理 <b class="mono-ish">{{ num(totals.reasoningOutputTokens) }}</b></span>
+          <span class="usg-updated">{{ usageBusy ? '更新中…' : `更新于 ${updatedTime}` }}</span>
         </div>
+      </section>
+
+      <div v-if="!days.length" class="rcard empty-state">
+        <div class="empty-icon"><AppIcon name="clock" :size="24" /></div>
+        <div class="empty-title">{{ usageRange === 'today' ? '今天还没有用量记录' : '这段时间没有用量记录' }}</div>
+        <div class="empty-desc">{{ usageRange === 'today' ? '在 Codex 中使用后点击“重新统计”，或切换范围查看历史用量' : '切换统计范围查看其他日期的用量' }}</div>
       </div>
 
-      <div v-if="models.length" class="rcard usg-models">
-        <div class="usg-model-title">按模型</div>
-        <div
-          v-for="m in models"
-          :key="m.key"
-          class="usg-model-row"
-          :data-model="m.key"
-          :title="`${m.label}：合计 ${num(m.totalTokens)} · 净输入 ${num(freshInput(m))} · 缓存 ${num(m.cachedInputTokens)} · 输出 ${num(m.outputTokens)}`"
-        >
+      <CodexTodayUsageChart v-if="usageRange === 'today' && usageReport" :report="usageReport" :updated-at="usageUpdatedAt ?? Date.now()" />
+
+      <template v-else-if="days.length">
+        <section class="rcard usg-chart" aria-label="每日用量趋势">
+          <div class="usg-heading">
+            <h3>每日用量</h3>
+            <span v-if="usageRange === 'all'" class="usg-period">最近 30 个有记录的日期</span>
+          </div>
+          <div class="usg-bars" :data-days="days.length" :data-max="maxTotal">
+            <div v-for="(d, i) in days" :key="d.key" class="usg-col" :title="dayTitle(d)">
+              <div class="usg-stack">
+                <div class="usg-output" :style="{ height: barHeight(d.outputTokens) }"></div>
+                <div class="usg-cached" :style="{ height: barHeight(d.cachedInputTokens) }"></div>
+                <div class="usg-fresh" :style="{ height: barHeight(freshInput(d)) }"></div>
+              </div>
+              <span class="usg-x" :class="{ shown: showLabel(i, days.length) }">{{ d.key.slice(5) }}</span>
+            </div>
+          </div>
+          <div class="usg-legend">
+            <span class="usg-key"><i class="usg-swatch sw-fresh"></i>净输入</span>
+            <span class="usg-key"><i class="usg-swatch sw-cached"></i>缓存命中</span>
+            <span class="usg-key"><i class="usg-swatch sw-output"></i>输出</span>
+            <span class="usg-hint">柱高表示总 Token</span>
+          </div>
+        </section>
+
+        <section class="rcard usg-daily" aria-label="每日用量明细">
+          <div class="usg-heading"><h3>每日明细</h3><span class="usg-period">有记录的日期 · 最近在前</span></div>
+          <div class="usg-table-scroll">
+            <table>
+              <thead><tr><th scope="col">日期</th><th scope="col">总 Token</th><th scope="col">净输入</th><th scope="col">缓存命中</th><th scope="col">输出</th><th scope="col">轮次</th></tr></thead>
+              <tbody>
+                <tr v-for="d in dailyRows" :key="d.key" class="usg-day-row" :data-day="d.key">
+                  <th scope="row">{{ d.key }}<span v-if="d.key === updatedDay" class="usg-today-mark">今天</span></th>
+                  <td class="usg-day-total">{{ num(d.totalTokens) }}</td><td>{{ num(freshInput(d)) }}</td><td>{{ num(d.cachedInputTokens) }}</td><td>{{ num(d.outputTokens) }}</td><td>{{ num(d.requestCount) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </template>
+
+      <section v-if="models.length" class="rcard usg-models" aria-label="模型用量">
+        <div class="usg-heading"><h3>按模型</h3><span class="usg-period">{{ scope }}</span></div>
+        <div v-for="m in models" :key="m.key" class="usg-model-row" :data-model="m.key" :title="`${m.label}：合计 ${num(m.totalTokens)} · 净输入 ${num(freshInput(m))} · 缓存 ${num(m.cachedInputTokens)} · 输出 ${num(m.outputTokens)}`">
           <span class="usg-model-name">{{ m.label }}</span>
           <span class="usg-track"><span class="usg-fill" :style="{ width: `${pct(m.totalTokens, totals.totalTokens)}%` }"></span></span>
           <span class="usg-model-num mono-ish">{{ num(m.totalTokens) }}</span>
           <span class="usg-model-pct mono-ish">{{ pct(m.totalTokens, totals.totalTokens).toFixed(1) }}%</span>
         </div>
+      </section>
+
+      <div class="usg-foot">
+        <p class="page-note"><AppIcon name="info" :size="13" />输入包含缓存命中，推理已计入输出。回收站中的会话不计入用量。</p>
+        <span class="usg-scan">扫了 {{ num(totals.fileCount) }} 个文件 · {{ scanSeconds }} s</span>
       </div>
     </template>
-
-    <p class="page-note">
-      <AppIcon name="info" :size="13" />
-      按天的数字来自官方会话文件里逐轮累计快照的差值，与「会话」档每条会话的合计同源；
-      会话一经移出官方目录，图上那一天也随之减少。
-    </p>
   </div>
 </template>
 
 <style scoped>
-.usg-view {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.usg-sum {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-height: 64px;
-  padding: 0 14px;
-}
-.usg-sum-main {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  gap: 2px;
-}
-.usg-num {
-  font-size: var(--text-lg);
-  color: var(--text);
-}
-.usg-sum-label {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-.usg-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-.usg-chip b {
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-.usg-wait {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 44px;
-  padding: 0 14px;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-.usg-chart {
-  padding: 14px;
-}
-.usg-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 132px;
-}
-.usg-col {
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
-  align-items: center;
-  height: 100%;
-  min-width: 0;
-}
-.usg-stack {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  justify-content: flex-end;
-  width: 100%;
-  /* 窗口里只有三四天时别把柱子拉成两块板；30 天密档本来就够不到这个宽 */
-  max-width: 44px;
-  gap: 1px;
-}
-/* 缓存在上方、净输入压在柱底：柱子一眼读的是「真实用量占这根柱的多少」 */
-.usg-cached {
-  width: 100%;
-  min-height: 0;
-  border-radius: 2px 2px 0 0;
-  background: var(--accent-light);
-}
-.usg-fresh {
-  width: 100%;
-  min-height: 0;
-  border-radius: 0 0 2px 2px;
-  background: var(--accent);
-}
-.usg-col:hover .usg-fresh {
-  background: var(--accent-hover);
-}
-.usg-x {
-  height: 14px;
-  margin-top: 4px;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  visibility: hidden;
-}
-.usg-x.shown {
-  visibility: visible;
-}
-.usg-legend {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-top: 6px;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-.usg-key {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.usg-hint {
-  color: var(--text-faint);
-}
-.usg-swatch {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-}
-.sw-fresh {
-  background: var(--accent);
-}
-.sw-cached {
-  background: var(--accent-light);
-}
-.usg-scan {
-  margin-left: auto;
-}
-.usg-models {
-  padding: 6px 14px 10px;
-}
-.usg-model-title {
-  padding: 6px 0 4px;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-.usg-model-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 34px;
-  border-top: 1px solid var(--border);
-  font-size: var(--text-xs);
-}
-.usg-model-name {
-  flex: 0 0 26%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text);
-}
-.usg-track {
-  flex: 1 1 auto;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--hover-chrome);
-  overflow: hidden;
-}
-.usg-fill {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-  background: var(--accent);
-}
-.usg-model-num {
-  flex-shrink: 0;
-  min-width: 76px;
-  text-align: right;
-  color: var(--text-secondary);
-}
-.usg-model-pct {
-  flex-shrink: 0;
-  min-width: 46px;
-  text-align: right;
-  color: var(--text-muted);
-}
-.mono-ish {
-  font-family: var(--font-mono);
+.page-note { font-size: var(--text-xs); }
+.usg-view { display: flex; flex-direction: column; gap: var(--space-3); }
+.usg-sum { padding: 16px 18px 12px; }
+.usg-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; }
+.usg-heading h3 { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--text); }
+.usg-period { font-size: var(--text-xs); color: var(--text-muted); }
+.usg-overview { display: flex; align-items: center; gap: 32px; padding: 18px 0; }
+.usg-sum-main { display: flex; flex-direction: column; flex: 0 0 25%; gap: 4px; }
+.usg-num { font-size: var(--text-2xl); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; letter-spacing: normal; color: var(--text); }
+.usg-sum-label { font-size: var(--text-xs); color: var(--text-muted); }
+.usg-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 1; gap: 12px; margin: 0; }
+.usg-metric dt { font-size: var(--text-xs); color: var(--text-muted); }
+.usg-metric dd { margin: 6px 0 0; font-size: var(--text-md); font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; color: var(--text-secondary); }
+.usg-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding-top: 10px; border-top: 1px solid var(--border); font-size: var(--text-xs); color: var(--text-muted); }
+.usg-facts b { font-weight: 500; color: var(--text-secondary); }
+.usg-updated { margin-left: auto; }
+.usg-wait { display: flex; align-items: center; gap: var(--space-2); min-height: 64px; padding: 0 18px; font-size: var(--text-xs); color: var(--text-muted); }
+.usg-chart { padding: 14px 18px; }
+.usg-bars { display: flex; align-items: flex-end; gap: 4px; height: 132px; margin-top: 16px; }
+.usg-col { display: flex; flex: 1 1 0; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
+.usg-stack { display: flex; flex: 1 1 auto; flex-direction: column; justify-content: flex-end; width: 100%; max-width: 44px; }
+.usg-output, .usg-cached, .usg-fresh { width: 100%; }
+.usg-output { border-radius: 2px 2px 0 0; background: var(--text-muted); }
+.usg-cached { background: var(--accent-light); }
+.usg-fresh { border-radius: 0 0 2px 2px; background: var(--accent); }
+.usg-col:hover .usg-fresh { background: var(--accent-hover); }
+.usg-x { min-height: 18px; margin-top: 4px; font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--text-muted); visibility: hidden; }
+.usg-x.shown { visibility: visible; }
+.usg-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: 10px; font-size: var(--text-xs); color: var(--text-muted); }
+.usg-key { display: flex; align-items: center; gap: 5px; }
+.usg-hint { margin-left: auto; color: var(--text-faint); }
+.usg-swatch { width: 8px; height: 8px; border-radius: 2px; }
+.sw-fresh { background: var(--accent); }
+.sw-cached { background: var(--accent-light); }
+.sw-output { background: var(--text-muted); }
+.usg-daily, .usg-models { padding: 14px 18px 8px; }
+.usg-table-scroll { overflow: auto; max-height: 236px; margin-top: 10px; scrollbar-gutter: stable; }
+.usg-daily table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); white-space: nowrap; }
+.usg-daily th, .usg-daily td { padding: 9px 8px; text-align: right; border-top: 1px solid var(--border); }
+.usg-daily thead th { border-top: 0; font-weight: 500; color: var(--text-muted); }
+.usg-daily th:first-child { text-align: left; padding-left: 0; }
+.usg-daily tbody th { font-weight: 400; color: var(--text-secondary); }
+.usg-daily td { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; color: var(--text-secondary); }
+.usg-daily td.usg-day-total { color: var(--text); font-weight: 600; }
+.usg-today-mark { margin-left: 6px; font-size: var(--text-xs); color: var(--accent); }
+.usg-models .usg-heading { padding-bottom: 8px; }
+.usg-model-row { display: flex; align-items: center; gap: var(--space-3); min-height: 34px; border-top: 1px solid var(--border); font-size: var(--text-xs); }
+.usg-model-name { flex: 0 0 26%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.usg-track { flex: 1 1 auto; height: 6px; border-radius: 3px; background: var(--hover-chrome); overflow: hidden; }
+.usg-fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.usg-model-num { flex-shrink: 0; min-width: 76px; text-align: right; color: var(--text-secondary); }
+.usg-model-pct { flex-shrink: 0; min-width: 46px; text-align: right; color: var(--text-muted); }
+.usg-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 14px; }
+.usg-foot .page-note { margin: 0; }
+.usg-scan { font-size: var(--text-xs); color: var(--text-faint); }
+.mono-ish { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
+@media (max-width: 850px) {
+  .usg-overview { flex-wrap: wrap; gap: 18px; }
+  .usg-sum-main { flex-basis: 100%; }
+  .usg-metrics { flex-basis: 100%; }
+  .usg-model-name { flex-basis: 32%; }
 }
 </style>

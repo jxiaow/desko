@@ -114,13 +114,13 @@ fn extract_error_code_from_message(message: &str) -> Option<String> {
 /// Only recognize errors emitted by local proxy preparation. Do not inspect
 /// upstream HTTP bodies or quota_error.code: an upstream can return the same code.
 pub(crate) fn is_local_proxy_error(message: &str) -> bool {
-    let message = message.trim();
-    let message = message
+    let mut message = message.trim();
+    while let Some(inner) = message
         .strip_prefix("Token 已过期，刷新 Token 失败: ")
-        .unwrap_or(message);
-    let message = message
-        .strip_prefix("Token 已过期且刷新失败: ")
-        .unwrap_or(message);
+        .or_else(|| message.strip_prefix("Token 已过期且刷新失败: "))
+    {
+        message = inner;
+    }
     super::codex_proxy_engine_preflight::is_prerequisite_error(message)
         || matches!(
             message,
@@ -2208,8 +2208,7 @@ mod tests {
     use reqwest::header::{REFERER, USER_AGENT};
     use reqwest::Method;
     use serde_json::json;
-    use std::sync::{Arc, Mutex};
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use std::sync::Arc;
     use tokio::net::TcpListener;
 
     #[test]
@@ -2386,50 +2385,6 @@ mod tests {
             assert_eq!(serde_json::to_value(&account.quota).unwrap(), quota);
             assert_eq!(account.usage_updated_at, Some(123456000));
         }
-    }
-
-    fn assertion_task_id(request: &str) -> Option<String> {
-        let authorization = request.lines().find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            name.eq_ignore_ascii_case("authorization")
-                .then(|| value.trim())
-        })?;
-        let encoded = authorization.strip_prefix("AgentAssertion ")?;
-        let payload = general_purpose::URL_SAFE_NO_PAD.decode(encoded).ok()?;
-        serde_json::from_slice::<serde_json::Value>(&payload)
-            .ok()?
-            .get("task_id")?
-            .as_str()
-            .map(str::to_string)
-    }
-
-    async fn read_test_http_request(stream: &mut tokio::net::TcpStream) -> String {
-        let mut bytes = Vec::new();
-        let mut chunk = [0u8; 2048];
-        let header_end = loop {
-            let read = stream.read(&mut chunk).await.expect("read request");
-            assert!(read > 0, "connection closed before request headers");
-            bytes.extend_from_slice(&chunk[..read]);
-            if let Some(index) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
-                break index + 4;
-            }
-        };
-        let headers = String::from_utf8_lossy(&bytes[..header_end]);
-        let content_length = headers
-            .lines()
-            .find_map(|line| {
-                let (name, value) = line.split_once(':')?;
-                name.eq_ignore_ascii_case("content-length")
-                    .then(|| value.trim().parse::<usize>().ok())
-                    .flatten()
-            })
-            .unwrap_or(0);
-        while bytes.len() < header_end + content_length {
-            let read = stream.read(&mut chunk).await.expect("read request body");
-            assert!(read > 0, "connection closed before request body");
-            bytes.extend_from_slice(&chunk[..read]);
-        }
-        String::from_utf8_lossy(&bytes).into_owned()
     }
 
     #[test]
@@ -2614,7 +2569,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn agent_identity_quota_request_uses_common_headers_and_recovers_task_once() {
+    async fn removed_agent_identity_auth_preserves_common_headers_and_sends_no_request() {
         let account = agent_identity_test_account();
         let headers = build_codex_api_headers(&account, account.account_id.as_deref())
             .expect("build common headers");
@@ -2638,79 +2593,12 @@ mod tests {
             .await
             .expect("bind mock upstream");
         let base_url = format!("http://{}", listener.local_addr().expect("local address"));
-        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
-        let captured = Arc::clone(&requests);
-        let server = tokio::spawn(async move {
-            let mut usage_calls = 0;
-            for _ in 0..3 {
-                let (mut stream, _) = listener.accept().await.expect("accept request");
-                let request = read_test_http_request(&mut stream).await;
-                let request_line = request.lines().next().unwrap_or_default().to_string();
-                captured.lock().expect("capture request").push(request);
-                let (status, body) = if request_line.contains("/task/register") {
-                    ("200 OK", r#"{"task_id":"task-new"}"#)
-                } else if usage_calls == 0 {
-                    usage_calls += 1;
-                    (
-                        "401 Unauthorized",
-                        r#"{"error":{"code":"invalid_task_id"}}"#,
-                    )
-                } else {
-                    usage_calls += 1;
-                    ("200 OK", r#"{"ok":true}"#)
-                };
-                let response = format!(
-                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                    body.len()
-                );
-                stream
-                    .write_all(response.as_bytes())
-                    .await
-                    .expect("write response");
-            }
-        });
-
-        let response = send_codex_api_request_with_agent_auth_base_url(
-            &account,
-            Method::GET,
-            &format!("{base_url}/usage"),
-            None,
-            &base_url,
-        )
-        .await
-        .expect("recover task and retry quota request");
-        assert!(response.status.is_success());
-        server.await.expect("mock server");
-
-        let requests = requests.lock().expect("captured requests");
-        assert_eq!(requests.len(), 3);
-        let usage_requests = requests
-            .iter()
-            .filter(|request| {
-                request
-                    .lines()
-                    .next()
-                    .is_some_and(|line| line.contains("/usage"))
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(usage_requests.len(), 2);
-        assert_eq!(
-            assertion_task_id(usage_requests[0]),
-            Some("task-old".to_string())
-        );
-        assert_eq!(
-            assertion_task_id(usage_requests[1]),
-            Some("task-new".to_string())
-        );
-        assert!(usage_requests.iter().all(|request| {
-            let lower = request.to_ascii_lowercase();
-            lower.contains("user-agent: codex desktop/")
-                && lower.contains("originator: codex desktop")
-                && lower.contains("chatgpt-account-id: team-test")
-                && lower.contains("x-openai-fedramp: true")
-                && !lower.contains("openai-beta")
-                && !lower.contains("referer:")
-                && !lower.contains("sec-fetch-site:")
-        }));
+        let before = serde_json::to_value(&account).unwrap();
+        let result = send_codex_api_request_with_agent_auth_base_url(
+            &account, Method::GET, &format!("{base_url}/usage"), None, &base_url,
+        ).await;
+        assert!(matches!(result, Err(ref error) if error == "CODEX_AGENT_IDENTITY_UNSUPPORTED"));
+        assert_eq!(serde_json::to_value(&account).unwrap(), before);
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(30), listener.accept()).await.is_err());
     }
 }

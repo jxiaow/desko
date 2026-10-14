@@ -689,6 +689,22 @@ pub async fn prepare_account_for_injection_from_store(
     ensure_managed_account_fresh(account_id).await
 }
 
+// The official-profile operation happens outside this short storage transaction.
+// Re-read the account so changing last_used never restores prepared old tokens.
+fn record_current_account(account_id: &str) -> Result<CodexAccount, String> {
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = load_account_index_checked_unlocked()?;
+    let mut account = load_account(account_id).ok_or_else(|| format!("账号不存在: {account_id}"))?;
+    account.update_last_used();
+    save_account_with_tombstone_guard(&account)?;
+    index.current_account_id = Some(account_id.to_string());
+    if let Some(summary) = index.accounts.iter_mut().find(|summary| summary.id == account_id) {
+        summary.last_used = account.last_used;
+    }
+    save_account_index_unlocked(&index)?;
+    Ok(account)
+}
+
 fn switch_account_with_prepared(
     account_id: &str,
     account_for_write: CodexAccount,
@@ -711,15 +727,7 @@ fn switch_account_with_prepared(
         write_prepared_account_bundle_to_dir(wsl_dir, &account_for_write)
     });
 
-    // 更新索引中的 current_account_id
-    let mut index = load_account_index();
-    index.current_account_id = Some(account_id.to_string());
-    save_account_index(&index)?;
-
-    // 更新账号的 last_used
-    let mut updated_account = account_for_write.clone();
-    updated_account.update_last_used();
-    save_account(&updated_account)?;
+    let updated_account = record_current_account(account_id)?;
 
     logger::log_info(&format!("已切换到 Codex 账号: {}", updated_account.email));
 
@@ -901,13 +909,7 @@ async fn commit_account_switch_locked(
                 write_api_key_account_bundle_with_oauth_to_dir(wsl_dir, &account, &oauth_account)
             });
 
-            let mut index = load_account_index();
-            index.current_account_id = Some(account_id.to_string());
-            save_account_index(&index)?;
-
-            let mut updated_account = account.clone();
-            updated_account.update_last_used();
-            save_account(&updated_account)?;
+            let updated_account = record_current_account(account_id)?;
 
             logger::log_info(&format!(
                 "已切换到 Codex API Key 账号: {}，登录态绑定 OAuth: {}",

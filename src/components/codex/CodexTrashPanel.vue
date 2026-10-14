@@ -279,6 +279,7 @@ function projectName(s: CodexTrashedSessionRecord): string {
 </template>
 
 <style scoped>
+.page-note { font-size: var(--text-xs); }
 .thr-sk {
   display: flex;
   align-items: center;
@@ -299,12 +300,12 @@ function projectName(s: CodexTrashedSessionRecord): string {
   border-bottom: 1px solid var(--border);
 }
 .thr-sec-title {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-muted);
 }
 .thr-sec-num {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--text-faint);
 }
 .thr-sec-act {
@@ -326,7 +327,8 @@ function projectName(s: CodexTrashedSessionRecord): string {
 }
 .thr-title {
   min-width: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
+  font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -338,7 +340,7 @@ function projectName(s: CodexTrashedSessionRecord): string {
   flex-direction: column;
   flex-shrink: 0;
   gap: 2px;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--text-muted);
   text-align: right;
 }
@@ -356,5 +358,7 @@ function projectName(s: CodexTrashedSessionRecord): string {
 }
 .mono-ish {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
 }
 </style>

@@ -93,3 +93,26 @@
 验收：`vue-tsc + vite build` 绿；主题覆盖检查 7×95 槽绿；vitest 166 全绿（含 `.stream-bar`→`.page-bar` 锚点同步）；
 Playwright e2e 97 全绿；截图见 `design/unify-shots/light-cool/` 与 `design/unify-shots/linear-dark/`。
 实测顶栏几何：滚动后 bar.top 与滚动容器贴合无缝，磨砂盖住滚过的行（早前截图"缝"为合成器假象）。
+
+## 实施记录 · 侧栏↔内容列 gutter 并轨（2026-10-14）
+
+用户实拍指侧栏与卡片之间那条空带。量出来是四段没人认领的内缩叠的（1187 窗）：侧栏行右内缩 21px
+（`scrollbar-gutter: stable` 无滚动条时仍留 9px 槽，全压在右侧，左只有 12px）+ 侧栏 padding 12 +
+发丝线 1 + 内容列左内距——小记 20、其余四页 39.5（`--content-max` 两侧均摊，1440 窗涨到 165）。
+同一条带子换页就跳宽，是它读起来像"设计漏了一段"的根因。取代 distinctive/01-plan.md 的"900 居中列"档。
+
+- 新尺度槽 `--page-gutter: 24px`、`--scrollbar-track: 9px`（后者与 `::-webkit-scrollbar` 宽度同源，不再各写各的 9）
+- `.sidebar-nav` 一律 `scrollbar-gutter: stable both-edges`（折叠档那条单独规则并入），展开档再
+  `margin-inline: calc(var(--scrollbar-track) * -1)` 把两侧空槽抵掉 → 行左右都回 12px、图标与「Desko」同轴；
+  真出滚动条时槽宽变了也只改对称值，不会只啃一侧
+- `.content-inner` 的 `padding-inline` 由 `max(space-5, 50% − content-max/2)` 改为
+  `var(--page-gutter) max(var(--page-gutter), calc(100% - var(--page-gutter) - var(--content-max)))`：
+  阅读列贴侧栏起算，上限之外的余量整份落到右侧
+- 小记 `.stream-inner` 删 `max-width: var(--stream-max)` + `margin-inline: auto`，改吃同一条 padding 契约；
+  1200 那档正文宽度不变，变的只是余量落在哪一侧
+- 标题栏 `.titlebar-left` 左内距 20 → `--page-gutter`，页名与内容列同左缘
+
+实测（1040/1187/1440/1920 四档 × 五页）：行 12..195，页名 / `.page-bar` / 卡片左缘一律 232，换页换窗宽都不跳。
+图标轨档回归：行 9..46，仍在 56 轨中线上。
+验收：`sticky-band-check` 五页全绿；navigation + entries e2e 18 passed / 1 failed——那条红是 `--accent-soft`
+#e8eef4→#e7eef8 的令牌改动没同步断言，与本轮无关。

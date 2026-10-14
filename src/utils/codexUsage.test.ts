@@ -1,0 +1,35 @@
+import { describe, expect, it } from 'vitest'
+import { localDayKey, usageHours, usageWindowFrom } from './codexUsage'
+
+describe('本地自然日的用量窗口', () => {
+  it('当天从本地零点起，近 7/30 天恰好包含今天在内的 7/30 个日期', () => {
+    const now = new Date(2026, 9, 13, 21, 30)
+    const keyOf = (range: 'today' | 'week' | 'month') => localDayKey(new Date(usageWindowFrom(range, now)! * 1000))
+    expect(keyOf('today')).toBe('2026-10-13')
+    expect(keyOf('week')).toBe('2026-10-07')
+    expect(keyOf('month')).toBe('2026-09-14')
+    expect(new Date(usageWindowFrom('today', now)! * 1000).getHours()).toBe(0)
+    expect(now.getHours()).toBe(21)
+    expect(usageWindowFrom('all', now)).toBeNull()
+  })
+
+  it('跨年和闰年按日历回退，日键不经过 UTC 转换', () => {
+    const start = usageWindowFrom('week', new Date(2027, 0, 3, 0, 10))!
+    expect(localDayKey(new Date(start * 1000))).toBe('2026-12-28')
+    expect(localDayKey(new Date(usageWindowFrom('month', new Date(2024, 2, 1))! * 1000))).toBe('2024-02-01')
+  })
+
+  it('真实小时桶填入已过空档，未来时段不进入图中观测值', () => {
+    const start = usageWindowFrom('today', new Date(2026, 9, 13, 6, 30))!
+    const hours = usageHours([
+      { key: String(start + 3600), label: '01:00', inputTokens: 100, cachedInputTokens: 80, outputTokens: 20, totalTokens: 120, requestCount: 2 },
+    ], start, start + 6.5 * 3600)
+    expect(hours).toHaveLength(24)
+    expect(hours[0].totalTokens).toBe(0)
+    expect(hours[1].totalTokens).toBe(120)
+    expect(hours[1].requestCount).toBe(2)
+    expect(hours[6].future).toBe(false)
+    expect(hours[7].future).toBe(true)
+    expect(hours.filter(hour => !hour.future).reduce((sum, hour) => sum + hour.totalTokens, 0)).toBe(120)
+  })
+})

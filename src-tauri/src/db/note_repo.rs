@@ -134,11 +134,11 @@ impl Database {
         Ok(())
     }
 
-    /// 解除加密：密文与封条全部抹掉
-    pub fn clear_note_lock(&self, id: &str) -> Result<(), AppError> {
+    /// 保存明文和清除密文必须是同一个写入，失败时保留可恢复的密文。
+    pub fn remove_note_lock_with_content(&self, id: &str, input: &super::UpdateNoteInput) -> Result<(), AppError> {
         self.conn.execute(
-            "UPDATE notes SET enc = 0, cipher = '', cipher_iv = '', wrap_pass = '', pass_salt = '', wrap_master = '' WHERE id = ?1",
-            params![id],
+            "UPDATE notes SET enc = 0, cipher = '', cipher_iv = '', wrap_pass = '', pass_salt = '', wrap_master = '', title=?2, content_html=?3, category=?4, updated_at=?5 WHERE id = ?1 AND enc=1",
+            params![id, input.title, input.content_html, input.category, chrono::Utc::now().timestamp_millis()],
         )?;
         Ok(())
     }
@@ -232,6 +232,22 @@ impl Database {
 mod tests {
     use super::super::{cleanup, setup_test_db};
     use super::Note;
+
+    #[test]
+    fn remove_lock_write_failure_retains_the_only_ciphertext() {
+        let db = super::Database::new(":memory:").unwrap();
+        db.create_note(&note("locked")).unwrap();
+        db.set_note_lock("locked", "only-ciphertext", "iv", "wrapped", "t", 2).unwrap();
+        db.conn.execute_batch("CREATE TRIGGER fail_plain BEFORE UPDATE ON notes WHEN NEW.enc=0 BEGIN SELECT RAISE(ABORT, 'disk write failed'); END;").unwrap();
+        let input = super::super::UpdateNoteInput { title: "t".into(), content_html: "recovered plaintext".into(), category: None };
+        assert!(db.remove_note_lock_with_content("locked", &input).is_err());
+        assert_eq!(db.get_note_lock("locked").unwrap().unwrap().cipher, "only-ciphertext");
+        assert!(db.get_note("locked").unwrap().unwrap().content_html.is_empty());
+        db.conn.execute_batch("DROP TRIGGER fail_plain;").unwrap();
+        db.remove_note_lock_with_content("locked", &input).unwrap();
+        assert!(db.get_note_lock("locked").unwrap().is_none());
+        assert_eq!(db.get_note("locked").unwrap().unwrap().content_html, input.content_html);
+    }
 
     fn note(id: &str) -> Note {
         Note {

@@ -143,6 +143,21 @@ pub fn write_config(
     Ok(path)
 }
 
+/// 本地管理的 cloudflared 不热读 YAML。配置改变时先撤下旧 connector，
+/// 写完才允许重新启动；写入失败也不能让已删除的旧服务继续暴露。
+pub fn apply_config_change(
+    root: &Path, tunnel_id: &str, rules: &[IngressRule],
+    stop: impl FnOnce(), restart: impl FnOnce() -> Result<(), AppError>,
+) -> Result<(), AppError> {
+    let next = build_ingress(tunnel_id, &creds_path(root, tunnel_id), rules)?;
+    if std::fs::read_to_string(config_path(root, tunnel_id)).ok().as_deref() == Some(next.as_str()) {
+        return Ok(());
+    }
+    stop();
+    write_config(root, tunnel_id, rules)?;
+    restart()
+}
+
 fn with_ext(path: &Path, ext: &str) -> PathBuf {
     let mut name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     name.push('.');
@@ -649,13 +664,22 @@ pub fn build_info_args(root: &Path, tunnel_id: &str) -> Vec<String> {
     args
 }
 
-/// 没显式 `--origincert` 时它按 `~/.cloudflared` 等处找 cert。授权完成后要同时查这里，
-/// 才能把落在外部默认目录的凭据搬进 desko 自己的目录（选址硬约束）。
-pub fn fallback_cert_path() -> Option<PathBuf> {
-    let home = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(PathBuf::from)?;
-    Some(home.join(".cloudflared").join("cert.pem"))
+/// 登录子进程专用的 home：cloudflared 的默认写入路径也留在当前档案内。
+/// 不借用用户真实 ~/.cloudflared，那里可能属于其他账号和外部 CLI。
+pub fn login_home(root: &Path) -> PathBuf {
+    tunnel_root(root).join("login-home")
+}
+
+pub fn fallback_cert_path(root: &Path) -> PathBuf {
+    login_home(root).join(".cloudflared").join("cert.pem")
+}
+
+pub fn build_login_envs(root: &Path) -> Vec<(String, String)> {
+    let home = login_home(root).display().to_string();
+    vec![
+        ("TUNNEL_ORIGIN_CERT".into(), cert_path(root).display().to_string()),
+        ("HOME".into(), home.clone()), ("USERPROFILE".into(), home),
+    ]
 }
 
 /// `login` 没有指定 cert 落点的 flag，写侧行为只能事后核验：我们的目录里没有、默认目录里有时搬进来。
@@ -1435,4 +1459,46 @@ mod tests {
         let _ = child.kill();
         let _ = child.wait();
     }
+    #[test]
+    fn changed_ingress_is_replaced_before_the_connector_restarts() {
+        let root = mock_root("reload-config");
+        let old = [IngressRule { hostname: "old.example.com".into(), port: 8000 }];
+        write_config(&root, "tun-1", &old).unwrap();
+        let stopped = std::cell::Cell::new(false);
+        let restarted = std::cell::Cell::new(false);
+        let next = [IngressRule { hostname: "new.example.com".into(), port: 9000 }];
+        apply_config_change(&root, "tun-1", &next, || stopped.set(true), || {
+            assert!(stopped.get(), "旧 connector 必须先停止");
+            let current = std::fs::read_to_string(config_path(&root, "tun-1")).unwrap();
+            assert!(current.contains("new.example.com") && current.contains(":9000"));
+            assert!(!current.contains("old.example.com") && !current.contains(":8000"));
+            restarted.set(true);
+            Ok(())
+        }).unwrap();
+        assert!(restarted.get());
+        apply_config_change(&root, "tun-1", &next,
+            || panic!("同一配置不应打断现有连接"), || panic!("同一配置不重启")).unwrap();
+        apply_config_change(&root, "tun-1", &[], || {}, || {
+            let current = std::fs::read_to_string(config_path(&root, "tun-1")).unwrap();
+            assert!(!current.contains("hostname:"));
+            Ok(())
+        }).unwrap();
+    }
+
+    #[test]
+    fn login_fallback_stays_in_its_own_home_and_preserves_external_credentials() {
+        let root = mock_root("isolated-login");
+        let external = root.join("external-home/.cloudflared/cert.pem");
+        std::fs::create_dir_all(external.parent().unwrap()).unwrap();
+        std::fs::write(&external, b"existing external account").unwrap();
+        let mut envs = build_login_envs(&root);
+        envs.extend(mock_envs(&root, &[("DESKO_MOCK_LOGIN", "write-home"), ("DESKO_MOCK_DELAY", "10")]));
+        run_mock(&build_login_args(&root), &envs, std::time::Duration::from_secs(20)).unwrap();
+        let fallback = fallback_cert_path(&root);
+        assert!(fallback.starts_with(&root) && fallback.exists());
+        assert!(adopt_stray_cert(&root, &fallback));
+        assert_eq!(std::fs::read(&external).unwrap(), b"existing external account");
+        assert!(cert_path(&root).exists());
+    }
+
 }

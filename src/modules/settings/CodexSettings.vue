@@ -55,6 +55,12 @@ void loadQuotaSettings()
 
 <template>
   <div class="group-content">
+    <div class="setting-item">
+      <div class="setting-info">
+        <span class="setting-name">备份范围</span>
+        <span class="setting-desc">Codex 只备份账号与账号配置；会话、历史和用量仅在本机，不参与坚果云备份、迁移导出或恢复。</span>
+      </div>
+    </div>
     <div v-if="storagePaths?.authPath" class="setting-item">
       <div class="setting-info">
         <span class="setting-name">官方凭据路径</span>

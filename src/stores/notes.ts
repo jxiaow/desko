@@ -6,7 +6,7 @@ import { useConfirmStore } from './confirm'
 import { extractTags, getDateGroupLabel, deriveTitleFromHtml, headingTitle, htmlToTagText, htmlToText } from '../utils/format'
 import { collectAttachmentNames, ensureAttachmentBase, nameOf, normalizeAssetHtml } from '../services/attachmentSrc'
 import type { Note, Attachment, UpdateNoteInput } from '../types'
-import type { NoteKeyStatus, NotePlain } from '../services/api/notes'
+import type { NoteDraft, NoteKeyStatus, NotePlain } from '../services/api/notes'
 
 export type NoteView = 'all' | 'pinned' | 'starred'
 export type NoteSort = 'new' | 'old' | 'updated'
@@ -76,7 +76,98 @@ export const useNotesStore = defineStore('notes', () => {
   let hintTimer: ReturnType<typeof setTimeout> | null = null
   // 按小记保存独立快照，共用防抖计时器；提交期间的新编辑也不会被覆盖。
   const pendingSaves = new Map<string, UpdateNoteInput>()
+  const mustRestageIds = new Set<string>()
   let saveInFlight: Promise<void> | null = null
+  // Staging and DB writes share one queue: an old save must not clear a newer staged draft.
+  let persistenceTail: Promise<void> = Promise.resolve()
+  let stageQueued = false
+  let clearPendingOnLock = true
+  let noteEpoch = 0
+  let fallbackKey: CryptoKey | null = null
+  let fallbackKeyPromise: Promise<CryptoKey> | null = null
+  const fallbackDrafts: { iv: ArrayBuffer; ciphertext: ArrayBuffer; recovered: Set<string> }[] = []
+  let fallbackComposer: { iv: ArrayBuffer; ciphertext: ArrayBuffer } | null = null
+
+  const localKey = async (): Promise<CryptoKey> => {
+    if (fallbackKey) return fallbackKey
+    if (!fallbackKeyPromise) {
+      const epoch = noteEpoch
+      fallbackKeyPromise = crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+        .then(key => {
+          if (epoch === noteEpoch) fallbackKey = key
+          return key
+        })
+    }
+    return fallbackKeyPromise
+  }
+
+  const sealUnpublishedDraft = async (): Promise<void> => {
+    if (!noteDraftHtml.value) return
+    const epoch = noteEpoch
+    const html = noteDraftHtml.value
+    const key = await localKey()
+    if (epoch !== noteEpoch) return
+    const iv = crypto.getRandomValues(new Uint8Array(12)).buffer as ArrayBuffer
+    const plaintext = new TextEncoder().encode(html)
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext)
+    plaintext.fill(0)
+    if (epoch !== noteEpoch) return
+    fallbackComposer = { iv, ciphertext }
+  }
+
+  const sealLocalDrafts = async (): Promise<void> => {
+    const epoch = noteEpoch
+    const drafts: NoteDraft[] = [...pendingSaves].map(([id, input]) => ({ id, input }))
+    const key = await localKey()
+    if (epoch !== noteEpoch) return
+    const iv = crypto.getRandomValues(new Uint8Array(12)).buffer as ArrayBuffer
+    const plaintext = new TextEncoder().encode(JSON.stringify(drafts))
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext)
+    plaintext.fill(0)
+    if (epoch !== noteEpoch) return
+    fallbackDrafts.push({ iv, ciphertext, recovered: new Set() })
+  }
+
+  const recoverLocalDrafts = async (): Promise<NoteDraft[]> => {
+    if (!fallbackKey) return []
+    const drafts: NoteDraft[] = []
+    const seen = new Set<string>()
+    for (const sealed of [...fallbackDrafts].reverse()) {
+      const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: sealed.iv }, fallbackKey, sealed.ciphertext)
+      for (const draft of JSON.parse(new TextDecoder().decode(plaintext)) as NoteDraft[]) {
+        if (!sealed.recovered.has(draft.id) && !seen.has(draft.id)) {
+          drafts.push(draft)
+          seen.add(draft.id)
+        }
+      }
+    }
+    return drafts
+  }
+
+  const enqueuePersistence = (work: () => Promise<void>): Promise<void> => {
+    const epoch = noteEpoch
+    const task = persistenceTail.then(() => epoch === noteEpoch ? work() : undefined)
+    persistenceTail = task.catch(() => {})
+    return task
+  }
+
+  const stagePendingDrafts = (): Promise<void> => enqueuePersistence(async () => {
+    const drafts: NoteDraft[] = [...pendingSaves].map(([id, input]) => ({ id, input }))
+    if (drafts.length) await api.stageDrafts(drafts)
+  })
+
+  const scheduleDraftStage = () => {
+    if (stageQueued) return
+    stageQueued = true
+    void enqueuePersistence(async () => {
+      stageQueued = false
+      const drafts: NoteDraft[] = [...pendingSaves].map(([id, input]) => ({ id, input }))
+      if (drafts.length) await api.stageDrafts(drafts)
+    }).catch((e: any) => {
+      toastStore.showToast('草稿暂存失败：' + (e.message ?? e), 'error')
+    })
+  }
 
   const clearSaveTimer = () => {
     if (saveTimer) {
@@ -161,27 +252,43 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   const fetchNotes = async () => {
+    const epoch = noteEpoch
     notesLoading.value = true
     try {
       // 图片 src 存的是相对形态，渲染要先有本机附件目录
       await ensureAttachmentBase()
-      noteKey.value = await api.noteKeyStatus()
+      if (epoch !== noteEpoch) return
+      const status = await api.noteKeyStatus()
+      if (epoch !== noteEpoch) return
+      noteKey.value = status
       const rows = await api.listNotes()
+      if (epoch !== noteEpoch) return
       // 页面刷新后 Rust 侧域密钥还在（应用没锁），把已解锁的明文找回来
-      if (noteKey.value.is_open) {
+      if (status.is_open) {
         for (const r of rows) {
           if (r.encrypted && notePlains.value[r.id] == null) {
-            try { notePlains.value[r.id] = await api.revealNote(r.id) } catch { /* 单条重锁过就是锁着 */ }
+            try {
+              const plain = await api.revealNote(r.id)
+              if (epoch !== noteEpoch) return
+              notePlains.value[r.id] = plain
+            } catch {
+              if (epoch !== noteEpoch) return
+              /* 单条重锁过就是锁着 */
+            }
           }
         }
       }
+      if (epoch !== noteEpoch) return
       notes.value = rows.map(withPlain)
+      await recoverDrafts()
+      if (epoch !== noteEpoch) return
       notesLoadError.value = null
     } catch (e: any) {
+      if (epoch !== noteEpoch) return
       notesLoadError.value = e?.message || '加载小记失败'
       toastStore.showToast('加载小记失败: ' + e.message, 'error')
     } finally {
-      notesLoading.value = false
+      if (epoch === noteEpoch) notesLoading.value = false
     }
   }
 
@@ -217,29 +324,44 @@ export const useNotesStore = defineStore('notes', () => {
 
   const commitSave = async (): Promise<void> => {
     clearSaveTimer()
-    if (saveInFlight) return saveInFlight
+    if (saveInFlight) {
+      await saveInFlight
+      if (pendingSaves.size) return commitSave()
+      return
+    }
     if (!pendingSaves.size) return
+    const epoch = noteEpoch
     const drain = async () => {
       noteSaveState.value = 'saving'
       try {
-        while (pendingSaves.size) {
-          const [id, input] = pendingSaves.entries().next().value!
+        // Fixed snapshot: edits arriving during update wait behind this write in the queue.
+        for (const [id, input] of [...pendingSaves]) {
+          if (epoch !== noteEpoch) return
           if (!findNote(id)) {
             pendingSaves.delete(id)
+            mustRestageIds.delete(id)
             continue
           }
+          if (mustRestageIds.has(id)) {
+            await api.stageDrafts([{ id, input }])
+            if (epoch !== noteEpoch) return
+            mustRestageIds.delete(id)
+          }
           await api.updateNote(id, input)
+          if (epoch !== noteEpoch) return
           const names = collectAttachmentNames(input.content_html)
           const known = new Set((noteAttachments.value[id] ?? []).map(a => nameOf(a.file_path)))
           const fresh = names.filter(n => !known.has(n))
           if (fresh.length) {
             try {
               const bound = await api.bindAttachments(id, fresh)
+              if (epoch !== noteEpoch) return
               if (bound.length) noteAttachments.value[id] = [...bound, ...(noteAttachments.value[id] ?? [])]
             } catch (e: any) {
               toastStore.showToast('附件登记失败：' + (e.message ?? e), 'error')
             }
           }
+          if (epoch !== noteEpoch) return
           // 写入途中同一条又改过：旧请求成功不能抹掉新快照。
           if (pendingSaves.get(id) === input) pendingSaves.delete(id)
         }
@@ -247,13 +369,16 @@ export const useNotesStore = defineStore('notes', () => {
         if (hintTimer) clearTimeout(hintTimer)
         hintTimer = setTimeout(() => { noteSaveState.value = '' }, SAVED_HINT_DELAY)
       } catch (e: any) {
+        if (epoch !== noteEpoch) return
         noteSaveState.value = ''
         toastStore.showToast('保存失败：' + (e.message ?? e), 'error')
         throw e
       }
     }
-    saveInFlight = drain()
-    try { await saveInFlight } finally { saveInFlight = null }
+    const flight = enqueuePersistence(drain)
+    saveInFlight = flight
+    try { await flight } finally { if (saveInFlight === flight) saveInFlight = null }
+    if (epoch === noteEpoch && pendingSaves.size) await commitSave()
   }
 
   /** 正文改动立即写回列表（保持列表与书写面一致），再防抖落盘 */
@@ -277,6 +402,7 @@ export const useNotesStore = defineStore('notes', () => {
       content_html: html,
       category: meta.tags[0] ?? undefined,
     })
+    scheduleDraftStage()
     noteSaveState.value = 'saving'
     clearSaveTimer()
     saveTimer = setTimeout(() => { void commitSave().catch(() => {}) }, AUTOSAVE_DELAY)
@@ -285,6 +411,97 @@ export const useNotesStore = defineStore('notes', () => {
   /** 切换书写面或卸载前调用，避免防抖窗口内的最后一次编辑丢失 */
   const flushNoteSave = async () => {
     await commitSave()
+  }
+
+  /** Lock may continue after a failed DB write only when the latest drafts are staged. */
+  const prepareNoteLock = async (forced = false): Promise<void> => {
+    clearPendingOnLock = false
+    let saveError: unknown
+    try { await flushNoteSave() } catch (e) { saveError = e }
+    if (!pendingSaves.size) {
+      await sealUnpublishedDraft()
+      clearPendingOnLock = true
+      return
+    }
+    try {
+      await stagePendingDrafts()
+      await sealUnpublishedDraft()
+      clearPendingOnLock = true
+      toastStore.showToast('保存失败，草稿已加密暂存，解锁后将重试', 'error')
+    } catch (e: any) {
+      if (forced) {
+        await sealLocalDrafts()
+        await sealUnpublishedDraft()
+        clearPendingOnLock = true
+        toastStore.showToast('草稿已在本进程加密保留，解锁后将重试；退出程序前请先保存', 'error')
+        return
+      }
+      throw new Error(`保存或草稿加密暂存失败：${e.message ?? e}${saveError ? `（保存错误：${String(saveError)}）` : ''}`)
+    }
+  }
+
+  /** Native timeout already revoked the master key; never wait for an in-flight IPC here. */
+  const forceSealDrafts = async (): Promise<void> => {
+    const epoch = noteEpoch
+    clearSaveTimer()
+    if (pendingSaves.size) await sealLocalDrafts()
+    await sealUnpublishedDraft()
+    if (epoch === noteEpoch) clearPendingOnLock = true
+  }
+
+  /** Backend only returns drafts whose note key is currently unlocked. */
+  const recoverDrafts = async (): Promise<void> => {
+    const epoch = noteEpoch
+    if (fallbackComposer && fallbackKey && !noteDraftHtml.value) {
+      const plaintext = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: fallbackComposer.iv }, fallbackKey, fallbackComposer.ciphertext)
+      if (epoch !== noteEpoch) return
+      noteDraftHtml.value = new TextDecoder().decode(plaintext)
+      fallbackComposer = null
+    }
+    const localDrafts = await recoverLocalDrafts()
+    if (epoch !== noteEpoch) return
+    const localIds = new Set(localDrafts.map(d => d.id))
+    let backendDrafts: NoteDraft[] = []
+    try { backendDrafts = await api.recoverDrafts() } catch (e: any) {
+      toastStore.showToast('读取加密暂存草稿失败：' + (e.message ?? e), 'error')
+    }
+    if (epoch !== noteEpoch) return
+    const drafts = [...localDrafts, ...backendDrafts]
+    let recovered = false
+    for (const { id, input } of drafts) {
+      if (pendingSaves.has(id)) {
+        for (const sealed of fallbackDrafts) sealed.recovered.add(id)
+        continue
+      }
+      const index = notes.value.findIndex(n => n.id === id)
+      if (index < 0 || (notes.value[index].encrypted && notePlains.value[id] == null)) continue
+      pendingSaves.set(id, input)
+      if (localIds.has(id)) mustRestageIds.add(id)
+      notes.value[index] = {
+        ...notes.value[index],
+        title: input.title,
+        content_html: input.content_html,
+        category: input.category ?? null,
+      }
+      if (notes.value[index].encrypted) notePlains.value[id] = input.content_html
+      for (const sealed of fallbackDrafts) sealed.recovered.add(id)
+      recovered = true
+    }
+    for (let i = fallbackDrafts.length - 1; i >= 0; i--) {
+      // Keep encrypted batches for notes that still need their separate note key.
+      const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fallbackDrafts[i].iv }, fallbackKey!, fallbackDrafts[i].ciphertext)
+      if (epoch !== noteEpoch) return
+      const ids = (JSON.parse(new TextDecoder().decode(plaintext)) as NoteDraft[]).map(d => d.id)
+      if (ids.every(id => fallbackDrafts[i].recovered.has(id))) fallbackDrafts.splice(i, 1)
+    }
+    if (!fallbackDrafts.length && !fallbackComposer) { fallbackKey = null; fallbackKeyPromise = null }
+    if (recovered) {
+      noteSaveState.value = 'saving'
+      clearSaveTimer()
+      saveTimer = setTimeout(() => { void commitSave().catch(() => {}) }, AUTOSAVE_DELAY)
+      toastStore.showToast('已找回未保存的小记草稿，正在重试保存', 'info')
+    }
   }
 
   const clearFilters = () => {
@@ -343,17 +560,24 @@ export const useNotesStore = defineStore('notes', () => {
 
   /** 设置页在列表之外也要知道口令设过没有 */
   const refreshNoteKey = async () => {
+    const epoch = noteEpoch
     try {
-      noteKey.value = await api.noteKeyStatus()
+      const status = await api.noteKeyStatus()
+      if (epoch === noteEpoch) noteKey.value = status
     } catch {
       /* 未解锁时本来就问不到，保持原样 */
     }
   }
 
   const setupNoteKey = async (passphrase: string): Promise<string | null> => {
+    const epoch = noteEpoch
     try {
-      applyPlains(await api.noteKeySetup(passphrase))
+      const plains = await api.noteKeySetup(passphrase)
+      if (epoch !== noteEpoch) return '应用已锁定'
+      applyPlains(plains)
       noteKey.value = { is_set: true, is_open: true }
+      await recoverDrafts()
+      if (epoch !== noteEpoch) return '应用已锁定'
       toastStore.showToast('小记口令已设好，加密小记全部解锁')
       return null
     } catch (e: any) {
@@ -362,9 +586,14 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   const unlockNoteDomain = async (passphrase: string): Promise<string | null> => {
+    const epoch = noteEpoch
     try {
-      applyPlains(await api.noteKeyUnlock(passphrase))
+      const plains = await api.noteKeyUnlock(passphrase)
+      if (epoch !== noteEpoch) return '应用已锁定'
+      applyPlains(plains)
       noteKey.value = { ...noteKey.value, is_open: true }
+      await recoverDrafts()
+      if (epoch !== noteEpoch) return '应用已锁定'
       return null
     } catch (e: any) {
       return String(e.message ?? e)
@@ -373,9 +602,14 @@ export const useNotesStore = defineStore('notes', () => {
 
   /** 兜底：应用会话已解锁，域密钥用主密钥封条直接取回，一个字都不用输 */
   const recoverNoteDomain = async (): Promise<string | null> => {
+    const epoch = noteEpoch
     try {
-      applyPlains(await api.noteKeyRecover())
+      const plains = await api.noteKeyRecover()
+      if (epoch !== noteEpoch) return '应用已锁定'
+      applyPlains(plains)
       noteKey.value = { ...noteKey.value, is_open: true }
+      await recoverDrafts()
+      if (epoch !== noteEpoch) return '应用已锁定'
       toastStore.showToast('已用主密码解开小记')
       return null
     } catch (e: any) {
@@ -428,9 +662,14 @@ export const useNotesStore = defineStore('notes', () => {
 
   /** 单条再开：口令已在手就不用再输，只有整库锁着时才要 */
   const unlockNote = async (id: string): Promise<string | null> => {
+    const epoch = noteEpoch
     try {
-      notePlains.value[id] = await api.unlockNote(id)
+      const plain = await api.unlockNote(id)
+      if (epoch !== noteEpoch) return '应用已锁定'
+      notePlains.value[id] = plain
       syncUnlocked(id)
+      await recoverDrafts()
+      if (epoch !== noteEpoch) return '应用已锁定'
       return null
     } catch (e: any) {
       return String(e.message ?? e)
@@ -501,11 +740,41 @@ export const useNotesStore = defineStore('notes', () => {
 
   /** 应用锁定：口令解出来的东西一律收回，加密小记重新锁上 */
   const clearUnlockedNotes = () => {
+    noteEpoch++
+    persistenceTail = Promise.resolve()
+    saveInFlight = null
+    stageQueued = false
     clearSaveTimer()
-    pendingSaves.clear()
+    if (clearPendingOnLock) pendingSaves.clear()
+    mustRestageIds.clear()
+    clearPendingOnLock = true
     metaCache.clear()
+    notesLoading.value = false
+    notesLoadError.value = null
     noteKey.value = { ...noteKey.value, is_open: false }
-    hideAllPlains()
+    notePlains.value = {}
+    noteDraftHtml.value = ''
+    notes.value = []
+    noteAttachments.value = {}
+  }
+
+  /** A restored database is a new timeline; neither backend nor local drafts may replay into it. */
+  const discardDraftsForRestore = () => {
+    clearPendingOnLock = true
+    pendingSaves.clear()
+    mustRestageIds.clear()
+    fallbackDrafts.length = 0
+    fallbackComposer = null
+    fallbackKey = null
+    fallbackKeyPromise = null
+    clearUnlockedNotes()
+  }
+
+  /** Last-resort security boundary when both backend staging and local encryption fail. */
+  const dropUnsealedDrafts = () => {
+    pendingSaves.clear()
+    mustRestageIds.clear()
+    clearPendingOnLock = true
   }
 
   const toggleSelectNote = (id: string) => {
@@ -629,10 +898,10 @@ export const useNotesStore = defineStore('notes', () => {
     noteAttachments, noteSaveState,
     notePlains, isUnlocked, noteKey,
     tagCounts, allTags, viewCounts, filteredNotes, groupedNotes,
-    fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, clearFilters, toggleTagFilter,
+    fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, prepareNoteLock, forceSealDrafts, recoverDrafts, clearFilters, toggleTagFilter,
     doDeleteNote, togglePin, toggleStar,
     setupNoteKey, unlockNoteDomain, recoverNoteDomain, relockNoteDomain, changeNoteKey, refreshNoteKey,
-    lockNote, unlockNote, relockNote, removeNoteLock, clearUnlockedNotes,
+    lockNote, unlockNote, relockNote, removeNoteLock, clearUnlockedNotes, discardDraftsForRestore, dropUnsealedDrafts,
     toggleSelectNote, selectAllNotes, clearSelection, toggleNotePick, exitNoteBatch,
     batchDelete, batchSetPinned, batchSetStarred,
     loadAttachments, uploadAttachment, deleteAttachment, stageImage,

@@ -8,6 +8,22 @@ use crate::files::{claim_available_name, sanitize_upload_name};
 use crate::http_util::percent_decode_bytes;
 
 const MAX_HEADER_BYTES: usize = 16 * 1024;
+const MAX_PARTS: usize = 128;
+
+// 文件内容预算之外只留有界的协议开销；忽略的字段也消耗正文预算。
+struct BodyBudget<R> { inner: R, left: u64 }
+impl<R: Read> Read for BodyBudget<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if buf.is_empty() { return Ok(0); }
+        let limit = buf.len().min(self.left.saturating_add(1).min(usize::MAX as u64) as usize);
+        let n = self.inner.read(&mut buf[..limit])?;
+        if n as u64 > self.left {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "multipart body too large"));
+        }
+        self.left -= n as u64;
+        Ok(n)
+    }
+}
 
 #[derive(Debug)]
 #[allow(dead_code)] // name/size 留给上层做回执与日志
@@ -131,7 +147,8 @@ pub fn read_multipart<R: Read>(
     dir: &Path,
     max_total: u64,
 ) -> std::io::Result<Vec<SavedFile>> {
-    let mut br = BufReader::new(body);
+    let overhead = (MAX_PARTS * (MAX_HEADER_BYTES + 80)) as u64;
+    let mut br = BufReader::new(BodyBudget { inner: body, left: max_total.saturating_add(overhead) });
     let dash_boundary = format!("--{}", boundary);
     let needle = format!("\r\n--{}", boundary).into_bytes();
     let mut saved = Vec::new();
@@ -139,13 +156,17 @@ pub fn read_multipart<R: Read>(
 
     // 起始行必须是 --boundary\r\n（浏览器不会带前置导言）
     consume_crlf_line(&mut br, |line| Ok(line == dash_boundary.as_bytes()))?
+        .filter(|matches| *matches)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "bad multipart preamble"))?;
 
+    let mut parts = 0;
     loop {
-        let header_text = match read_part_headers(&mut br)? {
-            Some(t) => t,
-            None => break, // 正文意外结束
-        };
+        parts += 1;
+        if parts > MAX_PARTS {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "too many multipart parts"));
+        }
+        let header_text = read_part_headers(&mut br)?
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "multipart headers truncated"))?;
         let is_files = header_text.to_ascii_lowercase().contains("name=\"files\"");
         let filename = parse_multipart_filename(&header_text).and_then(|raw| sanitize_upload_name(&raw));
         let want_file = is_files && filename.is_some();
@@ -215,7 +236,7 @@ pub fn read_multipart<R: Read>(
         match &tail[..n] {
             [b'\r', b'\n'] => continue,
             [b'-', b'-'] => break,
-            [] => break, // 干净收尾
+            [] => return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "multipart closing boundary truncated")),
             _ => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "bad boundary tail")),
         }
     }
@@ -238,7 +259,7 @@ fn consume_crlf_line<R: Read>(
     br: &mut BufReader<R>,
     pred: impl Fn(&[u8]) -> std::io::Result<bool>,
 ) -> std::io::Result<Option<bool>> {
-    match read_crlf_line(br)? {
+    match read_crlf_line(br, 74)? {
         Some(line) => pred(&line).map(Some),
         None => Ok(None),
     }
@@ -251,7 +272,7 @@ fn read_part_headers<R: Read>(br: &mut BufReader<R>) -> std::io::Result<Option<S
     let mut total = 0usize;
     let mut any = false;
     loop {
-        let Some(line) = read_crlf_line(br)? else {
+        let Some(line) = read_crlf_line(br, MAX_HEADER_BYTES.saturating_sub(total))? else {
             return Ok(if any { Some(out) } else { None });
         };
         any = true;
@@ -270,15 +291,19 @@ fn read_part_headers<R: Read>(br: &mut BufReader<R>) -> std::io::Result<Option<S
     Ok(Some(out))
 }
 
-fn read_crlf_line<R: Read>(br: &mut BufReader<R>) -> std::io::Result<Option<Vec<u8>>> {
+fn read_crlf_line<R: Read>(br: &mut BufReader<R>, limit: usize) -> std::io::Result<Option<Vec<u8>>> {
     let mut out = Vec::new();
     let mut prev_cr = false;
     loop {
         let b = match br.fill_buf()? {
-            [] => return Ok(None),
+            [] if out.is_empty() && !prev_cr => return Ok(None),
+            [] => return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "multipart line truncated")),
             [b, ..] => *b,
         };
         br.consume(1);
+        if out.len() + usize::from(prev_cr) >= limit && !(prev_cr && b == b'\n') {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "multipart line too large"));
+        }
         if prev_cr {
             if b == b'\n' {
                 return Ok(Some(out));
@@ -509,4 +534,38 @@ mod tests {
         assert_eq!(boundary_from_content_type("application/json"), None);
         assert_eq!(boundary_from_content_type("multipart/form-data; boundary=").as_deref(), None);
     }
+    #[test]
+    fn unterminated_headers_are_rejected_before_consuming_an_unbounded_line() {
+        let dir = tmpdir("header-budget");
+        let mut body = b"--BOUNDARY\r\n".to_vec();
+        body.extend(std::iter::repeat(b'A').take(2 * MAX_HEADER_BYTES));
+        let mut reader = std::io::Cursor::new(body);
+        let error = read_multipart(&mut reader, "BOUNDARY", &dir, 1).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(reader.position() < (2 * MAX_HEADER_BYTES) as u64);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn ignored_fields_are_subject_to_the_total_body_budget() {
+        let dir = tmpdir("ignored-budget");
+        let body = part("ignored", None, &vec![b'x'; MAX_PARTS * (MAX_HEADER_BYTES + 80) + 1], "BOUNDARY");
+        let error = read_multipart(&body[..], "BOUNDARY", &dir, 0).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn mismatched_opening_boundary_is_rejected_without_publishing_files() {
+        let dir = tmpdir("wrong-boundary");
+        let mut body = part("files", Some("file.txt"), b"payload", "GOOD");
+        body[..6].copy_from_slice(b"--EVIL");
+        body.extend(finish("GOOD"));
+        assert!(read_multipart(&body[..], "GOOD", &dir, 100).is_err());
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
 }

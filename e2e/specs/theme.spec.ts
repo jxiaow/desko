@@ -8,15 +8,15 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const BASES = {
-  paper: { name: '纸', pol: 'light', bg: 'rgb(248, 248, 247)', text: 'rgb(51, 50, 48)' },
+  paper: { name: '纸', pol: 'light', bg: 'rgb(248, 245, 240)', text: 'rgb(51, 50, 48)' },
   snow:  { name: '雪', pol: 'light', bg: 'rgb(241, 242, 243)', text: 'rgb(26, 27, 29)' },
   ink:   { name: '墨', pol: 'dark',  bg: 'rgb(29, 28, 26)',    text: 'rgb(230, 228, 222)' },
-  slate: { name: '岩', pol: 'dark',  bg: 'rgb(25, 28, 32)',    text: 'rgb(227, 230, 236)' },
+  slate: { name: '岩', pol: 'dark',  bg: 'rgb(37, 41, 50)',    text: 'rgb(237, 240, 246)' },
 } as const
 
 const ACCENT_HEX = {
-  light: { ink: '#3d5a80', celadon: '#3d7355', clay: '#9a5b33', plum: '#5f62b8', rose: '#984c64' },
-  dark:  { ink: '#89a8cd', celadon: '#7fb89a', clay: '#d09a6a', plum: '#9ba0e8', rose: '#d78aa0' },
+  light: { ink: '#315f9b', celadon: '#246e60', clay: '#9b562b', plum: '#7951a8', rose: '#9b3f68' },
+  dark:  { ink: '#7faeee', celadon: '#73c5ad', clay: '#e1a15f', plum: '#bd9ae0', rose: '#e991b6' },
 } as const
 
 type BaseId = keyof typeof BASES
@@ -227,7 +227,7 @@ test.describe('主题', () => {
       [...document.querySelectorAll('.brand-logo stop')].map((s) => getComputedStyle(s).stopColor),
     )
     expect(stops.length).toBeGreaterThanOrEqual(6)
-    expect(new Set(stops)).toEqual(new Set(['rgb(139, 142, 205)', 'rgb(95, 98, 184)', 'rgb(63, 66, 128)']))
+    expect(new Set(stops)).toEqual(new Set(['rgb(161, 123, 199)', 'rgb(121, 81, 168)', 'rgb(80, 52, 115)']))
     // 重复 id 会让第二个 logo 静默套用第一个的渐变：不报错，只是颜色不对
     const ids = await page.evaluate(() =>
       [...document.querySelectorAll('.brand-logo linearGradient')].map((g) => g.id),

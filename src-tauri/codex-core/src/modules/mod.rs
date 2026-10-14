@@ -6,6 +6,7 @@ pub mod app_lifecycle;
 pub mod atomic_write;
 pub mod backup_storage;
 pub mod codex_account;
+pub mod codex_account_backup;
 pub mod codex_account_proxy;
 pub mod codex_proxy_probe;
 pub mod codex_proxy_engine;

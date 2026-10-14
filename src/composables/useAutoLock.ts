@@ -3,12 +3,18 @@ import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { settingsApi as api } from '../services/api/settings'
 
+export interface LockRequest {
+  forced?: boolean
+  resetDrafts?: boolean
+}
+
 export function useAutoLock(
-  doLock: () => Promise<void>,
+  doLock: (request?: LockRequest) => Promise<void>,
   evictExpiredPasswords: () => void,
 ) {
   const authStore = useAuthStore()
   const toastStore = useToastStore()
+  const isLocked = () => authStore.appState === 'locked'
 
   let autoLockInterval: ReturnType<typeof setInterval> | null = null
   let unlistenTray: (() => void) | null = null
@@ -20,8 +26,8 @@ export function useAutoLock(
 
   onMounted(async () => {
     const { listen } = await import('@tauri-apps/api/event')
-    unlistenTray = await listen('tray-lock', () => {
-      doLock()
+    unlistenTray = await listen<LockRequest>('tray-lock', (event) => {
+      void doLock(event.payload ?? {})
     })
 
     const checkAutoLock = async () => {
@@ -32,8 +38,8 @@ export function useAutoLock(
       if (timeoutMinutes <= 0) return
       const elapsed = (Date.now() - lastActivityTime) / 1000 / 60
       if (elapsed >= timeoutMinutes) {
-        doLock()
-        toastStore.showToast('已自动锁定', 'info')
+        await doLock({ forced: true })
+        if (isLocked()) toastStore.showToast('已自动锁定', 'info')
       }
     }
 

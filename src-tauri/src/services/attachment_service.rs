@@ -163,8 +163,12 @@ pub fn create_attachment(db: &Database, note_id: &str, source_path: &str) -> Res
 /// 只认附件目录里那个文件，正文塞外链或别处的绝对路径都不会被记进库。
 pub fn bind_paths(db: &Database, note_id: &str, paths: &[String]) -> Result<Vec<Attachment>, AppError> {
     let dir = attachments_dir();
+    bind_paths_in(db, note_id, paths, &dir)
+}
+
+pub fn bind_paths_in(db: &Database, note_id: &str, paths: &[String], dir: &Path) -> Result<Vec<Attachment>, AppError> {
     let existing = db.list_attachments(note_id)?;
-    let mut bound = Vec::new();
+    let mut bound: Vec<Attachment> = Vec::new();
 
     for raw in paths {
         let Some(name) = name_of(raw) else { continue };
@@ -174,12 +178,13 @@ pub fn bind_paths(db: &Database, note_id: &str, paths: &[String]) -> Result<Vec<
         }
         if existing
             .iter()
+            .chain(bound.iter())
             .any(|a| name_of(&a.file_path).as_deref() == Some(name.as_str()))
         {
             continue;
         }
         // 名字形如 <uuid>__<原名>；老数据是 <uuid>.<ext>，取整段当 id、原名未知
-        let (id, file_name) = match name.split_once("__") {
+        let (_, file_name) = match name.split_once("__") {
             Some((id, rest)) => (id.to_string(), rest.to_string()),
             None => (
                 Path::new(&name).file_stem().unwrap_or_default().to_string_lossy().to_string(),
@@ -191,7 +196,8 @@ pub fn bind_paths(db: &Database, note_id: &str, paths: &[String]) -> Result<Vec<
             &path.extension().and_then(|e| e.to_str()).unwrap_or("").to_string(),
         );
         let attachment = Attachment {
-            id,
+            // A shared file may belong to several notes; each relation needs its own ID.
+            id: uuid::Uuid::new_v4().to_string(),
             note_id: note_id.to_string(),
             file_name,
             file_path: name,
@@ -207,6 +213,10 @@ pub fn bind_paths(db: &Database, note_id: &str, paths: &[String]) -> Result<Vec<
 
 pub fn delete_attachment(db: &Database, id: &str) -> Result<(), AppError> {
     if let Some(stored) = db.delete_attachment(id)? {
+        let live = claimed_names(db)?;
+        if name_of(&stored).is_some_and(|name| live.contains(&name)) {
+            return Ok(());
+        }
         // 删除物理文件
         match abs_of(&stored) {
             Some(p) => {
@@ -220,10 +230,15 @@ pub fn delete_attachment(db: &Database, id: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// 删小记时连带清文件。行已经删了，路径必须提前取出来。
-/// 单个文件删不掉（被占用等）只记警告，不能让删小记本身失败。
-pub fn delete_files(stored: &[String]) {
-    delete_files_in(&attachments_dir(), stored)
+pub fn delete_unreferenced_files(db: &Database, stored: &[String]) -> Result<(), AppError> {
+    delete_unreferenced_files_in(db, &attachments_dir(), stored)
+}
+
+pub fn delete_unreferenced_files_in(db: &Database, dir: &Path, stored: &[String]) -> Result<(), AppError> {
+    let live = claimed_names(db)?;
+    let unclaimed: Vec<_> = stored.iter().filter(|path| name_of(path).is_some_and(|name| !live.contains(&name))).cloned().collect();
+    delete_files_in(dir, &unclaimed);
+    Ok(())
 }
 
 /// 目录可注入版，测试和清理路径都走这里
@@ -367,6 +382,27 @@ pub fn cleanup_in(db: &Database, dir: &Path, names: &[String]) -> Result<usize, 
 #[cfg(test)]
 mod orphan_tests {
     use super::*;
+
+    #[test]
+    fn shared_image_has_distinct_relations_and_survives_owner_deletion() {
+        let (db, db_path, dir) = setup();
+        let name = touch(&dir, "shared__image.png");
+        db.create_note(&note("a", "")).unwrap();
+        db.create_note(&note("b", &format!("<p><img src=\"attachments/{name}\"></p>"))).unwrap();
+        let a = bind_paths_in(&db, "a", &[name.clone()], &dir).unwrap();
+        let b = bind_paths_in(&db, "b", &[name.clone(), name.clone()], &dir).unwrap();
+        assert_eq!(b.len(), 1);
+        assert_ne!(a[0].id, b[0].id);
+        let paths = db.attachment_paths_for_notes(&["a".into()]).unwrap();
+        db.delete_note("a").unwrap();
+        delete_unreferenced_files_in(&db, &dir, &paths).unwrap();
+        assert!(dir.join(&name).is_file());
+        let paths = db.attachment_paths_for_notes(&["b".into()]).unwrap();
+        db.delete_note("b").unwrap();
+        delete_unreferenced_files_in(&db, &dir, &paths).unwrap();
+        assert!(!dir.join(&name).exists());
+        drop(db); let _ = std::fs::remove_file(db_path); let _ = std::fs::remove_dir_all(dir);
+    }
     use crate::db::{Attachment, Note};
     use std::time::Duration;
 

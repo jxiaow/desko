@@ -1,5 +1,6 @@
 // E2E 内存版 fake backend —— 镜像 src-tauri/src/commands/*.rs 的行为契约。
 // 仅通过 vite alias 在 E2E 模式下注入，不进入生产构建。
+import type { CodexQuota } from '../../src/services/api/codex'
 
 export interface E2EEntrySeed {
   name: string
@@ -47,6 +48,8 @@ export interface E2EConfig {
   masterPassword?: string
   entries?: E2EEntrySeed[]
   notes?: E2ENoteSeed[]
+  /** Deterministic disk-write failures for note recovery regressions. */
+  notesUpdateFailCount?: number
   fileShortcuts?: E2EFileShortcutSeed[]
   urlPaths?: E2EUrlPathSeed[]
   mfaTokens?: E2EMfaSeed[]
@@ -79,6 +82,9 @@ export interface E2EConfig {
     fetchFail?: 'network' | 'content'
     /** 接入进度：每一格的初始态都要能单独摆，页面才演得出「中断后重进」 */
     authorized?: boolean
+    domain?: string
+    domainStatus?: string
+    domainFail?: string
     tunnelId?: string
     tunnelName?: string
     /** 一条隧道挂着的 N 条服务：子域、本机端口、指没指过来、端口在不在听，各自能单独摆 */
@@ -97,13 +103,14 @@ export interface E2EConfig {
     pollFail?: string
   }
   /**
-   * 直连清单：真探测要联网，E2E 只演判定形状。
+   * 网络直连：真探测要联网，E2E 只演判定形状。
    * verdict 决定「探测」出哪一份结论，targets 是清单里的预置行。
    */
   bypass?: {
     verdict?: 'directOk' | 'hostsOnly' | 'needRoute' | 'unreachable' | 'egressUnknown'
     /** 演 DoH 与探活全挂：命令面抛错，页面走 toast */
     probeFail?: boolean
+    probeDelayMs?: number
     probe?: E2EBypassProbeSeed
     targets?: E2EBypassTargetSeed[]
     /** hosts 直连托管区的小账：不给就演成「区还没写过」 */
@@ -130,6 +137,9 @@ export interface E2EConfig {
     }
     /** >0：逐条重验挂时间，「重验 x/N」的进度与停止才拍得到 */
     recheckDelayMs?: number
+    /** 配置后的复验结果覆盖，用来验证写入成功但目标仍不可达的场景。 */
+    recheckVerdict?: 'directOk' | 'hostsOnly' | 'needRoute' | 'unreachable' | 'egressUnknown'
+    revertFail?: string
   }
   codex?: {
     accounts?: {
@@ -142,6 +152,8 @@ export interface E2EConfig {
       reauth_reason?: string
       hourly?: number
       weekly?: number
+      /** 实际接口窗口、Credits 与模型额度；null 表示没有额度快照。 */
+      quota?: Partial<CodexQuota> & { reset_credits_available?: number } | null
       current?: boolean
       /** 行内三行事实的素材：用户 ID / 组织 / personal·team / 订阅到期 / 标签 */
       user_id?: string
@@ -175,10 +187,13 @@ export interface E2EConfig {
     sessions?: {
       sessionId: string
       title?: string
+      content?: string
       cwd: string
       projectName?: string
       /** 距今天数；不给按种子顺序推 */
       daysAgo?: number
+      /** 用量小时趋势：与 daysAgo 叠加，模拟某小时的记录。 */
+      hoursAgo?: number
       kind?: 'conversation' | 'external' | 'subagent'
       input?: number
       output?: number
@@ -423,6 +438,9 @@ interface BackendState {
     sha: string | null
     fetchFail: string | null
     authorized: boolean
+    domain: string
+    domainStatus: string
+    domainFail: string | null
     tunnelId: string | null
     tunnelName: string | null
     creds: boolean
@@ -442,7 +460,7 @@ interface BackendState {
   }
   /** currentId 是显式指针，与后端 index.current_account_id 同构：导入/新增不动它，只有切号与登录落库才改 */
   codex: { accounts: CodexAccountRecord[]; portBusy: boolean; loginId: string; currentId: string; repairFail: boolean; repairDelayMs: number; repairRows: number; switchDelayMs: number; switchCancel: boolean; sessionsFail: boolean; statsFail: boolean; sessions: CodexSessionSeed[]; trash: CodexTrashSeed[]; trashFail: boolean; recycled: CodexRecycledSeed[]; recycledFail: boolean; openFail: boolean; usageFail: boolean; usageScanMillis: number; deleteStepMs: number; deleteFailEmails: string[]; deleteJobs: Record<string, CodexDeleteJob> }
-  bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string; applyDelay: number; applyCancel: boolean; applyLost: string; applyBlocked: string[]; applyFailed: string[]; applySkipped: string[]; applyRollbackFail: boolean; recheckDelay: number; rollbackBatch: string }
+  bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probeDelay: number; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string; applyDelay: number; applyCancel: boolean; applyLost: string; applyBlocked: string[]; applyFailed: string[]; applySkipped: string[]; applyRollbackFail: boolean; recheckDelay: number; recheckVerdict: string; revertFail: string; rollbackBatch: string }
   profiles: { activeId: string; list: ProfileRecord[] }
 }
 
@@ -460,6 +478,7 @@ interface ProfileRecord {
 interface CodexSessionSeed {
   sessionId: string
   title: string
+  content: string
   cwd: string
   projectName: string | null
   updatedAt: number
@@ -546,6 +565,11 @@ interface CodexAccountRecord {
     hourly_reset_time: number | null
     weekly_percentage: number
     weekly_reset_time: number | null
+    hourly_window_minutes?: number | null
+    hourly_window_present?: boolean | null
+    weekly_window_minutes?: number | null
+    weekly_window_present?: boolean | null
+    raw_data?: unknown
     reset_credits_available: number
   } | null
   usage_updated_at: number | null
@@ -651,8 +675,9 @@ function bypassPath(raw: string): string {
   if (!raw.includes('://')) return ''
   const rest = raw.replace(/^[a-z]+:\/\//i, '')
   const slash = rest.search(/[/?#]/)
-  if (slash < 0) return ''
-  return rest.slice(slash).split('#')[0].split('?')[0]
+  if (slash < 0) return '/'
+  const path = rest.slice(slash).split('#')[0]
+  return path.startsWith('/') ? path : `/${path}`
 }
 
 /** 与 Rust gen_id 同形：p- + 8 位十六进制 */
@@ -690,6 +715,11 @@ class MockBackend {
   /** 全库一把小记口令：空串表示还没设过；noteOpen 对齐 AppState.note_key */
   private notePass = ''
   private noteOpen = false
+  private noteDrafts = new Map<string, { title: string; content_html: string; category?: string | null }>()
+  private notesUpdateFailCount = 0
+  private bypassProbes = new Map<string, () => void>()
+  private cancelledBypassProbes = new Set<string>()
+  private bypassReports = new Map<string, { at: number; report: BypassReport }>()
 
   constructor(config: E2EConfig = {}) {
     this.state = this.freshState(config)
@@ -700,6 +730,8 @@ class MockBackend {
     const now = Date.now()
     // 域口令跟着 state 一起重建：config 给了口令才算设过，noteOpen 才顺带解开
     this.noteUnlocked.clear()
+    this.noteDrafts.clear()
+    this.notesUpdateFailCount = config.notesUpdateFailCount ?? 0
     this.notePass = config.notePassphrase ?? ''
     this.noteOpen = !!config.noteOpen && !!this.notePass
     const state: BackendState = {
@@ -733,6 +765,9 @@ class MockBackend {
         sha: null,
         fetchFail: null,
         authorized: false,
+        domain: 'example.com',
+        domainStatus: 'active',
+        domainFail: null,
         tunnelId: null,
         tunnelName: null,
         creds: false,
@@ -753,6 +788,7 @@ class MockBackend {
         ),
         verdict: config.bypass?.verdict ?? 'needRoute',
         probeFail: config.bypass?.probeFail ?? false,
+        probeDelay: config.bypass?.probeDelayMs ?? 0,
         probe: config.bypass?.probe ?? null,
         hostsManaged: config.bypass?.hosts?.managed ?? 0,
         hostsError: config.bypass?.hosts?.error ?? '',
@@ -764,6 +800,8 @@ class MockBackend {
         applySkipped: config.bypass?.apply?.skipped ?? [],
         applyRollbackFail: config.bypass?.apply?.rollbackFail ?? false,
         recheckDelay: config.bypass?.recheckDelayMs ?? 0,
+        recheckVerdict: config.bypass?.recheckVerdict ?? '',
+        revertFail: config.bypass?.revertFail ?? '',
         rollbackBatch: '',
       },
       codex: { accounts: [], portBusy: false, loginId: '', currentId: '', repairFail: false, repairDelayMs: 0, repairRows: 3, switchDelayMs: 0, switchCancel: false, sessionsFail: false, statsFail: false, sessions: [], trash: [], trashFail: false, recycled: [], recycledFail: false, openFail: false, usageFail: false, usageScanMillis: 0, deleteStepMs: 0, deleteFailEmails: [], deleteJobs: {} },
@@ -807,6 +845,9 @@ class MockBackend {
       tn.sha = t.sha ?? null
       tn.fetchFail = t.fetchFail ?? null
       tn.authorized = t.authorized ?? Boolean(tn.tunnelId)
+      tn.domain = t.domain ?? 'example.com'
+      tn.domainStatus = t.domainStatus ?? 'active'
+      tn.domainFail = t.domainFail ?? null
       tn.loginFail = t.loginFail ?? null
       tn.pollFail = t.pollFail ?? null
       tn.creds = tn.tunnelId ? !(t.credsMissing ?? false) : false
@@ -845,10 +886,11 @@ class MockBackend {
       state.codex.sessions = (config.codex.sessions ?? []).map((s, i, arr) => ({
         sessionId: s.sessionId,
         title: s.title ?? '',
+        content: s.content ?? '',
         cwd: s.cwd,
         projectName: s.projectName ?? null,
         // 与账号种子同口径：unix 秒。这里不能用下面的 secs()，它在本语句之后才声明
-        updatedAt: Math.floor((now - (s.daysAgo ?? arr.length - i) * 86400_000) / 1000),
+        updatedAt: Math.floor((now - (s.daysAgo ?? arr.length - i) * 86400_000 - (s.hoursAgo ?? 0) * 3600_000) / 1000),
         sessionKind: s.kind ?? 'conversation',
         inputTokens: s.input ?? 0,
         outputTokens: s.output ?? 0,
@@ -927,7 +969,7 @@ class MockBackend {
             ? { code: 'quota_unavailable', message: a.quota_error, timestamp: nowSec }
             : null,
           tokens: a.login_provider ? { id_token: fakeIdToken(a.login_provider) } : null,
-          quota: a.quota_error
+          quota: a.quota_error || a.quota === null
             ? null
             : {
                 hourly_percentage: hourly,
@@ -935,6 +977,7 @@ class MockBackend {
                 weekly_percentage: weekly,
                 weekly_reset_time: weekly >= 100 ? null : now / 1000 + 7 * 86400,
                 reset_credits_available: hourly <= 20 ? 1 : 0,
+                ...a.quota,
               },
           // 「上次取数」与「上次使用」是两件事：都塞 now 会在底行读成重复字段
           usage_updated_at: nowSec - (seed.length - i) * 3600,
@@ -1049,6 +1092,12 @@ class MockBackend {
       },
       queueDialog: (value: unknown) => this.dialogQueue.push(value),
       emitEvent: (event: string, payload?: unknown) => {
+        if (event === 'tray-lock' && (payload as { resetDrafts?: boolean } | undefined)?.resetDrafts) {
+          this.noteDrafts.clear()
+          this.noteUnlocked.clear()
+          this.noteOpen = false
+          this.state.unlocked = false
+        }
         this.eventListeners.get(event)?.forEach((h) => h(payload))
       },
       setBackupBusy: (busy: boolean) => { this.state.backup.busy = busy },
@@ -1360,27 +1409,46 @@ class MockBackend {
   ): [string, string] {
     if (verdict === 'directOk') {
       return kind === 'domain'
-        ? ['直连已可用', `${o.host} 已固定到 ${o.pinned ?? '本机 DNS 解析结果'}，出口为 ${o.iface}，本模块无需处理。`]
-        : ['路由已通，无需处理', `${o.host} 的出口为 ${o.iface}，无需处理。`]
+        ? ['直连已可用', o.pinned
+          ? `${o.host} 的 hosts 记录指向 ${o.pinned}，出口为 ${o.iface}，当前无需更改。`
+          : `${o.host} 的实际地址可通过 ${o.iface} 直连，当前无需新增 hosts 或路由配置。`]
+        : ['出口可直连', `${o.host} 的出口为 ${o.iface}，无需处理。`]
     }
     if (verdict === 'hostsOnly') {
-      return ['仅缺 DNS 固定', `实际地址 ${o.address} 可由 ${o.iface} 直达，路由不缺，只需将域名固定到 hosts。`]
+      return ['需配置 hosts', `实际地址 ${o.address} 可通过 ${o.iface} 直连。需要添加 hosts 记录，让该域名解析到此地址。`]
     }
     if (verdict === 'needRoute') {
-      return ['缺少绑定的路由', `实际地址 ${o.address} 仍从接管方网卡 ${o.iface} 发出（源地址 ${o.source}）。仅固定 hosts 不足，需添加绑定该接口的持久路由。`]
+      return ['需配置路由', `实际地址 ${o.address} 当前通过代理接口 ${o.iface} 发出（源地址 ${o.source}）。需要添加持久路由，改用非代理接口。`]
     }
     if (verdict === 'egressUnknown') {
-      return ['出口路由无法判定', `${o.host} 连通性正常，但出口路由查询无结果（系统瞬时故障或探测接口不可用）。本轮不给出写入建议，请稍后重新探测。`]
+      return ['出口路由无法判定', `未查询到 ${o.host} 的出口路由，暂时无法确定直连配置。请稍后重新探测。`]
     }
     return o.ips.length
       ? ['目标不可达，暂不添加', `候选地址 ${o.ips.join(' / ')} 均连接失败：${o.err}。若服务不在默认端口，请以 URL 形式写明端口，例如 http://${o.host}:8080/`]
       : ['目标不可达，暂不添加', '没有可用的候选地址']
   }
 
-  /** DoH 全挂时三个入口（探测、加入、重探）都该抛，与 Rust 一样没有结论可落 */
+  /** 探测失败不缓存报告；登记只保存先前成功探测的那份。 */
   private bypassProbeOrThrow(raw: string): BypassReport {
     if (this.state.bypass.probeFail) throw '无法获取实际地址：DoH 解析全部失败'
-    return this.bypassReport(raw)
+    const report = this.bypassReport(raw)
+    this.bypassReports.set(report.input.trim(), { at: Date.now(), report })
+    return report
+  }
+
+  private async waitForBypassProbe(requestId: unknown, delayMs: number) {
+    const id = String(requestId ?? '')
+    if (id && this.cancelledBypassProbes.has(id)) throw '__bypass_probe_cancelled__'
+    if (!delayMs) return
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, delayMs)
+        if (id) this.bypassProbes.set(id, () => { clearTimeout(timer); reject('__bypass_probe_cancelled__') })
+      })
+    } finally {
+      if (id) this.bypassProbes.delete(id)
+    }
+    if (id && this.cancelledBypassProbes.has(id)) throw '__bypass_probe_cancelled__'
   }
 
   /** 复刻一次探测的结论形状：判定规则照 Rust，网络部分由场景给定 */
@@ -1389,7 +1457,7 @@ class MockBackend {
     const seed = this.state.bypass.probe ?? {}
     // 网段写法（10.0.0.0/8）不带 scheme，掩码得留在 host 里，否则重探按原文探不回同一段
     const cidr = !raw.includes('://') && raw.includes('/')
-    const host = seed.host ?? (cidr ? raw : bypassAuthority(raw).split(':')[0])
+    const host = seed.host ?? (cidr ? raw : bypassAuthority(raw).split(':')[0].replace(/\.$/, '').toLowerCase())
     const kind = seed.kind ?? (cidr ? 'cidr' : /^\d+\.\d+\.\d+\.\d+$/.test(host) ? 'ip' : 'domain')
     const port = seed.port ?? bypassPort(raw, bypassAuthority(raw))
     const scheme = seed.scheme ?? (raw.toLowerCase().startsWith('http://') ? 'http' : 'https')
@@ -1411,7 +1479,7 @@ class MockBackend {
     const unreachable = verdict === 'unreachable'
     const realIps = seed.realIps ?? (unreachable ? ['172.30.2.109', '172.30.2.110'] : [address])
     const cdnLike = seed.cdn ?? false
-    const pinned = seed.pinned ?? (verdict === 'directOk' ? address : null)
+    const pinned = seed.pinned === undefined ? (verdict === 'directOk' && !routeKind ? address : null) : seed.pinned
     const chosen = unreachable ? null : address
     const localAnswers = seed.localAnswers ?? (taker || unreachable ? ['198.18.0.136'] : realIps)
     const [headline, detail] = this.bypassCopy(verdict, kind, {
@@ -1427,10 +1495,10 @@ class MockBackend {
       !cdnLike && (verdict === 'hostsOnly' || verdict === 'needRoute')
     const pending: string[] = []
     if (recommend) {
-      pending.push('写入后仍需将该域名加入代理客户端的直连名单，本模块不修改代理配置。')
+      pending.push('配置后，如使用代理客户端，还需将该目标加入其直连规则。')
     }
     if (cdnLike) {
-      pending.push('该域名带 CDN 轮换特征，固定后会锁定在会失效的节点上，不建议写入。')
+      pending.push('该域名的地址可能随 CDN 节点变化。不建议固定；确需固定时，请定期重新探测并更新配置。')
     }
     return {
       input: raw,
@@ -1516,7 +1584,7 @@ class MockBackend {
           id: t.id,
           label: t.host,
           action: '',
-          blocked: '带 CDN 轮换特征，固定后会随节点变化失效；确需固定请勾选本条',
+          blocked: '地址可能随 CDN 节点变化，固定后可能需要更新；确需固定请勾选本条',
         })
         continue
       }
@@ -1553,13 +1621,14 @@ class MockBackend {
         blocked: '',
       })
     }
-    return rows
+    return rows.filter((r) => !r.action || !rows.some((other) => other.id === r.id && !!other.blocked))
   }
 
   /** 任务书里的那几笔：只有真有动作的行才落盘 */
   private bypassWork(allowCdn: string[] = []): { id: string; host: string; op: string }[] {
-    return this.bypassPlanRows(allowCdn)
-      .filter((r) => !!r.action)
+    const rows = this.bypassPlanRows(allowCdn)
+    return rows
+      .filter((r) => !!r.action && !rows.some((other) => other.id === r.id && !!other.blocked))
       .map((r) => ({
         id: r.id,
         host: this.state.bypass.targets.find((t) => t.id === r.id)?.host ?? r.label,
@@ -1908,6 +1977,22 @@ class MockBackend {
         .map((n) => (n.encrypted ? { ...n, content_html: '', category: null } : { ...n }))
     },
 
+    stage_note_drafts: ({ drafts }) => {
+      this.requireUnlocked()
+      for (const draft of drafts) {
+        const note = this.findNote(draft.id)
+        if (note.encrypted && !this.noteUnlocked.has(draft.id)) throw '小记未解锁'
+        this.noteDrafts.set(draft.id, structuredClone(draft.input))
+      }
+    },
+    recover_note_drafts: () => {
+      this.requireUnlocked()
+      return [...this.noteDrafts].filter(([id]) => {
+        const note = this.state.notes.find((n) => n.id === id)
+        return note && (!note.encrypted || this.noteUnlocked.has(id))
+      }).map(([id, input]) => ({ id, input: structuredClone(input) }))
+    },
+
     create_note: ({ input }) => {
       this.requireUnlocked()
       const now = Date.now()
@@ -1929,6 +2014,10 @@ class MockBackend {
 
     update_note: ({ id, input }) => {
       this.requireUnlocked()
+      if (this.notesUpdateFailCount > 0) {
+        this.notesUpdateFailCount--
+        throw '磁盘写入失败'
+      }
       const note = this.findNote(id)
       if (note.encrypted) {
         // 加密行：没有会话解锁就不许改；改的只进密文，正文列保持空，标题按新正文重算
@@ -1936,12 +2025,14 @@ class MockBackend {
         note.cipher = input.content_html
         note.title = headingTitle(input.content_html)
         note.updated_at = Date.now()
+        if (JSON.stringify(this.noteDrafts.get(id)) === JSON.stringify(input)) this.noteDrafts.delete(id)
         return
       }
       note.title = input.title
       note.content_html = input.content_html
       note.category = input.category ?? null
       note.updated_at = Date.now()
+      if (JSON.stringify(this.noteDrafts.get(id)) === JSON.stringify(input)) this.noteDrafts.delete(id)
     },
 
     delete_note: ({ id }) => {
@@ -1951,6 +2042,7 @@ class MockBackend {
       this.state.attachments = this.state.attachments.filter((a) => a.note_id !== id)
       this.state.staged = this.state.staged.filter((f) => !paths.includes(f.file_path))
       this.noteUnlocked.delete(id)
+      this.noteDrafts.delete(id)
     },
 
     batch_delete_notes: ({ ids }) => {
@@ -1962,6 +2054,7 @@ class MockBackend {
       this.state.attachments = this.state.attachments.filter((a) => !set.has(a.note_id))
       this.state.staged = this.state.staged.filter((f) => !paths.includes(f.file_path))
       ids.forEach((id: string) => this.noteUnlocked.delete(id))
+      ids.forEach((id: string) => this.noteDrafts.delete(id))
       return before - this.state.notes.length
     },
 
@@ -2539,6 +2632,13 @@ class MockBackend {
 
     tunnel_provision_status: () => this.tunnelProvisionDto(),
 
+    tunnel_authorized_domain: () => {
+      const t = this.state.tunnel
+      if (!t.authorized) throw '本机没有可读取的授权凭据，请先完成浏览器授权'
+      if (t.domainFail) throw t.domainFail
+      return { name: t.domain, status: t.domainStatus }
+    },
+
     tunnel_login_start: () => {
       const t = this.state.tunnel
       if (t.loginState !== 'waiting') {
@@ -2726,12 +2826,25 @@ class MockBackend {
     },
 
     // ===== bypass.rs：探测结论按场景给定，清单走 Rust 的 upsert-by-host =====
-    bypass_probe: ({ input }) => this.bypassProbeOrThrow(String(input ?? '')),
+    bypass_probe: async ({ input, requestId }) => {
+      await this.waitForBypassProbe(requestId, this.state.bypass.probeDelay)
+      return this.bypassProbeOrThrow(String(input ?? ''))
+    },
 
-    /** 探一次即判定又登记，回的是整份结论 —— 与 Rust bypass_save 同形 */
+    bypass_cancel_probe: ({ requestId }) => {
+      const id = String(requestId ?? '')
+      this.cancelledBypassProbes.add(id)
+      this.bypassProbes.get(id)?.()
+    },
+
+    /** 保存已有的有效报告，不隐式发起第二次探测 —— 与 Rust bypass_save 同形 */
     bypass_save: ({ input }) => {
-      const report = this.bypassProbeOrThrow(String(input ?? ''))
-      this.bypassPush(report)
+      const cached = this.bypassReports.get(String(input ?? '').trim())
+      if (!cached || Date.now() - cached.at >= 10 * 60 * 1000) throw '探测结果已过期或不存在，请重新探测后再加入清单'
+      const report = cached.report
+      if (report.verdict === 'unreachable') throw '目标不可达，请修正目标后重新探测'
+      const found = this.state.bypass.targets.find((t) => t.host === report.target.host)
+      this.bypassPush(report, found, found ? { state: found.applyState, batch: found.applyBatch } : undefined)
       return report
     },
 
@@ -2741,25 +2854,25 @@ class MockBackend {
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .map((t) => ({ ...t })),
 
-    bypass_recheck: async ({ id }) => {
+    bypass_recheck: async ({ id, requestId }) => {
       const found = this.state.bypass.targets.find((t) => t.id === id)
       if (!found) throw '条目不存在，可能已被删除'
       // 全量重验逐条调这里：挂一点时间，「重验 x/N」的进度与中途停止才拍得到
-      if (this.state.bypass.recheckDelay > 0) {
-        await new Promise((r) => setTimeout(r, this.state.bypass.recheckDelay))
-      }
+      await this.waitForBypassProbe(requestId, this.state.bypass.recheckDelay)
       // 按原文重探：只有 host 会把带端口/路径/掩码的目标探成默认 443
       let report = this.bypassProbeOrThrow(found.input || found.host)
       // 真写完以后系统已按钉住的地址解析/路由，重探该回「直连可用」。
       // 只认 applied：回滚过的批次（failed）系统里什么都没留，判定不该跟着变好
-      if (found.applyState === 'applied') report = { ...report, verdict: 'directOk' }
+      const override = this.state.bypass.recheckVerdict
+      if (override) report = { ...report, verdict: override }
+      else if (found.applyState === 'applied') report = { ...report, verdict: 'directOk' }
       // 与 Rust reconcile_apply 同判据：写过却仍判要写 = 失败，失败后不再要写 = 已了结
-      const needs = report.verdict === 'hostsOnly' || report.verdict === 'needRoute'
+      const direct = report.verdict === 'directOk'
       const next =
-        found.applyState === 'applied' && needs
+        found.applyState === 'applied' && !direct
           ? 'failed'
-          : found.applyState === 'failed' && !needs
-            ? 'applied'
+          : found.applyState === 'failed' && direct
+            ? found.applyBatch ? 'applied' : 'none'
             : found.applyState
       this.bypassPush(report, found, { state: next, batch: found.applyBatch })
       return report
@@ -2784,11 +2897,8 @@ class MockBackend {
     bypass_plan: ({ allowCdn }: { allowCdn?: unknown }) => {
       const allow = this.allowCdnOf(allowCdn)
       const rows = this.bypassPlanRows(allow)
-      const blocked = rows.filter((r) => !!r.blocked).length
-      const ready = this.bypassPending()
-        .filter((t) => !this.cdnGated(t, allow))
-        .filter((t) => !rows.some((r) => r.id === t.id && !!r.blocked))
-        .length
+      const blocked = new Set(rows.filter((r) => !!r.blocked).map((r) => r.id)).size
+      const ready = new Set(this.bypassWork(allow).map((r) => r.id)).size
       return { rows, ready, blocked }
     },
 
@@ -2834,7 +2944,7 @@ class MockBackend {
       const rollbackError = rolledBack && s.applyRollbackFail ? '写入 hosts 失败：拒绝访问 (os error 5)' : ''
       const keepBatch = !rolledBack || !!rollbackError
       for (const i of items) {
-        const okItem = i.ok && keepBatch
+        const okItem = items.filter((other) => other.id === i.id).every((other) => other.ok) && !rolledBack && !rollbackError
         this.bypassStateOf(i.id, okItem ? 'applied' : 'failed', keepBatch ? batch : '')
       }
       s.rollbackBatch = keepBatch ? batch : ''
@@ -2851,6 +2961,9 @@ class MockBackend {
       if (s.applyCancel) {
         return { batchId: revertBatch, cancelled: true, rolledBack: false, items: [], error: '' }
       }
+      if (s.revertFail) {
+        return { batchId: revertBatch, cancelled: false, rolledBack: true, items: [], error: s.revertFail }
+      }
       const items = this.state.bypass.targets
         .filter((t) => t.applyBatch === b)
         .map((t) => ({ id: t.id, op: 'route', ok: true, changed: true, error: '' }))
@@ -2865,15 +2978,13 @@ class MockBackend {
     bypass_rollback_exists: () => this.state.bypass.rollbackBatch,
 
     /** 与 Rust bypass_edit 同形：按新原文重探、覆盖回原行；host 变了就删掉旧行 */
-    bypass_edit: ({ id, input }) => {
+    bypass_edit: async ({ id, input, requestId }) => {
       const found = this.state.bypass.targets.find((t) => t.id === String(id))
       if (!found) throw '条目不存在，可能已被删除'
+      await this.waitForBypassProbe(requestId, this.state.bypass.probeDelay)
       const report = this.bypassProbeOrThrow(String(input ?? ''))
-      // 与 Rust 同序：先摘旧行再按新 host 归档，建档时间与 id 都跟着这条走
-      if (found.host !== report.target.host) {
-        this.state.bypass.targets = this.state.bypass.targets.filter((t) => t.id !== found.id)
-      }
-      this.bypassPush(report, found)
+      if (this.state.bypass.targets.some((t) => t.host === report.target.host && t.id !== found.id)) throw '该目标已在清单中，请编辑已有条目'
+      this.bypassPush(report, found, { state: found.host === report.target.host ? found.applyState : 'none', batch: found.applyBatch })
       return report
     },
 
@@ -2971,11 +3082,13 @@ class MockBackend {
     },
 
     /** 会话列表：wire 是 camelCase（后端 serde rename_all），token 三项不在这一档 */
-    codex_list_sessions_across_instances: ({ titleQuery }) => {
+    codex_list_sessions_across_instances: ({ titleQuery, contentQuery }) => {
       if (this.state.codex.sessionsFail) throw '官方会话目录不可读（e2e）'
       const q = String(titleQuery ?? '').trim().toLowerCase()
+      const content = String(contentQuery ?? '').trim().toLowerCase()
       return this.state.codex.sessions
         .filter((s) => !q || s.title.toLowerCase().includes(q) || s.sessionId.toLowerCase().includes(q))
+        .filter((s) => !content || s.content.toLowerCase().includes(content))
         .map((s) => ({
           sessionId: s.sessionId,
           title: s.title,
@@ -3040,15 +3153,24 @@ class MockBackend {
         b.requestCount += s.turns
       }
       const byDay = new Map<string, Bucket>()
+      const byHour = new Map<number, Bucket>()
       const byModel = new Map<string, Bucket>()
-      const inWindow = this.state.codex.sessions.filter((s) => s.updatedAt >= from && s.updatedAt <= to)
+      const inWindow = this.state.codex.sessions.filter((s) => s.updatedAt >= from && s.updatedAt < to)
       for (const s of inWindow) {
         const dk = dayKey(s.updatedAt)
+        const midnight = new Date(s.updatedAt * 1000)
+        midnight.setHours(0, 0, 0, 0)
+        const dayStart = Math.floor(midnight.getTime() / 1000)
+        const hourStart = dayStart + Math.floor((s.updatedAt - dayStart) / 3600) * 3600
+        const hour = byHour.get(hourStart) ?? newBucket(String(hourStart))
+        hour.label = new Date(hourStart * 1000).toTimeString().slice(0, 5)
         const day = byDay.get(dk) ?? newBucket(dk)
         const model = byModel.get(s.model) ?? newBucket(s.model)
         add(day, s)
+        add(hour, s)
         add(model, s)
         byDay.set(dk, day)
+        byHour.set(hourStart, hour)
         byModel.set(s.model, model)
       }
       const totals = {
@@ -3074,9 +3196,10 @@ class MockBackend {
       return {
         totals,
         byDay: days,
+        byHour: [...byHour.entries()].sort(([left], [right]) => left - right).map(([, bucket]) => bucket),
         byModel: models,
-        fromTimestamp: from,
-        toTimestamp: to,
+        fromTimestamp: fromTimestamp ?? null,
+        toTimestamp: toTimestamp ?? null,
         scanMillis: this.state.codex.usageScanMillis,
       }
     },
@@ -3153,6 +3276,7 @@ class MockBackend {
             t.restored ?? {
               sessionId: t.sessionId,
               title: t.title,
+              content: '',
               cwd: t.cwd,
               projectName: null,
               updatedAt: nowSec,
@@ -3418,6 +3542,17 @@ class MockBackend {
       rec.api_provider_name = 'cockpit_api'
       rec.api_base_url = apiBaseUrl ? String(apiBaseUrl) : null
       return { ...rec }
+    },
+
+    import_codex_access_token_account: ({ name, accessToken }) => {
+      if (!String(name ?? '').trim() || !String(accessToken ?? '').trim()) throw '账号名称和 Access Token 不能为空'
+      const rec = this.codexPush('access-token@e2e.dev')
+      rec.account_name = String(name).trim()
+      return { ...rec }
+    },
+    add_codex_account_with_token: ({ idToken, accessToken }) => {
+      if (!String(idToken ?? '').trim() || !String(accessToken ?? '').trim()) throw 'ID Token 和 Access Token 不能为空'
+      return { ...this.codexPush('token@e2e.dev') }
     },
 
     get_codex_reset_credits: ({ accountId }) => {

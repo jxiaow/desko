@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
+// @ts-expect-error The app tsconfig intentionally excludes Node types; Vitest runs on Node.
+import { webcrypto } from 'node:crypto'
 import { useNotesStore } from './notes'
 import { notesApi } from '../services/api/notes'
 import type { Note } from '../types'
@@ -7,8 +10,14 @@ import type { Note } from '../types'
 vi.mock('../services/api/notes', () => ({
   notesApi: {
     listNotes: vi.fn(),
+    noteKeyStatus: vi.fn(),
+    noteKeySetup: vi.fn(),
+    noteKeyUnlock: vi.fn(),
+    noteKeyRecover: vi.fn(),
     createNote: vi.fn(),
     updateNote: vi.fn(),
+    stageDrafts: vi.fn(),
+    recoverDrafts: vi.fn(),
     deleteNote: vi.fn(),
     batchDeleteNotes: vi.fn(),
     togglePinNote: vi.fn(),
@@ -51,15 +60,113 @@ const mockNote = (overrides: Partial<Note> = {}): Note => ({
   ...overrides,
 })
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail })
+  return { promise, resolve, reject }
+}
+
 describe('Notes Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.useFakeTimers()
     vi.clearAllMocks()
+    vi.mocked(notesApi.stageDrafts).mockResolvedValue(undefined)
+    vi.mocked(notesApi.recoverDrafts).mockResolvedValue([])
   })
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  describe('lock boundary for asynchronous reads', () => {
+    it('ignores a list returned after lock, including its loading state', async () => {
+      const store = useNotesStore()
+      const list = deferred<Note[]>()
+      vi.mocked(notesApi.noteKeyStatus).mockResolvedValue({ is_set: true, is_open: true })
+      vi.mocked(notesApi.listNotes).mockReturnValue(list.promise)
+      const loading = store.fetchNotes()
+      await flushPromises()
+      expect(notesApi.listNotes).toHaveBeenCalledTimes(1)
+      store.clearUnlockedNotes()
+      list.resolve([mockNote({ content_html: '<p>private after lock</p>' })])
+      await loading
+      expect(store.notes).toEqual([])
+      expect(store.notePlains).toEqual({})
+      expect(store.noteKey.is_open).toBe(false)
+      expect(store.notesLoading).toBe(false)
+      expect(store.notesLoadError).toBeNull()
+    })
+
+    it('ignores plaintext revealed after lock', async () => {
+      const store = useNotesStore()
+      const reveal = deferred<string>()
+      vi.mocked(notesApi.noteKeyStatus).mockResolvedValue({ is_set: true, is_open: true })
+      vi.mocked(notesApi.listNotes).mockResolvedValue([mockNote({ encrypted: true, content_html: '' })])
+      vi.mocked(notesApi.revealNote).mockReturnValue(reveal.promise)
+      const loading = store.fetchNotes()
+      await flushPromises()
+      expect(notesApi.revealNote).toHaveBeenCalledWith('1')
+      store.clearUnlockedNotes()
+      reveal.resolve('<p>private after lock</p>')
+      await loading
+      expect(store.notes).toEqual([])
+      expect(store.notePlains).toEqual({})
+      expect(store.noteKey.is_open).toBe(false)
+    })
+
+    it('does not let an old failed fetch clear a new fetch state', async () => {
+      const store = useNotesStore()
+      const oldList = deferred<Note[]>()
+      const newList = deferred<Note[]>()
+      vi.mocked(notesApi.noteKeyStatus).mockResolvedValue({ is_set: false, is_open: false })
+      vi.mocked(notesApi.listNotes).mockReturnValueOnce(oldList.promise).mockReturnValueOnce(newList.promise)
+      const oldFetch = store.fetchNotes()
+      await flushPromises()
+      store.clearUnlockedNotes()
+      const newFetch = store.fetchNotes()
+      await flushPromises()
+      oldList.reject(new Error('old session failed'))
+      await oldFetch
+      expect(store.notesLoading).toBe(true)
+      expect(store.notesLoadError).toBeNull()
+      newList.resolve([mockNote({ content_html: '<p>new session</p>' })])
+      await newFetch
+      expect(store.notes[0].content_html).toBe('<p>new session</p>')
+      expect(store.notesLoading).toBe(false)
+    })
+
+    it.each(['setup', 'unlock', 'recover'] as const)('ignores late note-domain %s plaintext', async (operation) => {
+      const store = useNotesStore()
+      store.notes = [mockNote({ encrypted: true, content_html: '' })]
+      const plains = deferred<{ id: string; html: string }[]>()
+      vi.mocked(notesApi.noteKeySetup).mockReturnValue(plains.promise)
+      vi.mocked(notesApi.noteKeyUnlock).mockReturnValue(plains.promise)
+      vi.mocked(notesApi.noteKeyRecover).mockReturnValue(plains.promise)
+      const pending = operation === 'setup' ? store.setupNoteKey('note-password')
+        : operation === 'unlock' ? store.unlockNoteDomain('note-password')
+          : store.recoverNoteDomain()
+      store.clearUnlockedNotes()
+      plains.resolve([{ id: '1', html: '<p>private after lock</p>' }])
+      expect(await pending).toBe('应用已锁定')
+      expect(store.notes).toEqual([])
+      expect(store.notePlains).toEqual({})
+      expect(store.noteKey.is_open).toBe(false)
+    })
+
+    it('ignores a single-note unlock returned after lock', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote({ encrypted: true, content_html: '' })]
+      const plain = deferred<string>()
+      vi.mocked(notesApi.unlockNote).mockReturnValue(plain.promise)
+      const pending = store.unlockNote('1')
+      store.clearUnlockedNotes()
+      plain.resolve('<p>private after lock</p>')
+      expect(await pending).toBe('应用已锁定')
+      expect(store.notes).toEqual([])
+      expect(store.notePlains).toEqual({})
+    })
   })
 
   describe('publishNote', () => {
@@ -87,6 +194,182 @@ describe('Notes Store', () => {
   })
 
   describe('saveNoteContent', () => {
+    it('stages each latest edit before saving so a successful update cannot be followed by stale staging', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote()]
+      vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
+      store.saveNoteContent('1', '<p>first</p>')
+      await flushPromises()
+      store.saveNoteContent('1', '<p>second</p>')
+      await store.flushNoteSave()
+      const stages = vi.mocked(notesApi.stageDrafts).mock.calls
+      expect(stages[stages.length - 1]?.[0]).toEqual([{ id: '1', input: expect.objectContaining({ content_html: '<p>second</p>' }) }])
+      const stageCalls = vi.mocked(notesApi.stageDrafts).mock.invocationCallOrder
+      expect(stageCalls[stageCalls.length - 1]).toBeLessThan(vi.mocked(notesApi.updateNote).mock.invocationCallOrder[0])
+    })
+
+    it('permits lock after disk failure only once encrypted staging succeeds', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote({ encrypted: true })]
+      store.notePlains = { '1': '<p>old</p>' }
+      vi.mocked(notesApi.updateNote).mockRejectedValue(new Error('disk full'))
+      store.saveNoteContent('1', '<p>private draft</p>')
+      await store.prepareNoteLock()
+      expect(notesApi.stageDrafts).toHaveBeenLastCalledWith([{ id: '1', input: expect.objectContaining({ content_html: '<p>private draft</p>' }) }])
+      store.clearUnlockedNotes()
+      expect(store.notePlains).toEqual({})
+      expect(store.notes).toEqual([])
+    })
+
+    it('blocks manual lock when both disk save and staging fail', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote()]
+      vi.mocked(notesApi.updateNote).mockRejectedValue(new Error('disk full'))
+      vi.mocked(notesApi.stageDrafts).mockRejectedValue(new Error('stage failed'))
+      store.saveNoteContent('1', '<p>keep me</p>')
+      await expect(store.prepareNoteLock()).rejects.toThrow('stage failed')
+      expect(store.notes[0].content_html).toBe('<p>keep me</p>')
+    })
+
+    it('encrypts failed drafts in process memory on forced lock and restores after unlock', async () => {
+      vi.stubGlobal('crypto', webcrypto)
+      try {
+        const store = useNotesStore()
+        store.notes = [mockNote({ encrypted: true })]
+        store.notePlains = { '1': '<p>old</p>' }
+        vi.mocked(notesApi.updateNote).mockRejectedValueOnce(new Error('disk full')).mockResolvedValue(undefined)
+        vi.mocked(notesApi.stageDrafts).mockRejectedValue(new Error('stage failed'))
+        store.saveNoteContent('1', '<p>secret draft</p>')
+        await store.prepareNoteLock(true)
+        store.clearUnlockedNotes()
+        expect(store.notePlains).toEqual({})
+        expect(store.notes).toEqual([])
+        vi.mocked(notesApi.stageDrafts).mockResolvedValue(undefined)
+        store.notes = [mockNote({ encrypted: true, content_html: '' })]
+        store.notePlains = { '1': '<p>old</p>' }
+        await store.recoverDrafts()
+        expect(store.notes[0].content_html).toBe('<p>secret draft</p>')
+        await store.flushNoteSave()
+        expect(notesApi.stageDrafts).toHaveBeenLastCalledWith([{ id: '1', input: expect.objectContaining({ content_html: '<p>secret draft</p>' }) }])
+        expect(notesApi.updateNote).toHaveBeenLastCalledWith('1', expect.objectContaining({ content_html: '<p>secret draft</p>' }))
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('seals unpublished composer text before lock and restores it after unlock', async () => {
+      vi.stubGlobal('crypto', webcrypto)
+      try {
+        const store = useNotesStore()
+        store.noteDraftHtml = '<p>unpublished private note</p>'
+        await store.prepareNoteLock()
+        store.clearUnlockedNotes()
+        expect(store.noteDraftHtml).toBe('')
+        await store.recoverDrafts()
+        expect(store.noteDraftHtml).toBe('<p>unpublished private note</p>')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('discards old pending edits and sealed drafts when a backup replaces the database', async () => {
+      vi.stubGlobal('crypto', webcrypto)
+      try {
+        const store = useNotesStore()
+        store.notes = [mockNote()]
+        store.noteDraftHtml = '<p>old composer</p>'
+        vi.mocked(notesApi.updateNote).mockRejectedValue(new Error('disk full'))
+        store.saveNoteContent('1', '<p>old edit</p>')
+        await store.forceSealDrafts()
+        store.discardDraftsForRestore()
+        expect(store.noteDraftHtml).toBe('')
+        expect(store.notes).toEqual([])
+
+        store.notes = [mockNote({ content_html: '<p>restored database</p>' })]
+        await store.recoverDrafts()
+        await store.flushNoteSave()
+        expect(store.notes[0].content_html).toBe('<p>restored database</p>')
+        expect(store.noteDraftHtml).toBe('')
+        expect(notesApi.updateNote).not.toHaveBeenCalled()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('does not let an old asynchronous seal repopulate drafts after restore', async () => {
+      let resolveOldKey!: (key: CryptoKey) => void
+      let keyCalls = 0
+      vi.stubGlobal('crypto', {
+        getRandomValues: webcrypto.getRandomValues.bind(webcrypto),
+        subtle: {
+          generateKey: (...args: Parameters<typeof webcrypto.subtle.generateKey>) => {
+            keyCalls++
+            if (keyCalls === 1) return new Promise<CryptoKey>(resolve => { resolveOldKey = resolve })
+            return webcrypto.subtle.generateKey(...args)
+          },
+          encrypt: webcrypto.subtle.encrypt.bind(webcrypto.subtle),
+          decrypt: webcrypto.subtle.decrypt.bind(webcrypto.subtle),
+        },
+      })
+      try {
+        const store = useNotesStore()
+        store.noteDraftHtml = '<p>before restore</p>'
+        const staleSeal = store.forceSealDrafts()
+        store.discardDraftsForRestore()
+        store.noteDraftHtml = '<p>after restore</p>'
+        await store.forceSealDrafts()
+        resolveOldKey(await webcrypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']))
+        await staleSeal
+        store.clearUnlockedNotes()
+        await store.recoverDrafts()
+        expect(store.noteDraftHtml).toBe('<p>after restore</p>')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('forced sealing bypasses a hung update and ignores its late failure after lock', async () => {
+      vi.stubGlobal('crypto', webcrypto)
+      try {
+        const store = useNotesStore()
+        store.notes = [mockNote()]
+        let failOldWrite!: (error: Error) => void
+        vi.mocked(notesApi.updateNote).mockImplementationOnce(() => new Promise<void>((_, reject) => { failOldWrite = reject }))
+          .mockResolvedValue(undefined)
+        store.saveNoteContent('1', '<p>last edit</p>')
+        const blockedFlush = store.flushNoteSave()
+        await flushPromises()
+        expect(notesApi.updateNote).toHaveBeenCalledTimes(1)
+        await store.forceSealDrafts()
+        store.clearUnlockedNotes()
+        expect(store.notes).toEqual([])
+        failOldWrite(new Error('backend already locked'))
+        await blockedFlush
+        store.notes = [mockNote()]
+        await store.recoverDrafts()
+        await store.flushNoteSave()
+        expect(notesApi.updateNote).toHaveBeenLastCalledWith('1', expect.objectContaining({ content_html: '<p>last edit</p>' }))
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('recovers backend drafts only after the encrypted note has been unlocked', async () => {
+      const store = useNotesStore()
+      store.notes = [mockNote({ encrypted: true, content_html: '' })]
+      vi.mocked(notesApi.recoverDrafts).mockResolvedValue([{
+        id: '1', input: { title: 'draft', content_html: '<p>private</p>' },
+      }])
+      await store.recoverDrafts()
+      expect(store.notes[0].content_html).toBe('')
+      store.notePlains = { '1': '<p>old</p>' }
+      await store.recoverDrafts()
+      expect(store.notes[0].content_html).toBe('<p>private</p>')
+      vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
+      await store.flushNoteSave()
+      expect(notesApi.updateNote).toHaveBeenCalledWith('1', expect.objectContaining({ content_html: '<p>private</p>' }))
+    })
+
     it('先乐观更新列表，防抖后再落库', async () => {
       const store = useNotesStore()
       store.notes = [mockNote({ id: '1', title: '旧标题', content_html: '<p>旧标题</p>' })]
@@ -151,6 +434,7 @@ describe('Notes Store', () => {
       vi.mocked(notesApi.updateNote).mockResolvedValue(undefined)
       store.saveNoteContent('1', '<p>第一版</p>')
       const first = store.flushNoteSave()
+      await flushPromises()
       store.saveNoteContent('1', '<p>第二版</p>')
       let flushed = false
       const second = store.flushNoteSave().then(() => { flushed = true })

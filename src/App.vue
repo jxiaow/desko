@@ -5,7 +5,8 @@ import { useAuthStore } from './stores/auth'
 import { useToastStore } from './stores/toast'
 import { useConfirmStore } from './stores/confirm'
 import { usePasswordStore } from './stores/password'
-import { useAutoLock } from './composables/useAutoLock'
+import { useNotesStore } from './stores/notes'
+import { useAutoLock, type LockRequest } from './composables/useAutoLock'
 import { useClipboard } from './composables/useClipboard'
 import { installHoverGuard } from './utils/hoverGuard'
 import { bootEnabledModules, flushModulesBeforeLock, lockEnabledModules } from './modules/state'
@@ -65,30 +66,67 @@ const onOpenSettingsTab = (e: Event) => {
 }
 
 let lockInFlight: Promise<void> | null = null
-const doLock = (): Promise<void> => {
-  if (lockInFlight) return lockInFlight
+let lockGeneration = 0
+let lockIsForced = false
+let lockResetsDrafts = false
+const finishLock = async () => {
   showSettings.value = false
   showChangePassword.value = false
   noteKeyMode.value = null
   clearConfirm()
-  lockInFlight = (async () => {
-    try { await flushModulesBeforeLock() } catch { /* 保存错误已有提示，锁定仍要完成 */ }
-    await lock()
-    clearSensitiveState()
-    // 会话明文随密钥一起收回，禁用过的模块也清理。
-    lockEnabledModules()
-    // 撤销旧密码清除定时器，避免解锁后的新剪贴板被误删。
-    clearClipboardTimer()
-    try { await navigator.clipboard.writeText('') } catch {}
-  })().finally(() => { lockInFlight = null })
-  return lockInFlight
+  await lock()
+  clearSensitiveState()
+  // 会话明文随密钥一起收回，禁用过的模块也清理。
+  lockEnabledModules()
+  // 撤销旧密码清除定时器，避免解锁后的新剪贴板被误删。
+  clearClipboardTimer()
+  try { await navigator.clipboard.writeText('') } catch {}
+}
+
+const doLock = (request: LockRequest = {}): Promise<void> => {
+  const { resetDrafts = false } = request
+  const forced = request.forced === true || resetDrafts
+  if (lockInFlight && (!resetDrafts || lockResetsDrafts) && (!forced || lockIsForced)) return lockInFlight
+  const generation = ++lockGeneration
+  lockIsForced = forced
+  lockResetsDrafts = resetDrafts
+  const run = async () => {
+    if (forced) {
+      if (resetDrafts) {
+        // Restore replaced the database: old edits must never replay into it.
+        useNotesStore().discardDraftsForRestore()
+      } else {
+        // Native has already revoked the key at its deadline; bypass a stalled save RPC.
+        try { await useNotesStore().forceSealDrafts() } catch (e: any) {
+          useNotesStore().dropUnsealedDrafts()
+          toastStore.showToast('强制锁定时草稿保留失败：' + (e.message ?? e), 'error')
+        }
+      }
+    } else {
+      try { await flushModulesBeforeLock() } catch (e: any) {
+        if (generation === lockGeneration) toastStore.showToast('锁定已取消：' + (e.message ?? e), 'error')
+        return
+      }
+    }
+    if (generation === lockGeneration) await finishLock()
+  }
+  const task = run().finally(() => {
+    if (generation === lockGeneration) { lockInFlight = null; lockIsForced = false; lockResetsDrafts = false }
+  })
+  lockInFlight = task
+  return task
 }
 
 useAutoLock(doLock, evictExpiredPasswords)
 
 const bootModules = () => bootEnabledModules()
+let unlistenKdfWarning: (() => void) | null = null
 
 onMounted(async () => {
+  const { listen } = await import('@tauri-apps/api/event')
+  unlistenKdfWarning = await listen('auth-kdf-upgrade-warning', () => {
+    toastStore.showToast('口令保护升级未完成，已按原格式解锁', 'error')
+  })
   await checkInitialized()
   if (appState.value === 'unlocked') {
     await bootEnabledModules()
@@ -101,6 +139,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  unlistenKdfWarning?.()
   window.removeEventListener('desko:open-settings-tab', onOpenSettingsTab)
   window.removeEventListener('keydown', onGlobalKey)
 })

@@ -181,7 +181,7 @@ pub fn restore_recycled_account(id: &str) -> Result<(), String> {
         )
         .checked_add(1)
         .ok_or("Account generation exhausted")?;
-    let mut index = load_account_index_checked()?;
+    let mut index = load_account_index_checked_unlocked()?;
     index.accounts.retain(|summary| summary.id != *account_id);
     index.accounts.push(CodexAccountSummary {
         id: account.id.clone(),
@@ -194,7 +194,7 @@ pub fn restore_recycled_account(id: &str) -> Result<(), String> {
     // Publish the new generation only after both the detail and index exist.
     // On any earlier failure the snapshot remains recoverable and tombstoned.
     save_account_unchecked(&account)?;
-    save_account_index(&index)?;
+    save_account_index_unlocked(&index)?;
     write_account_tombstone(
         account_id,
         false,

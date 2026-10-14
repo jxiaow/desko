@@ -79,7 +79,7 @@ export const MODULES: ModuleDef[] = [
     core: true,
     count: () => useNotesStore().notes.length,
     boot: () => useNotesStore().fetchNotes(),
-    beforeLock: () => useNotesStore().flushNoteSave(),
+    beforeLock: () => useNotesStore().prepareNoteLock(),
     onLock: () => useNotesStore().clearUnlockedNotes(),
     view: async () => (await import('../views/NotesView.vue')).default,
     settings: {
@@ -165,8 +165,8 @@ export const MODULES: ModuleDef[] = [
   {
     id: 'bypass',
     settingKey: 'bypass_enabled',
-    title: '直连清单',
-    desc: '探测指定域名应固定 hosts 记录还是添加系统路由',
+    title: '网络直连',
+    desc: '探测域名、IPv4 地址和网段，配置本机 hosts 与直连路由',
     icon: 'navBypass',
     defaultEnabled: false,
     core: false,

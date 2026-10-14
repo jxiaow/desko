@@ -23,12 +23,16 @@ export interface CodexQuota {
   hourly_percentage: number
   hourly_reset_time: number | null
   hourly_window_minutes?: number | null
+  hourly_window_present?: boolean | null
   weekly_percentage: number
   weekly_reset_time: number | null
   weekly_window_minutes?: number | null
+  weekly_window_present?: boolean | null
   reset_credits_available?: number | null
   reset_credits?: CodexResetCredit[] | null
   reset_credits_next_expires_at?: number | null
+  /** 官方 usage 响应；包含 Credits 和模型专属额度，读取时须校验形状。 */
+  raw_data?: unknown
 }
 
 export interface CodexAccount {
@@ -132,7 +136,7 @@ export interface CodexSessionTokenStats {
   reasoningOutputTokens: number
 }
 
-/** 用量图的一桶：一个本地日（key = 'YYYY-MM-DD'）或一个模型 */
+/** 用量桶：本地日（key = YYYY-MM-DD）、小时（key = Unix 秒）或模型。 */
 export interface CodexUsageBucket {
   key: string
   label: string
@@ -160,6 +164,8 @@ export interface CodexUsageTotals {
 export interface CodexSessionUsageReport {
   totals: CodexUsageTotals
   byDay: CodexUsageBucket[]
+  /** 小时桶：key 为起点的 Unix 秒，label 为本地 HH:mm。 */
+  byHour: CodexUsageBucket[]
   byModel: CodexUsageBucket[]
   fromTimestamp?: number | null
   toTimestamp?: number | null
@@ -321,6 +327,10 @@ export const codexApi = {
       apiKey,
       apiBaseUrl: apiBaseUrl && apiBaseUrl.trim() ? apiBaseUrl.trim() : null,
     }),
+  importAccessToken: (name: string, accessToken: string): Promise<CodexAccount> =>
+    invoke('import_codex_access_token_account', { name, accessToken }),
+  addTokens: (idToken: string, accessToken: string, refreshToken?: string): Promise<CodexAccount> =>
+    invoke('add_codex_account_with_token', { idToken, accessToken, refreshToken: refreshToken?.trim() || null }),
   /** 改已入库 API Key 账号的凭据；后端其余参数都是 Option，留空即不动 */
   updateApiKey: (accountId: string, apiKey: string, apiBaseUrl?: string): Promise<CodexAccount> =>
     invoke('update_codex_api_key_credentials', {
@@ -348,11 +358,11 @@ export const codexApi = {
   repairSessionVisibility: (): Promise<SessionVisibilityRepairSummary> =>
     invoke('codex_repair_session_visibility_for_launch_target'),
 
-  /** 官方目录里的会话列表（只读）。正文搜索暂不接，contentQuery 恒 null。 */
-  listSessions: (titleQuery?: string): Promise<CodexSessionRecord[]> =>
+  /** 官方目录里的会话列表；标题和正文各走上游已有的本地搜索路径。 */
+  listSessions: (titleQuery?: string, contentQuery?: string): Promise<CodexSessionRecord[]> =>
     invoke('codex_list_sessions_across_instances', {
       titleQuery: titleQuery && titleQuery.trim() ? titleQuery.trim() : null,
-      contentQuery: null,
+      contentQuery: contentQuery?.trim() || null,
     }),
   sessionTokenStats: (sessionIds: string[]): Promise<CodexSessionTokenStats[]> =>
     invoke('codex_get_session_token_stats_across_instances', { sessionIds }),

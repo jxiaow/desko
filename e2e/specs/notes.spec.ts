@@ -140,6 +140,66 @@ test.describe('Notes 小记', () => {
     expect((await e2e.snapshot(page)).notes).toEqual(expect.arrayContaining([expect.objectContaining({ content_html: html })]))
   })
 
+  test('导入的小记在卡片与全屏查看都不会执行 HTML 事件属性', async ({ page }) => {
+    const html = '<p>安全正文</p><img src="attachments/missing.png" onerror="window.__noteXss = true">' +
+      '<ul data-type="taskList"><li data-type="taskItem" data-checked="true"><label><input type="checkbox" checked></label><div><p>待办</p></div></li></ul>' +
+      '<script>window.__noteXss = true</script><a href="javascript:window.__noteXss=true">坏链接</a>'
+    await bootUnlocked(page, { notes: [{ title: '安全正文', content_html: html }] }, '/notes')
+    const card = page.locator('.memo')
+    await expect(card.locator('.memo-body img')).toHaveAttribute('src', /missing\.png/)
+    await expect(card.locator('.memo-body img')).not.toHaveAttribute('onerror')
+    await expect(card.locator('.memo-body script')).toHaveCount(0)
+    await card.hover()
+    await tipButton(card, '全屏查看').click()
+    const view = page.locator('.fs-view')
+    await expect(view.locator('input[type="checkbox"]')).toBeChecked()
+    await expect(view.locator('a')).not.toHaveAttribute('href')
+    await expect(view.locator('script')).toHaveCount(0)
+    expect(await page.evaluate(() => (window as any).__noteXss)).toBeUndefined()
+  })
+
+  test('保存失败后锁定会加密暂存，解锁自动找回并写入', async ({ page }) => {
+    await bootUnlocked(page, {
+      notes: [{ title: '原稿', content_html: '<p>原稿</p>' }],
+      notesUpdateFailCount: 1,
+    }, '/notes')
+    const card = page.locator('.memo')
+    await card.hover()
+    await tipButton(card, '编辑').click()
+    await page.locator('.memo.editing .ProseMirror').fill('锁前最后一笔')
+    await page.locator('button[title="锁定"]').click()
+    await expect(page.locator('.unlock-input')).toBeVisible()
+    expect((await e2e.snapshot(page)).notes[0].content_html).toBe('<p>原稿</p>')
+    expect(await e2e.count(page, 'stage_note_drafts')).toBeGreaterThan(0)
+    await page.locator('.unlock-input').fill('e2e-master-123')
+    await page.locator('.unlock-btn').click()
+    await expect.poll(() => e2e.snapshot(page).then(s => s.notes[0].content_html)).toContain('锁前最后一笔')
+    await expect(memo(page, '锁前最后一笔')).toBeVisible()
+    expect(await e2e.count(page, 'recover_note_drafts')).toBeGreaterThan(0)
+  })
+
+  test('未发布草稿锁定时从页面收回，解锁后恢复书写', async ({ page }) => {
+    await bootUnlocked(page, {}, '/notes')
+    await page.locator('.composer .ProseMirror').fill('还没发布的草稿')
+    await page.locator('button[title="锁定"]').click()
+    await expect(page.locator('.unlock-input')).toBeVisible()
+    await page.locator('.unlock-input').fill('e2e-master-123')
+    await page.locator('.unlock-btn').click()
+    await expect(page.locator('.composer .ProseMirror')).toContainText('还没发布的草稿')
+    expect(await e2e.count(page, 'create_note')).toBe(0)
+  })
+
+  test('备份恢复强制锁定会丢弃旧库的未发布草稿', async ({ page }) => {
+    await bootUnlocked(page, {}, '/notes')
+    await page.locator('.composer .ProseMirror').fill('旧库还没发布的草稿')
+    await e2e.emitEvent(page, 'tray-lock', { forced: true, resetDrafts: true })
+    await expect(page.locator('.unlock-input')).toBeVisible()
+    await page.locator('.unlock-input').fill('e2e-master-123')
+    await page.locator('.unlock-btn').click()
+    await expect(page.locator('.composer .ProseMirror')).toHaveText('')
+    expect(await e2e.count(page, 'create_note')).toBe(0)
+  })
+
   test('进入 /notes 自动拉取并渲染 seed 小记', async ({ page }) => {
     await gotoNotes(page)
     await expect(page.locator('.memo')).toHaveCount(3)
@@ -347,7 +407,7 @@ test.describe('Notes 小记', () => {
     await expect(exit).toBeEnabled()
     await exit.click()
     await expect(fs).toHaveCount(0)
-    expect((await e2e.snapshot(page)).notes.find((note: any) => note.id === id).content_html).toBe('<p></p>')
+    await expect.poll(() => e2e.snapshot(page).then(s => s.notes.find((note: any) => note.id === id).content_html)).toBe('<p></p>')
   })
 
   test('新小记全屏仍可发布或放弃，放弃后切换模块不会恢复内容', async ({ page }) => {

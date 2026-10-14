@@ -101,6 +101,7 @@ struct LoginProc {
     url: Arc<Mutex<Option<String>>>,
     tail: Arc<Mutex<String>>,
     started: std::time::Instant,
+    fallback_cert: PathBuf,
     _job: ProcessJob,
 }
 
@@ -200,6 +201,11 @@ fn start_inner(app: &AppHandle) -> Result<StatusDto, AppError> {
         .starting
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    start_locked(app)
+}
+
+// 调用方持有 starting：配置替换、启动、停止共享同一把进程编排锁。
+fn start_locked(app: &AppHandle) -> Result<StatusDto, AppError> {
     if child_alive(app) {
         return Ok(status_inner(app));
     }
@@ -207,6 +213,8 @@ fn start_inner(app: &AppHandle) -> Result<StatusDto, AppError> {
     let tunnel_id = tunnel_id(app)
         .ok_or_else(|| AppError::Tunnel("还没有可启动的隧道：需要先完成授权与创建".to_string()))?;
     require_credentials(app, &root, &tunnel_id)?;
+    // 失败的配置替换可能留下旧 YAML；手动启动也必须从当前服务表重建。
+    tunnel_service::write_config(&root, &tunnel_id, &ingress_rules(app)?)?;
     // 开门之前先把公网面的门槛重新说一遍：隧道停过、配置件被别的路径重建过，
     // 都不该出现"隧道在跑、公网门槛却还是上一次的"这种两套话
     sync_public(app)?;
@@ -390,16 +398,19 @@ fn service_counts(app: &AppHandle) -> Result<(usize, usize), AppError> {
 
 fn take_login(app: &AppHandle) -> Option<LoginProc> {
     let state = app.state::<AppState>();
-    let taken = match state.tunnel.login.lock() {
+    take_login_state(&state.tunnel)
+}
+
+fn take_login_state(state: &TunnelState) -> Option<LoginProc> {
+    let taken = match state.login.lock() {
         Ok(mut guard) => guard.take(),
         Err(_) => None,
     };
     taken
 }
 
-fn login_snapshot(app: &AppHandle) -> Option<LoginDto> {
-    let state = app.state::<AppState>();
-    let guard = state.tunnel.login.lock().ok()?;
+fn login_snapshot(state: &TunnelState) -> Option<LoginDto> {
+    let guard = state.login.lock().ok()?;
     let proc = guard.as_ref()?;
     let url = proc.url.lock().ok().and_then(|g| g.clone());
     let elapsed = proc.started.elapsed().as_millis() as u64;
@@ -412,18 +423,16 @@ fn login_snapshot(app: &AppHandle) -> Option<LoginDto> {
 }
 
 /// 授权子进程此刻的输出尾巴（取走进程之前读，杀完就没得读了）
-fn login_tail(app: &AppHandle) -> Option<String> {
-    let state = app.state::<AppState>();
-    let guard = state.tunnel.login.lock().ok()?;
+fn login_tail(state: &TunnelState) -> Option<String> {
+    let guard = state.login.lock().ok()?;
     let text = guard.as_ref()?.tail.lock().ok()?.trim().to_string();
     (!text.is_empty()).then_some(text)
 }
 
 /// 授权进程自己退了（用户没点开、被系统拦了都算），凭据又没落位——
 /// 不能继续报 waiting 到 5 分钟，把「去授权」按钮白白藏掉。
-fn login_child_exited(app: &AppHandle) -> bool {
-    let state = app.state::<AppState>();
-    let Ok(mut guard) = state.tunnel.login.lock() else { return false };
+fn login_child_exited(state: &TunnelState) -> bool {
+    let Ok(mut guard) = state.login.lock() else { return false };
     match guard.as_mut() {
         Some(proc) => !matches!(proc.child.try_wait(), Ok(None)),
         None => false,
@@ -431,37 +440,42 @@ fn login_child_exited(app: &AppHandle) -> bool {
 }
 
 /// 授权完成的判据是凭据文件出现，不是命令退出码 —— 它退出时可能什么都没写到。
-/// 真 `login` 没有指定 cert 落点的 flag，所以两处都查：我们的目录，以及它默认会写的 `~/.cloudflared`。
-fn cert_arrived() -> bool {
-    let root = root();
-    if tunnel_service::cert_path(&root).exists() {
-        return true;
-    }
-    tunnel_service::fallback_cert_path()
-        .map(|stray| tunnel_service::adopt_stray_cert(&root, &stray))
-        .unwrap_or(false)
+/// 真 `login` 的默认写入位置由子进程专用 home 隔离，只领取本次登录自己的凭据。
+fn cert_arrived(root: &Path, state: &TunnelState) -> bool {
+    if tunnel_service::cert_path(root).exists() { return true; }
+    let Ok(login) = state.login.lock() else { return false };
+    // 重启后进程句柄已丢失，但本档案登录目录里的凭据仍应领取；不读取用户外部 ~/.cloudflared。
+    let fallback = login.as_ref().map(|proc| proc.fallback_cert.clone())
+        .unwrap_or_else(|| tunnel_service::fallback_cert_path(root));
+    tunnel_service::adopt_stray_cert(root, &fallback)
 }
 
 fn login_status_inner(app: &AppHandle) -> LoginDto {
-    if cert_arrived() {
+    let state = app.state::<AppState>();
+    let _guard = state.tunnel.starting.lock().unwrap_or_else(|p| p.into_inner());
+    login_status(&root(), &state.tunnel)
+}
+
+fn login_status(root: &Path, state: &TunnelState) -> LoginDto {
+    if cert_arrived(root, state) {
         // 凭据到手，授权进程自己就会退；仍活着就收掉，不留挂着等回调的进程
-        if let Some(proc) = take_login(app) {
+        if let Some(proc) = take_login_state(state) {
             tunnel_service::kill_child(proc.child);
         }
         return LoginDto { state: "authorized", url: None, seconds_left: 0, note: None };
     }
-    let tail = login_tail(app);
-    match login_snapshot(app) {
+    let tail = login_tail(state);
+    match login_snapshot(state) {
         Some(dto) => {
             if dto.seconds_left == 0 {
-                if let Some(proc) = take_login(app) {
+                if let Some(proc) = take_login_state(state) {
                     tunnel_service::kill_child(proc.child);
                 }
                 return LoginDto { state: "timeout", url: dto.url, seconds_left: 0, note: tail };
             }
-            if login_child_exited(app) {
+            if login_child_exited(state) {
                 // 早退且没写出凭据：当场收尸，把它最后那句一起带回，用户可以立刻重来一轮
-                if let Some(proc) = take_login(app) {
+                if let Some(proc) = take_login_state(state) {
                     tunnel_service::kill_child(proc.child);
                 }
                 let note = tail.or_else(|| Some("授权进程没等到回调就退了，本机没有落凭据".to_string()));
@@ -474,19 +488,43 @@ fn login_status_inner(app: &AppHandle) -> LoginDto {
 }
 
 fn login_start_inner(app: &AppHandle) -> Result<LoginDto, AppError> {
-    if let Some(dto) = login_snapshot(app) {
+    let state = app.state::<AppState>();
+    let _guard = state.tunnel.starting.lock().unwrap_or_else(|p| p.into_inner());
+    if cert_arrived(&root(), &state.tunnel) {
+        return Ok(login_status(&root(), &state.tunnel));
+    }
+    if let Some(dto) = login_snapshot(&state.tunnel) {
         return Ok(dto);
     }
     let root = root();
     std::fs::create_dir_all(tunnel_service::secret_dir(&root))
         .map_err(|e| AppError::Tunnel(format!("创建凭据目录失败: {}", e)))?;
     let program = tunnel_service::ensure_binary(&root)?;
-    let cert = tunnel_service::cert_path(&root).display().to_string();
+    let home = tunnel_service::login_home(&root);
+    std::fs::create_dir_all(&home)
+        .map_err(|e| AppError::Tunnel(format!("创建登录目录失败: {e}")))?;
+    let fallback_cert = tunnel_service::fallback_cert_path(&root);
+    if fallback_cert.exists() {
+        std::fs::remove_file(&fallback_cert)
+            .map_err(|e| AppError::Tunnel(format!("清理上次登录暂存凭据失败: {e}")))?;
+    }
+    let envs = tunnel_service::build_login_envs(&root);
+    let envs: Vec<_> = envs.iter().map(|(key, value)| (key.as_str(), value.as_str())).collect();
     let args = tunnel_service::build_login_args(&root);
     let job = ProcessJob::new()?;
     let (child, stdout) =
-        tunnel_service::spawn_login(&program, &args, &[("TUNNEL_ORIGIN_CERT", cert.as_str())], &job)?;
+        tunnel_service::spawn_login(&program, &args, &envs, &job)?;
 
+    track_login(&root, &state.tunnel, child, stdout, job)
+}
+
+fn track_login(
+    root: &Path,
+    state: &TunnelState,
+    child: Child,
+    stdout: std::process::ChildStdout,
+    job: ProcessJob,
+) -> Result<LoginDto, AppError> {
     let url: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let tail: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
     {
@@ -512,8 +550,7 @@ fn login_start_inner(app: &AppHandle) -> Result<LoginDto, AppError> {
         });
     }
     // stdout 已被读线程接管；这里只留进程句柄与输出槽
-    let state = app.state::<AppState>();
-    let Ok(mut guard) = state.tunnel.login.lock() else {
+    let Ok(mut guard) = state.login.lock() else {
         tunnel_service::kill_child(child);
         return Err(AppError::Database("lock error".to_string()));
     };
@@ -522,9 +559,12 @@ fn login_start_inner(app: &AppHandle) -> Result<LoginDto, AppError> {
         url,
         tail,
         started: std::time::Instant::now(),
+        fallback_cert: tunnel_service::fallback_cert_path(root),
         _job: job,
     });
-    Ok(login_status_inner(app))
+    // 状态读取会再次获取 login；登记完进程必须先释放，Mutex 不支持同线程重入。
+    drop(guard);
+    Ok(login_status(root, state))
 }
 
 /// 凭据丢了不必重建隧道：`tunnel token` 能把同一隧道 ID 的凭据再吐一份。
@@ -615,10 +655,18 @@ fn ingress_rules(app: &AppHandle) -> Result<Vec<tunnel_service::IngressRule>, Ap
 /// 服务表 → 磁盘上那份配置。增删改之后一律重算，配置因此只是表的一个投影：
 /// 不存在"界面上删掉了、隧道还在往那个端口转"这种第二真相。
 fn sync_config(app: &AppHandle) -> Result<(), AppError> {
+    let state = app.state::<AppState>();
+    let _guard = state.tunnel.starting.lock().unwrap_or_else(|p| p.into_inner());
     let Some(id) = tunnel_id(app) else { return Ok(()) };
     let rules = ingress_rules(app)?;
-    tunnel_service::write_config(&root(), &id, &rules)?;
-    Ok(())
+    let was_alive = child_alive(app);
+    let root = root();
+    tunnel_service::apply_config_change(&root, &id, &rules,
+        || { if was_alive { kill_process(app); tunnel_service::clear_runtime_files(&root); } },
+        || {
+            if was_alive && !rules.is_empty() { start_locked(app)?; }
+            Ok(())
+        })
 }
 
 /// 把服务表落到公网：先重写配置，再逐条把子域指过来。
@@ -945,7 +993,23 @@ fn set_service_policy_inner(
 
 /// 撤销本机授权：停进程、收在途授权子进程、删掉本地凭据材料。
 /// 保留 META 隧道记录与服务表——同一账号重新授权后可走 `fetch_credentials` 恢复。
+fn clear_credentials(root: &Path, id: Option<&str>) -> Result<(), AppError> {
+    let mut paths = vec![tunnel_service::cert_path(root), tunnel_service::fallback_cert_path(root),
+        tunnel_service::secret_dir(root).join(STAGED_CREDS)];
+    if let Some(id) = id { paths.push(tunnel_service::creds_path(root, id)); }
+    for path in paths {
+        match std::fs::remove_file(path) {
+            Ok(()) => {},
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+            Err(error) => return Err(AppError::Tunnel(format!("删除本机授权凭据失败: {error}"))),
+        }
+    }
+    Ok(())
+}
+
 fn revoke_inner(app: &AppHandle) -> Result<ProvisionDto, AppError> {
+    let state = app.state::<AppState>();
+    let _guard = state.tunnel.starting.lock().unwrap_or_else(|p| p.into_inner());
     // 先收在途授权：避免删完凭据后浏览器回调又写回一份
     if let Some(proc) = take_login(app) {
         tunnel_service::kill_child(proc.child);
@@ -955,12 +1019,7 @@ fn revoke_inner(app: &AppHandle) -> Result<ProvisionDto, AppError> {
     let root = root();
     tunnel_service::clear_runtime_files(&root);
 
-    let secret = tunnel_service::secret_dir(&root);
-    let _ = std::fs::remove_file(tunnel_service::cert_path(&root));
-    let _ = std::fs::remove_file(secret.join(STAGED_CREDS));
-    if let Some(id) = tunnel_id(app) {
-        let _ = std::fs::remove_file(tunnel_service::creds_path(&root, &id));
-    }
+    clear_credentials(&root, tunnel_id(app).as_deref())?;
     Ok(provision_inner(app))
 }
 
@@ -988,6 +1047,14 @@ pub async fn tunnel_login_status(app: AppHandle) -> Result<LoginDto, AppError> {
     tauri::async_runtime::spawn_blocking(move || login_status_inner(&app))
         .await
         .map_err(|e| AppError::Tunnel(format!("读取授权状态失败: {}", e)))
+}
+
+#[tauri::command]
+pub async fn tunnel_authorized_domain(app: AppHandle) -> Result<crate::services::tunnel_domain_service::DomainDto, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        login_status_inner(&app);
+        crate::services::tunnel_domain_service::authorized_domain(&root())
+    }).await.map_err(|e| AppError::Tunnel(format!("读取主域名任务失败: {e}")))?
 }
 
 #[tauri::command]
@@ -1067,6 +1134,8 @@ pub async fn tunnel_start(app: AppHandle) -> Result<StatusDto, AppError> {
 #[tauri::command]
 pub async fn tunnel_stop(app: AppHandle) -> Result<(), AppError> {
     tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _guard = state.tunnel.starting.lock().unwrap_or_else(|p| p.into_inner());
         kill_process(&app);
         tunnel_service::clear_runtime_files(&root());
         Ok(())
@@ -1154,6 +1223,80 @@ pub fn stop_for_exit(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn login_recovers_its_own_staged_certificate_after_restart_and_revoke_clears_both_locations() {
+        let root = std::env::temp_dir().join(format!("desko-login-restart-{}", uuid::Uuid::new_v4()));
+        let fallback = tunnel_service::fallback_cert_path(&root);
+        std::fs::create_dir_all(fallback.parent().unwrap()).unwrap();
+        std::fs::write(&fallback, "our-cert").unwrap();
+        assert_eq!(login_status(&root, &TunnelState::default()).state, "authorized");
+        assert!(!fallback.exists());
+        assert_eq!(std::fs::read_to_string(tunnel_service::cert_path(&root)).unwrap(), "our-cert");
+        // 撤销时暂存目录也必须清理，否则下一轮状态查询会把授权恢复回来。
+        std::fs::write(&fallback, "our-cert").unwrap();
+        clear_credentials(&root, None).unwrap();
+        assert!(!fallback.exists());
+        assert_eq!(login_status(&root, &TunnelState::default()).state, "idle");
+        clear_credentials(&root, None).unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn begin_mock_login(mode: &str) -> (PathBuf, Arc<TunnelState>) {
+        let root = std::env::temp_dir().join(format!("desko-login-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = Arc::new(TunnelState::default());
+        let job = ProcessJob::new().unwrap();
+        let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../scripts/mock-cloudflared.mjs");
+        let mut args = vec![script.display().to_string()];
+        args.extend(tunnel_service::build_login_args(&root));
+        let mut envs = tunnel_service::build_login_envs(&root);
+        envs.extend([
+            ("DESKO_MOCK_STATE".into(), root.display().to_string()),
+            ("DESKO_MOCK_LOGIN".into(), mode.into()),
+            ("DESKO_MOCK_DELAY".into(), "600".into()),
+        ]);
+        let envs: Vec<_> = envs.iter().map(|(key, value)| (key.as_str(), value.as_str())).collect();
+        let (child, stdout) = tunnel_service::spawn_login(Path::new("node"), &args, &envs, &job).unwrap();
+        let (send, receive) = std::sync::mpsc::channel();
+        let worker_root = root.clone();
+        let worker_state = Arc::clone(&state);
+        std::thread::spawn(move || {
+            let result = track_login(&worker_root, &worker_state, child, stdout, job);
+            let _ = send.send(result);
+        });
+        let dto = receive.recv_timeout(std::time::Duration::from_secs(3))
+            .expect("授权进程登记后必须返回，不能持有 login 锁重入状态读取").unwrap();
+        assert_eq!(dto.state, "waiting");
+        (root, state)
+    }
+
+    #[test]
+    fn login_start_returns_and_waiting_login_can_be_polled_and_cancelled() {
+        let (root, state) = begin_mock_login("never");
+        assert_eq!(login_status(&root, &state).state, "waiting");
+        let proc = take_login_state(&state).expect("取消必须能取走授权进程");
+        tunnel_service::kill_child(proc.child);
+        drop(proc._job);
+        assert_eq!(login_status(&root, &state).state, "idle");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn browser_authorization_is_adopted_and_repeated_polls_return_authorized() {
+        let (root, state) = begin_mock_login("write-home");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            if login_status(&root, &state).state == "authorized" { break; }
+            assert!(std::time::Instant::now() < deadline, "浏览器授权完成后应领取凭据");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(tunnel_service::cert_path(&root).exists());
+        assert!(!tunnel_service::fallback_cert_path(&root).exists());
+        assert!(state.login.try_lock().unwrap().is_none());
+        assert_eq!(login_status(&root, &state).state, "authorized");
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     fn row(preset: &str, host: &str, digest: &str, read_only: bool) -> TunnelService {
         TunnelService {

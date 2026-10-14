@@ -6,6 +6,7 @@ import NoteAttachments from './NoteAttachments.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import { formatRelativeTime, stripTagsFromHtml, stripTagsFromText } from '../../utils/format'
+import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import { noteMeta, type NoteSaveState } from '../../stores/notes'
@@ -138,7 +139,7 @@ watch(() => props.editing, (on) => {
 })
 
 // 库里存的是 attachments/<名>，只显示层临时换成本机 asset URL
-const bodyHtml = computed(() => resolveAssetHtml(stripTagsFromHtml(props.note.content_html)))
+const bodyHtml = computed(() => resolveAssetHtml(stripTagsFromHtml(sanitizeNoteHtml(props.note.content_html))))
 
 /** 正文已引用的图片不再进附件条；编辑中按草稿过滤，保存前就不该闪出第二个 */
 const visibleAtts = computed(() =>
@@ -259,7 +260,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     </span>
 
     <div class="memo-head" @click="onHeadClick">
-      <span v-if="props.note.pinned" class="head-pin"><AppIcon name="pin" :size="14" /></span>
       <span class="memo-title">{{ titleText }}</span>
       <span class="memo-state">
         <span v-if="props.note.starred" class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
@@ -531,7 +531,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-body :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-3) 0; }
 .memo-body :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 34vh; object-fit: contain; border-radius: var(--radius); }
 
-/* 标题行：pin + 标题(粗) + 收藏标 + 时间(右)，对齐 mock .t */
+/* 标题行：标题(粗) + 收藏标 + 时间(右)，对齐 mock .t */
 .memo-head {
   position: relative;
   display: flex;
@@ -541,7 +541,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   min-height: 20px;
   cursor: pointer;
 }
-.head-pin { color: var(--accent); display: inline-flex; flex-shrink: 0; }
 .memo-title {
   flex: 1;
   min-width: 0;

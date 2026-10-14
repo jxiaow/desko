@@ -7,7 +7,9 @@ import {
   accounts,
   currentId,
   loaded,
+  accountsError,
   busyId,
+  switchingId,
   switchStep,
   applySwitchProgress,
   batchDeleteDialogOpen,
@@ -15,6 +17,7 @@ import {
   sessions,
   sessionsBusy,
   sessionQuery,
+  sessionSearchMode,
   reloadSessions,
   loadRecycled,
   loadTrash,
@@ -40,10 +43,20 @@ import {
   loadQuotaSettings,
   startQuotaTicker,
   stopQuotaTicker,
+  syncDeleteTicker,
 } from '../../services/codexState'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import AppIcon from '../shared/AppIcon.vue'
+import OptionSelect from '../shared/OptionSelect.vue'
+import {
+  filterCodexAccounts,
+  codexNeedsAttention,
+  codexSubscriptionExpired,
+  type CodexAccountAuthFilter,
+  type CodexAccountStatusFilter,
+  type CodexAccountSort,
+} from '../../utils/codexAccounts'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import CodexAuthDialog from './CodexAuthDialog.vue'
 import CodexBatchDeleteDialog from './CodexBatchDeleteDialog.vue'
@@ -51,8 +64,11 @@ import CodexEditDialog from './CodexEditDialog.vue'
 import CodexSessionsPanel from './CodexSessionsPanel.vue'
 import CodexTrashPanel from './CodexTrashPanel.vue'
 import CodexUsagePanel from './CodexUsagePanel.vue'
+import CodexPlanBadge from './CodexPlanBadge.vue'
+import CodexQuotaPanel from './CodexQuotaPanel.vue'
 import ResetCreditDialog from './ResetCreditDialog.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { codexPlan } from '../../utils/codexPlan'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
@@ -61,6 +77,7 @@ const confirmStore = useConfirmStore()
 const view = ref<'accounts' | 'sessions' | 'usage' | 'trash'>('accounts')
 
 const USAGE_RANGES: Array<{ key: UsageRange; label: string }> = [
+  { key: 'today', label: '今天' },
   { key: 'week', label: '近 7 天' },
   { key: 'month', label: '近 30 天' },
   { key: 'all', label: '全部' },
@@ -88,11 +105,31 @@ const openReauth = (a: CodexAccount) => {
 
 const isBatchMode = computed(() => pickMode.value || selected.value.size > 0)
 
+const accountQuery = ref('')
+const accountAuth = ref<CodexAccountAuthFilter>('all')
+const accountStatus = ref<CodexAccountStatusFilter>('all')
+const accountTag = ref('')
+const accountSort = ref<CodexAccountSort>('default')
+const visibleAccounts = computed(() => filterCodexAccounts(accounts.value, {
+  query: accountQuery.value, auth: accountAuth.value, status: accountStatus.value,
+  tag: accountTag.value, sort: accountSort.value,
+}))
+const accountTags = computed(() => [...new Set(accounts.value.flatMap(a => a.tags ?? []))].sort())
+const tagOptions = computed(() => [
+  { value: '', label: '全部标签' }, ...accountTags.value.map(tag => ({ value: tag, label: `#${tag}` })),
+])
+const attentionCount = computed(() => accounts.value.filter(codexNeedsAttention).length)
+const accountFiltersActive = computed(() => !!accountQuery.value || accountAuth.value !== 'all' || accountStatus.value !== 'all' || !!accountTag.value)
+
+function clearAccountFilters() {
+  accountQuery.value = ''
+  accountAuth.value = 'all'
+  accountStatus.value = 'all'
+  accountTag.value = ''
+}
+
 const initial = (a: CodexAccount) => (a.account_name || a.email || '?').trim().charAt(0).toUpperCase()
 const picked = (id: string) => selected.value.has(id)
-
-/** 等级徽标：官方凭据里的档位优先，账号档位兜底 */
-const tier = (a: CodexAccount) => (a.auth_file_plan_type || a.plan_type || '').trim().toUpperCase()
 
 /** 订阅到期字段两种形状都会出现：ISO 串，或 unix 秒的字符串 */
 function parseWhen(raw?: string | null): number | null {
@@ -122,7 +159,7 @@ const shortId = (v?: string | null) => {
 /** Team Name：personal 或非 team 计划一律「个人账户」，team 计划退到组织 ID */
 function teamName(a: CodexAccount): string {
   const structure = (a.account_structure || '').trim().toLowerCase()
-  const plan = (a.plan_type || '').trim().toLowerCase()
+  const plan = codexPlan(a).kind
   const teamLike = plan === 'team' || plan === 'business' || plan === 'enterprise'
   if (structure.includes('personal') || (!structure && !teamLike)) return '个人账户'
   return shortId(a.organization_id) || '团队账户'
@@ -157,14 +194,10 @@ const expiryText = (a: CodexAccount) => {
   if (!at) return ''
   return at <= Date.now() ? '订阅已过期' : `有效期至 ${dateTimeOf(at)}`
 }
-const expiryBad = (a: CodexAccount) => {
-  const at = expiryAt(a)
-  return !!at && at <= Date.now()
-}
+const expiryBad = codexSubscriptionExpired
 
-const resetCount = (a: CodexAccount) => a.quota?.reset_credits_available ?? 0
 const updatedText = (a: CodexAccount) =>
-  a.usage_updated_at ? `更新于 ${clockOf(a.usage_updated_at * 1000)}` : ''
+  a.usage_updated_at ? `额度更新 ${clockOf(a.usage_updated_at * 1000)}` : ''
 
 /** 后端 pending 常量只有这一种取值，仍按不区分大小写读，免得上游换写法就漏 */
 const pendingAuth = (a: CodexAccount) =>
@@ -175,33 +208,6 @@ function lastUsedText(a: CodexAccount): string {
   if (a.last_used > 0) return `上次使用 ${clockOf(a.last_used * 1000)}`
   if (a.created_at > 0) return `添加于 ${clockOf(a.created_at * 1000)}`
   return ''
-}
-
-/** 配额拉取失败的原因：徽标位放不下长句，挂在「暂无配额」的 title 上 */
-const quotaReason = (a: CodexAccount) => a.quota_error?.message?.trim() ?? ''
-
-/** 底行只跟"更紧的那条窗口"走：剩余更少的那个才是用户真正的约束 */
-function quotaWhen(a: CodexAccount): string {
-  const q = a.quota
-  if (!q) return ''
-  const hourlyTighter = q.hourly_percentage <= q.weekly_percentage
-  const ts = hourlyTighter ? q.hourly_reset_time : q.weekly_reset_time
-  if (!ts) return ''
-  const ms = ts * 1000 - Date.now()
-  if (ms <= 0) return `${hourlyTighter ? '5h' : '周'}即将重置`
-  const mins = Math.round(ms / 60000)
-  const h = Math.floor(mins / 60)
-  const rel =
-    h >= 24
-      ? h % 24 === 0
-        ? `${h / 24}d`
-        : `${Math.floor(h / 24)}d ${h % 24}h`
-      : h >= 1
-        ? mins % 60 === 0
-          ? `${h}h`
-          : `${h}h ${mins % 60}m`
-        : `${mins}m`
-  return `${hourlyTighter ? '5h' : '周'}重置 ${rel} · ${clockOf(ts * 1000)}`
 }
 
 function toggleSelect(id: string) {
@@ -276,6 +282,14 @@ function askResetCredit(a: CodexAccount) {
   resetAccount.value = a
 }
 
+function askRefreshTokens(a: CodexAccount) {
+  confirmStore.showConfirm(
+    '强制刷新令牌',
+    `确定强制刷新「${a.email}」的登录令牌？这会向认证服务请求新令牌，并更新 Desko 中保存的凭据。`,
+    () => void runOn(a.id, () => codexApi.forceRefreshTokens(a.id), '令牌已刷新'),
+  )
+}
+
 function askDelete(a: CodexAccount) {
   confirmStore.showConfirm(
     '删除账号',
@@ -326,6 +340,7 @@ onMounted(async () => {
   // 自动刷新的间隔与阈值先落进 state，定时器才能按上一次的选择起
   await loadQuotaSettings()
   if (!active) return
+  syncDeleteTicker()
   void refreshAccounts().then(() => {
     if (!active) return
     startQuotaTicker()
@@ -398,11 +413,15 @@ watchEffect(() => {
         </template>
 
         <template v-else-if="view === 'sessions'">
+          <div class="session-search-mode" role="group" aria-label="会话搜索范围">
+            <button class="cx-tab" :class="{ active: sessionSearchMode === 'title' }" type="button" :aria-pressed="sessionSearchMode === 'title'" @click="sessionSearchMode = 'title'">标题</button>
+            <button class="cx-tab" :class="{ active: sessionSearchMode === 'content' }" type="button" :aria-pressed="sessionSearchMode === 'content'" @click="sessionSearchMode = 'content'">正文</button>
+          </div>
           <div class="search-box">
             <span class="search-icon">
               <AppIcon name="search" :size="15" />
             </span>
-            <input v-model="sessionQuery" type="text" placeholder="搜索会话标题…" aria-label="搜索会话标题" />
+            <input v-model="sessionQuery" type="text" :placeholder="sessionSearchMode === 'title' ? '搜索会话标题…' : '搜索会话正文…'" :aria-label="sessionSearchMode === 'title' ? '搜索会话标题' : '搜索会话正文'" />
             <button v-if="sessionQuery" class="search-clear" type="button" title="清除搜索" @click="sessionQuery = ''">
               <AppIcon name="x" :size="13" />
             </button>
@@ -420,6 +439,7 @@ watchEffect(() => {
               :key="option.key"
               class="cx-tab"
               :class="{ active: usageRange === option.key }"
+              :aria-pressed="usageRange === option.key"
               type="button"
               @click="setUsageRange(option.key)"
             >
@@ -449,79 +469,92 @@ watchEffect(() => {
         {{ switchStep }}
       </p>
 
+      <div v-if="view === 'accounts' && accounts.length" class="account-filters">
+        <div class="search-box">
+          <span class="search-icon"><AppIcon name="search" :size="15" /></span>
+          <input v-model="accountQuery" type="search" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
+          <button v-if="accountQuery" class="search-clear" type="button" aria-label="清除账号搜索" @click="accountQuery = ''"><AppIcon name="x" :size="13" /></button>
+        </div>
+        <OptionSelect :model-value="accountAuth" aria-label="账号类型" :options="[
+          { value: 'all', label: '全部类型' }, { value: 'oauth', label: 'OAuth' }, { value: 'apikey', label: 'API Key' },
+        ]" @update:model-value="accountAuth = String($event) as CodexAccountAuthFilter" />
+        <OptionSelect :model-value="accountStatus" aria-label="账号状态" :options="[
+          { value: 'all', label: '全部状态' }, { value: 'attention', label: '需处理' },
+          { value: 'low', label: '低配额 ≤20%' }, { value: 'expired', label: '订阅已过期' },
+        ]" @update:model-value="accountStatus = String($event) as CodexAccountStatusFilter" />
+        <OptionSelect v-if="accountTags.length" :model-value="accountTag" aria-label="账号标签" :options="tagOptions" @update:model-value="accountTag = String($event)" />
+        <OptionSelect :model-value="accountSort" aria-label="账号排序" :options="[
+          { value: 'default', label: '默认排序' }, { value: 'quota', label: '可用配额优先' },
+          { value: 'recent', label: '最近使用优先' }, { value: 'name', label: '按名称排序' },
+        ]" @update:model-value="accountSort = String($event) as CodexAccountSort" />
+        <p class="account-summary">
+          {{ accountFiltersActive ? `${visibleAccounts.length} / ${accounts.length}` : accounts.length }} 个账号
+          <span v-if="attentionCount">· {{ attentionCount }} 个需处理</span>
+          <button v-if="accountFiltersActive" type="button" class="filter-reset" @click="clearAccountFilters">清除筛选</button>
+        </p>
+      </div>
+
       <div v-if="view === 'accounts' && !accounts.length" class="rcard empty-state">
         <div class="empty-icon"><AppIcon name="navCodex" :size="24" /></div>
-        <div class="empty-title">还没有 Codex 账号</div>
-        <div class="empty-desc">「添加账号」走官方 OAuth；也可以把本机 ~/.codex 里的凭据导进来</div>
+        <div class="empty-title">{{ accountsError ? '无法加载 Codex 账号' : '还没有 Codex 账号' }}</div>
+        <div class="empty-desc">{{ accountsError || '「添加账号」走官方 OAuth；也可以把本机 ~/.codex 里的凭据导进来' }}</div>
+        <button v-if="accountsError" class="action-btn" type="button" @click="refreshAccounts">重试</button>
+      </div>
+
+      <div v-else-if="view === 'accounts' && !visibleAccounts.length" class="empty-state">
+        <div class="empty-icon"><AppIcon name="searchEmpty" :size="24" /></div>
+        <div class="empty-title">没有匹配的账号</div>
+        <button class="action-btn" type="button" @click="clearAccountFilters">清除筛选</button>
       </div>
 
       <div v-else-if="view === 'accounts'" class="rcard-list">
         <div
-          v-for="a in accounts"
+          v-for="a in visibleAccounts"
           :key="a.id"
           class="rcard rcard-row acc-row"
           :class="{ picked: picked(a.id) }"
           :data-email="a.email"
           @click="onRowClick(a)"
         >
-          <span v-if="isBatchMode" class="pick-box" :class="{ on: picked(a.id) }" aria-hidden="true">
+          <button v-if="isBatchMode" class="pick-box" :class="{ on: picked(a.id) }" type="button" :aria-label="`选择 ${a.account_name || a.email}`" :aria-pressed="picked(a.id)" @click.stop="toggleSelect(a.id)">
             <AppIcon v-if="picked(a.id)" name="check" :size="12" />
-          </span>
+          </button>
           <span class="grid-slot acc-ico" :class="{ on: a.id === currentId }">{{ initial(a) }}</span>
 
           <div class="acc-main">
             <div class="acc-l1">
-              <span class="mail" :title="a.email">{{ a.account_name || a.email }}</span>
-              <span v-if="a.id === currentId" class="badge own">当前</span>
-              <span v-if="a.requires_reauth" class="badge warn" :title="a.reauth_reason || undefined">需重新登录</span>
-              <span v-else-if="pendingAuth(a)" class="badge warn" :title="`授权状态：${a.authorization_status}`">待授权</span>
-              <span v-if="a.auth_mode === 'apikey'" class="badge off">API Key</span>
-              <span v-if="tier(a)" class="tier">{{ tier(a) }}</span>
+              <span class="mail" :title="[a.account_name, a.email].filter(Boolean).join('\n')">{{ a.account_name || a.email }}</span>
+              <span class="acc-badges">
+                <span v-if="a.id === currentId" class="badge own">当前</span>
+                <span v-if="a.requires_reauth" class="badge warn" :title="a.reauth_reason || undefined">需重新登录</span>
+                <span v-else-if="pendingAuth(a)" class="badge warn" :title="`授权状态：${a.authorization_status}`">待授权</span>
+                <CodexPlanBadge :account="a" />
+              </span>
             </div>
 
+            <p v-if="a.account_name && a.account_name !== a.email" class="acc-email" :title="a.email">{{ a.email }}</p>
             <div class="acc-l2">
-              <span v-if="a.auth_mode !== 'apikey'">团队：{{ teamName(a) }}</span>
-              <span v-if="a.auth_mode === 'apikey' && a.api_provider_name">供应商：{{ a.api_provider_name }}</span>
-              <span>{{ loginWith(a) }} 登录</span>
-              <span v-if="shortId(a.user_id) || shortId(a.account_id)">
-                用户 ID：<b class="mono">{{ shortId(a.user_id) || shortId(a.account_id) }}</b>
+              <span v-if="a.auth_mode !== 'apikey'" class="acc-fact"><span class="fact-label">工作区：</span><span :title="a.organization_id || undefined">{{ teamName(a) }}</span></span>
+              <span v-if="a.auth_mode === 'apikey' && a.api_provider_name" class="acc-fact"><span class="fact-label">供应商：</span><span :title="a.api_provider_name">{{ a.api_provider_name }}</span></span>
+              <span class="acc-fact"><span class="fact-label">登录方式：</span><span>{{ loginWith(a) }}</span></span>
+              <span v-if="a.auth_mode === 'apikey' && a.api_base_url" class="acc-endpoint">
+                <span class="fact-label">Base URL：</span><b class="mono" :title="a.api_base_url">{{ a.api_base_url }}</b>
               </span>
-              <span v-if="a.auth_mode === 'apikey' && a.api_base_url">
-                Base URL：<b class="mono">{{ a.api_base_url }}</b>
-              </span>
-            </div>
-
-            <div class="acc-l3">
-              <span v-if="expiryText(a)" :class="{ bad: expiryBad(a) }">{{ expiryText(a) }}</span>
-              <span v-if="resetCount(a) > 0">可重置 <b class="mono">{{ resetCount(a) }}</b> 次</span>
-              <span v-if="lastUsedText(a)">{{ lastUsedText(a) }}</span>
-              <span v-if="a.tags?.length">标签：{{ a.tags.join(' / ') }}</span>
-              <span v-if="updatedText(a)">{{ updatedText(a) }}</span>
+              <span v-if="expiryText(a)" class="acc-fact acc-expiry" :class="{ bad: expiryBad(a) }"><span class="fact-label">订阅：</span><span>{{ expiryText(a) }}</span></span>
             </div>
           </div>
 
-          <div v-if="a.quota" class="acc-quota">
-            <div class="q" :class="{ low: a.quota.hourly_percentage <= 20, mid: a.quota.hourly_percentage <= 40 && a.quota.hourly_percentage > 20 }">
-              <span class="q-tag">5h</span>
-              <span class="q-bar"><i :style="{ width: Math.max(0, Math.min(100, a.quota.hourly_percentage)) + '%' }"></i></span>
-              <span class="q-num">{{ a.quota.hourly_percentage }}%</span>
-            </div>
-            <div class="q" :class="{ low: a.quota.weekly_percentage <= 20, mid: a.quota.weekly_percentage <= 40 && a.quota.weekly_percentage > 20 }">
-              <span class="q-tag">周</span>
-              <span class="q-bar"><i :style="{ width: Math.max(0, Math.min(100, a.quota.weekly_percentage)) + '%' }"></i></span>
-              <span class="q-num">{{ a.quota.weekly_percentage }}%</span>
-            </div>
-            <span class="q-when">{{ quotaWhen(a) }}</span>
-          </div>
-          <div v-else class="acc-quota">
-            <span class="q-when" :class="{ bad: a.quota_error }" :title="quotaReason(a)">
-              {{ quotaReason(a) ? '配额拉取失败' : '暂无配额' }}
-            </span>
+          <CodexQuotaPanel :account="a" />
+
+          <div class="acc-l3">
+            <span v-if="lastUsedText(a)">{{ lastUsedText(a) }}</span>
+            <span v-if="updatedText(a)">{{ updatedText(a) }}</span>
+            <span v-if="a.tags?.length" class="acc-tags" :title="a.tags.join(' / ')">标签：{{ a.tags.join(' / ') }}</span>
           </div>
 
           <span class="acc-acts">
             <button
-              v-if="!isBatchMode && busyId === a.id"
+              v-if="!isBatchMode && switchingId === a.id"
               class="action-btn"
               type="button"
               @click.stop="cancelSwitch(a.id)"
@@ -557,7 +590,7 @@ watchEffect(() => {
         <button class="pop-item" type="button" @click="runOn(menuAccount!.id, () => refreshDetail(menuAccount!), '信息已刷新'); closeMenu()">
           <AppIcon name="user" :size="14" />{{ refreshDetailLabel(menuAccount!) }}
         </button>
-        <button class="pop-item" type="button" @click="runOn(menuAccount!.id, () => codexApi.forceRefreshTokens(menuAccount!.id), '令牌已刷新'); closeMenu()">
+        <button v-if="menuAccount.auth_mode !== 'apikey'" class="pop-item" type="button" @click="askRefreshTokens(menuAccount!); closeMenu()">
           <AppIcon name="shield" :size="14" />强制刷新令牌
         </button>
         <button
@@ -578,7 +611,7 @@ watchEffect(() => {
         </button>
         <span class="pop-sep"></span>
         <button class="pop-item" type="button" @click="editAccount = menuAccount; closeMenu()">
-          <AppIcon name="edit" :size="14" />名称与备注
+          <AppIcon name="edit" :size="14" />{{ menuAccount.auth_mode === 'apikey' ? '账号与密钥' : '名称与备注' }}
         </button>
         <button class="pop-item" type="button" @click="copyEmail(menuAccount!); closeMenu()">
           <AppIcon name="copy" :size="14" />复制邮箱
@@ -595,8 +628,8 @@ watchEffect(() => {
       <div v-if="view === 'accounts' && (selected.size || batchDeleteJob)" class="batch-dock">
         <template v-if="selected.size">
           <span class="dock-count">已选 {{ selected.size }} 条</span>
-          <button class="dock-btn" type="button" @click="selected = new Set(accounts.map((a) => a.id))">
-            <AppIcon name="checkall" :size="12" />全选
+          <button class="dock-btn" type="button" @click="selected = new Set([...selected, ...visibleAccounts.map((a) => a.id)])">
+            <AppIcon name="checkall" :size="12" />{{ accountFiltersActive ? '全选筛选结果' : '全选' }}
           </button>
           <button class="dock-btn" type="button" @click="refreshQuotas(Array.from(selected))">
             <AppIcon name="refresh" :size="12" />刷新配额
@@ -630,10 +663,17 @@ watchEffect(() => {
 </template>
 
 <style scoped>
-.content-inner { --font-mono: Consolas, 'Cascadia Mono', monospace; }
-.mono { font-family: var(--font-mono); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
+.page-note { font-size: var(--text-xs); }
 
 .add-btn { margin-left: auto }
+.account-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.account-filters .search-box { flex: 1 1 180px; min-width: 160px; }
+.account-summary { flex-basis: 100%; display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-muted); }
+.filter-reset { margin-left: auto; border: none; background: transparent; color: var(--accent); cursor: pointer; font: inherit; }
+.account-filters :deep(.opt-trigger) { min-width: 100px; }
+.session-search-mode { display: flex; align-items: center; flex-shrink: 0; }
+.page-bar .search-box { flex: 1; min-width: 140px; }
 
 /* 页内第二档的切换件：照收藏页分类 tab 的下划线档，去掉滑块——页级换档不是滑动语义 */
 .cx-tabs {
@@ -655,6 +695,8 @@ watchEffect(() => {
   border-radius: var(--radius-tag);
   font-family: inherit;
   font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.5;
   color: var(--text-muted);
   cursor: pointer;
 }
@@ -683,11 +725,18 @@ watchEffect(() => {
   color: var(--accent);
 }
 
-/* 账号岛：壳（描边/抬影/10px 间隔）由 .rcard 骨架给，这里只给行内配方。
-   比 64px 档加高到 88：岛里要放下身份 + 两行事实（归属与登录、时效与标签），
-   收成一行会把用户 ID 或有效期挤到省略号后面。 */
-.acc-row { min-height: 88px; cursor: default }
-.rcard.acc-sk { min-height: 88px }
+/* 身份、周期额度各占一列；使用记录与标签在独立页脚。 */
+.acc-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, .85fr) minmax(0, 1.15fr) 78px;
+  align-items: start;
+  gap: var(--space-3);
+  min-height: 138px;
+  padding: 14px 16px;
+  cursor: default;
+}
+.acc-row:has(.pick-box) { grid-template-columns: 18px 34px minmax(0, .85fr) minmax(0, 1.15fr) 78px; }
+.rcard.acc-sk { min-height: 138px }
 .acc-row.picked { background: var(--fill) }
 
 .pick-box {
@@ -695,53 +744,68 @@ watchEffect(() => {
   display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: 5px; color: var(--accent-on);
+  background: transparent; cursor: pointer;
+  margin-top: 8px;
 }
 .pick-box.on { background: var(--accent); border-color: var(--accent) }
 
+.acc-ico { margin-top: 2px; }
 .acc-ico.on { background: var(--accent); color: var(--accent-on) }
-.acc-main { flex: 1; min-width: 0 }
+.acc-main { min-width: 0 }
+.acc-quota { grid-column: 3 / -1; grid-row: 1; }
+.acc-row:has(.pick-box) .acc-quota { grid-column: 4 / -1; }
 
-/* L1 身份 · L2 身份事实（Team/登录方式/用户 ID） · L3 时效事实（有效期/重置/标签/更新于） */
-.acc-l1 { display: flex; align-items: center; gap: 7px; min-width: 0 }
+/* 邮箱独立成行；属性与时间使用间距分隔，换行后不留悬空分隔点。 */
+.acc-l1 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; min-width: 0 }
 .acc-l1 .mail {
+  min-width: 0; max-width: 100%;
   font-size: var(--text-md); font-weight: 600; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tier {
-  flex-shrink: 0;
-  font-family: var(--font-mono); font-size: var(--text-2xs); font-weight: 700; letter-spacing: 0.06em;
-  line-height: 18px; padding: 1px 7px; border-radius: var(--radius-xs);
-  background: var(--fill); color: var(--text-secondary);
+.acc-badges { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.acc-badges:empty { display: none; }
+.acc-email {
+  margin: 3px 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.acc-l2, .acc-l3 { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0 }
-.acc-l2 { font-size: var(--text-xs); color: var(--text-muted) }
-.acc-l3 { font-size: var(--text-xs); color: var(--text-secondary) }
-.acc-l2 > span, .acc-l3 > span {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.acc-l2 > span + span::before, .acc-l3 > span + span::before {
-  content: '·'; margin-right: 6px; color: var(--text-faint);
-}
-.acc-l3 .bad { color: var(--warning) }
-.acc-l3 b { font-weight: 600; color: var(--text) }
-
-.acc-quota { flex-shrink: 0; width: 152px; display: flex; flex-direction: column; gap: 5px }
-.q { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary) }
-.q-tag { width: 16px; font-family: var(--font-mono); color: var(--text-faint) }
-.q-bar {
-  flex: 1; height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden;
-}
-.q-bar i { display: block; height: 100%; background: var(--success); border-radius: 3px }
-.q.mid .q-bar i { background: var(--warning) }
-.q.low .q-bar i { background: var(--danger) }
-.q-num { width: 34px; text-align: right; font-family: var(--font-mono) }
-.q-when { font-size: var(--text-2xs); color: var(--text-faint) }
-.q-when.bad { color: var(--warning) }
+.acc-l2 { display: grid; gap: 4px; margin-top: 9px; min-width: 0; font-size: var(--text-xs); line-height: 1.5; color: var(--text-secondary); }
+.acc-fact, .acc-endpoint { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 3px; min-width: 0; }
+.acc-fact > span, .acc-fact b, .acc-endpoint b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fact-label { color: var(--text-muted); }
+.acc-l2 b { font-weight: 400; }
+.acc-expiry.bad, .acc-expiry.bad .fact-label { color: var(--warning); }
+.acc-expiry > span:last-child { overflow: visible; white-space: normal; }
+.acc-l3 { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-width: 0; padding-top: 9px; border-top: 1px solid var(--border); font-size: var(--text-xs); line-height: 1.5; color: var(--text-muted); }
+.acc-l3 > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-tags { margin-left: auto; max-width: 45%; }
+.acc-row:has(.pick-box) .acc-l3 { grid-column: 3 / -1; }
 
 /* 行尾动作：不给 .grid-acts（那是条目卡的 hover 才显影的一档），这里必须常显 */
-.acc-acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0 }
+.acc-acts { grid-column: 4; grid-row: 1; display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-height: 28px; }
+.acc-row:has(.pick-box) .acc-acts { grid-column: 5; }
 .cur-mark { color: var(--accent); width: 30px; display: flex; justify-content: center }
 
 /* 作业进行中那一条：读的是计数不是动作，所以吃 accent 而不是 danger（删除已经发生了） */
 .dock-btn.job { color: var(--accent) }
+
+@media (max-width: 850px) {
+  .page-bar { flex-wrap: wrap; }
+  .acc-row { grid-template-columns: 34px minmax(0, 1fr) 78px; row-gap: 12px; }
+  .acc-main { grid-column: 2; }
+  .acc-l2 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 20px; }
+  .acc-expiry, .acc-endpoint { grid-column: 1 / -1; }
+  .acc-acts { grid-column: 3; grid-row: 1; }
+  .acc-quota { grid-column: 2 / -1; grid-row: 2; }
+  .acc-l3 { grid-row: 3; }
+  .acc-tags { max-width: 100%; margin-left: 0; }
+  .acc-row:has(.pick-box) { grid-template-columns: 18px 34px minmax(0, 1fr) 78px; }
+  .acc-row:has(.pick-box) .acc-main { grid-column: 3; }
+  .acc-row:has(.pick-box) .acc-acts { grid-column: 4; }
+  .acc-row:has(.pick-box) .acc-quota { grid-column: 3 / -1; }
+}
 </style>

@@ -72,7 +72,7 @@ fn commit_api_key_credential_index(old_id: &str, account: &CodexAccount) -> Resu
     if index.current_account_id.as_deref() == Some(old_id) {
         index.current_account_id = Some(account.id.clone());
     }
-    save_account_index(&index)?;
+    save_account_index_unlocked(&index)?;
     if old_id != account.id {
         delete_account_file_unlocked(old_id)?;
     }

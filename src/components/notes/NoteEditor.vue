@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 import { normalizeAssetHtml, resolveAssetHtml } from '../../services/attachmentSrc'
+import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { useEditor, EditorContent, VueNodeViewRenderer } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -229,7 +230,7 @@ const canRedo = ref(false)
 
 const editor = useEditor({
   // 库里存的是 attachments/<名>，编辑器里要看到真图；存回去时再洗回相对形态
-  content: resolveAssetHtml(props.initialContent || ''),
+  content: resolveAssetHtml(sanitizeNoteHtml(props.initialContent || '')),
   parseOptions: { preserveWhitespace: 'full' },
   // 胶囊输入不抢焦点：它默认收成一行，抢了焦点就等于永远是展开的，折叠态白做。
   // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
@@ -293,7 +294,7 @@ watch(() => props.initialContent, (val) => {
   const shown = resolveAssetHtml(val || '')
   if (editor.value && shown !== editor.value.getHTML()) {
     // 父层同步只更新这张书写面，不能再回写；后台 composer 也会订阅全屏正文。
-    editor.value.commands.setContent(shown, { emitUpdate: false, parseOptions: { preserveWhitespace: 'full' } })
+    editor.value.commands.setContent(resolveAssetHtml(sanitizeNoteHtml(val || '')), { emitUpdate: false, parseOptions: { preserveWhitespace: 'full' } })
   }
 })
 

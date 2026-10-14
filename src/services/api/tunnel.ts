@@ -10,6 +10,12 @@ export interface TunnelBinary {
   actualSha256: string | null
 }
 
+/** 浏览器授权时选中的主域名；授权密钥只在后端使用。 */
+export interface TunnelDomain {
+  name: string
+  status: string
+}
+
 export interface TunnelStatus {
   /** 本机有没有可启动的隧道（授权与创建完成后的事实） */
   bound: boolean
@@ -71,6 +77,7 @@ export interface TunnelSplitReport {
 }
 
 export const tunnelApi = {
+  authorizedDomain: (): Promise<TunnelDomain> => invoke('tunnel_authorized_domain'),
   binaryStatus: (): Promise<TunnelBinary> =>
     invoke('tunnel_binary_status'),
   fetchBinary: (): Promise<TunnelBinary> =>

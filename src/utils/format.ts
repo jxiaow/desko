@@ -1,6 +1,7 @@
+import { sanitizeNoteHtml } from './sanitizeNoteHtml'
+
 export function stripHtml(html: string): string {
-  const div = document.createElement('div')
-  div.innerHTML = html
+  const div = parseHtmlFragment(html)
   const text = div.textContent || ''
   return text.length > 120 ? text.slice(0, 120) + '...' : text
 }
@@ -64,7 +65,7 @@ export function htmlToLinkText(html: string): string {
 
 function parseHtmlFragment(html: string): HTMLDivElement {
   const div = document.createElement('div')
-  div.innerHTML = html
+  div.innerHTML = sanitizeNoteHtml(html)
   return div
 }
 
@@ -96,8 +97,7 @@ const HEADING_FIRST = /^\s*<(h[123])(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i
 export function headingTitle(html: string): string {
   const m = html.match(HEADING_FIRST)
   if (!m) return ''
-  const div = document.createElement('div')
-  div.innerHTML = m[2]
+  const div = parseHtmlFragment(m[2])
   return (div.textContent || '').trim().slice(0, 20)
 }
 

@@ -126,11 +126,24 @@ fn decrypt_envelope<T: DeserializeOwned>(
 }
 
 pub fn serialize_account_file<T: Serialize>(kind: &str, account: &T) -> Result<String, String> {
+    serialize_account_with_cipher(kind, account, cipher()?)
+}
+
+/// Used by profile staging; never resolves the process-global account directory.
+pub(crate) fn serialize_account_file_at<T: Serialize>(
+    kind: &str, account: &T, key_path: &Path,
+) -> Result<String, String> {
+    let cipher = Aes256Gcm::new_from_slice(&read_or_create_key_at(key_path)?)
+        .map_err(|error| format!("初始化账号详情加密失败: {error}"))?;
+    serialize_account_with_cipher(kind, account, cipher)
+}
+
+fn serialize_account_with_cipher<T: Serialize>(kind: &str, account: &T, cipher: Aes256Gcm) -> Result<String, String> {
     let plaintext =
         serde_json::to_vec(account).map_err(|e| format!("序列化账号详情失败: {}", e))?;
     let mut nonce_bytes = [0u8; 12];
     rand::thread_rng().fill_bytes(&mut nonce_bytes);
-    let ciphertext = cipher()?
+    let ciphertext = cipher
         .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_ref())
         .map_err(|e| format!("加密账号详情失败: {:?}", e))?;
     let envelope = SecureAccountEnvelope {

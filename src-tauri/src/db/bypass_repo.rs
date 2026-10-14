@@ -102,6 +102,22 @@ impl Database {
         self.conn.execute("DELETE FROM bypass_targets WHERE id = ?1", params![id])?;
         Ok(())
     }
+
+    /// 原地更新，不通过 upsert 重建已经被删除的条目。
+    pub fn update_bypass_target(&self, t: &BypassTarget) -> Result<(), AppError> {
+        let changed = self.conn.execute(
+            "UPDATE bypass_targets SET host=?2, input=?3, kind=?4, port=?5, path=?6, scheme=?7, \
+             address=?8, interface_name=?9, next_hop=?10, verdict=?11, stale=?12, cdn_like=?13, \
+             note=?14, apply_state=?15, apply_batch=?16, updated_at=?17, checked_at=?18 WHERE id=?1",
+            params![t.id, t.host, t.input, t.kind, t.port, t.path, t.scheme, t.address,
+                t.interface_name, t.next_hop, t.verdict, t.stale as i64, t.cdn_like as i64,
+                t.note, t.apply_state, t.apply_batch, t.updated_at, t.checked_at],
+        )?;
+        if changed == 0 {
+            return Err(AppError::Bypass("条目不存在，可能已被删除".to_string()));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -161,6 +177,31 @@ mod tests {
         let got = db.list_bypass_targets().unwrap().pop().unwrap();
         assert_eq!(got.created_at, 100, "upsert 不改建档时间");
         assert_eq!(got.updated_at, 300);
+        cleanup(&path);
+    }
+
+    #[test]
+    fn editing_updates_in_place_and_a_collision_keeps_both_rows() {
+        let (db, path) = setup_test_db();
+        let mut a = target("a", "first.example.com", "first.example.com", "10.0.0.1", "hostsOnly");
+        db.upsert_bypass_target(&a).unwrap();
+        db.upsert_bypass_target(&target("b", "second.example.com", "second.example.com", "10.0.0.2", "directOk")).unwrap();
+        a.host = "renamed.example.com".into();
+        a.input = "HTTP://renamed.example.com:8080/Path?Key=AbC".into();
+        a.apply_batch = "batch1".into();
+        db.update_bypass_target(&a).unwrap();
+        let saved = db.bypass_target_by_id("a").unwrap().unwrap();
+        assert_eq!(saved.host, "renamed.example.com");
+        assert_eq!(saved.apply_batch, "batch1");
+        assert_eq!(saved.created_at, 100);
+        a.host = "second.example.com".into();
+        assert!(db.update_bypass_target(&a).is_err());
+        assert_eq!(db.list_bypass_targets().unwrap().len(), 2);
+        assert_eq!(db.bypass_target_by_id("a").unwrap().unwrap().host, "renamed.example.com");
+        db.delete_bypass_target("a").unwrap();
+        a.host = "renamed.example.com".into();
+        assert!(db.update_bypass_target(&a).is_err());
+        assert!(db.bypass_target_by_id("a").unwrap().is_none());
         cleanup(&path);
     }
 }

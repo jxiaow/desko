@@ -1,6 +1,13 @@
 import { test, expect } from '@playwright/test'
 import { bootUnlocked, startApp, e2e, openSettings, tipButton } from '../helpers'
 
+test('口令保护升级未完成时提示旧格式解锁但不阻断操作', async ({ page }) => {
+  await bootUnlocked(page, {}, '/notes')
+  await e2e.emitEvent(page, 'auth-kdf-upgrade-warning', {})
+  await expect(page.locator('.toast')).toContainText('口令保护升级未完成，已按原格式解锁')
+  await expect(page.locator('.notes-page')).toBeVisible()
+})
+
 test('锁定会关闭加密小记的正文预览，重新解锁也不恢复旧确认框', async ({ page }) => {
   const auth = await bootUnlocked(page, {
     notes: [{ title: '私密', content_html: '<p>这段正文应随锁定收回</p>', encrypted: true }],

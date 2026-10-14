@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { tunnelApi } from '../../services/api/tunnel'
-import type { TunnelBinary, TunnelLogin, TunnelProvision } from '../../services/api/tunnel'
+import type { TunnelBinary, TunnelDomain, TunnelLogin, TunnelProvision } from '../../services/api/tunnel'
 import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
@@ -12,8 +12,11 @@ const props = defineProps<{
   login: TunnelLogin
   binary: TunnelBinary | null
   busy: boolean
+  domain: TunnelDomain | null
+  domainLoading: boolean
+  domainError: string
 }>()
-const emit = defineEmits<{ refresh: [] }>()
+const emit = defineEmits<{ refresh: []; retryDomain: [] }>()
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
@@ -130,6 +133,7 @@ function revokeAuth() {
       <span class="lbl auto">接入准备</span>
       <span class="tn-value mono ellipsis" :title="provision?.tunnelId ?? ''">
         {{ provision?.tunnelName }}<span v-if="shortId" class="tn-dim"> · {{ shortId }}… 本机持有</span>
+        <span v-if="domain" class="tn-dim"> · {{ domain.name }}</span>
       </span>
       <button class="btn-secondary row-btn" type="button" @click="expanded = true">
         <AppIcon name="adjustments" :size="12" />
@@ -170,7 +174,10 @@ function revokeAuth() {
           <span v-if="waiting" class="sub">
             等待浏览器里登录 Cloudflare<span class="tn-count mono">{{ loginLeft }}</span>
           </span>
-          <span v-else-if="authDone" class="sub">本机已有授权凭据</span>
+          <span v-else-if="authDone" class="sub">
+            本机已有授权凭据<span v-if="domain" class="mono"> · {{ domain.name }}</span>
+            <span v-else-if="domainLoading"> · 正在读取主域名…</span>
+          </span>
           <span v-else class="sub">在浏览器里登录 Cloudflare，凭据只留本机自己那份目录</span>
         </span>
         <template v-if="reached === 1">
@@ -252,6 +259,11 @@ function revokeAuth() {
 
       <button v-if="tunnelDone" class="tn-fold" type="button" @click="expanded = false">收起来</button>
     </template>
+    <div v-if="domainError || (domain && domain.status !== 'active')" class="tn-note chip-warn">
+      <AppIcon name="alert" :size="12" />
+      <span class="note-text">{{ domainError ? `主域名没读到：${domainError}` : `主域名 ${domain?.name} 尚未启用，请在 Cloudflare 完成域名接入后重试。` }}</span>
+      <button class="btn-secondary row-btn" type="button" :disabled="domainLoading" @click="emit('retryDomain')">重试读取主域名</button>
+    </div>
   </section>
 </template>
 

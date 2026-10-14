@@ -44,11 +44,6 @@ pub fn current_wrap(db: &Database) -> Result<Wrap, AppError> {
     read_wrap(db)?.ok_or_else(|| AppError::Backup("尚未设置备份密码".to_string()))
 }
 
-pub fn wrap_backup_key(db: &Database, master_key: &[u8], dek: &[u8]) -> Result<(), AppError> {
-    let sealed = crypto::encrypt_password(&BASE64.encode(dek), master_key)?;
-    db.set_meta(META_KEY, &serde_json::to_string(&sealed).map_err(|e| AppError::Crypto(e.to_string()))?)
-}
-
 pub fn unwrap_backup_key(db: &Database, master_key: &[u8]) -> Result<Option<Vec<u8>>, AppError> {
     let Some(json) = db.get_meta(META_KEY)? else {
         return Ok(None);
@@ -80,19 +75,21 @@ pub fn set_backup_password(
         None => crypto::random_bytes(crate::backup::container::DEK_LEN),
     };
     let wrap = Wrap::seal(&dek, password)?;
-    db.set_meta(META_WRAP, &BASE64.encode(wrap.to_bytes()))?;
-    wrap_backup_key(db, master_key, &dek)?;
+    let sealed = crypto::encrypt_password(&BASE64.encode(&dek), master_key)?;
+    db.set_meta_batch(&[(META_WRAP, &BASE64.encode(wrap.to_bytes())),
+        (META_KEY, &serde_json::to_string(&sealed).map_err(|e| AppError::Crypto(e.to_string()))?)])?;
     Ok((dek, wrap, changed))
 }
 
-pub fn status(db: &Database, app_data_dir: &std::path::Path, busy: bool) -> Result<BackupStatus, AppError> {
+pub fn status(db: &Database, app_data_dir: &std::path::Path, busy: bool, master: Option<&[u8]>) -> Result<BackupStatus, AppError> {
     let backups = backup::backups_dir(app_data_dir);
     let packages = backup::list_packages(&backups);
+    let cfg = master.map(|key| super::cloud_service::load_cfg(db, key)).transpose()?.flatten();
     Ok(BackupStatus {
         has_password: read_wrap(db).ok().flatten().is_some(),
         interval_min: super::auto_backup::interval_min(db),
         realtime: super::auto_backup::realtime_on(db),
-        pending: super::cloud_service::pending_count(&backups),
+        pending: super::cloud_service::pending_count_for(&backups, cfg.as_ref()),
         // 包名自带时间戳、mtime 就是写完那一刻，最新那个包即最近一轮
         last_round_at: packages.first().map(|p| p.2).unwrap_or(0),
         cloud_configured: super::cloud_service::configured(db),
@@ -128,7 +125,7 @@ mod key_lifecycle_tests {
             .name
     }
 
-    /// 换备份密码：DEK 不变，旧包换头后照样能解，旧密码立刻失效
+    /// 换备份密码更新受管理的本地包；已经导出的独立副本仍使用原密码。
     #[test]
     fn changing_backup_password_keeps_packages_readable() {
         let root = tmp("rotate");
@@ -143,6 +140,8 @@ mod key_lifecycle_tests {
         let backups = backup::backups_dir(&root);
         let pkg = backups.join(&name);
         let enc = backups.join("attachments").join("u1__p.png.enc");
+        let exported = root.join("exported-before-password-change.dsbk");
+        std::fs::copy(&pkg, &exported).unwrap();
 
         let (dek2, wrap2, changed) = set_backup_password(&db, &master, "second-backup-pw").unwrap();
         assert!(changed);
@@ -153,6 +152,13 @@ mod key_lifecycle_tests {
         assert!(container_unpack(&enc, &dek2).is_ok(), "附件密文同理");
         assert!(wrap2.open("first-backup-pw").is_err(), "旧密码必须失效");
         assert!(wrap2.open("second-backup-pw").is_ok());
+        assert!(backup::container::derive_dek(&pkg, "first-backup-pw").is_err());
+        assert_eq!(backup::container::derive_dek(&pkg, "second-backup-pw").unwrap(), dek2);
+        assert_eq!(backup::container::derive_dek(&exported, "first-backup-pw").unwrap(), dek);
+        assert!(backup::container::derive_dek(&exported, "second-backup-pw").is_err());
+        let next = make_package(&root, &path, &dek2, &wrap2);
+        assert!(backup::container::derive_dek(&backups.join(&next), "second-backup-pw").is_ok());
+        assert!(backup::container::derive_dek(&backups.join(&next), "first-backup-pw").is_err());
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -183,7 +189,7 @@ mod key_lifecycle_tests {
         let names: Vec<String> = reader.file_names().map(|s| s.to_string()).collect();
         assert_eq!(
             names,
-            vec!["manifest.json".to_string(), "data.db".to_string()],
+            vec!["manifest.json".to_string(), "data.db".to_string(), "codex-accounts.json".to_string()],
             "包里多了别的条目：档案根下的其它目录会被一起带走"
         );
         assert!(!String::from_utf8_lossy(&zip_bytes).contains("let-me-out"));

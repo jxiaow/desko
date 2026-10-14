@@ -160,9 +160,10 @@ pub fn notify_account_credentials_updated(account: &CodexAccount) {
 
 pub(crate) fn overlay_rendered_pool_models_on_experimental_catalog(
     profile_dir: &Path,
-    mut models: Vec<crate::models::codex::CodexExperimentalModelDefinition>,
+    models: Vec<crate::models::codex::CodexExperimentalModelDefinition>,
 ) -> Vec<crate::models::codex::CodexExperimentalModelDefinition> {
-    Vec::new()
+    // The removed gateway contributes no models; preserve the caller's catalog.
+    models
 }
 
 

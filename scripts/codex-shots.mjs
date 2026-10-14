@@ -114,6 +114,12 @@ const shot = async (page, name) => {
   console.log(`wrote ${name}`)
 }
 
+/** 进档会播种最近那一组：要点别的组，先确认它确实还关着 */
+const openGroup = async (page, name) => {
+  const head = page.locator('.grp-head', { hasText: name })
+  if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
+}
+
 // 1/2 账号页：两主题，三行事实 + 配额块
 for (const theme of ['paper', 'ink']) {
   const page = await openApp(theme)
@@ -177,7 +183,8 @@ for (const theme of ['paper', 'ink']) {
 
     // 7 API Key 行的编辑弹窗：元信息 + 更换凭据两块
     await page.locator('.acc-row[data-email="key@e2e.dev"] .acc-more').click()
-    await page.locator('.popover .pop-item', { hasText: '名称与备注' }).click()
+    // 编辑菜单的标签按凭据类型分档，两种叫法都接：这一帧要的是弹窗不是文案
+    await page.locator('.popover .pop-item', { hasText: /名称与备注|账号与密钥/ }).click()
     const edit = page.locator('.edit-dialog')
     await edit.locator('.key-box').waitFor()
     // 定高弹窗的正文必须滚得到底：最后一格摸不到就是溢出事故
@@ -196,16 +203,17 @@ for (const theme of ['paper', 'ink']) {
     await shot(page, 'codex-import.png')
     await dialog.locator('.dialog-close').click()
 
-    // 10/11 会话档：首屏全折叠（合计量已在页上）→ 展开一组并点开一条（行上两位、详情六位）
+    // 10/11 会话档：首屏播种最近一组（hero 已上账）→ 手动翻另一组并点开一条（行上不摆数，悬停与详情才给）
     const sessPage = await openApp('paper', config('paper', ACCOUNTS, SESS))
     await sessPage.locator('.cx-tab', { hasText: '会话' }).click()
-    await sessPage.locator('.sess-sum', { hasText: '累计' }).waitFor()
+    await sessPage.locator('.sess-hero').waitFor()
     await sessPage.locator('.grp-head').first().waitFor()
     await sessPage.mouse.move(1030, 660)
     await shot(sessPage, 'codex-sessions-collapsed.png')
-    await sessPage.locator('.grp-head', { hasText: 'demo-notes' }).click()
-    await sessPage.locator('.sess-row').first().waitFor()
-    await sessPage.locator('.sess-row').first().click()
+    await openGroup(sessPage, 'demo-notes')
+    await sessPage.locator('.grp-head', { hasText: 'demo-icons' }).click()
+    await sessPage.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]').waitFor()
+    await sessPage.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]').click()
     await shot(sessPage, 'codex-sessions-expanded.png')
     await sessPage.close()
 
@@ -253,6 +261,8 @@ for (const theme of ['paper', 'ink']) {
     const usagePage = await openApp('paper', config('paper', ACCOUNTS, SESS))
     await usagePage.locator('.cx-tab', { hasText: '用量' }).click()
     await usagePage.locator('.usg-sum').waitFor()
+    // 默认档已是「今天」（单柱图另有形状）：这一帧要的是按日柱阵，先切到近 30 天
+    await usagePage.locator('.cx-tab', { hasText: '近 30 天' }).click()
     await usagePage.locator('.usg-col').first().waitFor()
     await usagePage.mouse.move(1030, 660)
     await shot(usagePage, 'codex-usage-chart.png')
@@ -269,7 +279,7 @@ for (const theme of ['paper', 'ink']) {
     await page.locator('button[title="设置"]').click()
     const settings = page.locator('.settings-dialog')
     await settings.waitFor()
-    await settings.locator('.nav-tab', { hasText: 'Codex 账号' }).click()
+    await settings.locator('.nav-tab', { hasText: 'Codex' }).click()
     const alert = settings.locator('.setting-item', { hasText: '配额预警' })
     await alert.scrollIntoViewIfNeeded()
     await shot(page, 'codex-settings.png')

@@ -280,7 +280,11 @@ pub fn spawn(app: AppHandle) {
             // 上一轮传云端失败了、本地还有没进记录的包/附件、或者中转区堆着该清理的：算欠账
             if has_debt || last_debt.elapsed() >= DEBT_CHECK {
                 last_debt = Instant::now();
-                has_debt = cloud_service::has_backlog(&backups);
+                let state = app.state::<AppState>();
+                let cfg = crate::services::get_master_key(&state).ok().and_then(|key| {
+                    state.db.lock().ok().and_then(|db| cloud_service::load_cfg(&db, &key).ok().flatten())
+                });
+                has_debt = cloud_service::has_backlog_for(&backups, cfg.as_ref());
             }
             if !dirty && !has_debt {
                 continue;

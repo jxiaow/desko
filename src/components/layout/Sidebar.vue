@@ -104,10 +104,7 @@ const onDragDblclick = (e: MouseEvent) => {
   margin: 0 auto;
 }
 
-/* 折叠档两侧预留等宽的滚动条槽，模块图标与顶部按钮共用中线。 */
-.sidebar.collapsed .sidebar-nav {
-  scrollbar-gutter: stable both-edges;
-}
+/* 折叠档两侧预留等宽的滚动条槽（见 .sidebar-nav），模块图标与顶部按钮共用中线。 */
 
 .sidebar-name {
   flex: 1;
@@ -152,12 +149,19 @@ const onDragDblclick = (e: MouseEvent) => {
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
-  scrollbar-gutter: stable;
+  /* 两侧等宽留槽：滚动条出现或消失都不把行往一边推 */
+  scrollbar-gutter: stable both-edges;
   padding: 0 0 var(--space-2);
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* 展开档把两侧那两道空槽抵掉：行的左右内缩回到 .sidebar 的 12px，图标与「Desko」
+   同轴，行右缘不再凭空比左缘多出一条滚动条宽 */
+.sidebar:not(.collapsed) .sidebar-nav {
+  margin-inline: calc(var(--scrollbar-track) * -1);
 }
 
 .nav-item {

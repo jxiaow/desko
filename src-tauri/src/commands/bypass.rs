@@ -5,6 +5,7 @@ use tauri::State;
 use crate::db::BypassTarget;
 use crate::error::AppError;
 use crate::services::bypass_service::{self, ProbeReport};
+use crate::services::bypass_probe_job;
 use crate::services::netguard_service::{self, ApplyOutcome, PlannedRow};
 use crate::AppState;
 
@@ -13,7 +14,7 @@ fn now_ms() -> i64 {
 }
 
 /// 最近探过的结论缓存（原文 → 写库时刻 + 报告）。「开始探测」出结论后点「加入清单」
-/// 直接落这份，不再跑第二遍网络；超过 TTL 的缓存视同没有，重探。
+/// 直接落这份，不再跑第二遍网络；超过 TTL 后须显式重新探测，保存不发起网络请求。
 const REPORT_TTL_MS: i64 = 10 * 60 * 1000;
 
 fn probe_cache() -> &'static Mutex<HashMap<String, (i64, ProbeReport)>> {
@@ -21,8 +22,7 @@ fn probe_cache() -> &'static Mutex<HashMap<String, (i64, ProbeReport)>> {
     LAST.get_or_init(Default::default)
 }
 
-/// 探测报告 → 清单行。落盘状态由调用方决定：新建档与改原文都要归回「未写入」，
-/// 只有原地重探才把旧值带过来
+/// 探测报告 → 清单行。新建档默认未写入，更新时由调用方对账并保留撤销批次。
 fn target_from(report: &ProbeReport, created_at: i64, applied: Option<(&str, &str)>) -> BypassTarget {
     BypassTarget {
         id: uuid::Uuid::new_v4().to_string(),
@@ -57,11 +57,8 @@ fn target_from(report: &ProbeReport, created_at: i64, applied: Option<(&str, &st
     }
 }
 
-async fn probe_offline(input: String) -> Result<ProbeReport, AppError> {
-    let report = tauri::async_runtime::spawn_blocking(move || bypass_service::probe(&input))
-        .await
-        .map_err(|e| AppError::Bypass(format!("探测任务被中断：{e}")))?
-        .map_err(AppError::Bypass)?;
+async fn probe_offline(input: String, request_id: Option<String>) -> Result<ProbeReport, AppError> {
+    let report = bypass_probe_job::run(request_id, bypass_service::probe(&input)).await?;
     if let Ok(mut cache) = probe_cache().lock() {
         cache.retain(|_, (at, _)| now_ms() - *at < REPORT_TTL_MS);
         cache.insert(report.input.clone(), (now_ms(), report.clone()));
@@ -75,25 +72,43 @@ fn cached_report(key: &str) -> Option<ProbeReport> {
     (now_ms() - *at < REPORT_TTL_MS).then(|| report.clone())
 }
 
+fn report_for_save(key: &str) -> Result<ProbeReport, AppError> {
+    cached_report(key)
+        .ok_or_else(|| AppError::Bypass("探测结果已过期或不存在，请重新探测后再加入清单".to_string()))
+}
+
 /// 只探不写：给结论弹窗用
 #[tauri::command]
-pub async fn bypass_probe(input: String) -> Result<ProbeReport, AppError> {
-    probe_offline(input.trim().to_string()).await
+pub async fn bypass_probe(input: String, request_id: Option<String>) -> Result<ProbeReport, AppError> {
+    probe_offline(input.trim().to_string(), request_id).await
+}
+
+#[tauri::command]
+pub fn bypass_cancel_probe(request_id: String) -> Result<(), AppError> {
+    bypass_probe_job::cancel(&request_id)
 }
 
 /// 把一条探过的目标加进清单（P1 只登记，写系统的是 P2）。
 /// 回的是整份结论：前端刚探完就能看到判定，不用为写库再跑一次网络
 #[tauri::command]
 pub async fn bypass_save(state: State<'_, AppState>, input: String) -> Result<ProbeReport, AppError> {
-    // 命中「开始探测」刚探过的那份就直接写库；没有或超时才补一探
+    // 保存只使用已探测的结果；过期后回到可取消的显式探测流程。
     let input = input.trim().to_string();
-    let report = match cached_report(&input) {
-        Some(r) => r,
-        None => probe_offline(input).await?,
-    };
-    let row = target_from(&report, now_ms(), None);
+    let report = report_for_save(&input)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    db.upsert_bypass_target(&row)?;
+    if report.verdict == bypass_service::Verdict::Unreachable {
+        return Err(AppError::Bypass("目标不可达，请修正目标后重新探测".to_string()));
+    }
+    let found = db.list_bypass_targets()?.into_iter().find(|t| t.host == report.target.host);
+    let mut row = target_from(&report, found.as_ref().map_or_else(now_ms, |t| t.created_at), None);
+    if let Some(found) = found {
+        row.id = found.id;
+        row.apply_state = reconcile_apply(&found.apply_state, &found.apply_batch, report.verdict.as_str());
+        row.apply_batch = found.apply_batch;
+        db.update_bypass_target(&row)?;
+    } else {
+        db.upsert_bypass_target(&row)?;
+    }
     Ok(report)
 }
 
@@ -108,6 +123,7 @@ pub fn bypass_list(state: State<'_, AppState>) -> Result<Vec<BypassTarget>, AppE
 pub async fn bypass_recheck(
     state: State<'_, AppState>,
     id: String,
+    request_id: Option<String>,
 ) -> Result<ProbeReport, AppError> {
     let found = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
@@ -118,14 +134,14 @@ pub async fn bypass_recheck(
     };
     // 按原文重探：只有 host 会把带端口/路径/掩码的目标探成默认 443
     let key = if found.input.is_empty() { found.host.clone() } else { found.input.clone() };
-    let report = probe_offline(key).await?;
-    // 原地重探只改判定，不改「这批写过」：写过的条目重探若仍判要写，
-    // 那个 failed 状态得留得住，否则用户看不到失败原因
-    let next_state = reconcile_apply(&found.apply_state, report.verdict.as_str());
+    let report = probe_offline(key, request_id).await?;
+    // 原地重探对账配置状态并保留批次；失败或出口未知不能变成「已写入」。
+    let next_state = reconcile_apply(&found.apply_state, &found.apply_batch, report.verdict.as_str());
     let mut row = target_from(&report, found.created_at, Some((&next_state, &found.apply_batch)));
     row.id = found.id;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    db.upsert_bypass_target(&row)?;
+    ensure_unchanged(&db, &row.id, &found.input)?;
+    db.update_bypass_target(&row)?;
     Ok(report)
 }
 
@@ -136,6 +152,7 @@ pub async fn bypass_edit(
     state: State<'_, AppState>,
     id: String,
     input: String,
+    request_id: Option<String>,
 ) -> Result<ProbeReport, AppError> {
     let found = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
@@ -144,17 +161,22 @@ pub async fn bypass_edit(
             .find(|t| t.id == id)
             .ok_or_else(|| AppError::Bypass("条目不存在，可能已被删除".to_string()))?
     };
-    let report = probe_offline(input).await?;
-    // 改成了另一个 host：旧行留着就是同一个人的两条重复。删掉，新目标按 host 归档
+    let report = probe_offline(input, request_id).await?;
+    // 已有目标不能被重命名覆盖；更新同一 id 保证失败时原行还在。
     let renamed = found.host != report.target.host;
-    // 改了原文就是要写的东西变了，旧的落盘状态一律作废
+    // 更换目标时重新配置，同目标修改端口或路径则对账当前状态。
     let mut row = target_from(&report, found.created_at, None);
     row.id = found.id.clone();
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    if renamed {
-        db.delete_bypass_target(&found.id)?;
+    ensure_unchanged(&db, &found.id, &found.input)?;
+    if renamed && db.list_bypass_targets()?.iter().any(|t| t.host == row.host && t.id != row.id) {
+        return Err(AppError::Bypass("该目标已在清单中，请编辑已有条目".to_string()));
     }
-    db.upsert_bypass_target(&row)?;
+    if !renamed {
+        row.apply_state = reconcile_apply(&found.apply_state, &found.apply_batch, report.verdict.as_str());
+    }
+    row.apply_batch = found.apply_batch;
+    db.update_bypass_target(&row)?;
     Ok(report)
 }
 
@@ -208,13 +230,19 @@ pub fn bypass_status(state: State<'_, AppState>) -> Result<BypassStatus, AppErro
 }
 
 /// 落盘状态与判定怎么对上。只有"写过"的条目才参与对账：
-/// 写过却仍判要写 = 失败（保留原因给用户看），失败后不再要写 = 已了结。
-fn reconcile_apply(prev_state: &str, verdict: &str) -> String {
-    let needs = verdict == "hostsOnly" || verdict == "needRoute";
-    match (prev_state, needs) {
-        ("applied", true) => "failed".to_string(),
-        ("failed", false) => "applied".to_string(),
+/// 只有直连可用才算复验成功；回滚干净的批次不凭空恢复为「已写入」。
+fn reconcile_apply(prev_state: &str, batch: &str, verdict: &str) -> String {
+    match (prev_state, verdict == "directOk") {
+        ("applied", false) => "failed".to_string(),
+        ("failed", true) => if batch.is_empty() { "none" } else { "applied" }.to_string(),
         (other, _) => other.to_string(),
+    }
+}
+
+fn ensure_unchanged(db: &crate::db::Database, id: &str, input: &str) -> Result<(), AppError> {
+    match db.bypass_target_by_id(id)? {
+        Some(t) if t.input == input => Ok(()),
+        _ => Err(AppError::Bypass("条目已被修改或删除，请刷新后重试".to_string())),
     }
 }
 
@@ -237,13 +265,9 @@ pub fn bypass_plan(state: State<'_, AppState>, allow_cdn: Vec<String>) -> Result
         db.list_bypass_targets()?
     };
     let pending: Vec<BypassTarget> = targets.iter().filter(|t| needs_apply(t)).cloned().collect();
-    let (_, rows) = netguard_service::plan(&pending, &allow_cdn);
-    let blocked = rows.iter().filter(|r| !r.blocked.is_empty()).count();
-    let ready = pending
-        .iter()
-        .filter(|t| in_apply_batch(t, &allow_cdn))
-        .filter(|t| !rows.iter().any(|r| r.id == t.id && !r.blocked.is_empty()))
-        .count();
+    let (items, rows) = netguard_service::plan(&pending, &allow_cdn);
+    let blocked = rows.iter().filter(|r| !r.blocked.is_empty()).map(|r| &r.id).collect::<std::collections::HashSet<_>>().len();
+    let ready = items.iter().map(|i| i.id()).collect::<std::collections::HashSet<_>>().len();
     Ok(ApplyPlan { rows, ready, blocked })
 }
 
@@ -268,6 +292,7 @@ pub async fn bypass_apply(state: State<'_, AppState>, allow_cdn: Vec<String>) ->
         });
     }
     let batch = uuid::Uuid::new_v4().to_string();
+    let pending_ids: Vec<String> = pending.iter().map(|t| t.id.clone()).collect();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         netguard_service::apply(&pending, &allow_cdn, &batch)
     })
@@ -280,12 +305,12 @@ pub async fn bypass_apply(state: State<'_, AppState>, allow_cdn: Vec<String>) ->
     // helper 半批必回滚：回滚干净了系统就是没写过的样子，既不留「已写入」也不留撤销的余地；
     // 只有回滚自己失败（outcome.error 非空）才把批次留着，界面才给「撤销本批」
     let keep_batch = !outcome.rolled_back || !outcome.error.is_empty();
-    for item in &outcome.items {
-        // 记「已写入」与留批次是同一条判据：批次留着就说明写进去的还在系统里，
-        // 这时行上念「写入失败」会和结果弹窗自己打架
-        let state_name = if item.ok && keep_batch { "applied" } else { "failed" };
-        let batch = if keep_batch { outcome.batch_id.as_str() } else { "" };
-        db.set_bypass_apply_state(&item.id, state_name, batch, now_ms())?;
+    for id in pending_ids {
+        let items: Vec<_> = outcome.items.iter().filter(|i| i.id == id).collect();
+        if items.is_empty() && outcome.error.is_empty() { continue; }
+        let state_name = state_after_apply(&outcome, &id);
+        let batch = if keep_batch && netguard_service::rollback_exists(&outcome.batch_id) { outcome.batch_id.as_str() } else { "" };
+        db.set_bypass_apply_state(&id, state_name, batch, now_ms())?;
     }
     Ok(outcome)
 }
@@ -325,7 +350,7 @@ pub async fn bypass_revert(
         }
         Err(e) => return Err(e),
     };
-    if !outcome.cancelled {
+    if netguard_service::revert_succeeded(&outcome) {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
         for id in &ids {
             db.set_bypass_apply_state(id, "none", "", now_ms())?;
@@ -336,18 +361,42 @@ pub async fn bypass_revert(
 
 /// 有没有可撤销的批次：界面据此决定「撤销上次写入」在不在位
 #[tauri::command]
-pub fn bypass_rollback_exists(state: State<'_, AppState>) -> Result<String, AppError> {
-    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    let found = db
-        .list_bypass_targets()?
-        .into_iter()
-        .find(|t| !t.apply_batch.is_empty() && netguard_service::rollback_exists(&t.apply_batch));
-    Ok(found.map(|t| t.apply_batch).unwrap_or_default())
+pub fn bypass_rollback_exists() -> Result<String, AppError> {
+    Ok(netguard_service::latest_rollback())
+}
+
+fn state_after_apply(outcome: &ApplyOutcome, id: &str) -> &'static str {
+    let items: Vec<_> = outcome.items.iter().filter(|i| i.id == id).collect();
+    if !items.is_empty() && items.iter().all(|i| i.ok) && !outcome.rolled_back && outcome.error.is_empty() {
+        "applied"
+    } else {
+        "failed"
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saving_requires_a_fresh_report_and_never_starts_a_hidden_probe() {
+        let key = format!("save-cache-{}.test", uuid::Uuid::new_v4());
+        let report = ProbeReport {
+            input: key.clone(),
+            target: bypass_service::Target { kind: "domain", host: key.clone(), port: 443, path: "/".into(), scheme: "https" },
+            pinned: None, local_answers: vec![], hijacked: false, real_ips: vec![], cdn_like: false,
+            chosen: Some("10.0.0.2".into()), http_status: Some(200), probe_ms: Some(10), egress: None,
+            verdict: bypass_service::Verdict::DirectOk, recommend: false, stale: false,
+            headline: "直连已可用".into(), detail: String::new(), pending: vec![],
+        };
+        assert!(report_for_save(&key).is_err());
+        probe_cache().lock().unwrap().insert(key.clone(), (now_ms(), report));
+        assert_eq!(report_for_save(&key).unwrap().chosen.as_deref(), Some("10.0.0.2"));
+        probe_cache().lock().unwrap().get_mut(&key).unwrap().0 = now_ms() - REPORT_TTL_MS;
+        let error = report_for_save(&key).err().unwrap().to_string();
+        assert!(error.contains("请重新探测"));
+        probe_cache().lock().unwrap().remove(&key);
+    }
 
     fn row(verdict: &str, apply_state: &str) -> BypassTarget {
         BypassTarget {
@@ -398,12 +447,41 @@ mod tests {
     #[test]
     fn recheck_reconciles_written_state() {
         // 写过但仍判要写 = 失败，原因要留给用户看
-        assert_eq!(reconcile_apply("applied", "needRoute"), "failed");
+        assert_eq!(reconcile_apply("applied", "b1", "needRoute"), "failed");
         // 之前失败、现在不再要写 = 已了结
-        assert_eq!(reconcile_apply("failed", "directOk"), "applied");
+        assert_eq!(reconcile_apply("failed", "b1", "directOk"), "applied");
         // 从没写过的不凭空升格成「已写入」
-        assert_eq!(reconcile_apply("none", "hostsOnly"), "none");
-        assert_eq!(reconcile_apply("none", "directOk"), "none");
-        assert_eq!(reconcile_apply("applied", "directOk"), "applied");
+        assert_eq!(reconcile_apply("none", "b1", "hostsOnly"), "none");
+        assert_eq!(reconcile_apply("none", "b1", "directOk"), "none");
+        assert_eq!(reconcile_apply("applied", "b1", "directOk"), "applied");
+    }
+
+    #[test]
+    fn failed_or_unknown_probe_does_not_promote_a_failed_write() {
+        assert_eq!(reconcile_apply("failed", "b1", "unreachable"), "failed");
+        assert_eq!(reconcile_apply("failed", "b1", "egressUnknown"), "failed");
+        assert_eq!(reconcile_apply("applied", "b1", "unreachable"), "failed");
+        assert_eq!(reconcile_apply("applied", "b1", "egressUnknown"), "failed");
+        assert_eq!(reconcile_apply("failed", "", "directOk"), "none");
+    }
+
+    #[test]
+    fn a_target_is_successful_only_when_all_its_actions_succeed() {
+        let mut outcome = ApplyOutcome {
+            batch_id: "b1".into(), cancelled: false, rolled_back: false, error: String::new(),
+            items: vec![
+                netguard_service::ApplyItem { id: "x".into(), op: "pin".into(), ok: false, changed: false, error: "failed".into() },
+                netguard_service::ApplyItem { id: "x".into(), op: "route".into(), ok: true, changed: true, error: String::new() },
+            ],
+        };
+        assert_eq!(state_after_apply(&outcome, "x"), "failed");
+        outcome.items.reverse();
+        assert_eq!(state_after_apply(&outcome, "x"), "failed");
+        outcome.items.iter_mut().for_each(|i| i.ok = true);
+        assert_eq!(state_after_apply(&outcome, "x"), "applied");
+        outcome.rolled_back = true;
+        outcome.error = "rollback failed".into();
+        assert_eq!(state_after_apply(&outcome, "x"), "failed");
+        assert_eq!(state_after_apply(&outcome, "missing"), "failed");
     }
 }

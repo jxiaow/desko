@@ -7,7 +7,11 @@ import {
   loadSessionTokens,
   loadSessions,
   moveSessionToTrash,
+  sessionGroupsSeeded,
+  sessionOpenGroups,
+  sessionOpenId,
   sessionQuery,
+  sessionSearchMode,
   sessionTokens,
   sessions,
   sessionsBusy,
@@ -100,30 +104,46 @@ function groupName(s: CodexSessionRecord): string {
   return seg.length ? seg[seg.length - 1] : '未知目录'
 }
 
-const openKeys = ref<Set<string>>(new Set())
-const openSessionId = ref('')
+/** 展开态住在 store：切去用量再回来不该把翻开的组一起丢掉 */
+const searching = computed(() => sessionQuery.value.trim() !== '')
+
+function isOpen(key: string) {
+  // 有搜索词时命中即展开：折叠态会把搜索结果藏在水下
+  return searching.value || sessionOpenGroups.value.has(key)
+}
 
 async function toggleGroup(key: string, ids: string[]) {
-  const next = new Set(openKeys.value)
+  const next = new Set(sessionOpenGroups.value)
   if (next.has(key)) {
     next.delete(key)
-    if (openSessionId.value && ids.includes(openSessionId.value)) openSessionId.value = ''
+    if (sessionOpenId.value && ids.includes(sessionOpenId.value)) sessionOpenId.value = ''
   } else {
     next.add(key)
     // 进档时已按全量预取过；这里只补预取失败或新出现在列表里的 id
     await loadSessionTokens(ids)
   }
-  openKeys.value = next
+  sessionOpenGroups.value = next
 }
+
+/** 首屏别只给一排壳：进档把最近活动那一组摊开，播过一次就不再跟用户抢折叠权 */
+watch(
+  groups,
+  (list) => {
+    if (sessionGroupsSeeded.value || !list.length) return
+    sessionGroupsSeeded.value = true
+    sessionOpenGroups.value = new Set([list[0].key])
+  },
+  { immediate: true },
+)
 
 const kindLabel = (kind: string) => (kind === 'subagent' ? '子代理' : kind === 'external' ? '外部' : '')
 
-/** 后端没标题时把整条 UUID 原样填进 title（真机 64 条里 16 条如此），行上收成短 ID */
+/** 没有标题时显示完整会话 ID，空间不足时由布局自动换行。 */
 const idAsTitle = (s: CodexSessionRecord) => {
   const t = s.title.trim()
   return !t || t === s.sessionId
 }
-const titleText = (s: CodexSessionRecord) => (idAsTitle(s) ? `${s.sessionId.slice(0, 8)}…` : s.title.trim())
+const titleText = (s: CodexSessionRecord) => (idAsTitle(s) ? s.sessionId : s.title.trim())
 const titleTip = (s: CodexSessionRecord) => (idAsTitle(s) ? s.sessionId : s.title.trim())
 
 function compact(n: number): string {
@@ -156,11 +176,9 @@ const statsOf = (id: string) => sessionTokens.value[id]
 const netInput = (t: NonNullable<ReturnType<typeof statsOf>>) => Math.max(t.inputTokens - t.cachedInputTokens, 0)
 const num = (v: number) => v.toLocaleString()
 
-/** 取回前留占位灰线：这一格迟早要有数，空着会被读成「没有用量」 */
-function tokenText(id: string): string {
-  const t = statsOf(id)
-  if (!t) return ''
-  return `输入 ${compact(netInput(t))} · 输出 ${compact(t.outputTokens)}`
+/** 行上不给 token 读数：整行的悬停账（完整标题或完整 ID + 五口径）住这里 */
+function rowTip(s: CodexSessionRecord): string {
+  return [titleTip(s), tokenTip(s.sessionId)].filter(Boolean).join('\n')
 }
 
 /** 行上只给两位，缓存与推理这些进悬停 */
@@ -195,9 +213,13 @@ const sumText = computed(() => {
   const a = allSum.value
   return `累计 ${compact(a.total)} tokens（净输入 ${compact(a.input - a.cached)} · 输出 ${compact(a.output)} · 缓存命中 ${compact(a.cached)}）`
 })
+const heroSub = computed(() => {
+  const a = allSum.value
+  return `${groups.value.length} 个项目 · ${sessions.value.length} 条会话 · 净输入 ${compact(a.input - a.cached)} · 输出 ${compact(a.output)} · 缓存命中 ${compact(a.cached)}`
+})
 
 let debounce: ReturnType<typeof setTimeout> | null = null
-watch(sessionQuery, () => {
+watch([sessionQuery, sessionSearchMode], () => {
   if (debounce) clearTimeout(debounce)
   debounce = setTimeout(() => void loadSessions(), 300)
 })
@@ -218,9 +240,9 @@ async function runOnSession(id: string, fn: () => Promise<void>) {
   }
 }
 
-/** 无标题那条行上是短 ID，确认框里也得是短 ID，别放一串 UUID 进去吓人 */
+/** 确认框与列表使用同一标题，便于核对要删除的会话。 */
 function rowLabel(s: CodexSessionRecord): string {
-  return idAsTitle(s) ? `${s.sessionId.slice(0, 8)}…` : s.title.trim()
+  return titleText(s)
 }
 
 function askTrash(s: CodexSessionRecord) {
@@ -231,7 +253,7 @@ function askTrash(s: CodexSessionRecord) {
       void runOnSession(s.sessionId, async () => {
         try {
           toastStore.showToast(await moveSessionToTrash(s.sessionId))
-          if (openSessionId.value === s.sessionId) openSessionId.value = ''
+          if (sessionOpenId.value === s.sessionId) sessionOpenId.value = ''
         } catch (e) {
           toastStore.showToast(errText(e), 'error')
         }
@@ -270,7 +292,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
     <div v-else-if="!groups.length" class="rcard empty-state">
       <div class="empty-icon"><AppIcon name="navCodex" :size="24" /></div>
       <div class="empty-title">
-        {{ sessionQuery.trim() ? '没有标题匹配的会话' : '官方 Codex 还没有会话记录' }}
+        {{ sessionQuery.trim() ? (sessionSearchMode === 'content' ? '没有正文匹配的会话' : '没有标题匹配的会话') : '官方 Codex 还没有会话记录' }}
       </div>
       <div class="empty-desc">
         {{ sessionQuery.trim() ? '换个关键词，或清空搜索框看全量' : '这一档列的是官方客户端留在本机的会话' }}
@@ -278,52 +300,75 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
     </div>
 
     <div v-else class="rcard-list">
-      <div class="rcard sess-sum">
-        <span v-if="sumReady" class="sum-text" :title="`已取数 ${allSum.known} / ${sessions.length} 条`">{{ sumText }}</span>
-        <span v-else class="sum-text faint">token 取数中 · 已有 {{ allSum.known }} / {{ sessions.length }} 条</span>
+      <div class="rcard sess-hero" :title="sumReady ? sumText : undefined">
+        <div class="hero-line">
+          <template v-if="sumReady">
+            <span class="hero-num">{{ compact(allSum.total) }}</span>
+            <span class="hero-unit">累计 Token</span>
+          </template>
+          <span v-else class="hero-pending">Token 统计中 · 已获取 {{ allSum.known }} / {{ sessions.length }} 条</span>
+        </div>
+        <p class="hero-sub">{{ sumReady ? heroSub : '' }}</p>
       </div>
 
       <section v-for="g in groups" :key="g.key" class="rcard sess-group">
         <button
           class="grp-head"
           type="button"
-          :aria-expanded="openKeys.has(g.key)"
+          :aria-expanded="isOpen(g.key)"
           @click="toggleGroup(g.key, g.items.map((s) => s.sessionId))"
         >
-          <span class="grp-name" :title="g.cwd">{{ g.name }}</span>
-          <span v-if="groupTokText(g)" class="grp-tok mono-ish">{{ groupTokText(g) }}</span>
-          <span class="grp-meta">{{ g.items.length }} 条 · {{ recentText(g.recent) }}</span>
-          <AppIcon class="grp-caret" name="chevDown" :size="13" />
+          <span class="grp-info">
+            <span class="grp-l1">
+              <span class="grp-name" :title="[g.name, g.cwd].filter(Boolean).join('\n')">{{ g.name }}</span>
+              <span class="grp-meta">{{ g.items.length }} 条 · {{ recentText(g.recent) }}</span>
+            </span>
+            <span v-if="groupTokText(g)" class="grp-tok" :title="groupTokText(g)">
+              <span>累计 <b>{{ compact(g.sum.total) }}</b> Token</span>
+              <span>净输入 <b>{{ compact(g.sum.input - g.sum.cached) }}</b></span>
+              <span>输出 <b>{{ compact(g.sum.output) }}</b></span>
+            </span>
+          </span>
+          <AppIcon class="grp-caret" name="chevDown" :size="14" />
         </button>
 
-        <div v-if="openKeys.has(g.key)" class="grp-body">
+        <div v-if="isOpen(g.key)" class="grp-body">
           <div v-for="s in g.items" :key="s.sessionId" class="sess">
             <button
               class="sess-row"
               type="button"
-              :aria-expanded="openSessionId === s.sessionId"
+              :aria-expanded="sessionOpenId === s.sessionId"
               :data-sid="s.sessionId"
-              @click="openSessionId = openSessionId === s.sessionId ? '' : s.sessionId"
+              :title="rowTip(s)"
+              @click="sessionOpenId = sessionOpenId === s.sessionId ? '' : s.sessionId"
             >
-              <span class="sess-l1">
-                <span class="sess-title" :title="titleTip(s)">{{ titleText(s) }}</span>
-                <span v-if="s.sessionKind !== 'conversation'" class="badge off">{{ kindLabel(s.sessionKind) }}</span>
-              </span>
-              <span class="sess-l2">
-                <span v-if="whenText(s.updatedAt)">上次使用 {{ whenText(s.updatedAt) }}</span>
-                <span v-if="tokenText(s.sessionId)" :title="tokenTip(s.sessionId)">{{ tokenText(s.sessionId) }}</span>
-                <span v-else class="tok-ph" aria-hidden="true"></span>
-              </span>
+              <span class="sess-title" :class="{ mono: idAsTitle(s) }">{{ titleText(s) }}</span>
+              <span v-if="s.sessionKind !== 'conversation'" class="badge off">{{ kindLabel(s.sessionKind) }}</span>
+              <span v-if="whenText(s.updatedAt)" class="sess-time">{{ whenText(s.updatedAt) }}</span>
             </button>
 
-            <div v-if="openSessionId === s.sessionId" class="sess-card">
-              <p class="sess-cwd mono" :title="s.cwd">{{ s.cwd || '工作目录未知' }}</p>
-              <div class="sess-facts">
-                <span :title="s.sessionId">会话 ID <b class="mono">{{ s.sessionId.slice(0, 12) }}</b></span>
-                <span v-if="s.updatedAt">更新 {{ whenText(s.updatedAt) }}</span>
-                <span v-for="[k, v] in tokenFacts(s.sessionId)" :key="k">{{ k }} <b class="mono">{{ v }}</b></span>
-                <span v-if="!tokenFacts(s.sessionId).length">这条会话没有 token 记录</span>
-              </div>
+            <div v-if="sessionOpenId === s.sessionId" class="sess-card">
+              <dl class="sess-info" aria-label="会话信息">
+                <div class="sess-location">
+                  <dt>工作目录</dt>
+                  <dd class="sess-cwd" :class="{ mono: !!s.cwd }" :title="s.cwd">{{ s.cwd || '未知' }}</dd>
+                </div>
+                <div class="sess-identity">
+                  <dt>会话 ID</dt>
+                  <dd class="mono" :title="s.sessionId">{{ s.sessionId }}</dd>
+                </div>
+                <div v-if="s.updatedAt">
+                  <dt>更新时间</dt>
+                  <dd>{{ whenText(s.updatedAt) }}</dd>
+                </div>
+              </dl>
+              <dl v-if="tokenFacts(s.sessionId).length" class="sess-facts" aria-label="会话用量明细">
+                <div v-for="[k, v] in tokenFacts(s.sessionId)" :key="k">
+                  <dt>{{ k }}</dt>
+                  <dd>{{ v }}</dd>
+                </div>
+              </dl>
+              <p v-else class="sess-no-usage">这条会话没有 Token 记录</p>
               <div class="sess-acts">
                 <button
                   class="action-btn"
@@ -364,6 +409,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
 </template>
 
 <style scoped>
+.page-note { font-size: var(--text-xs); }
 /* 页内第二档的分组卡：一档一枚项目卡，展开才往纸面下挂会话行（细线分行，不做卡中卡） */
 .sess-sk {
   display: flex;
@@ -374,35 +420,64 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
-/* 合计量单占一行，坐在分组卡之上：组头那一档只放本组累计 */
-.sess-sum {
+/* 用量 hero：与直连页 hero 同壳同字号，数字是账目不是健康判定，所以吃 --text 不吃 --success */
+.sess-hero {
   display: flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 14px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 84px;
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
 }
-.sum-text {
+.hero-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 40px;
+}
+.hero-num {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.hero-unit { font-size: var(--text-xs); color: var(--text-muted); }
+.hero-pending { font-size: var(--text-sm); color: var(--text-muted); }
+.hero-sub {
+  min-height: 18px;
+  margin: 0;
   font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+/* 组头合计行 */
+.grp-tok > span { white-space: nowrap; }
+.grp-tok b {
+  margin-left: 4px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
 }
-.sum-text.faint {
-  color: var(--text-faint);
-}
-.grp-tok {
-  flex-shrink: 0;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-.mono-ish {
+.mono {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
 }
 .grp-head {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  min-height: 52px;
-  padding: 0 14px;
+  min-height: 64px;
+  padding: 10px 14px;
   border: none;
   background: transparent;
   font: inherit;
@@ -410,11 +485,22 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
   text-align: left;
   cursor: pointer;
 }
+.grp-info {
+  flex: 1;
+  min-width: 0;
+}
+.grp-l1 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
 .grp-name {
   flex: 1 1 auto;
   min-width: 0;
   font-size: var(--text-md);
   font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -422,25 +508,34 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
 .grp-meta {
   flex-shrink: 0;
   font-size: var(--text-xs);
-  color: var(--text-faint);
+  color: var(--text-muted);
+}
+.grp-tok {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 3px;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 .grp-caret {
   flex-shrink: 0;
-  color: var(--text-faint);
+  color: var(--text-muted);
   transition: transform var(--transition);
 }
 .grp-head[aria-expanded='true'] .grp-caret { transform: rotate(180deg); }
 
-/* 展开体：纸面 + 发丝线断句，凹底只留给单条会话的详情那一段 */
+/* 沿用面板内细线分行的列表：项目为上层，会话只轻度缩进。 */
 .grp-body { border-top: 1px solid var(--border); }
 .sess + .sess { border-top: 1px solid var(--border); }
 .sess-row {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  padding: 9px 14px;
+  min-height: 40px;
+  padding: 0 14px 0 26px;
   border: none;
   background: transparent;
   font: inherit;
@@ -449,62 +544,66 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
   cursor: pointer;
 }
 .sess-row:hover { background: var(--hover); }
-.sess-l1 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  width: 100%;
-}
 .sess-title {
+  flex: 1;
   min-width: 0;
   font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.5;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sess-l2 {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-  width: 100%;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-/* token 未取回时的占位灰线：撑住行高，别让它读成「没有用量」 */
-.tok-ph {
-  display: inline-block;
-  width: 58px;
-  height: 8px;
-  border-radius: 4px;
-  background: var(--fill);
-}
+.sess-title.mono { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+.sess-time { flex-shrink: 0; font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--text-muted); white-space: nowrap; }
 .sess-card {
-  padding: var(--space-3) 14px;
+  padding: 12px 14px 12px 26px;
   background: var(--sunken);
   border-top: 1px solid var(--border);
 }
-.sess-cwd {
-  margin: 0 0 var(--space-2);
-  font-size: var(--text-2xs);
+.sess-info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; margin: 0; }
+.sess-info > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: baseline; gap: 8px; min-width: 0; }
+.sess-info dt { font-size: var(--text-xs); line-height: 1.6; color: var(--text-muted); }
+.sess-info dd {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
-  word-break: break-all;
+  overflow-wrap: anywhere;
   line-height: 1.5;
 }
+.sess-info > .sess-location, .sess-info > .sess-identity { grid-column: 1 / -1; }
+.sess-info dd { font-variant-numeric: tabular-nums; }
 .sess-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 28px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
+.sess-facts > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: baseline; gap: 8px; min-width: 0; }
+.sess-facts dt { font-size: var(--text-xs); line-height: 1.5; color: var(--text-muted); }
+.sess-facts dd {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.sess-no-usage { margin: 12px 0 0; font-size: var(--text-xs); color: var(--text-muted); }
 /* 详情段的动作行：一颗颗走全局 .action-btn 的 28px 档，这里只排行程 */
 .sess-acts {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  margin-top: var(--space-3);
+  margin-top: 10px;
+}
+@media (max-width: 850px) {
+  .sess-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>

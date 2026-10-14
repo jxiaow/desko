@@ -183,7 +183,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   height: 100%;
-  padding-left: var(--space-5);
+  padding-left: var(--page-gutter);
   z-index: 1;
 }
 

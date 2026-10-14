@@ -7,15 +7,16 @@
 use crate::crypto::{self, EncryptedData};
 use crate::db::NoteLockRow;
 use crate::error::AppError;
-use crate::services::{self, note_service};
+use crate::services::note_service;
 use crate::AppState;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 const META_SALT: &str = "note_salt";
 const META_WRAP: &str = "note_key_wrap";
 const META_MASTER_WRAP: &str = "note_key_master_wrap";
+const META_KDF: &str = "note_kdf_iterations";
 
 fn lock_err<T>(_: std::sync::PoisonError<T>) -> AppError {
     AppError::Database("lock error".to_string())
@@ -136,7 +137,7 @@ pub(crate) fn build_domain(
 ) -> Result<DomainSetup, AppError> {
     let ndk = crypto::random_bytes(crypto::KEY_LENGTH);
     let salt = crypto::generate_salt();
-    let kpass = crypto::derive_key(passphrase, &salt);
+    let kpass = crypto::derive_password_key(passphrase, &salt, crypto::PASSWORD_ITERATIONS);
 
     let mut resealed: Vec<(String, String, String)> = Vec::with_capacity(rows.len());
     let mut deks: Vec<(String, Vec<u8>)> = Vec::with_capacity(rows.len());
@@ -157,6 +158,7 @@ pub(crate) fn build_domain(
         (META_SALT, BASE64.encode(&salt)),
         (META_WRAP, seal(&ndk, &kpass)?),
         (META_MASTER_WRAP, seal(&ndk, &crypto::note_domain_key(master_key))?),
+        (META_KDF, crypto::PASSWORD_ITERATIONS.to_string()),
     ];
     Ok(DomainSetup { ndk, meta, resealed, deks, plains })
 }
@@ -173,11 +175,17 @@ pub fn note_key_status(state: State<AppState>) -> Result<NoteKeyStatus, AppError
 
 /// 首次设口令：建 NDK、写下两条域封条，并把旧模型（每条一把口令）的封条一次改封
 #[tauri::command]
-pub fn note_key_setup(state: State<AppState>, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
+pub async fn note_key_setup(app: AppHandle, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || note_key_setup_with_state(&app.state::<AppState>(), passphrase))
+        .await.map_err(|_| AppError::Crypto("小记口令任务失败".into()))?
+}
+
+fn note_key_setup_with_state(state: &AppState, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
     if passphrase.is_empty() {
         return Err(AppError::Database("小记口令不能为空".to_string()));
     }
-    let master_key = services::get_master_key(&state)?;
+    let master_guard = state.master_key.lock().map_err(lock_err)?;
+    let master_key = master_guard.as_ref().ok_or(AppError::NotUnlocked)?;
 
     let db = state.db.lock().map_err(lock_err)?;
     if db.get_meta(META_WRAP)?.is_some() {
@@ -198,20 +206,35 @@ pub fn note_key_setup(state: State<AppState>, passphrase: String) -> Result<Vec<
 
 /// 日常解锁：口令换回 NDK，全库一次开
 #[tauri::command]
-pub fn note_key_unlock(state: State<AppState>, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
-    let (salt_b64, wrap, _) = {
+pub async fn note_key_unlock(app: AppHandle, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || note_key_unlock_with_state(&app.state::<AppState>(), passphrase))
+        .await.map_err(|_| AppError::Crypto("小记口令任务失败".into()))?
+}
+
+fn note_key_unlock_with_state(state: &AppState, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
+    let master = state.master_key.lock().map_err(lock_err)?;
+    master.as_ref().ok_or(AppError::NotUnlocked)?;
+    let (salt_b64, wrap, iterations) = {
         let db = state.db.lock().map_err(lock_err)?;
-        read_domain(&db)?
+        let (salt, wrap, _) = read_domain(&db)?;
+        (salt, wrap, crate::services::auth_service::kdf_iterations(&db, META_KDF)?)
     };
     let salt = BASE64.decode(&salt_b64).map_err(|e| AppError::Crypto(e.to_string()))?;
-    let ndk = open_wrap(&wrap, &crypto::derive_key(&passphrase, &salt))?;
+    let ndk = open_wrap(&wrap, &crypto::derive_password_key(&passphrase, &salt, iterations))?;
+    if iterations < crypto::PASSWORD_ITERATIONS {
+        let salt = crypto::generate_salt();
+        let key = crypto::derive_password_key(&passphrase, &salt, crypto::PASSWORD_ITERATIONS);
+        state.db.lock().map_err(lock_err)?.set_meta_batch(&[(META_SALT, &BASE64.encode(&salt)),
+            (META_WRAP, &seal(&ndk, &key)?), (META_KDF, &crypto::PASSWORD_ITERATIONS.to_string())])?;
+    }
     open_into_state(&state, &ndk)
 }
 
 /// 兜底路径：会话已解锁就免输入，用主密钥封条取回 NDK
 #[tauri::command]
 pub fn note_key_recover(state: State<AppState>) -> Result<Vec<NotePlain>, AppError> {
-    let master_key = services::get_master_key(&state)?;
+    let master_guard = state.master_key.lock().map_err(lock_err)?;
+    let master_key = master_guard.as_ref().ok_or(AppError::NotUnlocked)?;
     let (_, _, master_wrap) = {
         let db = state.db.lock().map_err(lock_err)?;
         read_domain(&db)?
@@ -247,31 +270,45 @@ fn open_into_state(state: &AppState, ndk: &[u8]) -> Result<Vec<NotePlain>, AppEr
 /// 锁回全库：内存里的 NDK 与 DEK 一律收回，库里的密文不动
 #[tauri::command]
 pub fn note_key_relock(state: State<AppState>) -> Result<(), AppError> {
-    close_domain(&state);
+    note_key_relock_with_state(&state)
+}
+
+fn note_key_relock_with_state(state: &AppState) -> Result<(), AppError> {
+    let _master = state.master_key.lock().map_err(lock_err)?;
+    close_domain(state);
     Ok(())
 }
 
 /// 改口令：只改 NDK 的口令封条，小记密文一条都不用动
 #[tauri::command]
-pub fn note_key_change(state: State<AppState>, passphrase: String) -> Result<(), AppError> {
+pub async fn note_key_change(app: AppHandle, passphrase: String) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(move || note_key_change_with_state(&app.state::<AppState>(), passphrase))
+        .await.map_err(|_| AppError::Crypto("小记口令任务失败".into()))?
+}
+
+fn note_key_change_with_state(state: &AppState, passphrase: String) -> Result<(), AppError> {
+    let master = state.master_key.lock().map_err(lock_err)?;
+    master.as_ref().ok_or(AppError::NotUnlocked)?;
     if passphrase.is_empty() {
         return Err(AppError::Database("小记口令不能为空".to_string()));
     }
     let ndk = get_note_key(&state)?;
     let salt = crypto::generate_salt();
-    let kpass = crypto::derive_key(&passphrase, &salt);
+    let kpass = crypto::derive_password_key(&passphrase, &salt, crypto::PASSWORD_ITERATIONS);
     let db = state.db.lock().map_err(lock_err)?;
     if db.get_meta(META_WRAP)?.is_none() {
         return Err(AppError::Database("还没设过小记口令".to_string()));
     }
-    db.set_meta(META_SALT, &BASE64.encode(&salt))?;
-    db.set_meta(META_WRAP, &seal(&ndk, &kpass)?)?;
+    db.set_meta_batch(&[(META_SALT, &BASE64.encode(&salt)), (META_WRAP, &seal(&ndk, &kpass)?),
+        (META_KDF, &crypto::PASSWORD_ITERATIONS.to_string())])?;
     Ok(())
 }
 
 /// 上锁：随机 DEK 封正文，DEK 再由 NDK 封一道
 #[tauri::command]
 pub fn lock_note(state: State<AppState>, id: String) -> Result<(), AppError> {
+    let master = state.master_key.lock().map_err(lock_err)?;
+    master.as_ref().ok_or(AppError::NotUnlocked)?;
     let ndk = get_note_key(&state)?;
     let db = state.db.lock().map_err(lock_err)?;
     let note = db.get_note(&id)?.ok_or(AppError::EntryNotFound)?;
@@ -295,6 +332,8 @@ pub fn lock_note(state: State<AppState>, id: String) -> Result<(), AppError> {
 /// 单条再开：域已开就免口令（口令只需输一次）
 #[tauri::command]
 pub fn unlock_note(state: State<AppState>, id: String) -> Result<String, AppError> {
+    let master = state.master_key.lock().map_err(lock_err)?;
+    master.as_ref().ok_or(AppError::NotUnlocked)?;
     let lock = {
         let db = state.db.lock().map_err(lock_err)?;
         db.get_note_lock(&id)?.ok_or_else(|| AppError::Database("这条小记没有加密".to_string()))?
@@ -310,6 +349,7 @@ pub fn unlock_note(state: State<AppState>, id: String) -> Result<String, AppErro
 
 #[tauri::command]
 pub fn relock_note(state: State<AppState>, id: String) -> Result<(), AppError> {
+    let _master = state.master_key.lock().map_err(lock_err)?;
     drop_dek(&state, &id);
     Ok(())
 }
@@ -321,7 +361,8 @@ pub fn remove_note_lock(
     id: String,
     input: crate::db::UpdateNoteInput,
 ) -> Result<(), AppError> {
-    let _key = services::get_master_key(&state)?;
+    let master = state.master_key.lock().map_err(lock_err)?;
+    let _key = master.as_ref().ok_or(AppError::NotUnlocked)?;
     let dek = get_dek(&state, &id)?;
     // 先验一把：DEK 必须真能解开当前密文，防止半路改坏
     {
@@ -329,8 +370,7 @@ pub fn remove_note_lock(
         if let Some(lock) = db.get_note_lock(&id)? {
             read_cipher(&lock, &dek)?;
         }
-        db.clear_note_lock(&id)?;
-        note_service::update_note(&db, &id, input)?;
+        db.remove_note_lock_with_content(&id, &input)?;
     }
     drop_dek(&state, &id);
     Ok(())
@@ -339,6 +379,8 @@ pub fn remove_note_lock(
 /// 刷新后找回会话内已解锁的正文
 #[tauri::command]
 pub fn reveal_note(state: State<AppState>, id: String) -> Result<String, AppError> {
+    let master = state.master_key.lock().map_err(lock_err)?;
+    master.as_ref().ok_or(AppError::NotUnlocked)?;
     let dek = get_dek(&state, &id)?;
     let db = state.db.lock().map_err(lock_err)?;
     let lock = db.get_note_lock(&id)?.ok_or_else(|| AppError::Database("这条小记没有加密".to_string()))?;
@@ -406,7 +448,7 @@ mod tests {
 
         // 日常解锁：口令 → NDK → 全库明文
         let salt = BASE64.decode(meta_of(&plan, META_SALT)).unwrap();
-        let ndk = open_wrap(&meta_of(&plan, META_WRAP), &crypto::derive_key("note-pw-1234", &salt)).unwrap();
+        let ndk = open_wrap(&meta_of(&plan, META_WRAP), &crypto::derive_password_key("note-pw-1234", &salt, crypto::PASSWORD_ITERATIONS)).unwrap();
         assert_eq!(ndk, plan.ndk);
         let resealed: Vec<_> = rows.iter().map(|r| resealed_row(r, &plan)).collect();
         let (deks, plains) = open_seals(&resealed, &ndk);
@@ -428,7 +470,7 @@ mod tests {
         let plan = build_domain(&rows, &mk, "note-pw-1234").unwrap();
         let salt = BASE64.decode(meta_of(&plan, META_SALT)).unwrap();
         assert!(matches!(
-            open_wrap(&meta_of(&plan, META_WRAP), &crypto::derive_key("猜的口令", &salt)),
+            open_wrap(&meta_of(&plan, META_WRAP), &crypto::derive_password_key("猜的口令", &salt, crypto::PASSWORD_ITERATIONS)),
             Err(AppError::WrongPassword)
         ));
         // 换一把主密钥（改过主密码却没换封条）就兜不回来
@@ -473,4 +515,36 @@ mod tests {
         let (_, plains) = open_seals(&[resealed], &ndk2);
         assert_eq!(plains[0].html, "<p>正文</p>");
     }
+    #[test]
+    fn password_commands_refuse_to_read_or_migrate_notes_while_the_app_is_locked() {
+        let state = crate::test_state();
+        assert!(matches!(note_key_setup_with_state(&state, "password".into()), Err(AppError::NotUnlocked)));
+        assert!(matches!(note_key_unlock_with_state(&state, "password".into()), Err(AppError::NotUnlocked)));
+        assert!(matches!(note_key_change_with_state(&state, "password".into()), Err(AppError::NotUnlocked)));
+        assert!(state.db.lock().unwrap().get_meta(META_WRAP).unwrap().is_none());
+    }
+
+    #[test]
+    fn relocking_waits_for_an_earlier_domain_unlock_before_removing_its_keys() {
+        let state = std::sync::Arc::new(crate::test_state());
+        let master = state.master_key.lock().unwrap();
+        let other = state.clone();
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (finished, done) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            entered.send(()).unwrap();
+            note_key_relock_with_state(&other).unwrap();
+            finished.send(()).unwrap();
+        });
+        ready.recv().unwrap();
+        assert!(done.recv_timeout(std::time::Duration::from_millis(100)).is_err(), "重锁必须等正在完成的解锁");
+        *state.note_key.lock().unwrap() = Some(vec![1; 32]);
+        state.note_keys.lock().unwrap().insert("fixture".into(), vec![2; 32]);
+        drop(master);
+        done.recv_timeout(std::time::Duration::from_secs(2)).unwrap();
+        worker.join().unwrap();
+        assert!(state.note_key.lock().unwrap().is_none());
+        assert!(state.note_keys.lock().unwrap().is_empty());
+    }
+
 }

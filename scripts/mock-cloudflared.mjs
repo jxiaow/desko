@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path'
 
 const argv = process.argv.slice(2)
 const STATE_DIR = process.env.DESKO_MOCK_STATE
-const HOME_DIR = process.env.DESKO_MOCK_HOME || join(STATE_DIR || '.', 'fake-home')
+const HOME_DIR = process.env.DESKO_MOCK_HOME || join(process.env.USERPROFILE || process.env.HOME || STATE_DIR || '.', '.cloudflared')
 const LOGIN_MODE = process.env.DESKO_MOCK_LOGIN || 'write-origincert'
 const LOGIN_DELAY = Number(process.env.DESKO_MOCK_DELAY || 300)
 if (!STATE_DIR) {

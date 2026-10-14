@@ -5,6 +5,8 @@ import { ref } from 'vue'
 import PopoverMenu from './PopoverMenu.vue'
 import AppIcon from './AppIcon.vue'
 
+defineOptions({ inheritAttrs: false })
+
 export interface OptionItem {
   value: string | number
   label: string
@@ -41,6 +43,7 @@ const pick = (v: string | number) => {
 
 <template>
   <button
+    v-bind="$attrs"
     type="button"
     class="select opt-trigger"
     :disabled="disabled"

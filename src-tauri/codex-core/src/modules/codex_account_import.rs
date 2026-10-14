@@ -1289,7 +1289,8 @@ fn upsert_account_from_access_token_with_hints(
         refresh_token: None,
     };
 
-    let mut index = load_account_index();
+    let _guard = CODEX_ACCOUNT_MUTATION_LOCK.lock().map_err(|_| "Codex 账号写入锁已损坏".to_string())?;
+    let mut index = load_account_index_checked_unlocked()?;
     let generated_id =
         build_account_storage_id(&email, account_id.as_deref(), organization_id.as_deref());
     let existing_id = find_existing_account_id(
@@ -1362,7 +1363,7 @@ fn upsert_account_from_access_token_with_hints(
     };
     apply_account_note_update_if_present(&mut account, note_update);
 
-    save_account_from_user_action(&mut account)?;
+    save_account_from_user_action_unlocked(&mut account)?;
 
     if let Some(summary) = index.accounts.iter_mut().find(|item| item.id == account.id) {
         summary.email = account.email.clone();
@@ -1380,7 +1381,7 @@ fn upsert_account_from_access_token_with_hints(
         });
     }
 
-    save_account_index(&index)?;
+    save_account_index_unlocked(&index)?;
 
     logger::log_info(&format!(
         "Codex accessToken 账号已保存: email={}, account_id={:?}, organization_id={:?}",

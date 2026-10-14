@@ -29,7 +29,7 @@ static CODEX_TOKEN_REFRESH_LOCKS: std::sync::LazyLock<
 > = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 static CODEX_ACCOUNT_SWITCH_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
     std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
-static CODEX_ACCOUNT_MUTATION_LOCK: std::sync::LazyLock<Mutex<()>> =
+pub(crate) static CODEX_ACCOUNT_MUTATION_LOCK: std::sync::LazyLock<Mutex<()>> =
     std::sync::LazyLock::new(|| Mutex::new(()));
 static CODEX_AUTO_SWITCH_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static CODEX_BATCH_IMPORT_COUNTER: AtomicU64 = AtomicU64::new(1);

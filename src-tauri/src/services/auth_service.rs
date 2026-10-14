@@ -1,7 +1,17 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use crate::crypto::{decrypt_password, encrypt_password, generate_salt, compute_verify_hash, verify_master_password, derive_key, note_domain_key, EncryptedData};
+use crate::crypto::{decrypt_password, encrypt_password, generate_salt, compute_verify_hash, note_domain_key, EncryptedData};
 use crate::db::Database;
 use crate::error::AppError;
+
+pub const META_KDF: &str = "master_kdf_iterations";
+pub fn kdf_iterations(db: &Database, meta: &str) -> Result<u32, AppError> {
+    match db.get_meta(meta)? {
+        None => Ok(crate::crypto::LEGACY_ITERATIONS),
+        Some(value) => value.parse::<u32>().ok()
+            .filter(|n| matches!(*n, crate::crypto::LEGACY_ITERATIONS | crate::crypto::PASSWORD_ITERATIONS))
+            .ok_or_else(|| AppError::Crypto("不支持的口令派生版本".into())),
+    }
+}
 
 /// 解锁失败后的冷却使用单调时钟，系统时间调整不会提前解除限制。
 #[derive(Default)]
@@ -39,12 +49,11 @@ pub fn setup_master_password(db: &Database, master_key: &mut Option<Vec<u8>>, pa
     }
 
     let salt = generate_salt();
-    let key = derive_key(password, &salt);
+    let key = crate::crypto::derive_password_key(password, &salt, crate::crypto::PASSWORD_ITERATIONS);
     let verify_hash = compute_verify_hash(&key);
 
-    db.set_meta("initialized", "true")?;
-    db.set_meta("salt", &BASE64.encode(&salt))?;
-    db.set_meta("verify_hash", &verify_hash)?;
+    db.set_meta_batch(&[("initialized", "true"), ("salt", &BASE64.encode(&salt)), ("verify_hash", &verify_hash),
+        (META_KDF, &crate::crypto::PASSWORD_ITERATIONS.to_string())])?;
 
     *master_key = Some(key);
 
@@ -61,19 +70,26 @@ pub fn verify_password(db: &Database, password: &str) -> Result<Vec<u8>, AppErro
 
     let verify_hash = db.get_meta("verify_hash")?.ok_or(AppError::NotInitialized)?;
 
-    verify_master_password(password, &salt, &verify_hash)
+    let key = crate::crypto::derive_password_key(password, &salt, kdf_iterations(db, META_KDF)?);
+    if compute_verify_hash(&key) == verify_hash { Ok(key) } else { Err(AppError::WrongPassword) }
 }
 
 pub fn change_master_password(db: &Database, old_key: &[u8], old_password: &str, new_password: &str) -> Result<Vec<u8>, AppError> {
-    let salt_b64 = db.get_meta("salt")?.ok_or(AppError::NotInitialized)?;
-    let old_salt = BASE64.decode(&salt_b64).map_err(|e| AppError::Crypto(e.to_string()))?;
+    Ok(change_master_password_prepared(db, old_key, old_password, new_password, |_| Ok(()))?.0)
+}
 
-    let verify_hash = db.get_meta("verify_hash")?.ok_or(AppError::NotInitialized)?;
-    verify_master_password(old_password, &old_salt, &verify_hash)?;
+/// Prepare dependent in-memory ciphertext before the database commit. A failed
+/// preparation must leave both the database and active key unchanged.
+pub fn change_master_password_prepared<T>(
+    db: &Database, old_key: &[u8], old_password: &str, new_password: &str,
+    prepare: impl FnOnce(&[u8]) -> Result<T, AppError>,
+) -> Result<(Vec<u8>, T), AppError> {
+    if verify_password(db, old_password)? != old_key { return Err(AppError::WrongPassword); }
 
     let new_salt = generate_salt();
-    let new_key = derive_key(new_password, &new_salt);
+    let new_key = crate::crypto::derive_password_key(new_password, &new_salt, crate::crypto::PASSWORD_ITERATIONS);
     let new_verify_hash = compute_verify_hash(&new_key);
+    let prepared = prepare(&new_key)?;
 
     let entries = db.list_all_entries()?;
     let now = chrono::Utc::now().timestamp_millis();
@@ -101,7 +117,7 @@ pub fn change_master_password(db: &Database, old_key: &[u8], old_password: &str,
     }
     let new_salt_b64 = BASE64.encode(&new_salt);
     // 备份密钥是用旧主密钥封存的，同一事务里换封
-    let mut extra_meta: Vec<(&str, String)> = Vec::new();
+    let mut extra_meta: Vec<(&str, String)> = vec![(META_KDF, crate::crypto::PASSWORD_ITERATIONS.to_string())];
     let backup_key_json = db.get_meta(crate::services::backup_service::META_KEY)?;
     let rewrapped;
     if let Some(json) = backup_key_json.as_deref() {
@@ -128,14 +144,20 @@ pub fn change_master_password(db: &Database, old_key: &[u8], old_password: &str,
             let resealed = encrypt_password(&ndk_b64, &note_domain_key(&new_key))?;
             serde_json::to_string(&resealed).map_err(|e| crate::error::AppError::Crypto(e.to_string()))
         })();
-        if let Ok(value) = rewrapped {
-            extra_meta.push(("note_key_master_wrap", value));
-        }
+        extra_meta.push(("note_key_master_wrap", rewrapped?));
+    }
+    let mut legacy_note_updates = Vec::new();
+    for (id, row) in db.list_note_locks()? {
+        if row.wrap_master.is_empty() { continue; }
+        let sealed: EncryptedData = serde_json::from_str(&row.wrap_master).map_err(|e| AppError::Crypto(e.to_string()))?;
+        let plain = decrypt_password(&sealed, &crate::crypto::note_wrap_key(old_key, &id))?;
+        let next = encrypt_password(&plain, &crate::crypto::note_wrap_key(&new_key, &id))?;
+        legacy_note_updates.push((id, serde_json::to_string(&next).map_err(|e| AppError::Crypto(e.to_string()))?));
     }
     let extra_refs: Vec<(&str, &str)> = extra_meta.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    db.finish_password_change(&updates, &mfa_updates, now, &new_salt_b64, &new_verify_hash, &extra_refs)?;
+    db.finish_password_change(&updates, &mfa_updates, now, &new_salt_b64, &new_verify_hash, &extra_refs, &legacy_note_updates)?;
 
-    Ok(new_key)
+    Ok((new_key, prepared))
 }
 
 #[cfg(test)]
@@ -143,6 +165,53 @@ mod tests {
     use super::*;
     use crate::crypto::random_bytes;
     use crate::db::{cleanup, setup_test_db};
+
+    #[test]
+    fn setup_failure_rolls_back_initialized_and_all_password_metadata() {
+        let (db, path) = setup_test_db();
+        let fixture = rusqlite::Connection::open(&path).unwrap();
+        fixture.execute_batch("CREATE TRIGGER fail_salt BEFORE INSERT ON meta WHEN NEW.key='salt' BEGIN SELECT RAISE(ABORT, 'disk write failed'); END;").unwrap();
+        let mut key = None;
+        assert!(setup_master_password(&db, &mut key, "password").is_err());
+        assert!(!db.is_initialized().unwrap());
+        assert!(key.is_none());
+        assert!(db.get_meta("verify_hash").unwrap().is_none());
+        fixture.execute_batch("DROP TRIGGER fail_salt;").unwrap();
+        setup_master_password(&db, &mut key, "password").unwrap();
+        assert_eq!(kdf_iterations(&db, META_KDF).unwrap(), crate::crypto::PASSWORD_ITERATIONS);
+        drop(fixture); drop(db); cleanup(&path);
+    }
+
+    #[test]
+    fn legacy_master_key_is_readable_and_migrates_without_losing_sealed_data() {
+        let db = Database::new(":memory:").unwrap();
+        let salt = generate_salt();
+        let old = crate::crypto::derive_key("legacy-password", &salt);
+        db.set_meta_batch(&[("initialized", "true"), ("salt", &BASE64.encode(&salt)), ("verify_hash", &compute_verify_hash(&old))]).unwrap();
+        crate::services::mfa_service::add_manual(&db, &old, "fixture", None, "JBSWY33NAXE3PY3B").unwrap();
+        assert_eq!(verify_password(&db, "legacy-password").unwrap(), old);
+        let new = change_master_password(&db, &old, "legacy-password", "legacy-password").unwrap();
+        assert_ne!(new, old);
+        assert_eq!(kdf_iterations(&db, META_KDF).unwrap(), crate::crypto::PASSWORD_ITERATIONS);
+        assert_eq!(verify_password(&db, "legacy-password").unwrap(), new);
+        assert_eq!(crate::services::mfa_service::list_codes(&db, &new).unwrap().len(), 1);
+        assert!(crate::services::mfa_service::list_codes(&db, &old).is_err());
+    }
+
+    #[test]
+    fn failed_draft_rekey_cannot_commit_a_password_change() {
+        let db = Database::new(":memory:").unwrap();
+        let mut master = None;
+        setup_master_password(&db, &mut master, "old-password").unwrap();
+        let old = master.unwrap();
+        let salt = db.get_meta("salt").unwrap();
+        let result = change_master_password_prepared(&db, &old, "old-password", "new-password",
+            |_| Err::<(), _>(AppError::Crypto("corrupted draft".into())));
+        assert!(result.is_err());
+        assert_eq!(db.get_meta("salt").unwrap(), salt);
+        assert_eq!(verify_password(&db, "old-password").unwrap(), old);
+        assert!(verify_password(&db, "new-password").is_err());
+    }
 
     #[test]
     fn unlock_throttle_expires_and_success_resets_it() {

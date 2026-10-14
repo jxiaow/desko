@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { codexApi, type CodexAccount } from '../../services/api/codex'
 import { errText } from '../../services/api/backup'
 import { refreshAccounts } from '../../services/codexState'
 import { useToastStore } from '../../stores/toast'
+import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
 
 const props = defineProps<{ account: CodexAccount }>()
 const emit = defineEmits<{ close: [] }>()
 const toastStore = useToastStore()
-useEscapeClose(() => emit('close'))
+const confirmStore = useConfirmStore()
+useEscapeClose(close)
+let active = true
+onUnmounted(() => { active = false })
 
 const name = ref(props.account.account_name ?? '')
 const note = ref(props.account.account_note ?? '')
@@ -29,38 +33,67 @@ const tagList = computed(() =>
     .filter(Boolean)
 )
 
-async function save() {
-  if (busy.value) return
-  busy.value = true
-  let id = props.account.id
-  try {
-    const key = newKey.value.trim()
-    if (isApiKey.value && key) {
-      const updated = await codexApi.updateApiKey(id, key, baseUrl.value)
-      // 账号 ID 由密钥哈希得出，换密钥等于换一条档案，后续三条写操作必须跟到新 ID
-      id = updated.id
-    }
-    await codexApi.setName(id, name.value.trim())
-    await codexApi.setNote(id, note.value.trim())
-    await codexApi.setTags(id, tagList.value)
-    await refreshAccounts()
-    toastStore.showToast(key ? '已保存，账号凭据与档案已按新密钥重建' : '账号信息已保存')
-    emit('close')
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-  } finally {
-    busy.value = false
+function close() {
+  if (!busy.value) emit('close')
+}
+
+function save() {
+  if (!active || busy.value) return
+  const key = isApiKey.value ? newKey.value.trim() : ''
+  const url = baseUrl.value.trim()
+  if (isApiKey.value && !key && url !== (props.account.api_base_url ?? '').trim()) {
+    toastStore.showToast('修改接口地址时请重新填写 API Key', 'error')
+    return
   }
+  const savedName = name.value.trim()
+  const savedNote = note.value.trim()
+  const savedTags = [...tagList.value]
+
+  const apply = async () => {
+    if (!active || busy.value) return
+    busy.value = true
+    let id = props.account.id
+    try {
+      if (key) {
+        const updated = await codexApi.updateApiKey(id, key, url)
+        if (!active) return
+        // 换密钥会生成新 ID，后续档案写入必须跟到新 ID。
+        id = updated.id
+      }
+      await codexApi.setName(id, savedName)
+      if (!active) return
+      await codexApi.setNote(id, savedNote)
+      if (!active) return
+      await codexApi.setTags(id, savedTags)
+      if (!active) return
+      await refreshAccounts()
+      if (!active) return
+      toastStore.showToast(key ? '已保存，账号凭据与档案已按新密钥重建' : '账号信息已保存')
+      emit('close')
+    } catch (e) {
+      if (active) toastStore.showToast(errText(e), 'error')
+    } finally {
+      busy.value = false
+    }
+  }
+
+  if (key) {
+    confirmStore.showConfirm(
+      '更换 API Key',
+      `确定更换「${props.account.email}」的 API Key？这会重建账号档案；如果它是当前账号，还会改写官方凭据文件。请先退出正在使用该账号的 Codex 客户端。`,
+      () => void apply(),
+    )
+  } else void apply()
 }
 </script>
 
 <template>
-  <div class="dialog-overlay" @click.self="emit('close')">
+  <div class="dialog-overlay" @click.self="close">
     <div class="dialog edit-dialog" role="dialog" aria-modal="true" aria-label="编辑账号信息">
       <div class="dialog-header">
         <h3>编辑账号信息</h3>
         <span class="sub mono" :title="account.email">{{ account.email }}</span>
-        <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
+        <button class="dialog-close" type="button" title="关闭" :disabled="busy" @click="close">
           <AppIcon name="x" :size="16" />
         </button>
       </div>
@@ -96,7 +129,7 @@ async function save() {
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="btn-secondary" type="button" @click="emit('close')">取消</button>
+        <button class="btn-secondary" type="button" :disabled="busy" @click="close">取消</button>
         <button class="btn-primary" type="button" :disabled="busy" @click="save">保存</button>
       </div>
     </div>
@@ -104,8 +137,8 @@ async function save() {
 </template>
 
 <style scoped>
-.edit-dialog { width: 460px; --font-mono: Consolas, 'Cascadia Mono', monospace; }
-.mono { font-family: var(--font-mono); }
+.edit-dialog { width: 460px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
 
 .note-box { line-height: 1.7; resize: vertical }
 .tag-preview { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0 }
