@@ -7,7 +7,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Extension, mergeAttributes, Node } from '@tiptap/core'
-import { Plugin } from '@tiptap/pm/state'
+import { Plugin, TextSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { createLowlight } from 'lowlight'
@@ -234,6 +234,17 @@ const editor = useEditor({
   // 胶囊输入不抢焦点：它默认收成一行，抢了焦点就等于永远是展开的，折叠态白做。
   // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
   autofocus: props.variant === 'composer' ? false : (isBlankContent(props.initialContent) ? 'start' : 'end'),
+  editorProps: {
+    handleTextInput: (view, from, to, text, defaultTransaction) => {
+      if (view.composing || !/^[，。！？；：、]$/.test(text)) return false
+      if (from !== view.state.selection.from || to !== view.state.selection.to) return false
+      const tr = defaultTransaction()
+      // 中文输入法直接提交标点时可能保留旧 DOM 选区，默认事务也会把光标留在标点前。
+      if (!tr.selection.empty || tr.selection.head !== from) return false
+      view.dispatch(tr.setSelection(TextSelection.create(tr.doc, from + text.length)).scrollIntoView())
+      return true
+    },
+  },
   extensions: [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },

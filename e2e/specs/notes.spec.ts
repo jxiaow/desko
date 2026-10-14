@@ -60,16 +60,42 @@ test.describe('Notes 小记', () => {
       }
       const state = () => pm.evaluate(el => {
         const editor = (el as HTMLElement & { editor: Editor }).editor
-        return { text: editor.state.doc.textContent, head: editor.state.selection.head }
+        const selection = window.getSelection()!
+        return {
+          text: editor.state.doc.textContent,
+          head: editor.state.selection.head,
+          domHead: editor.view.posAtDOM(selection.focusNode!, selection.focusOffset),
+        }
       })
       const text = '甲  乙，。；：“”！（）'
       await compose('，。；：“”！（）')
-      await expect.poll(state).toEqual({ text, head: text.length + 1 })
+      await expect.poll(state).toEqual({ text, head: text.length + 1, domHead: text.length + 1 })
       await pm.evaluate(el => (el as HTMLElement & { editor: Editor }).editor.commands.setTextSelection(2))
       await compose('，')
       await page.keyboard.insertText('续')
-      await expect.poll(state).toEqual({ text: '甲，续  乙，。；：“”！（）', head: 4 })
+      await expect.poll(state).toEqual({ text: '甲，续  乙，。；：“”！（）', head: 4, domHead: 4 })
       await cdp.detach()
+
+      for (const from of [3, 2]) {
+        await pm.fill('甲乙')
+        await pm.evaluate((el, from) => {
+          const editor = (el as HTMLElement & { editor: Editor }).editor
+          editor.commands.setTextSelection(from)
+          const selection = window.getSelection()!
+          const node = selection.focusNode as Text
+          const offset = selection.focusOffset
+          // 部分中文输入法直接提交标点时，DOM 已插入逗号，选区仍在提交前的位置。
+          node.insertData(offset, '，')
+          selection.collapse(node, offset)
+          el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '，' }))
+        }, from)
+        const expected = from === 3 ? '甲乙，' : '甲，乙'
+        await expect.poll(state).toEqual({ text: expected, head: from + 1, domHead: from + 1 })
+        await page.keyboard.insertText('续')
+        await expect.poll(state).toEqual({
+          text: from === 3 ? '甲乙，续' : '甲，续乙', head: from + 2, domHead: from + 2,
+        })
+      }
     })
   }
 
