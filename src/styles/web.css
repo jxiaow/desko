@@ -1,11 +1,5 @@
-/* 浏览器阅读列居中；桌面 WebView 继续使用原有的窗口布局。 */
+/* 浏览器专用适配；阅读列居中沿用桌面共用的页面骨架。 */
 .app-root.web-runtime .main-area { min-width: 0; }
-.app-root.web-runtime .content-inner {
-  padding-inline: max(var(--page-gutter), calc((100% - var(--content-max)) / 2));
-}
-.app-root.web-runtime .stream-inner {
-  padding-inline: max(var(--page-gutter), calc((100% - var(--stream-max)) / 2));
-}
 
 @media (max-width: 640px), (hover: none) and (max-width: 1024px) {
   .app-root.web-runtime {

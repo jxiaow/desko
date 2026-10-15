@@ -260,6 +260,7 @@ for (const width of [320, 390, 768, 1440, 1920]) {
       await page.getByRole('button', { name: '展开侧栏', exact: true }).click()
       await page.locator('.rail .rail-item', { hasText: '全部' }).click()
     } else if (width >= 1440) {
+      await expect(page.locator('.memo').first()).toBeVisible()
       const centered = await page.locator('.stream').evaluate(stream => {
         const reading = stream.querySelector('.memo')!.getBoundingClientRect()
         const box = stream.getBoundingClientRect()

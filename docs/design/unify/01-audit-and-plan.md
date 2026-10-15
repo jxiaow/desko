@@ -116,3 +116,7 @@ Playwright e2e 97 全绿；截图见 `design/unify-shots/light-cool/` 与 `desig
 图标轨档回归：行 9..46，仍在 56 轨中线上。
 验收：`sticky-band-check` 五页全绿；navigation + entries e2e 18 passed / 1 failed——那条红是 `--accent-soft`
 #e8eef4→#e7eef8 的令牌改动没同步断言，与本轮无关。
+
+## 实施记录 · 最大化窗口内容居中（2026-10-15）
+
+按桌面端最大化后的反馈，列表页 `.content-inner` 与小记 `.stream-inner` 改为左右等分留白，在各自可用内容区域内居中，工具栏和正文保持同列。继续使用原有阅读宽度上限与 24px 最小内距，小记筛选栏打开时按剩余书写区域居中。桌面与 Web 共用此规则，移除 Web 单独的居中覆盖。

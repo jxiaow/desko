@@ -72,7 +72,7 @@
      第三态不占宽，恢复入口在标题栏面包屑左侧 */
   --sidebar-w: 208px;
   --sidebar-rail-w: 56px;
-  /* 内容列与侧栏之间那条 gutter：标题栏页名、.page-bar、卡片左缘共用这一档 */
+  /* 内容区的最小水平留白；工具栏与卡片共用同一阅读列 */
   --page-gutter: 24px;
   /* 经典滚动条占位宽度，::-webkit-scrollbar 与侧栏的槽补偿都取它 */
   --scrollbar-track: 9px;
@@ -80,9 +80,9 @@
   --fs-max: 1200px;
   /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
   --stream-max: 1200px;
-  /* 四个列表页的阅读列上限：按视口给，侧栏展开/折叠不跟着抖。
+  /* 列表页的阅读列上限：按视口给，侧栏展开/折叠不跟着抖。
      1235 常态窗与 1440 都还吃在 900 下限上，只有最大化（≥1920）才涨到 1120。
-     上限之外的余量整份落在右侧，不再两侧均摊（见 .content-inner） */
+     上限之外的余量由左右两侧均分，阅读列在可用内容区内居中 */
   --content-max: clamp(900px, calc(100vw - 800px), 1120px);
   /* 小记卡片正文高度上限：短的小记按实际内容，长的由 JS 收在这里之上最近的整行边界 */
   --memo-max-h: 144px;
@@ -2185,10 +2185,8 @@ body {
   overflow-y: auto;
   scrollbar-gutter: stable;
   padding: 0 var(--page-gutter) 22px;
-  /* gutter 轮：阅读列从侧栏边起算，--content-max 之外的余量整份落到右侧。
-     原先两侧均摊（max(space-5, 50%−content-max/2)），在 1187 窗上给侧栏边上摊出
-     39.5px、1440 窗 165px 的空带，换页时还会和小记页的 20px 打架 */
-  padding-inline: var(--page-gutter) max(var(--page-gutter), calc(100% - var(--page-gutter) - var(--content-max)));
+  /* 宽窗口左右等分留白，窄窗口保留最小内距；工具栏与内容一起居中。 */
+  padding-inline: max(var(--page-gutter), calc((100% - var(--content-max)) / 2));
 }
 .content-inner:has(.batch-dock) { padding-bottom: var(--dock-clearance); }
 

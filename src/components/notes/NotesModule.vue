@@ -592,12 +592,11 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
 }
 /* 一行一张：正常窗口铺满，宽窗把正文收在 --stream-max 内。
    顶部不留内边距：首行是吸顶的 .page-bar，呼吸在它自己栏内出。
-   左右内距吃 .content-inner 同一条 gutter 契约（贴侧栏起算，余量落右侧），
-   否则换页时侧栏边上的空带会跳宽 */
+   工具栏、书写框与小记共用居中阅读列，窄窗口保留最小内距。 */
 .stream-inner {
   width: 100%;
   padding: 0 var(--page-gutter) var(--dock-clearance);
-  padding-inline-end: max(var(--page-gutter), calc(100% - var(--page-gutter) - var(--stream-max)));
+  padding-inline: max(var(--page-gutter), calc((100% - var(--stream-max)) / 2));
 }
 /* 书写框与吸顶栏拉开一档间距（列表页首行同款） */
 .stream-inner .composer { margin-top: var(--space-2); }
