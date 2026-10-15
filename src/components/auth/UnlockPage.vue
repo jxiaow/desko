@@ -82,7 +82,7 @@ const doUnlock = async () => {
     await unlock(unlockPwd.value, onUnlockSuccess)
   } catch (e: any) {
     const message = String(e?.message ?? e)
-    unlockErr.value = message === '密码错误' ? `${webRuntime ? '访问密码' : '主密码'}错误，请重试` : message
+    unlockErr.value = message === '密码错误' ? '主密码错误，请重试' : message
     shake()
   } finally {
     unlocking.value = false
@@ -122,7 +122,7 @@ onUnmounted(() => {
         <section class="lock-stack" ref="stackEl">
         <div class="lock-tile"><BrandLogo /></div>
         <h1 class="lock-title">{{ webRuntime ? 'Desko 浏览器访问' : 'Desko' }}</h1>
-        <p v-if="webRuntime" class="web-access-hint">使用独立访问密码登录，电脑上的 Desko 锁定后仍可使用。</p>
+        <p v-if="webRuntime" class="web-access-hint">使用当前档案的桌面主密码登录，电脑上的 Desko 锁定后仍可使用。</p>
 
         <form class="lock-form" :aria-busy="unlocking" @submit.prevent="doUnlock">
           <div class="unlock-field">
@@ -131,8 +131,8 @@ onUnmounted(() => {
               class="unlock-input"
               :type="revealed ? 'text' : 'password'"
               v-model="unlockPwd"
-              :placeholder="webRuntime ? '输入访问密码' : '输入主密码解锁'"
-              :aria-label="webRuntime ? '访问密码' : '主密码'"
+              :placeholder="webRuntime ? '输入桌面主密码' : '输入主密码解锁'"
+              aria-label="主密码"
               autocomplete="current-password"
               @input="unlockErr = ''"
               autofocus

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { isWebRuntime } from '../../services/runtime'
 import { tunnelApi } from '../../services/api/tunnel'
 import type { TunnelServiceRow, TunnelSplitReport } from '../../services/api/tunnel'
 import { errText } from '../../services/api/backup'
@@ -124,6 +125,7 @@ onMounted(() => {
   // 浏览器里点完授权回 desko 的那一刻必须当场补一次：窗口被盖住期间 WebView2 把
   // 3 秒计时器节流到分钟级，只靠轮询就成了「授权完了界面一动不动」
   try {
+    if (isWebRuntime()) return
     void getCurrentWindow().onFocusChanged(({ payload: hasFocus }) => {
       if (hasFocus) refreshOnFocus()
     }).then((unlisten) => {

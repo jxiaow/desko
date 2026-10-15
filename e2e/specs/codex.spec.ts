@@ -614,9 +614,9 @@ test.describe('Codex 会话档', () => {
 
   test('合计量上屏：hero 一笔、组头一位，展开行给六个口径', async ({ page }) => {
     await gotoSessions(page)
-    await expect(page.locator('.hero-num')).toHaveText('65.1K')
-    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 4 条会话 · 净输入 8.8K · 输出 5K · 缓存命中 51.3K')
-    await expect(page.locator('.grp-head').first().locator('.grp-tok > span')).toHaveText(['累计 16.9K Token', '净输入 3.8K', '输出 1.8K'])
+    await expect(page.locator('.hero-num')).toHaveText('6.51万')
+    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 4 条会话 · 净输入 8,800 · 输出 5,020 · 缓存命中 5.13万')
+    await expect(page.locator('.grp-head').first().locator('.grp-tok > span')).toHaveText(['累计 1.69万 Token', '净输入 3,800', '输出 1,820'])
 
     await expandGroup(page, 'demo-notes')
     const row = page.locator('.sess-row').first()
@@ -625,7 +625,7 @@ test.describe('Codex 会话档', () => {
     await row.click()
     const facts = page.locator('.sess-card .sess-facts')
     await expect(facts.locator('dt')).toHaveText(['净输入', '缓存命中', '缓存写入', '输出', '其中推理', '官方累计'])
-    await expect(facts.locator('dd')).toHaveText(['1,300', '11,000', '0', '1,400', '400', '13,700'])
+    await expect(facts.locator('dd')).toHaveText(['1,300', '1.1万', '0', '1,400', '400', '1.37万'])
   })
 
   test('标题搜索走后端：只填 trim 后的 titleQuery，contentQuery 恒 null', async ({ page }) => {
@@ -699,8 +699,8 @@ test.describe('Codex 会话回收站', () => {
     await bootUnlocked(page, SEED_SESSIONS)
     await gotoTab(page, '会话', '.grp-head')
     await expandGroup(page, 'demo-notes')
-    await expect(page.locator('.hero-num')).toHaveText('65.1K')
-    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 4 条会话 · 净输入 8.8K · 输出 5K · 缓存命中 51.3K')
+    await expect(page.locator('.hero-num')).toHaveText('6.51万')
+    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 4 条会话 · 净输入 8,800 · 输出 5,020 · 缓存命中 5.13万')
 
     const row = page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')
     await row.click()
@@ -720,8 +720,8 @@ test.describe('Codex 会话回收站', () => {
     expect(await argOf(page, MOVE_CMD, 'sessionIds')).toEqual(['sess-a1b2c3d4e5'])
     await expect(page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')).toHaveCount(0)
     // 合计量不能拿着已删的那条：65.1K 掉到 51.4K，缓存命中同步少 11K
-    await expect(page.locator('.hero-num')).toHaveText('51.4K')
-    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 3 条会话 · 净输入 7.5K · 输出 3.6K · 缓存命中 40.3K')
+    await expect(page.locator('.hero-num')).toHaveText('5.14万')
+    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 3 条会话 · 净输入 7,500 · 输出 3,620 · 缓存命中 4.03万')
     await expect(page.locator('.titlebar-count')).toHaveText('3 条')
 
     await page.locator('.cx-tab', { hasText: '回收站' }).click()
@@ -1167,38 +1167,39 @@ test.describe('Codex 用量图', () => {
 
   test('总量行与柱子同账：净输入拆开缓存、模型表按量降序、扫描耗时上屏', async ({ page }) => {
     await gotoUsage(page)
-    // 会话档那一页报的是 65.1K，图上必须落在同一个数
-    await expect(page.locator('.usg-num')).toHaveText('65,120')
+    // 会话与用量使用相同的单位，完整计数仍可从提示核对。
+    await expect(page.locator('.usg-num')).toHaveText('6.51万')
     await expect(page.locator('[data-metric="fresh"] dd')).toHaveText('8,800')
-    await expect(page.locator('[data-metric="cached"] dd')).toHaveText('51,300')
+    await expect(page.locator('[data-metric="cached"] dd')).toHaveText('5.13万')
     await expect(page.locator('[data-metric="output"] dd')).toHaveText('5,020')
     await expect(page.locator('.usg-facts')).toContainText('输出中含推理 1,300')
     await expect(page.locator('.usg-count')).toHaveText('5 轮 · 4 条会话')
     await expect(page.locator('.titlebar-count')).toHaveText('5 轮')
 
     // 四条会话落在四个本地日上，最满那天按输入 + 输出 = 48.2K 标定。
-    await expect(page.locator('.usg-col')).toHaveCount(4)
-    await expect(page.locator('.usg-bars')).toHaveAttribute('data-days', '4')
-    await expect(page.locator('.usg-bars')).toHaveAttribute('data-max', '48200')
+    await expect(page.locator('.usg-col')).toHaveCount(30)
+    await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(4)
+    await expect(page.locator('.daily-plot')).toHaveAttribute('data-days', '30')
+    await expect(page.locator('.daily-plot')).toHaveAttribute('data-max', '54000')
     const seg = async (index: number) =>
       page
-        .locator('.usg-col')
+        .locator('.usg-col[data-recorded="true"]')
         .nth(index)
         .evaluate((el) => ({
           fresh: (el.querySelector('.usg-fresh') as HTMLElement).style.height,
           cached: (el.querySelector('.usg-cached') as HTMLElement).style.height,
         }))
-    expect(parseFloat((await seg(1)).fresh)).toBeCloseTo(5000 / 48200 * 100, 4)
-    expect(parseFloat((await seg(1)).cached)).toBeCloseTo(40000 / 48200 * 100, 4)
-    expect(parseFloat((await seg(0)).fresh)).toBeCloseTo(1700 / 48200 * 100, 4)
-    expect(parseFloat((await seg(0)).cached)).toBeCloseTo(300 / 48200 * 100, 4)
+    expect(parseFloat((await seg(1)).fresh)).toBeCloseTo(5000 / 54000 * 100, 4)
+    expect(parseFloat((await seg(1)).cached)).toBeCloseTo(40000 / 54000 * 100, 4)
+    expect(parseFloat((await seg(0)).fresh)).toBeCloseTo(1700 / 54000 * 100, 4)
+    expect(parseFloat((await seg(0)).cached)).toBeCloseTo(300 / 54000 * 100, 4)
     await expect(page.locator('.usg-day-row')).toHaveCount(4)
-    await expect(page.locator('.usg-day-total').first()).toHaveText('13,700')
+    await expect(page.locator('.usg-day-total').first()).toHaveText('1.37万')
     await expect(page.locator('.usg-scan')).toHaveText('扫了 4 个文件 · 1.7 s')
 
     await expect(page.locator('.usg-model-row')).toHaveCount(2)
     await expect(page.locator('.usg-model-row').first().locator('.usg-model-name')).toHaveText('gpt-5.1-codex')
-    await expect(page.locator('.usg-model-row').first().locator('.usg-model-num')).toHaveText('61,900')
+    await expect(page.locator('.usg-model-row').first().locator('.usg-model-num')).toHaveText('6.19万')
     await expect(page.locator('.usg-model-row').first().locator('.usg-model-pct')).toHaveText('95.1%')
     await expect(page.locator('.usg-model-row').nth(1).locator('.usg-model-pct')).toHaveText('4.9%')
     const fill = await page.locator('.usg-model-row').first().locator('.usg-fill').evaluate((el) => (el as HTMLElement).style.width)
@@ -1211,15 +1212,15 @@ test.describe('Codex 用量图', () => {
     expect(Math.abs(await argOf(page, USAGE_CMD, 'toTimestamp') - Math.floor(Date.now() / 1000))).toBeLessThanOrEqual(1)
 
     await page.locator('.cx-tab', { hasText: '近 7 天' }).click()
-    await expect(page.locator('.usg-num')).toHaveText('62,820')
+    await expect(page.locator('.usg-num')).toHaveText('6.28万')
     expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(localMidnightSec() - 6 * 86_400)
-    await expect(page.locator('.usg-col')).toHaveCount(3)
+    await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(3)
     // 文件还在那儿：筛掉的是窗口，不是扫过的目录
     await expect(page.locator('.usg-scan')).toHaveText('扫了 4 个文件 · 1.7 s')
 
     await page.locator('.cx-tab', { hasText: '全部' }).click()
     expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(null)
-    await expect(page.locator('.usg-num')).toHaveText('65,120')
+    await expect(page.locator('.usg-num')).toHaveText('6.51万')
 
     // 同档再点一次：账没变就不该重扫
     const before = await e2e.count(page, USAGE_CMD)
@@ -1254,12 +1255,12 @@ test.describe('Codex 用量图', () => {
 
     await page.locator('.cx-tab', { hasText: '全部' }).click()
     await expect(page.locator('.usg-num')).toHaveText('5,500')
-    await expect(page.locator('.usg-col')).toHaveCount(1)
+    await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(1)
   })
 
   test('移到回收站后回用量档：那一天少一笔，页头轮数跟着减', async ({ page }) => {
     await gotoUsage(page)
-    await expect(page.locator('.usg-num')).toHaveText('65,120')
+    await expect(page.locator('.usg-num')).toHaveText('6.51万')
 
     await page.locator('.cx-tab', { hasText: '会话' }).click()
     await expandGroup(page, 'demo-notes')
@@ -1269,8 +1270,8 @@ test.describe('Codex 用量图', () => {
     await expectToast(page, '已将 1 条会话移到回收站')
 
     await page.locator('.cx-tab', { hasText: '用量' }).click()
-    await expect(page.locator('.usg-num')).toHaveText('51,420')
-    await expect(page.locator('.usg-col')).toHaveCount(3)
+    await expect(page.locator('.usg-num')).toHaveText('5.14万')
+    await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(3)
     await expect(page.locator('.titlebar-count')).toHaveText('4 轮')
     // 图是官方目录的镜子：只有这一次移动值得重扫，来回切档不再打第二次
     expect(await e2e.count(page, USAGE_CMD)).toBe(3)

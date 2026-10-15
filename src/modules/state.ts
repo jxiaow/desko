@@ -3,7 +3,8 @@ import { computed, reactive } from 'vue'
 import { settingsApi } from '../services/api/settings'
 import { MODULES, moduleById, type ModuleDef, type ModuleId } from './registry'
 
-const WEB_MODULES = new Set<ModuleId>(['notes', 'entries', 'files', 'mfa'])
+const WEB_MODULES = new Set<ModuleId>(['notes', 'entries', 'files', 'mfa', 'codex', 'fileshare', 'tunnel'])
+export const WEB_EXTRA_MODULES = ['codex', 'fileshare', 'tunnel'] as const
 const availableInRuntime = (id: ModuleId) => !isWebRuntime() || WEB_MODULES.has(id)
 
 /** 各模块总开关的当前值。默认按注册表缺省播种，首帧即是终态候选，不靠异步填。 */
@@ -74,6 +75,19 @@ export async function setModuleEnabled(id: ModuleId, on: boolean): Promise<void>
 
 /** 解锁后只给启用的模块补它那份数据；关掉的模块连一次 invoke 都不该发 */
 export async function bootEnabledModules(): Promise<void> {
+  if (isWebRuntime()) {
+    await Promise.all(WEB_EXTRA_MODULES.map(async id => {
+      try { moduleFlags[id] = await settingsApi.getSetting(moduleById(id).settingKey) === 'true' }
+      catch { moduleFlags[id] = false }
+    }))
+    const { default: router, syncModuleRoutes } = await import('../router')
+    syncModuleRoutes()
+    if (WEB_EXTRA_MODULES.some(id => router.currentRoute.value.path === '/' + id && !moduleFlags[id])) {
+      await router.replace(landingPath() ?? '/start')
+    }
+    const { startModuleSync } = await import('./runtime')
+    await startModuleSync()
+  }
   await Promise.all(enabledModules.value.map((m) => m.boot?.()))
 }
 

@@ -20,10 +20,34 @@ import {
 import { useConfirmStore } from '../../stores/confirm'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
+import { formatTokenCount as compact } from '../../utils/codexUsage'
+import { isWebRuntime } from '../../services/runtime'
+import { invoke } from '../../services/transport'
+import { useEscapeClose } from '../../composables/useEscapeClose'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
 let active = true
+const webRuntime = isWebRuntime()
+const sessionFile = ref<{ title: string; content: string } | null>(null)
+useEscapeClose(() => { sessionFile.value = null }, () => sessionFile.value !== null)
+async function readSessionFile(session: CodexSessionRecord) {
+  await runOnSession(session.sessionId, async () => {
+    try {
+      const content = await invoke<string>('web_codex_read_session', { sessionId: session.sessionId })
+      if (active) sessionFile.value = { title: titleText(session), content }
+    } catch (e) { if (active) toastStore.showToast(errText(e), 'error') }
+  })
+}
+function downloadSessionFile() {
+  if (!sessionFile.value) return
+  const url = URL.createObjectURL(new Blob([sessionFile.value.content], { type: 'application/x-ndjson' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'codex-session.jsonl'
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
 
 /** 官方目录一次全扫是重 I/O：进这一档才扫，扫过就留在内存，切回不重取 */
 onMounted(() => {
@@ -135,12 +159,6 @@ const idAsTitle = (s: CodexSessionRecord) => {
 const titleText = (s: CodexSessionRecord) => (idAsTitle(s) ? s.sessionId : s.title.trim())
 const titleTip = (s: CodexSessionRecord) => (idAsTitle(s) ? s.sessionId : s.title.trim())
 
-function compact(n: number): string {
-  const v = n >= 1_000_000 ? n / 1_000_000 : n >= 1_000 ? n / 1_000 : null
-  if (v === null) return String(n)
-  return `${v >= 100 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, '')}${n >= 1_000_000 ? 'M' : 'K'}`
-}
-
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** 上次使用只到分：秒级抖动在这一档没有信息量 */
@@ -177,17 +195,17 @@ function tokenTip(id: string): string {
   return `净输入 ${num(netInput(t))} · 缓存命中 ${num(t.cachedInputTokens)} · 输出 ${num(t.outputTokens)}（含推理 ${num(t.reasoningOutputTokens)}）· 官方累计 ${num(t.totalTokens)}`
 }
 
-/** 详情段逐位铺开：官方口径与账单口径并排，别再让人拿 1.8M 去对账单 */
-function tokenFacts(id: string): Array<[string, string]> {
+/** 明细同样换算单位，完整计数放在数字提示里用于核对。 */
+function tokenFacts(id: string): Array<[string, number]> {
   const t = statsOf(id)
   if (!t) return []
   return [
-    ['净输入', num(netInput(t))],
-    ['缓存命中', num(t.cachedInputTokens)],
-    ['缓存写入', num(t.cacheWriteInputTokens)],
-    ['输出', num(t.outputTokens)],
-    ['其中推理', num(t.reasoningOutputTokens)],
-    ['官方累计', num(t.totalTokens)],
+    ['净输入', netInput(t)],
+    ['缓存命中', t.cachedInputTokens],
+    ['缓存写入', t.cacheWriteInputTokens],
+    ['输出', t.outputTokens],
+    ['其中推理', t.reasoningOutputTokens],
+    ['官方累计', t.totalTokens],
   ]
 }
 
@@ -295,7 +313,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
       <div class="rcard sess-hero" :title="sumReady ? sumText : undefined">
         <div class="hero-line">
           <template v-if="sumReady">
-            <span class="hero-num">{{ compact(allSum.total) }}</span>
+            <span class="hero-num" :title="`${num(allSum.total)} Token`">{{ compact(allSum.total) }}</span>
             <span class="hero-unit">累计 Token</span>
           </template>
           <span v-else class="hero-pending">Token 统计中 · 已获取 {{ allSum.known }} / {{ sessions.length }} 条</span>
@@ -357,7 +375,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
               <dl v-if="tokenFacts(s.sessionId).length" class="sess-facts" aria-label="会话用量明细">
                 <div v-for="[k, v] in tokenFacts(s.sessionId)" :key="k">
                   <dt>{{ k }}</dt>
-                  <dd>{{ v }}</dd>
+                  <dd :title="`${num(v)} Token`">{{ compact(v) }}</dd>
                 </div>
               </dl>
               <p v-else class="sess-no-usage">这条会话没有 Token 记录</p>
@@ -366,6 +384,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
                   class="action-btn"
                   type="button"
                   :disabled="busyId === s.sessionId"
+                  v-if="!webRuntime"
                   @click="openVia(codexApi.openSessionLocation, s.sessionId, '打开位置失败')"
                 >
                   <AppIcon name="folder" :size="13" />打开位置
@@ -374,9 +393,9 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
                   class="action-btn"
                   type="button"
                   :disabled="busyId === s.sessionId"
-                  @click="openVia(codexApi.openSessionRollout, s.sessionId, '打开会话文件失败')"
+                  @click="webRuntime ? readSessionFile(s) : openVia(codexApi.openSessionRollout, s.sessionId, '打开会话文件失败')"
                 >
-                  <AppIcon name="file" :size="13" />打开会话文件
+                  <AppIcon name="file" :size="13" />{{ webRuntime ? '查看会话文件' : '打开会话文件' }}
                 </button>
                 <button
                   class="action-btn danger trash-btn"
@@ -397,10 +416,20 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
       <AppIcon name="info" :size="13" />
       这一档列的是官方 Codex 留在本机的会话；移到回收站会先留底进 desko，再从官方目录移除。
     </p>
+    <div v-if="sessionFile" class="dialog-overlay" @click.self="sessionFile = null">
+      <section class="dialog session-file-dialog" role="dialog" aria-modal="true" aria-label="会话文件">
+        <header class="dialog-header"><h3>{{ sessionFile.title }}</h3><button class="dialog-close" type="button" aria-label="关闭会话文件" @click="sessionFile = null"><AppIcon name="x" :size="16" /></button></header>
+        <div class="dialog-body"><pre>{{ sessionFile.content }}</pre></div>
+        <footer class="dialog-footer"><button class="btn-secondary" type="button" @click="downloadSessionFile">下载 JSONL</button><button class="btn-primary" type="button" @click="sessionFile = null">关闭</button></footer>
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.session-file-dialog { width: 800px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+.session-file-dialog .dialog-body { overflow: auto; }
+.session-file-dialog pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-xs); }
 .page-note { font-size: var(--text-xs); }
 /* 页内第二档的分组卡：一档一枚项目卡，展开才往纸面下挂会话行（细线分行，不做卡中卡） */
 .sess-sk {

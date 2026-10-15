@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { listen } from '../../services/events'
+import { isWebRuntime } from '../../services/runtime'
+import { writeClipboardText } from '../../utils/clipboard'
+import { openExternal } from '../../utils/openExternal'
 import { codexApi, type StoragePaths } from '../../services/api/codex'
 import { errText } from '../../services/api/backup'
 import { refreshAccounts } from '../../services/codexState'
@@ -15,7 +19,8 @@ const toastStore = useToastStore()
 useEscapeClose(() => close())
 
 type Mode = 'oauth' | 'device' | 'apikey' | 'import'
-const mode = ref<Mode>('oauth')
+const mode = ref<Mode>(isWebRuntime() ? 'device' : 'oauth')
+const importInput = ref<HTMLInputElement | null>(null)
 
 const loginId = ref('')
 const authUrl = ref('')
@@ -60,7 +65,7 @@ async function importFromToken() {
 
 async function copy(text: string, label: string) {
   try {
-    await navigator.clipboard.writeText(text)
+    await writeClipboardText(text)
     toastStore.showToast(`${label}已复制`)
   } catch {
     toastStore.showToast('复制失败', 'error')
@@ -69,8 +74,7 @@ async function copy(text: string, label: string) {
 
 async function openInBrowser(url: string) {
   try {
-    const { open } = await import('@tauri-apps/plugin-shell')
-    await open(url)
+    await openExternal(url)
   } catch {
     toastStore.showToast('无法打开浏览器', 'error')
   }
@@ -205,6 +209,7 @@ async function importLocal() {
 }
 
 async function importFromFile() {
+  if (isWebRuntime()) { importInput.value?.click(); return }
   importing.value = true
   try {
     const { open } = await import('@tauri-apps/plugin-dialog')
@@ -220,6 +225,28 @@ async function importFromFile() {
   } finally {
     importing.value = false
   }
+}
+
+async function importBrowserFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (!files.length || importing.value) return
+  importing.value = true
+  let imported = 0
+  const failures: string[] = []
+  try {
+    for (const file of files) {
+      if (!active) break
+      try {
+        if (file.size > 16 * 1024 * 1024) throw new Error('文件超过 16 MiB')
+        imported += (await codexApi.importJson(await file.text())).length
+      } catch (e) { failures.push(`${file.name}：${errText(e)}`) }
+    }
+    if (!active) return
+    await refreshAccounts()
+    if (active) toastStore.showToast(`已导入 ${imported} 条账号${failures.length ? `，${failures.length} 个文件失败：${failures[0]}` : ''}`, failures.length ? 'error' : 'success')
+  } finally { importing.value = false }
 }
 
 /** 粘贴导出的 JSON（单条对象或数组）走的是和选文件同一条落库路径，免去先存盘 */
@@ -274,6 +301,7 @@ onMounted(() => {
 
 <template>
   <div class="dialog-overlay" @click.self="close">
+    <input ref="importInput" type="file" accept=".json,application/json" multiple hidden @change="importBrowserFiles" />
     <div class="dialog auth-dialog" role="dialog" aria-modal="true" :aria-label="reauthAccountId ? '重新登录 Codex 账号' : '添加 Codex 账号'">
       <div class="dialog-header">
         <h3>{{ reauthAccountId ? '重新登录 Codex 账号' : '添加 Codex 账号' }}</h3>

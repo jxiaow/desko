@@ -7,6 +7,7 @@ import { releaseHover, suppressHover } from '../../utils/hoverGuard'
 import AppIcon from '../shared/AppIcon.vue'
 import BackupBadge from './BackupBadge.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { webAccessApi, type WebAccessStatus } from '../../services/api/webAccess'
 
 defineProps<{
   isLocked?: boolean
@@ -23,6 +24,25 @@ const emit = defineEmits<{
 const webRuntime = isWebRuntime()
 const appWindow = webRuntime ? null : getCurrentWindow()
 const isMaximized = ref(false)
+const webStatus = ref<WebAccessStatus | null>(null)
+const webStatusTitle = computed(() => `Web 运行中 · ${webStatus.value?.lan ? '本机与局域网' : '仅本机'} · ${webStatus.value?.port}`)
+let statusGeneration = 0
+let active = true
+let statusPoll: ReturnType<typeof setInterval> | undefined
+async function refreshWebStatus() {
+  const generation = ++statusGeneration
+  try {
+    const status = await webAccessApi.status()
+    if (active && generation === statusGeneration) webStatus.value = status
+  } catch { /* 下一次轮询补读。 */ }
+}
+function onWebStatus(event: Event) {
+  statusGeneration++
+  webStatus.value = (event as CustomEvent<WebAccessStatus>).detail
+}
+function openWebSettings() {
+  window.dispatchEvent(new CustomEvent('desko:open-settings-tab', { detail: 'web' }))
+}
 const route = useRoute()
 const pageHead = usePageHeadStore()
 const crumb = computed(() => pageHead.label || (route.meta.title as string) || 'Desko')
@@ -68,6 +88,9 @@ let unlistenFocus: (() => void) | null = null
 
 onMounted(async () => {
   if (!appWindow) return
+  window.addEventListener('desko:web-access-status', onWebStatus)
+  void refreshWebStatus()
+  statusPoll = setInterval(() => void refreshWebStatus(), 3000)
   await updateMaximizedState()
   unlisten = await appWindow.onResized(async () => {
     await updateMaximizedState()
@@ -82,6 +105,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  active = false
+  clearInterval(statusPoll)
+  window.removeEventListener('desko:web-access-status', onWebStatus)
   if (unlisten) unlisten()
   if (unlistenFocus) unlistenFocus()
 })
@@ -107,6 +133,9 @@ onUnmounted(() => {
     </div>
 
     <div class="titlebar-buttons">
+      <button v-if="!webRuntime && webStatus?.running" class="web-running" :title="webStatusTitle" :aria-label="webStatusTitle" :disabled="isLocked" @click="openWebSettings">
+        <span class="web-running-dot" aria-hidden="true"></span>Web
+      </button>
       <template v-if="!isLocked">
         <BackupBadge v-if="!webRuntime" />
         <button  class="titlebar-btn tb-util" @click="emit('openSettings')" title="设置">
@@ -142,6 +171,9 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.web-running { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; margin-right: 4px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--success); background: var(--success-soft); font: inherit; font-size: 11px; cursor: pointer; }
+.web-running:disabled { cursor: default; }
+.web-running-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .titlebar {
   height: 42px;
   /* 停靠态：透明并入画布，但留一条发丝下界把顶栏与页面身份行分开 */

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CodexSessionUsageReport } from '../../services/api/codex'
-import { usageHours, usageWindowFrom, type CodexUsageHour } from '../../utils/codexUsage'
+import { formatTokenCount as compact, usageHours, usageWindowFrom, type CodexUsageHour } from '../../utils/codexUsage'
 
 const props = defineProps<{ report: CodexSessionUsageReport; updatedAt: number }>()
 const activeKey = ref('')
@@ -14,7 +14,6 @@ const peak = computed(() => observed.value.reduce<CodexUsageHour | null>((best, 
 const selected = computed(() => observed.value.find(hour => hour.key === activeKey.value) ?? peak.value)
 const num = (value: number) => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 const clock = (timestamp: number) => new Date(timestamp * 1000).toTimeString().slice(0, 5)
-const compact = (value: number) => value >= 1_000_000 ? `${Number((value / 1_000_000).toFixed(1))}M` : value >= 1000 ? `${Number((value / 1000).toFixed(1))}K` : String(value)
 const maximum = computed(() => {
   const value = peak.value?.totalTokens ?? 0
   if (value <= 0) return 1
@@ -46,9 +45,9 @@ const parts = computed(() => {
 const partsTotal = computed(() => parts.value.reduce((sum, part) => sum + part.value, 0))
 const share = (value: number) => partsTotal.value > 0 ? value / partsTotal.value * 100 : 0
 
-function hourTitle(hour: CodexUsageHour): string {
+function hourTitle(hour: CodexUsageHour, format = num): string {
   const until = hour.endTimestamp === end.value ? '24:00' : hours.value.find(next => next.timestamp === hour.endTimestamp)?.label ?? clock(hour.endTimestamp)
-  return `${hour.label}–${until} · ${num(hour.totalTokens)} Token · ${num(hour.requestCount)} 轮${hour.endTimestamp > asOf.value ? ' · 本小时累计' : ''}`
+  return `${hour.label}–${until} · ${format(hour.totalTokens)} Token · ${num(hour.requestCount)} 轮${hour.endTimestamp > asOf.value ? ' · 本小时累计' : ''}`
 }
 </script>
 
@@ -59,7 +58,7 @@ function hourTitle(hour: CodexUsageHour): string {
       <span>每小时 Token · 截至 {{ clock(asOf) }}</span>
     </div>
     <div class="today-peak">
-      <template v-if="peak && peak.totalTokens > 0">高峰 <b>{{ peak.label }}</b> · <b>{{ num(peak.totalTokens) }}</b> Token</template>
+      <template v-if="peak && peak.totalTokens > 0">高峰 <b>{{ peak.label }}</b> · <b :title="`${num(peak.totalTokens)} Token`">{{ compact(peak.totalTokens) }}</b> Token</template>
       <template v-else>今天还没有用量记录</template>
     </div>
     <svg class="hourly-svg" viewBox="0 0 800 216" role="group" aria-label="每小时总 Token，未来时段留空" :data-hours="hours.length" :data-observed="observed.length">
@@ -83,8 +82,8 @@ function hourTitle(hour: CodexUsageHour): string {
       <text v-for="tick in xTicks" :key="tick.key" class="hour-x" :x="x(tick.timestamp)" y="204" text-anchor="middle">{{ tick.label }}</text>
     </svg>
     <div v-if="selected" class="hour-detail" aria-live="polite">
-      <b>{{ hourTitle(selected) }}</b>
-      <span>净输入 {{ num(Math.max(0, selected.inputTokens - selected.cachedInputTokens)) }} · 缓存 {{ num(selected.cachedInputTokens) }} · 输出 {{ num(selected.outputTokens) }}</span>
+      <b :title="hourTitle(selected)">{{ hourTitle(selected, compact) }}</b>
+      <span :title="`净输入 ${num(Math.max(0, selected.inputTokens - selected.cachedInputTokens))} · 缓存 ${num(selected.cachedInputTokens)} · 输出 ${num(selected.outputTokens)}`">净输入 {{ compact(Math.max(0, selected.inputTokens - selected.cachedInputTokens)) }} · 缓存 {{ compact(selected.cachedInputTokens) }} · 输出 {{ compact(selected.outputTokens) }}</span>
     </div>
     <div class="composition">
       <div class="today-heading"><h3>今日用量构成</h3><span>占今日总量</span></div>
@@ -94,7 +93,7 @@ function hourTitle(hour: CodexUsageHour): string {
       <div class="composition-legend">
         <div v-for="part in parts" :key="part.key" class="composition-item">
           <span><i :class="`part-${part.key}`"></i>{{ part.label }}</span>
-          <b>{{ num(part.value) }} <small>{{ share(part.value).toFixed(1) }}%</small></b>
+          <b :title="`${num(part.value)} Token`">{{ compact(part.value) }} <small>{{ share(part.value).toFixed(1) }}%</small></b>
         </div>
       </div>
     </div>
@@ -122,10 +121,11 @@ function hourTitle(hour: CodexUsageHour): string {
 .hour-detail { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 14px; padding: 8px 0 12px; font-size: var(--text-xs); color: var(--text-muted); }
 .hour-detail b { font-weight: 500; color: var(--text-secondary); }
 .composition { border-top: 1px solid var(--border); padding-top: 12px; }
-.composition-track { display: flex; width: 100%; height: 12px; overflow: hidden; border-radius: 3px; background: var(--fill); margin-top: 12px; }
-.part-fresh { background: var(--accent); }
-.part-cached { background: var(--accent-light); }
-.part-output { background: var(--text-muted); }
+.composition-track { display: flex; width: 100%; height: 14px; overflow: hidden; border-radius: 3px; background: var(--fill); margin-top: 12px; }
+.composition-track > span + span { box-shadow: inset 1px 0 0 var(--bg-surface); }
+.part-fresh { background: var(--usage-fresh); }
+.part-cached { background: var(--usage-cached); background-image: repeating-linear-gradient(135deg, transparent 0 3px, #ffffff40 3px 4px); }
+.part-output { background: var(--usage-output); }
 .composition-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 10px; }
 .composition-item { display: flex; flex-direction: column; gap: 5px; font-size: var(--text-xs); color: var(--text-muted); }
 .composition-item > span { display: flex; align-items: center; gap: 5px; }

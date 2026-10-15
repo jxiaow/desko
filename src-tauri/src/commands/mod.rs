@@ -14,3 +14,4 @@ pub mod fileshare;
 pub mod profiles;
 pub mod bypass;
 pub mod tunnel;
+pub mod note_export;

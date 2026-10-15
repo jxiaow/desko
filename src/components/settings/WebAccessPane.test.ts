@@ -11,7 +11,6 @@ beforeEach(() => { setActivePinia(createPinia()); vi.resetAllMocks(); vi.mocked(
 
 it('LAN confirmation after pane unmount cannot start a server', async () => {
   const wrapper = mount(WebAccessPane)
-  await wrapper.get('input[type=password]').setValue('synthetic-password')
   await wrapper.get('input[type=checkbox]').setValue(true)
   await wrapper.get('form').trigger('submit')
   expect(useConfirmStore().confirmDialog.show).toBe(true)
@@ -26,10 +25,11 @@ it('old status poll cannot overwrite a completed server start', async () => {
   vi.mocked(webAccessApi.status).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
   vi.mocked(webAccessApi.start).mockResolvedValue({ ...stopped, running: true, urls: ['http://127.0.0.1:8420'] })
   const wrapper = mount(WebAccessPane)
-  await wrapper.get('input[type=password]').setValue('synthetic-password')
   await wrapper.get('form').trigger('submit')
   await flushPromises()
   expect(wrapper.text()).toContain('服务运行中')
+  expect(webAccessApi.start).toHaveBeenCalledWith({ port: 8420, lan: false })
+  expect(wrapper.find('input[type=password]').exists()).toBe(false)
   finish(stopped)
   await flushPromises()
   expect(wrapper.text()).toContain('服务运行中')

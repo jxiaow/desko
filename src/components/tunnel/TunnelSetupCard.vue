@@ -6,6 +6,7 @@ import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import AppIcon from '../shared/AppIcon.vue'
+import { openExternal } from '../../utils/openExternal'
 
 const props = defineProps<{
   provision: TunnelProvision | null
@@ -91,8 +92,7 @@ function cancelLogin() {
 function openAuthUrl() {
   const url = props.login.url
   if (!url) return
-  void import('@tauri-apps/plugin-shell')
-    .then(({ open }) => open(url))
+  void openExternal(url)
     .catch(() => toastStore.showToast('无法打开浏览器，请手动复制授权地址', 'error'))
 }
 

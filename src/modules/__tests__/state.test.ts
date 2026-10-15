@@ -172,7 +172,7 @@ describe('module state', () => {
 })
 
 describe('Web 模块白名单', () => {
-  it('桌面启用的工具不出现在浏览器，也不读取或写入它们的设置', async () => {
+  it('Web 开放七个模块并可修改工具开关，网络直连仍限桌面', async () => {
     const meta = document.createElement('meta')
     meta.name = 'desko-runtime'
     meta.content = 'web'
@@ -185,11 +185,12 @@ describe('Web 模块白名单', () => {
       await s.loadModuleFlags()
       s.moduleFlags.codex = true
       s.moduleFlags.tunnel = true
-      expect(s.enabledModules.value.map(module => module.id)).toEqual(['notes', 'entries', 'files', 'mfa'])
-      expect(s.isModuleEnabled('codex')).toBe(false)
+      expect(s.enabledModules.value.map(module => module.id)).toEqual(['notes', 'entries', 'files', 'mfa', 'fileshare', 'tunnel', 'codex'])
+      expect(s.isModuleEnabled('codex')).toBe(true)
       expect(read).not.toHaveBeenCalled()
-      await expect(s.setModuleEnabled('tunnel', true)).rejects.toThrow('此模块仅在桌面版可用')
-      expect(write).not.toHaveBeenCalled()
+      await s.setModuleEnabled('tunnel', true)
+      expect(write).toHaveBeenCalledWith('tunnel_enabled', 'true')
+      await expect(s.setModuleEnabled('bypass', true)).rejects.toThrow('此模块仅在桌面版可用')
       read.mockRestore()
       write.mockRestore()
     } finally { meta.remove() }

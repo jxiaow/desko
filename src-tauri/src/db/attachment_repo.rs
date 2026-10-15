@@ -27,6 +27,14 @@ impl Database {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    pub fn attachment_note_ids(&self, name: &str) -> Result<Vec<String>, AppError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT a.note_id FROM note_attachments a JOIN notes n ON n.id = a.note_id WHERE a.file_path = ?1"
+        )?;
+        let rows = stmt.query_map(params![name], |row| row.get(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
     pub fn create_attachment(&self, attachment: &Attachment) -> Result<(), AppError> {
         self.conn.execute(
             "INSERT INTO note_attachments (id, note_id, file_name, file_path, file_size, mime_type, created_at) 

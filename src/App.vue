@@ -12,6 +12,7 @@ import { useAutoLock, type LockRequest } from './composables/useAutoLock'
 import { useClipboard } from './composables/useClipboard'
 import { installHoverGuard } from './utils/hoverGuard'
 import { bootEnabledModules, flushModulesBeforeLock, lockEnabledModules } from './modules/state'
+import { stopModuleSync } from './modules/runtime'
 import type { SettingsTabId } from './modules/registry'
 import TitleBar from './components/layout/TitleBar.vue'
 import Sidebar from './components/layout/Sidebar.vue'
@@ -82,6 +83,7 @@ const finishLock = async () => {
   // Browser logout may wait for an offline server. Hide private UI and clear
   // local state immediately; transport serializes the cookie-changing requests.
   const webLogout = isWebRuntime() ? authApi.lock() : null
+  if (webLogout) stopModuleSync()
   if (webLogout) appState.value = 'locked'
   else await lock()
   clearSensitiveState()
@@ -223,7 +225,9 @@ function onGlobalKey(e: KeyboardEvent) {
 
     <WebSettingsDialog
       v-if="showSettings && appState === 'unlocked' && isWebRuntime()"
+      :initial-tab="settingsInitialTab"
       @close="showSettings = false" @lock="doLock"
+      @open-change-note-key="noteKeyMode = $event"
     />
 
     <ChangePasswordDialog

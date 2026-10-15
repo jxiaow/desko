@@ -10,6 +10,8 @@ import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import { noteMeta, type NoteSaveState } from '../../stores/notes'
+import { isWebRuntime } from '../../services/runtime'
+import { NOTE_EXPORT_FORMATS, type NoteExportFormat } from '../../utils/noteExport'
 
 const props = withDefaults(defineProps<{
   note: Note
@@ -24,6 +26,7 @@ const props = withDefaults(defineProps<{
   activeTags?: Set<string>
   /** 本卡渲染在归档视图里：动作排换成「取消归档」，书写类动作照旧 */
   archivedView?: boolean
+  exportDisabled?: boolean
 }>(), {
   editing: false,
   isBatchMode: false,
@@ -33,6 +36,7 @@ const props = withDefaults(defineProps<{
   unlocked: false,
   activeTags: () => new Set<string>(),
   archivedView: false,
+  exportDisabled: false,
 })
 
 const emit = defineEmits<{
@@ -54,9 +58,12 @@ const emit = defineEmits<{
   select: []
   tagClick: [tag: string]
   removeAttachment: [attachmentId: string]
+  export: [format: NoteExportFormat]
 }>()
 
 const draft = ref(props.note.content_html)
+const exportButton = ref<HTMLElement | null>(null)
+const exportMenuOpen = ref(false)
 const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
 const bodyEl = ref<HTMLElement | null>(null)
 const clipped = ref(false)
@@ -307,6 +314,11 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           >
             <AppIcon name="star" :size="14" :filled="props.note.starred" />
           </button>
+        </template>
+        <button v-if="!isWebRuntime()" ref="exportButton" class="ib" type="button" title="导出" aria-label="导出" :disabled="props.exportDisabled" @click.stop="exportMenuOpen = !exportMenuOpen; menuOpen = false">
+          <AppIcon name="download" :size="14" />
+        </button>
+        <template v-if="!locked">
           <button
             class="ib"
             type="button"
@@ -383,8 +395,16 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       </span>
     </div>
 
-    <!-- 低频与危险动作收进 ⋯：快捷排只留高频五颗；归档视图的快捷排换成「找回 + 删除」，
+    <!-- 低频与危险动作收进 ⋯；归档视图的快捷排换成「找回 + 删除」，
          被让位的置顶/收藏/复制搬到这里，两边不出现同一颗 -->
+    <PopoverMenu v-if="exportMenuOpen" :anchor="exportButton" :width="184" @close="exportMenuOpen = false">
+      <div class="export-menu-title" :title="`导出「${titleText}」`">导出「{{ titleText }}」</div>
+      <button v-for="item in NOTE_EXPORT_FORMATS" :key="item.id" class="pop-item" type="button" role="menuitem" :aria-label="`${item.label} (.${item.extension})`" @click.stop="exportMenuOpen = false; emit('export', item.id)">
+        <AppIcon name="download" :size="14" />{{ item.label }}<span class="export-menu-extension">.{{ item.extension }}</span>
+      </button>
+      <span class="pop-sep"></span>
+      <div class="export-menu-hint">图片附件随文件导出</div>
+    </PopoverMenu>
     <PopoverMenu v-if="menuOpen" :anchor="moreBtn" :width="136" @close="menuOpen = false">
       <template v-if="props.archivedView">
         <button class="pop-item" type="button" @click="onMenu('pin')">
@@ -463,6 +483,9 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 </template>
 
 <style scoped>
+.export-menu-title { padding: 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--text-muted); }
+.export-menu-extension { margin-left: auto; font-size: var(--text-xs); color: var(--text-faint); }
+.export-menu-hint { padding: 4px 10px 6px; font-size: var(--text-xs); color: var(--text-muted); }
 .memo {
   position: relative;
   background: var(--bg-surface);

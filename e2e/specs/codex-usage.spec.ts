@@ -26,12 +26,38 @@ async function args(page: Page) {
   return page.evaluate(command => (window as any).__E2E__.invocations.filter((call: any) => call.cmd === command).at(-1).args, COMMAND)
 }
 
+test('大额用量换算万和亿，悬停仍能核对完整数字', async ({ page }) => {
+  await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
+    { sessionId: 'large', cwd: 'demo', daysAgo: 0, input: 1_500_000_000, cached: 1_200_000_000, output: 200_000_000 },
+  ] } })
+  await expect(page.locator('.usg-num')).toHaveText('17亿')
+  await expect(page.locator('.usg-num')).toHaveAttribute('title', '1,700,000,000 Token')
+  await expect(page.locator('.usg-metrics dd')).toHaveText(['3亿', '12亿', '2亿'])
+  await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+  await expect(page.locator('.usg-day-total')).toHaveText('17亿')
+  await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveAttribute('aria-label', /合计 1,700,000,000 Token/)
+})
+
+for (const theme of ['paper', 'slate']) {
+  test(`${theme} 下三类用量颜色明确，缓存另有纹理和对应图例`, async ({ page }) => {
+    await boot(page, { ...seed, settings: { ...seed.settings, theme, accent: 'celadon' } })
+    await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+    const colors = await page.locator('.usg-col[data-recorded="true"]').first().locator('.usg-stack > span').evaluateAll(elements => elements.map(element => getComputedStyle(element).backgroundColor))
+    expect(new Set(colors).size).toBe(3)
+    expect(colors.every(color => color.startsWith('rgb('))).toBe(true)
+    await expect(page.locator('.usg-cached').first()).not.toHaveCSS('background-image', 'none')
+    const legend = await page.locator('.daily-legend i').evaluateAll(elements => elements.map(element => getComputedStyle(element).backgroundColor))
+    expect(legend).toEqual([...colors].reverse())
+    await page.screenshot({ path: `.tmp/web-stat-fixes/usage-${theme}.png` })
+  })
+}
+
 test('默认展示今天的总量、构成与模型，昨天不会计入当天', async ({ page }) => {
   await boot(page)
   await expect(page.getByRole('navigation', { name: '统计窗口' }).getByRole('button', { name: '今天', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.locator('.usg-num')).toHaveText('13,700')
+  await expect(page.locator('.usg-num')).toHaveText('1.37万')
   await expect(page.locator('[data-metric="fresh"] dd')).toHaveText('1,300')
-  await expect(page.locator('[data-metric="cached"] dd')).toHaveText('11,000')
+  await expect(page.locator('[data-metric="cached"] dd')).toHaveText('1.1万')
   await expect(page.locator('[data-metric="output"] dd')).toHaveText('1,400')
   await expect(page.locator('.usg-count')).toHaveText('2 轮 · 1 条会话')
   await expect(page.locator('.usg-model-name')).toHaveText('gpt-today')
@@ -56,10 +82,10 @@ test('同小时记录合并为真实用量，可聚焦查看小时数值，未�
   const currentClock = await page.evaluate(() => new Date().getHours())
   const peakClock = `${String(currentClock - 10).padStart(2, '0')}:00`
   await expect(page.locator(`[data-hour="${peakClock}"]`)).toHaveAttribute('data-tokens', '14800')
-  await expect(page.locator('.usg-num')).toHaveText('15,350')
+  await expect(page.locator('.usg-num')).toHaveText('1.54万')
   const pointTotal = await page.locator('.hourly-svg [data-hour]').evaluateAll(points => points.reduce((sum, point) => sum + Number(point.getAttribute('data-tokens')), 0))
   expect(pointTotal).toBe(15350)
-  await expect(page.locator('.today-peak')).toContainText('14,800')
+  await expect(page.locator('.today-peak')).toContainText('1.48万')
   await page.locator('.hour-target').last().focus()
   await expect(page.locator('.hour-detail')).toContainText('550 Token')
   await expect(page.locator('.hour-detail')).toContainText('本小时累计')
@@ -72,7 +98,7 @@ test('未来时间戳记录被截止上界排除，总数和小时曲线仍然�
     seed.codex.sessions[0],
     { ...seed.codex.sessions[1], daysAgo: 0, hoursAgo: -4 },
   ] } })
-  await expect(page.locator('.usg-num')).toHaveText('13,700')
+  await expect(page.locator('.usg-num')).toHaveText('1.37万')
   const pointTotal = await page.locator('.hourly-svg [data-hour]').evaluateAll(points => points.reduce((sum, point) => sum + Number(point.getAttribute('data-tokens')), 0))
   expect(pointTotal).toBe(13700)
   expect((await args(page)).toTimestamp).toBe(Date.parse('2026-10-13T04:30:00Z') / 1000 + 1)
@@ -98,9 +124,9 @@ test('近 7 天只计入今天至六天前，每日数字可直接阅读', async
     { ...seed.codex.sessions[1], daysAgo: 7 },
   ] } })
   await page.getByRole('button', { name: '近 7 天', exact: true }).click()
-  await expect(page.locator('.usg-num')).toHaveText('13,700')
+  await expect(page.locator('.usg-num')).toHaveText('1.37万')
   await expect(page.locator('.usg-day-row')).toHaveCount(1)
-  await expect(page.locator('.usg-day-total')).toHaveText('13,700')
+  await expect(page.locator('.usg-day-total')).toHaveText('1.37万')
 })
 
 test.describe('本地日期边界', () => {
@@ -110,13 +136,13 @@ test.describe('本地日期边界', () => {
     await boot(page)
     await expect(page.locator('.usg-period').first()).toHaveText('2026-10-13 · 本地时间 00:00 起')
     expect((await args(page)).fromTimestamp).toBe(Date.parse('2026-10-12T16:00:00Z') / 1000)
-    await expect(page.locator('.usg-num')).toHaveText('13,700')
+    await expect(page.locator('.usg-num')).toHaveText('1.37万')
   })
 
   test('页面跨本地午夜自动统计新一天，离开用量页后取消跨日刷新', async ({ page }) => {
     await page.clock.install({ time: new Date('2026-10-13T15:59:00Z') })
     await boot(page)
-    await expect(page.locator('.usg-num')).toHaveText('13,700')
+    await expect(page.locator('.usg-num')).toHaveText('1.37万')
     await page.clock.fastForward(61_000)
     await expect(page.locator('.usg-num')).toHaveText('0')
     await expect(page.locator('.usg-period').first()).toHaveText('2026-10-14 · 本地时间 00:00 起')
@@ -148,7 +174,7 @@ test.describe('夏令时边界', () => {
     await expect(page.locator('.hourly-svg')).toHaveAttribute('data-hours', '25')
     await expect(page.locator('[data-hour="01:00 (UTC-04:00)"]')).toHaveAttribute('data-tokens', '13700')
     await expect(page.locator('[data-hour="01:00 (UTC-05:00)"]')).toHaveAttribute('data-tokens', '1100')
-    await expect(page.locator('.usg-num')).toHaveText('14,800')
+    await expect(page.locator('.usg-num')).toHaveText('1.48万')
   })
 
   test('跳时日只有 23 小时，不虚构不存在的 02 点', async ({ page }) => {
@@ -230,7 +256,7 @@ test('少量用量不因百分比舍入成为零柱，并可用键盘读取真�
   await expect(column).toHaveAttribute('aria-label', /合计 12 Token/)
   const heights = await column.locator('.usg-stack > span').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height))
   expect(heights.every(height => height > 0)).toBe(true)
-  await expect(page.locator('.usg-scale')).toHaveText('12K6K0')
+  await expect(page.locator('.usg-scale')).toHaveText('1.2万6,0000')
 })
 
 
@@ -252,7 +278,7 @@ test('缺失日期保留间隔，键盘可查看零记录日期和完整明细',
   await expect(page.locator('.daily-readout')).toContainText('无本地记录')
   await page.keyboard.press('Home')
   await expect(columns.first()).toBeFocused()
-  await expect(page.locator('.daily-readout')).toContainText('13,700')
+  await expect(page.locator('.daily-readout')).toContainText('1.37万')
   const geometry = await columns.evaluateAll(elements => elements.map(el => ({
     x: el.getBoundingClientRect().x, width: el.getBoundingClientRect().width,
     bar: el.querySelector('.usg-stack')!.getBoundingClientRect().width,

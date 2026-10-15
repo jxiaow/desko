@@ -1,8 +1,13 @@
 import { uploadBrowserImage } from '../browserImage'
 import { invoke } from '../transport'
 import type { Note, CreateNoteInput, UpdateNoteInput, Attachment } from '../../types'
+import type { NoteExportFile, NoteExportFormat } from '../../utils/noteExport'
 
 export const notesApi = {
+  exportImages: (names: string[]): Promise<Record<string, string>> =>
+    invoke('note_export_images', { names }),
+  writeExport: (path: string, format: NoteExportFormat, files: NoteExportFile[], noteIds: string[]): Promise<void> =>
+    invoke('note_export_write', { path, format, files, noteIds }),
   listNotes: (): Promise<Note[]> =>
     invoke('list_notes'),
   createNote: (input: CreateNoteInput): Promise<Note> =>

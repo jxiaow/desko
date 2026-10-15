@@ -237,13 +237,15 @@ const editor = useEditor({
   autofocus: false,
   editorProps: {
     handleTextInput: (view, from, to, text, defaultTransaction) => {
-      // 微软拼音也会把候选词和标点一次提交，不能只接收单个标点。
+      // 候选文字和标点可能一次提交，不能只接收单个标点。
       if (view.composing || !/[，。！？；：、]$/.test(text)) return false
-      if (from !== view.state.selection.from || to !== view.state.selection.to) return false
+      // 合成提交会替换整段拼音，原光标可以在替换范围末尾。
+      if (view.state.selection.from < from || view.state.selection.to > to) return false
       const tr = defaultTransaction()
-      // 中文输入法直接提交标点时可能保留旧 DOM 选区，默认事务也会把光标留在标点前。
-      if (!tr.selection.empty || tr.selection.head !== from) return false
-      view.dispatch(tr.setSelection(TextSelection.create(tr.doc, from + text.length)).scrollIntoView())
+      const end = from + text.length
+      // 光标也可能已到候选文字末尾、仍在标点前；只修正本次提交范围内的折叠选区。
+      if (!tr.selection.empty || tr.selection.head < from || tr.selection.head >= end) return false
+      view.dispatch(tr.setSelection(TextSelection.create(tr.doc, end)).scrollIntoView())
       return true
     },
   },

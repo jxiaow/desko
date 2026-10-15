@@ -19,8 +19,15 @@ import {
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { isWebRuntime } from '../../services/runtime'
+import { uploadSharedFile } from '../../services/transport'
+import { writeClipboardText } from '../../utils/clipboard'
 
 const toastStore = useToastStore()
+const webRuntime = isWebRuntime()
+const fileInput = ref<HTMLInputElement | null>(null)
+let active = true
+let poll: ReturnType<typeof setInterval> | undefined
 
 const dirAdd = ref('')
 const targetIdx = ref(0)
@@ -113,7 +120,7 @@ async function removeDir(i: number) {
 
 async function copyUrl(url: string) {
   try {
-    await navigator.clipboard.writeText(url)
+    await writeClipboardText(url)
     toastStore.showToast('地址已复制')
   } catch {
     toastStore.showToast('复制失败', 'error')
@@ -147,10 +154,44 @@ async function importPaths(paths: string[]) {
 
 let unlistenDrag: (() => void) | undefined
 
+async function importBrowserFiles(files: File[]) {
+  if (!running.value || dropping.value) return
+  const index = target.value
+  dropping.value = true
+  let count = 0
+  try {
+    for (const file of files) {
+      if (!active) break
+      const stored = await uploadSharedFile(file, index)
+      if (!active) return
+      received.value.push({ name: stored.name, url: `${linkBase.value}/download?share=${index}&name=${encodeURIComponent(stored.name)}` })
+      count++
+    }
+    if (active) toastStore.showToast(`已接收 ${count} 个文件`)
+  } catch (e) { if (active) toastStore.showToast(`已接收 ${count} 个文件；${errText(e)}`, 'error') }
+  finally { dropping.value = false }
+}
+function chooseBrowserFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  void importBrowserFiles(files)
+}
+function dropBrowserFiles(event: DragEvent) {
+  if (!webRuntime) return
+  event.preventDefault()
+  dragActive.value = false
+  void importBrowserFiles(Array.from(event.dataTransfer?.files ?? []))
+}
+
 onMounted(async () => {
-  fsRefresh()
+  void fsRefresh()
+  if (webRuntime) {
+    poll = setInterval(() => { if (!fsBusy.value && !dropping.value) void fsRefresh() }, 3000)
+    return
+  }
   // 外部文件只能由原生层给路径：HTML5 的 dataTransfer 在这拿不到真实路径
-  unlistenDrag = await getCurrentWebview().onDragDropEvent((event) => {
+  const unlisten = await getCurrentWebview().onDragDropEvent((event) => {
     const p = event.payload
     if (p.type === 'drop') {
       dragActive.value = false
@@ -159,9 +200,11 @@ onMounted(async () => {
       dragActive.value = p.type !== 'leave'
     }
   })
+  if (active) unlistenDrag = unlisten
+  else unlisten()
 })
 
-onUnmounted(() => unlistenDrag?.())
+onUnmounted(() => { active = false; clearInterval(poll); unlistenDrag?.() })
 
 usePageHeadStore().setHead('局域网传输')
 </script>
@@ -250,16 +293,18 @@ usePageHeadStore().setHead('局域网传输')
 
       <!-- 分组二：拖拽直投。虚线皮是这张卡自己的边框，不再往白卡里塞第二层盒；
            停止态收成一行提示，不为一个用不了的动作留半屏空白 -->
-      <section class="drop-card" :class="{ active: dragActive && running, off: !running }">
+      <section class="drop-card" :class="{ active: dragActive && running, off: !running }" @dragover="webRuntime && $event.preventDefault()" @drop="dropBrowserFiles">
+        <input v-if="webRuntime" ref="fileInput" type="file" multiple hidden aria-label="上传到共享目录" @change="chooseBrowserFiles" />
         <div class="well-body">
           <AppIcon class="well-ico" :name="dropping ? 'clock' : 'upload'" :size="running ? 28 : 20" />
           <div class="well-text">
-            <div class="well-title">{{ running ? (dropping ? '正在落盘…' : '把文件拖到这里') : '拖拽直投' }}</div>
+            <div class="well-title">{{ running ? (dropping ? '正在落盘…' : webRuntime ? '选择文件或拖入上传' : '把文件拖到这里') : webRuntime ? '上传文件' : '拖拽直投' }}</div>
             <div class="well-sub" v-if="running">
               落到 {{ targetName }} · 同名自动加 (1) · 单文件 4 GiB 内
             </div>
-            <div class="well-sub" v-else>启动服务后，从资源管理器把文件拖进来即可生成提取链接</div>
+            <div class="well-sub" v-else>{{ webRuntime ? '启动服务后，可从当前设备上传文件到共享目录' : '启动服务后，从资源管理器把文件拖进来即可生成提取链接' }}</div>
           </div>
+          <button v-if="webRuntime && running" class="btn-secondary" type="button" :disabled="dropping" @click="fileInput?.click()">选择文件</button>
         </div>
         <div v-if="running && dirs.length > 1" class="dz-dirs">
           <span class="dz-dirs-label">投到</span>

@@ -2,6 +2,15 @@ import type { CodexUsageBucket } from '../services/api/codex'
 
 export type UsageRange = 'today' | 'week' | 'month' | 'all'
 
+const usageNumber = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 })
+
+/** 大数按中文阅读单位展示；完整计数保留给明细提示和可访问名称。 */
+export function formatTokenCount(value: number): string {
+  if (Math.abs(value) >= 100_000_000) return `${usageNumber.format(value / 100_000_000)}亿`
+  if (Math.abs(value) >= 10_000) return `${usageNumber.format(value / 10_000)}万`
+  return usageNumber.format(value)
+}
+
 const RANGE_DAYS = { today: 1, week: 7, month: 30 } as const
 
 export function localDayKey(date: Date): string {

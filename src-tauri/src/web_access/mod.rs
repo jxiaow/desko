@@ -1,5 +1,8 @@
 //! Opt-in browser access. No native IPC forwarding: bridge.rs is the complete capability list.
 mod bridge;
+mod codex;
+mod events;
+mod network;
 mod drafts;
 mod vault;
 #[cfg(test)]
@@ -51,9 +54,15 @@ pub(super) struct Resource {
 }
 pub(super) trait Backend: Send + Sync + 'static {
     fn epoch(&self) -> Option<u64>;
+    fn verify_password(&self, password: &str) -> Result<(), String>;
+    /// Stateful backends give each browser its own note keys and pending drafts.
+    fn fork_session(&self) -> Result<Option<Arc<dyn Backend>>, String> { Ok(None) }
     fn invoke(&self, command: &str, args: Value, expected_epoch: u64) -> Result<Value, String>;
     fn asset(&self, path: &str) -> Option<Resource>;
     fn private_resource(&self, path: &str) -> Result<Resource, String>;
+    fn import_shared_file(&self, _: &std::path::Path, _: &str, _: usize, _: u64) -> Result<Value, String> {
+        Err("Web 端不支持上传共享文件".into())
+    }
 }
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,12 +76,12 @@ pub struct WebStatus {
 pub struct StartInput {
     port: u16,
     lan: bool,
-    password: String,
 }
 #[derive(Default)]
 pub struct WebAccessState(Mutex<Option<Running>>);
 struct Session {
     epoch: u64,
+    backend: Arc<dyn Backend>,
     created: Instant,
     used: Instant,
 }
@@ -86,8 +95,6 @@ struct Security {
 }
 struct Context {
     backend: Arc<dyn Backend>,
-    salt: Vec<u8>,
-    password_key: Vec<u8>,
     security: Mutex<Security>,
     stopped: AtomicBool,
     lan: bool,
@@ -182,10 +189,12 @@ fn cookie_token(req: &Request) -> Option<String> {
 struct Authorization {
     epoch: u64,
     token: String,
+    backend: Arc<dyn Backend>,
 }
 
 fn authorized(ctx: &Context, auth: &Authorization) -> bool {
-    if ctx.stopped.load(Ordering::SeqCst) || ctx.backend.epoch() != Some(auth.epoch) {
+    if ctx.stopped.load(Ordering::SeqCst) || ctx.backend.epoch() != Some(auth.epoch)
+        || auth.backend.epoch() != Some(auth.epoch) {
         return false;
     }
     ctx.security
@@ -217,7 +226,7 @@ fn authenticate(req: &Request, ctx: &Context) -> Option<Authorization> {
     if req.url() != "/api/session" {
         session.used = Instant::now();
     }
-    Some(Authorization { epoch, token: key })
+    Some(Authorization { epoch, token: key, backend: session.backend.clone() })
 }
 fn read_json(req: &mut Request, max: usize) -> Result<Value, String> {
     if !header(req, "Content-Type")
@@ -372,22 +381,19 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
             Err(e) => return error(req, 400, &e),
         };
         let password = body.get("password").and_then(Value::as_str).unwrap_or("");
-        let key = crate::crypto::derive_password_key(
-            password,
-            &ctx.salt,
-            crate::crypto::PASSWORD_ITERATIONS,
-        );
-        if key
-            .iter()
-            .zip(&ctx.password_key)
-            .fold(0u8, |diff, (a, b)| diff | (a ^ b))
-            != 0
-        {
-            return error(req, 401, "Web 访问密码不正确");
+        if let Err(message) = ctx.backend.verify_password(password) {
+            return error(req, 401, &message);
         }
         let Some(epoch) = ctx.backend.epoch() else {
             return error(req, 423, "Web 服务已失效，请在桌面端重新启动服务");
         };
+        let backend = match ctx.backend.fork_session() {
+            Ok(backend) => backend.unwrap_or_else(|| ctx.backend.clone()),
+            Err(message) => return error(req, 423, &message),
+        };
+        if backend.epoch() != Some(epoch) {
+            return error(req, 423, "Web 服务已失效，请在桌面端重新启动服务");
+        }
         let now = Instant::now();
         let key = token();
         {
@@ -413,6 +419,7 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
                 key.clone(),
                 Session {
                     epoch,
+                    backend,
                     created: now,
                     used: now,
                 },
@@ -453,10 +460,20 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
             );
         }
         let Some(authorization) = authenticate(&req, ctx) else {
-            return error(req, 401, "Web 会话已失效，请重新登录；若服务已重启，请使用新的访问密码");
+            return error(req, 401, "Web 会话已失效，请使用桌面主密码重新登录");
         };
         if path == "/api/session" && method == Method::Get {
             return authenticated_json(req, json!({"unlocked":true}), ctx, authorization);
+        }
+        if path.starts_with("/api/share-upload?") && method == Method::Post {
+            let result = receive_shared_file(&mut req, ctx, &authorization);
+            if !authorized(ctx, &authorization) {
+                return error(req, 401, "Web 会话已失效，请重新登录");
+            }
+            return match result {
+                Ok(value) => authenticated_json(req, value, ctx, authorization),
+                Err(message) => error(req, 400, &message),
+            };
         }
         if path == "/api/invoke" && method == Method::Post {
             let body = match read_json(&mut req, MAX_BODY) {
@@ -469,7 +486,7 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
                 return error(req, 401, "Web 会话已失效，请重新登录");
             }
             let command = body.get("command").and_then(Value::as_str).unwrap_or("");
-            let result = ctx.backend.invoke(
+            let result = authorization.backend.invoke(
                 command,
                 body.get("args").cloned().unwrap_or(json!({})),
                 authorization.epoch,
@@ -483,7 +500,7 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
             };
         }
         if method == Method::Get || method == Method::Head {
-            let result = ctx.backend.private_resource(&path);
+            let result = authorization.backend.private_resource(&path);
             if !authorized(ctx, &authorization) {
                 return error(req, 401, "Web 会话已结束，请重新登录");
             }
@@ -521,21 +538,44 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
         None => error(req, 404, "页面不存在"),
     }
 }
+fn receive_shared_file(req: &mut Request, ctx: &Arc<Context>, auth: &Authorization) -> Result<Value, String> {
+    use std::io::Write;
+    const MAX_UPLOAD: u64 = 4 * 1024 * 1024 * 1024;
+    if req.body_length().is_some_and(|len| len as u64 > MAX_UPLOAD) {
+        return Err("超过单文件 4 GiB 上限".into());
+    }
+    let url = reqwest::Url::parse(&format!("http://localhost{}", req.url())).map_err(|_| "上传地址无效")?;
+    let params: HashMap<_, _> = url.query_pairs().into_owned().collect();
+    let index = params.get("share").and_then(|s| s.parse::<usize>().ok()).ok_or("请选择共享目录")?;
+    let name = params.get("name").and_then(|s| fileshare_core::files::sanitize_upload_name(s)).ok_or("文件名无效")?;
+    let temp = std::env::temp_dir().join(format!("desko-web-upload-{}", uuid::Uuid::new_v4()));
+    let outcome = (|| {
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp).map_err(|_| "无法暂存上传文件")?;
+        let mut total = 0u64;
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            if !authorized(ctx, auth) { return Err("Web 会话已结束".into()); }
+            let len = req.as_reader().read(&mut buffer).map_err(|_| "读取上传文件失败")?;
+            if len == 0 { break; }
+            total += len as u64;
+            if total > MAX_UPLOAD { return Err("超过单文件 4 GiB 上限".into()); }
+            file.write_all(&buffer[..len]).map_err(|_| "暂存上传文件失败")?;
+        }
+        drop(file);
+        if !authorized(ctx, auth) { return Err("Web 会话已结束".into()); }
+        auth.backend.import_shared_file(&temp, &name, index, auth.epoch)
+    })();
+    let _ = std::fs::remove_file(temp);
+    outcome
+}
 fn start(
     backend: Arc<dyn Backend>,
     port: u16,
     lan: bool,
-    password: &str,
 ) -> Result<Running, String> {
     if backend.epoch().is_none() {
         return Err("请先解锁 Desko".into());
     }
-    if password.chars().count() < 8 || password.len() > 256 {
-        return Err("Web 访问密码需要 8～256 个字符".into());
-    }
-    let salt = crate::crypto::generate_salt();
-    let password_key =
-        crate::crypto::derive_password_key(password, &salt, crate::crypto::PASSWORD_ITERATIONS);
     let server = Arc::new(
         Server::http_with_timeout_and_limit(
             (if lan { "0.0.0.0" } else { "127.0.0.1" }, port),
@@ -551,8 +591,6 @@ fn start(
         .port();
     let ctx = Arc::new(Context {
         backend,
-        salt,
-        password_key,
         security: Mutex::new(Security {
             sessions: HashMap::new(),
             attempts: HashMap::new(),
@@ -617,7 +655,6 @@ pub async fn web_access_start(app: AppHandle, input: StartInput) -> Result<WebSt
             Arc::new(bridge::AppBackend::new(app.clone())?),
             input.port,
             input.lan,
-            &input.password,
         )?;
         let status = service.status.clone();
         *running = Some(service);

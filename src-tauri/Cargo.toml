@@ -49,6 +49,9 @@ codex-core = { path = "codex-core" }
 netguard-core = { path = "netguard-core" }
 
 [target.'cfg(windows)'.dependencies]
+webview2-com = "0.39.1"
+# 与 WebView2/Tauri 的 COM 接口版本一致，不替换现有 Windows 系统调用依赖。
+windows-webview = { package = "windows", version = "0.62", features = ["Win32_Foundation"] }
 # 版本与 tauri 传递依赖对齐（0.61），只给 session_lock 用
 windows = { version = "0.61", features = [
     "Win32_Foundation",

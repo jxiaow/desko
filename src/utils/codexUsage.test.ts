@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { localDayKey, usageHours, usageWindowFrom } from './codexUsage'
+import { formatTokenCount, localDayKey, usageHours, usageWindowFrom } from './codexUsage'
+
+it.each([[0, '0'], [9999, '9,999'], [10000, '1万'], [12345, '1.23万'], [1200000, '120万'], [100000000, '1亿'], [1234567890, '12.35亿']])('Token %s 显示为 %s', (value, expected) => {
+  expect(formatTokenCount(Number(value))).toBe(expected)
+})
 
 describe('本地自然日的用量窗口', () => {
   it('当天从本地零点起，近 7/30 天恰好包含今天在内的 7/30 个日期', () => {

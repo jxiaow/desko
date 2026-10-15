@@ -1,11 +1,11 @@
 # 小记 · 导出与归档
 
-- 状态：待拍板（未动代码）
-- 日期：2026-10-14
+- 状态：归档与导出已实现、已验证（代码未提交）
+- 日期：2026-10-14；导出验证更新：2026-10-15
 - 样张：`archive-frame1.png`（归档视图）·`archive-frame2.png`（归档勾选态）·`archive-frame3.png`（主列表导出菜单）·`archive-frame4.png`（批量导出弹窗）
 - 样张源码：`_mock_style.html` + `_frame1..4.html`（拼成整页后无头 Edge 1040×670 拍帧）
 
-## 1. 现状
+## 1. 初始现状（实施前基线）
 
 | 事实 | 出处 |
 |---|---|
@@ -23,14 +23,15 @@
 1. 导出入口三档：单条 / 批量勾选 / 全库。
 2. 导出格式四档：Markdown、HTML、Word、PDF。
 3. 加密小记必须先解锁，只导出明文；解锁失败的条目跳过并在结果里报数。
-4. 归档的展示口径见 §4，样张待拍板。
+4. 归档的展示口径见 §4，样张已拍板并实现。
+5. 多条 Markdown / HTML / Word 导出为 ZIP；多条 PDF 合并为单文件。
 
 ## 3. 导出
 
 ### 3.1 交互
 
 - **单条**：卡片 hover 动作排在既有 全屏·编辑·置顶·收藏 之后插入「导出」「归档」两枚，再接 复制·⋯（frame3）。点导出直接在动作排下方弹 4 档格式菜单，选格式 → 系统另存对话框 → 落盘。单条不再套一层应用内弹窗，省一跳。
-- **批量**：勾选态 dock 增加「导出」；全库入口在页栏右侧一枚方形下载钮（frame1 右上）。两者共用一个应用内弹窗（frame4）：标题带条数、`.seg` 选格式、说明块、主按钮「导出…」→ 系统对话框（单条目标文件 / 多条目标文件或目录）。
+- **批量**：勾选态 dock 增加「导出」；全库入口在页栏右侧一枚方形下载钮（frame1 右上）。两者共用一个应用内弹窗（frame4）：标题带条数、`.seg` 选格式、说明块、主按钮「导出…」→ 系统另存对话框（单条文件 / 多条 ZIP / 合并 PDF，均选目标文件）。
 - **归档视图**同样能导出，且归档条目不进「全库」默认范围——全库导出只导未归档的，归档视图里另有「导出全部归档」。
 
 ### 3.2 格式与产物
@@ -44,20 +45,35 @@
 
 单条四档都是单文件；多条时 md/html/doc 打成 `.zip`（`zip = "2"` 已在依赖里），PDF 合并成一份连续文档。
 
-### 3.3 PDF 通道（技术风险点）
+### 3.3 PDF 通道（已验证并接入）
 
-WebView2 的 `ICoreWebView2_7::PrintToPdf` 能把任意 HTML 打成 PDF，`webview2-com 0.39.1` 已在 `Cargo.lock`（tauri 传递依赖），但 wry/tauri 没有把这颗 API 暴露成现成命令，需要：
+Windows 桌面版使用 WebView2 的 `ICoreWebView2_7::PrintToPdf`，实现见 `src-tauri/src/services/note_pdf.rs`。`webview2-com 0.39.1` 与配套的 `windows 0.62` 已显式加入 Windows 目标依赖，保持与 Tauri 的 COM 接口类型一致。
 
-1. 用 `WebviewWindowBuilder` 开一颗 `visible(false)` 的 `export-*` 窗口，`http://localhost:1420/#/export?job=<id>`；
-2. 前端把渲染好的 HTML POST 给该窗口，窗口 `document.write` 后回一句 ready；
-3. Rust 侧从该窗口拿 `ICoreWebView2`（`with_webview` / `hwnd` + `GetAccessibleFromHwnd` 路线）调 `PrintToPdf(path, settings)`；
-4. 完成后关闭临时窗口。
+1. 前端生成清洗后、图片内嵌的完整 HTML，Rust 写入 UUID 命名的临时 HTML，避开 `NavigateToString` 的大小限制。
+2. `WebviewWindowBuilder` 创建 `visible(false)` 的 `export-*` 窗口，初始地址 `about:blank`，再通过原生 `Navigate` 加载临时文档。无需开发服务器或额外前端路由。
+3. `with_webview` → `controller().CoreWebView2()` 取得 COM 接口；关闭文档 JavaScript，CSP 仅允许内联样式与 data 图片，窗口不授予应用 capabilities。
+4. 原生 `NavigationCompleted` 回调触发 `PrintToPdf`，使用 A4 纵向、打印背景、关闭页眉页脚；多条小记连续排版。
+5. 最长等待 60 秒；成功、失败或取消都会销毁临时窗口并清理临时 HTML。先输出到目标目录中的临时 PDF，完成状态复核后才提交到所选路径。
 
-**先做小样验证**：单独一个 spike 命令跑通「隐藏窗 → PDF 落盘」再决定是否进主线。若 COM 取指路线在本机不通，回退方案是无头 `msedge.exe --print-to-pdf`（本机 Edge 常驻，`--headless` 已验证可用），代价是多一次进程启动（约 1–2s）。
+**验证结果（2026-10-15）**：独立 Tauri spike 成功生成两页 PDF，解析确认中文文字与内嵌图片完整；主应用的单条和三条合并导出也已真实落盘并解析。COM 路线可用，本轮无需无头 Edge 回退。PDF 当前仅支持 Windows 桌面版。
 
 ### 3.4 加密条目
 
-导出前置检查：命中加密条目且域未解锁 → 复用 `NoteLockDialog` 过一次口令；用户取消或失败 → 该条跳过。落盘只写明文，绝不导出密文信封。完成后 toast 报「N 条中 M 条已导出，K 条因未解锁跳过」。
+导出前先刷新待保存正文；命中加密条目且域未解锁 → 复用 `NoteLockDialog` 过一次口令，输错时可重试，取消后跳过未解锁条目。域已解锁时，单条锁回的条目免密再次解开。落盘只写明文，绝不导出密文信封。完成后 toast 报「N 条中 M 条已导出，K 条未解锁或已不存在，已跳过」。若无可导出条目，不打开系统保存框。
+
+后端在导出前和提交目标文件前复核主密钥、小记 DEK、锁定代次和数据代次；打印期间也检查应用锁定、换库与密钥收回，状态变化则取消，不提交旧会话明文。
+
+### 3.5 实现落点与边界
+
+| 层 | 落地 |
+|---|---|
+| 转换器 | `src/utils/noteExport.ts`：共用 `sanitizeNoteHtml` 清洗；Markdown 保留任务列表、链接、代码块；HTML/Word/PDF 共享打印模板，使用浅色主题令牌；文件名清理与大小写去重 |
+| 入口与交互 | `NoteCard.vue` 四格式菜单；`NotesModule.vue` 管理单条/勾选/全库范围；`NoteExportController.vue` 负责保存前刷新、解锁、读取图片、系统另存与结果提示 |
+| 原生图片与写盘 | `commands/note_export.rs`：仅主窗口可调用；附件路径限制在附件目录内，图片最多 48 MB；`services/note_export.rs`：校验格式、文件名与重复项，正文最多 64 MB，先写同目录临时文件再提交，失败保留旧文件 |
+| PDF | `services/note_pdf.rs`：隐藏 WebView2 窗口与原生打印回调，不运行正文脚本 |
+| mock / 测试 | `e2e/mocks/backend.ts` 增加图片读取与导出写盘 handler；`noteExport.test.ts` 6 条、Rust 导出单测 3 条、`notes-export.spec.ts` 11 条 |
+
+导出仅在桌面端提供入口。正文引用的本地图片以 base64 内嵌；丢失或不支持的图片、外链图片保留文字占位，并在完成提示中报数。Word 产物为带 UTF-8 BOM 与 Word 命名空间的 `.doc`（Word-HTML）；已验证文件内容与编码，尚未在 Word/WPS 内做打开与排版验收。
 
 ## 4. 归档
 
@@ -91,19 +107,23 @@ ALTER TABLE notes ADD COLUMN archived_at TEXT;
 ### 4.4 动作去重（已实现）
 
 hover 排、⋯ 菜单两处不得出现同一颗。
-- 主列表 hover：查看、编辑、置顶、收藏、**归档**、复制、⋯（共 7 颗；导出那一颗随 §3 一起加）
-- 归档视图 hover：查看、编辑、**取消归档**、**删除**、⋯（共 5 颗）
+
+- 主列表 hover：查看、编辑、置顶、收藏、**导出**、**归档**、复制、⋯（共 8 颗）
+- 归档视图 hover：查看、编辑、**导出**、**取消归档**、**删除**、⋯（共 6 颗）
+- 未解锁卡片 hover：解锁、**导出**（共 2 颗；发起导出后先走解锁前置）
 - 归档视图的 ⋯：置顶/取消置顶、收藏/取消收藏、复制正文、加密（或锁回/解除加密）——即被让出 hover 排的那几颗，删除不在这里重复
 
 ## 5. 交付顺序
 
-1. PDF spike 验证（决定 §3.3 走哪条通道）——不通就当场改方案，不硬推进主线。
+1. ~~PDF spike 验证（决定 §3.3 走哪条通道）。~~ 已通过（2026-10-15）：`with_webview` 直接获取 WebView2 COM 接口，中文、图片与分页验证通过。
 2. ~~归档：schema → repo → 命令 → store → UI → mock → e2e → 拍帧。~~ 已交付（2026-10-14）：Rust 3 条单测 + store/组件 6 条单测 + e2e 2 条用例全绿，真机 1040×670 三帧与 frame1/2/3 对拍通过。
-3. 导出：转换器 → 单条菜单 → 批量/全库弹窗 → 加密前置 → mock → e2e → 拍帧。
+3. ~~导出：转换器 → 单条菜单 → 批量/全库弹窗 → 加密前置 → mock → e2e → 拍帧。~~ 已实现（2026-10-15）：75 条相关前端单测、3 条 Rust 导出单测、53 条小记 e2e（含 11 条导出）通过，生产前端构建与 Windows 原生构建通过。真机 1040×670 验证四格式单条、ZIP、PDF 合并、加密跳过与解锁、覆盖已有文件和拒绝锁定条目；PDF 与 ZIP 均经独立解析校验。
 
-## 6. 待点头
+验证产物：`.tmp/note-export-spike/sample.pdf`（两页小样）；`.tmp/note-export-spike/native/verification.json`、`artifact-verification.json`（原生验证结果）；`export-native-menu.png`、`export-native-dialog.png`（本目录原生截图）。
+
+## 6. 决策记录
 
 - [x] §4 归档样张三帧（frame1/2/3）照此实现 —— 已拍板并落地
-- [x] §3.3 PDF 先花一轮做 spike；本机 WebView2 COM 路线不通则回退无头 Edge（多 1–2s）—— 已拍板，spike 未跑
+- [x] §3.3 PDF 先花一轮做 spike；本机 WebView2 COM 路线不通则回退无头 Edge（多 1–2s）—— COM 路线已跑通并接入
 - [x] Word 只出 `.doc`（Word-HTML），不做真 `.docx` —— 已拍板
-- [ ] 多条导出打 `.zip`（本机已验证 ZIP64 之外的小包 Explorer 可读，导出量级在 MB 内）
+- [x] 多条导出打 `.zip` —— 已按本轮完整导出实现范围落地；中文文件名、UTF-8 内容与 CRC 校验通过

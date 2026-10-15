@@ -5,6 +5,7 @@ import { setupGlobalTips } from './utils/tooltip'
 import { initializeAppearance } from './services/theme'
 import { installModules } from './modules/runtime'
 import './styles/global.css'
+import './styles/web.css'
 import App from './App.vue'
 
 async function bootstrap() {

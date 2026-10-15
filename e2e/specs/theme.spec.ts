@@ -1,13 +1,16 @@
 import { test, expect } from '@playwright/test'
 import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, settingsTab, visiblePane } from '../helpers'
 
-/** v3 三样两轴：底色 8 套 × accent 10 档 = 80 组可见组合。
+/** 底色 11 套 × accent 10 档 = 110 组配色，背景氛围独立开关。
  *  底色锚点（bg/text）来自 global.css 的底色块，accent 锚点（--accent）来自
  *  [data-base=x][data-accent=y] 覆盖层——覆盖层挂的是极性，不是底色，
  *  所以 accent 表按 light/dark 两极列，paper 与 snow 共用同一串。
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const BASES = {
+  purewhite: { name: '素白', pol: 'light', bg: 'rgb(250, 250, 250)', text: 'rgb(44, 44, 44)' },
+  warmgray: { name: '暖灰', pol: 'light', bg: 'rgb(245, 244, 241)', text: 'rgb(52, 51, 47)' },
+  charcoal: { name: '炭黑', pol: 'dark', bg: 'rgb(36, 36, 36)', text: 'rgb(232, 232, 232)' },
   paper: { name: '纸', pol: 'light', bg: 'rgb(248, 245, 240)', text: 'rgb(51, 50, 48)' },
   snow:  { name: '雪', pol: 'light', bg: 'rgb(241, 242, 243)', text: 'rgb(26, 27, 29)' },
   linen: { name: '绢', pol: 'light', bg: 'rgb(243, 234, 220)', text: 'rgb(60, 51, 40)' },
@@ -208,6 +211,9 @@ test.describe('主题', () => {
 
     // 四套底色各留一档 toast 值：暗极性反转成亮底，且 ink 暖白 / slate 冷白差在 B 通道
     const EXPECT: Record<BaseId, { bg: string; color: string }> = {
+      purewhite: { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },
+      warmgray: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
+      charcoal: { bg: 'rgb(239, 237, 232)', color: 'rgb(47, 125, 82)' },
       ink:   { bg: 'rgb(239, 237, 232)', color: 'rgb(47, 125, 82)' },
       slate: { bg: 'rgb(238, 240, 245)', color: 'rgb(47, 125, 82)' },
       paper: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },

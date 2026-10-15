@@ -5,6 +5,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
 use std::{
     path::{Component, Path, PathBuf},
+    sync::Arc,
 };
 use tauri::{AppHandle, Manager};
 
@@ -12,23 +13,25 @@ pub(super) struct AppBackend {
     app: AppHandle,
     vault: super::vault::WebVault,
     draft_key: Vec<u8>,
+    events: Arc<super::events::WebEvents>,
 }
 impl AppBackend {
     pub(super) fn new(app: AppHandle) -> Result<Self, String> {
         let _lease = super::SESSION_GATE.read().map_err(|_| "Web 会话状态无法读取")?;
         let desktop = app.state::<AppState>();
         let vault = super::vault::WebVault::new(&desktop).map_err(|e| e.user_message())?;
-        Ok(Self { app, vault, draft_key: crate::crypto::random_bytes(32) })
+        let events = super::events::WebEvents::new(app.clone());
+        Ok(Self { app, vault, draft_key: crate::crypto::random_bytes(32), events })
     }
     fn state(&self) -> crate::command_state::CommandState<'_, AppState> {
         crate::command_state::CommandState::from_ref(&self.vault.state)
     }
 }
-fn arg<T: DeserializeOwned>(args: &Value, key: &str) -> Result<T, String> {
+pub(super) fn arg<T: DeserializeOwned>(args: &Value, key: &str) -> Result<T, String> {
     serde_json::from_value(args.get(key).cloned().unwrap_or(Value::Null))
         .map_err(|_| format!("参数 {key} 无效"))
 }
-fn result<T: Serialize>(value: Result<T, AppError>) -> Result<Value, String> {
+pub(super) fn result<T: Serialize>(value: Result<T, AppError>) -> Result<Value, String> {
     value
         .map_err(|e| e.user_message())
         .and_then(|v| serde_json::to_value(v).map_err(|_| "无法读取结果".into()))
@@ -80,6 +83,18 @@ impl Backend for AppBackend {
     fn epoch(&self) -> Option<u64> {
         self.vault.epoch()
     }
+    fn verify_password(&self, password: &str) -> Result<(), String> {
+        let epoch = self.epoch().ok_or("Web 服务已失效，请在桌面端重新启动服务")?;
+        super::with_session_epoch(epoch, || self.epoch(), || {
+            self.vault.verify_password(password).map_err(|e| e.user_message())
+        })
+    }
+    fn fork_session(&self) -> Result<Option<Arc<dyn Backend>>, String> {
+        let _lease = super::SESSION_GATE.read().map_err(|_| "Web 会话状态无法读取")?;
+        if self.epoch().is_none() { return Err("Web 服务已失效，请在桌面端重新启动服务".into()); }
+        let vault = super::vault::WebVault::new(&self.vault.state).map_err(|e| e.user_message())?;
+        Ok(Some(Arc::new(Self { app: self.app.clone(), vault, draft_key: self.draft_key.clone(), events: self.events.clone() })))
+    }
     fn invoke(&self, command: &str, args: Value, expected_epoch: u64) -> Result<Value, String> {
         macro_rules! call { ($module:ident::$name:ident $(, $key:literal)* ) => { result(commands::$module::$name(self.state() $(, arg(&args, $key)?)*)) }; }
         // A favicon fetch can wait on a remote server. It neither mutates local
@@ -96,8 +111,41 @@ impl Backend for AppBackend {
             expected_epoch,
             || self.epoch(),
             || {
-                // Deliberately exclude native paths, process launch, Codex, network changes, backups and profiles.
+                if crate::is_codex_command(command) {
+                    crate::authorize_codex(&self.vault.state).map_err(str::to_string)?;
+                    if command == "web_codex_read_session" {
+                        let path = codex_core::modules::codex_session_manager::resolve_session_rollout_path(arg(&args, "sessionId")?)?;
+                        let file = std::fs::File::open(path).map_err(|_| "无法读取会话文件")?;
+                        use std::io::Read;
+                        let mut content = String::new();
+                        file.take(16 * 1024 * 1024 + 1).read_to_string(&mut content).map_err(|_| "无法读取会话文件")?;
+                        if content.len() > 16 * 1024 * 1024 { return Err("会话文件超过 16 MiB，请在桌面端打开".into()); }
+                        return Ok(json!(content));
+                    }
+                    return super::codex::invoke(&self.app, command, &args);
+                }
+                if command.starts_with("fileshare_") || command.starts_with("tunnel_") {
+                    let key = if command.starts_with("fileshare_") { "fileshare_enabled" } else { "tunnel_enabled" };
+                    if !matches!(command, "fileshare_stop" | "tunnel_stop") { self.require_module(key)?; }
+                    return super::network::invoke(&self.app, command, &args);
+                }
+                // Native paths, arbitrary process launch, backups and profiles stay outside this list.
                 match command {
+                    "web_poll_events" => Ok(self.events.since(arg(&args, "after")?)),
+                    "get_setting" | "set_setting" => {
+                        let key: String = arg(&args, "key")?;
+                        if !matches!(key.as_str(), "codex_enabled" | "fileshare_enabled" | "tunnel_enabled") {
+                            return Err("请在桌面端修改此设置".into());
+                        }
+                        let db = self.vault.state.db.lock().map_err(|_| "无法读取模块设置")?;
+                        if command == "get_setting" { return result(db.get_meta(&key).map(|v| v.unwrap_or_default())); }
+                        let value: String = arg(&args, "value")?;
+                        if !matches!(value.as_str(), "true" | "false") { return Err("模块开关无效".into()); }
+                        db.set_meta(&key, &value).map_err(|e| e.user_message())?;
+                        drop(db);
+                        commands::settings::notify_module_change(&self.app, &key, &value);
+                        Ok(Value::Null)
+                    }
                     "list_notes" => call!(notes::list_notes),
                     "create_note" => call!(notes::create_note, "input"),
                     "update_note" => call!(notes::update_note, "id", "input"),
@@ -111,18 +159,38 @@ impl Backend for AppBackend {
                     "recover_note_drafts" => call!(notes::recover_note_drafts),
                     "note_key_status" => call!(note_lock::note_key_status),
                     "note_key_recover" => call!(note_lock::note_key_recover),
-                    "note_key_relock" => call!(note_lock::note_key_relock),
                     "note_key_setup" => result(commands::note_lock::note_key_setup_with_state(&self.vault.state, arg(&args, "passphrase")?)),
-                    "note_key_unlock" => result(commands::note_lock::note_key_unlock_with_state(&self.vault.state, arg(&args, "passphrase")?)),
                     "note_key_change" => result(commands::note_lock::note_key_change_with_state(&self.vault.state, arg(&args, "passphrase")?)),
+                    "note_key_relock" => call!(note_lock::note_key_relock),
+                    "note_key_unlock" => result(commands::note_lock::note_key_unlock_with_state(&self.vault.state, arg(&args, "passphrase")?)),
                     "lock_note" => call!(note_lock::lock_note, "id"),
                     "unlock_note" => call!(note_lock::unlock_note, "id"),
                     "relock_note" => call!(note_lock::relock_note, "id"),
                     "remove_note_lock" => call!(note_lock::remove_note_lock, "id", "input"),
                     "reveal_note" => call!(note_lock::reveal_note, "id"),
-                    "list_attachments" => call!(notes::list_attachments, "noteId"),
-                    "bind_attachments" => call!(notes::bind_attachments, "noteId", "paths"),
-                    "delete_attachment" => call!(notes::delete_attachment, "id"),
+                    "list_attachments" => {
+                        let id: String = arg(&args, "noteId")?;
+                        self.vault.require_note_access(&id).map_err(|e| e.user_message())?;
+                        result(commands::notes::list_attachments(self.state(), id))
+                    }
+                    "bind_attachments" => {
+                        let id: String = arg(&args, "noteId")?;
+                        let paths: Vec<String> = arg(&args, "paths")?;
+                        self.vault.require_note_access(&id).map_err(|e| e.user_message())?;
+                        for path in &paths {
+                            let name = crate::services::attachment_service::name_of(path).ok_or("图片路径无效")?;
+                            self.vault.require_attachment_access(&name).map_err(|e| e.user_message())?;
+                        }
+                        result(commands::notes::bind_attachments(self.state(), id, paths))
+                    }
+                    "delete_attachment" => {
+                        let id: String = arg(&args, "id")?;
+                        let attachment = self.vault.state.db.lock().map_err(|_| "无法读取附件")?.get_attachment(&id).map_err(|e| e.user_message())?;
+                        if let Some(attachment) = attachment {
+                            self.vault.require_note_access(&attachment.note_id).map_err(|e| e.user_message())?;
+                        }
+                        result(commands::notes::delete_attachment(self.state(), id))
+                    }
                     "web_upload_attachment" => self.upload(&args),
                     "web_seal_draft" => result(super::drafts::seal(
                         &self.draft_key,
@@ -169,9 +237,11 @@ impl Backend for AppBackend {
         let url =
             reqwest::Url::parse(&format!("http://localhost{path}")).map_err(|_| "路径无效")?;
         if let Some(name) = url.path().strip_prefix("/api/attachments/") {
+            let name = crate::webdav::percent_decode(name);
+            self.vault.require_attachment_access(&name).map_err(|e| e.user_message())?;
             return self.image(
                 &crate::paths::attachments_dir(),
-                &crate::webdav::percent_decode(name),
+                &name,
                 false,
             );
         }
@@ -259,6 +329,12 @@ impl Backend for AppBackend {
             file: Some(std::fs::File::open(target).map_err(|_| "无法读取文件")?),
         })
     }
+    fn import_shared_file(&self, path: &Path, name: &str, index: usize, epoch: u64) -> Result<Value, String> {
+        super::with_session_epoch(epoch, || self.epoch(), || {
+            self.require_module("fileshare_enabled")?;
+            super::network::import_file(&self.app, path, name, index)
+        })
+    }
 }
 fn image_path(dir: &Path, name: &str, allow_svg: bool) -> Result<(PathBuf, &'static str), String> {
     if name.is_empty()
@@ -277,6 +353,13 @@ fn image_path(dir: &Path, name: &str, allow_svg: bool) -> Result<(PathBuf, &'sta
     Ok((within(dir, name)?, mime))
 }
 impl AppBackend {
+    fn require_module(&self, key: &str) -> Result<(), String> {
+        let db = self.vault.state.db.lock().map_err(|_| "无法读取模块设置")?;
+        if db.get_meta(key).map_err(|e| e.user_message())?.as_deref() != Some("true") {
+            return Err("模块未启用，请在设置的模块页打开开关".into());
+        }
+        Ok(())
+    }
     fn image(&self, dir: &Path, name: &str, allow_svg: bool) -> Result<Resource, String> {
         let (path, mime) = image_path(dir, name, allow_svg)?;
         let metadata = path.metadata().map_err(|_| "图片不存在")?;
@@ -289,6 +372,9 @@ impl AppBackend {
         ))
     }
     fn upload(&self, args: &Value) -> Result<Value, String> {
+        if let Some(id) = args.get("noteId").and_then(Value::as_str) {
+            self.vault.require_note_access(id).map_err(|e| e.user_message())?;
+        }
         let name: String = arg(args, "name")?;
         let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
         if !matches!(

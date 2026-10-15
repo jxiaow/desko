@@ -43,6 +43,18 @@ export function tnClearDomain(): void {
 
 let refreshVersion = 0
 const appliedVersions = { status: 0, binary: 0, provision: 0, login: 0, services: 0, error: 0 }
+export function clearTunnelSession(): void {
+  const version = ++refreshVersion
+  for (const key of Object.keys(appliedVersions) as (keyof typeof appliedVersions)[]) appliedVersions[key] = version
+  tnClearDomain()
+  tnLoaded.value = false
+  tnStatus.value = null
+  tnBinary.value = null
+  tnProvision.value = null
+  tnLogin.value = { state: 'idle', url: null, secondsLeft: 0, note: null }
+  tnServices.value = []
+  tnPollError.value = ''
+}
 
 export async function tnRefresh(): Promise<void> {
   const version = ++refreshVersion

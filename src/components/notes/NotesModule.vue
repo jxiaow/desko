@@ -10,6 +10,7 @@ import NoteCard from './NoteCard.vue'
 import NoteComposer from './NoteComposer.vue'
 import NoteFullscreen from './NoteFullscreen.vue'
 import NoteLockDialog from './NoteLockDialog.vue'
+import NoteExportController from './NoteExportController.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { htmlToLinkText, htmlToText } from '../../utils/format'
 import { attachmentSrc, collectAttachmentNames } from '../../services/attachmentSrc'
@@ -17,6 +18,7 @@ import type { IconName } from '../../utils/icons'
 import type { Note } from '../../types'
 import type { NoteView } from '../../stores/notes'
 import { usePageHeadStore } from '../../stores/pageHead'
+import type { NoteExportFormat } from '../../utils/noteExport'
 
 const VIEWS: { key: NoteView; label: string; icon: IconName }[] = [
   { key: 'all', label: '全部', icon: 'all' },
@@ -56,6 +58,12 @@ const fsTarget = ref<'new' | string | null>(null)
 const fsMode = ref<'edit' | 'view'>('edit')
 /** 全库小记口令弹窗：mode 决定要输什么，thenLock 是口令到手后要补做的那次加密 */
 const keyDialog = ref<{ mode: 'setup' | 'unlock' | 'change'; thenLock?: string } | null>(null)
+const exportRequest = ref<{ ids: string[]; scopeLabel: string; format?: NoteExportFormat } | null>(null)
+const exportAllCount = computed(() => notes.value.filter(note => note.archived === (noteView.value === 'archived')).length)
+const exportNotes = (ids: string[], scopeLabel: string, format?: NoteExportFormat) => {
+  if (!exportRequest.value && ids.length) exportRequest.value = { ids, scopeLabel, format }
+}
+const exportAll = () => exportNotes(notes.value.filter(note => note.archived === (noteView.value === 'archived')).map(note => note.id), noteView.value === 'archived' ? '全部归档小记' : '全部未归档小记')
 
 const requestRemoveLock = async (id: string) => {
   const err = await removeNoteLock(id)
@@ -109,6 +117,10 @@ const toggleRail = () => {
   } else {
     railPinned.value = !railPinned.value
   }
+}
+const selectView = (view: NoteView) => {
+  noteView.value = view
+  if (isWebRuntime() && railOverlay.value) railPinned.value = false
 }
 watch(railRoom, (room) => {
   if (room) railPinned.value = false
@@ -323,6 +335,9 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
           >
             <AppIcon name="checkall" :size="16" />
           </button>
+          <button v-if="!isWebRuntime()" class="bar-btn" type="button" :title="isArchivedView ? '导出全部归档' : '导出全部小记'" :aria-label="isArchivedView ? '导出全部归档' : '导出全部小记'" :disabled="!exportAllCount || !!exportRequest" @click="exportAll">
+            <AppIcon name="download" :size="16" />
+          </button>
           <!-- 口令只管加密小记，没加密过就不出现在顶栏；归档视图不做批量加解密 -->
           <template v-if="noteKey.is_set && !isArchivedView">
             <div class="bar-div"></div>
@@ -398,6 +413,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
                 :unlocked="notePlains[note.id] != null"
                 :active-tags="activeTags"
                 :archived-view="isArchivedView"
+                :export-disabled="!!exportRequest"
                 @open="openCard(note)"
                 @update="saveNoteContent(note.id, $event)"
                 @close="closeCard"
@@ -411,6 +427,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
                 @toggle-pin="togglePin(note)"
                 @toggle-star="toggleStar(note)"
                 @toggle-archive="setArchived(note, !note.archived)"
+                @export="exportNotes([note.id], '单条小记', $event)"
                 @copy="copyNote(note)"
                 @delete="doDeleteNote(note)"
                 @select="toggleSelectNote(note.id)"
@@ -440,14 +457,14 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
     </div>
 
     <aside v-if="railVisible" class="rail" :class="{ overlay: railOverlay }">
-      <div class="rail-title">视图</div>
+      <div class="rail-title rail-heading"><span>视图</span><button v-if="railOverlay && isWebRuntime()" class="ib" type="button" aria-label="关闭小记筛选" @click="railPinned = false"><AppIcon name="x" :size="16" /></button></div>
       <button
         v-for="v in VIEWS"
         :key="v.key"
         class="rail-item"
         :class="{ active: noteView === v.key }"
         type="button"
-        @click="noteView = v.key"
+        @click="selectView(v.key)"
       >
         <AppIcon :name="v.icon" :size="16" />
         <span class="nm">{{ v.label }}</span>
@@ -489,6 +506,9 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
         <AppIcon name="x" :size="12" />取消全选
       </button>
       <span class="dock-sep"></span>
+      <button v-if="!isWebRuntime()" class="dock-btn" type="button" :disabled="!selectedNoteIds.size || !!exportRequest" @click="exportNotes([...selectedNoteIds], '已选小记')">
+        <AppIcon name="download" :size="12" />导出
+      </button>
       <button v-if="isArchivedView" class="dock-btn" type="button" @click="batchSetArchived(false)">
         <AppIcon name="unarchive" :size="12" />取消归档
       </button>
@@ -540,6 +560,8 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       @remove-attachment="fsNote && deleteAttachment(fsNote.id, $event)"
     />
 
+    <NoteExportController v-if="exportRequest" :ids="exportRequest.ids" :format="exportRequest.format" :scope-label="exportRequest.scopeLabel" @close="exportRequest = null" />
+
     <NoteLockDialog
       v-if="keyDialog"
       :mode="keyDialog.mode"
@@ -557,6 +579,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
   overflow: hidden;
   position: relative;
 }
+.rail-heading { display: flex; align-items: center; justify-content: space-between; }
 
 .stream {
   flex: 1;

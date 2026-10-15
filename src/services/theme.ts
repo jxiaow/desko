@@ -1,11 +1,12 @@
 /* 主题：颜色（和外设字体栈）会换，尺度（圆角/间距/字号）不动。
  *
- * v3 起是「底色 × 极性 × accent」三样两轴：
+ * 外观由「底色 × accent × 背景氛围」独立组合：
  *   底色十一套，每套交出完全相同的 96 槽；
- *   极性 light / dark 由底色决定（不是第三轴，用户不能单设），只用来挂 accent；
+ *   极性 light / dark 由底色决定（用户不能单设），只用来挂 accent；
  *   accent 十档，覆盖层按 [data-base][data-accent] 填 accent 族 17 槽。
- * 所以组合数 = 底色 11 × accent 10 = 110，但 accent 块只有 2×10=20 个——新增底色不必再配一轮 accent。
- * 这里负责把 data-theme / data-base / data-accent 三个属性挂到 <html> 上、以及存取用户的选择。
+ *   背景氛围独立开关，素色与冷暖底色共用同一套材质规则。
+ * 所以组合数 = 底色 11 × accent 10 × 氛围 2 = 220，但 accent 块只有 2×10=20 个——新增底色不必再配一轮 accent。
+ * 这里负责把外观属性挂到 <html> 上，以及存取用户的选择。
  *
  * 读取用的是明文 meta 表，锁屏前也能拿到，所以 main.ts 可以在
  * 首次绘制之前 await 一次，避免"先闪纸色再跳到墨色"。
@@ -56,7 +57,7 @@ const LEGACY_ACCENT: Record<string, AccentId> = {
   'linear-dark': 'plum',
 }
 
-/** 注册表只保存身份；颜色由 global.css 提供，预览也消费同一套令牌。 */
+/** 注册表只保存身份与底色分组；分组不限制背景氛围，预览消费同一套颜色令牌。 */
 export const THEMES = [
   { id: 'paper', name: '纸', kind: 'atmosphere' },
   { id: 'snow', name: '雪', kind: 'atmosphere' },
@@ -111,7 +112,7 @@ export const polarityOf = (theme: ThemeId): PolarityId => POLARITY[theme]
 export const isPlainTheme = (theme: ThemeId): boolean => THEMES.find(t => t.id === theme)?.kind === 'plain'
 export const THEME_GROUPS = [
   { label: '素色', themes: THEMES.filter(theme => theme.kind === 'plain') },
-  { label: '氛围配色', themes: THEMES.filter(theme => theme.kind === 'atmosphere') },
+  { label: '冷暖配色', themes: THEMES.filter(theme => theme.kind === 'atmosphere') },
 ]
 
 

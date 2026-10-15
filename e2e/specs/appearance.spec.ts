@@ -13,8 +13,8 @@ test.describe('统一外观状态', () => {
       return { theme: el.getAttribute('data-theme'), image: style.backgroundImage, color: style.backgroundColor }
     }))
     const before = await previews()
-    expect(before).toHaveLength(8)
-    expect(new Set(before.map((preview) => preview.color)).size).toBe(8)
+    expect(before).toHaveLength(11)
+    expect(new Set(before.map((preview) => preview.color)).size).toBe(11)
     for (const preview of before) expect(preview.image, `${preview.theme} 柔光应使用卡片尺寸`).not.toMatch(/[\d.]+v[wh]\b/)
     const images: Buffer[] = []
     const cards = page.locator('.theme-prev')

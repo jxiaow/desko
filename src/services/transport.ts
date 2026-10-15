@@ -1,7 +1,8 @@
 import { invoke as nativeInvoke } from '@tauri-apps/api/core'
 import { isWebRuntime } from './runtime'
 
-const WEB_PREFERENCES = new Set(['theme', 'accent', 'background_atmosphere', 'auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock'])
+const WEB_PREFERENCES = new Set(['theme', 'accent', 'background_atmosphere', 'auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold'])
+const WEB_MODULE_SETTINGS = new Set(['codex_enabled', 'fileshare_enabled', 'tunnel_enabled'])
 const SESSION_EXPIRED = 'Web 会话已失效，请重新登录'
 let generation = 0
 let authenticated = false
@@ -24,14 +25,14 @@ export function expireWebSession(): void {
   clearInterval(heartbeat)
   window.dispatchEvent(new Event('desko:web-session-expired'))
 }
-async function request<T>(path: string, body?: object, invalidate = true, epoch = generation): Promise<T> {
+async function request<T>(path: string, body?: object | Blob, invalidate = true, epoch = generation): Promise<T> {
   let response: Response
   try {
     response = await fetch(path, {
       method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(30_000),
+      headers: body ? { 'Content-Type': body instanceof Blob ? 'application/octet-stream' : 'application/json' } : undefined,
+      body: body instanceof Blob ? body : body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(body instanceof Blob ? 600_000 : 120_000),
     })
   } catch {
     if (invalidate && epoch === generation) expireWebSession()
@@ -80,13 +81,15 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
   }
   if (command === 'get_setting' || command === 'set_setting') {
     const key = String(parameters.key)
-    if (!WEB_PREFERENCES.has(key)) throw new Error('请在桌面端修改此设置')
-    if (command === 'set_setting') {
-      localStorage.setItem(`desko.web.${key}`, String(parameters.value))
-      return undefined as T
+    if (!WEB_PREFERENCES.has(key) && !WEB_MODULE_SETTINGS.has(key)) throw new Error('请在桌面端修改此设置')
+    if (WEB_PREFERENCES.has(key)) {
+      if (command === 'set_setting') {
+        localStorage.setItem(`desko.web.${key}`, String(parameters.value))
+        return undefined as T
+      }
+      const defaults: Record<string, string> = { auto_lock_timeout: '5', lock_on_close: 'false', lock_on_system_lock: 'false' }
+      return (localStorage.getItem(`desko.web.${key}`) ?? defaults[key] ?? '') as T
     }
-    const defaults: Record<string, string> = { auto_lock_timeout: '5', lock_on_close: 'false', lock_on_system_lock: 'false' }
-    return (localStorage.getItem(`desko.web.${key}`) ?? defaults[key] ?? '') as T
   }
   if (command === 'get_attachment_dir') return '/api/attachments' as T
   if (!authenticated) throw new Error(SESSION_EXPIRED)
@@ -94,4 +97,10 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
   const value = await request<T>('/api/invoke', { command, args: parameters }, true, epoch)
   if (epoch !== generation || !authenticated) throw new Error(SESSION_EXPIRED)
   return value
+}
+
+export async function uploadSharedFile(file: File, share: number): Promise<{ name: string }> {
+  if (!authenticated) throw new Error(SESSION_EXPIRED)
+  if (file.size > 4 * 1024 ** 3) throw new Error('超过单文件 4 GiB 上限')
+  return request(`/api/share-upload?share=${share}&name=${encodeURIComponent(file.name)}`, file)
 }

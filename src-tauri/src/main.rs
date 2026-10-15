@@ -23,6 +23,14 @@ use tauri::{
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 fn request_quit(app: &tauri::AppHandle) {
     // 托盘入口在窗口隐藏、应用锁定时也要能确认；连续点击只打开一个原生弹窗。
     static PENDING: AtomicBool = AtomicBool::new(false);
@@ -110,11 +118,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // When a second instance is launched, focus the existing window
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
@@ -199,12 +203,7 @@ fn main() {
                 .menu(&menu)
                 .on_menu_event(|app, event| {
                     match event.id.as_ref() {
-                        "show" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
+                        "show" => show_main_window(app),
                         "lock" => commands::auth::request_lock(app),
                         "quit" => request_quit(app),
                         _ => {}
@@ -217,10 +216,7 @@ fn main() {
                         ..
                     } = event
                     {
-                        if let Some(window) = tray.app_handle().get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(tray.app_handle());
                     }
                 })
                 .build(app)?;
@@ -293,6 +289,8 @@ fn main() {
             commands::cloud::cloud_restore,
             commands::entries::create_test_data,
             commands::notes::list_notes,
+            commands::note_export::note_export_images,
+            commands::note_export::note_export_write,
             commands::notes::create_note,
             commands::notes::update_note,
             commands::notes::stage_note_drafts,

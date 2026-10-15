@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CodexUsageBucket } from '../../services/api/codex'
-import { usageDays, type UsageRange } from '../../utils/codexUsage'
+import { formatTokenCount as compact, usageDays, type UsageRange } from '../../utils/codexUsage'
 
 const props = defineProps<{ buckets: CodexUsageBucket[]; range: UsageRange; updatedAt: number }>()
 const days = computed(() => usageDays(props.buckets, props.range, new Date(props.updatedAt)))
@@ -14,7 +14,6 @@ const maximum = computed(() => {
   return Math.ceil(peak.value * 1.1 / step) * step
 })
 const num = (value: number) => new Intl.NumberFormat('zh-CN').format(value)
-const compact = (value: number) => value >= 1e6 ? `${Number((value / 1e6).toFixed(1))}M` : value >= 1000 ? `${Number((value / 1000).toFixed(1))}K` : num(value)
 const fresh = (day: CodexUsageBucket) => Math.max(0, day.inputTokens - day.cachedInputTokens)
 const height = (value: number) => `${value / maximum.value * 100}%`
 const label = (index: number) => days.value.length <= 8 || index === 0 || index === days.value.length - 1 || index % 5 === 0
@@ -52,11 +51,11 @@ function move(event: KeyboardEvent) {
       </div>
     </div>
     <div class="daily-readout" aria-live="polite">
-      <span v-if="selected"><b>{{ selected.key }}</b><strong>{{ num(selected.totalTokens) }}</strong> Token<span v-if="!selected.recorded" class="no-record">无本地记录</span></span>
+      <span v-if="selected"><b>{{ selected.key }}</b><strong :title="`${num(selected.totalTokens)} Token`">{{ compact(selected.totalTokens) }}</strong> Token<span v-if="!selected.recorded" class="no-record">无本地记录</span></span>
       <div class="daily-legend" v-if="selected">
-        <span><i class="sw-fresh" />净输入 {{ num(fresh(selected)) }}</span>
-        <span><i class="sw-cached" />缓存 {{ num(selected.cachedInputTokens) }}</span>
-        <span><i class="sw-output" />输出 {{ num(selected.outputTokens) }}</span>
+        <span :title="`${num(fresh(selected))} Token`"><i class="sw-fresh" />净输入 {{ compact(fresh(selected)) }}</span>
+        <span :title="`${num(selected.cachedInputTokens)} Token`"><i class="sw-cached" />缓存 {{ compact(selected.cachedInputTokens) }}</span>
+        <span :title="`${num(selected.outputTokens)} Token`"><i class="sw-output" />输出 {{ compact(selected.outputTokens) }}</span>
       </div>
     </div>
   </section>
@@ -79,9 +78,10 @@ function move(event: KeyboardEvent) {
 .usg-col:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .usg-stack { position:absolute; inset:0; width:62%; max-width:28px; margin:auto; display:flex; flex-direction:column; justify-content:flex-end; pointer-events:none; }
 .usg-stack > span { flex-shrink:0; width:100%; }
-.usg-output { background:var(--text-muted); }.usg-cached { background:var(--accent-light); }.usg-fresh { background:var(--accent); }
+.usg-output, .sw-output { background:var(--usage-output); }.usg-cached, .sw-cached { background:var(--usage-cached); background-image:repeating-linear-gradient(135deg,transparent 0 3px,#ffffff40 3px 4px); }.usg-fresh, .sw-fresh { background:var(--usage-fresh); }
+.usg-stack > span { box-shadow:inset 0 1px 0 var(--bg-surface); }
 .usg-x { position:absolute; top:100%; left:50%; transform:translateX(-50%); padding-top:8px; white-space:nowrap; font-size:var(--text-xs); color:var(--text-muted); font-variant-numeric:tabular-nums; }
 .daily-readout { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px; min-height:46px; padding:10px 0; border-top:1px solid var(--border); font-size:var(--text-xs); color:var(--text-muted); }
 .daily-readout b { margin-right:12px; font-weight:500; color:var(--text-secondary); }.daily-readout strong { margin-right:3px; font-weight:600; color:var(--text); font-variant-numeric:tabular-nums; }
-.no-record { margin-left:8px; }.daily-legend { display:flex; flex-wrap:wrap; gap:8px 14px; }.daily-legend span { display:flex; align-items:center; gap:5px; font-variant-numeric:tabular-nums; }.daily-legend i { width:7px; height:7px; border-radius:1px; }.sw-fresh { background:var(--accent); }.sw-cached { background:var(--accent-light); }.sw-output { background:var(--text-muted); }
+.no-record { margin-left:8px; }.daily-legend { display:flex; flex-wrap:wrap; gap:8px 14px; }.daily-legend span { display:flex; align-items:center; gap:5px; font-variant-numeric:tabular-nums; }.daily-legend i { width:10px; height:10px; border-radius:2px; }
 </style>

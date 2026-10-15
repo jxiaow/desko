@@ -475,7 +475,7 @@ describe('NotesModule', () => {
     expect(store.selectedNoteIds.size).toBe(2)
     expect(wrapper.findAll('.memo.is-sel')).toHaveLength(2)
 
-    await wrapper.findAll('.dock-btn')[2].trigger('click') // 置顶
+    await wrapper.findAll('.dock-btn').find(button => button.text() === '置顶')!.trigger('click')
     await flushPromises()
     expect(store.notes.every(n => n.pinned)).toBe(true)
 

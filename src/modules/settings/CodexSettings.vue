@@ -16,6 +16,7 @@ import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../../components/shared/AppIcon.vue'
 import OptionSelect from '../../components/shared/OptionSelect.vue'
+import { isWebRuntime } from '../../services/runtime'
 
 const toastStore = useToastStore()
 
@@ -67,7 +68,7 @@ void loadQuotaSettings()
         <span class="setting-desc">当前账号的授权文件位置</span>
         <div class="codex-path">
           <code :title="storagePaths.authPath">{{ storagePaths.authPath }}</code>
-          <button class="action-btn" type="button" @click="openCodexConfig">
+          <button v-if="!isWebRuntime()" class="action-btn" type="button" @click="openCodexConfig">
             <AppIcon name="file" :size="13" />打开 config.toml
           </button>
         </div>

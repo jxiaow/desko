@@ -6,6 +6,7 @@ import { errText } from '../../services/api/backup'
 import { useConfirmStore } from '../../stores/confirm'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
+import { writeClipboardText } from '../../utils/clipboard'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 
 const props = defineProps<{
@@ -60,8 +61,7 @@ function apply() {
 }
 
 function copyHost(row: TunnelServiceRow) {
-  void navigator.clipboard
-    .writeText(`https://${row.hostname}`)
+  void writeClipboardText(`https://${row.hostname}`)
     .then(() => toastStore.showToast(`已复制 https://${row.hostname}`))
     .catch(() => toastStore.showToast('复制失败', 'error'))
 }

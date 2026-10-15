@@ -538,7 +538,7 @@ test.describe('Notes 小记', () => {
     const archived = memo(page, '已经收走')
     await archived.hover()
     // 归档视图的快捷排只留「找回 + 删除」，让位的三颗搬进 ⋯，两边不重复
-    await expect(archived.locator('.memo-acts button')).toHaveCount(5)
+    await expect(archived.locator('.memo-acts button')).toHaveCount(6)
     await tipButton(archived, '更多操作').click()
     await expect(page.locator('.popover .pop-item')).toHaveText(['置顶', '收藏', '复制正文', '加密'])
     await page.keyboard.press('Escape')
@@ -735,9 +735,10 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.memo-locked')).toHaveCount(1)
     // 露标题上线前锁的那条：库里 title 是空的，本会话第一次解锁前只剩提示语
     await expect(sealed.locator('.memo-locked')).toContainText('已加密 · 单击解锁')
-    // 锁着的那条只剩一把解锁钮；加密动作在明文卡的 ⋯ 里
-    await expect(sealed.locator('.memo-acts button')).toHaveCount(1)
-    await expect(plain.locator('.memo-acts button')).toHaveCount(7)
+    // 锁着的条目可解锁或发起明文导出；加密动作仍在明文卡的 ⋯ 里
+    await expect(sealed.locator('.memo-acts button')).toHaveCount(2)
+    await expect(sealed.getByRole('button', { name: '导出', exact: true })).toHaveCount(1)
+    await expect(plain.locator('.memo-acts button')).toHaveCount(8)
 
     // 首次加密就是立全库口令，只有这一次要输两格
     await (await noteMenu(page, plain)).locator('.pop-item:text-is("加密")').click()

@@ -1,5 +1,6 @@
-//! A Web service owns its unlock state. Only the database and data generation
-//! are shared with the desktop; screen locking never gives either side a key.
+//! Server-side Web contexts retain the service's authenticated master key.
+//! Each browser login owns its note keys and drafts; desktop screen locking
+//! never shares either side's note unlock state.
 use crate::{AppState, error::AppError, services};
 use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
 
@@ -27,11 +28,63 @@ impl WebVault {
         self.state.master_key.lock().ok()?.as_ref()?;
         Some(self.generation)
     }
+    pub fn verify_password(&self, password: &str) -> Result<(), AppError> {
+        let db = self.state.db.lock().map_err(|_| AppError::Database("无法读取当前档案".into()))?;
+        services::auth_service::verify_password(&db, password).map(|_| ())
+    }
+    pub fn require_note_access(&self, id: &str) -> Result<(), AppError> {
+        let master = self.state.master_key.lock().map_err(|_| AppError::NotUnlocked)?;
+        master.as_ref().ok_or(AppError::NotUnlocked)?;
+        let db = self.state.db.lock().map_err(|_| AppError::Database("无法读取小记".into()))?;
+        if let Some(lock) = db.get_note_lock(id)? {
+            crate::commands::note_lock::validated_dek(&self.state, id, &lock)?;
+        }
+        Ok(())
+    }
+    pub fn require_attachment_access(&self, name: &str) -> Result<(), AppError> {
+        let master = self.state.master_key.lock().map_err(|_| AppError::NotUnlocked)?;
+        master.as_ref().ok_or(AppError::NotUnlocked)?;
+        let db = self.state.db.lock().map_err(|_| AppError::Database("无法读取图片".into()))?;
+        let owners = db.attachment_note_ids(name)?;
+        // 暂存图片尚未绑定；共享图片只要在一条可读的小记里出现就可读取。
+        if owners.is_empty() { return Ok(()); }
+        for id in owners {
+            match db.get_note_lock(&id)? {
+                None => return Ok(()),
+                Some(lock) if crate::commands::note_lock::validated_dek(&self.state, &id, &lock).is_ok() => return Ok(()),
+                Some(_) => {},
+            }
+        }
+        Err(AppError::Database("请先解锁此图片所属的小记".into()))
+    }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{commands, command_state::CommandState};
+    #[test]
+    fn web_uses_current_desktop_master_password_and_same_note_recovery() {
+        use crate::commands::note_lock;
+        let desktop = crate::test_state();
+        {
+            let db = desktop.db.lock().unwrap();
+            let mut key = desktop.master_key.lock().unwrap();
+            services::auth_service::setup_master_password(&db, &mut key, "shared-desktop-password").unwrap();
+        }
+        let web = WebVault::new(&desktop).unwrap();
+        commands::auth::clear_keys(&desktop).unwrap();
+        assert!(web.verify_password("shared-desktop-password").is_ok());
+        assert!(web.verify_password("old-web-only-password").is_err());
+        assert!(desktop.master_key.lock().unwrap().is_none());
+        note_lock::note_key_setup_with_state(&web.state, "shared-note-passphrase".into()).unwrap();
+        note_lock::note_key_relock(CommandState::from_ref(&web.state)).unwrap();
+        note_lock::note_key_recover(CommandState::from_ref(&web.state)).unwrap();
+        note_lock::note_key_change_with_state(&web.state, "updated-note-passphrase".into()).unwrap();
+        *desktop.master_key.lock().unwrap() = Some(services::auth_service::verify_password(&desktop.db.lock().unwrap(), "shared-desktop-password").unwrap());
+        assert!(note_lock::note_key_unlock_with_state(&desktop, "shared-note-passphrase".into()).is_err());
+        note_lock::note_key_unlock_with_state(&desktop, "updated-note-passphrase".into()).unwrap();
+        assert_eq!(*desktop.note_key.lock().unwrap(), *web.state.note_key.lock().unwrap());
+    }
     #[test]
     fn desktop_lock_and_unlock_leave_web_read_write_available_without_unlocking_desktop() {
         let desktop = crate::test_state();
@@ -73,6 +126,39 @@ mod tests {
         *web.state.note_key.lock().unwrap()=Some(vec![10;32]);
         commands::auth::clear_keys(&desktop).unwrap();
         assert!(web.state.note_key.lock().unwrap().is_some());
+    }
+
+    #[test]
+    fn note_passphrase_unlocks_only_the_browser_that_supplied_it() {
+        use crate::{commands::{note_lock, notes}, db::CreateNoteInput};
+        let desktop = crate::test_state();
+        *desktop.master_key.lock().unwrap() = Some(vec![7; 32]);
+        note_lock::note_key_setup_with_state(&desktop, "separate-note-password".into()).unwrap();
+        let note = notes::create_note(CommandState::from_ref(&desktop), CreateNoteInput {
+            title: "private note".into(), content_html: "<p>secret</p>".into(), category: None,
+        }).unwrap();
+        note_lock::lock_note(CommandState::from_ref(&desktop), note.id.clone()).unwrap();
+        desktop.db.lock().unwrap().create_attachment(&crate::db::Attachment {
+            id: "image-fixture".into(), note_id: note.id.clone(), file_name: "secret.png".into(),
+            file_path: "fixture__secret.png".into(), file_size: 1, mime_type: "image/png".into(), created_at: 1,
+        }).unwrap();
+        let service = WebVault::new(&desktop).unwrap();
+        let first = WebVault::new(&service.state).unwrap();
+        let second = WebVault::new(&service.state).unwrap();
+        assert!(first.require_note_access(&note.id).is_err());
+        assert!(first.require_attachment_access("fixture__secret.png").is_err());
+        assert!(note_lock::note_key_unlock_with_state(&first.state, "web-access-password".into()).is_err());
+        assert!(note_lock::reveal_note(CommandState::from_ref(&first.state), note.id.clone()).is_err());
+        note_lock::note_key_unlock_with_state(&first.state, "separate-note-password".into()).unwrap();
+        assert!(first.require_note_access(&note.id).is_ok());
+        assert!(first.require_attachment_access("fixture__secret.png").is_ok());
+        assert!(second.require_attachment_access("fixture__secret.png").is_err());
+        assert_eq!(note_lock::reveal_note(CommandState::from_ref(&first.state), note.id.clone()).unwrap(), "<p>secret</p>");
+        assert!(note_lock::reveal_note(CommandState::from_ref(&second.state), note.id.clone()).is_err());
+        assert!(service.state.note_keys.lock().unwrap().is_empty());
+        note_lock::note_key_unlock_with_state(&second.state, "separate-note-password".into()).unwrap();
+        note_lock::note_key_relock(CommandState::from_ref(&first.state)).unwrap();
+        assert_eq!(note_lock::reveal_note(CommandState::from_ref(&second.state), note.id).unwrap(), "<p>secret</p>");
     }
 }
 

@@ -1856,7 +1856,6 @@ class MockBackend {
     web_access_start: ({ input }) => {
       this.requireUnlocked()
       if (this.webAccess.running) throw '服务已启动，请先停止再修改配置'
-      if (input.password.length < 8) throw 'Web 访问密码需要至少8位'
       this.webAccess = { running: true, lan: input.lan, port: input.port, urls: [`http://127.0.0.1:${input.port}`, ...(input.lan ? [`http://192.168.1.2:${input.port}`] : [])] }
       return { ...this.webAccess }
     },
@@ -2205,6 +2204,20 @@ class MockBackend {
       note.category = input.category ?? null
       note.updated_at = Date.now()
       this.noteUnlocked.delete(id)
+    },
+
+    note_export_images: ({ names }: { names: string[] }) => {
+      this.requireUnlocked()
+      return Object.fromEntries(names.filter(name => this.state.staged.some(file => nameOf(file.file_path) === name)).map(name => [name, 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6rXcAAAAASUVORK5CYII=']))
+    },
+
+    note_export_write: ({ noteIds, files, format }: { noteIds: string[]; files: { name: string; content: string }[]; format: string }) => {
+      this.requireUnlocked()
+      if (!files.length || !['markdown', 'html', 'word', 'pdf'].includes(format)) throw '导出内容无效'
+      for (const id of noteIds) {
+        const note = this.findNote(id)
+        if (note.encrypted && !this.noteUnlocked.has(id)) throw '加密小记已锁回，请解锁后重试'
+      }
     },
 
     reveal_note: ({ id }: { id: string }) => {

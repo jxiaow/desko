@@ -6,7 +6,9 @@ import { useNotesStore } from '../stores/notes'
 import { useToastStore } from '../stores/toast'
 import { fileshareApi } from '../services/api/fileshare'
 import { tunnelApi } from '../services/api/tunnel'
-import { fsRefresh } from '../services/fileshareSettings'
+import { clearFileshareSession, fsRefresh } from '../services/fileshareSettings'
+import { clearTunnelSession } from '../services/tunnelState'
+import { isWebRuntime } from '../services/runtime'
 import { loadStoragePaths, clearCodexSession } from '../services/codexState'
 
 /** 页面模块的标识，与路由名、侧栏项一一对应 */
@@ -137,6 +139,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'fileshare',
+    onLock: () => { if (isWebRuntime()) clearFileshareSession() },
     settingKey: 'fileshare_enabled',
     title: '局域网传输',
     desc: '同网段设备用浏览器互传文件',
@@ -154,6 +157,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'tunnel',
+    onLock: () => { if (isWebRuntime()) clearTunnelSession() },
     settingKey: 'tunnel_enabled',
     title: '内网穿透',
     desc: '把本机服务经 Cloudflare 隧道暴露到公网',

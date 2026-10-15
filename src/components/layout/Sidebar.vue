@@ -15,6 +15,7 @@ defineEmits<{
 }>()
 
 const route = useRoute()
+const webRuntime = isWebRuntime()
 
 const startDrag = (e: MouseEvent) => {
   if (isWebRuntime()) return
@@ -41,7 +42,7 @@ const onDragDblclick = (e: MouseEvent) => {
 
     <div v-if="!collapsed" class="sidebar-sec">模块</div>
 
-    <div class="sidebar-nav">
+    <nav class="sidebar-nav" aria-label="模块导航">
       <router-link
         v-for="m in enabledModules"
         :key="m.id"
@@ -55,13 +56,13 @@ const onDragDblclick = (e: MouseEvent) => {
           <AppIcon :name="m.icon" :size="collapsed ? 22 : 18" />
         </div>
         <Transition name="nav-text">
-          <span v-if="!collapsed" class="nav-text">{{ m.title }}</span>
+          <span v-if="!collapsed || webRuntime" class="nav-text">{{ m.title }}</span>
         </Transition>
         <Transition name="nav-text">
           <span v-if="!collapsed && m.count && m.count() > 0" class="nav-count">{{ m.count() }}</span>
         </Transition>
       </router-link>
-    </div>
+    </nav>
   </div>
 </template>
 
@@ -218,6 +219,7 @@ const onDragDblclick = (e: MouseEvent) => {
   justify-content: center;
   padding: 0;
 }
+.sidebar.collapsed .nav-text { display: none; }
 
 /* 图标分两档：展开档文字打头，图标退到 18px 当锚点；图标轨档 22px，
    那里图标是唯一线索，缩到 18 会显得空。AppIcon 的 size 决定实笔反算，

@@ -5,6 +5,9 @@ struct Fake {
     invocations: AtomicU64,
 }
 impl Backend for Fake {
+    fn verify_password(&self, password: &str) -> Result<(), String> {
+        if password == "test-password" { Ok(()) } else { Err("密码错误".into()) }
+    }
     fn epoch(&self) -> Option<u64> {
         let n = self.epoch.load(Ordering::SeqCst);
         (n != 0).then_some(n)
@@ -33,7 +36,7 @@ fn service() -> (Running, Arc<Fake>, String) {
         epoch: AtomicU64::new(1),
         invocations: AtomicU64::new(0),
     });
-    let service = start(fake.clone(), 0, false, "test-password").unwrap();
+    let service = start(fake.clone(), 0, false).unwrap();
     let url = service.status.urls[0].clone();
     (service, fake, url)
 }
@@ -136,17 +139,13 @@ fn http_rejects_foreign_origin_rebinding_native_commands_and_invalid_json() {
     assert!(html.contains("name=\"desko-runtime\" content=\"web\""));
 }
 #[test]
-fn host_and_password_validation_are_explicit() {
+fn host_validation_is_explicit() {
     assert!(valid_host("127.0.0.1:8420", 8420, false));
     assert!(!valid_host("192.168.1.2:8420", 8420, false));
     assert!(valid_host("192.168.1.2:8420", 8420, true));
     assert!(!valid_host("evil.example:8420", 8420, true));
     assert!(!valid_host("127.0.0.1:8421", 8420, true));
-    let fake = Arc::new(Fake {
-        epoch: AtomicU64::new(1),
-        invocations: AtomicU64::new(0),
-    });
-    assert!(start(fake, 0, false, "short").is_err());
+
 }
 
 #[test]
@@ -184,6 +183,9 @@ fn logout_invalidates_a_pending_rpc_result_before_it_is_returned() {
         resume: Mutex<std::sync::mpsc::Receiver<()>>,
     }
     impl Backend for Blocking {
+        fn verify_password(&self, password: &str) -> Result<(), String> {
+            if password == "test-password" { Ok(()) } else { Err("密码错误".into()) }
+        }
         fn epoch(&self) -> Option<u64> {
             Some(1)
         }
@@ -211,7 +213,7 @@ fn logout_invalidates_a_pending_rpc_result_before_it_is_returned() {
         started: Mutex::new(Some(started_tx)),
         resume: Mutex::new(resume_rx),
     });
-    let running = start(backend, 0, false, "test-password").unwrap();
+    let running = start(backend, 0, false).unwrap();
     let url = running.status.urls[0].clone();
     let cookie = login(&url);
     let request_url = url.clone();
@@ -242,6 +244,7 @@ fn logout_stops_an_already_open_resource_reader() {
     let auth = Authorization {
         epoch: 1,
         token: cookie.split_once('=').unwrap().1.into(),
+        backend: running.context.backend.clone(),
     };
     let mut reader = GuardedReader {
         reader: Box::new(std::io::Cursor::new(b"private bytes")),
@@ -261,6 +264,43 @@ fn logout_stops_an_already_open_resource_reader() {
         reader.read(&mut byte).unwrap_err().kind(),
         std::io::ErrorKind::PermissionDenied
     );
+}
+
+#[test]
+fn browsers_get_independent_unlock_state_and_relogin_starts_locked() {
+    struct Isolated { unlocked: AtomicBool }
+    impl Backend for Isolated {
+        fn verify_password(&self, password: &str) -> Result<(), String> {
+            if password == "test-password" { Ok(()) } else { Err("密码错误".into()) }
+        }
+        fn epoch(&self) -> Option<u64> { Some(1) }
+        fn fork_session(&self) -> Result<Option<Arc<dyn Backend>>, String> {
+            Ok(Some(Arc::new(Self { unlocked: AtomicBool::new(false) })))
+        }
+        fn invoke(&self, command: &str, _: Value, _: u64) -> Result<Value, String> {
+            if command == "unlock_fixture" { self.unlocked.store(true, Ordering::SeqCst); }
+            Ok(json!(self.unlocked.load(Ordering::SeqCst)))
+        }
+        fn asset(&self, _: &str) -> Option<Resource> { None }
+        fn private_resource(&self, _: &str) -> Result<Resource, String> { Err("not found".into()) }
+    }
+    let running = start(Arc::new(Isolated { unlocked: AtomicBool::new(false) }), 0, false).unwrap();
+    let url = &running.status.urls[0];
+    let first = login(url);
+    let second = login(url);
+    let invoke = |cookie: &str, command: &str| -> bool {
+        let body = ureq::post(&format!("{url}/api/invoke"))
+            .set("Cookie", cookie).set("Content-Type", "application/json")
+            .send_string(&json!({"command":command}).to_string()).unwrap().into_string().unwrap();
+        serde_json::from_str(&body).unwrap()
+    };
+    assert!(!invoke(&first, "status"));
+    assert!(invoke(&first, "unlock_fixture"));
+    assert!(!invoke(&second, "status"), "another browser must not inherit note keys");
+    assert!(invoke(&first, "status"));
+    ureq::post(&format!("{url}/api/logout")).set("Cookie", &first).send_string("").unwrap();
+    let replacement = login(url);
+    assert!(!invoke(&replacement, "status"), "a new login starts with locked notes");
 }
 
 #[test]
@@ -295,7 +335,7 @@ fn explicit_stop_releases_the_port_before_an_immediate_restart() {
     let (running, fake, _) = service();
     let port = running.status.port;
     running.stop_and_wait();
-    let restarted = start(fake, port, false, "test-password").unwrap();
+    let restarted = start(fake, port, false).unwrap();
     assert_eq!(restarted.status.port, port);
     restarted.stop_and_wait();
 }
@@ -350,6 +390,9 @@ fn relogin_replaces_this_browser_session_and_failed_password_keeps_it() {
 fn head_download_checks_session_and_length_without_transferring_file_bytes() {
     struct FileBackend(std::path::PathBuf);
     impl Backend for FileBackend {
+        fn verify_password(&self, password: &str) -> Result<(), String> {
+            if password == "test-password" { Ok(()) } else { Err("密码错误".into()) }
+        }
         fn epoch(&self) -> Option<u64> {
             Some(1)
         }
@@ -374,7 +417,6 @@ fn head_download_checks_session_and_length_without_transferring_file_bytes() {
         Arc::new(FileBackend(path.clone())),
         0,
         false,
-        "test-password",
     )
     .unwrap();
     let url = running.status.urls[0].clone();

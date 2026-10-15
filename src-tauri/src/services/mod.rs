@@ -2,6 +2,8 @@ pub mod auth_service;
 pub mod entry_service;
 pub mod favicon_service;
 pub mod note_service;
+pub mod note_export;
+pub mod note_pdf;
 pub mod note_draft_service;
 pub mod file_service;
 pub mod attachment_service;

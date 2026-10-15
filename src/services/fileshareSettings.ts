@@ -8,6 +8,14 @@ export const fsStatus = ref<FileShareStatus | null>(null)
 export const fsConfig = ref<FileShareConfig | null>(null)
 export const fsLoaded = ref(false)
 export const fsBusy = ref(false)
+let generation = 0
+export function clearFileshareSession(): void {
+  generation++
+  fsStatus.value = null
+  fsConfig.value = null
+  fsLoaded.value = false
+  fsBusy.value = false
+}
 
 export const fsRunning = computed(() => fsStatus.value?.running ?? false)
 export const fsPortDrifted = computed(
@@ -17,15 +25,17 @@ export const fsHasPassword = computed(() => fsConfig.value?.hasPassword ?? false
 export const fsLocalOnly = computed(() => fsConfig.value?.localOnly ?? false)
 
 export async function fsRefresh(): Promise<void> {
+  const epoch = generation
   const toastStore = useToastStore()
   try {
     const [st, cfg] = await Promise.all([fileshareApi.status(), fileshareApi.getConfig()])
+    if (epoch !== generation) return
     fsStatus.value = st
     fsConfig.value = cfg
   } catch (e) {
-    toastStore.showToast(errText(e), 'error')
+    if (epoch === generation) toastStore.showToast(errText(e), 'error')
   } finally {
-    fsLoaded.value = true
+    if (epoch === generation) fsLoaded.value = true
   }
 }
 
@@ -35,23 +45,30 @@ export async function fsSaveConfig(
   nextPort: number,
   nextLocalOnly: boolean
 ): Promise<void> {
+  const epoch = generation
   fsBusy.value = true
   try {
-    fsStatus.value = await fileshareApi.saveConfig(nextPort, nextDirs, nextLocalOnly)
+    const status = await fileshareApi.saveConfig(nextPort, nextDirs, nextLocalOnly)
+    if (epoch === generation) fsStatus.value = status
   } finally {
-    fsBusy.value = false
-    await fsRefresh()
+    if (epoch === generation) {
+      fsBusy.value = false
+      await fsRefresh()
+    }
   }
 }
 
 /** 空串 = 清除口令 */
 export async function fsSetPassword(password: string): Promise<void> {
+  const epoch = generation
   fsBusy.value = true
   try {
     await fileshareApi.setPassword(password)
   } finally {
-    fsBusy.value = false
-    await fsRefresh()
+    if (epoch === generation) {
+      fsBusy.value = false
+      await fsRefresh()
+    }
   }
 }
 

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { listen } from '../../services/events'
+import { writeClipboardText } from '../../utils/clipboard'
 import { codexApi, type CodexAccount } from '../../services/api/codex'
 import { errText } from '../../services/api/backup'
 import {
@@ -253,7 +255,7 @@ async function doSwitch(a: CodexAccount) {
 
 async function copyEmail(a: CodexAccount) {
   try {
-    await navigator.clipboard.writeText(a.email)
+    await writeClipboardText(a.email)
     toastStore.showToast('邮箱已复制')
   } catch {
     toastStore.showToast('复制失败', 'error')
@@ -271,7 +273,7 @@ function exportJson(ids: string[]) {
       try {
         const json = await codexApi.exportJson(selectedIds)
         if (!active) return
-        await navigator.clipboard.writeText(json)
+        await writeClipboardText(json)
         if (active) toastStore.showToast(`已导出 ${selectedIds.length} 条账号的 JSON 到剪贴板`)
       } catch (e) {
         if (active) toastStore.showToast(errText(e), 'error')

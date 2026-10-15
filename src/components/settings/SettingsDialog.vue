@@ -346,7 +346,7 @@ onMounted(() => {
               <div class="setting-item">
                 <div class="setting-info">
                   <span class="setting-name">背景氛围</span>
-                  <span id="background-atmosphere-desc" class="setting-desc">{{ isPlainTheme(appearance.theme) ? '素色主题保持纯色背景，此偏好在氛围配色中生效' : '随强调色变化的静态柔光' }}</span>
+                  <span id="background-atmosphere-desc" class="setting-desc">在任意底色上叠加随强调色变化的柔光</span>
                 </div>
                 <label class="switch">
                   <input
@@ -355,7 +355,7 @@ onMounted(() => {
                     aria-label="背景氛围"
                     aria-describedby="background-atmosphere-desc"
                     :checked="appearance.backgroundAtmosphere"
-                    :disabled="savingAtmosphere || isPlainTheme(appearance.theme)"
+                    :disabled="savingAtmosphere"
                     @change="saveBackgroundAtmosphere"
                   />
                   <span class="switch-slider"></span>

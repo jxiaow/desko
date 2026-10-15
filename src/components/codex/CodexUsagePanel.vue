@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import type { CodexUsageBucket } from '../../services/api/codex'
 import { loadUsage, usageBusy, usageError, usageRange, usageReport, usageUpdatedAt } from '../../services/codexState'
-import { localDayKey, usageWindowFrom } from '../../utils/codexUsage'
+import { formatTokenCount as compact, localDayKey, usageWindowFrom } from '../../utils/codexUsage'
 import AppIcon from '../shared/AppIcon.vue'
 import CodexDailyUsageChart from './CodexDailyUsageChart.vue'
 import CodexTodayUsageChart from './CodexTodayUsageChart.vue'
@@ -78,18 +78,18 @@ function pct(part: number, whole: number): number {
         </div>
         <div class="usg-overview">
           <div class="usg-sum-main">
-            <span class="usg-num">{{ num(totals.totalTokens) }}</span>
+            <span class="usg-num" :title="`${num(totals.totalTokens)} Token`">{{ compact(totals.totalTokens) }}</span>
             <span class="usg-sum-label">总 Token</span>
           </div>
           <dl class="usg-metrics">
-            <div class="usg-metric" data-metric="fresh"><dt>净输入</dt><dd>{{ num(freshInput(totals)) }}</dd></div>
-            <div class="usg-metric" data-metric="cached"><dt>缓存命中</dt><dd>{{ num(totals.cachedInputTokens) }}</dd></div>
-            <div class="usg-metric" data-metric="output"><dt>输出</dt><dd>{{ num(totals.outputTokens) }}</dd></div>
+            <div class="usg-metric" data-metric="fresh"><dt>净输入</dt><dd :title="`${num(freshInput(totals))} Token`">{{ compact(freshInput(totals)) }}</dd></div>
+            <div class="usg-metric" data-metric="cached"><dt>缓存命中</dt><dd :title="`${num(totals.cachedInputTokens)} Token`">{{ compact(totals.cachedInputTokens) }}</dd></div>
+            <div class="usg-metric" data-metric="output"><dt>输出</dt><dd :title="`${num(totals.outputTokens)} Token`">{{ compact(totals.outputTokens) }}</dd></div>
           </dl>
         </div>
         <div class="usg-facts">
           <span class="usg-count">{{ num(totals.requestCount) }} 轮 · {{ num(totals.sessionCount) }} 条会话</span>
-          <span>输出中含推理 <b class="mono-ish">{{ num(totals.reasoningOutputTokens) }}</b></span>
+          <span>输出中含推理 <b class="mono-ish" :title="`${num(totals.reasoningOutputTokens)} Token`">{{ compact(totals.reasoningOutputTokens) }}</b></span>
           <span class="usg-updated">{{ usageBusy ? '更新中…' : `更新于 ${updatedTime}` }}</span>
         </div>
       </section>
@@ -113,7 +113,7 @@ function pct(part: number, whole: number): number {
               <tbody>
                 <tr v-for="d in dailyRows" :key="d.key" class="usg-day-row" :data-day="d.key">
                   <th scope="row">{{ d.key }}<span v-if="d.key === updatedDay" class="usg-today-mark">今天</span></th>
-                  <td class="usg-day-total">{{ num(d.totalTokens) }}</td><td>{{ num(freshInput(d)) }}</td><td>{{ num(d.cachedInputTokens) }}</td><td>{{ num(d.outputTokens) }}</td><td>{{ num(d.requestCount) }}</td>
+                  <td class="usg-day-total" :title="num(d.totalTokens)">{{ compact(d.totalTokens) }}</td><td :title="num(freshInput(d))">{{ compact(freshInput(d)) }}</td><td :title="num(d.cachedInputTokens)">{{ compact(d.cachedInputTokens) }}</td><td :title="num(d.outputTokens)">{{ compact(d.outputTokens) }}</td><td>{{ num(d.requestCount) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -126,7 +126,7 @@ function pct(part: number, whole: number): number {
         <div v-for="m in models" :key="m.key" class="usg-model-row" :data-model="m.key" :title="`${m.label}：合计 ${num(m.totalTokens)} · 净输入 ${num(freshInput(m))} · 缓存 ${num(m.cachedInputTokens)} · 输出 ${num(m.outputTokens)}`">
           <span class="usg-model-name">{{ m.label }}</span>
           <span class="usg-track"><span class="usg-fill" :style="{ width: `${pct(m.totalTokens, totals.totalTokens)}%` }"></span></span>
-          <span class="usg-model-num mono-ish">{{ num(m.totalTokens) }}</span>
+          <span class="usg-model-num mono-ish" :title="`${num(m.totalTokens)} Token`">{{ compact(m.totalTokens) }}</span>
           <span class="usg-model-pct mono-ish">{{ pct(m.totalTokens, totals.totalTokens).toFixed(1) }}%</span>
         </div>
       </section>
@@ -141,7 +141,8 @@ function pct(part: number, whole: number): number {
 
 <style scoped>
 .page-note { font-size: var(--text-xs); }
-.usg-view { display: flex; flex-direction: column; gap: var(--space-3); }
+.usg-view { --usage-fresh: #376cb3; --usage-cached: #32856f; --usage-output: #b96b25; display: flex; flex-direction: column; gap: var(--space-3); }
+[data-base='dark'] .usg-view { --usage-fresh: #8aadf4; --usage-cached: #6bc5b4; --usage-output: #e8ac68; }
 .usg-sum { padding: 16px 18px 12px; }
 .usg-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; }
 .usg-heading h3 { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--text); }
@@ -152,6 +153,9 @@ function pct(part: number, whole: number): number {
 .usg-sum-label { font-size: var(--text-xs); color: var(--text-muted); }
 .usg-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 1; gap: 12px; margin: 0; }
 .usg-metric dt { font-size: var(--text-xs); color: var(--text-muted); }
+.usg-metric dt::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; background: var(--usage-fresh); }
+.usg-metric[data-metric='cached'] dt::before { background: var(--usage-cached); }
+.usg-metric[data-metric='output'] dt::before { background: var(--usage-output); }
 .usg-metric dd { margin: 6px 0 0; font-size: var(--text-md); font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; color: var(--text-secondary); }
 .usg-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding-top: 10px; border-top: 1px solid var(--border); font-size: var(--text-xs); color: var(--text-muted); }
 .usg-facts b { font-weight: 500; color: var(--text-secondary); }
