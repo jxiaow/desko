@@ -7,7 +7,6 @@ import {
   loadSessionTokens,
   loadSessions,
   moveSessionToTrash,
-  sessionGroupsSeeded,
   sessionOpenGroups,
   sessionOpenId,
   sessionQuery,
@@ -24,6 +23,7 @@ import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
+let active = true
 
 /** 官方目录一次全扫是重 I/O：进这一档才扫，扫过就留在内存，切回不重取 */
 onMounted(() => {
@@ -112,7 +112,7 @@ function isOpen(key: string) {
   return searching.value || sessionOpenGroups.value.has(key)
 }
 
-async function toggleGroup(key: string, ids: string[]) {
+function toggleGroup(key: string, ids: string[]) {
   const next = new Set(sessionOpenGroups.value)
   if (next.has(key)) {
     next.delete(key)
@@ -120,21 +120,10 @@ async function toggleGroup(key: string, ids: string[]) {
   } else {
     next.add(key)
     // 进档时已按全量预取过；这里只补预取失败或新出现在列表里的 id
-    await loadSessionTokens(ids)
+    void loadSessionTokens(ids)
   }
   sessionOpenGroups.value = next
 }
-
-/** 首屏别只给一排壳：进档把最近活动那一组摊开，播过一次就不再跟用户抢折叠权 */
-watch(
-  groups,
-  (list) => {
-    if (sessionGroupsSeeded.value || !list.length) return
-    sessionGroupsSeeded.value = true
-    sessionOpenGroups.value = new Set([list[0].key])
-  },
-  { immediate: true },
-)
 
 const kindLabel = (kind: string) => (kind === 'subagent' ? '子代理' : kind === 'external' ? '外部' : '')
 
@@ -224,6 +213,7 @@ watch([sessionQuery, sessionSearchMode], () => {
   debounce = setTimeout(() => void loadSessions(), 300)
 })
 onUnmounted(() => {
+  active = false
   if (debounce) clearTimeout(debounce)
 })
 
@@ -231,7 +221,7 @@ onUnmounted(() => {
 const busyId = ref('')
 
 async function runOnSession(id: string, fn: () => Promise<void>) {
-  if (busyId.value) return
+  if (!active || busyId.value) return
   busyId.value = id
   try {
     await fn()
@@ -252,10 +242,12 @@ function askTrash(s: CodexSessionRecord) {
     () => {
       void runOnSession(s.sessionId, async () => {
         try {
-          toastStore.showToast(await moveSessionToTrash(s.sessionId))
+          const message = await moveSessionToTrash(s.sessionId)
+          if (!active) return
+          toastStore.showToast(message)
           if (sessionOpenId.value === s.sessionId) sessionOpenId.value = ''
         } catch (e) {
-          toastStore.showToast(errText(e), 'error')
+          if (active) toastStore.showToast(errText(e), 'error')
         }
       })
     },
@@ -267,7 +259,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
     try {
       await fn(id)
     } catch (e) {
-      toastStore.showToast(errText(e) || failText, 'error')
+      if (active) toastStore.showToast(errText(e) || failText, 'error')
     }
   })
 }

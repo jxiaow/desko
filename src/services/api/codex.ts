@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '../transport'
 
 /** 主动重置次数里的单条记录；status 后端已小写化，缺省时得自己看 expires_at */
 export interface CodexResetCredit {

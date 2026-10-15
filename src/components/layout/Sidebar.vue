@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import { isWebRuntime } from '../../services/runtime'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { enabledModules } from '../../modules/state'
 import { modulePath } from '../../modules/registry'
@@ -16,11 +17,13 @@ defineEmits<{
 const route = useRoute()
 
 const startDrag = (e: MouseEvent) => {
+  if (isWebRuntime()) return
   if ((e.target as HTMLElement).closest('button')) return
   getCurrentWindow().startDragging()
 }
 
 const onDragDblclick = (e: MouseEvent) => {
+  if (isWebRuntime()) return
   if ((e.target as HTMLElement).closest('button')) return
   getCurrentWindow().toggleMaximize()
 }
@@ -67,7 +70,7 @@ const onDragDblclick = (e: MouseEvent) => {
   width: var(--sidebar-w);
   /* Things 式暖灰目录列：体积感靠这一档底色，右界只留发丝线 */
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-navigation);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;

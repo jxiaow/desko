@@ -47,6 +47,7 @@ test('筛选结果的全选只增加当前可见账号，导出不夹带其他�
   await page.getByRole('button', { name: '全选筛选结果', exact: true }).click()
   await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
   await page.getByRole('button', { name: '导出所选 JSON', exact: true }).click()
+  await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
   const accounts = JSON.parse(await page.evaluate(() => navigator.clipboard.readText())).accounts
   expect(accounts.map((a: { email: string }) => a.email).sort()).toEqual(['main@e2e.dev', 'need@e2e.dev'])
 })

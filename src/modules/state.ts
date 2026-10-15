@@ -1,10 +1,14 @@
+import { isWebRuntime } from '../services/runtime'
 import { computed, reactive } from 'vue'
 import { settingsApi } from '../services/api/settings'
 import { MODULES, moduleById, type ModuleDef, type ModuleId } from './registry'
 
+const WEB_MODULES = new Set<ModuleId>(['notes', 'entries', 'files', 'mfa'])
+const availableInRuntime = (id: ModuleId) => !isWebRuntime() || WEB_MODULES.has(id)
+
 /** 各模块总开关的当前值。默认按注册表缺省播种，首帧即是终态候选，不靠异步填。 */
 export const moduleFlags = reactive<Record<ModuleId, boolean>>(
-  Object.fromEntries(MODULES.map((m) => [m.id, m.defaultEnabled])) as Record<ModuleId, boolean>
+  Object.fromEntries(MODULES.map((m) => [m.id, availableInRuntime(m.id) && (isWebRuntime() || m.defaultEnabled)])) as Record<ModuleId, boolean>
 )
 
 let loaded = false
@@ -17,8 +21,13 @@ function parseFlag(raw: string, m: ModuleDef): boolean {
 /** bootstrap 阶段跑一次：路由、侧栏、设置页都必须在挂载前就看到终态开关 */
 export async function loadModuleFlags(): Promise<void> {
   if (loaded) return
+  if (isWebRuntime()) {
+    for (const module of MODULES) moduleFlags[module.id] = WEB_MODULES.has(module.id)
+    loaded = true
+    return
+  }
   await Promise.all(
-    MODULES.map(async (m) => {
+    MODULES.filter(m => availableInRuntime(m.id)).map(async (m) => {
       try {
         moduleFlags[m.id] = parseFlag(await settingsApi.getSetting(m.settingKey), m)
       } catch {
@@ -30,10 +39,10 @@ export async function loadModuleFlags(): Promise<void> {
 }
 
 export function isModuleEnabled(id: ModuleId): boolean {
-  return moduleFlags[id]
+  return availableInRuntime(id) && moduleFlags[id]
 }
 
-export const enabledModules = computed(() => MODULES.filter((m) => moduleFlags[m.id]))
+export const enabledModules = computed(() => MODULES.filter((m) => isModuleEnabled(m.id)))
 
 /** 落地页：启用模块里排最前的那个；全关时没有页面可去，交给空态壳 */
 export function landingPath(): string | null {
@@ -42,6 +51,7 @@ export function landingPath(): string | null {
 }
 
 export async function setModuleEnabled(id: ModuleId, on: boolean): Promise<void> {
+  if (!availableInRuntime(id)) throw new Error('此模块仅在桌面版可用')
   const m = moduleById(id)
   const prev = moduleFlags[id]
   moduleFlags[id] = on
@@ -69,7 +79,7 @@ export async function bootEnabledModules(): Promise<void> {
 
 /** 关闭过的模块也可能有待保存内容和敏感缓存，锁定时一并处理。 */
 export async function flushModulesBeforeLock(): Promise<void> {
-  await Promise.all(MODULES.map(m => m.beforeLock?.()))
+  await Promise.all(MODULES.filter(m => availableInRuntime(m.id)).map(m => m.beforeLock?.()))
 }
 
 /** 锁定：各模块收回会话态，不受当前开关影响。 */

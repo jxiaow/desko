@@ -170,3 +170,28 @@ describe('module state', () => {
     moduleById('notes').onLock = undefined
   })
 })
+
+describe('Web 模块白名单', () => {
+  it('桌面启用的工具不出现在浏览器，也不读取或写入它们的设置', async () => {
+    const meta = document.createElement('meta')
+    meta.name = 'desko-runtime'
+    meta.content = 'web'
+    document.head.append(meta)
+    try {
+      const s = await loadState()
+      const { settingsApi } = await import('../../services/api/settings')
+      const read = vi.spyOn(settingsApi, 'getSetting').mockResolvedValue('true')
+      const write = vi.spyOn(settingsApi, 'setSetting').mockResolvedValue(undefined)
+      await s.loadModuleFlags()
+      s.moduleFlags.codex = true
+      s.moduleFlags.tunnel = true
+      expect(s.enabledModules.value.map(module => module.id)).toEqual(['notes', 'entries', 'files', 'mfa'])
+      expect(s.isModuleEnabled('codex')).toBe(false)
+      expect(read).not.toHaveBeenCalled()
+      await expect(s.setModuleEnabled('tunnel', true)).rejects.toThrow('此模块仅在桌面版可用')
+      expect(write).not.toHaveBeenCalled()
+      read.mockRestore()
+      write.mockRestore()
+    } finally { meta.remove() }
+  })
+})

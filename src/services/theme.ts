@@ -1,10 +1,10 @@
 /* 主题：颜色（和外设字体栈）会换，尺度（圆角/间距/字号）不动。
  *
  * v3 起是「底色 × 极性 × accent」三样两轴：
- *   底色 paper 纸 / snow 雪 / ink 墨 / slate 岩，每套交出完全相同的 96 槽；
+ *   底色十一套，每套交出完全相同的 96 槽；
  *   极性 light / dark 由底色决定（不是第三轴，用户不能单设），只用来挂 accent；
- *   accent 五档墨蓝/青瓷/赭石/紫罗/暮瑰，覆盖层按 [data-base][data-accent] 填 accent 族 17 槽。
- * 所以组合数 = 底色 4 × accent 5 = 20，但 accent 块只有 2×5=10 个——新增底色不必再配一轮 accent。
+ *   accent 十档，覆盖层按 [data-base][data-accent] 填 accent 族 17 槽。
+ * 所以组合数 = 底色 11 × accent 10 = 110，但 accent 块只有 2×10=20 个——新增底色不必再配一轮 accent。
  * 这里负责把 data-theme / data-base / data-accent 三个属性挂到 <html> 上、以及存取用户的选择。
  *
  * 读取用的是明文 meta 表，锁屏前也能拿到，所以 main.ts 可以在
@@ -58,18 +58,32 @@ const LEGACY_ACCENT: Record<string, AccentId> = {
 
 /** 注册表只保存身份；颜色由 global.css 提供，预览也消费同一套令牌。 */
 export const THEMES = [
-  { id: 'paper', name: '纸' },
-  { id: 'snow', name: '雪' },
-  { id: 'ink', name: '墨' },
-  { id: 'slate', name: '岩' },
+  { id: 'paper', name: '纸', kind: 'atmosphere' },
+  { id: 'snow', name: '雪', kind: 'atmosphere' },
+  { id: 'linen', name: '绢', kind: 'atmosphere' },
+  { id: 'mist', name: '雾', kind: 'atmosphere' },
+  { id: 'ink', name: '墨', kind: 'atmosphere' },
+  { id: 'slate', name: '岩', kind: 'atmosphere' },
+  { id: 'midnight', name: '夜', kind: 'atmosphere' },
+  { id: 'moss', name: '苔', kind: 'atmosphere' },
+  { id: 'purewhite', name: '素白', kind: 'plain' },
+  { id: 'warmgray', name: '暖灰', kind: 'plain' },
+  { id: 'charcoal', name: '炭黑', kind: 'plain' },
 ] as const
 
 /** 底色 → accent 覆盖层挂的那一极。新增底色只需在这里登记一行。 */
 export const POLARITY: Record<ThemeId, PolarityId> = {
+  purewhite: 'light',
+  warmgray: 'light',
+  charcoal: 'dark',
   paper: 'light',
   snow: 'light',
+  linen: 'light',
+  mist: 'light',
   ink: 'dark',
   slate: 'dark',
+  midnight: 'dark',
+  moss: 'dark',
 }
 
 export const ACCENTS = [
@@ -78,6 +92,11 @@ export const ACCENTS = [
   { id: 'clay', name: '赭石' },
   { id: 'plum', name: '紫罗' },
   { id: 'rose', name: '暮瑰' },
+  { id: 'teal', name: '碧青' },
+  { id: 'forest', name: '松绿' },
+  { id: 'amber', name: '琥珀' },
+  { id: 'coral', name: '珊瑚' },
+  { id: 'graphite', name: '石墨' },
 ] as const
 
 export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink', backgroundAtmosphere: true }
@@ -89,11 +108,18 @@ const isThemeId = (v: string): v is ThemeId => THEMES.some((t) => t.id === v)
 const isAccentId = (v: string): v is AccentId => ACCENTS.some((a) => a.id === v)
 
 export const polarityOf = (theme: ThemeId): PolarityId => POLARITY[theme]
+export const isPlainTheme = (theme: ThemeId): boolean => THEMES.find(t => t.id === theme)?.kind === 'plain'
+export const THEME_GROUPS = [
+  { label: '素色', themes: THEMES.filter(theme => theme.kind === 'plain') },
+  { label: '氛围配色', themes: THEMES.filter(theme => theme.kind === 'atmosphere') },
+]
+
 
 const applyAppearance = (ap: Appearance) => {
   Object.assign(state, ap)
   const root = document.documentElement
   root.setAttribute('data-theme', ap.theme)
+  root.setAttribute('data-palette', isPlainTheme(ap.theme) ? 'plain' : 'atmosphere')
   root.setAttribute('data-base', polarityOf(ap.theme))
   root.setAttribute('data-accent', ap.accent)
   root.setAttribute('data-atmosphere', ap.backgroundAtmosphere ? 'on' : 'off')

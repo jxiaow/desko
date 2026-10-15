@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '../transport'
 import type { Entry, CreateEntryInput, UpdateEntryInput } from '../../types'
 
 export const entriesApi = {

@@ -218,11 +218,15 @@ pub(crate) async fn restore_package_while_busy(
     .await
     .map_err(|e| AppError::Backup(format!("恢复任务失败: {}", e)))??;
 
+    // End independent Web access before changing the vault and its attachments.
+    crate::web_access::web_access_stop(app.clone()).await.map_err(AppError::Backup)?;
     // 阶段二（持锁）：关连接 → 换文件 → 重开
     emit_progress(&app, "restore", "替换数据库", 92);
     {
+        let _web_session = crate::web_access::SESSION_GATE.write().map_err(|_| AppError::Database("Web 会话状态无法读取".into()))?;
         let mut master = state.master_key.lock().map_err(|_| AppError::Database("lock error".into()))?;
         let mut db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+        state.data_epoch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         db.swap_into_restored_with_accounts(&data_dir, &attachments, &staging, accounts.as_deref())?;
         *master = None;
         state.lock_epoch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

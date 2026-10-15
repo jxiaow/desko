@@ -126,7 +126,6 @@ export function clearCodexSession(): void {
   sessionTokens.value = {}
   sessionOpenGroups.value = new Set()
   sessionOpenId.value = ''
-  sessionGroupsSeeded.value = false
   rescanQueued = false
   trashSessions.value = []
   trashLoaded.value = false
@@ -390,8 +389,6 @@ export const sessionTokens = ref<Record<string, CodexSessionTokenStats>>({})
 /** 组展开态住在这一档而不是面板里：组件被 v-if 卸挂不该把用户翻开的组一起带走 */
 export const sessionOpenGroups = ref<Set<string>>(new Set())
 export const sessionOpenId = ref('')
-/** 首屏只播种一次「最近活动」那组：播过就不再自动开，用户折叠了也不跟 */
-export const sessionGroupsSeeded = ref(false)
 
 /** 全扫期间又来一次（边扫边改搜索词）：先记下，本轮结束立刻补一次，别让新词被吞掉 */
 let rescanQueued = false
@@ -480,7 +477,9 @@ export async function loadTrash(): Promise<void> {
 
 /** 移进回收站。成功后立刻把这条从列表与 token 缓存里摘掉：合计量不能拿着已删的数 */
 export async function moveSessionToTrash(sessionId: string): Promise<string> {
+  const epoch = accountEpoch
   const summary = await codexApi.moveToTrash([sessionId])
+  if (epoch !== accountEpoch) return ''
   sessions.value = sessions.value.filter((s) => s.sessionId !== sessionId)
   const next = { ...sessionTokens.value }
   delete next[sessionId]
@@ -492,9 +491,12 @@ export async function moveSessionToTrash(sessionId: string): Promise<string> {
 
 /** 恢复：留底这一行当场摘掉，官方目录多了一条要整页重扫才看得见；顺手丢掉 token 缓存 */
 export async function restoreTrashedSession(sessionId: string): Promise<string> {
+  const epoch = accountEpoch
   const summary = await codexApi.restoreFromTrash([sessionId])
+  if (epoch !== accountEpoch) return ''
   dropTrashRow(sessionId)
   await reloadSessions()
+  if (epoch !== accountEpoch) return ''
   // 文件回到官方目录，图上那一天就多这一笔；彻底删除/清空不动目录，无须标脏
   invalidateUsage()
   return summary.message
@@ -502,13 +504,17 @@ export async function restoreTrashedSession(sessionId: string): Promise<string> 
 
 /** 彻底删除与清空动的都是留底自己，行上当场消失，不必回读目录 */
 export async function deleteTrashedSession(sessionId: string): Promise<string> {
+  const epoch = accountEpoch
   const summary = await codexApi.deleteFromTrash([sessionId])
+  if (epoch !== accountEpoch) return ''
   dropTrashRow(sessionId)
   return summary.message
 }
 
 export async function emptySessionTrash(): Promise<string> {
+  const epoch = accountEpoch
   const summary = await codexApi.emptyTrash()
+  if (epoch !== accountEpoch) return ''
   trashSessions.value = []
   return summary.message
 }
@@ -548,23 +554,30 @@ export async function loadRecycled(): Promise<void> {
 
 /** 恢复成功要把账号页重读一遍：那条号已经回到索引里，不重读就是假象 */
 export async function restoreRecycledAccount(recycleId: string): Promise<string> {
+  const epoch = accountEpoch
   await codexApi.restoreRecycled(recycleId)
+  if (epoch !== accountEpoch) return ''
   dropRecycledRow(recycleId)
   await refreshAccounts()
+  if (epoch !== accountEpoch) return ''
   return '已恢复到账号列表'
 }
 
 export async function deleteRecycledAccount(recycleId: string): Promise<string> {
+  const epoch = accountEpoch
   await codexApi.deleteRecycled(recycleId)
+  if (epoch !== accountEpoch) return ''
   dropRecycledRow(recycleId)
   return '已彻底删除这条留底'
 }
 
 /** 清空的范围等于刚看到的那份清单，别处新删的号不在里面 */
 export async function emptyRecycledAccounts(): Promise<string> {
+  const epoch = accountEpoch
   const ids = recycledAccounts.value.map((r) => r.id)
   if (!ids.length) return '账号留底已经是空的'
   await codexApi.emptyRecycled(ids)
+  if (epoch !== accountEpoch) return ''
   recycledAccounts.value = []
   return `已彻底删除 ${ids.length} 条留底`
 }

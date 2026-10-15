@@ -234,10 +234,11 @@ const editor = useEditor({
   parseOptions: { preserveWhitespace: 'full' },
   // 胶囊输入不抢焦点：它默认收成一行，抢了焦点就等于永远是展开的，折叠态白做。
   // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
-  autofocus: props.variant === 'composer' ? false : (isBlankContent(props.initialContent) ? 'start' : 'end'),
+  autofocus: false,
   editorProps: {
     handleTextInput: (view, from, to, text, defaultTransaction) => {
-      if (view.composing || !/^[，。！？；：、]$/.test(text)) return false
+      // 微软拼音也会把候选词和标点一次提交，不能只接收单个标点。
+      if (view.composing || !/[，。！？；：、]$/.test(text)) return false
       if (from !== view.state.selection.from || to !== view.state.selection.to) return false
       const tr = defaultTransaction()
       // 中文输入法直接提交标点时可能保留旧 DOM 选区，默认事务也会把光标留在标点前。
@@ -259,6 +260,12 @@ const editor = useEditor({
     SlashCommandExtension,
     NoteImage,
   ],
+  onCreate: ({ editor }) => {
+    // 挂载完成前用户可能已经开始输入，延迟自动聚焦不能覆盖用户刚设置的选区。
+    if (props.variant !== 'composer' && !editor.isFocused) {
+      editor.commands.focus(isBlankContent(props.initialContent) ? 'start' : 'end')
+    }
+  },
   onUpdate: ({ editor }) => {
     emit('update', normalizeAssetHtml(editor.getHTML()))
     checkSlashMenu(editor)

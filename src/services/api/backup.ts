@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '../transport'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 export interface BackupPackage {

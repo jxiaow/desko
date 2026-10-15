@@ -273,6 +273,7 @@ test.describe('Codex 账号', () => {
     await dialog.locator('.dialog-close').click()
     await page.locator('.acc-row').first().locator('.acc-more').click()
     await page.locator('.popover .pop-item', { hasText: '导出这一条 JSON' }).click()
+    await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
     expect(await e2e.count(page, 'export_codex_accounts')).toBe(1)
   })
 
@@ -515,7 +516,7 @@ async function argOf(page: Page, cmd: string, key: string) {
   return calls[calls.length - 1]?.args[key]
 }
 
-/** 进档会播种最近那一组：要点开别的组，先看清它是不是已经开着，别把展开点成折叠 */
+/** 默认收起；需要读取会话行时显式展开目标项目。 */
 async function expandGroup(page: Page, name: string) {
   const head = page.locator('.grp-head', { hasText: name })
   if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
@@ -549,14 +550,14 @@ test.describe('Codex 会话档', () => {
     expect(await e2e.count(page, LIST_CMD)).toBe(1)
   })
 
-  test('首屏播种最近一组，进档即按全量 id 预取 token，展开不再补取', async ({ page }) => {
+  test('首屏所有项目默认收起，进档预取 token，展开不再补取', async ({ page }) => {
     await gotoSessions(page)
     await expect(page.locator('.grp-head')).toHaveCount(2)
-    // 一排壳不算内容：最近活动那组进档即摊开，另一组仍归用户自己翻
+    // 项目默认全部收起，合计仍可读，用户主动展开后才显示会话。
     const notes = page.locator('.grp-head', { hasText: 'demo-notes' })
-    await expect(notes).toHaveAttribute('aria-expanded', 'true')
+    await expect(notes).toHaveAttribute('aria-expanded', 'false')
     await expect(page.locator('.grp-head', { hasText: 'demo-icons' })).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.locator('.sess-row')).toHaveCount(3)
+    await expect(page.locator('.sess-row')).toHaveCount(0)
     // 本机实测 67 个 rollout 全量尾扫 218 ms：等展开才取会让合计量沉在水下
     await expect.poll(() => e2e.count(page, STATS_CMD)).toBe(1)
     expect((await argOf(page, STATS_CMD, 'sessionIds')).slice().sort()).toEqual([
@@ -566,8 +567,6 @@ test.describe('Codex 会话档', () => {
       'sess-p6q7r8s9t0',
     ])
 
-    await notes.click()
-    await expect(page.locator('.sess-row')).toHaveCount(0)
     await notes.click()
     await expect(page.locator('.sess-row')).toHaveCount(3)
     expect(await e2e.count(page, STATS_CMD)).toBe(1)
@@ -595,7 +594,7 @@ test.describe('Codex 会话档', () => {
     await page.locator('.search-clear').click()
     await expect(page.locator('.grp-head')).toHaveCount(2)
     await expect(icons).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.locator('.sess-row')).toHaveCount(3)
+    await expect(page.locator('.sess-row')).toHaveCount(0)
   })
 
   test('切到别的档再回来：翻开的组不丢', async ({ page }) => {
@@ -1189,8 +1188,10 @@ test.describe('Codex 用量图', () => {
           fresh: (el.querySelector('.usg-fresh') as HTMLElement).style.height,
           cached: (el.querySelector('.usg-cached') as HTMLElement).style.height,
         }))
-    expect(await seg(1)).toEqual({ fresh: '10.4%', cached: '83%' })
-    expect(await seg(0)).toEqual({ fresh: '3.5%', cached: '0.6%' })
+    expect(parseFloat((await seg(1)).fresh)).toBeCloseTo(5000 / 48200 * 100, 4)
+    expect(parseFloat((await seg(1)).cached)).toBeCloseTo(40000 / 48200 * 100, 4)
+    expect(parseFloat((await seg(0)).fresh)).toBeCloseTo(1700 / 48200 * 100, 4)
+    expect(parseFloat((await seg(0)).cached)).toBeCloseTo(300 / 48200 * 100, 4)
     await expect(page.locator('.usg-day-row')).toHaveCount(4)
     await expect(page.locator('.usg-day-total').first()).toHaveText('13,700')
     await expect(page.locator('.usg-scan')).toHaveText('扫了 4 个文件 · 1.7 s')

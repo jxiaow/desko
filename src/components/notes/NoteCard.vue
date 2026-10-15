@@ -22,6 +22,8 @@ const props = withDefaults(defineProps<{
   unlocked?: boolean
   /** 当前生效的标签筛选，用于把命中的胶囊点亮 */
   activeTags?: Set<string>
+  /** 本卡渲染在归档视图里：动作排换成「取消归档」，书写类动作照旧 */
+  archivedView?: boolean
 }>(), {
   editing: false,
   isBatchMode: false,
@@ -30,6 +32,7 @@ const props = withDefaults(defineProps<{
   saveState: '',
   unlocked: false,
   activeTags: () => new Set<string>(),
+  archivedView: false,
 })
 
 const emit = defineEmits<{
@@ -45,6 +48,7 @@ const emit = defineEmits<{
   addImage: []
   togglePin: []
   toggleStar: []
+  toggleArchive: []
   copy: []
   delete: []
   select: []
@@ -121,11 +125,14 @@ const onCopy = () => {
 const moreBtn = ref<HTMLElement | null>(null)
 const menuOpen = ref(false)
 const toggleMenu = () => { menuOpen.value = !menuOpen.value }
-const onMenu = (action: 'encrypt' | 'relock' | 'removeLock' | 'delete') => {
+const onMenu = (action: 'encrypt' | 'relock' | 'removeLock' | 'delete' | 'pin' | 'star' | 'copy') => {
   menuOpen.value = false
   if (action === 'encrypt') emit('encrypt')
   else if (action === 'relock') emit('relock')
   else if (action === 'removeLock') emit('removeLock')
+  else if (action === 'pin') emit('togglePin')
+  else if (action === 'star') emit('toggleStar')
+  else if (action === 'copy') void onCopy()
   else emit('delete')
 }
 
@@ -279,6 +286,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
             <AppIcon name="edit" :size="14" />
           </button>
           <button
+            v-if="!props.archivedView"
             class="ib"
             type="button"
             :class="{ on: props.note.pinned }"
@@ -289,6 +297,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
             <AppIcon name="pin" :size="14" />
           </button>
           <button
+            v-if="!props.archivedView"
             class="ib"
             type="button"
             :class="{ on: props.note.starred, warn: props.note.starred }"
@@ -298,7 +307,20 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           >
             <AppIcon name="star" :size="14" :filled="props.note.starred" />
           </button>
-          <button class="ib" :class="{ copied }" type="button" :title="copied ? '已复制' : '复制正文'" aria-label="复制正文" @click.stop="onCopy">
+          <button
+            class="ib"
+            type="button"
+            :title="props.archivedView ? '取消归档，放回「全部」' : '归档（从「全部」收起）'"
+            :aria-label="props.archivedView ? '取消归档' : '归档'"
+            @click.stop="emit('toggleArchive')"
+          >
+            <AppIcon :name="props.archivedView ? 'unarchive' : 'archive'" :size="14" />
+          </button>
+          <!-- 归档视图是这些条目的唯一入口，就地删除省一趟绕路 -->
+          <button v-if="props.archivedView" class="ib danger" type="button" title="删除" aria-label="删除" @click.stop="emit('delete')">
+            <AppIcon name="trash" :size="14" />
+          </button>
+          <button v-if="!props.archivedView" class="ib" :class="{ copied }" type="button" :title="copied ? '已复制' : '复制正文'" aria-label="复制正文" @click.stop="onCopy">
             <AppIcon :name="copied ? 'check' : 'copy'" :size="14" />
           </button>
           <button
@@ -361,8 +383,24 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       </span>
     </div>
 
-    <!-- 低频与危险动作收进 ⋯：快捷排只留高频五颗 -->
+    <!-- 低频与危险动作收进 ⋯：快捷排只留高频五颗；归档视图的快捷排换成「找回 + 删除」，
+         被让位的置顶/收藏/复制搬到这里，两边不出现同一颗 -->
     <PopoverMenu v-if="menuOpen" :anchor="moreBtn" :width="136" @close="menuOpen = false">
+      <template v-if="props.archivedView">
+        <button class="pop-item" type="button" @click="onMenu('pin')">
+          <AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="14" />
+          {{ props.note.pinned ? '取消置顶' : '置顶' }}
+        </button>
+        <button class="pop-item" type="button" @click="onMenu('star')">
+          <AppIcon name="star" :size="14" :filled="props.note.starred" />
+          {{ props.note.starred ? '取消收藏' : '收藏' }}
+        </button>
+        <button class="pop-item" type="button" @click="onMenu('copy')">
+          <AppIcon name="copy" :size="14" />
+          复制正文
+        </button>
+        <span class="pop-sep"></span>
+      </template>
       <button v-if="!props.note.encrypted" class="pop-item" type="button" @click="onMenu('encrypt')">
         <AppIcon name="lock" :size="14" />
         加密
@@ -377,11 +415,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           解除加密
         </button>
       </template>
-      <span class="pop-sep"></span>
-      <button class="pop-item danger" type="button" @click="onMenu('delete')">
-        <AppIcon name="trash" :size="14" />
-        删除
-      </button>
+      <template v-if="!props.archivedView">
+        <span class="pop-sep"></span>
+        <button class="pop-item danger" type="button" @click="onMenu('delete')">
+          <AppIcon name="trash" :size="14" />
+          删除
+        </button>
+      </template>
     </PopoverMenu>
   </article>
 
@@ -600,6 +640,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo:not(.editing):hover .memo-time, .memo:not(.editing):focus-within .memo-time { opacity: 0; }
 .memo-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
 .memo-acts .ib :deep(svg) { width: 15px; height: 15px; }
+.memo-acts .ib.danger { color: var(--danger); }
 
 .memo-check {
   position: absolute;

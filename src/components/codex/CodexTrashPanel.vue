@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { CodexRecycledAccount, CodexTrashedSessionRecord } from '../../services/api/codex'
 import { errText } from '../../services/api/backup'
 import {
@@ -26,6 +26,8 @@ import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
+let active = true
+onUnmounted(() => { active = false })
 
 /** 两份留底清单都是本地目录扫描：进这一档才扫，扫过留在内存 */
 onMounted(() => {
@@ -36,12 +38,13 @@ onMounted(() => {
 const busyId = ref('')
 
 async function run(id: string, fn: () => Promise<string>) {
-  if (busyId.value) return
+  if (!active || busyId.value) return
   busyId.value = id
   try {
-    toastStore.showToast(await fn())
+    const message = await fn()
+    if (active) toastStore.showToast(message)
   } catch (e) {
-    toastStore.showToast(errText(e), 'error')
+    if (active) toastStore.showToast(errText(e), 'error')
   } finally {
     busyId.value = ''
   }

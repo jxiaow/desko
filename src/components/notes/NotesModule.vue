@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { isWebRuntime } from '../../services/runtime'
+import { pickBrowserImage } from '../../services/browserImage'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useNotesStore } from '../../stores/notes'
@@ -20,6 +22,7 @@ const VIEWS: { key: NoteView; label: string; icon: IconName }[] = [
   { key: 'all', label: '全部', icon: 'all' },
   { key: 'pinned', label: '置顶', icon: 'pin' },
   { key: 'starred', label: '收藏', icon: 'star' },
+  { key: 'archived', label: '归档', icon: 'archive' },
 ]
 const RAIL_FALLBACK_ROOM = 900
 
@@ -31,11 +34,11 @@ const {
   notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, hasActiveFilters,
   noteRailCollapsed, noteDraftHtml: draftHtml,
   isBatchMode, hasNoteSelection, selectedNoteIds, noteAttachments, noteSaveState, notePlains, noteKey,
-  tagCounts, viewCounts, filteredNotes, groupedNotes,
+  tagCounts, viewCounts, filteredNotes, groupedNotes, archivedNotes, archiveSummary,
 } = storeToRefs(notesStore)
 const {
   fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, clearFilters, toggleTagFilter,
-  doDeleteNote, togglePin, toggleStar,
+  doDeleteNote, togglePin, toggleStar, setArchived, batchSetArchived, unarchiveAllFiltered,
   lockNote, unlockNote, relockNote, removeNoteLock, relockNoteDomain,
   toggleSelectNote, selectAllNotes, clearSelection, toggleNotePick, exitNoteBatch,
   batchDelete, batchSetPinned, batchSetStarred,  loadAttachments, uploadAttachment, deleteAttachment, stageImage,
@@ -113,13 +116,23 @@ watch(railRoom, (room) => {
 
 const draftText = computed(() => htmlToText(draftHtml.value))
 const draftEmpty = computed(() => !draftText.value.trim() && !collectAttachmentNames(draftHtml.value).length)
+/** 归档视图只读不回书写面：书写框收掉，页栏搜索改口径 */
+const isArchivedView = computed(() => noteView.value === 'archived')
+/** 顶栏那个总数跟着视图走：归档行不该计进「全部」的条数里 */
+const headTotal = computed(() => (isArchivedView.value ? viewCounts.value.archived : viewCounts.value.all))
+/** 空态分「没搜到」还是「这个视图本来就空」：归档视图只认关键词/标签，光切视图不算无果 */
+const hasQueryFilter = computed(() => !!noteSearchKeyword.value.trim() || activeTags.value.size > 0)
+const emptyNoMatch = computed(() => (isArchivedView.value ? hasQueryFilter.value : hasActiveFilters.value))
 const fsNote = computed(() =>
   typeof fsTarget.value === 'string' ? findNote(fsTarget.value) : null)
 
 /** 侧栏脚注：全库口径，不受筛选影响，和顶栏那条「筛后 / 总数」分开表意 */
 const railSummary = computed(() => {
   const lockedN = notes.value.filter((n) => n.encrypted).length
-  return `共 ${notes.value.length} 条小记${lockedN ? ` · ${lockedN} 条已加密` : ''}`
+  const archivedN = archivedNotes.value.length
+  return `共 ${notes.value.length} 条小记`
+    + (lockedN ? ` · ${lockedN} 条已加密` : '')
+    + (archivedN ? ` · ${archivedN} 条归档` : '')
 })
 
 /** 落库成功后清空书写面，光标回到顶部输入框 */
@@ -175,8 +188,11 @@ const onFsUpdate = (html: string) => {
   else if (typeof fsTarget.value === 'string') saveNoteContent(fsTarget.value, html)
 }
 
-const pickImagePath = async (): Promise<string | null> => {
+let active = true
+
+const pickImagePath = async (): Promise<string | File | null> => {
   try {
+    if (isWebRuntime()) return await pickBrowserImage()
     const { open } = await import('@tauri-apps/plugin-dialog')
     const selected = await open({
       multiple: false,
@@ -192,9 +208,9 @@ const pickImagePath = async (): Promise<string | null> => {
 /** 已有小记配图：落盘即登记附件，再把图片块补进当前打开的书写面 */
 const addImageToNote = async (noteId: string) => {
   const path = await pickImagePath()
-  if (!path) return
+  if (!active || !path) return
   const att = await uploadAttachment(noteId, path)
-  if (!att?.mime_type.startsWith('image/')) return
+  if (!active || !att?.mime_type.startsWith('image/')) return
   const src = attachmentSrc(att.file_path)
   if (fsTarget.value === noteId) fsRef.value?.insertImage(src)
   else cardRefs.value?.find((c) => c.noteId === noteId)?.insertImage(src)
@@ -215,9 +231,9 @@ const onStreamKeydown = (event: KeyboardEvent) => {
 /** 新小记配图：文件只收进附件目录（stage），发布时才按正文补附件记录——纯图小记也发得出去 */
 const addImageToDraft = async () => {
   const path = await pickImagePath()
-  if (!path) return
+  if (!active || !path) return
   const att = await stageImage(path)
-  if (!att) return
+  if (!active || !att) return
   const src = attachmentSrc(att.file_path)
   if (fsTarget.value === 'new') fsRef.value?.insertImage(src)
   else composerRef.value?.insertImage(src)
@@ -260,6 +276,7 @@ onMounted(() => {
   observer.observe(root)
 })
 onBeforeUnmount(() => {
+  active = false
   void flushNoteSave().catch(() => {})
   document.removeEventListener('keydown', onKeyDown)
   observer?.disconnect()
@@ -267,7 +284,7 @@ onBeforeUnmount(() => {
 })
 
 const pageHead = usePageHeadStore()
-watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filteredNotes.value.length} / ${notes.value.length}` : notes.value.length} 条`))
+watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filteredNotes.value.length} / ${headTotal.value}` : headTotal.value} 条`))
 </script>
 
 <template>
@@ -281,8 +298,8 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
               ref="searchEl"
               v-model="noteSearchKeyword"
               type="text"
-              placeholder="搜索小记…"
-              aria-label="搜索小记"
+              :placeholder="isArchivedView ? '搜索归档小记…' : '搜索小记…'"
+              :aria-label="isArchivedView ? '搜索归档小记' : '搜索小记'"
             />
             <button
               v-if="noteSearchKeyword"
@@ -306,8 +323,8 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
           >
             <AppIcon name="checkall" :size="16" />
           </button>
-          <!-- 口令只管加密小记，没加密过就不出现在顶栏 -->
-          <template v-if="noteKey.is_set">
+          <!-- 口令只管加密小记，没加密过就不出现在顶栏；归档视图不做批量加解密 -->
+          <template v-if="noteKey.is_set && !isArchivedView">
             <div class="bar-div"></div>
             <button
               class="bar-btn"
@@ -332,7 +349,17 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
           </button>
         </div>
 
+        <div v-if="isArchivedView" class="archive-bar">
+          <span class="ab-lead"><b>归档中 {{ viewCounts.archived }} 条</b> · 不再出现在「全部」与搜索里</span>
+          <span v-if="archiveSummary" class="ab-sub">{{ archiveSummary }}</span>
+          <span class="ab-sp"></span>
+          <button class="ab-btn" type="button" :disabled="!viewCounts.archived" @click="unarchiveAllFiltered">
+            <AppIcon name="unarchive" :size="14" />全部取消归档
+          </button>
+        </div>
+
         <NoteComposer
+          v-if="!isArchivedView"
           ref="composerRef"
           :html="draftHtml"
           :empty="draftEmpty"
@@ -370,6 +397,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
                 :save-state="editingId === note.id ? noteSaveState : ''"
                 :unlocked="notePlains[note.id] != null"
                 :active-tags="activeTags"
+                :archived-view="isArchivedView"
                 @open="openCard(note)"
                 @update="saveNoteContent(note.id, $event)"
                 @close="closeCard"
@@ -382,6 +410,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
                 @add-image="addImageToNote(note.id)"
                 @toggle-pin="togglePin(note)"
                 @toggle-star="toggleStar(note)"
+                @toggle-archive="setArchived(note, !note.archived)"
                 @copy="copyNote(note)"
                 @delete="doDeleteNote(note)"
                 @select="toggleSelectNote(note.id)"
@@ -401,10 +430,10 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
 
           <div v-else-if="!filteredNotes.length" class="empty-state">
             <div class="empty-icon">
-              <AppIcon :name="hasActiveFilters ? 'searchEmpty' : 'navNotes'" :size="24" />
+              <AppIcon :name="emptyNoMatch ? 'searchEmpty' : isArchivedView ? 'archive' : 'navNotes'" :size="24" />
             </div>
-            <div class="empty-title">{{ hasActiveFilters ? '未找到匹配的小记' : '还没有小记' }}</div>
-            <div class="empty-desc">{{ hasActiveFilters ? '试试清空筛选或其他关键词' : '在上方写第一条' }}</div>
+            <div class="empty-title">{{ emptyNoMatch ? '未找到匹配的小记' : isArchivedView ? '还没有归档的小记' : '还没有小记' }}</div>
+            <div class="empty-desc">{{ emptyNoMatch ? '试试清空筛选或其他关键词' : isArchivedView ? '在小记卡上点「归档」就会收进这里' : '在上方写第一条' }}</div>
           </div>
         </template>
       </div>
@@ -460,6 +489,10 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
         <AppIcon name="x" :size="12" />取消全选
       </button>
       <span class="dock-sep"></span>
+      <button v-if="isArchivedView" class="dock-btn" type="button" @click="batchSetArchived(false)">
+        <AppIcon name="unarchive" :size="12" />取消归档
+      </button>
+      <template v-else>
       <button class="dock-btn" type="button" @click="batchSetPinned(true)">
         <AppIcon name="pin" :size="12" />置顶
       </button>
@@ -472,6 +505,11 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       <button class="dock-btn" type="button" @click="batchSetStarred(false)">
         <AppIcon name="star" :size="12" />取消收藏
       </button>
+      <span class="dock-sep"></span>
+      <button class="dock-btn" type="button" @click="batchSetArchived(true)">
+        <AppIcon name="archive" :size="12" />归档
+      </button>
+      </template>
       <span class="dock-sep"></span>
       <button class="dock-btn danger" type="button" :disabled="!selectedNoteIds.size" @click="batchDelete">
         <AppIcon name="trash" :size="12" />删除
@@ -551,6 +589,40 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
    分组线两侧净距 25px、邻钮之间只有 8px，读起来像断成了两截。 */
 .page-bar .bar-div { align-self: center; height: 16px; opacity: 0.55; margin: 0; }
 
+/* ---------- 归档视图上下文条：一句话交代「这里的东西为什么不在全部里」+ 一次性恢复 ---------- */
+.archive-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 38px;
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-3);
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.archive-bar .ab-lead b { font-weight: 650; color: var(--text); }
+.archive-bar .ab-sub { font-size: var(--text-xs); color: var(--text-muted); }
+.archive-bar .ab-sp { flex: 1; }
+.archive-bar .ab-btn {
+  height: 26px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.archive-bar .ab-btn:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.archive-bar .ab-btn:disabled { color: var(--text-faint); }
+
 /* ---------- 日期分组 ---------- */
 .day { margin-bottom: var(--space-4); }
 .day-head {
@@ -594,7 +666,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
 .rail {
   width: var(--rail-w);
   flex-shrink: 0;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--border-navigation);
   background: var(--bg-sidebar);
   overflow-y: auto;
   scrollbar-gutter: stable;
@@ -647,7 +719,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
   bottom: 0;
   z-index: 40;
   box-shadow: var(--shadow-pop);
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--border-navigation);
 }
 /* .page-bar 的右沿本来停在 .stream-inner 的内距处，侧栏左沿比它再往左 var(--page-gutter) */
 .notes-page.rail-over .page-bar { padding-right: calc(var(--rail-w) - var(--page-gutter)); }

@@ -22,6 +22,8 @@ vi.mock('../services/api/notes', () => ({
     batchDeleteNotes: vi.fn(),
     togglePinNote: vi.fn(),
     toggleStarNote: vi.fn(),
+    setNoteArchived: vi.fn(),
+    batchSetArchived: vi.fn(),
     lockNote: vi.fn(),
     unlockNote: vi.fn(),
     unlockNoteByMaster: vi.fn(),
@@ -57,6 +59,8 @@ const mockNote = (overrides: Partial<Note> = {}): Note => ({
   pinned: false,
   starred: false,
   encrypted: false,
+  archived: false,
+  archived_at: null,
   ...overrides,
 })
 
@@ -613,7 +617,60 @@ describe('Notes Store', () => {
 
       expect(store.tagCounts).toEqual([['多', 3], ['少', 1]])
       expect(store.allTags).toEqual(['多', '少'])
-      expect(store.viewCounts).toEqual({ all: 3, pinned: 0, starred: 0 })
+      expect(store.viewCounts).toEqual({ all: 3, pinned: 0, starred: 0, archived: 0 })
+    })
+  })
+
+  describe('归档', () => {
+    const seed = () => [
+      mockNote({ id: 'a', title: '甲', content_html: '<p>甲 #工作</p>' }),
+      mockNote({ id: 'b', title: '乙', content_html: '<p>乙</p>', pinned: true, starred: true }),
+      mockNote({ id: 'c', title: '丙', content_html: '<p>丙</p>', archived: true, archived_at: Date.now() }),
+    ]
+
+    it('归档行不进「全部/置顶/收藏」，只在归档视图出现', async () => {
+      const store = useNotesStore()
+      store.notes = seed()
+
+      expect(store.filteredNotes.map(n => n.id)).toEqual(['a', 'b'])
+      store.noteView = 'pinned'
+      expect(store.filteredNotes.map(n => n.id)).toEqual(['b'])
+      store.noteView = 'starred'
+      expect(store.filteredNotes.map(n => n.id)).toEqual(['b'])
+      store.noteView = 'archived'
+      expect(store.filteredNotes.map(n => n.id)).toEqual(['c'])
+      expect(store.viewCounts).toEqual({ all: 2, pinned: 1, starred: 1, archived: 1 })
+    })
+
+    it('归档行不算进标签统计', async () => {
+      const store = useNotesStore()
+      store.notes = [
+        mockNote({ content_html: '<p>#活</p>' }),
+        mockNote({ id: 'c', content_html: '<p>#活</p>', archived: true }),
+      ]
+
+      expect(store.tagCounts).toEqual([['活', 1]])
+    })
+
+    it('归档视图里的关键词筛选照常生效', async () => {
+      const store = useNotesStore()
+      store.notes = seed()
+      store.noteView = 'archived'
+      store.noteSearchKeyword = '搜不到的词'
+
+      expect(store.filteredNotes.length).toBe(0)
+    })
+
+    it('setArchived 只换归档位，不动置顶与收藏', async () => {
+      const store = useNotesStore()
+      store.notes = seed()
+      vi.mocked(notesApi.setNoteArchived).mockResolvedValue(true)
+
+      await store.setArchived(store.notes[1], true)
+
+      expect(notesApi.setNoteArchived).toHaveBeenCalledWith('b', true)
+      const b = store.notes.find(n => n.id === 'b')!
+      expect(b.archived && b.pinned && b.starred && b.archived_at).toBeTruthy()
     })
   })
 

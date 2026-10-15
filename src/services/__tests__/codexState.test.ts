@@ -52,6 +52,23 @@ describe('Codex 锁屏与异步请求', () => {
     })
   }
 
+  for (const method of ['restoreTrashedSession', 'restoreRecycledAccount'] as const) {
+    it(`${method} 在锁屏后完成，不再发起读取或重新填回账号会话`, async () => {
+      const s = await loadState()
+      let finish!: (value: any) => void
+      mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      const request = s[method]('synthetic-id')
+      s.clearCodexSession()
+      mockInvoke.mockResolvedValue([sessionRec('old')])
+      finish({ message: 'restored' })
+      expect(await request).toBe('')
+      expect(mockInvoke).toHaveBeenCalledTimes(1)
+      expect(s.accounts.value).toEqual([])
+      expect(s.sessions.value).toEqual([])
+      expect(s.sessionsLoaded.value).toBe(false)
+    })
+  }
+
   it('只给真实切号显示取消状态，其他账号操作不能发切号取消命令', async () => {
     const s = await loadState()
     let finish!: () => void

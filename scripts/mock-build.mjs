@@ -23,7 +23,7 @@ const CSS_SELECTORS = new Set([
   '.theme-scope',
   ':root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]',
   ':root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"]',
-  ':root, [data-theme="paper"]',
+  ':where(:root), [data-theme="paper"]',
   '[data-theme="snow"]',
   '[data-theme="ink"]',
   '[data-theme="slate"]',
@@ -83,7 +83,7 @@ function svg(name, size, icons) {
 
 const globalCss = readStyleSource(path.join(root, 'src/styles/global.css'))
 const tokens = pickTokenBlocks(globalCss)
-const missing = ['[data-theme="ink"]', '[data-base="light"][data-accent="ink"]'].filter(
+const missing = [':where(:root), [data-theme="paper"]', '[data-theme="ink"]', '[data-base="light"][data-accent="ink"]'].filter(
   (s) => !tokens.includes(s),
 )
 if (missing.length) throw new Error(`token 块未命中: ${missing.join(', ')}`)

@@ -3,7 +3,7 @@ use crate::error::AppError;
 use super::Database;
 use super::models::{Note, NoteLockRow};
 
-const NOTE_SELECT: &str = "id, title, content_html, category, created_at, updated_at, pinned, starred, enc";
+const NOTE_SELECT: &str = "id, title, content_html, category, created_at, updated_at, pinned, starred, enc, archived, archived_at";
 
 impl Database {
     fn row_to_note(row: &rusqlite::Row) -> rusqlite::Result<Note> {
@@ -17,6 +17,8 @@ impl Database {
             pinned: row.get::<_, i32>(6)? != 0,
             starred: row.get::<_, i32>(7)? != 0,
             encrypted: row.get::<_, i32>(8)? != 0,
+            archived: row.get::<_, i32>(9)? != 0,
+            archived_at: row.get(10)?,
         })
     }
 
@@ -226,6 +228,31 @@ impl Database {
         )?;
         Ok(new_starred)
     }
+
+    /// 归档不动 updated_at：取消归档后条目该回到它原本的位置
+    pub fn set_note_archived(&self, id: &str, archived: bool, now: i64) -> Result<bool, AppError> {
+        let changed = self.conn.execute(
+            "UPDATE notes SET archived = ?2, archived_at = ?3 WHERE id = ?1 AND archived != ?2",
+            params![id, archived as i32, if archived { Some(now) } else { None }],
+        )?;
+        if changed == 0 && self.get_note(id)?.is_none() {
+            return Err(AppError::Database("note not found".to_string()));
+        }
+        Ok(archived)
+    }
+
+    pub fn batch_set_archived(&self, ids: &[String], archived: bool, now: i64) -> Result<usize, AppError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let mut count = 0;
+        for id in ids {
+            count += tx.execute(
+                "UPDATE notes SET archived = ?2, archived_at = ?3 WHERE id = ?1 AND archived != ?2",
+                params![id, archived as i32, if archived { Some(now) } else { None }],
+            )?;
+        }
+        tx.commit()?;
+        Ok(count)
+    }
 }
 
 #[cfg(test)]
@@ -260,6 +287,8 @@ mod tests {
             pinned: false,
             starred: false,
             encrypted: false,
+            archived: false,
+            archived_at: None,
         }
     }
 
@@ -361,6 +390,58 @@ mod tests {
         assert_eq!((n.title.as_str(), n.content_html.as_str()), ("新标题", ""));
         // 未加密的行不在这条 UPDATE 的 AND enc=1 里
         assert_eq!(db.get_note("plain").unwrap().unwrap().title, "t");
+        cleanup(&path);
+    }
+
+    #[test]
+    fn archive_sets_stamp_and_clears_it_on_unarchive() {
+        let (db, path) = setup_test_db();
+        db.create_note(&note("n1")).unwrap();
+
+        assert!(db.set_note_archived("n1", true, 500).unwrap());
+        let n = db.get_note("n1").unwrap().unwrap();
+        assert!(n.archived);
+        assert_eq!(n.archived_at, Some(500));
+        assert_eq!(n.updated_at, 1, "归档不算内容改动，放回时不该跳到最前");
+
+        // 重复设同一值：既不报错也不刷新时间戳
+        assert!(db.set_note_archived("n1", true, 900).unwrap());
+        assert_eq!(db.get_note("n1").unwrap().unwrap().archived_at, Some(500));
+
+        assert!(!db.set_note_archived("n1", false, 1200).unwrap());
+        let n = db.get_note("n1").unwrap().unwrap();
+        assert!(!n.archived && n.archived_at.is_none());
+
+        assert!(db.set_note_archived("missing", true, 1).is_err());
+        cleanup(&path);
+    }
+
+    #[test]
+    fn batch_set_archived_counts_only_changes() {
+        let (db, path) = setup_test_db();
+        for id in ["a", "b", "c"] {
+            db.create_note(&note(id)).unwrap();
+        }
+        db.set_note_archived("c", true, 100).unwrap();
+
+        let ids = ["a".to_string(), "b".to_string(), "c".to_string(), "zzz".to_string()];
+        assert_eq!(db.batch_set_archived(&ids, true, 200).unwrap(), 2, "已归档和不存在的都不计");
+        assert_eq!(db.list_all_notes().unwrap().iter().filter(|n| n.archived).count(), 3);
+        assert_eq!(db.batch_set_archived(&ids, false, 300).unwrap(), 3);
+        assert!(db.list_all_notes().unwrap().iter().all(|n| !n.archived));
+        cleanup(&path);
+    }
+
+    #[test]
+    fn reopen_keeps_archive_columns_and_state() {
+        let (db, path) = setup_test_db();
+        db.create_note(&note("n1")).unwrap();
+        db.set_note_archived("n1", true, 777).unwrap();
+        drop(db);
+        // 重开走同一趟 run_schema：探针必须认出列已存在，不能二次 ALTER
+        let db = super::super::Database::new(&path).unwrap();
+        let n = db.get_note("n1").unwrap().unwrap();
+        assert!(n.archived && n.archived_at == Some(777), "旧行的归档状态要留住");
         cleanup(&path);
     }
 }

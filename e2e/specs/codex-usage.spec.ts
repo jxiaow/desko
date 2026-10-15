@@ -195,3 +195,68 @@ for (const width of [800, 1235]) {
     await page.screenshot({ path: `.tmp/codex-parity/shots/usage-month-${width}.png` })
   })
 }
+
+test('每日柱高按同一刻度比较，缓存占比与实际 Token 一致', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-13T04:00:00Z') })
+  await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
+    { sessionId: 'large', cwd: 'C:\\demo', daysAgo: 1, input: 9000, cached: 6000, output: 1000 },
+    { sessionId: 'small', cwd: 'C:\\demo', daysAgo: 0, input: 900, cached: 600, output: 100 },
+  ] } })
+  await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+  await expect(page.locator('.usg-col')).toHaveCount(7)
+  await expect(page.locator('.usg-col[data-recorded="false"]')).toHaveCount(5)
+  const bars = await page.locator('.usg-col[data-recorded="true"] .usg-stack').evaluateAll(elements => elements.map(element => {
+    const parts = [...element.children].map(child => child.getBoundingClientRect().height)
+    return { parts, total: parts.reduce((sum, value) => sum + value, 0), height: element.getBoundingClientRect().height }
+  }))
+  expect(bars[0].total).toBeGreaterThan(80)
+  expect(bars[1].total / bars[0].total).toBeCloseTo(0.1, 2)
+  expect(bars[0].parts[1] / bars[0].total).toBeCloseTo(0.6, 2)
+  expect(bars[0].total).toBeLessThanOrEqual(bars[0].height + 1)
+  await page.screenshot({ path: '.tmp/app-review/web-plain-chart/codex-usage-bars.png' })
+})
+
+
+test('少量用量不因百分比舍入成为零柱，并可用键盘读取真实值', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-13T04:00:00Z') })
+  await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
+    { sessionId: 'large', cwd: 'demo', daysAgo: 1, input: 9000, cached: 6000, output: 1000 },
+    { sessionId: 'small', cwd: 'demo', daysAgo: 0, input: 8, cached: 4, output: 4 },
+  ] } })
+  await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+  const column = page.locator('.usg-col').last()
+  await column.focus()
+  await expect(column).toBeFocused()
+  await expect(column).toHaveAttribute('aria-label', /合计 12 Token/)
+  const heights = await column.locator('.usg-stack > span').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height))
+  expect(heights.every(height => height > 0)).toBe(true)
+  await expect(page.locator('.usg-scale')).toHaveText('12K6K0')
+})
+
+
+test('缺失日期保留间隔，键盘可查看零记录日期和完整明细', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-13T04:00:00Z') })
+  await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
+    { ...seed.codex.sessions[0], daysAgo: 6 },
+    seed.codex.sessions[1],
+  ] } })
+  await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+  const columns = page.locator('.usg-col')
+  await expect(columns).toHaveCount(7)
+  await expect(columns.first()).toHaveAttribute('data-day', '2026-10-07')
+  await expect(columns.last()).toHaveAttribute('data-day', '2026-10-13')
+  await columns.nth(5).focus()
+  await expect(page.locator('.daily-readout')).toContainText('1,100')
+  await page.keyboard.press('ArrowRight')
+  await expect(columns.last()).toBeFocused()
+  await expect(page.locator('.daily-readout')).toContainText('无本地记录')
+  await page.keyboard.press('Home')
+  await expect(columns.first()).toBeFocused()
+  await expect(page.locator('.daily-readout')).toContainText('13,700')
+  const geometry = await columns.evaluateAll(elements => elements.map(el => ({
+    x: el.getBoundingClientRect().x, width: el.getBoundingClientRect().width,
+    bar: el.querySelector('.usg-stack')!.getBoundingClientRect().width,
+  })))
+  expect(geometry.every(box => box.bar <= 28.1)).toBe(true)
+  for (let n = 1; n < geometry.length; n++) expect(geometry[n].x - geometry[n-1].x).toBeCloseTo(geometry[0].width, 0)
+})

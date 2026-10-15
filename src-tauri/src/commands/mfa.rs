@@ -1,4 +1,4 @@
-use tauri::State;
+use crate::command_state::CommandState as State;
 
 use crate::db::{MfaCode, MfaTokenInfo};
 use crate::error::AppError;

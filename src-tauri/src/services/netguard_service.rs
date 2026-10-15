@@ -12,6 +12,25 @@ use netguard_core::{in_fake_ip, net, usable_v4, Mode, ReceiptFile, TaskFile, Tas
 use crate::db::BypassTarget;
 use crate::error::AppError;
 
+/// 只绑定用户确认的实际写入；候选出口顺序、接口显示名、时间戳不影响确认。
+pub fn plan_key(items: &[TaskItem]) -> Result<String, AppError> {
+    use sha2::{Digest, Sha256};
+    let canonical: std::collections::BTreeSet<String> = items.iter().map(|item| match item {
+        TaskItem::Pin { id, host, address } => serde_json::json!(["pin", id, host.to_ascii_lowercase(), address]),
+        TaskItem::Route { id, prefix, prefix_len, gateway, interface_index, .. } =>
+            serde_json::json!(["route", id, prefix, prefix_len, gateway, interface_index]),
+    }.to_string()).collect();
+    let bytes = serde_json::to_vec(&canonical).map_err(|e| AppError::Bypass(format!("配置方案无法校验：{e}")))?;
+    Ok(Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn require_confirmed_plan(items: &[TaskItem], expected_key: &str) -> Result<(), AppError> {
+    if expected_key.is_empty() || plan_key(items)? != expected_key {
+        return Err(AppError::Bypass("网络或清单已变化，尚未写入更改。请重新打开“配置直连”查看最新方案".into()));
+    }
+    Ok(())
+}
+
 /// 回滚点：一份 mode=revert 的任务书，撤销时原样再交给 helper
 fn batch_dir() -> PathBuf {
     crate::paths::profile_root()
@@ -44,6 +63,31 @@ pub struct PlannedRow {
     pub action: String,
     /// 非空 = 这条无法自动判定，不进批次，界面就地说明原因
     pub blocked: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason: Option<PlanBlockReason>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub route_options: Vec<net::RoutePlan>,
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum PlanBlockReason {
+    NoDirectRoute,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteOverride {
+    pub id: String,
+    pub interface_index: u32,
+    pub gateway: String,
+}
+
+fn selected_route(automatic: Option<net::RoutePlan>, options: &[net::RoutePlan], choice: Option<&RouteOverride>) -> Option<net::RoutePlan> {
+    match choice {
+        Some(choice) => options.iter().find(|r| r.interface_index == choice.interface_index && r.gateway.to_string() == choice.gateway).cloned(),
+        None => automatic,
+    }
 }
 
 #[derive(serde::Serialize, Clone, Debug)]
@@ -115,8 +159,19 @@ fn taker_interface(prefix: &str) -> Option<u32> {
     in_fake_ip(hit.source).then_some(hit.interface_index)
 }
 
+fn requires_route(verdict: &str, is_domain: bool, current_taker: Option<u32>) -> bool {
+    verdict == "needRoute" || (is_domain && current_taker.is_some())
+}
+
 /// 把「待写入」条目摊成落盘计划。只读路由表，不提权。
-pub fn plan(targets: &[BypassTarget], allow_cdn: &[String]) -> (Vec<TaskItem>, Vec<PlannedRow>) {
+pub fn plan(targets: &[BypassTarget], allow_cdn: &[String], route_overrides: &[RouteOverride]) -> (Vec<TaskItem>, Vec<PlannedRow>) {
+    plan_with_egress(targets, allow_cdn, route_overrides, taker_interface)
+}
+
+fn plan_with_egress(
+    targets: &[BypassTarget], allow_cdn: &[String], route_overrides: &[RouteOverride],
+    current_taker: impl Fn(&str) -> Option<u32>,
+) -> (Vec<TaskItem>, Vec<PlannedRow>) {
     let mut items = Vec::new();
     let mut rows = Vec::new();
     for t in targets {
@@ -129,7 +184,9 @@ pub fn plan(targets: &[BypassTarget], allow_cdn: &[String]) -> (Vec<TaskItem>, V
                 id: t.id.clone(),
                 label: t.host.clone(),
                 action: String::new(),
-                blocked: "地址可能随 CDN 节点变化，固定后可能需要更新；确需固定请勾选本条".to_string(),
+                blocked: "地址可能随 CDN 节点变化，固定后可能需要更新 hosts".to_string(),
+                blocked_reason: None,
+                route_options: Vec::new(),
             });
             continue;
         }
@@ -139,6 +196,8 @@ pub fn plan(targets: &[BypassTarget], allow_cdn: &[String]) -> (Vec<TaskItem>, V
                 rows.push(PlannedRow {
                     id: t.id.clone(), label: t.host.clone(), action: String::new(),
                     blocked: "没有可固定的实际 IPv4 地址，请重新探测".to_string(),
+                    blocked_reason: None,
+                    route_options: Vec::new(),
                 });
                 continue;
             }
@@ -147,6 +206,8 @@ pub fn plan(targets: &[BypassTarget], allow_cdn: &[String]) -> (Vec<TaskItem>, V
                 label: t.host.clone(),
                 action: format!("hosts 固定 {} → {}", t.host, t.address),
                 blocked: String::new(),
+                blocked_reason: None,
+                route_options: Vec::new(),
             });
             items.push(TaskItem::Pin { id: t.id.clone(), host: t.host.clone(), address: t.address.clone() });
         }
@@ -157,25 +218,31 @@ pub fn plan(targets: &[BypassTarget], allow_cdn: &[String]) -> (Vec<TaskItem>, V
                     label: t.host.clone(),
                     action: String::new(),
                     blocked: "网段写法无法识别".to_string(),
+                    blocked_reason: None,
+                    route_options: Vec::new(),
                 });
             }
             continue;
         };
-        // hostsOnly 的域名只缺 DNS 固定，路由本来就通，不该顺手改系统路由
-        if t.verdict != "needRoute" {
-            continue;
-        }
-        let plan = net::route_plan_for(
-            prefix.parse().unwrap_or(std::net::Ipv4Addr::UNSPECIFIED),
-            len,
-            taker_interface(&prefix),
+        // 网络可能在探测后变化。hostsOnly 也要读取当前出口，不能沿用过期结论漏配路由。
+        let taker = current_taker(&prefix);
+        if !requires_route(t.verdict.as_str(), is_domain, taker) { continue; }
+        let (automatic, route_options) = net::route_choices_for(
+            prefix.parse().unwrap_or(std::net::Ipv4Addr::UNSPECIFIED), len, taker,
         );
+        let selected = route_overrides.iter().find(|r| r.id == t.id);
+        // 只能使用本次从系统读出的可用出口；前端传来的接口/网关不是信任边界。
+        let plan = selected_route(automatic, &route_options, selected);
         let Some(plan) = plan else {
             rows.push(PlannedRow {
                 id: t.id.clone(),
                 label: if is_domain { t.host.clone() } else { format!("{prefix}/{len}") },
                 action: String::new(),
-                blocked: "路由表里没有可绑定的非接管接口，需人工确认出口".to_string(),
+                blocked: if selected.is_some() { "所选出口已不可用，请重新选择".to_string() }
+                    else if !route_options.is_empty() { format!("无法自动确定到 {prefix}/{len} 的出口，请选择可访问该地址的网络") }
+                    else { format!("未找到通往 {prefix}/{len} 的可用直连出口，请检查网络连接") },
+                blocked_reason: Some(PlanBlockReason::NoDirectRoute),
+                route_options,
             });
             continue;
         };
@@ -189,6 +256,8 @@ pub fn plan(targets: &[BypassTarget], allow_cdn: &[String]) -> (Vec<TaskItem>, V
                     "网关 {} 不在接口 {} 的网段内，绑定后不会生效",
                     plan.gateway, plan.interface_alias
                 ),
+                blocked_reason: None,
+                route_options: Vec::new(),
             });
             continue;
         }
@@ -197,11 +266,13 @@ pub fn plan(targets: &[BypassTarget], allow_cdn: &[String]) -> (Vec<TaskItem>, V
             id: t.id.clone(),
             action: format!(
                 "持久路由 绑 {}（接口 {}）",
-                if plan.gateway_is_on_link { "链路本地".to_string() } else { plan.gateway.to_string() },
+                if plan.gateway_is_on_link { "同网段直连（无网关）".to_string() } else { plan.gateway.to_string() },
                 plan.interface_alias
             ),
             label,
             blocked: String::new(),
+            blocked_reason: None,
+            route_options,
         });
         items.push(TaskItem::Route {
             id: t.id.clone(),
@@ -429,8 +500,9 @@ fn wait_and_collect(_handle: isize, _receipt: &Path) -> Result<Option<ReceiptFil
 }
 
 /// 写入一批：任务书 = hosts 固定 + 路由绑定，一次 UAC 落完
-pub fn apply(targets: &[BypassTarget], allow_cdn: &[String], batch: &str) -> Result<ApplyOutcome, AppError> {
-    let (items, _) = plan(targets, allow_cdn);
+pub fn apply(targets: &[BypassTarget], allow_cdn: &[String], route_overrides: &[RouteOverride], batch: &str, expected_plan_key: &str) -> Result<ApplyOutcome, AppError> {
+    let (items, _) = plan(targets, allow_cdn, route_overrides);
+    require_confirmed_plan(&items, expected_plan_key)?;
     if items.is_empty() {
         return Ok(ApplyOutcome { batch_id: String::new(), cancelled: false, rolled_back: false, items: Vec::new(), error: String::new() });
     }
@@ -572,11 +644,51 @@ mod tests {
     }
 
     #[test]
+    fn dns_only_probe_is_not_trusted_after_the_network_switches_to_a_proxy() {
+        assert!(!requires_route("hostsOnly", true, None));
+        assert!(requires_route("hostsOnly", true, Some(7)));
+        assert!(requires_route("needRoute", true, None));
+    }
+
+    #[test]
+    fn confirmed_plan_survives_order_and_display_changes_but_rejects_changed_writes() {
+        let items = vec![pin("domain"), route("route")];
+        let key = plan_key(&items).unwrap();
+        let mut reordered = items.clone();
+        reordered.reverse();
+        if let TaskItem::Route { interface_alias, .. } = &mut reordered[0] { *interface_alias = "renamed adapter".into(); }
+        require_confirmed_plan(&reordered, &key).unwrap();
+        for change in 0..5 {
+            let mut changed = items.clone();
+            match change {
+                0 => if let TaskItem::Pin { address, .. } = &mut changed[0] { *address = "10.0.0.2".into(); },
+                1 => if let TaskItem::Route { interface_index, .. } = &mut changed[1] { *interface_index = 2; },
+                2 => if let TaskItem::Route { gateway, .. } = &mut changed[1] { *gateway = "192.168.2.1".into(); },
+                3 => { changed.pop(); },
+                _ => { changed.push(pin("new-target")); },
+            }
+            assert!(require_confirmed_plan(&changed, &key).is_err(), "change {change}");
+        }
+        assert!(require_confirmed_plan(&items, "").is_err());
+    }
+
+    #[test]
     fn blocked_domain_does_not_write_its_hosts_half() {
         let mut items = vec![pin("blocked"), route("blocked"), pin("ready")];
-        let rows = vec![PlannedRow { id: "blocked".into(), label: "blocked.example.com".into(), action: String::new(), blocked: "出口未确定".into() }];
+        let rows = vec![PlannedRow { id: "blocked".into(), label: "blocked.example.com".into(), action: String::new(), blocked: "出口未确定".into(), blocked_reason: Some(PlanBlockReason::NoDirectRoute), route_options: Vec::new() }];
         filter_blocked_items(&mut items, &rows);
         assert_eq!(items, vec![pin("ready")]);
+    }
+
+    #[test]
+    fn manual_route_must_match_a_current_option_and_never_falls_back_silently() {
+        let route = net::RoutePlan { interface_index: 16, interface_alias: "VPN".into(), gateway: "26.0.48.1".parse().unwrap(), gateway_is_on_link: false };
+        let choice = RouteOverride { id: "target".into(), interface_index: 16, gateway: "26.0.48.1".into() };
+        assert_eq!(selected_route(None, &[route.clone()], Some(&choice)), Some(route.clone()));
+        assert!(selected_route(Some(route.clone()), &[], Some(&choice)).is_none());
+        assert!(selected_route(Some(route.clone()), &[route.clone()], Some(&RouteOverride { interface_index: 7, ..choice.clone() })).is_none());
+        assert!(selected_route(Some(route.clone()), &[route.clone()], Some(&RouteOverride { gateway: "198.18.0.2".into(), ..choice })).is_none());
+        assert_eq!(selected_route(Some(route.clone()), &[route.clone()], None), Some(route));
     }
 
     #[test]
@@ -589,13 +701,13 @@ mod tests {
             created_at: 0, updated_at: 0, checked_at: 0,
         };
         for address in ["", "198.18.0.2", "127.0.0.1", "not-an-ip"] {
-            let (items, rows) = plan(&[BypassTarget { address: address.into(), ..t.clone() }], &[]);
+            let (items, rows) = plan_with_egress(&[BypassTarget { address: address.into(), ..t.clone() }], &[], &[], |_| None);
             assert!(items.is_empty());
             assert_eq!(rows.len(), 1);
             assert!(!rows[0].blocked.is_empty());
         }
         let ready = BypassTarget { address: "10.0.0.1".into(), ..t };
-        let (items, rows) = plan(&[ready], &[]);
+        let (items, rows) = plan_with_egress(&[ready], &[], &[], |_| None);
         assert_eq!(items.len(), 1);
         assert!(rows[0].blocked.is_empty());
     }

@@ -18,6 +18,7 @@ export function useBypassProbe() {
   const now = ref(Date.now())
   let timer: ReturnType<typeof setInterval> | undefined
   let mounted = true
+  let cancelling: { requestId: string; pending: Promise<void> } | null = null
   const elapsed = computed(() => active.value ? Math.floor((now.value - active.value.startedAt) / 1000) : 0)
 
   function release(requestId: string) {
@@ -34,9 +35,11 @@ export function useBypassProbe() {
     timer = setInterval(() => { now.value = Date.now() }, 1000)
     try {
       const report = await work(requestId)
+      if (cancelling?.requestId === requestId) await cancelling.pending.catch(() => {})
       if (!mounted || active.value?.requestId !== requestId || active.value.cancelling) return
       return report
     } catch (error) {
+      if (cancelling?.requestId === requestId) await cancelling.pending.catch(() => {})
       if (!mounted || active.value?.requestId !== requestId || active.value.cancelling || errText(error) === '__bypass_probe_cancelled__') return
       throw error
     } finally {
@@ -52,7 +55,9 @@ export function useBypassProbe() {
     if (!job || job.cancelling) return false
     job.cancelling = true
     try {
-      await bypassApi.cancelProbe(job.requestId)
+      const pending = bypassApi.cancelProbe(job.requestId)
+      cancelling = { requestId: job.requestId, pending }
+      await pending
       release(job.requestId)
       return true
     } catch (error) {
@@ -61,6 +66,8 @@ export function useBypassProbe() {
         if (active.value.settled) release(job.requestId)
       }
       throw error
+    } finally {
+      if (cancelling?.requestId === job.requestId) cancelling = null
     }
   }
 

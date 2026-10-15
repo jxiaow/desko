@@ -15,9 +15,10 @@ test.describe('背景材质', () => {
 
     await expect(toggle).toBeChecked()
     expect((await background('.app-root')).image).toContain('radial-gradient')
-    expect((await background('.sidebar')).color).toMatch(/0\.18\)$/)
+    const sidebar = (await background('.sidebar')).color
+    expect(sidebar).toMatch(/rgba|\/\s*0\./)
     expect((await background('.settings-dialog')).image).toContain('radial-gradient')
-    expect((await background('.settings-nav')).color).toMatch(/0\.18\)$/)
+    expect((await background('.settings-nav')).color).toBe(sidebar)
 
     await control.locator('label.switch').click()
     await expect(toggle).toBeEnabled()
@@ -25,6 +26,7 @@ test.describe('背景材质', () => {
     expect((await background('.app-root')).image).toBe('none')
     expect((await background('.settings-dialog')).image).toBe('none')
     expect((await background('.sidebar')).color).not.toMatch(/rgba/)
+    expect((await background('.sidebar')).color).not.toBe(sidebar)
 
     await control.locator('label.switch').click()
     await expect(toggle).toBeEnabled()
@@ -56,15 +58,15 @@ test.describe('背景材质', () => {
     await expect(surface).toHaveCSS('background-image', 'none')
   })
 
-  test('启动恢复关闭状态，锁屏装饰与动效遵循开关及系统偏好', async ({ page }) => {
+  test('启动恢复关闭状态，锁屏采用静态柔光且不持续创建动画图层', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await startApp(page, { config: { settings: { background_atmosphere: 'false' } } })
     await expect(page.locator('.unlock-input')).toBeVisible()
     await expect(page.locator('.unlock-page')).toHaveCSS('background-image', 'none')
-    for (const layer of ['.unlock-bg', '.lock-aura', '.lock-grain']) {
+    for (const layer of ['.unlock-bg']) {
       await expect(page.locator(layer)).toBeHidden()
     }
-    await expect(page.locator('.lock-aura-blob.a')).toHaveCSS('animation-name', 'none')
+    await expect(page.locator('.unlock-bg')).toHaveCSS('animation-name', 'none')
     await page.locator('.unlock-input').fill(E2E_PASSWORD)
     await page.locator('.unlock-btn').click()
     await expect(page.locator('.app-layout')).toBeVisible()
@@ -77,16 +79,19 @@ test.describe('背景材质', () => {
     await page.keyboard.press('Escape')
     await page.locator('button[title="锁定"], button[data-tip="锁定"]').click()
     await expect(page.locator('.unlock-page')).toHaveCSS('background-image', /linear-gradient/)
-    for (const layer of ['.unlock-bg', '.lock-aura', '.lock-grain']) {
+    for (const layer of ['.unlock-bg']) {
       await expect(page.locator(layer)).toBeVisible()
     }
-    await expect(page.locator('.lock-aura-blob.a')).toHaveCSS('animation-name', /aura-a/)
-    await expect(page.locator('.lock-aura-blob.a')).toHaveCSS('animation-duration', '28s')
+    await expect(page.locator('.unlock-bg')).toHaveCSS('background-image', /radial-gradient/)
+    await expect(page.locator('.unlock-bg')).toHaveCSS('animation-name', 'none')
+    await expect(page.locator('.unlock-bg')).toHaveCSS('filter', 'none')
+    await expect(page.locator('.unlock-bg')).toHaveCSS('will-change', 'auto')
+    expect(await page.locator('.unlock-bg').evaluate(el => el.getAnimations({ subtree: true }).some(a => a.effect?.getTiming().iterations === Infinity))).toBe(false)
 
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    await expect(page.locator('.lock-aura-blob.a')).toHaveCSS('animation-name', 'none')
+    await expect(page.locator('.unlock-bg')).toHaveCSS('animation-name', 'none')
     await page.emulateMedia({ reducedMotion: 'no-preference' })
-    await expect(page.locator('.lock-aura-blob.a')).toHaveCSS('animation-name', /aura-a/)
+    await expect(page.locator('.unlock-bg')).toHaveCSS('animation-name', 'none')
 
     // 同一会话里关闭后再次锁定，画布与全部装饰都恢复关闭状态。
     await page.locator('.unlock-input').fill(E2E_PASSWORD)
@@ -101,10 +106,10 @@ test.describe('背景材质', () => {
     await page.keyboard.press('Escape')
     await page.locator('button[title="锁定"], button[data-tip="锁定"]').click()
     await expect(page.locator('.unlock-page')).toHaveCSS('background-image', 'none')
-    for (const layer of ['.unlock-bg', '.lock-aura', '.lock-grain']) {
+    for (const layer of ['.unlock-bg']) {
       await expect(page.locator(layer)).toBeHidden()
     }
-    await expect(page.locator('.lock-aura-blob.a')).toHaveCSS('animation-name', 'none')
+    await expect(page.locator('.unlock-bg')).toHaveCSS('animation-name', 'none')
     await expect(page.locator('.unlock-input')).toBeVisible()
   })
 })

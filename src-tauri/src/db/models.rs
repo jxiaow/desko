@@ -95,6 +95,9 @@ pub struct Note {
     pub starred: bool,
     /// 单条加密：true 时 title/content_html 恒为空，正文在 cipher 里
     pub encrypted: bool,
+    /// 归档：true 时不进「全部/置顶/收藏」，只在归档视图里出现
+    pub archived: bool,
+    pub archived_at: Option<i64>,
 }
 
 /// 加密小记的密文与两条 DEK 封条（口令封条 + 主密钥封条）

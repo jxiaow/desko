@@ -47,3 +47,24 @@ describe('刷新后的主密码解锁', () => {
     wrapper.unmount()
   })
 })
+
+it('浏览器入口明确要求单独访问密码，错误不称为主密码', async () => {
+  setActivePinia(createPinia())
+  const meta = document.createElement('meta')
+  meta.name = 'desko-runtime'
+  meta.content = 'web'
+  document.head.append(meta)
+  vi.mocked(authApi.unlock).mockRejectedValue('密码错误')
+  const wrapper = mount(UnlockPage, { global: { stubs: { AmbientBackground: true, BrandLogo: true, AppIcon: true } } })
+  try {
+    ;(wrapper.get('.lock-stack').element as HTMLElement).animate = vi.fn() as any
+    expect(wrapper.get('input').attributes('placeholder')).toBe('输入访问密码')
+    expect(wrapper.text()).toContain('电脑上的 Desko 锁定后仍可使用')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('.unlock-error').text()).toBe('访问密码错误，请重试')
+  } finally {
+    wrapper.unmount()
+    meta.remove()
+  }
+})

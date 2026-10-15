@@ -3,10 +3,12 @@ import BrandLogo from '../shared/BrandLogo.vue'
 import AmbientBackground from '../shared/AmbientBackground.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { isWebRuntime } from '../../services/runtime'
 import { useAuthStore } from '../../stores/auth'
 
 const emit = defineEmits<{ unlockComplete: [] }>()
 const { unlock } = useAuthStore()
+const webRuntime = isWebRuntime()
 
 const unlockPwd = ref('')
 const unlockErr = ref('')
@@ -80,7 +82,7 @@ const doUnlock = async () => {
     await unlock(unlockPwd.value, onUnlockSuccess)
   } catch (e: any) {
     const message = String(e?.message ?? e)
-    unlockErr.value = message === '密码错误' ? '主密码错误，请重试' : message
+    unlockErr.value = message === '密码错误' ? `${webRuntime ? '访问密码' : '主密码'}错误，请重试` : message
     shake()
   } finally {
     unlocking.value = false
@@ -119,7 +121,8 @@ onUnmounted(() => {
 
         <section class="lock-stack" ref="stackEl">
         <div class="lock-tile"><BrandLogo /></div>
-        <h1 class="lock-title">Desko</h1>
+        <h1 class="lock-title">{{ webRuntime ? 'Desko 浏览器访问' : 'Desko' }}</h1>
+        <p v-if="webRuntime" class="web-access-hint">使用独立访问密码登录，电脑上的 Desko 锁定后仍可使用。</p>
 
         <form class="lock-form" :aria-busy="unlocking" @submit.prevent="doUnlock">
           <div class="unlock-field">
@@ -128,7 +131,9 @@ onUnmounted(() => {
               class="unlock-input"
               :type="revealed ? 'text' : 'password'"
               v-model="unlockPwd"
-              placeholder="输入主密码解锁"
+              :placeholder="webRuntime ? '输入访问密码' : '输入主密码解锁'"
+              :aria-label="webRuntime ? '访问密码' : '主密码'"
+              autocomplete="current-password"
               @input="unlockErr = ''"
               autofocus
             />
@@ -141,7 +146,7 @@ onUnmounted(() => {
             >
               <AppIcon :name="revealed ? 'eyeOff' : 'eye'" :size="15" />
             </button>
-            <button class="unlock-btn" type="submit" title="解锁" aria-label="解锁" :disabled="unlocking">
+            <button class="unlock-btn" type="submit" :title="webRuntime ? '登录' : '解锁'" :aria-label="webRuntime ? '登录' : '解锁'" :disabled="unlocking">
               <AppIcon name="arrowRight" :size="13" />
             </button>
           </div>
@@ -264,6 +269,8 @@ onUnmounted(() => {
   color: var(--text);
   margin-bottom: 22px;
 }
+
+.web-access-hint { margin: -8px 0 18px; text-align: center; font-size: var(--text-xs); line-height: 1.6; color: var(--text-muted); }
 
 .lock-form { width: 100%; }
 

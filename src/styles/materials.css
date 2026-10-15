@@ -1,22 +1,22 @@
 /* 材质层：只消费主题颜色，负责不同表面的背景、定位和文字对比。
    组件选择材质角色，不读取 data-atmosphere；新增表面应接入这里的角色。
-   --bg-surface / --bg-input 保持实底，导航透出画布，浮层独立承接较轻的光场。 */
+   --bg-surface / --bg-input 保持实底，导航与内容共用光场，浮层独立承接较轻的光场。 */
 :root, .theme-scope {
-  /* 氛围色独立于控件色：保留清晰色相，再以透明度控制强度。
-     主光与辅光取邻近色，避免同一低彩度强调色反复叠加后趋于灰白。 */
-  --material-tint-primary: #387ed1;
-  --material-tint-secondary: #6d94d4;
-  --material-grain-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='deskoGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23deskoGrain)' opacity='0.035'/%3E%3C/svg%3E");
-  --material-grain-size: 180px 180px;
+  /* 两处局部柔光之间留出底色，避免整张画布被同一层颜色冲淡。 */
+  --material-tint-primary: #4b82c1;
+  --material-tint-secondary: #83a3cd;
+  --material-primary-strength: 40%;
+  --material-secondary-strength: 28%;
+  --material-navigation-strength: 18%;
   --material-field-primary-size: 68vw 74vh;
   --material-field-secondary-size: 62vw 68vh;
   --material-field:
-    var(--material-grain-image) 0 0 / var(--material-grain-size) repeat,
-    radial-gradient(ellipse var(--material-field-primary-size) at 14% 28%, color-mix(in srgb, var(--material-tint-primary) 24%, transparent), transparent 72%),
-    radial-gradient(ellipse var(--material-field-secondary-size) at 86% 82%, color-mix(in srgb, var(--material-tint-secondary) 24%, transparent), transparent 72%);
+    radial-gradient(ellipse var(--material-field-primary-size) at 14% 28%, color-mix(in srgb, var(--material-tint-primary) var(--material-primary-strength), transparent), transparent 72%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at 86% 82%, color-mix(in srgb, var(--material-tint-secondary) var(--material-secondary-strength), transparent), transparent 72%);
   --material-floating-field:
-    linear-gradient(color-mix(in srgb, var(--panel-bg) 25%, transparent), color-mix(in srgb, var(--panel-bg) 25%, transparent)),
+    linear-gradient(color-mix(in srgb, var(--panel-bg) 70%, transparent), color-mix(in srgb, var(--panel-bg) 70%, transparent)),
     var(--material-field), var(--panel-bg);
+  --border-navigation: color-mix(in srgb, var(--text) 10%, transparent);
 
   --bg-app: var(--material-field), var(--sunken);
   --bg-toolbar: var(--bg-app);
@@ -45,49 +45,67 @@
   --text-nav-section: var(--text-faint);
 
   --bg-lock: linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%);
-  --bg-lock-wash: radial-gradient(110% 85% at 50% 40%, var(--lock-wash-b) 0%, var(--bg) 65%), var(--bg);
-  --bg-lock-aura-primary: color-mix(in srgb, var(--material-tint-primary) 24%, transparent);
-  --bg-lock-aura-secondary: color-mix(in srgb, var(--material-tint-secondary) 18%, transparent);
-  --bg-lock-aura-neutral: color-mix(in srgb, var(--panel-bg) 35%, transparent);
   --material-decoration-display: block;
 }
 
-/* 五组氛围色与强调色同源切换；局部预览覆盖自身颜色，不继承当前主题的光场。 */
+/* 氛围色与强调色同源切换；局部预览覆盖自身颜色，不继承当前主题的光场。 */
 :root[data-accent="celadon"], .theme-scope[data-accent="celadon"] {
-  --material-tint-primary: #198c74;
-  --material-tint-secondary: #6ebc95;
+  --material-tint-primary: #489f85;
+  --material-tint-secondary: #82b69e;
 }
 :root[data-accent="clay"], .theme-scope[data-accent="clay"] {
-  --material-tint-primary: #cf7836;
-  --material-tint-secondary: #dcae50;
+  --material-tint-primary: #c18b5e;
+  --material-tint-secondary: #cba987;
 }
 :root[data-accent="plum"], .theme-scope[data-accent="plum"] {
-  --material-tint-primary: #8946c6;
-  --material-tint-secondary: #9a6bd0;
+  --material-tint-primary: #945fc5;
+  --material-tint-secondary: #b18bd0;
 }
 :root[data-accent="rose"], .theme-scope[data-accent="rose"] {
-  --material-tint-primary: #ce4f83;
-  --material-tint-secondary: #e68b9d;
+  --material-tint-primary: #c17094;
+  --material-tint-secondary: #d49faf;
+}
+:root[data-accent="teal"], .theme-scope[data-accent="teal"] {
+  --material-tint-primary: #0093c7;
+  --material-tint-secondary: #51ccd9;
+}
+:root[data-accent="forest"], .theme-scope[data-accent="forest"] {
+  --material-tint-primary: #58a135;
+  --material-tint-secondary: #9cc970;
+}
+:root[data-accent="amber"], .theme-scope[data-accent="amber"] {
+  --material-tint-primary: #b69912;
+  --material-tint-secondary: #d9be5a;
+}
+:root[data-accent="coral"], .theme-scope[data-accent="coral"] {
+  --material-tint-primary: #e33d46;
+  --material-tint-secondary: #ef8e80;
+}
+:root[data-accent="graphite"], .theme-scope[data-accent="graphite"] {
+  --material-tint-primary: #404349;
+  --material-tint-secondary: #787d84;
+}
+
+:root[data-base="dark"], .theme-scope[data-base="dark"] {
+  --material-navigation-strength: 14%;
 }
 
 /* 局部主题按自己的画布缩放，避免窗口大小的光斑在微缩预览里变成整块强调色。 */
 .theme-scope {
-  --material-grain-size: 18% auto;
   --material-field-primary-size: 68% 74%;
   --material-field-secondary-size: 62% 68%;
 }
 
 :root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"] {
-  --bg-sidebar: color-mix(in srgb, var(--sidebar-bg) 18%, transparent);
+  /* 薄底色保留主题冷暖，主侧栏直接透出全窗光场，让分界两侧的颜色连续。 */
+  --bg-sidebar: color-mix(in srgb, var(--sidebar-bg) var(--material-navigation-strength), transparent);
+  /* 抽屉覆盖在正文上，需自带不透明底色，避免透出正文。 */
   --bg-nav-overlay: var(--material-field), var(--sidebar-bg);
   --bg-dialog: var(--material-floating-field);
   --bg-popover: var(--material-floating-field);
   --bg-menu: var(--material-floating-field);
   --bg-dock: var(--material-floating-field);
   --bg-editor: var(--material-field), var(--bg);
-  --floating-background-attachment: fixed;
-  --nav-overlay-background-attachment: fixed;
-  --editor-background-attachment: fixed;
   --text-canvas-meta: var(--text-secondary);
   --text-nav-label: var(--text-secondary);
   --text-nav-section: var(--text-secondary);
@@ -99,9 +117,22 @@
   --material-decoration-display: none;
 }
 
-/* 装饰与动效是渲染器的通用职责，不与锁屏、侧栏或对话框的类名耦合。 */
+/* 氛围为静态背景，不创建持续动画或额外的模糊合成层。 */
 .material-decoration { display: var(--material-decoration-display); }
-:root[data-atmosphere="off"] .material-motion { animation: none !important; }
-@media (prefers-reduced-motion: reduce) {
-  .material-motion { animation: none !important; }
+
+/* 素色主题始终使用实底；保留氛围偏好，切回原主题时继续生效。 */
+:root[data-palette="plain"], .theme-scope[data-palette="plain"] {
+  --bg-app: var(--sunken);
+  --bg-lock: var(--bg);
+  --bg-sidebar: var(--sidebar-bg);
+  --bg-nav-overlay: var(--sidebar-bg);
+  --bg-dialog: var(--panel-bg);
+  --bg-popover: var(--panel-bg);
+  --bg-menu: var(--panel-bg);
+  --bg-dock: var(--panel-bg);
+  --bg-editor: var(--bg);
+  --text-canvas-meta: var(--text-muted);
+  --text-nav-label: var(--text-muted);
+  --text-nav-section: var(--text-muted);
+  --material-decoration-display: none;
 }

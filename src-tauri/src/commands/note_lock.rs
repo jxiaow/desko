@@ -11,7 +11,8 @@ use crate::services::note_service;
 use crate::AppState;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
+use crate::command_state::CommandState as State;
 
 const META_SALT: &str = "note_salt";
 const META_WRAP: &str = "note_key_wrap";
@@ -40,6 +41,17 @@ pub struct NotePlain {
 pub fn get_dek(state: &AppState, id: &str) -> Result<Vec<u8>, AppError> {
     let keys = state.note_keys.lock().map_err(lock_err)?;
     keys.get(id).cloned().ok_or_else(|| AppError::Database("小记未解锁".to_string()))
+}
+
+/// Caller already holds the database row: never take the DB mutex here.
+/// Another authenticated context may have removed/recreated this note's lock.
+pub(crate) fn validated_dek(state: &AppState, id: &str, lock: &NoteLockRow) -> Result<Vec<u8>, AppError> {
+    let dek = get_dek(state, id)?;
+    if read_cipher(lock, &dek).is_err() {
+        drop_dek(state, id);
+        return Err(AppError::NoteStateChanged);
+    }
+    Ok(dek)
 }
 
 fn put_dek(state: &AppState, id: &str, dek: Vec<u8>) -> Result<(), AppError> {
@@ -180,7 +192,7 @@ pub async fn note_key_setup(app: AppHandle, passphrase: String) -> Result<Vec<No
         .await.map_err(|_| AppError::Crypto("小记口令任务失败".into()))?
 }
 
-fn note_key_setup_with_state(state: &AppState, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
+pub(crate) fn note_key_setup_with_state(state: &AppState, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
     if passphrase.is_empty() {
         return Err(AppError::Database("小记口令不能为空".to_string()));
     }
@@ -211,21 +223,36 @@ pub async fn note_key_unlock(app: AppHandle, passphrase: String) -> Result<Vec<N
         .await.map_err(|_| AppError::Crypto("小记口令任务失败".into()))?
 }
 
-fn note_key_unlock_with_state(state: &AppState, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
+pub(crate) fn note_key_unlock_with_state(state: &AppState, passphrase: String) -> Result<Vec<NotePlain>, AppError> {
+    note_key_unlock_after_read(state, passphrase, || {})
+}
+
+fn note_key_unlock_after_read(state: &AppState, passphrase: String, after_read: impl FnOnce()) -> Result<Vec<NotePlain>, AppError> {
     let master = state.master_key.lock().map_err(lock_err)?;
     master.as_ref().ok_or(AppError::NotUnlocked)?;
-    let (salt_b64, wrap, iterations) = {
+    let (salt_b64, wrap, kdf_meta, iterations) = {
         let db = state.db.lock().map_err(lock_err)?;
         let (salt, wrap, _) = read_domain(&db)?;
-        (salt, wrap, crate::services::auth_service::kdf_iterations(&db, META_KDF)?)
+        (salt, wrap, db.get_meta(META_KDF)?, crate::services::auth_service::kdf_iterations(&db, META_KDF)?)
     };
+    after_read();
     let salt = BASE64.decode(&salt_b64).map_err(|e| AppError::Crypto(e.to_string()))?;
     let ndk = open_wrap(&wrap, &crypto::derive_password_key(&passphrase, &salt, iterations))?;
     if iterations < crypto::PASSWORD_ITERATIONS {
         let salt = crypto::generate_salt();
         let key = crypto::derive_password_key(&passphrase, &salt, crypto::PASSWORD_ITERATIONS);
-        state.db.lock().map_err(lock_err)?.set_meta_batch(&[(META_SALT, &BASE64.encode(&salt)),
-            (META_WRAP, &seal(&ndk, &key)?), (META_KDF, &crypto::PASSWORD_ITERATIONS.to_string())])?;
+        let next_wrap = seal(&ndk, &key)?;
+        let db = state.db.lock().map_err(lock_err)?;
+        // Desktop and Web hold separate master guards. Never let a slow legacy
+        // upgrade overwrite a password another context has changed meanwhile.
+        if db.get_meta(META_SALT)?.as_deref() != Some(salt_b64.as_str())
+            || db.get_meta(META_WRAP)?.as_deref() != Some(wrap.as_str())
+            || db.get_meta(META_KDF)? != kdf_meta
+        {
+            return Err(AppError::NoteStateChanged);
+        }
+        db.set_meta_batch(&[(META_SALT, &BASE64.encode(&salt)),
+            (META_WRAP, &next_wrap), (META_KDF, &crypto::PASSWORD_ITERATIONS.to_string())])?;
     }
     open_into_state(&state, &ndk)
 }
@@ -286,7 +313,7 @@ pub async fn note_key_change(app: AppHandle, passphrase: String) -> Result<(), A
         .await.map_err(|_| AppError::Crypto("小记口令任务失败".into()))?
 }
 
-fn note_key_change_with_state(state: &AppState, passphrase: String) -> Result<(), AppError> {
+pub(crate) fn note_key_change_with_state(state: &AppState, passphrase: String) -> Result<(), AppError> {
     let master = state.master_key.lock().map_err(lock_err)?;
     master.as_ref().ok_or(AppError::NotUnlocked)?;
     if passphrase.is_empty() {
@@ -339,7 +366,8 @@ pub fn unlock_note(state: State<AppState>, id: String) -> Result<String, AppErro
         db.get_note_lock(&id)?.ok_or_else(|| AppError::Database("这条小记没有加密".to_string()))?
     };
     if let Ok(dek) = get_dek(&state, &id) {
-        return read_cipher(&lock, &dek);
+        if let Ok(html) = read_cipher(&lock, &dek) { return Ok(html); }
+        drop_dek(&state, &id);
     }
     let ndk = get_note_key(&state)?;
     let dek = open_wrap(&lock.wrap_pass, &ndk)?;
@@ -522,6 +550,51 @@ mod tests {
         assert!(matches!(note_key_unlock_with_state(&state, "password".into()), Err(AppError::NotUnlocked)));
         assert!(matches!(note_key_change_with_state(&state, "password".into()), Err(AppError::NotUnlocked)));
         assert!(state.db.lock().unwrap().get_meta(META_WRAP).unwrap().is_none());
+    }
+
+    fn legacy_domain_state() -> AppState {
+        let state = crate::test_state();
+        let master = vec![7; crypto::KEY_LENGTH];
+        let ndk = vec![8; crypto::KEY_LENGTH];
+        let salt = crypto::generate_salt();
+        let pass_key = crypto::derive_password_key("old-note-password", &salt, crypto::LEGACY_ITERATIONS);
+        state.db.lock().unwrap().set_meta_batch(&[
+            (META_SALT, &BASE64.encode(&salt)),
+            (META_WRAP, &seal(&ndk, &pass_key).unwrap()),
+            (META_MASTER_WRAP, &seal(&ndk, &crypto::note_domain_key(&master)).unwrap()),
+        ]).unwrap();
+        *state.master_key.lock().unwrap() = Some(master);
+        *state.note_key.lock().unwrap() = Some(ndk);
+        state
+    }
+
+    #[test]
+    fn legacy_note_upgrade_cannot_overwrite_another_contexts_changed_password() {
+        let desktop = legacy_domain_state();
+        let mut web = crate::test_state();
+        web.db = desktop.db.clone();
+        *web.master_key.lock().unwrap() = Some(vec![7; crypto::KEY_LENGTH]);
+
+        // Deterministically pause Web after reading the old seal, while the
+        // separate desktop master guard allows a new password to commit.
+        let result = note_key_unlock_after_read(&web, "old-note-password".into(), || {
+            note_key_change_with_state(&desktop, "new-note-password".into()).unwrap();
+        });
+        assert!(result.err().unwrap().user_message().contains("其他端更改"));
+        assert!(web.note_key.lock().unwrap().is_none(), "stale unlock must not install a domain key");
+        assert!(matches!(note_key_unlock_with_state(&web, "old-note-password".into()), Err(AppError::WrongPassword)));
+        note_key_unlock_with_state(&web, "new-note-password".into()).unwrap();
+        assert_eq!(*web.note_key.lock().unwrap(), *desktop.note_key.lock().unwrap());
+    }
+
+    #[test]
+    fn unchanged_legacy_note_seal_is_upgraded_and_can_be_unlocked_again() {
+        let state = legacy_domain_state();
+        note_key_unlock_with_state(&state, "old-note-password".into()).unwrap();
+        assert_eq!(state.db.lock().unwrap().get_meta(META_KDF).unwrap(), Some(crypto::PASSWORD_ITERATIONS.to_string()));
+        close_domain(&state);
+        note_key_unlock_with_state(&state, "old-note-password".into()).unwrap();
+        assert_eq!(*state.note_key.lock().unwrap(), Some(vec![8; crypto::KEY_LENGTH]));
     }
 
     #[test]

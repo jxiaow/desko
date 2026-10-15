@@ -1,3 +1,4 @@
+import { isWebRuntime } from './runtime'
 import { reactive } from 'vue'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { faviconsApi } from './api/favicons'
@@ -24,7 +25,7 @@ export function faviconSrcFor(url?: string | null): string | null {
   if (!srcs.has(host) && !inFlight.has(host)) {
     inFlight.add(host)
     faviconsApi.faviconGet(url)
-      .then((path) => { srcs.set(host, path ? convertFileSrc(path) : null) })
+      .then((path) => { srcs.set(host, path ? (isWebRuntime() ? `/api/favicons/${encodeURIComponent(path.split(/[\\/]/).pop() ?? path)}` : convertFileSrc(path)) : null) })
       .catch(() => { srcs.set(host, null) })
       .finally(() => { inFlight.delete(host) })
   }

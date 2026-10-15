@@ -7,16 +7,16 @@
  * "换了主题但没换颜色"的补丁，很难在满屏里找出来。
  *
  * 三样两轴契约：
- *   · 底色层 [data-theme="paper"|"snow"|"ink"|"slate"] 交出完全相同的 96 个槽位名；
+ *   · 底色层按 theme.ts 注册表 交出完全相同的 96 个槽位名；
  *   · 极性 light/dark 由底色决定，theme.ts 的 POLARITY 是唯一登记处；
  *   · accent 族 17 槽由 [data-base=x][data-accent=y] 覆盖层填，
- *     2×5=10 个组合一个不许少（同极的几套底色共用同一档），
+ *     2×N 个组合一个不许少（同极的几套底色共用同一档），
  *     槽位名只许落在 accent 白名单内；
  *   · 底色/accent 名单从 theme.ts 现读，CSS 里缺哪一块就报哪一块。
  *
  * 这个脚本做七件事：
  *   1. 每套底色槽位名完全对齐（以 paper 为基准）
- *   2. 10 个 accent 组合齐全，组合之间槽位名一致且都在白名单内
+ *   2. 所有 accent 组合齐全，组合之间槽位名一致且都在白名单内
  *   3. 底色块里不许出现 var() 引用（那是别名块的活）；accent 块允许，
  *      因为它按极性切、本来就要能引用 var(--panel-bg) 这类随底走的槽
  *   4. 别名块不许被主题/accent 块重复定义（顺序反转会互相盖值）
@@ -61,7 +61,7 @@ function parseDecls(body) {
   return out
 }
 
-const BASE_RE = /^:root(?:\s*,\s*\[data-theme="([\w-]+)"\])?$/
+const BASE_RE = /^(?::root|:where\(:root\))(?:\s*,\s*\[data-theme="([\w-]+)"\])?$/
 const ACCENT_RE = /^\[data-base="([\w-]+)"\]\[data-accent="([\w-]+)"\]$/
 
 function collectBlocks(css) {
@@ -144,7 +144,7 @@ for (const t of baseSlots.keys()) {
   if (!BASES.includes(t)) problems.push(`CSS 里出现未知底色块 [data-theme="${t}"]，theme.ts/守护名单都没它`)
 }
 
-/* ---- 2. accent 覆盖层：2 极性 × 5 档 = 10 组合齐全 + 白名单 + 组合间对齐 ---- */
+/* ---- 2. accent 覆盖层：2 极性 × N 档齐全 + 白名单 + 组合间对齐 ---- */
 const comboKeys = ACCENTS.flatMap((a) => POLARITIES.map((p) => `${p}/${a}`))
 for (const key of comboKeys) {
   if (!comboSlots.has(key)) {

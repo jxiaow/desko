@@ -32,3 +32,27 @@ test('API Key 账号没有不适用的刷新登录令牌入口', async ({ page }
   await expect(page.getByRole('button', { name: '强制刷新令牌', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '刷新账号信息', exact: true })).toBeVisible()
 })
+
+
+test('导出完整凭据需要确认，取消不会读取凭据或覆盖剪贴板', async ({ page }) => {
+  await bootUnlocked(page, {
+    settings: { codex_enabled: 'true' },
+    codex: { accounts: [{ email: 'export@example.invalid' }] },
+  }, '/codex')
+  await page.evaluate(() => navigator.clipboard.writeText('keep-clipboard'))
+  const openExport = async () => {
+    await page.locator('.acc-more').click()
+    await page.getByRole('button', { name: '导出这一条 JSON', exact: true }).click()
+  }
+  await openExport()
+  const confirm = page.locator('.confirm-dialog')
+  await expect(confirm).toContainText('登录令牌、API Key')
+  expect(await e2e.count(page, 'export_codex_accounts')).toBe(0)
+  await page.keyboard.press('Escape')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('keep-clipboard')
+  expect(await e2e.count(page, 'export_codex_accounts')).toBe(0)
+  await openExport()
+  await confirm.getByRole('button', { name: '确定', exact: true }).click()
+  await expectToast(page, '已导出 1 条账号的 JSON 到剪贴板')
+  expect(await e2e.count(page, 'export_codex_accounts')).toBe(1)
+})

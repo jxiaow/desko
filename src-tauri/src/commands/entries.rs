@@ -4,7 +4,7 @@ use crate::services;
 use crate::services::entry_service;
 use crate::db::{CreateEntryInput, UpdateEntryInput};
 use crate::AppState;
-use tauri::State;
+use crate::command_state::CommandState as State;
 
 #[tauri::command]
 pub fn list_entries(state: State<AppState>) -> Result<Vec<EntryResponse>, AppError> {

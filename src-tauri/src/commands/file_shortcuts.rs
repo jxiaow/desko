@@ -3,7 +3,7 @@ use crate::error::AppError;
 use crate::services;
 use crate::services::file_service;
 use crate::AppState;
-use tauri::State;
+use crate::command_state::CommandState as State;
 
 #[tauri::command]
 pub fn list_file_shortcuts(state: State<AppState>) -> Result<Vec<FileShortcut>, AppError> {

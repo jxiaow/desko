@@ -75,6 +75,9 @@ export interface Note {
   starred: boolean
   /** 单条加密：true 且本会话未解锁时 content_html 恒为空 */
   encrypted: boolean
+  /** 归档：只在归档视图出现，不进「全部/置顶/收藏」与搜索 */
+  archived: boolean
+  archived_at: number | null
 }
 
 export interface Attachment {

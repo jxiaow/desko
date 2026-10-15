@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import BrandLogo from '../shared/BrandLogo.vue'
+import WebAccessPane from './WebAccessPane.vue'
 import BackupPane from './BackupPane.vue'
 import ProfilesPane from './ProfilesPane.vue'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { settingsApi } from '../../services/api/settings'
-import { THEMES, ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
+import { THEME_GROUPS, isPlainTheme, ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
 import type { ThemeId, AccentId } from '../../services/theme'
 import { moduleFlags, loadModuleFlags } from '../../modules/state'
 import { MODULES, moduleById, type ModuleId, type SettingsTabId } from '../../modules/registry'
@@ -26,6 +27,7 @@ const emit = defineEmits<{
 
 const show = ref(true)
 const FIXED_TAB_LABELS = {
+  web: 'Web 访问',
   profiles: '档案',
   modules: '模块',
   appearance: '外观',
@@ -212,6 +214,9 @@ onMounted(() => {
             </div>
             <div class="nav-group" role="group" aria-label="数据与安全">
               <div class="nav-group-label">数据与安全</div>
+              <button class="nav-tab" :class="{ on: tab === 'web' }" @click="tab = 'web'">
+                <AppIcon name="navLan" :size="16" /><span>{{ FIXED_TAB_LABELS.web }}</span>
+              </button>
               <button class="nav-tab" :class="{ on: tab === 'profiles' }" @click="tab = 'profiles'">
                 <AppIcon name="user" :size="16" />
                 <span>{{ FIXED_TAB_LABELS.profiles }}</span>
@@ -259,6 +264,8 @@ onMounted(() => {
             </div>
           </section>
 
+          <section v-if="tab === 'web'" class="settings-pane"><WebAccessPane /></section>
+
           <!-- 档案 -->
           <section v-show="tab === 'profiles'" class="settings-pane">
             <ProfilesPane />
@@ -274,9 +281,11 @@ onMounted(() => {
           <!-- 外观 -->
           <section v-show="tab === 'appearance'" class="settings-pane">
             <div class="settings-section-label">底色</div>
-            <div class="theme-row">
+            <div v-for="group in THEME_GROUPS" :key="group.label" class="theme-group">
+              <div class="theme-group-label">{{ group.label }}</div>
+              <div class="theme-row">
               <button
-                v-for="t in THEMES"
+                v-for="t in group.themes"
                 :key="t.id"
                 class="theme-chip"
                 :class="{ on: appearance.theme === t.id }"
@@ -286,6 +295,7 @@ onMounted(() => {
                 <span
                   class="theme-prev theme-scope"
                   :data-theme="t.id"
+                  :data-palette="isPlainTheme(t.id) ? 'plain' : 'atmosphere'"
                   :data-base="polarityOf(t.id)"
                   :data-accent="appearance.accent"
                   :data-atmosphere="appearance.backgroundAtmosphere ? 'on' : 'off'"
@@ -312,6 +322,7 @@ onMounted(() => {
                 </span>
                 <span class="theme-chip-name">{{ t.name }}</span>
               </button>
+              </div>
             </div>
             <div class="settings-section-label">强调色</div>
             <div class="accent-row" role="radiogroup" aria-label="强调色">
@@ -335,7 +346,7 @@ onMounted(() => {
               <div class="setting-item">
                 <div class="setting-info">
                   <span class="setting-name">背景氛围</span>
-                  <span id="background-atmosphere-desc" class="setting-desc">随强调色变化的柔光与纹理</span>
+                  <span id="background-atmosphere-desc" class="setting-desc">{{ isPlainTheme(appearance.theme) ? '素色主题保持纯色背景，此偏好在氛围配色中生效' : '随强调色变化的静态柔光' }}</span>
                 </div>
                 <label class="switch">
                   <input
@@ -344,7 +355,7 @@ onMounted(() => {
                     aria-label="背景氛围"
                     aria-describedby="background-atmosphere-desc"
                     :checked="appearance.backgroundAtmosphere"
-                    :disabled="savingAtmosphere"
+                    :disabled="savingAtmosphere || isPlainTheme(appearance.theme)"
                     @change="saveBackgroundAtmosphere"
                   />
                   <span class="switch-slider"></span>
@@ -602,9 +613,11 @@ onMounted(() => {
 /* 主题选择：每块卡里画一个等比缩小的微缩界面——侧栏、三行行卡
    （中间一行是悬浮态底色）、行尾一枚强调色小块。所见即所得，不配文字解释。
    边框固定 2px 占位，选中只换颜色，切换时不跳布局。 */
+.theme-group + .theme-group { margin-top: var(--space-3); }
+.theme-group-label { margin-bottom: var(--space-2); font-size: var(--text-xs); color: var(--text-muted); }
 .theme-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
   gap: var(--space-3);
 }
 
@@ -670,7 +683,7 @@ onMounted(() => {
   background: var(--bg-app);
   position: relative;
   display: block;
-  height: 92px;
+  height: 64px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -683,7 +696,7 @@ onMounted(() => {
   top: 0;
   bottom: 0;
   width: 30%;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-navigation);
 }
 .tp-rail-dot {
   background: var(--accent);

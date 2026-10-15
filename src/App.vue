@@ -5,6 +5,8 @@ import { useAuthStore } from './stores/auth'
 import { useToastStore } from './stores/toast'
 import { useConfirmStore } from './stores/confirm'
 import { usePasswordStore } from './stores/password'
+import { useEntriesStore } from './stores/entries'
+import { useFileShortcutsStore } from './stores/fileShortcuts'
 import { useNotesStore } from './stores/notes'
 import { useAutoLock, type LockRequest } from './composables/useAutoLock'
 import { useClipboard } from './composables/useClipboard'
@@ -15,6 +17,9 @@ import TitleBar from './components/layout/TitleBar.vue'
 import Sidebar from './components/layout/Sidebar.vue'
 import SetupPage from './components/auth/SetupPage.vue'
 import UnlockPage from './components/auth/UnlockPage.vue'
+import { authApi } from './services/api/auth'
+import { isWebRuntime } from './services/runtime'
+import WebSettingsDialog from './components/settings/WebSettingsDialog.vue'
 import SettingsDialog from './components/settings/SettingsDialog.vue'
 import ChangePasswordDialog from './components/settings/ChangePasswordDialog.vue'
 import NoteLockDialog from './components/notes/NoteLockDialog.vue'
@@ -74,13 +79,23 @@ const finishLock = async () => {
   showChangePassword.value = false
   noteKeyMode.value = null
   clearConfirm()
-  await lock()
+  // Browser logout may wait for an offline server. Hide private UI and clear
+  // local state immediately; transport serializes the cookie-changing requests.
+  const webLogout = isWebRuntime() ? authApi.lock() : null
+  if (webLogout) appState.value = 'locked'
+  else await lock()
   clearSensitiveState()
+  if (webLogout) {
+    useEntriesStore().entries = []
+    useFileShortcutsStore().shortcuts = []
+    toastStore.toast = { show: false, message: '', type: 'info' }
+  }
   // 会话明文随密钥一起收回，禁用过的模块也清理。
   lockEnabledModules()
   // 撤销旧密码清除定时器，避免解锁后的新剪贴板被误删。
   clearClipboardTimer()
   try { await navigator.clipboard.writeText('') } catch {}
+  if (webLogout) await webLogout
 }
 
 const doLock = (request: LockRequest = {}): Promise<void> => {
@@ -120,13 +135,18 @@ const doLock = (request: LockRequest = {}): Promise<void> => {
 useAutoLock(doLock, evictExpiredPasswords)
 
 const bootModules = () => bootEnabledModules()
+const onWebSessionExpired = () => {
+  if (isWebRuntime()) void doLock({ forced: true, resetDrafts: true })
+}
 let unlistenKdfWarning: (() => void) | null = null
 
 onMounted(async () => {
-  const { listen } = await import('@tauri-apps/api/event')
-  unlistenKdfWarning = await listen('auth-kdf-upgrade-warning', () => {
-    toastStore.showToast('口令保护升级未完成，已按原格式解锁', 'error')
-  })
+  if (!isWebRuntime()) {
+    const { listen } = await import('@tauri-apps/api/event')
+    unlistenKdfWarning = await listen('auth-kdf-upgrade-warning', () => {
+      toastStore.showToast('口令保护升级未完成，已按原格式解锁', 'error')
+    })
+  }
   await checkInitialized()
   if (appState.value === 'unlocked') {
     await bootEnabledModules()
@@ -136,12 +156,14 @@ onMounted(async () => {
   installHoverGuard()
   window.addEventListener('desko:open-settings-tab', onOpenSettingsTab)
   window.addEventListener('keydown', onGlobalKey)
+  window.addEventListener('desko:web-session-expired', onWebSessionExpired)
 })
 
 onUnmounted(() => {
   unlistenKdfWarning?.()
   window.removeEventListener('desko:open-settings-tab', onOpenSettingsTab)
   window.removeEventListener('keydown', onGlobalKey)
+  window.removeEventListener('desko:web-session-expired', onWebSessionExpired)
 })
 
 /* Ctrl/Cmd+B 按 rail → expanded → hidden 的顺序循环：缺省是图标轨，
@@ -157,7 +179,7 @@ function onGlobalKey(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="app-root" :class="{ 'locked-bg': appState === 'locked' }" :style="{ '--toast-side': toastSide }">
+  <div class="app-root" :class="{ 'locked-bg': appState === 'locked', 'web-runtime': isWebRuntime() }" :style="{ '--toast-side': toastSide }">
     <!-- 锁定/初始化态：顶栏浮在页面上；解锁态：顶栏进右列，侧栏全高贯通 -->
     <TitleBar
       v-if="appState !== 'unlocked'"
@@ -191,12 +213,17 @@ function onGlobalKey(e: KeyboardEvent) {
     </div>
 
     <SettingsDialog
-      v-if="showSettings && appState === 'unlocked'"
+      v-if="showSettings && appState === 'unlocked' && !isWebRuntime()"
       :initial-tab="settingsInitialTab"
       @close="showSettings = false"
       @open-change-password="showChangePassword = true"
       @open-change-note-key="noteKeyMode = $event"
       @entries-refreshed="bootModules"
+    />
+
+    <WebSettingsDialog
+      v-if="showSettings && appState === 'unlocked' && isWebRuntime()"
+      @close="showSettings = false" @lock="doLock"
     />
 
     <ChangePasswordDialog
@@ -215,3 +242,8 @@ function onGlobalKey(e: KeyboardEvent) {
     <ConfirmDialog v-if="appState === 'unlocked'" :dialog="confirmDialog" @confirm="handleConfirm" @cancel="clearConfirm" />
   </div>
 </template>
+
+<style scoped>
+.app-root.web-runtime { height: 100dvh; }
+.web-runtime :deep(.dialog) { max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); }
+</style>

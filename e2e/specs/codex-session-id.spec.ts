@@ -13,6 +13,7 @@ for (const width of [1040, 800]) {
       },
     }, '/codex')
     await page.getByRole('button', { name: '会话', exact: true }).click()
+    await page.locator('.grp-head').click()
     const row = page.locator(`.sess-row[data-sid="${sessionId}"]`)
     await expect(row.locator('.sess-title')).toHaveText(sessionId)
     await row.click()

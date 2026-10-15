@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, settingsTab, visiblePane } from '../helpers'
 
-/** v3 三样两轴：底色 4 套 × accent 5 档 = 20 组可见组合。
+/** v3 三样两轴：底色 8 套 × accent 10 档 = 80 组可见组合。
  *  底色锚点（bg/text）来自 global.css 的底色块，accent 锚点（--accent）来自
  *  [data-base=x][data-accent=y] 覆盖层——覆盖层挂的是极性，不是底色，
  *  所以 accent 表按 light/dark 两极列，paper 与 snow 共用同一串。
@@ -10,20 +10,24 @@ import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, setting
 const BASES = {
   paper: { name: '纸', pol: 'light', bg: 'rgb(248, 245, 240)', text: 'rgb(51, 50, 48)' },
   snow:  { name: '雪', pol: 'light', bg: 'rgb(241, 242, 243)', text: 'rgb(26, 27, 29)' },
+  linen: { name: '绢', pol: 'light', bg: 'rgb(243, 234, 220)', text: 'rgb(60, 51, 40)' },
+  mist: { name: '雾', pol: 'light', bg: 'rgb(237, 243, 238)', text: 'rgb(38, 58, 47)' },
   ink:   { name: '墨', pol: 'dark',  bg: 'rgb(29, 28, 26)',    text: 'rgb(230, 228, 222)' },
   slate: { name: '岩', pol: 'dark',  bg: 'rgb(37, 41, 50)',    text: 'rgb(237, 240, 246)' },
+  midnight: { name: '夜', pol: 'dark', bg: 'rgb(20, 30, 46)', text: 'rgb(228, 236, 247)' },
+  moss: { name: '苔', pol: 'dark', bg: 'rgb(29, 41, 34)', text: 'rgb(228, 238, 231)' },
 } as const
 
 const ACCENT_HEX = {
-  light: { ink: '#315f9b', celadon: '#246e60', clay: '#9b562b', plum: '#7951a8', rose: '#9b3f68' },
-  dark:  { ink: '#7faeee', celadon: '#73c5ad', clay: '#e1a15f', plum: '#bd9ae0', rose: '#e991b6' },
+  light: { ink: '#315f9b', celadon: '#246e60', clay: '#9b562b', plum: '#7951a8', rose: '#9b3f68', teal: '#126b83', forest: '#456d25', amber: '#886008', coral: '#ac443c', graphite: '#56616d' },
+  dark:  { ink: '#7faeee', celadon: '#73c5ad', clay: '#e1a15f', plum: '#bd9ae0', rose: '#e991b6', teal: '#71c8e1', forest: '#a7c97b', amber: '#e9c463', coral: '#f09c92', graphite: '#b5bec9' },
 } as const
 
 type BaseId = keyof typeof BASES
 type AccentId = keyof typeof ACCENT_HEX.light
 
 const ACCENT_NAMES: Record<AccentId, string> = {
-  ink: '墨蓝', celadon: '青瓷', clay: '赭石', plum: '紫罗', rose: '暮瑰',
+  ink: '墨蓝', celadon: '青瓷', clay: '赭石', plum: '紫罗', rose: '暮瑰', teal: '碧青', forest: '松绿', amber: '琥珀', coral: '珊瑚', graphite: '石墨',
 }
 
 /** 底色档的 accent 主色：查的是那一极的覆盖层 */
@@ -102,11 +106,11 @@ test.describe('主题', () => {
     expect(got.accentAttr).toBe('ink')
   })
 
-  test('四张底色卡 + 五枚 accent 丸，点一张立刻换色并落盘', async ({ page }) => {
+  test('十一张底色卡 + 十枚 accent 丸，点一张立刻换色并落盘', async ({ page }) => {
     await bootUnlocked(page)
     const dialog = await openSettings(page)
-    await expect(dialog.locator('.theme-chip')).toHaveCount(4)
-    await expect(dialog.locator('.accent-pill')).toHaveCount(5)
+    await expect(dialog.locator('.theme-chip')).toHaveCount(11)
+    await expect(dialog.locator('.accent-pill')).toHaveCount(10)
     await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('纸')
 
     await dialog.locator('.theme-chip', { hasText: '墨' }).click()
@@ -136,13 +140,11 @@ test.describe('主题', () => {
     await waitForToastGone(page)
   })
 
-  test('二十组配色轮换，锚点色各不相同', async ({ page }) => {
-    await bootUnlocked(page)
-    const dialog = await openSettings(page)
-    const seen: Record<string, string> = {}
-    for (const base of Object.keys(BASES) as BaseId[]) {
-      await dialog.locator('.theme-chip', { hasText: BASES[base].name }).click()
-      await waitForToastGone(page)
+  for (const base of Object.keys(BASES) as BaseId[]) {
+    test(`${BASES[base].name}主题：十种强调色都能切换、保存并匹配预览`, async ({ page }) => {
+      await bootUnlocked(page, { settings: { theme: base } })
+      const dialog = await openSettings(page)
+      const seen = new Set<string>()
       for (const accent of Object.keys(ACCENT_NAMES) as AccentId[]) {
         await dialog.locator(`.accent-pill[data-accent-id="${accent}"]`).click()
         await waitForToastGone(page)
@@ -154,6 +156,7 @@ test.describe('主题', () => {
         expect(got.bg, `${label} 底色`).toBe(BASES[base].bg)
         expect(got.text, `${label} 文字`).toBe(BASES[base].text)
         expect(got.accent, `${label} 主色`).toBe(accentOf(base, accent))
+        expect((await e2e.snapshot(page)).settings.accent ?? 'ink').toBe(accent)
         const preview = dialog.locator(`.theme-prev[data-theme="${base}"]`)
         const surfaces = await page.evaluate((base) => {
           const preview = document.querySelector(`.theme-prev[data-theme="${base}"]`)!
@@ -163,22 +166,24 @@ test.describe('主题', () => {
           const miniatureNav = getComputedStyle(preview.querySelector('.tp-rail')!)
           return { app: app.backgroundImage, preview: miniature.backgroundImage, nav: nav.backgroundColor, previewNav: miniatureNav.backgroundColor }
         }, base)
-        // 同一配方：主窗口按视口绘制，预览按卡片尺寸等比缩小。
         const relativeField = surfaces.app.replace(/([\d.]+)vw/g, '$1%').replace(/([\d.]+)vh/g, '$1%')
         expect(surfaces.preview, `${label} 预览画布`).toBe(relativeField)
         expect(surfaces.previewNav, `${label} 预览导航`).toBe(surfaces.nav)
         expect(await preview.evaluate((el) => getComputedStyle(el).getPropertyValue('--accent').trim()), `${label} 预览强调色`).toBe(got.accent)
-        seen[label] = `${got.bg}|${got.accent}`
+        seen.add(`${got.bg}|${got.accent}`)
       }
-    }
-    expect(new Set(Object.values(seen)).size).toBe(20)
-  })
+      expect(seen.size).toBe(10)
+    })
+  }
 
   test('刷新后仍是选的那组', async ({ page }) => {
-    await bootUnlocked(page, { settings: { theme: 'ink', accent: 'plum' } })
-    const dialog = await openSettings(page)
-    await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('墨')
-    await expect(dialog.locator('.accent-pill[aria-checked="true"] .accent-name')).toHaveText('紫罗')
+    for (const [theme, accent] of [['ink', 'plum'], ['linen', 'amber'], ['mist', 'graphite'], ['midnight', 'teal'], ['moss', 'forest']] as const) {
+      await bootUnlocked(page, { settings: { theme, accent } })
+      const dialog = await openSettings(page)
+      await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText(BASES[theme].name)
+      await expect(dialog.locator('.accent-pill[aria-checked="true"] .accent-name')).toHaveText(ACCENT_NAMES[accent])
+      expect(await readAnchors(page)).toMatchObject({ theme, base: BASES[theme].pol, accentAttr: accent, accent: accentOf(theme, accent) })
+    }
   })
 
   test('toast 跟着极性翻面：暗极性是亮底暗字，亮极性反过来', async ({ page }) => {
@@ -207,8 +212,12 @@ test.describe('主题', () => {
       slate: { bg: 'rgb(238, 240, 245)', color: 'rgb(47, 125, 82)' },
       paper: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
       snow:  { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },
+      linen: { bg: 'rgb(53, 45, 36)', color: 'rgb(156, 196, 174)' },
+      mist: { bg: 'rgb(32, 52, 43)', color: 'rgb(145, 201, 166)' },
+      midnight: { bg: 'rgb(232, 238, 247)', color: 'rgb(47, 125, 82)' },
+      moss: { bg: 'rgb(233, 241, 233)', color: 'rgb(47, 125, 82)' },
     }
-    const order: BaseId[] = ['ink', 'slate', 'paper', 'snow']
+    const order: BaseId[] = ['ink', 'slate', 'paper', 'snow', 'linen', 'mist', 'midnight', 'moss']
     for (const [i, base] of order.entries()) {
       await settingsTab(dialog, 'appearance')
       await dialog.locator('.theme-chip', { hasText: BASES[base].name }).click()

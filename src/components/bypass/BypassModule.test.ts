@@ -23,7 +23,7 @@ const report = (over: Partial<ProbeReport> = {}): ProbeReport => ({
   chosen: '10.20.0.1', httpStatus: 200, probeMs: 30, egress: null, verdict: 'hostsOnly', recommend: true,
   stale: false, headline: '需配置 hosts', detail: '固定实际地址', pending: [], ...over,
 })
-const plan: ApplyPlan = { rows: [{ id: 'a', label: 'internal.example.com', action: 'hosts 固定', blocked: '' }], ready: 1, blocked: 0 }
+const plan: ApplyPlan = { planKey: 'confirmed-plan', rows: [{ id: 'a', label: 'internal.example.com', action: 'hosts 固定', blocked: '' }], ready: 1, blocked: 0 }
 const outcome = (over: Partial<ApplyOutcome> = {}): ApplyOutcome => ({
   batchId: 'b1', cancelled: false, rolledBack: false,
   items: [{ id: 'a', op: 'pin', ok: true, changed: true, error: '' }], error: '', ...over,
@@ -192,7 +192,7 @@ describe('网络直连交互', () => {
     expect(configure).toBeDefined()
     await configure!.trigger('click')
     await flushPromises()
-    expect(bypassApi.plan).toHaveBeenCalledWith([])
+    expect(bypassApi.plan).toHaveBeenCalledWith([], [])
     expect(bypassApi.apply).not.toHaveBeenCalled()
     expect(wrapper.find('.concl-dialog').exists()).toBe(false)
     expect(wrapper.find('[aria-label="配置确认"]').exists()).toBe(true)
@@ -327,6 +327,20 @@ describe('网络直连交互', () => {
     expect(wrapper.get('.probe-box input').attributes('disabled')).toBeUndefined()
   })
 
+  it('方案变化拒绝配置时提示重新确认，且不发起配置后检查', async () => {
+    vi.mocked(bypassApi.apply).mockRejectedValueOnce('网络或清单已变化，尚未写入更改。请重新打开“配置直连”查看最新方案')
+    await boot([target()])
+    await openPlan()
+    await button('确认并配置').trigger('click')
+    await flushPromises()
+    expect(bypassApi.apply).toHaveBeenCalledWith([], [], 'confirmed-plan')
+    expect(bypassApi.recheck).not.toHaveBeenCalled()
+    expect(useToastStore().toast.message).toContain('重新打开“配置直连”')
+    expect(wrapper.get('.probe-box input').attributes('disabled')).toBeUndefined()
+    await openPlan()
+    expect(bypassApi.plan).toHaveBeenCalledTimes(2)
+  })
+
   it('取消授权不触发复验', async () => {
     vi.mocked(bypassApi.apply).mockResolvedValue(outcome({ cancelled: true, items: [] }))
     await boot([target()])
@@ -393,7 +407,7 @@ describe('网络直连交互', () => {
     await flushPromises()
     expect(wrapper.find('[aria-label="配置确认"]').exists()).toBe(false)
     await openPlan()
-    expect(bypassApi.plan).toHaveBeenLastCalledWith([])
+    expect(bypassApi.plan).toHaveBeenLastCalledWith([], [])
     expect((wrapper.get('.plan-cdn input').element as HTMLInputElement).checked).toBe(false)
   })
 
@@ -421,6 +435,92 @@ describe('网络直连交互', () => {
     expect(useToastStore().toast.message).toBe('方案读取失败')
     await button('确认并配置').trigger('click')
     await flushPromises()
+    expect(bypassApi.apply).not.toHaveBeenCalled()
+  })
+
+  it('同意固定 CDN IP 后仍缺少直连出口时，说明检查位置和下一步，不允许写入', async () => {
+    const gated: ApplyPlan = {
+      planKey: 'confirmed-plan',
+      rows: [{ id: 'a', label: 'internal.example.com', action: '', blocked: '地址可能随 CDN 节点变化' }],
+      ready: 0, blocked: 1,
+    }
+    vi.mocked(bypassApi.plan).mockResolvedValueOnce(gated)
+    await boot([target({ verdict: 'needRoute', cdnLike: true })])
+    await openPlan()
+    expect(wrapper.get('.plan-cdn').text()).toBe('同意固定当前 IP（10.20.0.1）')
+    expect(wrapper.find('.plan-help').exists()).toBe(false)
+    vi.mocked(bypassApi.plan).mockResolvedValueOnce({
+      planKey: 'confirmed-plan',
+      rows: [{ id: 'a', label: 'internal.example.com', action: '', blocked: '无法自动确定到 10.20.0.1/32 的直连出口，本项暂不配置', blockedReason: 'noDirectRoute' }],
+      ready: 0, blocked: 1,
+    })
+    await wrapper.get('.plan-cdn input').setValue(true)
+    await flushPromises()
+    expect(bypassApi.plan).toHaveBeenLastCalledWith(['a'], [])
+    const dialog = wrapper.get('[aria-label="配置确认"]')
+    expect(dialog.get('.plan-action').text()).toContain('10.20.0.1/32')
+    expect(dialog.get('.plan-cdn-hint').text()).toContain('仍需通过直连出口检查')
+    const help = dialog.get('[aria-label="直连出口处理指引"]').text()
+    for (const text of ['没有额外的“人工确认”操作', 'Win + R', 'ncpa.cpl', '内网 VPN', '代理客户端', 'DIRECT', '检查全部', '配置直连']) {
+      expect(help).toContain(text)
+    }
+    expect(dialog.get('.footer-hints').text()).not.toContain('管理员授权')
+    expect(button('确认并配置').attributes('disabled')).toBeDefined()
+    await button('确认并配置').trigger('click')
+    expect(bypassApi.apply).not.toHaveBeenCalled()
+    vi.mocked(bypassApi.plan).mockResolvedValueOnce(gated)
+    await wrapper.get('.plan-cdn input').setValue(false)
+    await flushPromises()
+    expect(wrapper.find('.plan-help').exists()).toBe(false)
+  })
+
+  it('缺少实际 IP 时只提示重新探测，不显示无关的出口处理指引', async () => {
+    vi.mocked(bypassApi.plan).mockResolvedValueOnce({
+      planKey: 'confirmed-plan',
+      rows: [{ id: 'a', label: 'internal.example.com', action: '', blocked: '没有可固定的实际 IPv4 地址，请重新探测' }],
+      ready: 0, blocked: 1,
+    })
+    await boot([target({ address: '' })])
+    await openPlan()
+    expect(wrapper.get('.plan-action').text()).toContain('请重新探测')
+    expect(wrapper.find('.plan-help').exists()).toBe(false)
+    expect(button('确认并配置').attributes('disabled')).toBeDefined()
+  })
+
+  it('选择内网出口后重新生成方案，更新完成才允许确认，并将所选出口传入配置', async () => {
+    const option = { interfaceIndex: 16, interfaceAlias: '本地连接', gateway: '26.0.48.1', gatewayIsOnLink: false }
+    const blocked: ApplyPlan = { planKey: 'confirmed-plan', rows: [{ id: 'a', label: 'internal.example.com', action: '', blocked: '请选择可访问该地址的网络', blockedReason: 'noDirectRoute', routeOptions: [option] }], ready: 0, blocked: 1 }
+    vi.mocked(bypassApi.plan).mockResolvedValueOnce(blocked)
+    await boot([target({ verdict: 'needRoute' })])
+    await openPlan()
+    expect(wrapper.get('.plan-route-hint').text()).toContain('局域网或 VPN')
+    const planning = deferred<ApplyPlan>()
+    vi.mocked(bypassApi.plan).mockReturnValueOnce(planning.promise)
+    await wrapper.get('.plan-route select').setValue('16|26.0.48.1')
+    expect(button('确认并配置').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.plan-route select').attributes('disabled')).toBeDefined()
+    const overrides = [{ id: 'a', interfaceIndex: 16, gateway: '26.0.48.1' }]
+    expect(bypassApi.plan).toHaveBeenLastCalledWith([], overrides)
+    planning.resolve({ planKey: 'updated-plan', rows: [{ id: 'a', label: 'internal.example.com', action: '持久路由 绑 26.0.48.1（接口 本地连接）', blocked: '', routeOptions: [option] }], ready: 1, blocked: 0 })
+    await flushPromises()
+    expect(wrapper.find('.plan-help').exists()).toBe(false)
+    expect(button('确认并配置').attributes('disabled')).toBeUndefined()
+    expect((wrapper.get('.plan-route select').element as HTMLSelectElement).value).toBe('16|26.0.48.1')
+    await button('确认并配置').trigger('click')
+    await flushPromises()
+    expect(bypassApi.apply).toHaveBeenCalledWith([], overrides, 'updated-plan')
+  })
+
+  it('出口方案更新失败时恢复上次选择，不放行未确认的出口', async () => {
+    vi.mocked(bypassApi.plan).mockResolvedValueOnce({ planKey: 'confirmed-plan', rows: [{ id: 'a', label: 'internal.example.com', action: '', blocked: '请选择出口', routeOptions: [{ interfaceIndex: 16, interfaceAlias: 'VPN', gateway: '26.0.48.1', gatewayIsOnLink: false }] }], ready: 0, blocked: 1 })
+    await boot([target({ verdict: 'needRoute' })])
+    await openPlan()
+    vi.mocked(bypassApi.plan).mockRejectedValueOnce('路由读取失败')
+    await wrapper.get('.plan-route select').setValue('16|26.0.48.1')
+    await flushPromises()
+    expect((wrapper.get('.plan-route select').element as HTMLSelectElement).value).toBe('')
+    expect(useToastStore().toast.message).toBe('路由读取失败')
+    expect(button('确认并配置').attributes('disabled')).toBeDefined()
     expect(bypassApi.apply).not.toHaveBeenCalled()
   })
 
@@ -528,6 +628,24 @@ describe('网络直连交互', () => {
     probing.resolve(report())
     await flushPromises()
     expect(wrapper.find('.concl-dialog').exists()).toBe(true)
+    expect(wrapper.find('.bp-probe-progress').exists()).toBe(false)
+  })
+
+  it('取消命令尚未回传时探测完成，取消失败后仍能查看本次结论', async () => {
+    const probing = deferred<ProbeReport>()
+    const cancelling = deferred<void>()
+    vi.mocked(bypassApi.probe).mockReturnValue(probing.promise)
+    vi.mocked(bypassApi.cancelProbe).mockReturnValueOnce(cancelling.promise)
+    await boot()
+    await startProbe()
+    await button('取消探测').trigger('click')
+    probing.resolve(report({ headline: '有效的完成结果' }))
+    await flushPromises()
+    expect(wrapper.find('.concl-dialog').exists()).toBe(false)
+    cancelling.reject('连接已断开')
+    await flushPromises()
+    expect(useToastStore().toast.message).toBe('取消失败：连接已断开')
+    expect(wrapper.get('.concl-title').text()).toBe('有效的完成结果')
     expect(wrapper.find('.bp-probe-progress').exists()).toBe(false)
   })
 

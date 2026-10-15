@@ -15,6 +15,8 @@ pub fn create_note(db: &Database, input: CreateNoteInput) -> Result<Note, AppErr
         pinned: false,
         starred: false,
         encrypted: false,
+        archived: false,
+        archived_at: None,
     };
 
     db.create_note(&note)?;
@@ -90,6 +92,16 @@ fn plain_text(src: &str) -> String {
 
 pub fn toggle_star_note(db: &Database, id: &str) -> Result<bool, AppError> {
     db.toggle_star_note(id)
+}
+
+pub fn set_note_archived(db: &Database, id: &str, archived: bool) -> Result<bool, AppError> {
+    let now = chrono::Utc::now().timestamp_millis();
+    db.set_note_archived(id, archived, now)
+}
+
+pub fn batch_set_archived(db: &Database, ids: &[String], archived: bool) -> Result<usize, AppError> {
+    let now = chrono::Utc::now().timestamp_millis();
+    db.batch_set_archived(ids, archived, now)
 }
 
 #[cfg(test)]

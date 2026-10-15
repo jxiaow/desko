@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod command_state;
 mod db;
 mod crypto;
 mod error;
@@ -9,6 +10,7 @@ mod services;
 mod backup;
 mod session_lock;
 mod webdav;
+mod web_access;
 
 use db::Database;
 use services::attachment_service;
@@ -29,7 +31,7 @@ fn request_quit(app: &tauri::AppHandle) {
     }
     let app = app.clone();
     app.dialog()
-        .message("确定退出 Desko？退出后，局域网文件传输和内网穿透服务将停止。")
+        .message("确定退出 Desko？退出后，Web 访问、局域网文件传输和内网穿透服务将停止。")
         .title("退出 Desko")
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::OkCancelCustom("确认退出".into(), "取消".into()))
@@ -43,7 +45,9 @@ fn request_quit(app: &tauri::AppHandle) {
 }
 
 pub struct AppState {
-    pub db: Mutex<Database>,
+    pub db: std::sync::Arc<Mutex<Database>>,
+    /// Shared data/key generation; desktop screen locks leave Web sessions intact.
+    pub data_epoch: std::sync::Arc<std::sync::atomic::AtomicU64>,
     pub master_key: Mutex<Option<Vec<u8>>>,
     pub unlock_attempts: Mutex<services::auth_service::UnlockThrottle>,
     /// 锁定请求的代次：前端完成锁定或重新解锁后取消旧请求的超时兜底。
@@ -153,8 +157,10 @@ fn main() {
 
             let db = Database::new(db_path_str).expect("failed to init database");
             
+            app.manage(web_access::WebAccessState::default());
             app.manage(AppState {
-                db: Mutex::new(db),
+                db: std::sync::Arc::new(Mutex::new(db)),
+                data_epoch: Default::default(),
                 master_key: Mutex::new(None),
                 unlock_attempts: Mutex::new(services::auth_service::UnlockThrottle::default()),
                 lock_epoch: std::sync::atomic::AtomicU64::new(0),
@@ -256,6 +262,9 @@ fn main() {
             // 宏展开是不捕获的闭包，标注成 fn 指针供外层闸门闭包捕获
             let base_invoke: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool =
                 tauri::generate_handler![
+            web_access::web_access_status,
+            web_access::web_access_start,
+            web_access::web_access_stop,
             commands::auth::is_initialized,
             commands::auth::setup_master_password,
             commands::auth::unlock,
@@ -292,6 +301,8 @@ fn main() {
             commands::notes::batch_delete_notes,
             commands::notes::toggle_pin_note,
             commands::notes::toggle_star_note,
+            commands::notes::set_note_archived,
+            commands::notes::batch_set_archived,
             commands::notes::list_attachments,
             commands::note_lock::note_key_status,
             commands::note_lock::note_key_setup,
@@ -458,6 +469,7 @@ fn main() {
             // 及时备份交给 auto_backup 的定时/停笔即备两档。
             // 例外：局域网传输在收上传请求，拔监听要快过任何落盘动作。
             if let tauri::RunEvent::Exit { .. } = event {
+                web_access::revoke(app_handle);
                 commands::fileshare::stop_for_exit(app_handle);
                 commands::tunnel::stop_for_exit(app_handle);
             }
@@ -467,7 +479,8 @@ fn main() {
 #[cfg(test)]
 pub(crate) fn test_state() -> AppState {
     AppState {
-        db: Mutex::new(Database::new(":memory:").unwrap()),
+        db: std::sync::Arc::new(Mutex::new(Database::new(":memory:").unwrap())),
+        data_epoch: Default::default(),
         master_key: Mutex::new(None),
         unlock_attempts: Mutex::new(services::auth_service::UnlockThrottle::default()),
         lock_epoch: std::sync::atomic::AtomicU64::new(0),

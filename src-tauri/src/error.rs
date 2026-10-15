@@ -24,6 +24,9 @@ pub enum AppError {
     #[error("尝试次数过多，请 {0} 秒后重试")]
     UnlockRateLimited(u64),
     
+    #[error("小记加密设置已在其他端更改，请重新解锁后重试")]
+    NoteStateChanged,
+
     #[error("Entry not found")]
     EntryNotFound,
     
@@ -56,6 +59,7 @@ impl AppError {
             AppError::WrongPassword => "密码错误".to_string(),
             AppError::NotUnlocked => "应用已锁定".to_string(),
             AppError::UnlockRateLimited(seconds) => format!("尝试次数过多，请 {} 秒后重试", seconds),
+            AppError::NoteStateChanged => "小记加密设置已在其他端更改，请重新解锁后重试".into(),
             AppError::EntryNotFound => "记录不存在".to_string(),
             AppError::Io(_) => "文件操作失败".to_string(),
             // 备份的错误信息本身就是给人看的（含校验失败原因），原样透出

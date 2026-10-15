@@ -8,6 +8,7 @@ import {
   type BypassStatus,
   type BypassTarget,
   type ProbeReport,
+  type RouteOverride,
 } from '../../services/api/bypass'
 import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
@@ -283,6 +284,7 @@ const applyResult = ref<ApplyOutcome | null>(null)
 const rollbackBatch = ref('')
 /** 用户在确认弹窗里坚持要钉的 CDN 条目；改了要向后端重算一次账 */
 const allowCdn = ref<string[]>([])
+const routeOverrides = ref<RouteOverride[]>([])
 
 const pendingCount = computed(() => targets.value.filter(needsApply).length)
 
@@ -292,6 +294,7 @@ function closePlan() {
   planOpen.value = false
   plan.value = null
   allowCdn.value = []
+  routeOverrides.value = []
 }
 
 async function loadRollback() {
@@ -305,10 +308,11 @@ async function loadRollback() {
 async function openApplyPlan() {
   if (operationBusy.value || !pendingCount.value) return
   allowCdn.value = []
+  routeOverrides.value = []
   const request = ++planRequest
   busyPlan.value = true
   try {
-    const next = await bypassApi.plan([])
+    const next = await bypassApi.plan([], [])
     if (request !== planRequest || !mounted) return
     plan.value = next
     planOpen.value = true
@@ -333,29 +337,44 @@ function retryReport() {
   else void probeOnly()
 }
 
-/** 勾选「仍要固定」只影响这一条：批次账目由后端重算，界面不自己加减 */
-async function toggleCdn(id: string) {
+/** CDN 授权和出口选择共同重算方案；失败时恢复已确认的选项。 */
+async function updatePlan(nextAllow: string[], nextRoutes: RouteOverride[]) {
   if (busyPlan.value) return
   const previousAllow = allowCdn.value
-  const nextAllow = allowCdn.value.includes(id)
-    ? allowCdn.value.filter((v) => v !== id)
-    : [...allowCdn.value, id]
+  const previousRoutes = routeOverrides.value
   const request = ++planRequest
   allowCdn.value = nextAllow
+  routeOverrides.value = nextRoutes
   busyPlan.value = true
   try {
-    const next = await bypassApi.plan(nextAllow)
+    const next = await bypassApi.plan(nextAllow, nextRoutes)
     if (request !== planRequest || !mounted) return
     allowCdn.value = nextAllow
+    routeOverrides.value = nextRoutes
     plan.value = next
   } catch (e) {
     if (request === planRequest && mounted) {
       allowCdn.value = previousAllow
+      routeOverrides.value = previousRoutes
       toastStore.showToast(errText(e), 'error')
     }
   } finally {
     if (request === planRequest) busyPlan.value = false
   }
+}
+
+function toggleCdn(id: string) {
+  const next = allowCdn.value.includes(id) ? allowCdn.value.filter((v) => v !== id) : [...allowCdn.value, id]
+  void updatePlan(next, routeOverrides.value)
+}
+
+function changeRoute(id: string, value: string) {
+  const option = plan.value?.rows.filter((r) => r.id === id).flatMap((r) => r.routeOptions ?? [])
+    .find((r) => `${r.interfaceIndex}|${r.gateway}` === value)
+  if (value && !option) return
+  const next = routeOverrides.value.filter((r) => r.id !== id)
+  if (option) next.push({ id, interfaceIndex: option.interfaceIndex, gateway: option.gateway })
+  void updatePlan(allowCdn.value, next)
 }
 
 async function runApply() {
@@ -366,7 +385,7 @@ async function runApply() {
   let written: string[] = []
   let verifySuccessfulBatch = false
   try {
-    const outcome = await bypassApi.apply(allowCdn.value)
+    const outcome = await bypassApi.apply(allowCdn.value, routeOverrides.value, plan.value.planKey)
     written = outcome.cancelled ? [] : [...new Set(outcome.items.map((i) => i.id))]
     if (outcome.cancelled) {
       toastStore.showToast('已取消授权，系统未改动')
@@ -390,6 +409,7 @@ async function runApply() {
     awaitingAuth.value = false
     plan.value = null
     allowCdn.value = []
+    routeOverrides.value = []
     await Promise.all([loadTargets(), loadStatus(), loadRollback()])
     // 写完不靠回执自证：这一批逐条重探一遍，判定变了才算真落定
     if (written.length) {
@@ -745,10 +765,12 @@ watchEffect(() => pageHead.setHead('网络直连', targets.value.length ? `${tar
       :rollback-batch="rollbackBatch"
       :targets="targets"
       :allow-cdn="allowCdn"
+      :route-overrides="routeOverrides"
       @close-plan="closePlan"
       @close-result="applyResult = null"
       @apply="runApply"
       @cdn="toggleCdn"
+      @route="changeRoute"
       @revert="askRevert"
     />
 

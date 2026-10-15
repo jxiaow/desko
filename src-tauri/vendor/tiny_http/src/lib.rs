@@ -140,6 +140,7 @@ pub struct Server {
 
     // result of TcpListener::local_addr()
     listening_addr: ListenAddr,
+    accept_thread: std::sync::Mutex<Option<thread::JoinHandle<()>>>,
 }
 
 enum Message {
@@ -188,12 +189,26 @@ pub struct SslConfig {
     pub private_key: Vec<u8>,
 }
 
+struct ConnectionSlot(Arc<std::sync::atomic::AtomicUsize>);
+impl Drop for ConnectionSlot {
+    fn drop(&mut self) { self.0.fetch_sub(1, std::sync::atomic::Ordering::AcqRel); }
+}
+
 impl Server {
     /// HTTP server with a read/write idle timeout on every accepted connection.
     pub fn http_with_timeout<A: ToSocketAddrs>(addr: A, timeout: Duration)
         -> Result<Server, Box<dyn Error + Send + Sync + 'static>> {
         let listener = ConfigListenAddr::from_socket_addrs(addr)?.bind()?;
-        Self::from_listener_with_timeout(listener, None, Some(timeout))
+        Self::from_listener_with_timeout(listener, None, Some(timeout), None)
+    }
+
+    /// Opt-in bounded connections and at most one pending request per connection.
+    /// Excess sockets are closed before allocating a connection worker.
+    pub fn http_with_timeout_and_limit<A: ToSocketAddrs>(addr: A, timeout: Duration, limit: usize)
+        -> Result<Server, Box<dyn Error + Send + Sync + 'static>> {
+        if limit == 0 { return Err(IoError::new(IoErrorKind::InvalidInput, "connection limit must be positive").into()); }
+        let listener = ConfigListenAddr::from_socket_addrs(addr)?.bind()?;
+        Self::from_listener_with_timeout(listener, None, Some(timeout), Some(limit))
     }
 
     /// Shortcut for a simple server on a specific address.
@@ -250,11 +265,11 @@ impl Server {
         listener: L,
         ssl_config: Option<SslConfig>,
     ) -> Result<Server, Box<dyn Error + Send + Sync + 'static>> {
-        Self::from_listener_with_timeout(listener, ssl_config, None)
+        Self::from_listener_with_timeout(listener, ssl_config, None, None)
     }
 
     fn from_listener_with_timeout<L: Into<Listener>>(
-        listener: L, ssl_config: Option<SslConfig>, timeout: Option<Duration>,
+        listener: L, ssl_config: Option<SslConfig>, timeout: Option<Duration>, max_connections: Option<usize>,
     ) -> Result<Server, Box<dyn Error + Send + Sync + 'static>> {
         let listener = listener.into();
         // building the "close" variable
@@ -298,14 +313,20 @@ impl Server {
 
         let inside_close_trigger = close_trigger.clone();
         let inside_messages = messages.clone();
-        thread::spawn(move || {
+        let accept_thread = thread::spawn(move || {
             // a tasks pool is used to dispatch the connections into threads
             let tasks_pool = util::TaskPool::new();
+            let connections = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
             log::debug!("Running accept thread");
             while !inside_close_trigger.load(Relaxed) {
                 let new_client = match server.accept() {
                     Ok((sock, _)) => {
+                        let slot = if let Some(limit) = max_connections {
+                            if connections.load(std::sync::atomic::Ordering::Acquire) >= limit { continue; }
+                            connections.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                            Some(ConnectionSlot(connections.clone()))
+                        } else { None };
                         if let Some(timeout) = timeout {
                             if sock.set_timeouts(timeout).is_err() { continue; }
                         }
@@ -327,23 +348,39 @@ impl Server {
                             Some(ref _ssl) => unreachable!(),
                         };
 
-                        Ok(ClientConnection::new(write_closable, read_closable))
+                        Ok((ClientConnection::new(write_closable, read_closable), slot))
                     }
                     Err(e) => Err(e),
                 };
 
                 match new_client {
-                    Ok(client) => {
+                    Ok((client, slot)) => {
                         let messages = inside_messages.clone();
                         let mut client = Some(client);
+                        let mut slot = slot;
+                        let closed = inside_close_trigger.clone();
                         tasks_pool.spawn(Box::new(move || {
+                            let _connection_slot = slot.take();
                             if let Some(client) = client.take() {
                                 // Synchronization is needed for HTTPS requests to avoid a deadlock
-                                if client.secure() {
+                                if client.secure() || max_connections.is_some() {
                                     let (sender, receiver) = mpsc::channel();
                                     for rq in client {
                                         messages.push(rq.with_notify_sender(sender.clone()).into());
-                                        receiver.recv().unwrap();
+                                        if max_connections.is_some() && closed.load(Relaxed) {
+                                            while let Some(message) = messages.try_pop() { discard_message(message); }
+                                            break;
+                                        }
+                                        if max_connections.is_some() {
+                                            loop {
+                                                if closed.load(Relaxed) { break; }
+                                                match receiver.recv_timeout(Duration::from_millis(200)) {
+                                                    Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                                                    Err(mpsc::RecvTimeoutError::Timeout) => {},
+                                                }
+                                            }
+                                            if closed.load(Relaxed) { break; }
+                                        } else { receiver.recv().unwrap(); }
                                     }
                                 } else {
                                     for rq in client {
@@ -369,6 +406,7 @@ impl Server {
             messages,
             close: close_trigger,
             listening_addr: local_addr,
+            accept_thread: std::sync::Mutex::new(Some(accept_thread)),
         })
     }
 
@@ -434,28 +472,67 @@ impl Iterator for IncomingRequests<'_> {
     }
 }
 
-impl Drop for Server {
-    fn drop(&mut self) {
-        self.close.store(true, Relaxed);
-        // Connect briefly to ourselves to unblock the accept thread
+fn discard_message(message: Message) {
+    if let Message::NewRequest(request) = message { request.discard(); }
+}
+
+impl Server {
+    fn close_listener(&self) {
+        if self.close.swap(true, Relaxed) { return; }
+        // Wake accept so its listener is released before an explicit shutdown returns.
         let maybe_stream = match &self.listening_addr {
             ListenAddr::IP(addr) => TcpStream::connect(addr).map(Connection::from),
             #[cfg(unix)]
-            ListenAddr::Unix(addr) => {
-                // TODO: use connect_addr when its stabilized.
-                let path = addr.as_pathname().unwrap();
-                std::os::unix::net::UnixStream::connect(path).map(Connection::from)
-            }
+            ListenAddr::Unix(addr) => std::os::unix::net::UnixStream::connect(addr.as_pathname().unwrap()).map(Connection::from),
         };
-        if let Ok(stream) = maybe_stream {
-            let _ = stream.shutdown(Shutdown::Both);
-        }
-
+        if let Ok(stream) = maybe_stream { let _ = stream.shutdown(Shutdown::Both); }
         #[cfg(unix)]
         if let ListenAddr::Unix(addr) = &self.listening_addr {
-            if let Some(path) = addr.as_pathname() {
-                let _ = std::fs::remove_file(path);
-            }
+            if let Some(path) = addr.as_pathname() { let _ = std::fs::remove_file(path); }
         }
+    }
+
+    /// Stop accepting and wait for the listener to close. Application workers
+    /// still own any requests already received and must be joined separately.
+    pub fn shutdown(&self) {
+        self.close_listener();
+        if let Some(handle) = self.accept_thread.lock().unwrap_or_else(|error| error.into_inner()).take() {
+            let _ = handle.join();
+        }
+        while let Some(message) = self.messages.try_pop() { discard_message(message); }
+    }
+}
+impl Drop for Server {
+    fn drop(&mut self) { self.close_listener(); }
+}
+
+#[cfg(test)]
+mod connection_limit_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    #[test]
+    fn bounded_http_refuses_excess_connections_and_does_not_queue_pipeline_requests() {
+        let server = Server::http_with_timeout_and_limit("127.0.0.1:0", Duration::from_secs(2), 1).unwrap();
+        let address = server.server_addr().to_ip().unwrap();
+        let mut first = TcpStream::connect(address).unwrap();
+        first.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        first.write_all(b"GET /first HTTP/1.1\r\nHost: localhost\r\n\r\nGET /second HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").unwrap();
+        let request = server.recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
+        assert_eq!(request.url(), "/first");
+        assert!(server.recv_timeout(Duration::from_millis(30)).unwrap().is_none());
+        let mut excess = TcpStream::connect(address).unwrap();
+        excess.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        let mut byte = [0];
+        match excess.read(&mut byte) {
+            Ok(0) => {},
+            Err(error) if matches!(error.kind(), IoErrorKind::ConnectionReset | IoErrorKind::ConnectionAborted) => {},
+            result => panic!("excess socket must close before a worker is allocated: {result:?}"),
+        }
+        request.respond(Response::from_string("first")).unwrap();
+        let request = server.recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
+        assert_eq!(request.url(), "/second");
+        request.respond(Response::from_string("second")).unwrap();
+        let mut responses = String::new(); first.read_to_string(&mut responses).unwrap();
+        assert!(responses.contains("first") && responses.contains("second"));
     }
 }

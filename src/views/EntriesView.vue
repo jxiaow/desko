@@ -11,6 +11,7 @@ import DetailDialog from '../components/entries/DetailDialog.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useToastStore } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
+import { openExternal } from '../utils/openExternal'
 
 const entriesStore = useEntriesStore()
 const toastStore = useToastStore()
@@ -90,8 +91,7 @@ const categoryNames = computed(() => tabs.value.filter(t => t.id !== 'all').map(
 
 const openUrl = async (url: string) => {
   try {
-    const { open } = await import('@tauri-apps/plugin-shell')
-    await open(url)
+    await openExternal(url)
   } catch {
     toastStore.showToast('无法打开浏览器', 'error')
   }

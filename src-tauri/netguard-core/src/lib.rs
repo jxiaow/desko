@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
 
 mod hosts_bytes;
+mod route_selection;
 pub use hosts_bytes::{apply_pins_bytes, restore_managed_bytes};
 
 pub const HOSTS_BEGIN: &str = "# BEGIN TUN-BYPASS-MANAGED";
@@ -379,12 +380,12 @@ pub mod net {
 
     /// 目标当前走哪块卡、下一跳是谁
     #[cfg(windows)]
-    pub fn best_route(dest: Ipv4Addr) -> Option<RouteHit> {
+    fn best_route_on_interface(dest: Ipv4Addr, interface_index: u32) -> Option<RouteHit> {
         use windows::Win32::NetworkManagement::IpHelper::{GetBestRoute2, MIB_IPFORWARD_ROW2};
         let dest = v4_sock(dest);
         let mut row = MIB_IPFORWARD_ROW2::default();
         let mut src = Default::default();
-        if unsafe { GetBestRoute2(None, 0, None, &dest, 0, &mut row, &mut src) }.0 != 0 {
+        if unsafe { GetBestRoute2(None, interface_index, None, &dest, 0, &mut row, &mut src) }.0 != 0 {
             return None;
         }
         Some(RouteHit {
@@ -394,17 +395,61 @@ pub mod net {
         })
     }
 
+    #[cfg(windows)]
+    pub fn best_route(dest: Ipv4Addr) -> Option<RouteHit> {
+        best_route_on_interface(dest, 0)
+    }
+
+    #[cfg(not(windows))]
+    fn best_route_on_interface(_dest: Ipv4Addr, _index: u32) -> Option<RouteHit> { None }
+
     #[cfg(not(windows))]
     pub fn best_route(_dest: Ipv4Addr) -> Option<RouteHit> {
         None
     }
 
+    /// A route can change only at a route prefix's start/end. Probe those boundaries
+    /// rather than one representative host or every address in a large subnet.
+    fn prefix_probe_points(prefix: Ipv4Addr, prefix_len: u8, rows: &[(Ipv4Addr, u8, Ipv4Addr, u32, u32)]) -> Vec<Ipv4Addr> {
+        if prefix_len > 32 { return Vec::new(); }
+        let start = u32::from(prefix) & u32::from(prefix_len_to_mask(prefix_len));
+        let end = start as u64 + (1u64 << (32 - prefix_len)) - 1;
+        let mut points = std::collections::BTreeSet::from([start]);
+        for (net, len, ..) in rows {
+            if *len > 32 { continue; }
+            let first = (u32::from(*net) & u32::from(prefix_len_to_mask(*len))) as u64;
+            let after = first + (1u64 << (32 - *len));
+            for point in [first, after] {
+                if point >= start as u64 && point <= end { points.insert(point as u32); }
+            }
+        }
+        points.into_iter().map(Ipv4Addr::from).collect()
+    }
+
+    /// Every distinct route segment within a subnet, using the same Windows route decision as single IPs.
+    #[cfg(windows)]
+    pub fn prefix_routes(prefix: Ipv4Addr, prefix_len: u8) -> Option<Vec<RouteHit>> {
+        let rows = forward_rows()?;
+        let points = prefix_probe_points(prefix, prefix_len, &rows);
+        if points.is_empty() { return None; }
+        let mut hits = Vec::new();
+        for point in points {
+            let hit = best_route(point)?;
+            if !hits.contains(&hit) { hits.push(hit); }
+        }
+        Some(hits)
+    }
+
+    #[cfg(not(windows))]
+    pub fn prefix_routes(_prefix: Ipv4Addr, _prefix_len: u8) -> Option<Vec<RouteHit>> { None }
+
     /// 网关必须落在候选接口自己的网段内，否则 Windows 判路由不可用、静默回落默认
     /// 路由，流量重新被接管方拿走——症状是"路由在，却不通"。判据：路由到该网关时
     /// 选中的就是这块卡，且下一跳为空（命中 on-link 前缀路由）。
     pub fn gateway_on_link(interface_index: u32, gateway: Ipv4Addr) -> bool {
-        match best_route(gateway) {
-            Some(hit) => hit.interface_index == interface_index && hit.next_hop == Ipv4Addr::UNSPECIFIED,
+        match best_route_on_interface(gateway, interface_index) {
+            Some(hit) => hit.interface_index == interface_index && hit.next_hop == Ipv4Addr::UNSPECIFIED
+                && usable_v4(IpAddr::V4(hit.source)),
             None => false,
         }
     }
@@ -421,9 +466,11 @@ pub mod net {
     /// 核验目标前缀确实落在指定接口上，而非查询 0.0.0.0 的默认出口。
     pub fn route_binding_valid(prefix: Ipv4Addr, prefix_len: u8, gateway: Ipv4Addr, interface_index: u32) -> bool {
         if prefix_len > 32 || interface_index == 0 { return false; }
+        if gateway != Ipv4Addr::UNSPECIFIED && !usable_v4(IpAddr::V4(gateway)) { return false; }
         if gateway != Ipv4Addr::UNSPECIFIED { return gateway_on_link(interface_index, gateway); }
         #[cfg(windows)]
-        { forward_rows().map(|rows| rows.iter().any(|(net, len, hop, idx, _)|
+        { best_route_on_interface(prefix, interface_index).filter(|hit| usable_v4(IpAddr::V4(hit.source))).is_some()
+            && forward_rows().map(|rows| rows.iter().any(|(net, len, hop, idx, _)|
             *idx == interface_index && on_link_prefix_covers(*net, *len, *hop, prefix, prefix_len))).unwrap_or(false) }
         #[cfg(not(windows))]
         { false }
@@ -507,76 +554,68 @@ pub mod net {
     }
 
     /// 一条路由要绑成什么样
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(serde::Serialize, Clone, Debug, PartialEq, Eq)]
+    #[serde(rename_all = "camelCase")]
     pub struct RoutePlan {
         pub interface_index: u32,
         pub interface_alias: String,
         pub gateway: Ipv4Addr,
-        /// 该接口没有默认路由，网关按链路本地填 0.0.0.0
+        /// 目标在该接口链路上，网关为 0.0.0.0；可与该接口的默认路由并存。
         pub gateway_is_on_link: bool,
     }
 
-    /// 该前缀该绑哪块接口：在路由表里找覆盖它的 on-link 前缀路由，并且**排除接管方**——
-    /// 直连要的就是把这条流量从接管方手里抢走，绑回接管方等于什么都没做。
-    ///
-    /// 只认下一跳为 0.0.0.0 的前缀路由，那才是「这块接口自己够得着」的段；同一段落在
-    /// 多块接口上时取掩码最长、metric 最小的一条，那才是实际生效的归属。
+    /// 只读生成自动方案及可供选择的出口；接口不可用、fake-IP 和接管方均排除。
     #[cfg(windows)]
-    pub fn route_plan_for(
-        prefix: Ipv4Addr,
-        prefix_len: u8,
-        exclude_interface: Option<u32>,
-    ) -> Option<RoutePlan> {
-        let rows = forward_rows()?;
-        let mut best: Option<(u8, u32, u32)> = None; // (前缀长度, metric, 接口)
-        for (net, len, next_hop, if_index, metric) in rows.iter() {
-            if !on_link_prefix_covers(*net, *len, *next_hop, prefix, prefix_len) {
-                continue;
+    pub fn route_choices_for(prefix: Ipv4Addr, prefix_len: u8, exclude: Option<u32>) -> (Option<RoutePlan>, Vec<RoutePlan>) {
+        use windows::Win32::NetworkManagement::IpHelper::{GetIpInterfaceEntry, MIB_IPINTERFACE_ROW};
+        use windows::Win32::Networking::WinSock::AF_INET;
+        let Some(mut rows) = forward_rows() else { return (None, Vec::new()); };
+        let mut metrics = std::collections::HashMap::new();
+        rows.retain_mut(|(_, _, _, index, metric)| {
+            let interface_metric = metrics.entry(*index).or_insert_with(|| {
+                let mut row = MIB_IPINTERFACE_ROW { Family: AF_INET, InterfaceIndex: *index, ..Default::default() };
+                (unsafe { GetIpInterfaceEntry(&mut row) }.0 == 0 && row.Connected).then_some(row.Metric)
+            });
+            match interface_metric {
+                Some(value) => { *metric = metric.saturating_add(*value); true }
+                None => false,
             }
-            if Some(*if_index) == exclude_interface {
-                continue;
-            }
-            let better = match best {
-                None => true,
-                Some((bl, bm, _)) => *len > bl || (*len == bl && *metric < bm),
-            };
-            if better {
-                best = Some((*len, *metric, *if_index));
-            }
-        }
-        let (_, _, if_index) = best?;
-        // 网关取该接口自己的默认路由；没有默认路由就按链路本地加（0.0.0.0 + if N）
-        let gateway = rows
-            .iter()
-            .find(|(net, len, hop, idx, _)| {
-                *len == 0 && *net == Ipv4Addr::UNSPECIFIED && *idx == if_index
-                    && *hop != Ipv4Addr::UNSPECIFIED
-            })
-            .map(|(_, _, hop, _, _)| *hop);
-        let (gateway, gateway_is_on_link) = match gateway {
-            Some(g) => (g, false),
-            None => (Ipv4Addr::UNSPECIFIED, true),
+        });
+        let candidates: Vec<_> = crate::route_selection::candidates(&rows, prefix, prefix_len, exclude)
+            .into_iter().filter(|r| route_binding_valid(prefix, prefix_len, r.gateway, r.interface_index)).collect();
+        let automatic = crate::route_selection::automatic(&candidates, prefix);
+        let to_plan = |r: &crate::route_selection::Candidate| RoutePlan {
+            interface_index: r.interface_index, interface_alias: interface_alias(r.interface_index),
+            gateway: r.gateway, gateway_is_on_link: r.gateway == Ipv4Addr::UNSPECIFIED,
         };
-        Some(RoutePlan {
-            interface_index: if_index,
-            interface_alias: interface_alias(if_index),
-            gateway,
-            gateway_is_on_link,
-        })
+        (automatic.map(&to_plan), candidates.iter().map(to_plan).collect())
     }
 
     #[cfg(not(windows))]
-    pub fn route_plan_for(
-        _prefix: Ipv4Addr,
-        _prefix_len: u8,
-        _exclude_interface: Option<u32>,
-    ) -> Option<RoutePlan> {
-        None
+    pub fn route_choices_for(_prefix: Ipv4Addr, _prefix_len: u8, _exclude: Option<u32>) -> (Option<RoutePlan>, Vec<RoutePlan>) {
+        (None, Vec::new())
+    }
+
+    pub fn route_plan_for(prefix: Ipv4Addr, prefix_len: u8, exclude: Option<u32>) -> Option<RoutePlan> {
+        route_choices_for(prefix, prefix_len, exclude).0
     }
 
     #[cfg(test)]
     mod binding_tests {
         use super::*;
+        #[test]
+        fn subnet_probe_points_cover_nested_route_changes_and_ipv4_boundaries() {
+            let row = |prefix: &str, len| (prefix.parse().unwrap(), len, Ipv4Addr::UNSPECIFIED, 1, 0);
+            let rows = vec![row("0.0.0.0", 0), row("10.0.0.0", 32), row("10.0.0.64", 26), row("10.0.1.0", 24)];
+            let points = prefix_probe_points("10.0.0.0".parse().unwrap(), 24, &rows);
+            assert_eq!(points.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                vec!["10.0.0.0", "10.0.0.1", "10.0.0.64", "10.0.0.128"]);
+            assert_eq!(prefix_probe_points("255.255.255.255".parse().unwrap(), 32,
+                &[row("255.255.255.255", 32)]), vec!["255.255.255.255".parse::<Ipv4Addr>().unwrap()]);
+            assert_eq!(prefix_probe_points(Ipv4Addr::UNSPECIFIED, 0, &[]), vec![Ipv4Addr::UNSPECIFIED]);
+            assert!(prefix_probe_points(Ipv4Addr::UNSPECIFIED, 33, &rows).is_empty());
+        }
+
         #[test]
         fn on_link_binding_checks_the_target_prefix_instead_of_a_default_gateway() {
             let row = "10.20.0.0".parse().unwrap();

@@ -59,3 +59,21 @@ export function usageHours(buckets: CodexUsageBucket[], dayStart: number, asOf: 
   }
   return hours
 }
+
+/** A calendar axis: absent dates occupy a slot rather than compressing time. */
+export function usageDays(buckets: CodexUsageBucket[], range: UsageRange, asOf: Date): (CodexUsageBucket & { recorded: boolean })[] {
+  const today = localDayKey(asOf)
+  const valid = buckets.filter(bucket => /^\d{4}-\d{2}-\d{2}$/.test(bucket.key) && bucket.key <= today)
+  if (!valid.length) return []
+  const last = range === 'all' ? valid.map(bucket => bucket.key).sort().slice(-1)[0] : today
+  const end = new Date(`${last}T12:00:00`)
+  const count = range === 'week' ? 7 : range === 'today' ? 1 : 30
+  const byDay = new Map(valid.map(bucket => [bucket.key, bucket]))
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(end)
+    date.setDate(date.getDate() - count + 1 + index)
+    const key = localDayKey(date)
+    const bucket = byDay.get(key)
+    return { key, label: key, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0, requestCount: 0, ...bucket, recorded: !!bucket }
+  })
+}

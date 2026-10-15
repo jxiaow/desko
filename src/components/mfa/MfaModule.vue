@@ -10,9 +10,12 @@ import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { isWebRuntime } from '../../services/runtime'
+import { writeClipboardText } from '../../utils/clipboard'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
+const webRuntime = isWebRuntime()
 
 /* 档面取发行方首字，与收藏/文件身份档同一配方（utils/avatar），24px 档只放得下一枚 */
 
@@ -88,7 +91,7 @@ const ringOffset = (c: MfaCode) => RING * (1 - Math.max(c.remaining, 0) / Math.m
 
 const copyCode = async (c: MfaCode) => {
   try {
-    await navigator.clipboard.writeText(c.code)
+    await writeClipboardText(c.code)
     toastStore.showToast('验证码已复制')
     copiedId.value = c.id
     if (copiedTimer) window.clearTimeout(copiedTimer)
@@ -155,16 +158,21 @@ const submitAdd = async () => {
 }
 
 /* ---------- 二维码识别（前端 jsQR，后端只帮忙读文件） ---------- */
+const imageInput = ref<HTMLInputElement | null>(null)
 
 const imageDataFromBlob = async (blob: Blob): Promise<ImageData> => {
   const bmp = await createImageBitmap(blob)
-  const canvas = document.createElement('canvas')
-  canvas.width = bmp.width
-  canvas.height = bmp.height
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  if (!ctx) throw new Error('无法创建画布')
-  ctx.drawImage(bmp, 0, 0)
-  return ctx.getImageData(0, 0, canvas.width, canvas.height)
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = bmp.width
+    canvas.height = bmp.height
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) throw new Error('无法创建画布')
+    ctx.drawImage(bmp, 0, 0)
+    return ctx.getImageData(0, 0, canvas.width, canvas.height)
+  } finally {
+    bmp.close()
+  }
 }
 
 const base64ToBlob = (b64: string): Blob => {
@@ -183,6 +191,10 @@ const applyScan = (data: string | null) => {
 }
 
 const scanFromImageFile = async () => {
+  if (webRuntime) {
+    imageInput.value?.click()
+    return
+  }
   try {
     const selected = await dialogOpen({
       multiple: false,
@@ -194,6 +206,28 @@ const scanFromImageFile = async () => {
     applyScan(jsQRFrom(await imageDataFromBlob(base64ToBlob(b64))))
   } catch (e) {
     toastStore.showToast(errText(e), 'error')
+  }
+}
+
+const onWebImageSelected = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (file.size > 15 * 1024 * 1024) {
+    toastStore.showToast('二维码图片不能超过 15 MB', 'error')
+    return
+  }
+  try {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => reject(reader.error)
+      reader.onload = () => resolve(String(reader.result).split(',', 2)[1] || '')
+      reader.readAsDataURL(file)
+    })
+    applyScan(jsQRFrom(await imageDataFromBlob(base64ToBlob(base64))))
+  } catch {
+    toastStore.showToast('图片解析失败', 'error')
   }
 }
 
@@ -331,6 +365,7 @@ watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.va
               </div>
               <div class="qr-row">
                 <span class="qr-hint">有二维码图片？</span>
+                <input v-if="webRuntime" ref="imageInput" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" class="qr-file-input" aria-label="选择二维码图片" @change="onWebImageSelected" />
                 <button class="btn-secondary" @click="scanFromImageFile">
                   <AppIcon name="image" :size="14" />
                   识别图片
@@ -365,6 +400,7 @@ watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.va
 </template>
 
 <style scoped>
+.qr-file-input { display: none; }
 /* .content-inner / .page-bar / 主按钮走 global.css 的页面骨架；本页计数顶左、动作钮顶右 */
 .page-bar .btn-primary { margin-left: auto; }
 

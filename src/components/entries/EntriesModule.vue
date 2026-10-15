@@ -9,6 +9,9 @@ import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import EntryActionMenu from './EntryActionMenu.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { isWebRuntime } from '../../services/runtime'
+
+const webRuntime = isWebRuntime()
 
 const props = defineProps<{
   searchKeyword: string
@@ -184,7 +187,7 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
 </script>
 
 <template>
-  <div class="content-inner">
+  <div class="content-inner" :class="{ 'web-runtime': webRuntime }">
     <!-- 身份行 + 工具栏：搜索、分类、计数和两个动作；分类超出宽度改为横向滚动 -->
     <div class="page-bar">
       <div class="search-box">
@@ -387,6 +390,13 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
 </template>
 
 <style scoped>
+@media (max-width: 600px) {
+  .web-runtime .page-bar { flex-wrap: wrap; min-height: 0; }
+  .web-runtime .page-bar .search-box { flex: 1 0 100%; width: 100%; margin-right: 0; }
+  .web-runtime .page-bar .tabs { flex: 1 1 0; min-width: 0; }
+  .web-runtime .page-bar .bar-btn,
+  .web-runtime .page-bar .btn-primary { flex: none; white-space: nowrap; }
+}
 /* .content-inner / .page-bar / 搜索框 / 主按钮 / 骨架行形全部走 global.css 的页面骨架，
    此处只留本页特有的东西 */
 

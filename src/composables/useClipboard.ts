@@ -1,5 +1,6 @@
 import { useToastStore } from '../stores/toast'
 import { usePasswordStore } from '../stores/password'
+import { writeClipboardText } from '../utils/clipboard'
 
 const CLIPBOARD_CLEAR_DELAY = 30 * 1000
 const PASSWORD_CACHE_TTL = 2 * 60 * 1000
@@ -12,7 +13,7 @@ export function useClipboard() {
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
-      await navigator.clipboard.writeText(text)
+      await writeClipboardText(text)
       // 用户已把新内容复制进剪贴板，撤销待执行的密码清除定时器，
       // 否则 30 秒后会误删这次复制的内容（定时器无法区分当前剪贴板归属）。
       clearClipboardTimer()
@@ -45,13 +46,18 @@ export function useClipboard() {
         const pwd = await passwordStore.getPassword(id)
         passwordStore.passwordCache[id] = { value: pwd, ts: Date.now() }
       }
-      await navigator.clipboard.writeText(passwordStore.passwordCache[id].value)
-      toastStore.showToast('密码已复制，30秒后自动清除')
+      const mode = await writeClipboardText(passwordStore.passwordCache[id].value)
       if (clipboardClearTimer) clearTimeout(clipboardClearTimer)
-      clipboardClearTimer = setTimeout(async () => {
-        try { await navigator.clipboard.writeText('') } catch {}
-        clipboardClearTimer = null
-      }, CLIPBOARD_CLEAR_DELAY)
+      clipboardClearTimer = null
+      if (mode === 'native') {
+        toastStore.showToast('密码已复制，30秒后自动清除')
+        clipboardClearTimer = setTimeout(async () => {
+          try { await navigator.clipboard.writeText('') } catch {}
+          clipboardClearTimer = null
+        }, CLIPBOARD_CLEAR_DELAY)
+      } else {
+        toastStore.showToast('密码已复制，请使用后手动清除剪贴板')
+      }
     } catch {
       toastStore.showToast('复制失败', 'error')
     }

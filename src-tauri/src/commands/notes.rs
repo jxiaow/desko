@@ -4,7 +4,7 @@ use crate::services;
 use crate::services::note_service;
 use crate::services::attachment_service;
 use crate::AppState;
-use tauri::State;
+use crate::command_state::CommandState as State;
 
 #[tauri::command]
 pub fn list_notes(state: State<AppState>) -> Result<Vec<Note>, AppError> {
@@ -25,9 +25,9 @@ pub fn update_note(state: State<AppState>, id: String, input: UpdateNoteInput) -
     let master = state.master_key.lock().map_err(|_| AppError::NotUnlocked)?;
     let key = master.as_ref().ok_or(AppError::NotUnlocked)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    if db.get_note_lock(&id)?.is_some() {
+    if let Some(lock) = db.get_note_lock(&id)? {
         // 加密行：明文只进密文，正文与分类一个字节都不落；标题按新正文重新算
-        let dek = crate::commands::note_lock::get_dek(&state, &id)?;
+        let dek = crate::commands::note_lock::validated_dek(&state, &id, &lock)?;
         let enc = crate::crypto::encrypt_password(&input.content_html, &dek)?;
         let title = note_service::heading_title(&input.content_html);
         let now = chrono::Utc::now().timestamp_millis();
@@ -87,6 +87,20 @@ pub fn toggle_star_note(state: State<AppState>, id: String) -> Result<bool, AppE
     let _key = services::get_master_key(&state)?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     note_service::toggle_star_note(&db, &id)
+}
+
+#[tauri::command]
+pub fn set_note_archived(state: State<AppState>, id: String, archived: bool) -> Result<bool, AppError> {
+    let _key = services::get_master_key(&state)?;
+    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    note_service::set_note_archived(&db, &id, archived)
+}
+
+#[tauri::command]
+pub fn batch_set_archived(state: State<AppState>, ids: Vec<String>, archived: bool) -> Result<usize, AppError> {
+    let _key = services::get_master_key(&state)?;
+    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    note_service::batch_set_archived(&db, &ids, archived)
 }
 
 #[tauri::command]

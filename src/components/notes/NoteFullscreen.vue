@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { isWebRuntime } from '../../services/runtime'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
@@ -73,6 +74,7 @@ const onPrimary = () => {
 }
 
 const startDrag = (e: MouseEvent) => {
+  if (isWebRuntime()) return
   if ((e.target as HTMLElement).closest('button, input, a')) return
   getCurrentWindow().startDragging().catch(() => {})
 }

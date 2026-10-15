@@ -139,7 +139,8 @@ test.describe('Entries 网址收藏', () => {
     await entryCard(page, 'GitHub').click()
     const detail = page.locator('.detail-dialog')
     await expect(detail).toBeVisible()
-    await expect(detail.locator('.detail-head-id h3')).toHaveText('GitHub')
+    await expect(detail.locator('.dialog-header h3')).toHaveText('网址详情')
+    await expect(detail.locator('.detail-identity h4')).toHaveText('GitHub')
 
     await detail.locator('.dialog-footer button.btn-secondary', { hasText: '编辑' }).click()
     // 详情收起，弹出与新增同款的编辑弹窗，预填原值
@@ -157,6 +158,39 @@ test.describe('Entries 网址收藏', () => {
     expect(edited).toBeTruthy()
     // 密码留空则保持原值
     expect(edited.password).toBe('Gh!tHub2024')
+  })
+
+  test('详情标题在窄窗口完整换行，关闭和底栏操作保持可见', async ({ page }) => {
+    const name = '一个很长的网址收藏标题，包含项目名称、环境说明和一段不应被弹窗头部截断的附加信息'
+    await bootEntries(page, { entries: [{ name, category: '开发工具', url: 'https://example.com/path', password: '' }] })
+    await entryCard(page, name).click()
+    const detail = page.locator('.detail-dialog')
+
+    for (const width of [800, 400, 320]) {
+      await page.setViewportSize({ width, height: 620 })
+      await expect(detail.locator('.detail-identity h4')).toHaveText(name)
+      await expect(detail.locator('.dialog-close')).toBeVisible()
+      await expect(detail.locator('.dialog-footer .btn-secondary.danger')).toBeVisible()
+      await expect(detail.locator('.dialog-footer .btn-primary')).toBeVisible()
+      const layout = await detail.evaluate(el => {
+        const box = el.getBoundingClientRect()
+        const title = el.querySelector('.detail-identity h4')!
+        const actions = [...el.querySelectorAll<HTMLButtonElement>('.dialog-footer button')]
+        return {
+          left: box.left,
+          right: box.right,
+          titleFits: title.scrollWidth <= title.clientWidth,
+          actionsFit: actions.every(button => {
+            const rect = button.getBoundingClientRect()
+            return rect.left >= box.left && rect.right <= box.right && button.scrollHeight <= button.clientHeight
+          }),
+        }
+      })
+      expect(layout.left).toBeGreaterThanOrEqual(15)
+      expect(layout.right).toBeLessThanOrEqual(width - 15)
+      expect(layout.titleFits).toBe(true)
+      expect(layout.actionsFit).toBe(true)
+    }
   })
 
   test('单条删除收在 ⋯ 菜单里，走确认对话框', async ({ page }) => {
@@ -235,10 +269,19 @@ test.describe('Entries 网址收藏', () => {
     await page.locator('.page-bar .bar-btn[aria-label="选择条目"]').click()
     await gh.click()
 
-    // 浮岛网格轮：选中 = 浸润底 + accent 实描边（白面板里的 1px 内环随 .rowlist 一起退了）
-    await expect(gh).toHaveCSS('background-color', 'rgb(232, 238, 244)')
-    await expect(gh).toHaveCSS('border-top-color', 'rgb(61, 90, 128)')
-    await expect(gh.locator('.ec-name')).toHaveCSS('color', 'rgb(49, 73, 106)')
+    // 浮岛网格轮：选中直接使用当前主题的浸润底、强调描边和品牌字色。
+    const selectedColors = await gh.evaluate(el => {
+      const probe = document.createElement('span')
+      probe.style.cssText = 'position:absolute;background:var(--accent-soft);border:1px solid var(--accent);color:var(--text-brand)'
+      el.append(probe)
+      const style = getComputedStyle(probe)
+      const colors = { bg: style.backgroundColor, border: style.borderTopColor, text: style.color }
+      probe.remove()
+      return colors
+    })
+    await expect(gh).toHaveCSS('background-color', selectedColors.bg)
+    await expect(gh).toHaveCSS('border-top-color', selectedColors.border)
+    await expect(gh.locator('.ec-name')).toHaveCSS('color', selectedColors.text)
 
     // 900px 窗（侧栏轨 56 + 内距 48）落 2 列，3 张卡排成两行，跨行步进才是 2
     await page.setViewportSize({ width: 900, height: 700 })

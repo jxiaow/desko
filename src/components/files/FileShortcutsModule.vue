@@ -10,6 +10,10 @@ import { useGridKeys } from '../../composables/useGridKeys'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { isWebRuntime } from '../../services/runtime'
+import { writeClipboardText } from '../../utils/clipboard'
+import { downloadWebFile } from './webFiles'
+import WebFilesDialog from './WebFilesDialog.vue'
 
 const props = defineProps<{
   searchKeyword: string
@@ -22,6 +26,8 @@ const props = defineProps<{
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
+const webRuntime = isWebRuntime()
+const browsingShortcut = ref<FileShortcut | null>(null)
 
 const emit = defineEmits<{
   'update:searchKeyword': [value: string]
@@ -163,9 +169,17 @@ useEscapeClose(cancelAdd, () => showAddDialog.value)
 
 const openShortcut = async (shortcut: FileShortcut) => {
   try {
+    if (webRuntime) {
+      if (shortcut.shortcut_type === 'folder') {
+        browsingShortcut.value = shortcut
+      } else {
+        await downloadWebFile(shortcut.id, '', shortcut.name)
+      }
+      return
+    }
     await api.openFile(shortcut.path)
-  } catch {
-    toastStore.showToast('无法打开，文件可能不存在', 'error')
+  } catch (cause) {
+    toastStore.showToast(webRuntime && cause instanceof Error ? cause.message : '无法打开，文件可能不存在', 'error')
   }
 }
 
@@ -236,7 +250,7 @@ const copiedId = ref<string | null>(null)
 let copiedTimer: number | undefined
 const copyPathToClipboard = async (shortcut: FileShortcut) => {
   try {
-    await navigator.clipboard.writeText(shortcut.path)
+    await writeClipboardText(shortcut.path)
     toastStore.showToast('地址已复制')
     copiedId.value = shortcut.id
     if (copiedTimer) window.clearTimeout(copiedTimer)
@@ -255,6 +269,7 @@ const getFileExt = (path: string) => {
 const { onGridKeydown } = useGridKeys({
   cardSelector: '.shortcut-row',
   onCopy: (id) => {
+    if (webRuntime) return
     const shortcut = props.filteredShortcuts.find(s => s.id === id)
     if (shortcut) void copyPathToClipboard(shortcut)
   },
@@ -319,7 +334,7 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
 </script>
 
 <template>
-  <div class="content-inner">
+  <div class="content-inner" :class="{ 'web-runtime': webRuntime }">
     <div class="page-bar">
       <div class="search-box">
         <span class="search-icon"><AppIcon name="search" :size="15" /></span>
@@ -329,7 +344,7 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
           <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <button class="btn-primary" @click="showAddDialog = true">
+      <button v-if="!webRuntime" class="btn-primary" @click="showAddDialog = true">
         <AppIcon name="plus" :size="14" />
         添加快捷方式
       </button>
@@ -356,28 +371,28 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
         :data-id="shortcut.id"
         role="button"
         tabindex="0"
-        :aria-label="`打开 ${shortcut.name}`"
+        :aria-label="webRuntime ? `${shortcut.shortcut_type === 'folder' ? '浏览' : '下载'} ${shortcut.name}` : `打开 ${shortcut.name}`"
         @click="openShortcut(shortcut)"
         @keydown.enter.prevent="openShortcut(shortcut)"
         @keydown.space.prevent="openShortcut(shortcut)"
-        @contextmenu="onContextMenu($event, shortcut)"
+        @contextmenu="!webRuntime && onContextMenu($event, shortcut)"
       >
         <!-- 一行身份：24px 类型档 + 名称 + 右对齐类型标签；动作收进右下浮岛 -->
         <div class="row1">
           <span v-if="shortcut.shortcut_type === 'folder'" class="ft-ico grid-slot grid-slot--folder" aria-hidden="true">
             <AppIcon name="folder" :size="15" />
           </span>
-          <span v-else class="ft-ico toned grid-slot" :style="{ '--ftc': extVar(getFileExt(shortcut.path)) }">{{ getFileExt(shortcut.path) || 'FILE' }}</span>
+          <span v-else class="ft-ico toned grid-slot" :style="{ '--ftc': extVar(getFileExt(webRuntime ? shortcut.name : shortcut.path)) }">{{ getFileExt(webRuntime ? shortcut.name : shortcut.path) || 'FILE' }}</span>
           <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
           <span v-if="shortcut.shortcut_type === 'folder'" class="sc-type">目录</span>
         </div>
 
         <!-- 二行副址：等宽路径缩进到名称起笔，尾部优先（保文件名） -->
-        <div class="row2">
+        <div v-if="!webRuntime" class="row2">
           <span class="path-chip" :title="shortcut.path">{{ pathTail(shortcut.path) }}</span>
         </div>
 
-        <div class="row-acts grid-acts">
+        <div v-if="!webRuntime" class="row-acts grid-acts">
           <button class="ib" :class="{ copied: copiedId === shortcut.id }" type="button" :title="copiedId === shortcut.id ? '已复制' : '复制地址 (C)'" @click.stop="copyPathToClipboard(shortcut)">
             <AppIcon :name="copiedId === shortcut.id ? 'check' : 'copy'" :size="15" />
           </button>
@@ -389,7 +404,7 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
           </button>
         </div>
 
-        <PopoverMenu v-if="moreMenu.shortcut?.id === shortcut.id" :anchor="moreMenu.anchor" :width="136" @close="closeMoreMenu">
+        <PopoverMenu v-if="!webRuntime && moreMenu.shortcut?.id === shortcut.id" :anchor="moreMenu.anchor" :width="136" @close="closeMoreMenu">
           <button class="pop-item" type="button" @click="runOnMoreMenu(openContainingFolder)">
             <AppIcon name="folderOpen" :size="14" />
             打开所在目录
@@ -421,12 +436,12 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navFiles'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无快捷方式' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「添加快捷方式」开始' }}</div>
+      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : webRuntime ? '请在桌面端添加文件快捷方式' : '点击「添加快捷方式」开始' }}</div>
     </div>
 
     <!-- Add/Edit Dialog：与收藏表单弹窗同一套骨架（居中悬浮 + 42px 头 + 32px 字段轴 + 46px 底栏带快捷键徽标） -->
     <Transition name="dialog">
-      <div v-if="showAddDialog" class="dialog-overlay form-overlay">
+      <div v-if="!webRuntime && showAddDialog" class="dialog-overlay form-overlay">
         <div class="dialog shortcut-dialog" role="dialog" aria-modal="true" :aria-label="isEditing() ? '编辑快捷方式' : '添加快捷方式'">
           <div class="dialog-header">
             <div class="dialog-header-left">
@@ -482,7 +497,7 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
     </Transition>
 
     <!-- Context Menu -->
-    <div v-if="contextMenu.show" ref="ctxPanel" class="popover" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
+    <div v-if="!webRuntime && contextMenu.show" ref="ctxPanel" class="popover" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
       <div class="pop-item" @click="editFromMenu">
         <AppIcon name="edit" :size="14" />
         编辑
@@ -504,14 +519,19 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
         删除
       </div>
     </div>
+    <WebFilesDialog v-if="browsingShortcut" :shortcut="browsingShortcut" @close="browsingShortcut = null" />
   </div>
 
 </template>
 
 <style scoped>
+@media (max-width: 600px) {
+  .web-runtime .page-bar .search-box { flex: 1 1 100%; width: 100%; margin-right: 0; }
+}
 /* .content-inner / .page-bar / 搜索框 / 主按钮 / 骨架行形全部走 global.css 的页面骨架；
    本页没有分类标签，动作钮顶到右缘 */
 .page-bar .btn-primary { margin-left: auto; }
+.web-runtime .shortcut-row { min-height: 56px; justify-content: center; }
 
 /* 卡皮、双行壳（.row1/.row2）、24px 档、右下动作浮岛全在 global.css 的 .grid-card 一节；
    这里只留文件卡自己的类型着色与字档 */

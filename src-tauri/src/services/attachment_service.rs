@@ -425,6 +425,8 @@ mod orphan_tests {
             pinned: false,
             starred: false,
             encrypted: false,
+            archived: false,
+            archived_at: None,
         }
     }
 

@@ -1,4 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
+import { uploadBrowserImage } from '../browserImage'
+import { invoke } from '../transport'
 import type { Note, CreateNoteInput, UpdateNoteInput, Attachment } from '../../types'
 
 export const notesApi = {
@@ -20,6 +21,10 @@ export const notesApi = {
     invoke('toggle_pin_note', { id }),
   toggleStarNote: (id: string): Promise<boolean> =>
     invoke('toggle_star_note', { id }),
+  setNoteArchived: (id: string, archived: boolean): Promise<boolean> =>
+    invoke('set_note_archived', { id, archived }),
+  batchSetArchived: (ids: string[], archived: boolean): Promise<number> =>
+    invoke('batch_set_archived', { ids, archived }),
   /** 小记域口令：全库一把，状态分「设过」与「本会话已解开」 */
   noteKeyStatus: (): Promise<NoteKeyStatus> =>
     invoke('note_key_status'),
@@ -48,11 +53,11 @@ export const notesApi = {
     invoke('reveal_note', { id }),
   listAttachments: (noteId: string): Promise<Attachment[]> =>
     invoke('list_attachments', { noteId }),
-  uploadAttachment: (noteId: string, filePath: string): Promise<Attachment> =>
-    invoke('upload_attachment', { noteId, filePath }),
+  uploadAttachment: (noteId: string, filePath: string | File): Promise<Attachment> =>
+    typeof filePath === 'string' ? invoke('upload_attachment', { noteId, filePath }) : uploadBrowserImage(filePath, noteId),
   /** 草稿还没有 note id：先把文件收进附件目录，发布时再补记录 */
-  stageAttachment: (filePath: string): Promise<Attachment> =>
-    invoke('stage_attachment', { filePath }),
+  stageAttachment: (filePath: string | File): Promise<Attachment> =>
+    typeof filePath === 'string' ? invoke('stage_attachment', { filePath }) : uploadBrowserImage(filePath),
   bindAttachments: (noteId: string, paths: string[]): Promise<Attachment[]> =>
     invoke('bind_attachments', { noteId, paths }),
   deleteAttachment: (id: string): Promise<void> =>

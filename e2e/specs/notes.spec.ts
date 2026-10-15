@@ -514,8 +514,87 @@ test.describe('Notes 小记', () => {
     expect((await e2e.snapshot(page)).notes.find((n: any) => n.content_html.includes('第三条')).starred).toBe(true)
   })
 
-  test('搜索过滤与 rail 视图筛选', async ({ page }) => {
-    await gotoNotes(page)
+  test('归档：从「全部」收起，在归档视图找回', async ({ page }) => {
+    await bootUnlocked(page, {
+      notes: [
+        { title: '甲', content_html: '<p>在册甲</p>' },
+        { title: '乙', content_html: '<p>在册乙</p>' },
+        { title: '丙', content_html: '<p>已经收走</p>', archived: true },
+      ],
+    }, '/notes')
+
+    // 归档行不占「全部」的卡位，也不进顶栏那个条数
+    await expect(page.locator('.memo')).toHaveCount(2)
+    await expect(page.locator('.titlebar-count')).toHaveText('2 条')
+
+    // 窄窗默认收侧栏，视图切换要先展开
+    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
+    const archivedRail = page.locator('.rail button.rail-item', { hasText: '归档' })
+    await expect(archivedRail.locator('.tab-count')).toHaveText('1')
+    await archivedRail.click()
+
+    await expect(page.locator('.archive-bar .ab-lead')).toHaveText('归档中 1 条 · 不再出现在「全部」与搜索里')
+    await expect(page.locator('.composer')).toHaveCount(0)
+    const archived = memo(page, '已经收走')
+    await archived.hover()
+    // 归档视图的快捷排只留「找回 + 删除」，让位的三颗搬进 ⋯，两边不重复
+    await expect(archived.locator('.memo-acts button')).toHaveCount(5)
+    await tipButton(archived, '更多操作').click()
+    await expect(page.locator('.popover .pop-item')).toHaveText(['置顶', '收藏', '复制正文', '加密'])
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.popover')).toHaveCount(0)
+    await tipButton(archived, '取消归档，放回「全部」').click()
+    await expectToast(page, '已取消归档，回到「全部」')
+    await waitForToastGone(page)
+    await expect(page.locator('.empty-title')).toHaveText('还没有归档的小记')
+    await expect(archivedRail.locator('.tab-count')).toHaveText('0')
+    expect((await e2e.snapshot(page)).notes.find((n: any) => n.title === '丙').archived).toBe(false)
+
+    // 回「全部」把在册的那条收走
+    await page.locator('.rail button.rail-item', { hasText: '全部' }).click()
+    await expect(page.locator('.memo')).toHaveCount(3)
+    const target = memo(page, '在册乙')
+    await target.hover()
+    await tipButton(target, '归档（从「全部」收起）').click()
+    await expectToast(page, '已归档，可在侧栏「归档」里找回')
+    await expect(page.locator('.memo')).toHaveCount(2)
+    const snap = (await e2e.snapshot(page)).notes.find((n: any) => n.title === '乙')
+    expect(snap.archived).toBe(true)
+    expect(typeof snap.archived_at).toBe('number')
+  })
+
+  test('批量归档与「全部取消归档」', async ({ page }) => {
+    await bootUnlocked(page, {
+      notes: [
+        { title: '甲', content_html: '<p>在册甲</p>' },
+        { title: '乙', content_html: '<p>在册乙</p>' },
+        { title: '丙', content_html: '<p>已经收走</p>', archived: true },
+      ],
+    }, '/notes')
+
+    const first = memo(page, '在册甲')
+    await first.hover()
+    await first.locator('.memo-check').click()
+    await memo(page, '在册乙').click()
+    await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
+    await page.locator('button.dock-btn:text-is("归档")').click()
+    await expectToast(page, '已归档 2 条小记')
+    await waitForToastGone(page)
+    await expect(page.locator('.memo')).toHaveCount(0)
+
+    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
+    await page.locator('.rail button.rail-item', { hasText: '归档' }).click()
+    await expect(page.locator('.memo')).toHaveCount(3)
+    await page.locator('.archive-bar .ab-btn').click()
+    const confirm = page.locator('.confirm-dialog')
+    await expect(confirm.locator('.dialog-body p')).toHaveText('3 条小记将回到「全部」列表。')
+    await confirm.locator('button.btn-danger').click()
+    await expectToast(page, '已取消归档 3 条小记')
+    await expect(page.locator('.memo')).toHaveCount(0)
+    expect((await e2e.snapshot(page)).notes.every((n: any) => !n.archived)).toBe(true)
+  })
+
+  test('搜索过滤与 rail 视图筛选', async ({ page }) => {    await gotoNotes(page)
     const search = page.locator('.page-bar .search-box input')
     await search.fill('采购')
     await expect(page.locator('.memo')).toHaveCount(1)
@@ -543,7 +622,7 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
     await expect(memo(page, '第一条小记')).toHaveClass(/is-sel/)
     // 选中态：浸润底 + 1px 全包裹微环（锚点 = paper 底色 × 墨蓝 accent）
-    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(61, 90, 128) 0px 0px 0px 1px, rgba(29, 28, 26, 0.05) 0px 1px 3px 0px')
+    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(49, 95, 155) 0px 0px 0px 1px, rgba(29, 28, 26, 0.05) 0px 1px 3px 0px')
     // 上下键换焦点，微环跟着走
     await page.locator('.memo').first().focus()
     await page.keyboard.press('ArrowDown')
@@ -658,7 +737,7 @@ test.describe('Notes 小记', () => {
     await expect(sealed.locator('.memo-locked')).toContainText('已加密 · 单击解锁')
     // 锁着的那条只剩一把解锁钮；加密动作在明文卡的 ⋯ 里
     await expect(sealed.locator('.memo-acts button')).toHaveCount(1)
-    await expect(plain.locator('.memo-acts button')).toHaveCount(6)
+    await expect(plain.locator('.memo-acts button')).toHaveCount(7)
 
     // 首次加密就是立全库口令，只有这一次要输两格
     await (await noteMenu(page, plain)).locator('.pop-item:text-is("加密")').click()

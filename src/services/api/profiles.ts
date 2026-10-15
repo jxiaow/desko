@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '../transport'
 
 /** 与后端 ProfileDto 同档（camelCase） */
 export interface Profile {

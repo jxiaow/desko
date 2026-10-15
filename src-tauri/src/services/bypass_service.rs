@@ -238,71 +238,23 @@ async fn probe_tcp(target: &Target, ip: Ipv4Addr) -> Result<(u16, u64), String> 
         .map(|_| (0u16, started.elapsed().as_millis() as u64))
 }
 
-/// UTF-16 定长数组读到第一个 NUL
-fn from_utf16(buf: &[u16]) -> String {
-    let end = buf.iter().position(|c| *c == 0).unwrap_or(buf.len());
-    String::from_utf16_lossy(&buf[..end])
-}
-
-#[cfg(windows)]
-fn egress_of(ip: Ipv4Addr) -> Option<Egress> {
-    use windows::Win32::NetworkManagement::IpHelper::{
-        GetBestRoute2, GetIfEntry2, MIB_IF_ROW2, MIB_IPFORWARD_ROW2,
-    };
-    use windows::Win32::Networking::WinSock::{AF_INET, IN_ADDR, IN_ADDR_0, SOCKADDR_IN, SOCKADDR_INET};
-
-    let dest = SOCKADDR_INET {
-        Ipv4: SOCKADDR_IN {
-            sin_family: AF_INET,
-            sin_addr: IN_ADDR {
-                S_un: IN_ADDR_0 {
-                    S_addr: u32::from_ne_bytes(ip.octets()),
-                },
-            },
-            ..Default::default()
-        },
-    };
-    let mut row = MIB_IPFORWARD_ROW2::default();
-    let mut src = SOCKADDR_INET::default();
-    if unsafe { GetBestRoute2(None, 0, None, &dest, 0, &mut row, &mut src) }.0 != 0 {
-        return None;
+fn egress_from_hit(hit: netguard_core::net::RouteHit) -> Egress {
+    Egress {
+        if_index: hit.interface_index,
+        interface: netguard_core::net::interface_alias(hit.interface_index),
+        source: hit.source.to_string(), next_hop: hit.next_hop.to_string(),
+        is_taker: in_fake_ip(hit.source),
     }
-    // S_addr 就是按地址顺序摊在内存里的四个字节，ne_bytes 直接还原点分四段
-    let (source, next_hop) = unsafe {
-        (
-            Ipv4Addr::from(src.Ipv4.sin_addr.S_un.S_addr.to_ne_bytes()),
-            Ipv4Addr::from(row.NextHop.Ipv4.sin_addr.S_un.S_addr.to_ne_bytes()),
-        )
-    };
-    let if_index = row.InterfaceIndex;
-
-    let mut if_row = MIB_IF_ROW2 {
-        InterfaceIndex: if_index,
-        ..Default::default()
-    };
-    let interface = if unsafe { GetIfEntry2(&mut if_row) }.0 == 0 {
-        let name = from_utf16(&if_row.Alias);
-        if name.trim().is_empty() {
-            format!("接口 #{if_index}")
-        } else {
-            name
-        }
-    } else {
-        format!("接口 #{if_index}")
-    };
-
-    Some(Egress {
-        if_index,
-        interface,
-        source: source.to_string(),
-        next_hop: next_hop.to_string(),
-        is_taker: in_fake_ip(source),
-    })
 }
 
-#[cfg(not(windows))]
-fn egress_of(_ip: Ipv4Addr) -> Option<Egress> {
-    None
+fn egress_of(ip: Ipv4Addr) -> Option<Egress> {
+    netguard_core::net::best_route(ip).map(egress_from_hit)
+}
+
+fn subnet_egress(hits: &[netguard_core::net::RouteHit]) -> Option<Egress> {
+    // Any captured segment means the subnet still needs a route. A single direct
+    // address must not stand in for the remaining addresses in the subnet.
+    hits.iter().find(|hit| in_fake_ip(hit.source)).or_else(|| hits.first()).copied().map(egress_from_hit)
 }
 
 /// IP/CIDR 目标的地址合法性闸：fake-IP 接管段、回环、链路本地、组播、0/8 都不许进——
@@ -329,6 +281,9 @@ pub fn parse_target(raw: &str) -> Result<Target, String> {
     }
     if entry.contains("://") {
         return Err("仅支持 http 与 https 协议".to_string());
+    }
+    if entry.trim_matches(['[', ']']).parse::<std::net::Ipv6Addr>().is_ok() {
+        return Err("暂不支持 IPv6，请使用 IPv4 地址或可解析到 IPv4 的主机名".into());
     }
     if let Some((prefix, bits)) = entry.split_once('/') {
         let Ok(pref) = prefix.parse::<Ipv4Addr>() else {
@@ -378,6 +333,9 @@ fn parse_url(entry: &str, authority_and_path: &str) -> Result<Target, String> {
     let authority = &without_fragment[..at];
     let suffix = &without_fragment[at..];
     let path = if suffix.starts_with('/') { suffix.to_string() } else { format!("/{suffix}") };
+    if authority.starts_with('[') {
+        return Err("暂不支持 IPv6，请使用 IPv4 地址或可解析到 IPv4 的主机名".into());
+    }
     if authority.contains('@') {
         return Err("URL 中不应包含用户名与密码".to_string());
     }
@@ -418,8 +376,11 @@ fn parse_url(entry: &str, authority_and_path: &str) -> Result<Target, String> {
 
 fn validate_domain(host: &str) -> Result<(), String> {
     let name = host.trim_end_matches('.');
-    if name.len() < 3 || name.len() > 253 || !name.contains('.') {
-        return Err("域名至少需要 3 个字符并包含一个点".to_string());
+    if name.is_empty() || name.len() > 253 {
+        return Err("主机名需在 1 到 253 个字符之间".to_string());
+    }
+    if name.bytes().all(|byte| byte.is_ascii_digit() || byte == b'.') {
+        return Err("IPv4 地址格式不合法，请使用完整的点分四段地址".into());
     }
     for label in name.split('.') {
         if label.is_empty()
@@ -434,15 +395,29 @@ fn validate_domain(host: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// 本机 DNS（含内网 / split DNS）也是实际地址来源；公共 DoH 不认识内网域名时不能丢掉它。
+fn actual_addresses(local: &[IpAddr], remote: &[IpAddr]) -> Vec<IpAddr> {
+    let mut addresses = Vec::new();
+    for ip in local.iter().chain(remote) {
+        if usable_v4(*ip) && !addresses.contains(ip) { addresses.push(*ip); }
+    }
+    addresses
+}
+
+fn dns_needs_pin(local: &[IpAddr], chosen: Option<Ipv4Addr>) -> bool {
+    local.iter().any(|ip| matches!(ip, IpAddr::V4(v4) if in_fake_ip(*v4)))
+        || chosen.is_some_and(|ip| !local.contains(&IpAddr::V4(ip)))
+}
+
 /// 四态判定（纯函数，供单测直灌）。要点：
-/// - 域名只有「本机解析被接管成 fake-IP」时才需要钉 hosts；没被接管、出口又不是接管方，
-///   就是直连可用——哪怕 hosts 里没钉过，也不能推荐去钉公网站。
+/// - 本机解析包含可用的候选且未被 fake-IP 接管时无需钉 hosts；只有 DoH 候选能连接、
+///   但本机无法解析到它时也需要固定解析，不能将“指定 IP 可连接”当作普通域名可用。
 /// - CIDR 没有可钉的地址，判据只有出口。
 /// - 探活了但出口路由查不到 ≠ 不可达，给独立态，不推荐落盘。
 fn decide(
     chosen: Option<Ipv4Addr>,
     egress: Option<&Egress>,
-    hijacked: bool,
+    needs_pin: bool,
     kind: &str,
     pinned: Option<&str>,
 ) -> Verdict {
@@ -458,7 +433,7 @@ fn decide(
         (Some(_), Some(e)) if e.is_taker => Verdict::NeedRoute,
         (Some(ip), Some(_)) => {
             let pinned_here = pinned == Some(ip.to_string().as_str());
-            if kind != "domain" || (!hijacked && pinned.is_none()) || pinned_here {
+            if kind != "domain" || (!needs_pin && pinned.is_none()) || pinned_here {
                 Verdict::DirectOk
             } else {
                 Verdict::HostsOnly
@@ -498,7 +473,7 @@ async fn probe_report(raw: &str) -> Result<ProbeReport, String> {
         _ => false,
     });
 
-    let (real_ips, cdn_like, doh_err) = match target.kind {
+    let (doh_ips, cdn_like, doh_err) = match target.kind {
         "ip" => (
             target
                 .host
@@ -509,9 +484,13 @@ async fn probe_report(raw: &str) -> Result<ProbeReport, String> {
             None,
         ),
         "cidr" => (Vec::new(), false, None),
+        // 单标签和 mDNS 主机名只属于当前局域网，公共解析器没有对应命名空间。
+        _ if !target.host.contains('.') || target.host.ends_with(".local") => (Vec::new(), false,
+            (!local.iter().any(|ip| usable_v4(*ip))).then(|| "本机未解析到可用 IPv4 地址，请连接局域网或内网 VPN，并检查主机名与 DNS 设置".into())),
         _ => doh_lookup(&target.host).await,
     };
 
+    let real_ips = actual_addresses(&local, &doh_ips);
     // 已固定且仍可达的节点优先续用，避免 CDN 换答案后把可用固定地址误判成待重写。
     let mut candidates = real_ips.clone();
     if let Some(ip) = pinned.as_ref().and_then(|p| p.parse::<IpAddr>().ok()).filter(|ip| usable_v4(*ip)) {
@@ -556,9 +535,13 @@ async fn probe_report(raw: &str) -> Result<ProbeReport, String> {
         "ip" => target.host.parse::<Ipv4Addr>().ok(),
         _ => chosen,
     };
-    let egress = egress_ip.and_then(egress_of);
+    let egress = if target.kind == "cidr" {
+        let len = target.host.split_once('/').and_then(|(_, len)| len.parse::<u8>().ok());
+        egress_ip.zip(len).and_then(|(prefix, len)| netguard_core::net::prefix_routes(prefix, len))
+            .and_then(|hits| subnet_egress(&hits))
+    } else { egress_ip.and_then(egress_of) };
 
-    let verdict = decide(chosen, egress.as_ref(), hijacked, target.kind, pinned.as_deref());
+    let verdict = decide(chosen, egress.as_ref(), dns_needs_pin(&local, chosen), target.kind, pinned.as_deref());
 
     let recommend =
         !cdn_like && matches!(verdict, Verdict::HostsOnly | Verdict::NeedRoute);
@@ -566,8 +549,8 @@ async fn probe_report(raw: &str) -> Result<ProbeReport, String> {
     // 只看第一条腿会在 DoH 整体失败时把全部已钉条目误判成过期。
     let stale = match (target.kind, pinned.as_ref()) {
         ("domain", Some(p)) => {
-            let in_answers = real_ips.iter().any(|ip| ip.to_string() == *p);
-            if in_answers || real_ips.is_empty() || chosen.map(|ip| ip.to_string()).as_ref() == Some(p) {
+            let in_answers = doh_ips.iter().any(|ip| ip.to_string() == *p);
+            if in_answers || doh_ips.is_empty() || chosen.map(|ip| ip.to_string()).as_ref() == Some(p) {
                 false
             } else if started.elapsed() > PROBE_BUDGET {
                 // 预算内没机会复核第二腿，宁可不下「过期」结论
@@ -596,7 +579,8 @@ async fn probe_report(raw: &str) -> Result<ProbeReport, String> {
         ),
         Verdict::DirectOk => (
             "出口可直连".to_string(),
-            format!("{} 的出口为 {}，无需处理。", target.host, egress_name),
+            if target.kind == "cidr" { "已按当前路由表复查网段内的各段出口，均未检测到代理接口。未逐一检查网段内的具体服务。".into() }
+            else { format!("{} 的出口为 {}，无需处理。", target.host, egress_name) },
         ),
         Verdict::HostsOnly => (
             "需配置 hosts".to_string(),
@@ -617,8 +601,8 @@ async fn probe_report(raw: &str) -> Result<ProbeReport, String> {
         ),
         Verdict::Unreachable => (
             "目标不可达，暂不添加".to_string(),
-            if let Some(err) = doh_err {
-                format!("无法获取实际地址：{err}")
+            if real_ips.is_empty() && doh_err.is_some() {
+                format!("无法获取实际地址：{}", doh_err.as_deref().unwrap_or_default())
             } else if !probe_err.is_empty() {
                 format!(
                     "候选地址 {} 均连接失败：{}。若服务不在默认端口，请以 URL 形式写明端口，例如 http://{}:8080/",
@@ -680,6 +664,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn subnet_report_cannot_hide_a_captured_segment_behind_its_first_direct_address() {
+        let hit = |source: &str, index| netguard_core::net::RouteHit {
+            source: source.parse().unwrap(), next_hop: Ipv4Addr::UNSPECIFIED, interface_index: index,
+        };
+        let hits = [hit("192.168.1.5", 1), hit("198.18.0.1", 7)];
+        let egress = subnet_egress(&hits).unwrap();
+        assert_eq!(egress.if_index, 7);
+        assert_eq!(decide(None, Some(&egress), false, "cidr", None), Verdict::NeedRoute);
+        assert!(subnet_egress(&[]).is_none());
+    }
+
+    #[test]
+    fn split_dns_keeps_local_ipv4_even_when_public_dns_has_no_answer() {
+        let local = vec!["10.20.0.2".parse().unwrap(), "198.18.0.2".parse().unwrap(), "::1".parse().unwrap()];
+        let remote = vec!["203.0.113.5".parse().unwrap(), "10.20.0.2".parse().unwrap()];
+        assert_eq!(actual_addresses(&local, &[]), vec![local[0]]);
+        assert_eq!(actual_addresses(&local, &remote), vec![local[0], remote[0]]);
+        let usable_local = vec![local[0]];
+        assert_eq!(decide(Some("10.20.0.2".parse().unwrap()), Some(&eg(false)),
+            dns_needs_pin(&usable_local, Some("10.20.0.2".parse().unwrap())), "domain", None), Verdict::DirectOk);
+    }
+
+    #[test]
+    fn working_doh_address_still_needs_hosts_when_system_dns_cannot_use_it() {
+        let ip = Some("10.20.0.2".parse().unwrap());
+        for local in [vec![], vec!["10.20.0.3".parse().unwrap()], vec!["198.18.0.2".parse().unwrap()]] {
+            assert_eq!(decide(ip, Some(&eg(false)), dns_needs_pin(&local, ip), "domain", None), Verdict::HostsOnly);
+        }
+    }
+
+    #[test]
     fn direct_report_distinguishes_existing_hosts_from_unpinned_access() {
         let unpinned = direct_domain_detail("public.test", None, "Ethernet");
         assert!(unpinned.contains("无需新增"));
@@ -688,6 +703,23 @@ mod tests {
         let pinned = direct_domain_detail("internal.test", Some("10.0.0.2"), "VPN");
         assert!(pinned.contains("hosts 记录指向 10.0.0.2"));
         assert!(pinned.contains("VPN"));
+    }
+
+    #[test]
+    fn parses_single_label_lan_hosts_and_explicitly_rejects_ipv6() {
+        for input in ["NAS", "nas.", "a", "printer-01"] {
+            let target = parse_target(input).unwrap();
+            assert_eq!(target.kind, "domain");
+            assert_eq!(target.host, input.trim_end_matches('.').to_ascii_lowercase());
+        }
+        let target = parse_target("http://NAS:8080/Status?Q=AbC").unwrap();
+        assert_eq!((target.host.as_str(), target.port, target.path.as_str()), ("nas", 8080, "/Status?Q=AbC"));
+        for input in ["::1", "[::1]", "http://[2001:db8::1]:8080/"] {
+            assert!(parse_target(input).err().unwrap().contains("暂不支持 IPv6"));
+        }
+        for input in ["123", "1.2.3", "999.1.1.1", "bad_name", "-nas", "nas-"] {
+            assert!(parse_target(input).is_err(), "{input}");
+        }
     }
 
     #[test]

@@ -1,6 +1,7 @@
 // E2E 内存版 fake backend —— 镜像 src-tauri/src/commands/*.rs 的行为契约。
 // 仅通过 vite alias 在 E2E 模式下注入，不进入生产构建。
 import type { CodexQuota } from '../../src/services/api/codex'
+import type { PlannedRow, RouteOption, RouteOverride } from '../../src/services/api/bypass'
 
 export interface E2EEntrySeed {
   name: string
@@ -19,6 +20,8 @@ export interface E2ENoteSeed {
   starred?: boolean
   /** 预置加密小记：口令在全库级（notePassphrase），不再逐条挂 */
   encrypted?: boolean
+  /** 预置归档小记：只在归档视图里出现 */
+  archived?: boolean
 }
 
 export interface E2EFileShortcutSeed {
@@ -128,6 +131,8 @@ export interface E2EConfig {
       lost?: string
       /** 这些 host 判不出出口：进确认弹窗的 blocked 行，不写系统 */
       blocked?: string[]
+      /** 从系统枚举的可用网卡/网关；用于验证手动选择出口。 */
+      routeOptions?: Record<string, RouteOption[]>
       /** 这些 host 写失败：整批回滚 */
       failed?: string[]
       /** 这些 host 系统里原本已就位（changed=false，算跳过） */
@@ -275,6 +280,8 @@ interface NoteRecord {
   encrypted: boolean
   /** 假加密：cipher 存原文，口令在全库那一份上，只为复刻命令面的行为 */
   cipher: string
+  archived: boolean
+  archived_at: number | null
 }
 
 interface UrlPathRecord {
@@ -460,7 +467,7 @@ interface BackendState {
   }
   /** currentId 是显式指针，与后端 index.current_account_id 同构：导入/新增不动它，只有切号与登录落库才改 */
   codex: { accounts: CodexAccountRecord[]; portBusy: boolean; loginId: string; currentId: string; repairFail: boolean; repairDelayMs: number; repairRows: number; switchDelayMs: number; switchCancel: boolean; sessionsFail: boolean; statsFail: boolean; sessions: CodexSessionSeed[]; trash: CodexTrashSeed[]; trashFail: boolean; recycled: CodexRecycledSeed[]; recycledFail: boolean; openFail: boolean; usageFail: boolean; usageScanMillis: number; deleteStepMs: number; deleteFailEmails: string[]; deleteJobs: Record<string, CodexDeleteJob> }
-  bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probeDelay: number; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string; applyDelay: number; applyCancel: boolean; applyLost: string; applyBlocked: string[]; applyFailed: string[]; applySkipped: string[]; applyRollbackFail: boolean; recheckDelay: number; recheckVerdict: string; revertFail: string; rollbackBatch: string }
+  bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probeDelay: number; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string; applyDelay: number; applyCancel: boolean; applyLost: string; applyBlocked: string[]; routeOptions: Record<string, RouteOption[]>; applyFailed: string[]; applySkipped: string[]; applyRollbackFail: boolean; recheckDelay: number; recheckVerdict: string; revertFail: string; rollbackBatch: string }
   profiles: { activeId: string; list: ProfileRecord[] }
 }
 
@@ -716,6 +723,7 @@ class MockBackend {
   private notePass = ''
   private noteOpen = false
   private noteDrafts = new Map<string, { title: string; content_html: string; category?: string | null }>()
+  private webAccess = { running: false, lan: false, port: 8420, urls: [] as string[] }
   private notesUpdateFailCount = 0
   private bypassProbes = new Map<string, () => void>()
   private cancelledBypassProbes = new Set<string>()
@@ -796,6 +804,7 @@ class MockBackend {
         applyCancel: config.bypass?.apply?.cancel ?? false,
         applyLost: config.bypass?.apply?.lost ?? '',
         applyBlocked: config.bypass?.apply?.blocked ?? [],
+        routeOptions: config.bypass?.apply?.routeOptions ?? {},
         applyFailed: config.bypass?.apply?.failed ?? [],
         applySkipped: config.bypass?.apply?.skipped ?? [],
         applyRollbackFail: config.bypass?.apply?.rollbackFail ?? false,
@@ -1023,6 +1032,8 @@ class MockBackend {
         updated_at: ts,
         encrypted: enc,
         cipher: enc ? n.content_html : '',
+        archived: !!n.archived,
+        archived_at: n.archived ? ts : null,
       }
       state.notes.push(rec)
       if (enc && this.noteOpen) this.noteUnlocked.add(rec.id)
@@ -1575,16 +1586,16 @@ class MockBackend {
   }
 
   /** 与 netguard_service::plan 同形：一条域名可以出两行（hosts 固定 + 持久路由） */
-  private bypassPlanRows(allowCdn: string[] = []): { id: string; label: string; action: string; blocked: string }[] {
+  private bypassPlanRows(allowCdn: string[] = [], routeOverrides: RouteOverride[] = []): PlannedRow[] {
     const s = this.state.bypass
-    const rows: { id: string; label: string; action: string; blocked: string }[] = []
+    const rows: PlannedRow[] = []
     for (const t of this.bypassPending()) {
       if (this.cdnGated(t, allowCdn)) {
         rows.push({
           id: t.id,
           label: t.host,
           action: '',
-          blocked: '地址可能随 CDN 节点变化，固定后可能需要更新；确需固定请勾选本条',
+          blocked: '地址可能随 CDN 节点变化，固定后可能需要更新 hosts',
         })
         continue
       }
@@ -1605,19 +1616,27 @@ class MockBackend {
         }
         continue
       }
-      if (s.applyBlocked.includes(t.host)) {
+      const routeOptions = s.routeOptions[t.host] ?? []
+      const selected = routeOverrides.find((r) => r.id === t.id)
+      const route = selected ? routeOptions.find((r) => r.interfaceIndex === selected.interfaceIndex && r.gateway === selected.gateway) : undefined
+      if ((selected && !route) || (s.applyBlocked.includes(t.host) && !route)) {
         rows.push({
           id: t.id,
           label: t.host,
           action: '',
-          blocked: '路由表里没有可绑定的非接管接口，需人工确认出口',
+          blocked: selected ? '所选出口已不可用，请重新选择'
+            : routeOptions.length ? `无法自动确定到 ${prefix}${prefix.includes('/') ? '' : '/32'} 的出口，请选择可访问该地址的网络`
+            : `未找到通往 ${prefix}${prefix.includes('/') ? '' : '/32'} 的可用直连出口，请检查网络连接`,
+          blockedReason: 'noDirectRoute',
+          routeOptions,
         })
         continue
       }
       rows.push({
         id: t.id,
         label: t.host,
-        action: `持久路由 绑 ${t.nextHop || '链路本地'}（接口 ${t.interfaceName || '本机'}）`,
+        action: `持久路由 绑 ${route ? (route.gatewayIsOnLink ? '同网段直连（无网关）' : route.gateway) : (t.nextHop || '同网段直连（无网关）')}（接口 ${route?.interfaceAlias || t.interfaceName || '本机'}）`,
+        routeOptions,
         blocked: '',
       })
     }
@@ -1625,8 +1644,8 @@ class MockBackend {
   }
 
   /** 任务书里的那几笔：只有真有动作的行才落盘 */
-  private bypassWork(allowCdn: string[] = []): { id: string; host: string; op: string }[] {
-    const rows = this.bypassPlanRows(allowCdn)
+  private bypassWork(allowCdn: string[] = [], routeOverrides: RouteOverride[] = []): { id: string; host: string; op: string }[] {
+    const rows = this.bypassPlanRows(allowCdn, routeOverrides)
     return rows
       .filter((r) => !!r.action && !rows.some((other) => other.id === r.id && !!other.blocked))
       .map((r) => ({
@@ -1833,6 +1852,15 @@ class MockBackend {
   // （Tauri v2 的 camelCase → snake_case 转换发生在 IPC 层，本 mock 在其之上）
   private commands: Record<string, (args: Record<string, any>) => unknown> = {
     // ===== auth.rs =====
+    web_access_status: () => ({ ...this.webAccess }),
+    web_access_start: ({ input }) => {
+      this.requireUnlocked()
+      if (this.webAccess.running) throw '服务已启动，请先停止再修改配置'
+      if (input.password.length < 8) throw 'Web 访问密码需要至少8位'
+      this.webAccess = { running: true, lan: input.lan, port: input.port, urls: [`http://127.0.0.1:${input.port}`, ...(input.lan ? [`http://192.168.1.2:${input.port}`] : [])] }
+      return { ...this.webAccess }
+    },
+    web_access_stop: () => { this.webAccess = { running: false, lan: false, port: 8420, urls: [] } },
     is_initialized: () => this.state.initialized,
 
     setup_master_password: ({ password }) => {
@@ -2007,6 +2035,8 @@ class MockBackend {
         updated_at: now,
         encrypted: false,
         cipher: '',
+        archived: false,
+        archived_at: null,
       }
       this.state.notes.push(note)
       return { ...note }
@@ -2070,6 +2100,30 @@ class MockBackend {
       const note = this.findNote(id)
       note.starred = !note.starred
       return note.starred
+    },
+
+    set_note_archived: ({ id, archived }) => {
+      this.requireUnlocked()
+      const note = this.findNote(id)
+      // 和 Rust 一样：只在状态真的翻转时动 archived_at，重复设同一值不刷新时间
+      if (note.archived !== archived) {
+        note.archived = archived
+        note.archived_at = archived ? Date.now() : null
+      }
+      return archived
+    },
+
+    batch_set_archived: ({ ids, archived }) => {
+      this.requireUnlocked()
+      const set = new Set<string>(ids)
+      let changed = 0
+      this.state.notes.forEach((n) => {
+        if (!set.has(n.id) || n.archived === archived) return
+        n.archived = archived
+        n.archived_at = archived ? Date.now() : null
+        changed++
+      })
+      return changed
     },
 
     // ===== note_lock.rs 全库口令（假加密：只复刻命令面行为） =====
@@ -2894,19 +2948,23 @@ class MockBackend {
     },
 
     /** 与 Rust bypass_plan 同形：ready 按条目计，不是按动作计 */
-    bypass_plan: ({ allowCdn }: { allowCdn?: unknown }) => {
+    bypass_plan: ({ allowCdn, routeOverrides = [] }: { allowCdn?: unknown; routeOverrides?: RouteOverride[] }) => {
       const allow = this.allowCdnOf(allowCdn)
-      const rows = this.bypassPlanRows(allow)
+      const rows = this.bypassPlanRows(allow, routeOverrides)
       const blocked = new Set(rows.filter((r) => !!r.blocked).map((r) => r.id)).size
-      const ready = new Set(this.bypassWork(allow).map((r) => r.id)).size
-      return { rows, ready, blocked }
+      const ready = new Set(this.bypassWork(allow, routeOverrides).map((r) => r.id)).size
+      const planKey = JSON.stringify(rows.filter((r) => r.action).map((r) => [r.id, r.action]).sort())
+      return { rows, ready, blocked, planKey }
     },
 
     /** 与 Rust bypass_apply 同形：一次 UAC 落完一批，任一条失败则整批回滚 */
-    bypass_apply: async ({ allowCdn }: { allowCdn?: unknown }) => {
+    bypass_apply: async ({ allowCdn, routeOverrides = [], expectedPlanKey }: { allowCdn?: unknown; routeOverrides?: RouteOverride[]; expectedPlanKey?: string }) => {
       const s = this.state.bypass
       if (s.applyDelay > 0) await new Promise((r) => setTimeout(r, s.applyDelay))
-      const work = this.bypassWork(this.allowCdnOf(allowCdn))
+      const rows = this.bypassPlanRows(this.allowCdnOf(allowCdn), routeOverrides)
+      const currentKey = JSON.stringify(rows.filter((r) => r.action).map((r) => [r.id, r.action]).sort())
+      if (!expectedPlanKey || currentKey !== expectedPlanKey) throw new Error('网络或清单已变化，尚未写入更改。请重新打开“配置直连”查看最新方案')
+      const work = this.bypassWork(this.allowCdnOf(allowCdn), routeOverrides)
       if (!work.length) {
         return { batchId: '', cancelled: false, rolledBack: false, items: [], error: '' }
       }

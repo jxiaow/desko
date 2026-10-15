@@ -16,6 +16,7 @@ pub async fn setup_master_password(app: AppHandle, password: String) -> Result<(
 }
 
 fn setup_master_password_with_state(state: &AppState, password: String) -> Result<(), AppError> {
+    let _web_session = crate::web_access::SESSION_GATE.write().map_err(|_| AppError::Database("Web 会话状态无法读取".into()))?;
     let mut master_key = state.master_key.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     auth_service::setup_master_password(&db, &mut master_key, &password)?;
@@ -37,6 +38,7 @@ pub async fn unlock(app: AppHandle, password: String) -> Result<(), AppError> {
 
 /// 返回 true 表示认证成功，但旧格式的保护升级应在之后重试。
 fn unlock_with_state(state: &AppState, password: String) -> Result<bool, AppError> {
+    let _web_session = crate::web_access::SESSION_GATE.write().map_err(|_| AppError::Database("Web 会话状态无法读取".into()))?;
     let mut attempts = state.unlock_attempts.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     attempts.check(std::time::Instant::now())?;
     let mut master_key = state.master_key.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
@@ -53,7 +55,7 @@ fn unlock_with_state(state: &AppState, password: String) -> Result<bool, AppErro
         let mut drafts = state.note_drafts.lock().map_err(|_| AppError::Database("lock error".into()))?;
         match auth_service::change_master_password_prepared(&db, &key, &password, &password,
             |new| drafts.rekeyed(&key, new)) {
-            Ok((next, prepared)) => { *drafts = prepared; next }
+            Ok((next, prepared)) => { *drafts = prepared; state.data_epoch.fetch_add(1, std::sync::atomic::Ordering::SeqCst); next }
             Err(error) => {
                 // 只有再次验证库仍使用旧密钥时才允许降级为这次旧格式会话。
                 // 若提交已改变密钥，绝不能把旧钥匙安装进新格式库。
@@ -79,6 +81,7 @@ pub(crate) fn clear_keys(state: &AppState) -> Result<(), AppError> {
 }
 
 fn clear_keys_for_epoch(state: &AppState, expected: Option<u64>) -> Result<bool, AppError> {
+    let _web_session = crate::web_access::SESSION_GATE.write().map_err(|_| AppError::Database("Web 会话状态无法读取".into()))?;
     let mut master_key = state.master_key.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     if expected.is_some_and(|epoch| state.lock_epoch.load(std::sync::atomic::Ordering::SeqCst) != epoch) {
         return Ok(false);
@@ -98,7 +101,10 @@ pub(crate) fn request_lock(app: &tauri::AppHandle) {
     use tauri::{Emitter, Manager};
     use std::sync::atomic::Ordering;
     let state = app.state::<AppState>();
-    let epoch = state.lock_epoch.fetch_add(1, Ordering::SeqCst) + 1;
+    let epoch = {
+        let _web_session = crate::web_access::SESSION_GATE.write().unwrap_or_else(|error| error.into_inner());
+        state.lock_epoch.fetch_add(1, Ordering::SeqCst) + 1
+    };
     if app.emit("tray-lock", serde_json::json!({"forced": false})).is_err() {
         let _ = clear_keys(&state);
         return;
@@ -115,12 +121,16 @@ pub(crate) fn request_lock(app: &tauri::AppHandle) {
 
 #[tauri::command]
 pub async fn change_master_password(app: AppHandle, old_password: String, new_password: String) -> Result<(), AppError> {
+    let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move ||
-        change_master_password_with_state(&app.state::<AppState>(), old_password, new_password))
-        .await.map_err(|_| AppError::Crypto("修改口令任务失败".into()))?
+        change_master_password_with_state(&handle.state::<AppState>(), old_password, new_password))
+        .await.map_err(|_| AppError::Crypto("修改口令任务失败".into()))??;
+    crate::web_access::revoke(&app);
+    Ok(())
 }
 
 fn change_master_password_with_state(state: &AppState, old_password: String, new_password: String) -> Result<(), AppError> {
+    let _web_session = crate::web_access::SESSION_GATE.write().map_err(|_| AppError::Database("Web 会话状态无法读取".into()))?;
     let mut master_key = state.master_key.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
 
@@ -130,6 +140,7 @@ fn change_master_password_with_state(state: &AppState, old_password: String, new
         |new| drafts.rekeyed(old_key, new))?;
     *drafts = next_drafts;
     *master_key = Some(new_key);
+    state.data_epoch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
     Ok(())
 }
@@ -137,6 +148,27 @@ fn change_master_password_with_state(state: &AppState, old_password: String, new
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_lock_waits_for_the_web_command_read_lease() {
+        let state = std::sync::Arc::new(crate::test_state());
+        *state.master_key.lock().unwrap() = Some(vec![1; 32]);
+        let read = crate::web_access::SESSION_GATE.read().unwrap();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker_state = state.clone();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            done_tx.send(clear_keys(&worker_state)).unwrap();
+        });
+        started_rx.recv().unwrap();
+        assert!(matches!(done_rx.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+        assert!(state.master_key.lock().unwrap().is_some());
+        drop(read);
+        done_rx.recv_timeout(std::time::Duration::from_secs(15)).unwrap().unwrap();
+        worker.join().unwrap();
+        assert!(state.master_key.lock().unwrap().is_none());
+    }
 
     #[test]
     fn expired_lock_request_cannot_clear_a_new_unlock_session() {

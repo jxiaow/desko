@@ -7,8 +7,12 @@ import NoteComposer from './NoteComposer.vue'
 import NoteFullscreen from './NoteFullscreen.vue'
 import NoteLockDialog from './NoteLockDialog.vue'
 import { useNotesStore } from '../../stores/notes'
+import * as attachmentFiles from '../../services/attachmentSrc'
+import { pickBrowserImage } from '../../services/browserImage'
 import { notesApi } from '../../services/api/notes'
 import type { Note } from '../../types'
+
+vi.mock('../../services/browserImage', () => ({ pickBrowserImage: vi.fn() }))
 
 // Tiptap/ProseMirror 在 jsdom 里不是被测对象，换成轻量替身，只保留父子契约
 vi.mock('./NoteEditor.vue', () => ({
@@ -35,6 +39,8 @@ vi.mock('../../services/api/notes', () => ({
     batchDeleteNotes: vi.fn(),
     togglePinNote: vi.fn(),
     toggleStarNote: vi.fn(),
+    setNoteArchived: vi.fn(),
+    batchSetArchived: vi.fn(),
     noteKeyStatus: vi.fn(),
     noteKeySetup: vi.fn(),
     noteKeyUnlock: vi.fn(),
@@ -48,6 +54,7 @@ vi.mock('../../services/api/notes', () => ({
     revealNote: vi.fn(),
     listAttachments: vi.fn(),
     uploadAttachment: vi.fn(),
+    stageAttachment: vi.fn(),
     deleteAttachment: vi.fn(),
   },
 }))
@@ -73,6 +80,8 @@ const makeNote = (over: Partial<Note> = {}): Note => ({
   pinned: false,
   starred: false,
   encrypted: false,
+  archived: false,
+  archived_at: null,
   ...over,
 })
 
@@ -119,12 +128,31 @@ describe('NotesModule', () => {
     vi.mocked(notesApi.stageDrafts).mockResolvedValue(undefined)
     vi.mocked(notesApi.recoverDrafts).mockResolvedValue([])
     vi.mocked(notesApi.togglePinNote).mockResolvedValue(true)
+    vi.mocked(notesApi.setNoteArchived).mockResolvedValue(true)
+    vi.mocked(notesApi.batchSetArchived).mockResolvedValue(0)
     vi.mocked(notesApi.batchDeleteNotes).mockResolvedValue(0)
   })
 
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+  })
+
+  it('浏览器选图期间卸载，迟到选择不能上传到后续页面', async () => {
+    const meta = document.createElement('meta')
+    meta.name = 'desko-runtime'; meta.content = 'web'; document.head.append(meta)
+    let finish!: (file: File) => void
+    vi.mocked(pickBrowserImage).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    stageNotes([])
+    const base = vi.spyOn(attachmentFiles, 'ensureAttachmentBase').mockResolvedValue(undefined)
+    const wrapper = await mountModule()
+    try {
+      wrapper.findComponent(NoteComposer).vm.$emit('addImage')
+      wrapper.unmount()
+      finish(new File(['synthetic'], 'image.png', { type: 'image/png' }))
+      await flushPromises()
+      expect(notesApi.stageAttachment).not.toHaveBeenCalled()
+    } finally { base.mockRestore(); meta.remove() }
   })
 
   it('loads notes on mount and groups them under today', async () => {
@@ -526,6 +554,44 @@ describe('NotesModule', () => {
     await vi.advanceTimersByTimeAsync(600)
     expect(useNotesStore().notes[0].content_html).toBe('<p>全屏里改的</p>')
     expect(notesApi.updateNote).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('归档视图收掉草稿箱，只列归档行并给出一次性恢复', async () => {
+    stageNotes([
+      makeNote(),
+      makeNote({ id: 'c', title: '丙', content_html: '<p>丙</p>', archived: true, archived_at: NOW }),
+    ])
+    const wrapper = await mountModule()
+    expect(wrapper.find('.archive-bar').exists()).toBe(false)
+    expect(wrapper.findComponent(NoteComposer).exists()).toBe(true)
+
+    const store = useNotesStore()
+    store.noteView = 'archived'
+    await flushPromises()
+
+    expect(wrapper.findComponent(NoteComposer).exists()).toBe(false)
+    expect(wrapper.findAll('.memo')).toHaveLength(1)
+    expect(wrapper.find('.archive-bar').text()).toContain('归档中 1 条')
+    expect(wrapper.find('.ab-btn').text()).toContain('全部取消归档')
+
+    vi.mocked(notesApi.batchSetArchived).mockResolvedValue(1)
+    await wrapper.find('.ab-btn').trigger('click')
+    await flushPromises()
+
+    expect(notesApi.batchSetArchived).toHaveBeenCalledWith(['c'], false)
+    wrapper.unmount()
+  })
+
+  it('卡片上的归档钮只翻归档位', async () => {
+    stageNotes([makeNote()])
+    const wrapper = await mountModule()
+
+    wrapper.findComponent(NoteCard).vm.$emit('toggleArchive')
+    await flushPromises()
+
+    expect(notesApi.setNoteArchived).toHaveBeenCalledWith('a', true)
+    expect(useNotesStore().notes[0].archived).toBe(true)
     wrapper.unmount()
   })
 })

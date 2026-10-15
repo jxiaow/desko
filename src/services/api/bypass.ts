@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '../transport'
 
 /** 五态判定：后端 bypass_service::Verdict 的 as_str() 与此一一对应 */
 export type Verdict = 'directOk' | 'hostsOnly' | 'needRoute' | 'unreachable' | 'egressUnknown'
@@ -69,6 +69,19 @@ export interface BypassTarget {
 }
 
 /** 确认弹窗里的一条：这条将往系统里写什么，或为什么写不了 */
+export interface RouteOption {
+  interfaceIndex: number
+  interfaceAlias: string
+  gateway: string
+  gatewayIsOnLink: boolean
+}
+
+export interface RouteOverride {
+  id: string
+  interfaceIndex: number
+  gateway: string
+}
+
 export interface PlannedRow {
   id: string
   label: string
@@ -76,9 +89,13 @@ export interface PlannedRow {
   action: string
   /** 非空 = 这条自动判定不了，不进批次 */
   blocked: string
+  /** 需在配置前处理的直连出口问题；不通过勾选放行 */
+  blockedReason?: 'noDirectRoute'
+  routeOptions?: RouteOption[]
 }
 
 export interface ApplyPlan {
+  planKey: string
   rows: PlannedRow[]
   /** 可以进批次的条目数 */
   ready: number
@@ -129,9 +146,9 @@ export const bypassApi = {
   edit: (id: string, input: string, requestId?: string): Promise<ProbeReport> => invoke('bypass_edit', { id, input, requestId }),
   remove: (id: string): Promise<void> => invoke('bypass_delete', { id }),
   /** 落盘计划：逐条列出要往系统里写什么，只读路由表，不提权。allowCdn = 用户坚持要钉的 CDN 条目 */
-  plan: (allowCdn: string[]): Promise<ApplyPlan> => invoke('bypass_plan', { allowCdn }),
+  plan: (allowCdn: string[], routeOverrides: RouteOverride[] = []): Promise<ApplyPlan> => invoke('bypass_plan', { allowCdn, routeOverrides }),
   /** 一批落盘：一批共用一次 UAC */
-  apply: (allowCdn: string[]): Promise<ApplyOutcome> => invoke('bypass_apply', { allowCdn }),
+  apply: (allowCdn: string[], routeOverrides: RouteOverride[], expectedPlanKey: string): Promise<ApplyOutcome> => invoke('bypass_apply', { allowCdn, routeOverrides, expectedPlanKey }),
   /** 按回滚点撤销一批 */
   revert: (batch: string): Promise<ApplyOutcome> => invoke('bypass_revert', { batch }),
   /** 有回滚点时回批次 id，没有回空串 */

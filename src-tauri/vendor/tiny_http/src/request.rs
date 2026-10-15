@@ -111,7 +111,7 @@ impl<R: Write> Write for NotifyOnDrop<R> {
 }
 impl<R> Drop for NotifyOnDrop<R> {
     fn drop(&mut self) {
-        self.sender.send(()).unwrap();
+        let _ = self.sender.send(());
     }
 }
 
@@ -258,6 +258,15 @@ where
 }
 
 impl Request {
+    /// Close an unhandled request without a response or draining its body.
+    /// Used only when an application explicitly shuts down the server.
+    pub fn discard(mut self) {
+        self.set_body_timeout(std::time::Duration::ZERO);
+        self.response_writer.take();
+        self.data_reader.take();
+        if let Some(sender) = self.notify_when_responded.take() { let _ = sender.send(()); }
+    }
+
     /// Returns true if the request was made through HTTPS.
     #[inline]
     pub fn secure(&self) -> bool {
@@ -467,7 +476,7 @@ impl Request {
     {
         let res = self.respond_impl(response);
         if let Some(sender) = self.notify_when_responded.take() {
-            sender.send(()).unwrap();
+            let _ = sender.send(());
         }
         res
     }
@@ -523,7 +532,7 @@ impl Drop for Request {
             let response = Response::empty(500);
             let _ = self.respond_impl(response); // ignoring any potential error
             if let Some(sender) = self.notify_when_responded.take() {
-                sender.send(()).unwrap();
+                let _ = sender.send(());
             }
         }
     }

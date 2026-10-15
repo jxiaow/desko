@@ -1,3 +1,4 @@
+import { isWebRuntime } from '../services/runtime'
 import { onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
@@ -16,6 +17,7 @@ export function useAutoLock(
   const toastStore = useToastStore()
   const isLocked = () => authStore.appState === 'locked'
 
+  let active = true
   let autoLockInterval: ReturnType<typeof setInterval> | null = null
   let unlistenTray: (() => void) | null = null
   let lastActivityTime = Date.now()
@@ -25,21 +27,25 @@ export function useAutoLock(
   }
 
   onMounted(async () => {
-    const { listen } = await import('@tauri-apps/api/event')
-    unlistenTray = await listen<LockRequest>('tray-lock', (event) => {
-      void doLock(event.payload ?? {})
-    })
+    if (!isWebRuntime()) {
+      const { listen } = await import('@tauri-apps/api/event')
+      unlistenTray = await listen<LockRequest>('tray-lock', (event) => {
+        if (active) void doLock(event.payload ?? {})
+      })
+      if (!active) { unlistenTray(); return }
+    }
 
     const checkAutoLock = async () => {
       if (authStore.appState !== 'unlocked') return
       evictExpiredPasswords()
       const timeout = await api.getSetting('auto_lock_timeout')
+      if (!active || authStore.appState !== 'unlocked') return
       const timeoutMinutes = parseInt(timeout) || 0
       if (timeoutMinutes <= 0) return
       const elapsed = (Date.now() - lastActivityTime) / 1000 / 60
       if (elapsed >= timeoutMinutes) {
         await doLock({ forced: true })
-        if (isLocked()) toastStore.showToast('已自动锁定', 'info')
+        if (isLocked()) toastStore.showToast(isWebRuntime() ? '浏览器访问已自动退出' : '已自动锁定', 'info')
       }
     }
 
@@ -52,6 +58,7 @@ export function useAutoLock(
   })
 
   onUnmounted(() => {
+    active = false
     if (autoLockInterval) clearInterval(autoLockInterval)
     if (unlistenTray) unlistenTray()
     document.removeEventListener('mousemove', updateActivity)

@@ -13,15 +13,15 @@ test.describe('统一外观状态', () => {
       return { theme: el.getAttribute('data-theme'), image: style.backgroundImage, color: style.backgroundColor }
     }))
     const before = await previews()
-    expect(before).toHaveLength(4)
-    expect(new Set(before.map((preview) => preview.color)).size).toBe(4)
+    expect(before).toHaveLength(8)
+    expect(new Set(before.map((preview) => preview.color)).size).toBe(8)
     for (const preview of before) expect(preview.image, `${preview.theme} 柔光应使用卡片尺寸`).not.toMatch(/[\d.]+v[wh]\b/)
     const images: Buffer[] = []
     const cards = page.locator('.theme-prev')
-    for (let i = 0; i < 4; i++) images.push(await cards.nth(i).screenshot({ animations: 'disabled' }))
+    for (let i = 0; i < before.length; i++) images.push(await cards.nth(i).screenshot({ animations: 'disabled' }))
     await page.setViewportSize({ width: 1600, height: 1000 })
     await expect.poll(previews).toEqual(before)
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < before.length; i++) {
       const after = await cards.nth(i).screenshot({ animations: 'disabled' })
       const difference = await page.evaluate(async ([before, after]) => {
         const pixels = async (png: string) => {
@@ -118,7 +118,7 @@ test.describe('统一外观状态', () => {
     const preview = dialog.locator('.theme-prev[data-theme="slate"]')
     await expect(preview.locator('.tp-row').first()).toHaveCSS('background-color', 'rgb(13, 29, 47)')
     await expect(preview.locator('.tp-rail-dot')).toHaveCSS('background-color', 'rgb(121, 61, 97)')
-    await expect(dialog.locator('.theme-prev[data-theme="paper"] .tp-row').first()).toHaveCSS('background-color', 'rgb(252, 252, 252)')
+    await expect(dialog.locator('.theme-prev[data-theme="paper"] .tp-row').first()).toHaveCSS('background-color', 'rgb(252, 250, 247)')
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper')
 
     await dialog.locator('.theme-chip', { hasText: '岩' }).click()

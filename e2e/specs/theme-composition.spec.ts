@@ -2,9 +2,10 @@ import { test, expect, type Page } from '@playwright/test'
 import { bootUnlocked, openSettings, waitForToastGone } from '../helpers'
 import { contrast, lab } from '../../scripts/lib/theme-tokens.mjs'
 
-const THEMES = { paper: '纸', snow: '雪', ink: '墨', slate: '岩' } as const
-const ACCENTS = ['ink', 'celadon', 'clay', 'plum', 'rose'] as const
+const THEMES = { paper: '纸', snow: '雪', linen: '绢', mist: '雾', ink: '墨', slate: '岩', midnight: '夜', moss: '苔' } as const
+const ACCENTS = ['ink', 'celadon', 'clay', 'plum', 'rose', 'teal', 'forest', 'amber', 'coral', 'graphite'] as const
 type Theme = keyof typeof THEMES
+const LIGHT_THEMES: Theme[] = ['paper', 'snow', 'linen', 'mist']
 type RGB = [number, number, number]
 
 // 从实际截图取画布空白处的像素，覆盖主光、辅光与中间过渡。
@@ -20,17 +21,23 @@ async function renderedPalette(page: Page) {
     canvas.height = img.height
     const ctx = canvas.getContext('2d')!
     ctx.drawImage(img, 0, 0)
+    const sample = (x: number, y: number): [number, number, number] => {
+      const patch = ctx.getImageData(x - 2, y - 2, 5, 5).data
+      const rgb: [number, number, number] = [0, 0, 0]
+      for (let i = 0; i < patch.length; i += 4) {
+        for (let c = 0; c < 3; c++) rgb[c] += patch[i + c] / 25
+      }
+      return rgb
+    }
     const pixels: [number, number, number][] = []
     for (const x of [60, 270, 480, 720, 980]) {
       for (const y of [380, 500, 620]) {
-        const patch = ctx.getImageData(x - 2, y - 2, 5, 5).data
-        const rgb: [number, number, number] = [0, 0, 0]
-        for (let i = 0; i < patch.length; i += 4) {
-          for (let c = 0; c < 3; c++) rgb[c] += patch[i + c] / 25
-        }
-        pixels.push(rgb)
+        pixels.push(sample(x, y))
       }
     }
+    // 避开 1px 分割线和正文，只比较分界两侧相邻的背景。
+    const edge = document.querySelector('.sidebar')!.getBoundingClientRect().right
+    const seams = [180, 380, 500, 620].map(y => [sample(edge - 8, y), sample(edge + 8, y)])
     const root = getComputedStyle(document.documentElement)
     const color = (name: string): [number, number, number] => {
       ctx.fillStyle = root.getPropertyValue(name).trim()
@@ -39,6 +46,8 @@ async function renderedPalette(page: Page) {
     }
     return {
       pixels,
+      sidebar: pixels.slice(0, 3),
+      seams,
       meta: color('--text-canvas-meta'),
       buttonText: color('--accent-on'),
       buttonStates: ['--accent', '--accent-hover', '--accent-active'].map(color),
@@ -54,7 +63,8 @@ function distance(a: RGB[], b: RGB[]) {
   }, 0) / a.length
 }
 
-test('二十组主题的实际合成色保持区别，画布文字与主按钮可读', async ({ page }) => {
+test('八十组主题的实际合成色保持区别，画布文字与主按钮可读', async ({ page }) => {
+  test.setTimeout(180_000)
   await page.setViewportSize({ width: 1040, height: 670 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await bootUnlocked(page, {
@@ -67,11 +77,13 @@ test('二十组主题的实际合成色保持区别，画布文字与主按钮�
     await page.locator('.sidebar-toggle').click()
   }
   const rendered = {} as Record<Theme, RGB[][]>
+  const sidebars = {} as Record<Theme, RGB[][]>
   for (const theme of Object.keys(THEMES) as Theme[]) {
     let dialog = await openSettings(page)
     await dialog.locator('.theme-chip', { hasText: THEMES[theme] }).click()
     await waitForToastGone(page)
     rendered[theme] = []
+    sidebars[theme] = []
     for (const [index, accent] of ACCENTS.entries()) {
       if (index) dialog = await openSettings(page)
       await dialog.locator(`.accent-pill[data-accent-id="${accent}"]`).click()
@@ -80,22 +92,75 @@ test('二十组主题的实际合成色保持区别，画布文字与主按钮�
       await expect(dialog).toBeHidden()
       const got = await renderedPalette(page)
       const label = `${theme}/${accent}`
+      for (const [left, right] of got.seams) {
+        expect.soft(distance([left], [right]), `${label} 侧栏与内容背景衔接`).toBeLessThan(4.5)
+      }
       expect(Math.min(...got.pixels.map(bg => contrast(got.meta, bg))), `${label} 画布辅助文字`).toBeGreaterThanOrEqual(4.5)
       for (const bg of got.buttonStates) {
         expect(contrast(got.buttonText, bg), `${label} 主按钮文字`).toBeGreaterThanOrEqual(4.5)
       }
       rendered[theme].push(got.pixels)
+      sidebars[theme].push(got.sidebar)
     }
     for (let i = 0; i < ACCENTS.length; i++) {
       for (let j = i + 1; j < ACCENTS.length; j++) {
         const label = `${theme}: ${ACCENTS[i]} / ${ACCENTS[j]}`
-        expect(distance(rendered[theme][i], rendered[theme][j]), label)
-          .toBeGreaterThan(theme === 'paper' || theme === 'snow' ? 2 : 2.5)
+        expect.soft(distance(rendered[theme][i], rendered[theme][j]), label)
+          .toBeGreaterThan(LIGHT_THEMES.includes(theme) ? 2 : 2.5)
       }
     }
   }
   for (let i = 0; i < ACCENTS.length; i++) {
-    expect(distance(rendered.paper[i], rendered.snow[i]), `纸/雪 × ${ACCENTS[i]}`).toBeGreaterThan(3)
-    expect(distance(rendered.ink[i], rendered.slate[i]), `墨/岩 × ${ACCENTS[i]}`).toBeGreaterThan(7)
+    expect.soft(distance(sidebars.paper[i], sidebars.snow[i]), `纸/雪侧栏 × ${ACCENTS[i]}`).toBeGreaterThan(5)
+    const themes = Object.keys(THEMES) as Theme[]
+    for (const [j, a] of themes.entries()) for (const b of themes.slice(j + 1)) {
+      const light = LIGHT_THEMES.includes(a)
+      if (light !== LIGHT_THEMES.includes(b)) continue
+      const minimum = a === 'ink' && b === 'slate' ? 7 : light ? 3 : 5
+      expect.soft(distance(rendered[a][i], rendered[b][i]), `${THEMES[a]}/${THEMES[b]} × ${ACCENTS[i]}`).toBeGreaterThan(minimum)
+    }
   }
 })
+
+
+for (const [theme, [name, bg, text]] of Object.entries({ purewhite: ['素白', 'rgb(245, 245, 245)', 'rgb(44, 44, 44)'], warmgray: ['暖灰', 'rgb(234, 233, 230)', 'rgb(52, 51, 47)'], charcoal: ['炭黑', 'rgb(31, 31, 31)', 'rgb(232, 232, 232)'] })) {
+  test(`${name}保持纯色，十种强调色不会给画布染色`, async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await bootUnlocked(page, { settings: { theme, accent: 'ink', background_atmosphere: 'true' } })
+    let dialog = await openSettings(page)
+    await expect(page.locator('html')).toHaveAttribute('data-palette', 'plain')
+    await expect(page.locator('.app-root')).toHaveCSS('background-color', bg)
+    await expect(page.locator('body')).toHaveCSS('color', text)
+    const toggle = dialog.getByRole('switch', { name: '背景氛围' })
+    await expect(toggle).toBeDisabled()
+    const backgrounds: string[] = []
+    for (const accent of ACCENTS) {
+      await dialog.locator(`.accent-pill[data-accent-id="${accent}"]`).click()
+      await waitForToastGone(page)
+      const colors = await page.evaluate(() => {
+        const app = getComputedStyle(document.querySelector('.app-root')!)
+        const nav = getComputedStyle(document.querySelector('.sidebar')!)
+        const miniature = getComputedStyle(document.querySelector('.theme-prev[data-theme="' + document.documentElement.dataset.theme + '"]')!)
+        return { app: app.backgroundImage, color: app.backgroundColor, nav: nav.backgroundImage, preview: miniature.backgroundImage }
+      })
+      expect(colors.app).toBe('none')
+      expect(colors.nav).toBe('none')
+      expect(colors.preview).toBe('none')
+      backgrounds.push(colors.color)
+    }
+    expect(new Set(backgrounds).size).toBe(1)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    const got = await renderedPalette(page)
+    for (const bg of got.buttonStates) expect(contrast(got.buttonText, bg)).toBeGreaterThanOrEqual(4.5)
+    expect(Math.min(...got.pixels.map(bg => contrast(got.meta, bg)))).toBeGreaterThanOrEqual(4.5)
+    await page.screenshot({ path: `.tmp/app-review/web-plain-chart/theme-${theme}.png` })
+    dialog = await openSettings(page)
+    await dialog.locator('.theme-chip-name').getByText('纸', { exact: true }).click()
+    await waitForToastGone(page)
+    await expect(toggle).toBeEnabled()
+    // 素色只禁用视觉效果，不覆盖用户原来的氛围偏好。
+    await expect(toggle).toBeChecked()
+  })
+}

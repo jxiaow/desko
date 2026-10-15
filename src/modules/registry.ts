@@ -22,6 +22,7 @@ export type ModuleId =
 
 /** 设置弹窗左导航的页签 id：固定页签 + 带配置页签的模块 id */
 export type SettingsTabId =
+  | 'web'
   | 'profiles'
   | 'modules'
   | 'appearance'

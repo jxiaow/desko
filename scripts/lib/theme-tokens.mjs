@@ -68,7 +68,7 @@ export function readGlobal(cssPath = join(ROOT, 'src', 'styles', 'global.css')) 
     if (decls.size === 0) continue
     const c = /^\[data-base="([\w-]+)"\]\[data-accent="([\w-]+)"\]$/.exec(sel)
     if (c) { combo.set(`${c[1]}/${c[2]}`, decls); continue }
-    const b = /^(?::root\s*,\s*)?\[data-theme="([\w-]+)"\]$/.exec(sel)
+    const b = /^(?:(?::root|:where\(:root\))\s*,\s*)?\[data-theme="([\w-]+)"\]$/.exec(sel)
     if (b) {
       const prev = base.get(b[1]) ?? new Map()
       for (const [k, v] of decls) prev.set(k, v)

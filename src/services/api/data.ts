@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '../transport'
 
 export const dataApi = {
   getDbPath: (): Promise<string> => invoke('get_db_path'),

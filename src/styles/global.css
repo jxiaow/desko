@@ -1,4 +1,5 @@
 @import './materials.css';
+@import './plain-themes.css';
 
 /* ═══════════════════════════════════════════════════════════════════
    第 1 层 · 尺度 —— 主题之间恒定。
@@ -104,12 +105,12 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   第 2 层 · 主题 —— 两轴结构：四种底色 × 五种强调色。
+   第 2 层 · 主题 —— 两轴结构：十一种底色 × 十种强调色。
 
-   · [data-theme] 四块交出**完全相同**的 96 个槽位名。少填一个，切过去
+   · [data-theme] 十一块交出**完全相同**的 96 个槽位名。少填一个，切过去
      那个位置就留着上一套的值，变成一块切换后不动的颜色。
    · accent 族 17 槽由 [data-base=x][data-accent=y] 覆盖层填，
-     10 个组合必须齐全（缺省态 = 墨蓝，与底色块内的值保持一致）。
+     20 个组合必须齐全（缺省态 = 墨蓝，与底色块内的值保持一致）。
    · 改槽位时跑 scripts/check-theme-coverage.mjs，它会比对键集。
 
    槽位分两类：
@@ -118,15 +119,15 @@
      用几个色相、什么决定它是全局定死的；主题只负责给它填 hex。
      v2 起分类色只服务内容侧（头像/徽章/色相钉），界面层只吃灰阶+accent。
 
-   :root 上挂的是 paper+墨蓝 的值，作为属性缺失时的兜底。
-   底色四套：纸 paper / 雪 snow（亮极性）、墨 ink / 板岩 slate（暗极性），
-   每套交出完全相同的 96 槽；accent 五档（墨蓝/青瓷/赭石/紫罗/暮瑰）只按极性覆盖
+   :where(:root) 提供 paper+墨蓝 的缺省值，低优先级让导入的主题也能覆盖。
+   素色三套（plain-themes.css）：素白 / 暖灰 / 炭黑；氛围八套：纸 / 雪 / 绢 / 雾 / 墨 / 岩 / 夜 / 苔。
+   每套交出完全相同的 96 槽；accent 十档只按极性覆盖
    accent 族 17 槽，所以新增底色不必再配一轮 accent。
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ---------- paper：暖纸。象牙白内容面与暖灰画布，在柔光下仍保留纸的色温。
    与雪的净白分开；文字沿用暖炭灰，层级由浅色差与描边共同承接。 ---------- */
-:root, [data-theme="paper"] {
+:where(:root), [data-theme="paper"] {
   /* 品牌缺省：墨蓝（accent 覆盖层会按 data-accent 重填这一族） */
   --accent: #315f9b;
   --accent-hover: #264c80;
@@ -630,8 +631,408 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
+/* ---------- 绢：亚麻暖砂，卡面保留暖白。 ---------- */
+[data-theme="linen"] {
+  --accent: #315f9b;
+  --accent-hover: #264c80;
+  --accent-active: #1e3d68;
+  --accent-on: #ffffff;
+  --accent-soft: #e7eef8;
+  --accent-light: #cfdef1;
+  --accent-ring: rgba(49, 95, 155, 0.16);
+  --text-brand: #264c80;
+  --bg: #f3eadc;
+  --panel-bg: #faf5eb;
+  --chrome-bg: rgba(243, 234, 220, 0.86);
+  --sunken: #e8ddcc;
+  --fill: #e0d2bd;
+  --hover: #f2e8d9;
+  --active: #e4d7c3;
+  --overlay: rgba(29, 28, 26, 0.42);
+  --text: #3c3328;
+  --text-secondary: #574a3b;
+  --text-muted: #71614e;
+  --text-faint: #96836c;
+  --border: #d9c9b2;
+  --border-strong: #bfa88b;
+  --border-subtle: #e9dfcf;
+  --border-hover: #bfa88b;
+  --text-url: #574a3b;
+  --badge-cat-bg: #ebe0cf;
+  --badge-cat-border: #d9c9b2;
+  --badge-cat-text: #574a3b;
+  --badge-ver-bg: #e7eef8;
+  --badge-ver-text: #264c80;
+  --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #cec5b8;
+  --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14);
+  --danger: #a9443c;
+  --danger-on: #ffffff;
+  --danger-hover: #8c362f;
+  --danger-soft: #f7ece9;
+  --danger-border: #eacfc8;
+  --success: #3d7355;
+  --success-soft: #ecf3ee;
+  --warning: #926326;
+  --warning-soft: #f6efdf;
+  --sidebar-bg: #dfd1ba;
+  --sidebar-hover: #d6c5aa;
+  --brand-g1: #668cbd;
+  --brand-g2: #315f9b;
+  --brand-g3: #1e3d68;
+  --brand-knob: #ffffff;
+  --lock-wash-a: #faf5eb;
+  --lock-wash-b: #dfd1ba;
+  --lock-orb-1: rgba(49, 95, 155, 0.07);
+  --lock-orb-2: rgba(49, 95, 155, 0.045);
+  --frost-bg: rgba(250, 245, 235, 0.88);
+  --frost-border: #d9c9b2;
+  --tip-bg: #352d24;
+  --tip-fg: #f7f0e5;
+  --toast-bg: #352d24;
+  --toast-ok: #9cc4ae;
+  --toast-err: #e09a92;
+  --toast-info: #96b7df;
+  --scrollbar: rgba(29, 28, 26, 0.16);
+  --scrollbar-hover: rgba(29, 28, 26, 0.28);
+  --selection: rgba(49, 95, 155, 0.18);
+  --cat-1: #5f62b8;
+  --cat-2: #7b5fb0;
+  --cat-3: #a85b7d;
+  --cat-4: #937042;
+  --cat-5: #46806b;
+  --cat-6: #457f8a;
+  --cat-text: #ffffff;
+  --ft-pdf: #b8564f;
+  --ft-doc: #4a6d9c;
+  --ft-sheet: #3f7a5e;
+  --ft-deck: #a0603a;
+  --ft-arch: #6a5a99;
+  --ft-code: #8a7534;
+  --ft-mark: #5e6672;
+  --ft-img: #9a5a72;
+  --ft-unk: #7a7f88;
+  --code-fg: #17181d;
+  --code-kw: #8d4a69;
+  --code-str: #34674d;
+  --code-num: #875034;
+  --code-type: #705f2a;
+  --code-fn: #43628c;
+  --code-var: #555c67;
+  --code-com: #5e5f68;
+  --code-tag: #5f518a;
+  --code-pun: #55575e;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+}
+
+/* ---------- 雾：浅鼠尾草灰，柔和的绿调工作面。 ---------- */
+[data-theme="mist"] {
+  --accent: #315f9b;
+  --accent-hover: #264c80;
+  --accent-active: #1e3d68;
+  --accent-on: #ffffff;
+  --accent-soft: #e7eef8;
+  --accent-light: #cfdef1;
+  --accent-ring: rgba(49, 95, 155, 0.16);
+  --text-brand: #264c80;
+  --bg: #edf3ee;
+  --panel-bg: #f7fbf8;
+  --chrome-bg: rgba(237, 243, 238, 0.86);
+  --sunken: #e2ebe4;
+  --fill: #d5e1d8;
+  --hover: #edf4ef;
+  --active: #dce8df;
+  --overlay: rgba(18, 19, 22, 0.42);
+  --text: #263a2f;
+  --text-secondary: #40574a;
+  --text-muted: #5d7164;
+  --text-faint: #81998a;
+  --border: #cbd9ce;
+  --border-strong: #aec3b3;
+  --border-subtle: #e2ebe4;
+  --border-hover: #aec3b3;
+  --text-url: #40574a;
+  --badge-cat-bg: #e1ece4;
+  --badge-cat-border: #cbd9ce;
+  --badge-cat-text: #40574a;
+  --badge-ver-bg: #e7eef8;
+  --badge-ver-text: #264c80;
+  --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
+  --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(18, 19, 22, 0.05);
+  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2;
+  --shadow-md: 0 6px 16px -6px rgba(18, 19, 22, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(18, 19, 22, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14);
+  --danger: #b83a30;
+  --danger-on: #ffffff;
+  --danger-hover: #992e26;
+  --danger-soft: #faecea;
+  --danger-border: #f0cfcb;
+  --success: #2e7a50;
+  --success-soft: #eaf4ee;
+  --warning: #9c681e;
+  --warning-soft: #f9f0df;
+  --sidebar-bg: #d8e5db;
+  --sidebar-hover: #ceded2;
+  --brand-g1: #668cbd;
+  --brand-g2: #315f9b;
+  --brand-g3: #1e3d68;
+  --brand-knob: #ffffff;
+  --lock-wash-a: #f7fbf8;
+  --lock-wash-b: #d8e5db;
+  --lock-orb-1: rgba(49, 95, 155, 0.07);
+  --lock-orb-2: rgba(49, 95, 155, 0.045);
+  --frost-bg: rgba(247, 251, 248, 0.88);
+  --frost-border: #cbd9ce;
+  --tip-bg: #20342b;
+  --tip-fg: #f1f7f3;
+  --toast-bg: #20342b;
+  --toast-ok: #91c9a6;
+  --toast-err: #e28e84;
+  --toast-info: #96b7df;
+  --scrollbar: rgba(18, 19, 22, 0.16);
+  --scrollbar-hover: rgba(18, 19, 22, 0.28);
+  --selection: rgba(49, 95, 155, 0.18);
+  --cat-1: #5465c4;
+  --cat-2: #735eb8;
+  --cat-3: #a6587d;
+  --cat-4: #946e38;
+  --cat-5: #3f8067;
+  --cat-6: #3b808e;
+  --cat-text: #ffffff;
+  --ft-pdf: #be4e46;
+  --ft-doc: #3a689e;
+  --ft-sheet: #337d57;
+  --ft-deck: #a65e31;
+  --ft-arch: #6957a0;
+  --ft-code: #8c7324;
+  --ft-mark: #586374;
+  --ft-img: #9d5472;
+  --ft-unk: #6e7580;
+  --code-fg: #16171a;
+  --code-kw: #904269;
+  --code-str: #2a6849;
+  --code-num: #8c4c29;
+  --code-type: #6b5a1f;
+  --code-fn: #345e8e;
+  --code-var: #4f5968;
+  --code-com: #595b64;
+  --code-tag: #5e4e90;
+  --code-pun: #52565f;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+}
+
+/* ---------- 夜：深海蓝，保留清晰的面与字阶。 ---------- */
+[data-theme="midnight"] {
+  --accent: #7faeee;
+  --accent-hover: #a0c3f5;
+  --accent-active: #6692d0;
+  --accent-on: #121e30;
+  --accent-soft: rgba(127, 174, 238, 0.16);
+  --accent-light: rgba(127, 174, 238, 0.28);
+  --accent-ring: rgba(127, 174, 238, 0.32);
+  --text-brand: #b0cef8;
+  --bg: #141e2e;
+  --panel-bg: #1b283c;
+  --chrome-bg: rgba(20, 30, 46, 0.88);
+  --sunken: #0f1826;
+  --fill: #25354b;
+  --hover: #24344a;
+  --active: #30445e;
+  --overlay: rgba(0, 0, 0, 0.65);
+  --text: #e4ecf7;
+  --text-secondary: #c5d2e5;
+  --text-muted: #afbed3;
+  --text-faint: #a5b5cb;
+  --border: #30445f;
+  --border-strong: #4b6586;
+  --border-subtle: #23334a;
+  --border-hover: #4b6586;
+  --text-url: #c5d2e5;
+  --badge-cat-bg: #25364d;
+  --badge-cat-border: #30445f;
+  --badge-cat-text: #c5d2e5;
+  --badge-ver-bg: rgba(127, 174, 238, 0.16);
+  --badge-ver-text: #b0cef8;
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #535f71;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+  --danger: #df817c;
+  --danger-on: #181517;
+  --danger-hover: #e89e99;
+  --danger-soft: #38252e;
+  --danger-border: #61404a;
+  --success: #6cbd94;
+  --success-soft: #1c3231;
+  --warning: #d9aa63;
+  --warning-soft: #342e24;
+  --sidebar-bg: #101b2c;
+  --sidebar-hover: #22334b;
+  --brand-g1: #b0cef8;
+  --brand-g2: #7faeee;
+  --brand-g3: #6692d0;
+  --brand-knob: #252932;
+  --lock-wash-a: #141e2e;
+  --lock-wash-b: #1b283c;
+  --lock-orb-1: rgba(127, 174, 238, 0.14);
+  --lock-orb-2: rgba(127, 174, 238, 0.07);
+  --frost-bg: rgba(27, 40, 60, 0.9);
+  --frost-border: #30445f;
+  --tip-bg: #e8eef7;
+  --tip-fg: #172439;
+  --toast-bg: #e8eef7;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #315f9b;
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(127, 174, 238, 0.30);
+  --cat-1: #8c90da;
+  --cat-2: #ac8fe6;
+  --cat-3: #dc91b8;
+  --cat-4: #d7b17c;
+  --cat-5: #70c1a2;
+  --cat-6: #71b9c9;
+  --cat-text: #14171c;
+  --ft-pdf: #ef726d;
+  --ft-doc: #7ca3f7;
+  --ft-sheet: #42ba54;
+  --ft-deck: #dfa561;
+  --ft-arch: #aa8ce8;
+  --ft-code: #dfc165;
+  --ft-mark: #8f96a7;
+  --ft-img: #df8cb8;
+  --ft-unk: #8f96a7;
+  --code-fg: #e2e5eb;
+  --code-kw: #dd9cb8;
+  --code-str: #72d0a8;
+  --code-num: #deb177;
+  --code-type: #dec165;
+  --code-fn: #8ea9df;
+  --code-var: #b8b5ac;
+  --code-com: #9fa098;
+  --code-tag: #ac8fe6;
+  --code-pun: #8f96a7;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+}
+
+/* ---------- 苔：深苔绿，低亮度的自然色底。 ---------- */
+[data-theme="moss"] {
+  --accent: #7faeee;
+  --accent-hover: #a0c3f5;
+  --accent-active: #6692d0;
+  --accent-on: #121e30;
+  --accent-soft: rgba(127, 174, 238, 0.16);
+  --accent-light: rgba(127, 174, 238, 0.28);
+  --accent-ring: rgba(127, 174, 238, 0.32);
+  --text-brand: #b0cef8;
+  --bg: #1d2922;
+  --panel-bg: #25342b;
+  --chrome-bg: rgba(29, 41, 34, 0.88);
+  --sunken: #17221b;
+  --fill: #304135;
+  --hover: #2d4033;
+  --active: #3b5141;
+  --overlay: rgba(0, 0, 0, 0.62);
+  --text: #e4eee7;
+  --text-secondary: #c3d0c7;
+  --text-muted: #b4c4b8;
+  --text-faint: #abbcaf;
+  --border: #3a5141;
+  --border-strong: #55735e;
+  --border-subtle: #2b3d31;
+  --border-hover: #55735e;
+  --text-url: #c3d0c7;
+  --badge-cat-bg: #2c4032;
+  --badge-cat-border: #3a5141;
+  --badge-cat-text: #c3d0c7;
+  --badge-ver-bg: rgba(127, 174, 238, 0.16);
+  --badge-ver-text: #b0cef8;
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+  --danger: #e08079;
+  --danger-on: #181716;
+  --danger-hover: #ea9d97;
+  --danger-soft: #372a29;
+  --danger-border: #62423e;
+  --success: #6fbf95;
+  --success-soft: #203c2b;
+  --warning: #d9a95f;
+  --warning-soft: #3b3524;
+  --sidebar-bg: #19271e;
+  --sidebar-hover: #2b3e31;
+  --brand-g1: #b0cef8;
+  --brand-g2: #7faeee;
+  --brand-g3: #6692d0;
+  --brand-knob: #1d1c1a;
+  --lock-wash-a: #1d2922;
+  --lock-wash-b: #25342b;
+  --lock-orb-1: rgba(127, 174, 238, 0.14);
+  --lock-orb-2: rgba(127, 174, 238, 0.07);
+  --frost-bg: rgba(37, 52, 43, 0.9);
+  --frost-border: #3a5141;
+  --tip-bg: #e9f1e9;
+  --tip-fg: #203628;
+  --toast-bg: #e9f1e9;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #315f9b;
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(127, 174, 238, 0.30);
+  --cat-1: #8a8fd8;
+  --cat-2: #ab8de6;
+  --cat-3: #de8fb8;
+  --cat-4: #d8b078;
+  --cat-5: #6fc0a0;
+  --cat-6: #6fb8c8;
+  --cat-text: #171614;
+  --ft-pdf: #f0716b;
+  --ft-doc: #7aa2f7;
+  --ft-sheet: #3fb950;
+  --ft-deck: #e0a45c;
+  --ft-arch: #a98be8;
+  --ft-code: #e0c060;
+  --ft-mark: #8c94a6;
+  --ft-img: #e08bb8;
+  --ft-unk: #6b7280;
+  --code-fg: #e4e2dc;
+  --code-kw: #de9ab8;
+  --code-str: #6fd0a8;
+  --code-num: #e0b072;
+  --code-type: #e0c060;
+  --code-fn: #8aa8e0;
+  --code-var: #b6b2a8;
+  --code-com: #9d9991;
+  --code-tag: #ab8de6;
+  --code-pun: #8c94a6;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+}
+
 /* ═══ accent 覆盖层：挂极性轴 [data-base]，只填 accent 族 17 槽，底色不动。
-   极性由底色决定（paper/snow=light，ink/slate=dark），theme.ts 与 data-theme 同时挂上。
+   极性由底色决定（极性登记见 theme.ts），theme.ts 与 data-theme 同时挂上。
    浅档用实色水洗（按纸底卡面切），深档用半透明（天然跟底走）；
    toast-info 在浅底 toast 上取 accent 深一档。 ═══ */
 
@@ -735,12 +1136,217 @@
   --selection: rgba(233, 145, 182, 0.30); --toast-info: #9b3f68;
 }
 
-/* ---------- 别名槽位：不填 hex，只指向别的槽，所以四套主题不必各写一遍。
+/* ---- 碧青 teal ---- */
+[data-base="light"][data-accent="teal"] {
+  --accent: #126b83;
+  --accent-hover: #0d566b;
+  --accent-active: #084657;
+  --accent-on: #ffffff;
+  --accent-soft: #eaf2f4;
+  --accent-light: #cbdee4;
+  --accent-ring: rgba(18, 107, 131, 0.16);
+  --text-brand: #0d566b;
+  --badge-ver-bg: #eaf2f4;
+  --badge-ver-text: #0d566b;
+  --brand-g1: #5997a8;
+  --brand-g2: #126b83;
+  --brand-g3: #084657;
+  --lock-orb-1: rgba(18, 107, 131, 0.07);
+  --lock-orb-2: rgba(18, 107, 131, 0.045);
+  --selection: rgba(18, 107, 131, 0.18);
+  --toast-info: #71c8e1;
+}
+
+[data-base="dark"][data-accent="teal"] {
+  --accent: #71c8e1;
+  --accent-hover: #94d9eb;
+  --accent-active: #50a9c1;
+  --accent-on: #10232b;
+  --accent-soft: rgba(113, 200, 225, 0.16);
+  --accent-light: rgba(113, 200, 225, 0.28);
+  --accent-ring: rgba(113, 200, 225, 0.32);
+  --text-brand: #b8e4f0;
+  --badge-ver-bg: rgba(113, 200, 225, 0.16);
+  --badge-ver-text: #b8e4f0;
+  --brand-g1: #b8e4f0;
+  --brand-g2: #71c8e1;
+  --brand-g3: #50a9c1;
+  --lock-orb-1: rgba(113, 200, 225, 0.14);
+  --lock-orb-2: rgba(113, 200, 225, 0.07);
+  --selection: rgba(113, 200, 225, 0.3);
+  --toast-info: #126b83;
+}
+
+/* ---- 松绿 forest ---- */
+[data-base="light"][data-accent="forest"] {
+  --accent: #456d25;
+  --accent-hover: #36591c;
+  --accent-active: #2a4615;
+  --accent-on: #ffffff;
+  --accent-soft: #eef2eb;
+  --accent-light: #d6dfcf;
+  --accent-ring: rgba(69, 109, 37, 0.16);
+  --text-brand: #36591c;
+  --badge-ver-bg: #eef2eb;
+  --badge-ver-text: #36591c;
+  --brand-g1: #7d9966;
+  --brand-g2: #456d25;
+  --brand-g3: #2a4615;
+  --lock-orb-1: rgba(69, 109, 37, 0.07);
+  --lock-orb-2: rgba(69, 109, 37, 0.045);
+  --selection: rgba(69, 109, 37, 0.18);
+  --toast-info: #a7c97b;
+}
+
+[data-base="dark"][data-accent="forest"] {
+  --accent: #a7c97b;
+  --accent-hover: #bedb9b;
+  --accent-active: #8caf5e;
+  --accent-on: #1b2612;
+  --accent-soft: rgba(167, 201, 123, 0.16);
+  --accent-light: rgba(167, 201, 123, 0.28);
+  --accent-ring: rgba(167, 201, 123, 0.32);
+  --text-brand: #d3e4bd;
+  --badge-ver-bg: rgba(167, 201, 123, 0.16);
+  --badge-ver-text: #d3e4bd;
+  --brand-g1: #d3e4bd;
+  --brand-g2: #a7c97b;
+  --brand-g3: #8caf5e;
+  --lock-orb-1: rgba(167, 201, 123, 0.14);
+  --lock-orb-2: rgba(167, 201, 123, 0.07);
+  --selection: rgba(167, 201, 123, 0.3);
+  --toast-info: #456d25;
+}
+
+/* ---- 琥珀 amber ---- */
+[data-base="light"][data-accent="amber"] {
+  --accent: #886008;
+  --accent-hover: #704d06;
+  --accent-active: #5c3e05;
+  --accent-on: #ffffff;
+  --accent-soft: #f4f1e9;
+  --accent-light: #e5dcc9;
+  --accent-ring: rgba(136, 96, 8, 0.16);
+  --text-brand: #704d06;
+  --badge-ver-bg: #f4f1e9;
+  --badge-ver-text: #704d06;
+  --brand-g1: #ac9052;
+  --brand-g2: #886008;
+  --brand-g3: #5c3e05;
+  --lock-orb-1: rgba(136, 96, 8, 0.07);
+  --lock-orb-2: rgba(136, 96, 8, 0.045);
+  --selection: rgba(136, 96, 8, 0.18);
+  --toast-info: #e9c463;
+}
+
+[data-base="dark"][data-accent="amber"] {
+  --accent: #e9c463;
+  --accent-hover: #f2d88d;
+  --accent-active: #cbaa45;
+  --accent-on: #2a210d;
+  --accent-soft: rgba(233, 196, 99, 0.16);
+  --accent-light: rgba(233, 196, 99, 0.28);
+  --accent-ring: rgba(233, 196, 99, 0.32);
+  --text-brand: #f4e2b1;
+  --badge-ver-bg: rgba(233, 196, 99, 0.16);
+  --badge-ver-text: #f4e2b1;
+  --brand-g1: #f4e2b1;
+  --brand-g2: #e9c463;
+  --brand-g3: #cbaa45;
+  --lock-orb-1: rgba(233, 196, 99, 0.14);
+  --lock-orb-2: rgba(233, 196, 99, 0.07);
+  --selection: rgba(233, 196, 99, 0.3);
+  --toast-info: #886008;
+}
+
+/* ---- 珊瑚 coral ---- */
+[data-base="light"][data-accent="coral"] {
+  --accent: #ac443c;
+  --accent-hover: #8d342e;
+  --accent-active: #732822;
+  --accent-on: #ffffff;
+  --accent-soft: #f8eeed;
+  --accent-light: #edd6d4;
+  --accent-ring: rgba(172, 68, 60, 0.16);
+  --text-brand: #8d342e;
+  --badge-ver-bg: #f8eeed;
+  --badge-ver-text: #8d342e;
+  --brand-g1: #c57c76;
+  --brand-g2: #ac443c;
+  --brand-g3: #732822;
+  --lock-orb-1: rgba(172, 68, 60, 0.07);
+  --lock-orb-2: rgba(172, 68, 60, 0.045);
+  --selection: rgba(172, 68, 60, 0.18);
+  --toast-info: #f09c92;
+}
+
+[data-base="dark"][data-accent="coral"] {
+  --accent: #f09c92;
+  --accent-hover: #f7b8b0;
+  --accent-active: #d78176;
+  --accent-on: #301714;
+  --accent-soft: rgba(240, 156, 146, 0.16);
+  --accent-light: rgba(240, 156, 146, 0.28);
+  --accent-ring: rgba(240, 156, 146, 0.32);
+  --text-brand: #f8cec8;
+  --badge-ver-bg: rgba(240, 156, 146, 0.16);
+  --badge-ver-text: #f8cec8;
+  --brand-g1: #f8cec8;
+  --brand-g2: #f09c92;
+  --brand-g3: #d78176;
+  --lock-orb-1: rgba(240, 156, 146, 0.14);
+  --lock-orb-2: rgba(240, 156, 146, 0.07);
+  --selection: rgba(240, 156, 146, 0.3);
+  --toast-info: #ac443c;
+}
+
+/* ---- 石墨 graphite ---- */
+[data-base="light"][data-accent="graphite"] {
+  --accent: #56616d;
+  --accent-hover: #444e59;
+  --accent-active: #363e48;
+  --accent-on: #ffffff;
+  --accent-soft: #f0f1f2;
+  --accent-light: #dadcdf;
+  --accent-ring: rgba(86, 97, 109, 0.16);
+  --text-brand: #444e59;
+  --badge-ver-bg: #f0f1f2;
+  --badge-ver-text: #444e59;
+  --brand-g1: #899099;
+  --brand-g2: #56616d;
+  --brand-g3: #363e48;
+  --lock-orb-1: rgba(86, 97, 109, 0.07);
+  --lock-orb-2: rgba(86, 97, 109, 0.045);
+  --selection: rgba(86, 97, 109, 0.18);
+  --toast-info: #b5bec9;
+}
+
+[data-base="dark"][data-accent="graphite"] {
+  --accent: #b5bec9;
+  --accent-hover: #cdd3db;
+  --accent-active: #98a3b0;
+  --accent-on: #19212b;
+  --accent-soft: rgba(181, 190, 201, 0.16);
+  --accent-light: rgba(181, 190, 201, 0.28);
+  --accent-ring: rgba(181, 190, 201, 0.32);
+  --text-brand: #dadee4;
+  --badge-ver-bg: rgba(181, 190, 201, 0.16);
+  --badge-ver-text: #dadee4;
+  --brand-g1: #dadee4;
+  --brand-g2: #b5bec9;
+  --brand-g3: #98a3b0;
+  --lock-orb-1: rgba(181, 190, 201, 0.14);
+  --lock-orb-2: rgba(181, 190, 201, 0.07);
+  --selection: rgba(181, 190, 201, 0.3);
+  --toast-info: #56616d;
+}
+
+/* ---------- 别名槽位：不填 hex，只指向别的槽，所以各套主题不必各写一遍。
      放在主题块之后、同一条 :root 上，切换主题时自动跟着源头走。
 
      背景材质角色统一定义在 materials.css；这里保留描边、文字和状态别名。 ---------- */
 :root {
-  --sidebar-border: var(--border);
+  --sidebar-border: var(--border-navigation);
   --sidebar-active: var(--accent-soft);
   --sidebar-text: var(--text-secondary);
   --sidebar-text-active: var(--accent);
@@ -803,7 +1409,7 @@ body {
 
 #app { height: 100%; }
 
-/* 画布以 sunken 托住内容面，静态柔光与颗粒沿用锁屏的材质。
+/* 画布以 sunken 托住内容面，静态柔光沿用锁屏的材质。
    背景固定到视口，与工具栏、日期行对齐；内容滚动时光场不跟着移动。 */
 .app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; background: var(--bg-app); background-attachment: fixed; }
 .app-root.locked-bg { background: var(--bg-lock); }

@@ -6,8 +6,23 @@ use crate::db::BypassTarget;
 use crate::error::AppError;
 use crate::services::bypass_service::{self, ProbeReport};
 use crate::services::bypass_probe_job;
-use crate::services::netguard_service::{self, ApplyOutcome, PlannedRow};
+use crate::services::netguard_service::{self, ApplyOutcome, PlannedRow, RouteOverride};
 use crate::AppState;
+
+static MUTATING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+struct MutationGuard;
+impl Drop for MutationGuard {
+    fn drop(&mut self) { MUTATING.store(false, std::sync::atomic::Ordering::Release); }
+}
+
+/// The page can be closed during UAC. Serialize backend mutations independently
+/// of component state; cloned worker owners also survive command cancellation.
+fn mutation_guard() -> Result<std::sync::Arc<MutationGuard>, AppError> {
+    MUTATING.compare_exchange(false, true, std::sync::atomic::Ordering::Acquire, std::sync::atomic::Ordering::Relaxed)
+        .map_err(|_| AppError::Bypass("另一项网络直连操作正在进行，请等待完成后重试".into()))?;
+    Ok(std::sync::Arc::new(MutationGuard))
+}
 
 fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -92,6 +107,7 @@ pub fn bypass_cancel_probe(request_id: String) -> Result<(), AppError> {
 /// 回的是整份结论：前端刚探完就能看到判定，不用为写库再跑一次网络
 #[tauri::command]
 pub async fn bypass_save(state: State<'_, AppState>, input: String) -> Result<ProbeReport, AppError> {
+    let _operation = mutation_guard()?;
     // 保存只使用已探测的结果；过期后回到可取消的显式探测流程。
     let input = input.trim().to_string();
     let report = report_for_save(&input)?;
@@ -125,6 +141,7 @@ pub async fn bypass_recheck(
     id: String,
     request_id: Option<String>,
 ) -> Result<ProbeReport, AppError> {
+    let _operation = mutation_guard()?;
     let found = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
         db.list_bypass_targets()?
@@ -154,6 +171,7 @@ pub async fn bypass_edit(
     input: String,
     request_id: Option<String>,
 ) -> Result<ProbeReport, AppError> {
+    let _operation = mutation_guard()?;
     let found = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
         db.list_bypass_targets()?
@@ -182,6 +200,7 @@ pub async fn bypass_edit(
 
 #[tauri::command]
 pub fn bypass_delete(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    let _operation = mutation_guard()?;
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
     db.delete_bypass_target(&id)
 }
@@ -250,6 +269,7 @@ fn ensure_unchanged(db: &crate::db::Database, id: &str, input: &str) -> Result<(
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyPlan {
+    pub plan_key: String,
     pub rows: Vec<PlannedRow>,
     /// 可以进批次的条目数（按条目计，一条域名可能同时出 hosts 与路由两个动作）
     pub ready: usize,
@@ -259,22 +279,23 @@ pub struct ApplyPlan {
 /// 落盘计划：确认弹窗与批次要念的是同一份账，两处不许各算各的。
 /// allowCdn 是用户在弹窗里显式坚持要钉的 CDN 条目，回一次账就重算一次。
 #[tauri::command]
-pub fn bypass_plan(state: State<'_, AppState>, allow_cdn: Vec<String>) -> Result<ApplyPlan, AppError> {
+pub fn bypass_plan(state: State<'_, AppState>, allow_cdn: Vec<String>, route_overrides: Option<Vec<RouteOverride>>) -> Result<ApplyPlan, AppError> {
     let targets = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
         db.list_bypass_targets()?
     };
     let pending: Vec<BypassTarget> = targets.iter().filter(|t| needs_apply(t)).cloned().collect();
-    let (items, rows) = netguard_service::plan(&pending, &allow_cdn);
+    let (items, rows) = netguard_service::plan(&pending, &allow_cdn, &route_overrides.unwrap_or_default());
     let blocked = rows.iter().filter(|r| !r.blocked.is_empty()).map(|r| &r.id).collect::<std::collections::HashSet<_>>().len();
     let ready = items.iter().map(|i| i.id()).collect::<std::collections::HashSet<_>>().len();
-    Ok(ApplyPlan { rows, ready, blocked })
+    Ok(ApplyPlan { plan_key: netguard_service::plan_key(&items)?, rows, ready, blocked })
 }
 
 /// 一批落盘：一次 UAC，把待写入的 hosts 固定与持久路由一起写完。
 /// 阻塞在提权进程上，所以数据库锁只在前后各拿一次，等授权期间不占锁。
 #[tauri::command]
-pub async fn bypass_apply(state: State<'_, AppState>, allow_cdn: Vec<String>) -> Result<ApplyOutcome, AppError> {
+pub async fn bypass_apply(state: State<'_, AppState>, allow_cdn: Vec<String>, route_overrides: Option<Vec<RouteOverride>>, expected_plan_key: String) -> Result<ApplyOutcome, AppError> {
+    let operation = mutation_guard()?;
     let pending: Vec<BypassTarget> = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
         db.list_bypass_targets()?
@@ -293,8 +314,10 @@ pub async fn bypass_apply(state: State<'_, AppState>, allow_cdn: Vec<String>) ->
     }
     let batch = uuid::Uuid::new_v4().to_string();
     let pending_ids: Vec<String> = pending.iter().map(|t| t.id.clone()).collect();
+    let worker_operation = operation.clone();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
-        netguard_service::apply(&pending, &allow_cdn, &batch)
+        let _operation = worker_operation;
+        netguard_service::apply(&pending, &allow_cdn, &route_overrides.unwrap_or_default(), &batch, &expected_plan_key)
     })
     .await
     .map_err(|e| AppError::Bypass(format!("写入任务被中断：{e}")))??;
@@ -321,6 +344,7 @@ pub async fn bypass_revert(
     state: State<'_, AppState>,
     batch: String,
 ) -> Result<ApplyOutcome, AppError> {
+    let operation = mutation_guard()?;
     let batch = batch.trim().to_string();
     if batch.is_empty() {
         return Err(AppError::Bypass("没有可撤销的批次".to_string()));
@@ -334,7 +358,11 @@ pub async fn bypass_revert(
             .collect()
     };
     let revert_batch = batch.clone();
-    let outcome = tauri::async_runtime::spawn_blocking(move || netguard_service::revert(&revert_batch))
+    let worker_operation = operation.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        let _operation = worker_operation;
+        netguard_service::revert(&revert_batch)
+    })
         .await
         .map_err(|e| AppError::Bypass(format!("撤销任务被中断：{e}")))?;
     let outcome = match outcome {
@@ -377,6 +405,19 @@ fn state_after_apply(outcome: &ApplyOutcome, id: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mutation_lease_survives_navigation_and_a_cancelled_command_until_worker_finishes() {
+        let command = mutation_guard().unwrap();
+        assert!(mutation_guard().is_err());
+        let worker = command.clone();
+        drop(command);
+        assert!(mutation_guard().is_err(), "dropping the command must not unlock a running helper");
+        drop(worker);
+        let next = mutation_guard().unwrap();
+        drop(next);
+        assert!(mutation_guard().is_ok());
+    }
 
     #[test]
     fn saving_requires_a_fresh_report_and_never_starts_a_hidden_probe() {

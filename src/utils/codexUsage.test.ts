@@ -33,3 +33,22 @@ describe('本地自然日的用量窗口', () => {
     expect(hours.filter(hour => !hour.future).reduce((sum, hour) => sum + hour.totalTokens, 0)).toBe(120)
   })
 })
+
+describe('每日图表日期轴', () => {
+  const bucket = (key: string, totalTokens = 120) => ({ key, label:key, totalTokens, inputTokens:100, cachedInputTokens:80, outputTokens:20, requestCount:1 })
+  it('稀疏记录按自然日显示完整七天，缺失日不压缩时间', async () => {
+    const { usageDays } = await import('./codexUsage')
+    const rows = usageDays([bucket('2026-10-11'),bucket('2026-10-13')], 'week', new Date(2026,9,13))
+    expect(rows.map(row => row.key)).toEqual(['2026-10-07','2026-10-08','2026-10-09','2026-10-10','2026-10-11','2026-10-12','2026-10-13'])
+    expect(rows[5]).toMatchObject({totalTokens:0,recorded:false})
+    expect(rows.filter(row => row.recorded).map(row => row.totalTokens)).toEqual([120,120])
+  })
+  it('全部用量显示截至最后一条记录的连续30天，未来数据不入图', async () => {
+    const { usageDays } = await import('./codexUsage')
+    const rows = usageDays([bucket('2026-09-03'),bucket('2026-10-15')], 'all', new Date(2026,9,13))
+    expect(rows).toHaveLength(30)
+    expect(rows[29].key).toBe('2026-09-03')
+    expect(rows.reduce((sum,row)=>sum+row.totalTokens,0)).toBe(120)
+    expect(usageDays([], 'month',new Date())).toEqual([])
+  })
+})

@@ -4,6 +4,7 @@ import type { CodexUsageBucket } from '../../services/api/codex'
 import { loadUsage, usageBusy, usageError, usageRange, usageReport, usageUpdatedAt } from '../../services/codexState'
 import { localDayKey, usageWindowFrom } from '../../utils/codexUsage'
 import AppIcon from '../shared/AppIcon.vue'
+import CodexDailyUsageChart from './CodexDailyUsageChart.vue'
 import CodexTodayUsageChart from './CodexTodayUsageChart.vue'
 
 onMounted(() => {
@@ -29,7 +30,6 @@ onUnmounted(() => clearTimeout(dayTimer))
 const num = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 const days = computed(() => usageReport.value?.byDay.slice(-30) ?? [])
 const dailyRows = computed(() => [...days.value].reverse())
-const maxTotal = computed(() => days.value.reduce((max, d) => Math.max(max, d.totalTokens), 0))
 const models = computed(() => usageReport.value?.byModel ?? [])
 const totals = computed(() => usageReport.value?.totals ?? null)
 const scope = computed(() => ({ today: '今日用量', week: '近 7 天用量', month: '近 30 天用量', all: '全部用量' })[usageRange.value])
@@ -55,17 +55,6 @@ function pct(part: number, whole: number): number {
   return whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0
 }
 
-function barHeight(tokens: number): string {
-  return `${pct(tokens, maxTotal.value)}%`
-}
-
-function dayTitle(d: CodexUsageBucket): string {
-  return `${d.key} · 合计 ${num(d.totalTokens)} Token · 净输入 ${num(freshInput(d))} · 缓存 ${num(d.cachedInputTokens)} · 输出 ${num(d.outputTokens)} · ${num(d.requestCount)} 轮`
-}
-
-function showLabel(index: number, length: number): boolean {
-  return length <= 8 || index === 0 || index === length - 1 || (length - 1 - index) % 7 === 0
-}
 </script>
 
 <template>
@@ -114,28 +103,7 @@ function showLabel(index: number, length: number): boolean {
       <CodexTodayUsageChart v-if="usageRange === 'today' && usageReport" :report="usageReport" :updated-at="usageUpdatedAt ?? Date.now()" />
 
       <template v-else-if="days.length">
-        <section class="rcard usg-chart" aria-label="每日用量趋势">
-          <div class="usg-heading">
-            <h3>每日用量</h3>
-            <span v-if="usageRange === 'all'" class="usg-period">最近 30 个有记录的日期</span>
-          </div>
-          <div class="usg-bars" :data-days="days.length" :data-max="maxTotal">
-            <div v-for="(d, i) in days" :key="d.key" class="usg-col" :title="dayTitle(d)">
-              <div class="usg-stack">
-                <div class="usg-output" :style="{ height: barHeight(d.outputTokens) }"></div>
-                <div class="usg-cached" :style="{ height: barHeight(d.cachedInputTokens) }"></div>
-                <div class="usg-fresh" :style="{ height: barHeight(freshInput(d)) }"></div>
-              </div>
-              <span class="usg-x" :class="{ shown: showLabel(i, days.length) }">{{ d.key.slice(5) }}</span>
-            </div>
-          </div>
-          <div class="usg-legend">
-            <span class="usg-key"><i class="usg-swatch sw-fresh"></i>净输入</span>
-            <span class="usg-key"><i class="usg-swatch sw-cached"></i>缓存命中</span>
-            <span class="usg-key"><i class="usg-swatch sw-output"></i>输出</span>
-            <span class="usg-hint">柱高表示总 Token</span>
-          </div>
-        </section>
+        <CodexDailyUsageChart :buckets="usageReport!.byDay" :range="usageRange" :updated-at="usageUpdatedAt ?? Date.now()" />
 
         <section class="rcard usg-daily" aria-label="每日用量明细">
           <div class="usg-heading"><h3>每日明细</h3><span class="usg-period">有记录的日期 · 最近在前</span></div>
@@ -189,24 +157,6 @@ function showLabel(index: number, length: number): boolean {
 .usg-facts b { font-weight: 500; color: var(--text-secondary); }
 .usg-updated { margin-left: auto; }
 .usg-wait { display: flex; align-items: center; gap: var(--space-2); min-height: 64px; padding: 0 18px; font-size: var(--text-xs); color: var(--text-muted); }
-.usg-chart { padding: 14px 18px; }
-.usg-bars { display: flex; align-items: flex-end; gap: 4px; height: 132px; margin-top: 16px; }
-.usg-col { display: flex; flex: 1 1 0; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
-.usg-stack { display: flex; flex: 1 1 auto; flex-direction: column; justify-content: flex-end; width: 100%; max-width: 44px; }
-.usg-output, .usg-cached, .usg-fresh { width: 100%; }
-.usg-output { border-radius: 2px 2px 0 0; background: var(--text-muted); }
-.usg-cached { background: var(--accent-light); }
-.usg-fresh { border-radius: 0 0 2px 2px; background: var(--accent); }
-.usg-col:hover .usg-fresh { background: var(--accent-hover); }
-.usg-x { min-height: 18px; margin-top: 4px; font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--text-muted); visibility: hidden; }
-.usg-x.shown { visibility: visible; }
-.usg-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: 10px; font-size: var(--text-xs); color: var(--text-muted); }
-.usg-key { display: flex; align-items: center; gap: 5px; }
-.usg-hint { margin-left: auto; color: var(--text-faint); }
-.usg-swatch { width: 8px; height: 8px; border-radius: 2px; }
-.sw-fresh { background: var(--accent); }
-.sw-cached { background: var(--accent-light); }
-.sw-output { background: var(--text-muted); }
 .usg-daily, .usg-models { padding: 14px 18px 8px; }
 .usg-table-scroll { overflow: auto; max-height: 236px; margin-top: 10px; scrollbar-gutter: stable; }
 .usg-daily table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); white-space: nowrap; }

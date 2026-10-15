@@ -260,15 +260,24 @@ async function copyEmail(a: CodexAccount) {
   }
 }
 
-async function exportJson(ids: string[]) {
+function exportJson(ids: string[]) {
   if (!ids.length) return
-  try {
-    const json = await codexApi.exportJson(ids)
-    await navigator.clipboard.writeText(json)
-    toastStore.showToast(`已导出 ${ids.length} 条账号的 JSON 到剪贴板`)
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-  }
+  const selectedIds = [...ids]
+  confirmStore.showConfirm(
+    '导出账号凭据',
+    `将把 ${selectedIds.length} 条账号的完整 JSON 复制到剪贴板，其中可能包含登录令牌、API Key 和账号私密资料。能读取剪贴板的应用也可能获得这些凭据，请勿发送给他人。是否继续？`,
+    async () => {
+      if (!active) return
+      try {
+        const json = await codexApi.exportJson(selectedIds)
+        if (!active) return
+        await navigator.clipboard.writeText(json)
+        if (active) toastStore.showToast(`已导出 ${selectedIds.length} 条账号的 JSON 到剪贴板`)
+      } catch (e) {
+        if (active) toastStore.showToast(errText(e), 'error')
+      }
+    },
+  )
 }
 
 /** 详情刷新分两条路：OAuth 走订阅接口拿档位与到期，API Key 账号后端会直接拒订阅，只走 profile */

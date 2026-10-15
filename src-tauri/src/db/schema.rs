@@ -137,6 +137,21 @@ pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
         )?;
     }
 
+    // 迁移：归档。归档行不进「全部/置顶/收藏」，只在归档视图出现；
+    // archived_at 供归档页头显示「最近归档 N 天前」，取消归档时清空
+    let has_archived: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('notes') WHERE name='archived'",
+        [],
+        |r| r.get(0),
+    ).unwrap_or(0) > 0;
+
+    if !has_archived {
+        conn.execute_batch(
+            "ALTER TABLE notes ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE notes ADD COLUMN archived_at INTEGER;"
+        )?;
+    }
+
     // 迁移：直连清单记下粘贴原文。端口/路径/掩码都不在 host 列里，
     // 重探只按 host 走会把 http://host:9090/a 探成 https://host:443
     let has_bp_input: bool = conn.query_row(

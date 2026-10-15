@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { createDraftCipherKey, sealDraft, openDraft, type DraftCipherKey, type SealedDraft } from '../services/draftCipher'
 import { notesApi as api } from '../services/api/notes'
 import { useToastStore } from './toast'
 import { useConfirmStore } from './confirm'
@@ -8,7 +9,7 @@ import { collectAttachmentNames, ensureAttachmentBase, nameOf, normalizeAssetHtm
 import type { Note, Attachment, UpdateNoteInput } from '../types'
 import type { NoteDraft, NoteKeyStatus, NotePlain } from '../services/api/notes'
 
-export type NoteView = 'all' | 'pinned' | 'starred'
+export type NoteView = 'all' | 'pinned' | 'starred' | 'archived'
 export type NoteSort = 'new' | 'old' | 'updated'
 export type NoteSaveState = '' | 'saving' | 'saved'
 
@@ -83,17 +84,16 @@ export const useNotesStore = defineStore('notes', () => {
   let stageQueued = false
   let clearPendingOnLock = true
   let noteEpoch = 0
-  let fallbackKey: CryptoKey | null = null
-  let fallbackKeyPromise: Promise<CryptoKey> | null = null
-  const fallbackDrafts: { iv: ArrayBuffer; ciphertext: ArrayBuffer; recovered: Set<string> }[] = []
-  let fallbackComposer: { iv: ArrayBuffer; ciphertext: ArrayBuffer } | null = null
+  let fallbackKey: DraftCipherKey | null = null
+  let fallbackKeyPromise: Promise<DraftCipherKey> | null = null
+  const fallbackDrafts: (SealedDraft & { recovered: Set<string> })[] = []
+  let fallbackComposer: SealedDraft | null = null
 
-  const localKey = async (): Promise<CryptoKey> => {
+  const localKey = async (): Promise<DraftCipherKey> => {
     if (fallbackKey) return fallbackKey
     if (!fallbackKeyPromise) {
       const epoch = noteEpoch
-      fallbackKeyPromise = crypto.subtle.generateKey(
-        { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+      fallbackKeyPromise = createDraftCipherKey()
         .then(key => {
           if (epoch === noteEpoch) fallbackKey = key
           return key
@@ -108,12 +108,9 @@ export const useNotesStore = defineStore('notes', () => {
     const html = noteDraftHtml.value
     const key = await localKey()
     if (epoch !== noteEpoch) return
-    const iv = crypto.getRandomValues(new Uint8Array(12)).buffer as ArrayBuffer
-    const plaintext = new TextEncoder().encode(html)
-    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext)
-    plaintext.fill(0)
+    const sealed = await sealDraft(key, html)
     if (epoch !== noteEpoch) return
-    fallbackComposer = { iv, ciphertext }
+    fallbackComposer = sealed
   }
 
   const sealLocalDrafts = async (): Promise<void> => {
@@ -121,25 +118,35 @@ export const useNotesStore = defineStore('notes', () => {
     const drafts: NoteDraft[] = [...pendingSaves].map(([id, input]) => ({ id, input }))
     const key = await localKey()
     if (epoch !== noteEpoch) return
-    const iv = crypto.getRandomValues(new Uint8Array(12)).buffer as ArrayBuffer
-    const plaintext = new TextEncoder().encode(JSON.stringify(drafts))
-    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext)
-    plaintext.fill(0)
+    const sealed = await sealDraft(key, JSON.stringify(drafts))
     if (epoch !== noteEpoch) return
-    fallbackDrafts.push({ iv, ciphertext, recovered: new Set() })
+    fallbackDrafts.push({ ...sealed, recovered: new Set() })
+  }
+
+  const discardInvalidBatch = (sealed: typeof fallbackDrafts[number]) => {
+    const index = fallbackDrafts.indexOf(sealed)
+    if (index >= 0) fallbackDrafts.splice(index, 1)
+    toastStore.showToast('一份暂存草稿无法恢复，已丢弃无效草稿；其他小记不受影响', 'error')
   }
 
   const recoverLocalDrafts = async (): Promise<NoteDraft[]> => {
     if (!fallbackKey) return []
+    const epoch = noteEpoch
     const drafts: NoteDraft[] = []
     const seen = new Set<string>()
     for (const sealed of [...fallbackDrafts].reverse()) {
-      const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: sealed.iv }, fallbackKey, sealed.ciphertext)
-      for (const draft of JSON.parse(new TextDecoder().decode(plaintext)) as NoteDraft[]) {
-        if (!sealed.recovered.has(draft.id) && !seen.has(draft.id)) {
-          drafts.push(draft)
-          seen.add(draft.id)
+      try {
+        const plaintext = await openDraft(fallbackKey, sealed)
+        if (epoch !== noteEpoch) return []
+        for (const draft of JSON.parse(plaintext) as NoteDraft[]) {
+          if (!sealed.recovered.has(draft.id) && !seen.has(draft.id)) {
+            drafts.push(draft)
+            seen.add(draft.id)
+          }
         }
+      } catch {
+        if (epoch !== noteEpoch) return []
+        discardInvalidBatch(sealed)
       }
     }
     return drafts
@@ -178,7 +185,8 @@ export const useNotesStore = defineStore('notes', () => {
 
   const tagCounts = computed<[string, number][]>(() => {
     const counts = new Map<string, number>()
-    notes.value.forEach(n => {
+    // 归档条目不贡献标签计数：侧栏那串数字是「在库」的口径
+    notes.value.filter(n => !n.archived).forEach(n => {
       noteMeta(n.content_html).tags.forEach(t => counts.set(t, (counts.get(t) ?? 0) + 1))
     })
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -186,11 +194,24 @@ export const useNotesStore = defineStore('notes', () => {
 
   const allTags = computed(() => tagCounts.value.map(([tag]) => tag))
 
+  const archivedNotes = computed(() => notes.value.filter(n => n.archived))
+
   const viewCounts = computed<Record<NoteView, number>>(() => ({
-    all: notes.value.length,
-    pinned: notes.value.filter(n => n.pinned).length,
-    starred: notes.value.filter(n => n.starred).length,
+    all: notes.value.filter(n => !n.archived).length,
+    pinned: notes.value.filter(n => n.pinned && !n.archived).length,
+    starred: notes.value.filter(n => n.starred && !n.archived).length,
+    archived: archivedNotes.value.length,
   }))
+
+  /** 归档页头一句话：条数 + 最近一次归档距今多久 */
+  const archiveSummary = computed(() => {
+    const latest = archivedNotes.value.reduce((m, n) => Math.max(m, n.archived_at ?? 0), 0)
+    if (!latest) return null
+    const days = Math.floor((Date.now() - latest) / 86400000)
+    if (days <= 0) return '最近归档在今天'
+    if (days === 1) return '最近归档在昨天'
+    return `最近归档 ${days} 天前`
+  })
 
   const hasActiveFilters = computed(
     () => !!noteSearchKeyword.value || noteView.value !== 'all' || activeTags.value.size > 0,
@@ -205,8 +226,10 @@ export const useNotesStore = defineStore('notes', () => {
         n.title.toLowerCase().includes(kw) || noteMeta(n.content_html).text.toLowerCase().includes(kw))
     }
 
-    if (noteView.value === 'pinned') result = result.filter(n => n.pinned)
-    else if (noteView.value === 'starred') result = result.filter(n => n.starred)
+    if (noteView.value === 'archived') result = result.filter(n => n.archived)
+    else if (noteView.value === 'pinned') result = result.filter(n => n.pinned && !n.archived)
+    else if (noteView.value === 'starred') result = result.filter(n => n.starred && !n.archived)
+    else result = result.filter(n => !n.archived)
 
     if (activeTags.value.size > 0) {
       result = result.filter(n => noteMeta(n.content_html).tags.some(t => activeTags.value.has(t)))
@@ -453,17 +476,23 @@ export const useNotesStore = defineStore('notes', () => {
   const recoverDrafts = async (): Promise<void> => {
     const epoch = noteEpoch
     if (fallbackComposer && fallbackKey && !noteDraftHtml.value) {
-      const plaintext = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: fallbackComposer.iv }, fallbackKey, fallbackComposer.ciphertext)
-      if (epoch !== noteEpoch) return
-      noteDraftHtml.value = new TextDecoder().decode(plaintext)
-      fallbackComposer = null
+      try {
+        const plaintext = await openDraft(fallbackKey, fallbackComposer)
+        if (epoch !== noteEpoch) return
+        noteDraftHtml.value = plaintext
+        fallbackComposer = null
+      } catch {
+        if (epoch !== noteEpoch) return
+        fallbackComposer = null
+        toastStore.showToast('未发布草稿无法恢复，已丢弃无效草稿；其他小记不受影响', 'error')
+      }
     }
     const localDrafts = await recoverLocalDrafts()
     if (epoch !== noteEpoch) return
     const localIds = new Set(localDrafts.map(d => d.id))
     let backendDrafts: NoteDraft[] = []
     try { backendDrafts = await api.recoverDrafts() } catch (e: any) {
+      if (epoch !== noteEpoch) return
       toastStore.showToast('读取加密暂存草稿失败：' + (e.message ?? e), 'error')
     }
     if (epoch !== noteEpoch) return
@@ -490,10 +519,16 @@ export const useNotesStore = defineStore('notes', () => {
     }
     for (let i = fallbackDrafts.length - 1; i >= 0; i--) {
       // Keep encrypted batches for notes that still need their separate note key.
-      const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fallbackDrafts[i].iv }, fallbackKey!, fallbackDrafts[i].ciphertext)
-      if (epoch !== noteEpoch) return
-      const ids = (JSON.parse(new TextDecoder().decode(plaintext)) as NoteDraft[]).map(d => d.id)
-      if (ids.every(id => fallbackDrafts[i].recovered.has(id))) fallbackDrafts.splice(i, 1)
+      const sealed = fallbackDrafts[i]
+      try {
+        const plaintext = await openDraft(fallbackKey!, sealed)
+        if (epoch !== noteEpoch) return
+        const ids = (JSON.parse(plaintext) as NoteDraft[]).map(d => d.id)
+        if (ids.every(id => sealed.recovered.has(id))) fallbackDrafts.splice(i, 1)
+      } catch {
+        if (epoch !== noteEpoch) return
+        discardInvalidBatch(sealed)
+      }
     }
     if (!fallbackDrafts.length && !fallbackComposer) { fallbackKey = null; fallbackKeyPromise = null }
     if (recovered) {
@@ -550,6 +585,59 @@ export const useNotesStore = defineStore('notes', () => {
     } catch (e: any) {
       toastStore.showToast('操作失败：' + e.message, 'error')
     }
+  }
+
+  /** 归档/取消归档：归档行只是换个视图，属性（置顶/收藏/加密）一律不动 */
+  const setArchived = async (note: Note, archived: boolean) => {
+    try {
+      await api.setNoteArchived(note.id, archived)
+      const idx = notes.value.findIndex(n => n.id === note.id)
+      if (idx >= 0) {
+        notes.value[idx] = {
+          ...notes.value[idx],
+          archived,
+          archived_at: archived ? Date.now() : null,
+        }
+      }
+      toastStore.showToast(archived ? '已归档，可在侧栏「归档」里找回' : '已取消归档，回到「全部」')
+    } catch (e: any) {
+      toastStore.showToast('操作失败：' + e.message, 'error')
+    }
+  }
+
+  const batchSetArchived = async (archived: boolean) => {
+    const ids = Array.from(selectedNoteIds.value)
+      .filter(id => findNote(id)?.archived !== archived)
+    if (!ids.length) {
+      toastStore.showToast('没有需要变更的小记')
+      return
+    }
+    try {
+      await api.batchSetArchived(ids, archived)
+      const now = Date.now()
+      notes.value = notes.value.map(n =>
+        ids.includes(n.id) ? { ...n, archived, archived_at: archived ? now : null } : n)
+      selectedNoteIds.value = new Set()
+      toastStore.showToast(`已${archived ? '归档' : '取消归档'} ${ids.length} 条小记`)
+    } catch (e: any) {
+      toastStore.showToast('操作失败：' + e.message, 'error')
+    }
+  }
+
+  /** 归档视图头部的一次性恢复：把当前筛出来的（含关键词/标签过滤）全部放回库里 */
+  const unarchiveAllFiltered = async () => {
+    const ids = filteredNotes.value.map(n => n.id)
+    if (!ids.length) return
+    confirmStore.showConfirm('全部取消归档', `${ids.length} 条小记将回到「全部」列表。`, async () => {
+      try {
+        await api.batchSetArchived(ids, false)
+        notes.value = notes.value.map(n =>
+          ids.includes(n.id) ? { ...n, archived: false, archived_at: null } : n)
+        toastStore.showToast(`已取消归档 ${ids.length} 条小记`)
+      } catch (e: any) {
+        toastStore.showToast('操作失败：' + e.message, 'error')
+      }
+    })
   }
 
   /** 口令到手：一次带回的明文全部填进会话，列表跟着换显示 */
@@ -858,7 +946,7 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
-  const uploadAttachment = async (noteId: string, filePath: string) => {
+  const uploadAttachment = async (noteId: string, filePath: string | File) => {
     try {
       const attachment = await api.uploadAttachment(noteId, filePath)
       noteAttachments.value[noteId] = [attachment, ...(noteAttachments.value[noteId] ?? [])]
@@ -871,7 +959,7 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   /** 草稿阶段用：文件收进附件目录但不入库，发布时按正文补记录 */
-  const stageImage = async (filePath: string): Promise<Attachment | null> => {
+  const stageImage = async (filePath: string | File): Promise<Attachment | null> => {
     try {
       return await api.stageAttachment(filePath)
     } catch (e: any) {
@@ -897,9 +985,9 @@ export const useNotesStore = defineStore('notes', () => {
     isBatchMode, hasNoteSelection, notePickMode, selectedNoteIds,
     noteAttachments, noteSaveState,
     notePlains, isUnlocked, noteKey,
-    tagCounts, allTags, viewCounts, filteredNotes, groupedNotes,
+    tagCounts, allTags, archivedNotes, archiveSummary, viewCounts, filteredNotes, groupedNotes,
     fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, prepareNoteLock, forceSealDrafts, recoverDrafts, clearFilters, toggleTagFilter,
-    doDeleteNote, togglePin, toggleStar,
+    doDeleteNote, togglePin, toggleStar, setArchived, batchSetArchived, unarchiveAllFiltered,
     setupNoteKey, unlockNoteDomain, recoverNoteDomain, relockNoteDomain, changeNoteKey, refreshNoteKey,
     lockNote, unlockNote, relockNote, removeNoteLock, clearUnlockedNotes, discardDraftsForRestore, dropUnsealedDrafts,
     toggleSelectNote, selectAllNotes, clearSelection, toggleNotePick, exitNoteBatch,

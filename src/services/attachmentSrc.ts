@@ -1,4 +1,6 @@
-import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { convertFileSrc } from '@tauri-apps/api/core'
+import { invoke } from './transport'
+import { isWebRuntime } from './runtime'
 
 /**
  * 库里只存**相对**形态：
@@ -31,11 +33,13 @@ export const srcOf = (stored: string): string => `${SRC_DIR}/${nameOf(stored)}`
 /** 显示用 URL：由本机目录现拼 */
 export const attachmentSrc = (stored: string): string => {
   const name = nameOf(stored)
+  if (isWebRuntime()) return `/api/attachments/${encodeURIComponent(name)}`
   return baseDir ? convertFileSrc(`${baseDir}/${name}`) : srcOf(name)
 }
 
 const isOurAssetSrc = (src: string) =>
   src.startsWith(`${SRC_DIR}/`) ||
+  src.startsWith('/api/attachments/') ||
   src.startsWith('asset://') ||
   src.includes('asset.localhost') ||
   src.startsWith('desko-asset://')

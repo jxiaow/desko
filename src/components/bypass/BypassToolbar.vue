@@ -48,7 +48,7 @@ const probeLabel = (kind: ProbeJob['kind']) => ({ probe: '正在探测', row: '�
         <AppIcon name="x" :size="13" />{{ activeProbe.cancelling ? '正在取消' : '取消探测' }}
       </button>
     </div>
-    <p v-else class="probe-help">探测只读取网络状态，不会修改系统配置。</p>
+    <p v-else class="probe-help">探测不修改系统配置。支持内网主机名和 IPv4；URL 可指定端口，暂不支持 IPv6。</p>
   </section>
 </template>
 

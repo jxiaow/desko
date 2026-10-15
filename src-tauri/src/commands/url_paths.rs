@@ -2,7 +2,7 @@ use crate::db::{UrlPath, CreateUrlPathInput, UpdateUrlPathInput};
 use crate::error::AppError;
 use crate::services;
 use crate::AppState;
-use tauri::State;
+use crate::command_state::CommandState as State;
 
 #[tauri::command]
 pub fn list_url_paths(state: State<AppState>, entry_id: String) -> Result<Vec<UrlPath>, AppError> {

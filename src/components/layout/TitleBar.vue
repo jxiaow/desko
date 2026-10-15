@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { isWebRuntime } from '../../services/runtime'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { releaseHover, suppressHover } from '../../utils/hoverGuard'
 import AppIcon from '../shared/AppIcon.vue'
@@ -19,14 +20,15 @@ const emit = defineEmits<{
   showSidebar: []
 }>()
 
-const appWindow = getCurrentWindow()
+const webRuntime = isWebRuntime()
+const appWindow = webRuntime ? null : getCurrentWindow()
 const isMaximized = ref(false)
 const route = useRoute()
 const pageHead = usePageHeadStore()
 const crumb = computed(() => pageHead.label || (route.meta.title as string) || 'Desko')
 
 const updateMaximizedState = async () => {
-  isMaximized.value = await appWindow.isMaximized()
+  if (appWindow) isMaximized.value = await appWindow.isMaximized()
 }
 
 // 先盖遮罩并等两帧，让 WebView 基于遮罩重算 hover，再真正隐藏窗口，
@@ -42,28 +44,30 @@ const withHoverGuard = (action: () => void) => {
 }
 
 const minimize = () => {
-  withHoverGuard(() => appWindow.minimize())
+  if (appWindow) withHoverGuard(() => { void appWindow.minimize() })
 }
 
 const toggleMaximize = async () => {
+  if (!appWindow) return
   await appWindow.toggleMaximize()
   await updateMaximizedState()
 }
 
 const close = () => {
-  withHoverGuard(() => appWindow.close())
+  if (appWindow) withHoverGuard(() => { void appWindow.close() })
 }
 
 // 品牌区没有交互控件，自己接管拖拽，与空白拖拽区行为一致
 const startDrag = (e: MouseEvent) => {
   if ((e.target as HTMLElement).closest('button')) return
-  appWindow.startDragging()
+  void appWindow?.startDragging()
 }
 
 let unlisten: (() => void) | null = null
 let unlistenFocus: (() => void) | null = null
 
 onMounted(async () => {
+  if (!appWindow) return
   await updateMaximizedState()
   unlisten = await appWindow.onResized(async () => {
     await updateMaximizedState()
@@ -104,21 +108,21 @@ onUnmounted(() => {
 
     <div class="titlebar-buttons">
       <template v-if="!isLocked">
-        <BackupBadge />
+        <BackupBadge v-if="!webRuntime" />
         <button  class="titlebar-btn tb-util" @click="emit('openSettings')" title="设置">
           <AppIcon name="gear" :size="16" />
         </button>
-        <button  class="titlebar-btn tb-util" @click="emit('lock')" title="锁定">
+        <button  class="titlebar-btn tb-util" @click="emit('lock')" :title="webRuntime ? '退出浏览器访问' : '锁定'">
           <AppIcon name="lock" :size="16" />
         </button>
-        <div class="titlebar-divider"></div>
+        <div v-if="!webRuntime" class="titlebar-divider"></div>
       </template>
-      <button  class="titlebar-btn" @click="minimize" title="最小化">
+      <button v-if="!webRuntime" class="titlebar-btn" @click="minimize" title="最小化">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <rect x="2" y="5.5" width="8" height="1" fill="currentColor"/>
         </svg>
       </button>
-      <button  class="titlebar-btn" @click="toggleMaximize" :title="isMaximized ? '还原' : '最大化'">
+      <button v-if="!webRuntime" class="titlebar-btn" @click="toggleMaximize" :title="isMaximized ? '还原' : '最大化'">
         <svg v-if="!isMaximized" width="12" height="12" viewBox="0 0 12 12">
           <rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
@@ -127,7 +131,7 @@ onUnmounted(() => {
           <rect x="2" y="4.2" width="6" height="6" rx="1.2" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
       </button>
-      <button  class="titlebar-btn titlebar-btn-close" @click="close" title="关闭">
+      <button v-if="!webRuntime" class="titlebar-btn titlebar-btn-close" @click="close" title="关闭">
         <!-- 三钮同一档：同 2–10 光学盒、同 1px 实笔（原先关闭是 1.2px 的 10×10，比另两颗又粗又大） -->
         <svg width="12" height="12" viewBox="0 0 12 12">
           <path d="M2 2 10 10M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '../transport'
 
 export const settingsApi = {
   getSetting: (key: string): Promise<string> =>
