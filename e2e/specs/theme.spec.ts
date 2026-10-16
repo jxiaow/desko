@@ -11,8 +11,8 @@ import { lab } from '../../scripts/lib/theme-tokens.mjs'
 const BASES = {
   paper: { name: '纸', pol: 'light', bg: 'rgb(253, 252, 251)', text: 'rgb(36, 35, 33)' },
   snow:  { name: '雪', pol: 'light', bg: 'rgb(255, 255, 255)', text: 'rgb(32, 36, 43)' },
-  apricot: { name: '杏', pol: 'light', bg: 'rgb(251, 243, 233)', text: 'rgb(54, 43, 35)' },
-  seafoam: { name: '汐', pol: 'light', bg: 'rgb(240, 248, 244)', text: 'rgb(37, 59, 52)' },
+  linen: { name: '绢', pol: 'light', bg: 'rgb(250, 248, 244)', text: 'rgb(48, 44, 37)' },
+  mist: { name: '雾', pol: 'light', bg: 'rgb(247, 250, 254)', text: 'rgb(38, 50, 68)' },
   ink:   { name: '墨', pol: 'dark',  bg: 'rgb(27, 28, 31)',    text: 'rgb(241, 242, 244)' },
   slate: { name: '岩', pol: 'dark',  bg: 'rgb(37, 41, 50)',    text: 'rgb(237, 240, 246)' },
   midnight: { name: '夜', pol: 'dark', bg: 'rgb(52, 55, 63)', text: 'rgb(215, 219, 228)' },
@@ -189,7 +189,7 @@ test.describe('主题', () => {
   }
 
   test('刷新后仍是选的那组', async ({ page }) => {
-    for (const [theme, accent] of [['ink', 'plum'], ['apricot', 'amber'], ['seafoam', 'graphite'], ['midnight', 'teal'], ['moss', 'forest']] as const) {
+    for (const [theme, accent] of [['ink', 'plum'], ['linen', 'amber'], ['mist', 'graphite'], ['midnight', 'teal'], ['moss', 'forest']] as const) {
       await bootUnlocked(page, { settings: { theme, accent } })
       const dialog = await openSettings(page)
       await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText(BASES[theme].name)
@@ -224,12 +224,12 @@ test.describe('主题', () => {
       slate: { bg: 'rgb(238, 240, 245)', color: 'rgb(47, 125, 82)' },
       paper: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
       snow:  { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },
-      apricot: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
-      seafoam: { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },
+      linen: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
+      mist: { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },
       midnight: { bg: 'rgb(238, 240, 245)', color: 'rgb(47, 125, 82)' },
       moss: { bg: 'rgb(239, 237, 232)', color: 'rgb(47, 125, 82)' },
     }
-    const order: BaseId[] = ['ink', 'slate', 'paper', 'snow', 'apricot', 'seafoam', 'midnight', 'moss']
+    const order: BaseId[] = ['ink', 'slate', 'paper', 'snow', 'linen', 'mist', 'midnight', 'moss']
     for (const [i, base] of order.entries()) {
       await settingsTab(dialog, 'appearance')
       await dialog.locator('.theme-chip', { hasText: BASES[base].name }).click()

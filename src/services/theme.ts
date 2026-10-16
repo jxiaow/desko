@@ -44,8 +44,8 @@ const LEGACY_THEME: Record<string, ThemeId> = {
   'swiss-monochrome': 'paper',
   /* 暖砂在 2026-10 冷白轮被雪取代，存着砂的选择就近落到雪 */
   sand: 'snow',
-  linen: 'apricot',
-  mist: 'seafoam',
+  apricot: 'linen',
+  seafoam: 'mist',
   dark: 'ink',
   'dark-carbon': 'ink',
   'cyber-hacker': 'ink',
@@ -66,8 +66,8 @@ const LEGACY_ACCENT: Record<string, AccentId> = {
 export const THEMES = [
   { id: 'paper', name: '纸' },
   { id: 'snow', name: '雪' },
-  { id: 'apricot', name: '杏' },
-  { id: 'seafoam', name: '汐' },
+  { id: 'linen', name: '绢' },
+  { id: 'mist', name: '雾' },
   { id: 'ink', name: '墨' },
   { id: 'slate', name: '岩' },
   { id: 'midnight', name: '夜' },
@@ -78,8 +78,8 @@ export const THEMES = [
 export const POLARITY: Record<ThemeId, PolarityId> = {
   paper: 'light',
   snow: 'light',
-  apricot: 'light',
-  seafoam: 'light',
+  linen: 'light',
+  mist: 'light',
   ink: 'dark',
   slate: 'dark',
   midnight: 'dark',

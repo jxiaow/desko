@@ -119,7 +119,7 @@
      v2 起分类色只服务内容侧（头像/徽章/色相钉），界面层只吃灰阶+accent。
 
    :where(:root) 提供 paper+墨蓝 的缺省值。
-   八套底色：纸 / 雪 / 杏 / 汐 / 墨 / 岩 / 夜 / 苔，背景氛围独立开关。
+   八套底色：纸 / 雪 / 绢 / 雾 / 墨 / 岩 / 夜 / 苔，背景氛围独立开关。
    每套交出完全相同的 96 槽；accent 十档只按极性覆盖
    accent 族 17 槽，所以新增底色不必再配一轮 accent。
    ═══════════════════════════════════════════════════════════════════ */
@@ -618,8 +618,8 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- 杏：暖杏画布与陶砂侧栏，正文使用低彩度乳白。 ---------- */
-[data-theme="apricot"] {
+/* ---------- 绢：明亮亚麻白，保留轻微暖调，减少米灰覆盖。 ---------- */
+[data-theme="linen"] {
   --accent: #2856c7;
   --accent-hover: #234bad;
   --accent-active: #1e4093;
@@ -628,32 +628,32 @@
   --accent-light: #c3d0ef;
   --accent-ring: rgba(40, 86, 199, 0.2);
   --text-brand: #234bad;
-  --bg: #fbf3e9;
-  --panel-bg: #fffcf8;
-  --chrome-bg: rgba(251, 243, 233, 0.92);
-  --sunken: #f2e4d6;
-  --fill: #e9d5c0;
-  --hover: #f7ecdf;
-  --active: #e4ceb6;
+  --bg: #faf8f4;
+  --panel-bg: #fffefa;
+  --chrome-bg: rgba(250, 248, 244, 0.92);
+  --sunken: #f4f1eb;
+  --fill: #eae6dd;
+  --hover: #f4f0e8;
+  --active: #e9e3d8;
   --overlay: rgba(29, 28, 26, 0.42);
-  --text: #362b23;
-  --text-secondary: #5d4c3e;
-  --text-muted: #75604e;
-  --text-faint: #79634f;
-  --border: #e6d5c3;
-  --border-strong: #ceb69c;
-  --border-subtle: #f2e8dc;
-  --border-hover: #bda083;
-  --text-url: #5d4c3e;
-  --badge-cat-bg: #f1e2d0;
-  --badge-cat-border: #e6d5c3;
-  --badge-cat-text: #5d4c3e;
+  --text: #302c25;
+  --text-secondary: #575046;
+  --text-muted: #70685c;
+  --text-faint: #776d5f;
+  --border: #e6e0d5;
+  --border-strong: #d1c6b6;
+  --border-subtle: #efebe3;
+  --border-hover: #c4b7a4;
+  --text-url: #575046;
+  --badge-cat-bg: #eee9df;
+  --badge-cat-border: #e6e0d5;
+  --badge-cat-text: #575046;
   --badge-ver-bg: #dde4f6;
   --badge-ver-text: #234bad;
   --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
-  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #ceb69c;
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d1c6b6;
   --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
   --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -667,18 +667,18 @@
   --success-soft: #ecf3ee;
   --warning: #815924;
   --warning-soft: #f6efdf;
-  --sidebar-bg: #ecd8c2;
-  --sidebar-hover: #e2c8ac;
+  --sidebar-bg: #eee9df;
+  --sidebar-hover: #e4ddcf;
   --brand-g1: #6485d7;
   --brand-g2: #2856c7;
   --brand-g3: #1e4093;
   --brand-knob: #ffffff;
-  --lock-wash-a: #fbf3e9;
-  --lock-wash-b: #f2e4d6;
+  --lock-wash-a: #faf8f4;
+  --lock-wash-b: #f4f1eb;
   --lock-orb-1: rgba(40, 86, 199, 0.07);
   --lock-orb-2: rgba(40, 86, 199, 0.045);
-  --frost-bg: rgba(255, 252, 248, 0.94);
-  --frost-border: #e6d5c3;
+  --frost-bg: rgba(255, 254, 250, 0.94);
+  --frost-border: #e6e0d5;
   --tip-bg: #26241f;
   --tip-fg: #f2f0ea;
   --toast-bg: #26241f;
@@ -718,8 +718,8 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- 汐：浅青绿画布与海盐绿侧栏，正文使用低彩度瓷白。 ---------- */
-[data-theme="seafoam"] {
+/* ---------- 雾：通透冰白，冷调留在画布，正文仍用白色内容面。 ---------- */
+[data-theme="mist"] {
   --accent: #2856c7;
   --accent-hover: #234bad;
   --accent-active: #1e4093;
@@ -728,32 +728,32 @@
   --accent-light: #c3d0ef;
   --accent-ring: rgba(40, 86, 199, 0.2);
   --text-brand: #234bad;
-  --bg: #f0f8f4;
-  --panel-bg: #f8fcfa;
-  --chrome-bg: rgba(240, 248, 244, 0.92);
-  --sunken: #e0ede6;
-  --fill: #cfe1d7;
-  --hover: #eaf4ee;
-  --active: #c5dbce;
+  --bg: #f7fafe;
+  --panel-bg: #ffffff;
+  --chrome-bg: rgba(247, 250, 254, 0.92);
+  --sunken: #eff4fa;
+  --fill: #e4ebf4;
+  --hover: #edf3fa;
+  --active: #e0e9f4;
   --overlay: rgba(18, 19, 22, 0.42);
-  --text: #253b34;
-  --text-secondary: #425d52;
-  --text-muted: #52695e;
-  --text-faint: #566c60;
-  --border: #cedfd5;
-  --border-strong: #adc9ba;
-  --border-subtle: #e5eee9;
-  --border-hover: #97b7a5;
-  --text-url: #425d52;
-  --badge-cat-bg: #deece3;
-  --badge-cat-border: #cedfd5;
-  --badge-cat-text: #425d52;
+  --text: #263244;
+  --text-secondary: #4c5b70;
+  --text-muted: #617188;
+  --text-faint: #697990;
+  --border: #dce5ef;
+  --border-strong: #c2cfdf;
+  --border-subtle: #eaf0f7;
+  --border-hover: #b2c3d9;
+  --text-url: #4c5b70;
+  --badge-cat-bg: #e9f0f8;
+  --badge-cat-border: #dce5ef;
+  --badge-cat-text: #4c5b70;
   --badge-ver-bg: #dde4f6;
   --badge-ver-text: #234bad;
   --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(18, 19, 22, 0.05);
-  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #adc9ba;
+  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #c2cfdf;
   --shadow-md: 0 6px 16px -6px rgba(18, 19, 22, 0.10);
   --shadow-lg: 0 12px 28px -8px rgba(18, 19, 22, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -767,18 +767,18 @@
   --success-soft: #eaf4ee;
   --warning: #815619;
   --warning-soft: #f9f0df;
-  --sidebar-bg: #d3e5da;
-  --sidebar-hover: #c2dccc;
+  --sidebar-bg: #e9f0f8;
+  --sidebar-hover: #dde7f3;
   --brand-g1: #6485d7;
   --brand-g2: #2856c7;
   --brand-g3: #1e4093;
   --brand-knob: #ffffff;
-  --lock-wash-a: #f0f8f4;
-  --lock-wash-b: #e0ede6;
+  --lock-wash-a: #f7fafe;
+  --lock-wash-b: #eff4fa;
   --lock-orb-1: rgba(40, 86, 199, 0.07);
   --lock-orb-2: rgba(40, 86, 199, 0.045);
-  --frost-bg: rgba(248, 252, 250, 0.94);
-  --frost-border: #cedfd5;
+  --frost-bg: rgba(255, 255, 255, 0.94);
+  --frost-border: #dce5ef;
   --tip-bg: #1f2124;
   --tip-fg: #f4f5f6;
   --toast-bg: #1f2124;
