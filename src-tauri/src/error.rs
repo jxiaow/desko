@@ -5,6 +5,8 @@ use thiserror::Error;
 pub enum AppError {
     #[error("Database error: {0}")]
     Database(String),
+    #[error("Setting error: {0}")]
+    Setting(String),
     
     #[error("Crypto error: {0}")]
     Crypto(String),
@@ -56,6 +58,7 @@ impl AppError {
     pub fn user_message(&self) -> String {
         match self {
             AppError::Database(_) => "操作失败".to_string(),
+            AppError::Setting(msg) => msg.clone(),
             AppError::Crypto(_) => "加密操作失败".to_string(),
             AppError::NotInitialized => "应用未初始化".to_string(),
             AppError::AlreadyInitialized => "应用已初始化".to_string(),

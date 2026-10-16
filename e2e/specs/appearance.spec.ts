@@ -118,7 +118,7 @@ test.describe('统一外观状态', () => {
     const preview = dialog.locator('.theme-prev[data-theme="slate"]')
     await expect(preview.locator('.tp-row').first()).toHaveCSS('background-color', 'rgb(13, 29, 47)')
     await expect(preview.locator('.tp-rail-dot')).toHaveCSS('background-color', 'rgb(121, 61, 97)')
-    await expect(dialog.locator('.theme-prev[data-theme="paper"] .tp-row').first()).toHaveCSS('background-color', 'rgb(252, 250, 247)')
+    await expect(dialog.locator('.theme-prev[data-theme="paper"] .tp-row').first()).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper')
 
     await dialog.locator('.theme-chip', { hasText: '岩' }).click()

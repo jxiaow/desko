@@ -7,6 +7,16 @@ vi.mock('../api/settings', () => ({ settingsApi: { getSetting: vi.fn(), setSetti
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => { document.documentElement.removeAttribute('data-theme') })
 
+it.each(['', 'unknown'])('未保存或无效的氛围值 %s 使用纯色默认外观', async raw => {
+  vi.mocked(settingsApi.getSetting).mockImplementation(async key => key === 'background_atmosphere' ? raw : '')
+
+  await initializeAppearance()
+
+  expect(appearance).toEqual({ theme: 'paper', accent: 'ink', backgroundAtmosphere: false })
+  expect(document.documentElement.dataset.atmosphere).toBe('off')
+  expect(settingsApi.setSetting).not.toHaveBeenCalled()
+})
+
 it.each([
   ['warmgray', 'paper', 'light'],
   ['purewhite', 'snow', 'light'],

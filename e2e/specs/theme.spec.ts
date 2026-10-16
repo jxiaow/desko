@@ -9,11 +9,11 @@ import { lab } from '../../scripts/lib/theme-tokens.mjs'
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const BASES = {
-  paper: { name: '纸', pol: 'light', bg: 'rgb(248, 245, 240)', text: 'rgb(51, 50, 48)' },
-  snow:  { name: '雪', pol: 'light', bg: 'rgb(241, 242, 243)', text: 'rgb(26, 27, 29)' },
-  linen: { name: '绢', pol: 'light', bg: 'rgb(235, 231, 224)', text: 'rgb(52, 50, 46)' },
-  mist: { name: '雾', pol: 'light', bg: 'rgb(229, 230, 235)', text: 'rgb(48, 52, 61)' },
-  ink:   { name: '墨', pol: 'dark',  bg: 'rgb(29, 28, 26)',    text: 'rgb(230, 228, 222)' },
+  paper: { name: '纸', pol: 'light', bg: 'rgb(253, 252, 251)', text: 'rgb(36, 35, 33)' },
+  snow:  { name: '雪', pol: 'light', bg: 'rgb(255, 255, 255)', text: 'rgb(32, 36, 43)' },
+  linen: { name: '绢', pol: 'light', bg: 'rgb(250, 248, 244)', text: 'rgb(48, 44, 37)' },
+  mist: { name: '雾', pol: 'light', bg: 'rgb(247, 250, 254)', text: 'rgb(38, 50, 68)' },
+  ink:   { name: '墨', pol: 'dark',  bg: 'rgb(27, 28, 31)',    text: 'rgb(241, 242, 244)' },
   slate: { name: '岩', pol: 'dark',  bg: 'rgb(37, 41, 50)',    text: 'rgb(237, 240, 246)' },
   midnight: { name: '夜', pol: 'dark', bg: 'rgb(52, 55, 63)', text: 'rgb(215, 219, 228)' },
   moss: { name: '苔', pol: 'dark', bg: 'rgb(40, 43, 37)', text: 'rgb(216, 218, 207)' },
@@ -49,7 +49,7 @@ const readAnchors = (page: import('@playwright/test').Page) =>
   })
 
 test.describe('主题', () => {
-  test('没存过外观时用默认：纸底 × 群青', async ({ page }) => {
+  test('没存过外观时用默认：纸底 × 群青，背景保持纯色', async ({ page }) => {
     await bootUnlocked(page)
     const got = await readAnchors(page)
     expect(got.theme).toBe('paper')
@@ -58,6 +58,10 @@ test.describe('主题', () => {
     expect(got.text).toBe(BASES.paper.text)
     expect(got.base).toBe('light')
     expect(got.accent).toBe(accentOf('paper', 'ink'))
+    await expect(page.locator('html')).toHaveAttribute('data-atmosphere', 'off')
+    await expect(page.locator('.app-root')).toHaveCSS('background-image', 'none')
+    const dialog = await openSettings(page)
+    await expect(dialog.getByRole('switch', { name: '背景氛围' })).not.toBeChecked()
   })
 
   test('已存的外观在首屏之前就挂上，不走默认色', async ({ page }) => {
@@ -168,7 +172,7 @@ test.describe('主题', () => {
           const miniatureNav = getComputedStyle(preview.querySelector('.tp-rail')!)
           return { app: app.backgroundImage, preview: miniature.backgroundImage, nav: nav.backgroundColor, previewNav: miniatureNav.backgroundColor, swatch: getComputedStyle(preview.querySelector('.tp-row-tag')!).backgroundColor }
         }, base)
-        // 预览独立缩放、定位并省略噪点；光场各色标的颜色与强度须与工作区一致。
+        // 预览独立缩放、定位；光场各色标的颜色与强度须与工作区一致。
         const fieldColors = (image: string) => image.match(/(?:color|rgba?)\([^)]*\)/g)
         expect(fieldColors(surfaces.preview), `${label} 预览画布`).toEqual(fieldColors(surfaces.app))
         expect(surfaces.previewNav, `${label} 预览导航`).toBe(surfaces.nav)
@@ -214,9 +218,9 @@ test.describe('主题', () => {
       return style
     }
 
-    // 四套底色各留一档 toast 值：暗极性反转成亮底，且 ink 暖白 / slate 冷白差在 B 通道
+    // 各底色保留独立的 toast 值：暗极性反转成亮底，墨使用中性灰白。
     const EXPECT: Record<BaseId, { bg: string; color: string }> = {
-      ink:   { bg: 'rgb(239, 237, 232)', color: 'rgb(47, 125, 82)' },
+      ink:   { bg: 'rgb(240, 242, 245)', color: 'rgb(47, 125, 82)' },
       slate: { bg: 'rgb(238, 240, 245)', color: 'rgb(47, 125, 82)' },
       paper: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
       snow:  { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },

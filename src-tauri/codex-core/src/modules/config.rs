@@ -113,6 +113,12 @@ pub struct UserConfig {
     /// Codex WSL 配置目录 (Windows Only)
     #[serde(default = "default_codex_wsl_config_dir")]
     pub codex_wsl_config_dir: String,
+    /// 会话用量统计的额外 CODEX_HOME，可填写 Windows 可访问的 WSL UNC 目录。
+    #[serde(default)]
+    pub codex_usage_extra_dirs: Vec<String>,
+    /// Windows 上自动统计运行中 WSL 发行版的标准 Codex 目录。
+    #[serde(default = "default_codex_usage_auto_wsl")]
+    pub codex_usage_auto_wsl: bool,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_zed_auto_refresh")]
     pub zed_auto_refresh_minutes: i32,
@@ -730,6 +736,9 @@ fn default_codex_auto_refresh_plan_types() -> Vec<String> {
 fn default_codex_sync_wsl() -> bool {
     false
 }
+fn default_codex_usage_auto_wsl() -> bool {
+    true
+}
 fn default_codex_app_ui_injection_enabled() -> bool {
     true
 }
@@ -1215,6 +1224,8 @@ impl Default for UserConfig {
             codex_sync_wsl: default_codex_sync_wsl(),
             codex_app_ui_injection_enabled: default_codex_app_ui_injection_enabled(),
             codex_wsl_config_dir: default_codex_wsl_config_dir(),
+            codex_usage_extra_dirs: Vec::new(),
+            codex_usage_auto_wsl: default_codex_usage_auto_wsl(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),
             windsurf_auto_refresh_minutes: default_windsurf_auto_refresh(),

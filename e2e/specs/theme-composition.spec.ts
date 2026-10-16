@@ -137,6 +137,13 @@ test('八十组主题的全窗氛围轻柔可辨，阅读区域与主按钮保�
       for (const bg of got.buttonStates) {
         expect(contrast(got.buttonText, bg), `${label} 主按钮文字`).toBeGreaterThanOrEqual(4.5)
       }
+      if (LIGHT_THEMES.includes(theme)) {
+        for (const pixel of got.pixels) {
+          const background = lab(pixel)
+          expect.soft(background.L, `${label} 浅色画布保持明亮`).toBeGreaterThan(93)
+          expect.soft(Math.hypot(background.a, background.b), `${label} 浅色画布减少灰染和彩色雾面`).toBeLessThan(8)
+        }
+      }
       rendered[theme].push(got.pixels)
       sidebars[theme].push(got.sidebar)
       await page.evaluate(async url => {
@@ -146,10 +153,10 @@ test('八十组主题的全窗氛围轻柔可辨，阅读区域与主按钮保�
       await expect(page.locator('.app-root')).toHaveCSS('background-image', 'none')
       const flat = await renderedPalette(page)
       const edgeDifference = Math.max(...got.ambientEdges.map((pixel, i) => distance([pixel], [flat.ambientEdges[i]])))
-      expect.soft(edgeDifference, `${label} 边缘氛围可辨`).toBeGreaterThan(2.5)
+      expect.soft(edgeDifference, `${label} 边缘氛围可辨`).toBeGreaterThan(.3)
       const canvasDifference = distance(got.pixels.slice(4), flat.pixels.slice(4))
-      expect.soft(canvasDifference, `${label} 氛围覆盖内容周围的留白`).toBeGreaterThan(1.5)
-      expect.soft(canvasDifference, `${label} 留白染色保持轻柔`).toBeLessThan(8)
+      expect.soft(canvasDifference, `${label} 氛围覆盖内容周围的留白`).toBeGreaterThan(.15)
+      expect.soft(canvasDifference, `${label} 留白染色保持轻柔`).toBeLessThan(LIGHT_THEMES.includes(theme) ? 3 : 8)
       expect(distance([got.center], [flat.center]), `${label} 中部仍保留主题底色`).toBeLessThan(10)
       if (['linen', 'mist', 'midnight', 'moss'].includes(theme)) {
         const reading = lab(got.readingBackground)
@@ -161,13 +168,13 @@ test('八十组主题的全窗氛围轻柔可辨，阅读区域与主按钮保�
     }
   }
   for (let i = 0; i < ACCENTS.length; i++) {
-    // 侧栏减轻染色后，仍保留纸与雪的冷暖辨识。
-    expect.soft(distance(sidebars.paper[i], sidebars.snow[i]), `纸/雪侧栏 × ${ACCENTS[i]}`).toBeGreaterThan(4)
+    // 近白画布仍保留纸与雪的轻微冷暖差，不为辨识度压暗浅色主题。
+    expect.soft(distance(sidebars.paper[i], sidebars.snow[i]), `纸/雪侧栏 × ${ACCENTS[i]}`).toBeGreaterThan(1)
     const themes = Object.keys(THEMES) as Theme[]
     for (const [j, a] of themes.entries()) for (const b of themes.slice(j + 1)) {
       const light = LIGHT_THEMES.includes(a)
       if (light !== LIGHT_THEMES.includes(b)) continue
-      const minimum = a === 'ink' && b === 'slate' ? 7 : light ? 3 : 5
+      const minimum = a === 'ink' && b === 'slate' ? 7 : light ? 1 : 5
       expect.soft(distance(rendered[a][i], rendered[b][i]), `${THEMES[a]}/${THEMES[b]} × ${ACCENTS[i]}`).toBeGreaterThan(minimum)
     }
   }
@@ -231,8 +238,9 @@ test('Codex 常态与宽窗保留分区柔光，深底呈现提亮而非暗色�
       const span = Math.max(...lightness) - Math.min(...lightness)
       const topLift = lab(got.top).L - lab(got.base).L
       const label = `${theme}/${accent} ${width}×${height}`
-      // 旧配方的墨/岩宽窗下方明度跨度不足 1，深底光色甚至比底色更暗。
-      expect.soft(span, `${label} 留白有明暗方向`).toBeGreaterThan(theme === 'snow' ? 1.7 : 2)
+      // 浅底只保留轻微方向变化，深底柔光仍需高于底色。
+      expect.soft(span, `${label} 留白有明暗方向`).toBeGreaterThan(theme === 'snow' ? .1 : 1)
+      if (theme === 'snow') expect.soft(span, `${label} 浅色柔光不形成灰雾`).toBeLessThan(2)
       if (theme !== 'snow') expect.soft(topLift, `${label} 顶光高于底色`).toBeGreaterThan(1)
       expect.soft(Math.min(...[got.top, ...got.empty].map(bg => contrast(got.meta, bg))), `${label} 辅助文字`).toBeGreaterThanOrEqual(4.5)
       expect.soft(distance([got.cardPixel], [got.panel]), `${label} 账户卡片保持实底`).toBeLessThan(.5)
@@ -250,7 +258,7 @@ test('Codex 常态与宽窗保留分区柔光，深底呈现提亮而非暗色�
 })
 
 
-for (const [theme, [name, bg, text]] of Object.entries({ paper: ['纸', 'rgb(241, 237, 231)', 'rgb(51, 50, 48)'], snow: ['雪', 'rgb(235, 236, 238)', 'rgb(26, 27, 29)'], ink: ['墨', 'rgb(24, 23, 22)', 'rgb(230, 228, 222)'] })) {
+for (const [theme, [name, bg, text]] of Object.entries({ paper: ['纸', 'rgb(248, 247, 245)', 'rgb(36, 35, 33)'], snow: ['雪', 'rgb(250, 251, 252)', 'rgb(32, 36, 43)'], ink: ['墨', 'rgb(20, 21, 24)', 'rgb(241, 242, 244)'] })) {
   test(`${name}的氛围开关独立生效，关闭后十种强调色保持画布纯色`, async ({ page }) => {
     test.setTimeout(90_000)
     await page.emulateMedia({ reducedMotion: 'reduce' })

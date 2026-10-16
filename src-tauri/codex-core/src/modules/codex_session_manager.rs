@@ -712,16 +712,78 @@ struct UsageFileEntry {
 }
 
 
-/// 现扫现算，不落任何文件：与上游 `codex_session_usage.rs` 的差别只在这里
-fn usage_rollout_files() -> Result<Vec<PathBuf>, String> {
-    let data_dir = modules::codex_account::get_codex_home();
-    let mut files = Vec::new();
-    for dir_name in SESSION_DIRS {
-        let root = data_dir.join(dir_name);
-        if !root.exists() {
+/// 额外目录只参与用量扫描，不改变账号凭据、会话管理与回收站的目录。
+pub fn normalize_usage_extra_dirs(dirs: Vec<String>) -> Result<Vec<String>, String> {
+    let mut normalized = Vec::new();
+    for dir in dirs {
+        let dir = dir.trim();
+        if dir.is_empty() {
             continue;
         }
-        files.extend(list_rollout_files(&root)?);
+        if !Path::new(dir).is_absolute() {
+            return Err(format!("请填写 Desko 所在系统可访问的绝对路径: {}", dir));
+        }
+        if !normalized.iter().any(|existing| existing == dir) {
+            normalized.push(dir.to_string());
+        }
+    }
+    Ok(normalized)
+}
+
+/// 现扫现算；默认 CODEX_HOME 与手动配置的额外目录合并后按路径去重。
+fn usage_rollout_files(config: &modules::config::UserConfig) -> Result<Vec<PathBuf>, String> {
+    let mut data_dirs = vec![modules::codex_account::get_codex_home()];
+    for dir in &config.codex_usage_extra_dirs {
+        let path = PathBuf::from(dir);
+        let metadata = fs::metadata(&path)
+            .map_err(|error| format!("无法访问额外统计目录 ({}): {}", path.display(), error))?;
+        if !metadata.is_dir() {
+            return Err(format!("额外统计路径不是目录: {}", path.display()));
+        }
+        data_dirs.push(path);
+    }
+    let mut files = usage_rollout_files_in_dirs(&data_dirs)?;
+    if config.codex_usage_auto_wsl {
+        for dir in modules::codex_session_wsl::discover_usage_dirs() {
+            match usage_rollout_files_in_dirs(std::slice::from_ref(&dir)) {
+                Ok(discovered) => files.extend(discovered),
+                Err(error) => modules::logger::log_warn(&format!("跳过无法读取的 WSL 用量目录: {}", error)),
+            }
+        }
+    }
+    let mut seen = HashSet::new();
+    files.retain(|path| {
+        let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
+        seen.insert(modules::codex_session_wsl::path_key(&canonical))
+    });
+    files.sort();
+    Ok(files)
+}
+
+fn usage_rollout_files_in_dirs(data_dirs: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+    let mut files = Vec::new();
+    let mut seen_roots = HashSet::new();
+    let mut seen_files = HashSet::new();
+    for data_dir in data_dirs {
+        for dir_name in SESSION_DIRS {
+            let root = data_dir.join(dir_name);
+            let canonical_root = match fs::canonicalize(&root) {
+                Ok(root) => root,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(format!("无法访问统计目录 ({}): {}", root.display(), error)),
+            };
+            if !seen_roots.insert(modules::codex_session_wsl::path_key(&canonical_root)) {
+                continue;
+            }
+            for path in list_rollout_files(&root)? {
+                let canonical = fs::canonicalize(&path)
+                    .map_err(|error| format!("无法访问会话文件 ({}): {}", path.display(), error))?;
+                if seen_files.insert(modules::codex_session_wsl::path_key(&canonical)) {
+                    // 保留首个来源的路径，让默认目录继续与会话页共用事件缓存。
+                    files.push(path);
+                }
+            }
+        }
     }
     files.sort();
     Ok(files)
@@ -975,6 +1037,14 @@ pub fn query_session_usage(
     from_timestamp: Option<i64>,
     to_timestamp: Option<i64>,
 ) -> Result<CodexSessionUsageReport, String> {
+    query_session_usage_with_config(from_timestamp, to_timestamp, &modules::config::get_user_config())
+}
+
+fn query_session_usage_with_config(
+    from_timestamp: Option<i64>,
+    to_timestamp: Option<i64>,
+    config: &modules::config::UserConfig,
+) -> Result<CodexSessionUsageReport, String> {
     let started = Instant::now();
     let mut by_day = HashMap::<String, CodexUsageBucket>::new();
     let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
@@ -982,7 +1052,7 @@ pub fn query_session_usage(
     let mut totals = CodexUsageTotals::default();
     let mut active_sessions = HashSet::new();
 
-    for path in usage_rollout_files()? {
+    for path in usage_rollout_files(config)? {
         totals.file_count += 1;
         let entry = load_usage_events(&path)?;
         if accumulate_usage_entry(
@@ -2404,6 +2474,61 @@ mod tests {
     }
 
     #[test]
+    fn usage_sources_merge_extra_homes_and_archives_without_recounting_path_aliases() {
+        let root = make_temp_dir("codex-extra-usage-sources");
+        let default_home = root.join("default");
+        let extra_home = root.join("extra");
+        for (home, session_dir, id, input) in [
+            (&default_home, "sessions", "native", 100),
+            (&extra_home, "archived_sessions", "wsl", 200),
+        ] {
+            let dir = home.join(session_dir).join("2026/10/16");
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join(format!("rollout-{}.jsonl", id)), [
+                json!({"type":"session_meta","payload":{"id":id,"model":"gpt-5.4"}}).to_string(),
+                usage_snapshot_line("2026-10-16T01:00:00Z", input, 0, 10),
+            ].join("\n")).unwrap();
+            fs::write(dir.join("unrelated.jsonl"), "{}").unwrap();
+        }
+        let files = usage_rollout_files_in_dirs(&[
+            default_home.clone(), extra_home.clone(), default_home.join("."),
+            extra_home.join("../extra"), root.join("missing-default"),
+        ]).unwrap();
+        assert_eq!(files.len(), 2);
+        let entries = files.iter().map(|path| load_usage_events(path).unwrap()).collect::<Vec<_>>();
+        assert_eq!(entries.iter().flat_map(|entry| &entry.events).map(|event| event.usage.total_tokens).sum::<u64>(), 320);
+        assert_eq!(entries.iter().filter_map(|entry| entry.session_id.as_deref()).collect::<HashSet<_>>(), HashSet::from(["native", "wsl"]));
+
+        let dirs = normalize_usage_extra_dirs(vec![
+            format!(" {} ", extra_home.display()), String::new(), extra_home.to_string_lossy().to_string(),
+        ]).unwrap();
+        assert_eq!(dirs, vec![extra_home.to_string_lossy().to_string()]);
+        assert!(normalize_usage_extra_dirs(vec!["relative/.codex".into()]).is_err());
+        #[cfg(windows)]
+        assert!(normalize_usage_extra_dirs(vec![r"\\wsl.localhost\Ubuntu\home\user\.codex".into()]).is_ok());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "只读真实 WSL 目录，验证自动发现与手动路径别名合并"]
+    fn live_wsl_sources_do_not_recount_manual_aliases() {
+        let homes = modules::codex_session_wsl::discover_usage_dirs();
+        assert!(!homes.is_empty());
+        let mut config = modules::config::UserConfig {
+            codex_usage_auto_wsl: false,
+            codex_usage_extra_dirs: homes.iter().map(|home| home.to_string_lossy().replace("wsl.localhost", "wsl$")).collect(),
+            ..Default::default()
+        };
+        let manual = usage_rollout_files(&config).unwrap();
+        assert!(!manual.is_empty());
+        config.codex_usage_auto_wsl = true;
+        let automatic = usage_rollout_files(&config).unwrap();
+        assert_eq!(automatic.len(), manual.len());
+        println!("默认目录与 WSL 合并后共 {} 份 rollout，手动别名未重复计入", automatic.len());
+    }
+
+    #[test]
     fn resolve_thread_snapshot_updated_at_prefers_rollout_activity_when_index_is_stale() {
         let base_dir = make_temp_dir("codex-session-updated-at-drift-test");
         let rollout_path = base_dir.join("rollout-session-1.jsonl");
@@ -2630,6 +2755,7 @@ mod tests {
             }
         }
         let _reset = ResetHome(std::env::var_os("CODEX_HOME"));
+        let config = modules::config::UserConfig { codex_usage_auto_wsl: false, ..Default::default() };
         let root = make_temp_dir("codex-session-billing");
         let dir = root.join("sessions");
         fs::create_dir_all(&dir).unwrap();
@@ -2656,7 +2782,7 @@ mod tests {
         fs::write(&path, lines.join("\n")).unwrap();
         std::env::set_var("CODEX_HOME", &root);
         let stats = get_session_token_stats_across_instances(vec!["billing".into()]).unwrap();
-        let report = query_session_usage(None, None).unwrap();
+        let report = query_session_usage_with_config(None, None, &config).unwrap();
         assert_eq!(stats.len(), 1);
         assert_eq!(stats[0].request_count, 2);
         assert_eq!(stats[0].input_tokens, 1_500_000);
@@ -2676,7 +2802,7 @@ mod tests {
         assert!((estimate_usage_cost("gpt-5.4", usage).unwrap() - 0.000175).abs() < 1e-10);
         // 时间窗口只筛选增量，不能把前一天的累计按新模型再次计价。
         let from = DateTime::parse_from_rfc3339("2026-10-11T02:30:00Z").unwrap().timestamp();
-        let filtered = query_session_usage(Some(from), None).unwrap();
+        let filtered = query_session_usage_with_config(Some(from), None, &config).unwrap();
         assert_eq!(filtered.totals.request_count, 1);
         assert!((filtered.totals.estimated_cost_usd.unwrap() - 0.33).abs() < 1e-10);
 
@@ -2691,7 +2817,7 @@ mod tests {
             usage_snapshot_line("2026-10-11T04:00:00Z", 10_600_000, 8_480_000, 1_060_000),
         ].join("\n")).unwrap();
         let combined = get_session_token_stats_across_instances(vec!["billing".into()]).unwrap();
-        let report = query_session_usage(None, None).unwrap();
+        let report = query_session_usage_with_config(None, None, &config).unwrap();
         assert_eq!(combined.len(), 1);
         assert_eq!(combined[0].request_count, 3);
         assert_eq!(combined[0].input_tokens, 1_600_000);

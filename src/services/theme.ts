@@ -97,7 +97,7 @@ export const ACCENTS = [
   { id: 'graphite', name: '石墨' },
 ] as const
 
-export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink', backgroundAtmosphere: true }
+export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink', backgroundAtmosphere: false }
 const state = reactive<Appearance>({ ...DEFAULT_APPEARANCE })
 /** 全应用共享的当前外观；只能通过选择入口更新，避免状态和根属性各自变化。 */
 export const appearance = readonly(state)
@@ -125,7 +125,8 @@ const readAppearance = async (): Promise<Appearance> => {
     theme = isThemeId(rawTheme) ? rawTheme : LEGACY_THEME[rawTheme] ?? null
     const rawAccent = await settingsApi.getSetting('accent')
     accent = isAccentId(rawAccent) ? rawAccent : LEGACY_ACCENT[rawTheme] ?? null
-    backgroundAtmosphere = await settingsApi.getSetting('background_atmosphere') !== 'false'
+    const rawAtmosphere = await settingsApi.getSetting('background_atmosphere')
+    if (rawAtmosphere === 'true' || rawAtmosphere === 'false') backgroundAtmosphere = rawAtmosphere === 'true'
   } catch {
     /* 回落默认 */
   }

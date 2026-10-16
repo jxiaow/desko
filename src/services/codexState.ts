@@ -767,13 +767,54 @@ async function clearBatchDeleteJob(): Promise<void> {
 
 /**
  * 用量图。图的数据来自官方 rollout 里逐轮累计快照的差值，
- * 与「会话」档每条会话的合计同账；后端按 (len, mtime) 缓存事件，切窗口只重算不重扫。
+ * 统计默认目录与配置的额外目录；后端按 (len, mtime) 缓存事件，切窗口只重算不重扫。
  */
 export const usageRange = ref<UsageRange>('today')
 export const usageReport = ref<CodexSessionUsageReport | null>(null)
 export const usageUpdatedAt = ref<number | null>(null)
 export const usageBusy = ref(false)
 export const usageError = ref('')
+let usageSourcesVersion = 0
+
+const KEY_USAGE_EXTRA_DIRS = 'codex_usage_extra_dirs'
+const KEY_USAGE_AUTO_WSL = 'codex_usage_auto_wsl'
+
+export async function loadUsageAutoWsl(): Promise<boolean> {
+  const raw = await settingsApi.getSetting(KEY_USAGE_AUTO_WSL)
+  if (!raw || raw === 'true') return true
+  if (raw === 'false') return false
+  throw new Error('WSL 自动统计开关无效')
+}
+
+export async function saveUsageAutoWsl(enabled: boolean): Promise<void> {
+  await saveUsageSetting(KEY_USAGE_AUTO_WSL, String(enabled))
+}
+
+export async function loadUsageExtraDirs(): Promise<string[]> {
+  const raw = await settingsApi.getSetting(KEY_USAGE_EXTRA_DIRS)
+  if (!raw) return []
+  const dirs: unknown = JSON.parse(raw)
+  if (!Array.isArray(dirs) || !dirs.every(dir => typeof dir === 'string')) {
+    throw new Error('额外统计目录格式无效')
+  }
+  return dirs
+}
+
+export async function saveUsageExtraDirs(dirs: string[]): Promise<void> {
+  const normalized = [...new Set(dirs.map(dir => dir.trim()).filter(Boolean))]
+  await saveUsageSetting(KEY_USAGE_EXTRA_DIRS, JSON.stringify(normalized))
+}
+
+async function saveUsageSetting(key: string, value: string): Promise<void> {
+  const epoch = accountEpoch
+  await settingsApi.setSetting(key, value)
+  if (epoch !== accountEpoch) return
+  const refresh = usageReport.value !== null || usageBusy.value
+  usageSourcesVersion++
+  invalidateUsage()
+  usageError.value = ''
+  if (refresh) void loadUsage()
+}
 
 export async function loadUsage(): Promise<void> {
   if (usageBusy.value) return
@@ -784,19 +825,20 @@ export async function loadUsage(): Promise<void> {
     // 扫描期间可继续选范围，串行补读最后选中的范围，旧结果不冒充新范围的数据。
     while (epoch === accountEpoch) {
       const range = usageRange.value
+      const sourcesVersion = usageSourcesVersion
       const fromTimestamp = usageWindowFrom(range)
       const queryAt = Date.now()
       const toTimestamp = Math.floor(queryAt / 1000) + 1
       try {
         const report = await codexApi.querySessionUsage(fromTimestamp, toTimestamp)
         if (epoch !== accountEpoch) return
-        if (range !== usageRange.value || fromTimestamp !== usageWindowFrom(range)) continue
+        if (range !== usageRange.value || fromTimestamp !== usageWindowFrom(range) || sourcesVersion !== usageSourcesVersion) continue
         usageReport.value = report
         usageUpdatedAt.value = queryAt
         return
       } catch (e) {
         if (epoch !== accountEpoch) return
-        if (range !== usageRange.value || fromTimestamp !== usageWindowFrom(range)) continue
+        if (range !== usageRange.value || fromTimestamp !== usageWindowFrom(range) || sourcesVersion !== usageSourcesVersion) continue
         usageError.value = errText(e)
         return
       }

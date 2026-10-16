@@ -481,9 +481,9 @@ watchEffect(() => {
       </p>
 
       <div v-if="view === 'accounts' && accounts.length" class="account-filters">
-        <div class="search-box">
+        <div class="search-box flat">
           <span class="search-icon"><AppIcon name="search" :size="15" /></span>
-          <input v-model="accountQuery" type="search" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
+          <input v-model="accountQuery" type="text" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
           <button v-if="accountQuery" class="search-clear" type="button" aria-label="清除账号搜索" @click="accountQuery = ''"><AppIcon name="x" :size="13" /></button>
         </div>
         <OptionSelect :model-value="accountAuth" aria-label="账号类型" :options="[
@@ -684,7 +684,8 @@ watchEffect(() => {
 .filter-reset { margin-left: auto; border: none; background: transparent; color: var(--accent); cursor: pointer; font: inherit; }
 .account-filters :deep(.opt-trigger) { min-width: 100px; }
 .session-search-mode { display: flex; align-items: center; flex-shrink: 0; }
-.page-bar .search-box { flex: 1; min-width: 140px; }
+/* 会话搜索与另两页同档：可随栏伸缩但封顶 320，刷新钮已 margin-left:auto 钉右端 */
+.page-bar .search-box { flex: 1; min-width: 140px; max-width: 320px; }
 
 /* 页内第二档的切换件：照收藏页分类 tab 的下划线档，去掉滑块——页级换档不是滑动语义 */
 .cx-tabs {

@@ -649,6 +649,67 @@ describe('codexState 用量档', () => {
     return Math.floor(d.getTime() / 1000)
   }
 
+  it('WSL 自动统计在旧配置中默认开启，关闭状态可读取，修改后刷新已有用量', async () => {
+    const s = await loadState()
+    mockInvoke.mockResolvedValueOnce('')
+    expect(await s.loadUsageAutoWsl()).toBe(true)
+    mockInvoke.mockResolvedValueOnce('false')
+    expect(await s.loadUsageAutoWsl()).toBe(false)
+    s.usageReport.value = usageReportFixture()
+    mockInvoke.mockImplementation(async cmd => cmd === USAGE_CMD ? usageReportFixture(50) : undefined)
+    await s.saveUsageAutoWsl(false)
+    await vi.waitFor(() => expect(s.usageReport.value?.totals.totalTokens).toBe(50))
+    expect(mockInvoke).toHaveBeenCalledWith('set_setting', { key: 'codex_usage_auto_wsl', value: 'false' })
+    await s.saveUsageAutoWsl(true)
+    expect(mockInvoke).toHaveBeenCalledWith('set_setting', { key: 'codex_usage_auto_wsl', value: 'true' })
+  })
+
+  it('额外统计目录可读取、去重保存和清空，保存成功后刷新已有用量', async () => {
+    const s = await loadState()
+    const wsl = String.raw`\\wsl.localhost\Ubuntu\home\user\.codex`
+    mockInvoke.mockResolvedValueOnce(JSON.stringify([wsl]))
+    expect(await s.loadUsageExtraDirs()).toEqual([wsl])
+    s.usageReport.value = usageReportFixture()
+    mockInvoke.mockImplementation(async cmd => cmd === USAGE_CMD ? usageReportFixture(50) : undefined)
+    await s.saveUsageExtraDirs([` ${wsl} `, '', wsl])
+    await vi.waitFor(() => expect(s.usageReport.value?.totals.totalTokens).toBe(50))
+    expect(mockInvoke).toHaveBeenCalledWith('set_setting', { key: 'codex_usage_extra_dirs', value: JSON.stringify([wsl]) })
+    expect(callsOf(USAGE_CMD)).toHaveLength(1)
+    await s.saveUsageExtraDirs([])
+    expect(mockInvoke).toHaveBeenCalledWith('set_setting', { key: 'codex_usage_extra_dirs', value: '[]' })
+  })
+
+  it('额外目录保存失败时保留当前统计和错误，不发起重扫', async () => {
+    const s = await loadState()
+    s.usageReport.value = usageReportFixture()
+    mockInvoke.mockRejectedValueOnce('保存失败')
+    await expect(s.saveUsageExtraDirs(['/extra/.codex'])).rejects.toBe('保存失败')
+    expect(s.usageReport.value?.totals.totalTokens).toBe(1000)
+    expect(callsOf(USAGE_CMD)).toHaveLength(0)
+  })
+
+  for (const failed of [false, true]) {
+    for (const source of ['目录', 'WSL 开关']) {
+      it(`扫描期间修改${source}会补扫，旧扫描${failed ? '失败' : '成功'}均不覆盖`, async () => {
+        const s = await loadState()
+        let finish!: (value: unknown) => void
+        let fail!: (reason: unknown) => void
+        mockInvoke.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject }))
+        mockInvoke.mockImplementation(async cmd => cmd === USAGE_CMD ? usageReportFixture(50) : undefined)
+        const pending = s.loadUsage()
+        if (source === '目录') await s.saveUsageExtraDirs(['/extra/.codex'])
+        else await s.saveUsageAutoWsl(false)
+        expect(s.usageReport.value).toBeNull()
+        if (failed) fail('旧目录不可访问')
+        else finish(usageReportFixture())
+        await pending
+        expect(callsOf(USAGE_CMD)).toHaveLength(2)
+        expect(s.usageReport.value?.totals.totalTokens).toBe(50)
+        expect(s.usageError.value).toBe('')
+      })
+    }
+  }
+
   it('默认当天零点，近 7/30 天包含今天且同档重复点不重扫，全部不带起点', async () => {
     const s = await loadState()
     mockInvoke.mockResolvedValue(usageReportFixture())

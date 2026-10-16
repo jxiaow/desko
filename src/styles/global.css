@@ -124,8 +124,7 @@
    accent 族 17 槽，所以新增底色不必再配一轮 accent。
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ---------- paper：暖纸。象牙白内容面与暖灰画布，在柔光下仍保留纸的色温。
-   与雪的净白分开；文字沿用暖炭灰，层级由浅色差与描边共同承接。 ---------- */
+/* ---------- paper：明亮暖白。色温只留在画布与侧栏，白色内容面保持清晰。 ---------- */
 :where(:root), [data-theme="paper"] {
   /* 品牌缺省：墨蓝（accent 覆盖层会按 data-accent 重填这一族） */
   --accent: #2856c7;
@@ -137,33 +136,33 @@
   --accent-ring: rgba(40, 86, 199, 0.2);
   --text-brand: #234bad;
 
-  /* 面：暖白五档。卡面不上纯白，悬停比卡面暗一档，避免柔光盖掉反馈。 */
-  --bg: #f8f5f0;
-  --panel-bg: #fcfaf7;
-  --chrome-bg: rgba(248, 245, 240, 0.78);
-  --sunken: #f1ede7;
-  --fill: #e8e2d9;
-  --hover: #f6f3ee;
-  --active: #eae4db;
+  /* 面：白色内容面、近白画布与浅暖侧栏，悬停保留清晰反馈。 */
+  --bg: #fdfcfb;
+  --panel-bg: #ffffff;
+  --chrome-bg: rgba(253, 252, 251, 0.9);
+  --sunken: #f8f7f5;
+  --fill: #efede9;
+  --hover: #f5f3f0;
+  --active: #eae7e2;
   --overlay: rgba(29, 28, 26, 0.42);
 
   /* 文字：四级近中性，深字浅底一眼可读 */
-  --text: #333230;
-  --text-secondary: #4d4c49;
-  --text-muted: #6b6a66;
-  --text-faint: #95948e;
+  --text: #242321;
+  --text-secondary: #53514d;
+  --text-muted: #6d6963;
+  --text-faint: #77726c;
 
   /* 描边：层级靠边框，不靠色块 */
-  --border: #e2dbd1;
-  --border-strong: #cec5b8;
-  --border-subtle: #f1ede7;
-  --border-hover: #cec5b8;
+  --border: #e8e5e0;
+  --border-strong: #d4cfc7;
+  --border-subtle: #f1efeb;
+  --border-hover: #c9c3ba;
 
   /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
-  --text-url: #4d4c49;
-  --badge-cat-bg: #eee8df;
-  --badge-cat-border: #e2dbd1;
-  --badge-cat-text: #4d4c49;
+  --text-url: #53514d;
+  --badge-cat-bg: #f0ede6;
+  --badge-cat-border: #e4dfd7;
+  --badge-cat-text: #53514d;
   --badge-ver-bg: #dde4f6;
   --badge-ver-text: #234bad;
 
@@ -172,7 +171,7 @@
   /* 轻量化轮：行卡不再靠宽大软影浮起，阴影只留一丝贴地感，分层交还发丝描边 */
   --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
-  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #cec5b8;
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d4cfc7;
   --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
   --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -192,8 +191,8 @@
   --warning-soft: #f6efdf;
 
   /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
-  --sidebar-bg: #eae4db;
-  --sidebar-hover: #e2dbd1;
+  --sidebar-bg: #f4f2ee;
+  --sidebar-hover: #eae7e1;
 
   /* 品牌标渐变 */
   --brand-g1: #6485d7;
@@ -202,14 +201,14 @@
   --brand-knob: #ffffff;
 
   /* 锁屏 */
-  --lock-wash-a: #fcfaf7;
-  --lock-wash-b: #eae4db;
+  --lock-wash-a: #ffffff;
+  --lock-wash-b: #f4f2ee;
   --lock-orb-1: rgba(40, 86, 199, 0.07);
   --lock-orb-2: rgba(40, 86, 199, 0.045);
 
   /* 毛玻璃底栏 */
-  --frost-bg: rgba(252, 250, 247, 0.86);
-  --frost-border: #e2dbd1;
+  --frost-bg: rgba(255, 255, 255, 0.92);
+  --frost-border: #e8e5e0;
 
   /* 深色面：气泡与 toast */
   --tip-bg: #26241f;
@@ -263,16 +262,7 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- ink：暖墨（V5.2 收编轮 P1 · 2026-09-30）。
-   四层实色直接取 V5.2 的阶梯：画布 #181716 → 卡片 #22211e → 悬停 #282622，
-   侧栏落在画布与卡片之间。代价是画布→卡片的 ΔL* 从净暖分层轮的 8.7 压到 4.9，
-   「面板浮在画布上」改由发丝描边主担。
-   其余槽不重新调色：比卡面亮的按「与卡面 ΔL* 保持旧值」在白方向上求解，
-   带色相的软底保色相整族缩放到同一 ΔL*——求解器 scripts/ink-ladder.mjs。
-   字阶沿用旧值（V5.2 那组 muted 4.17:1 / faint 2.11:1 低于 ≥5.8:1 底线，已否），
-   在新卡面上反而更高：正文 12.66、次要 9.25、muted 7.02、faint 5.66。
-   连带槽沿用旧的对应关系而不是另取：--chrome-bg / --brand-knob / --lock-wash-a 跟 --bg，
-   --lock-wash-b 跟 --panel-bg，--danger-on 跟 --sunken，--shadow 的 1px 环跟 --border-strong。 ---------- */
+/* ---------- ink：中性炭黑。去除棕黄灰染，以清晰字阶和轻描边区分内容面。 ---------- */
 [data-theme="ink"] {
   --accent: #9bbfff;
   --accent-hover: #a9c8ff;
@@ -283,29 +273,29 @@
   --accent-ring: rgba(155, 191, 255, 0.36);
   --text-brand: #adcbff;
 
-  --bg: #1d1c1a;
-  --panel-bg: #22211e;
-  --chrome-bg: rgba(29, 28, 26, 0.86);
-  --sunken: #181716;
-  --fill: #2a2927;
-  --hover: #282622;
-  --active: #343431;
+  --bg: #1b1c1f;
+  --panel-bg: #242529;
+  --chrome-bg: rgba(27, 28, 31, 0.9);
+  --sunken: #141518;
+  --fill: #2d2f34;
+  --hover: #2c2e33;
+  --active: #363940;
   --overlay: rgba(0, 0, 0, 0.62);
 
-  --text: #e6e4de;
-  --text-secondary: #c7c4bd;
-  --text-muted: #aeaba4;
-  --text-faint: #9c9992;
+  --text: #f1f2f4;
+  --text-secondary: #cbd0d8;
+  --text-muted: #adb5c1;
+  --text-faint: #969fac;
 
-  --border: #30302d;
-  --border-strong: #434340;
-  --border-subtle: #252421;
-  --border-hover: #434340;
+  --border: #35383f;
+  --border-strong: #4c525d;
+  --border-subtle: #2c2e34;
+  --border-hover: #4c525d;
 
-  --text-url: #c9c6bf;
-  --badge-cat-bg: #252421;
-  --badge-cat-border: #30302d;
-  --badge-cat-text: #c7c4bd;
+  --text-url: #cbd0d8;
+  --badge-cat-bg: #2b2d33;
+  --badge-cat-border: #393d45;
+  --badge-cat-text: #cbd0d8;
   --badge-ver-bg: rgba(155, 191, 255, 0.1);
   --badge-ver-text: #adcbff;
 
@@ -314,7 +304,7 @@
   /* 轻量化轮：墨色行卡去掉 18px 大投影与外圈环，只留顶部高光一丝 */
   --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340;
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #4c525d;
   --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
   --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
   --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -322,7 +312,7 @@
   --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
 
   --danger: #e08079;
-  --danger-on: #181716;
+  --danger-on: #141518;
   --danger-hover: #ea9d97;
   --danger-soft: #271a17;
   --danger-border: #462924;
@@ -331,26 +321,26 @@
   --warning: #d9a95f;
   --warning-soft: #241e13;
 
-  --sidebar-bg: #1a1917;
-  --sidebar-hover: #282622;
+  --sidebar-bg: #191a1d;
+  --sidebar-hover: #292b30;
 
   --brand-g1: #adcbff;
   --brand-g2: #9bbfff;
   --brand-g3: #86a5dc;
-  --brand-knob: #1d1c1a;
+  --brand-knob: #1b1c1f;
 
-  --lock-wash-a: #1d1c1a;
-  --lock-wash-b: #22211e;
+  --lock-wash-a: #1b1c1f;
+  --lock-wash-b: #242529;
   --lock-orb-1: rgba(155, 191, 255, 0.14);
   --lock-orb-2: rgba(155, 191, 255, 0.07);
 
-  --frost-bg: rgba(34, 33, 30, 0.88);
-  --frost-border: #30302d;
+  --frost-bg: rgba(36, 37, 41, 0.94);
+  --frost-border: #35383f;
 
   /* 深色界面的浮层反过来：亮底暗字 */
-  --tip-bg: #efede8;
-  --tip-fg: #1d1c1a;
-  --toast-bg: #efede8;
+  --tip-bg: #f0f2f5;
+  --tip-fg: #1b1c1f;
+  --toast-bg: #f0f2f5;
   --toast-ok: #2f7d52;
   --toast-err: #b23c37;
   --toast-info: #2856c7;
@@ -378,24 +368,22 @@
   --ft-img: #e08bb8;
   --ft-unk: #6b7280;
 
-  --code-fg: #e4e2dc;
+  --code-fg: #e9ecf1;
   --code-kw: #de9ab8;
   --code-str: #6fd0a8;
   --code-num: #e0b072;
   --code-type: #e0c060;
   --code-fn: #8aa8e0;
-  --code-var: #b6b2a8;
-  --code-com: #9d9991;
+  --code-var: #b5bdc9;
+  --code-com: #9aa3b0;
   --code-tag: #ab8de6;
-  --code-pun: #8c94a6;
+  --code-pun: #9aa3b0;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- snow：净白。保留中性瓷白卡面与灰色台阶，不用蓝色染白底。
-   画布与卡面以明度分层，代码色维持下陷面上 ≥4.5 的对比。
-   accent 族填亮极性缺省档（墨蓝）。 ---------- */
+/* ---------- snow：纯白内容面与近白画布，冷灰只用于侧栏、描边和交互状态。 ---------- */
 [data-theme="snow"] {
   --accent: #2856c7;
   --accent-hover: #234bad;
@@ -406,36 +394,36 @@
   --accent-ring: rgba(40, 86, 199, 0.2);
   --text-brand: #234bad;
 
-  --bg: #f1f2f3;
-  --panel-bg: #fefefe;
-  --chrome-bg: rgba(241, 242, 243, 0.85);
-  --sunken: #ebecee;
-  --fill: #dbdde0;
-  --hover: #f7f8f9;
-  --active: #e1e3e6;
+  --bg: #ffffff;
+  --panel-bg: #ffffff;
+  --chrome-bg: rgba(255, 255, 255, 0.92);
+  --sunken: #fafbfc;
+  --fill: #eff1f4;
+  --hover: #f4f6f8;
+  --active: #e8edf3;
   --overlay: rgba(18, 19, 22, 0.42);
 
-  --text: #1a1b1d;
-  --text-secondary: #3e3f42;
-  --text-muted: #5b5d61;
-  --text-faint: #85888d;
+  --text: #20242b;
+  --text-secondary: #4c5664;
+  --text-muted: #667181;
+  --text-faint: #727c89;
 
-  --border: #d3d5d9;
-  --border-strong: #b9bdc2;
-  --border-subtle: #e9ebee;
-  --border-hover: #b9bdc2;
+  --border: #e4e8ed;
+  --border-strong: #cbd2db;
+  --border-subtle: #f0f2f5;
+  --border-hover: #b9c3d0;
 
-  --text-url: #3e3f42;
-  --badge-cat-bg: #ebecee;
-  --badge-cat-border: #d3d5d9;
-  --badge-cat-text: #3e3f42;
+  --text-url: #4c5664;
+  --badge-cat-bg: #eef2f6;
+  --badge-cat-border: #e4e8ed;
+  --badge-cat-text: #4c5664;
   --badge-ver-bg: #dde4f6;
   --badge-ver-text: #234bad;
 
   --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(18, 19, 22, 0.05);
-  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2;
+  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #cbd2db;
   --shadow-md: 0 6px 16px -6px rgba(18, 19, 22, 0.10);
   --shadow-lg: 0 12px 28px -8px rgba(18, 19, 22, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -451,21 +439,21 @@
   --warning: #9c681e;
   --warning-soft: #f9f0df;
 
-  --sidebar-bg: #e3e5e8;
-  --sidebar-hover: #dadee1;
+  --sidebar-bg: #f5f7fa;
+  --sidebar-hover: #e9eef4;
 
   --brand-g1: #6485d7;
   --brand-g2: #2856c7;
   --brand-g3: #1e4093;
   --brand-knob: #ffffff;
 
-  --lock-wash-a: #fefefe;
-  --lock-wash-b: #e3e5e8;
+  --lock-wash-a: #ffffff;
+  --lock-wash-b: #f5f7fa;
   --lock-orb-1: rgba(40, 86, 199, 0.07);
   --lock-orb-2: rgba(40, 86, 199, 0.045);
 
-  --frost-bg: rgba(254, 254, 254, 0.88);
-  --frost-border: #d3d5d9;
+  --frost-bg: rgba(255, 255, 255, 0.92);
+  --frost-border: #e4e8ed;
 
   /* 深色浮层与瓷白同色温：中性近黑，不再为了"跟底翻冷"掺蓝 */
   --tip-bg: #1f2124;
@@ -630,7 +618,7 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- 绢：低彩度米灰，暖白卡面与柔和炭灰文字。 ---------- */
+/* ---------- 绢：明亮亚麻白，保留轻微暖调，减少米灰覆盖。 ---------- */
 [data-theme="linen"] {
   --accent: #2856c7;
   --accent-hover: #234bad;
@@ -640,32 +628,32 @@
   --accent-light: #c3d0ef;
   --accent-ring: rgba(40, 86, 199, 0.2);
   --text-brand: #234bad;
-  --bg: #ebe7e0;
-  --panel-bg: #f5f2ed;
-  --chrome-bg: rgba(235, 231, 224, 0.9);
-  --sunken: #e3dfd8;
-  --fill: #d8d3cb;
-  --hover: #eeebe5;
-  --active: #dcd7cf;
+  --bg: #faf8f4;
+  --panel-bg: #fffefa;
+  --chrome-bg: rgba(250, 248, 244, 0.92);
+  --sunken: #f4f1eb;
+  --fill: #eae6dd;
+  --hover: #f4f0e8;
+  --active: #e9e3d8;
   --overlay: rgba(29, 28, 26, 0.42);
-  --text: #34322e;
-  --text-secondary: #514e49;
-  --text-muted: #66635d;
-  --text-faint: #67625c;
-  --border: #cec8be;
-  --border-strong: #b4ac9f;
-  --border-subtle: #e5e0d8;
-  --border-hover: #b4ac9f;
-  --text-url: #514e49;
-  --badge-cat-bg: #e3ded5;
-  --badge-cat-border: #cec8be;
-  --badge-cat-text: #514e49;
+  --text: #302c25;
+  --text-secondary: #575046;
+  --text-muted: #70685c;
+  --text-faint: #776d5f;
+  --border: #e6e0d5;
+  --border-strong: #d1c6b6;
+  --border-subtle: #efebe3;
+  --border-hover: #c4b7a4;
+  --text-url: #575046;
+  --badge-cat-bg: #eee9df;
+  --badge-cat-border: #e6e0d5;
+  --badge-cat-text: #575046;
   --badge-ver-bg: #dde4f6;
   --badge-ver-text: #234bad;
   --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
-  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #cec5b8;
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d1c6b6;
   --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
   --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -679,18 +667,18 @@
   --success-soft: #ecf3ee;
   --warning: #815924;
   --warning-soft: #f6efdf;
-  --sidebar-bg: #dcd7cf;
-  --sidebar-hover: #d1cbc1;
+  --sidebar-bg: #eee9df;
+  --sidebar-hover: #e4ddcf;
   --brand-g1: #6485d7;
   --brand-g2: #2856c7;
   --brand-g3: #1e4093;
   --brand-knob: #ffffff;
-  --lock-wash-a: #ebe7e0;
-  --lock-wash-b: #e3dfd8;
+  --lock-wash-a: #faf8f4;
+  --lock-wash-b: #f4f1eb;
   --lock-orb-1: rgba(40, 86, 199, 0.07);
   --lock-orb-2: rgba(40, 86, 199, 0.045);
-  --frost-bg: rgba(245, 242, 237, 0.94);
-  --frost-border: #cec8be;
+  --frost-bg: rgba(255, 254, 250, 0.94);
+  --frost-border: #e6e0d5;
   --tip-bg: #26241f;
   --tip-fg: #f2f0ea;
   --toast-bg: #26241f;
@@ -730,7 +718,7 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- 雾：浅雾灰，轻微冷调与中性文字，减少绿染。 ---------- */
+/* ---------- 雾：通透冰白，冷调留在画布，正文仍用白色内容面。 ---------- */
 [data-theme="mist"] {
   --accent: #2856c7;
   --accent-hover: #234bad;
@@ -740,32 +728,32 @@
   --accent-light: #c3d0ef;
   --accent-ring: rgba(40, 86, 199, 0.2);
   --text-brand: #234bad;
-  --bg: #e5e6eb;
-  --panel-bg: #f3f4f7;
-  --chrome-bg: rgba(229, 230, 235, 0.9);
-  --sunken: #dadce2;
-  --fill: #cfd2da;
-  --hover: #e9ebf0;
-  --active: #d4d7df;
+  --bg: #f7fafe;
+  --panel-bg: #ffffff;
+  --chrome-bg: rgba(247, 250, 254, 0.92);
+  --sunken: #eff4fa;
+  --fill: #e4ebf4;
+  --hover: #edf3fa;
+  --active: #e0e9f4;
   --overlay: rgba(18, 19, 22, 0.42);
-  --text: #30343d;
-  --text-secondary: #4a505c;
-  --text-muted: #5b606b;
-  --text-faint: #5c616c;
-  --border: #c7cbd4;
-  --border-strong: #adb3c0;
-  --border-subtle: #dfe2e9;
-  --border-hover: #adb3c0;
-  --text-url: #4a505c;
-  --badge-cat-bg: #dee1e8;
-  --badge-cat-border: #c7cbd4;
-  --badge-cat-text: #4a505c;
+  --text: #263244;
+  --text-secondary: #4c5b70;
+  --text-muted: #617188;
+  --text-faint: #697990;
+  --border: #dce5ef;
+  --border-strong: #c2cfdf;
+  --border-subtle: #eaf0f7;
+  --border-hover: #b2c3d9;
+  --text-url: #4c5b70;
+  --badge-cat-bg: #e9f0f8;
+  --badge-cat-border: #dce5ef;
+  --badge-cat-text: #4c5b70;
   --badge-ver-bg: #dde4f6;
   --badge-ver-text: #234bad;
   --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(18, 19, 22, 0.05);
-  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2;
+  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #c2cfdf;
   --shadow-md: 0 6px 16px -6px rgba(18, 19, 22, 0.10);
   --shadow-lg: 0 12px 28px -8px rgba(18, 19, 22, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -779,18 +767,18 @@
   --success-soft: #eaf4ee;
   --warning: #815619;
   --warning-soft: #f9f0df;
-  --sidebar-bg: #d5d8e0;
-  --sidebar-hover: #cacfd8;
+  --sidebar-bg: #e9f0f8;
+  --sidebar-hover: #dde7f3;
   --brand-g1: #6485d7;
   --brand-g2: #2856c7;
   --brand-g3: #1e4093;
   --brand-knob: #ffffff;
-  --lock-wash-a: #e5e6eb;
-  --lock-wash-b: #dadce2;
+  --lock-wash-a: #f7fafe;
+  --lock-wash-b: #eff4fa;
   --lock-orb-1: rgba(40, 86, 199, 0.07);
   --lock-orb-2: rgba(40, 86, 199, 0.045);
-  --frost-bg: rgba(243, 244, 247, 0.94);
-  --frost-border: #c7cbd4;
+  --frost-bg: rgba(255, 255, 255, 0.94);
+  --frost-border: #dce5ef;
   --tip-bg: #1f2124;
   --tip-fg: #f4f5f6;
   --toast-bg: #1f2124;
@@ -2208,17 +2196,24 @@ body {
   align-items: center;
   gap: var(--space-2);
 }
-/* 栏内控件一律 32px 档；搜索框灰底无描边（Apple 方言），窄窗先让搜索让位。 */
-.page-bar .search-box {
-  flex: 0 1 220px;
-  min-width: 140px;
+/* 搜索框的工具条档：32px、无描边、12px 字，底色交给 --bg-canvas-input。页栏内默认吃这一档；
+   栏外的第二行工具条（如 Codex 账号筛选行）给元素加 .flat 认领同一档，
+   不要再抄一遍令牌——基础 .search-box 那棵是弹窗/表单里的 36px 白底描边档。 */
+.page-bar .search-box,
+.search-box.flat {
   height: 32px;
-  margin-right: var(--space-2);
   background: var(--bg-canvas-input);
   border: 0;
   border-radius: 9px;
 }
-.page-bar .search-box input { font-size: var(--text-xs); }
+.page-bar .search-box input,
+.search-box.flat input { font-size: var(--text-xs); }
+/* 窄窗先让搜索让位，动作键不许被挤走。 */
+.page-bar .search-box {
+  flex: 0 1 220px;
+  min-width: 140px;
+  margin-right: var(--space-2);
+}
 .page-bar .btn-primary,
 .page-bar .btn-secondary,
 .page-bar .bar-btn { height: 32px; }

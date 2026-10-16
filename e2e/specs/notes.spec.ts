@@ -726,7 +726,7 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
     await expect(memo(page, '第一条小记')).toHaveClass(/is-sel/)
     // 选中态：浸润底 + 1px 全包裹微环（锚点 = paper 底色 × 墨蓝 accent）
-    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(49, 95, 155) 0px 0px 0px 1px, rgba(29, 28, 26, 0.05) 0px 1px 3px 0px')
+    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(40, 86, 199) 0px 0px 0px 1px, rgba(29, 28, 26, 0.05) 0px 1px 3px 0px')
     // 上下键换焦点，微环跟着走
     await page.locator('.memo').first().focus()
     await page.keyboard.press('ArrowDown')

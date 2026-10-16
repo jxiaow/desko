@@ -3,7 +3,7 @@ import { bootUnlocked, startApp, e2e, E2E_PASSWORD, openSettings } from '../help
 
 test.describe('背景材质', () => {
   test('开关同时改变画布、导航和浮层，输入区域保持实底', async ({ page }) => {
-    await bootUnlocked(page)
+    await bootUnlocked(page, { settings: { background_atmosphere: 'true' } })
     const dialog = await openSettings(page)
     const control = dialog.locator('.setting-item', { hasText: '背景氛围' })
     const toggle = control.getByRole('switch')
@@ -40,7 +40,7 @@ test.describe('背景材质', () => {
   })
 
   test('基础对话框自动继承材质，无需登记新的页面类名', async ({ page }) => {
-    await bootUnlocked(page)
+    await bootUnlocked(page, { settings: { background_atmosphere: 'true' } })
     await page.evaluate(() => {
       const el = document.createElement('div')
       el.className = 'dialog new-material-consumer'

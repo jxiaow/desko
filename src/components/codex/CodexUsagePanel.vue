@@ -136,7 +136,7 @@ function pct(part: number, whole: number): number {
       </section>
 
       <div class="usg-foot">
-        <p class="page-note"><AppIcon name="info" :size="13" />输入包含缓存命中，推理已计入输出。金额按标准 API 单价估算（USD），含未知模型时显示“未定价”，不代表订阅实际扣费。请求按有用量的 Token 记录去重计数；回收站中的会话不计入。</p>
+        <p class="page-note"><AppIcon name="info" :size="13" />统计包含默认 Codex 目录、开启自动统计时识别的 WSL 目录及「设置 → Codex」中手动补充的目录。输入包含缓存命中，推理已计入输出。金额按标准 API 单价估算（USD），含未知模型时显示“未定价”，不代表订阅实际扣费。请求按有用量的 Token 记录去重计数；回收站中的会话不计入。</p>
         <span class="usg-scan">扫了 {{ num(totals.fileCount) }} 个文件 · {{ scanSeconds }} s</span>
       </div>
     </template>

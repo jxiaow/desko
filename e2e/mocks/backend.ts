@@ -2369,7 +2369,8 @@ class MockBackend {
     get_setting: ({ key }) => this.state.settings[key] ?? '',
 
     set_setting: ({ key, value }) => {
-      if (!SETTINGS_ALLOWED_KEYS.includes(key)) throw ERR_DB
+      // 此目录配置由原生端存入 Codex 本地 config.json，mock 共用内存设置表。
+      if (!['codex_usage_extra_dirs', 'codex_usage_auto_wsl'].includes(key) && !SETTINGS_ALLOWED_KEYS.includes(key)) throw ERR_DB
       this.state.settings[key] = value
     },
 

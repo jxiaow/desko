@@ -22,7 +22,7 @@ async function pick(page: Page, label: string, option: string) {
 
 test('账号可以用邮箱搜索，并叠加类型、状态和标签筛选', async ({ page }) => {
   await boot(page)
-  await page.getByRole('searchbox', { name: '搜索 Codex 账号' }).fill(' MAIN@ ')
+  await page.getByRole('textbox', { name: '搜索 Codex 账号' }).fill(' MAIN@ ')
   await expect(page.locator('.acc-row')).toHaveCount(1)
   await expect(page.locator('.acc-row .mail')).toHaveText('主力')
   await expect(page.locator('.account-summary')).toContainText('1 / 3')
@@ -41,7 +41,7 @@ test('账号可以用邮箱搜索，并叠加类型、状态和标签筛选', as
 
 test('筛选结果的全选只增加当前可见账号，导出不夹带其他账号', async ({ page }) => {
   await boot(page)
-  await page.getByRole('searchbox', { name: '搜索 Codex 账号' }).fill('工作')
+  await page.getByRole('textbox', { name: '搜索 Codex 账号' }).fill('工作')
   await page.getByRole('button', { name: '选择', exact: true }).click()
   await page.locator('.acc-row .pick-box').first().click()
   await page.getByRole('button', { name: '全选筛选结果', exact: true }).click()

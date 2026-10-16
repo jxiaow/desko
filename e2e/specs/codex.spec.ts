@@ -486,6 +486,52 @@ test.describe('Codex 账号', () => {
       ['codex_quota_alert_threshold', '10'],
     ])
   })
+
+  test('设置·Codex：WSL 额外统计目录可以保存、重新打开和清空', async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 900 })
+    await bootUnlocked(page, { settings: { codex_enabled: 'true' } })
+    let dialog = await openSettings(page, 'codex')
+    const wsl = String.raw`\\wsl.localhost\Ubuntu\home\user\.codex`
+    const other = String.raw`D:\codex-home`
+    const input = dialog.getByRole('textbox', { name: '额外统计目录', exact: true })
+    await expect(input).toBeEnabled()
+    await input.fill(` ${wsl} \n\n${other}\n${wsl}`)
+    await dialog.getByRole('button', { name: '保存统计目录', exact: true }).click()
+    await expect(input).toHaveValue(`${wsl}\n${other}`)
+    await expectToast(page, '额外统计目录已保存')
+    expect(await visiblePane(dialog).evaluate(element => element.scrollWidth > element.clientWidth)).toBe(false)
+    await page.screenshot({ path: '.tmp/codex-wsl/settings-auto-800.png' })
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+    dialog = await openSettings(page, 'codex')
+    await expect(dialog.getByRole('textbox', { name: '额外统计目录', exact: true })).toHaveValue(`${wsl}\n${other}`)
+    await dialog.getByRole('textbox', { name: '额外统计目录', exact: true }).fill('')
+    await dialog.getByRole('button', { name: '保存统计目录', exact: true }).click()
+    const writes = await page.evaluate(() => (window as any).__E2E__.invocations
+      .filter((call: any) => call.cmd === 'set_setting' && call.args.key === 'codex_usage_extra_dirs')
+      .map((call: any) => JSON.parse(call.args.value)))
+    expect(writes).toEqual([[wsl, other], []])
+  })
+
+  test('设置·Codex：WSL 自动统计默认开启，可关闭并持久保存', async ({ page }) => {
+    await bootUnlocked(page, { settings: { codex_enabled: 'true' } })
+    let dialog = await openSettings(page, 'codex')
+    let toggle = dialog.getByRole('switch', { name: '自动统计 WSL 会话', exact: true })
+    await expect(toggle).toBeEnabled()
+    await expect(toggle).toBeChecked()
+    await toggle.locator('..').click()
+    await expectToast(page, '已关闭 WSL 自动统计')
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+    dialog = await openSettings(page, 'codex')
+    toggle = dialog.getByRole('switch', { name: '自动统计 WSL 会话', exact: true })
+    await expect(toggle).not.toBeChecked()
+    await expect(toggle).toBeEnabled()
+    await toggle.locator('..').click()
+    await expectToast(page, '已开启 WSL 自动统计')
+    const writes = await page.evaluate(() => (window as any).__E2E__.invocations
+      .filter((call: any) => call.cmd === 'set_setting' && call.args.key === 'codex_usage_auto_wsl')
+      .map((call: any) => call.args.value))
+    expect(writes).toEqual(['false', 'true'])
+  })
 })
 
 
