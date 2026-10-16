@@ -58,3 +58,8 @@ tmp/
 
 # 一次性截图/联调脚本，跑完即可弃
 scripts/.tmp-*
+
+# 对拍页把截图按 base64 内嵌在单行里，单个 21.7 MB；只留本机看，不入本
+# （同轮的轻量版 05-visual-audit.html / 06-spatial-applied.html 不内嵌图，已入库）
+docs/design/atmosphere/02-accent-source.html
+docs/design/atmosphere/03-accent-source-recalibrated.html
