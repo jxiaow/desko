@@ -1,0 +1,1773 @@
+<!doctype html>
+<!-- 背景氛围光场调参对拍稿（2026-10-16）。
+     改完重跑：
+       node scripts/mock-build.mjs docs/design/atmosphere/01-field-tuning.src.html docs/design/atmosphere/01-field-tuning.html
+       node scripts/mock-frames.mjs docs/design/atmosphere/01-field-tuning.html docs/design/atmosphere/shots atmo \
+         dark-ink dark-str tint-paper tint-mix anchor-snow anchor-cand dlg-slate dlg-thru dark-chroma \
+         bare-ink-base bare-ink-chroma bare-slate-base bare-slate-chroma bare-anchor bare-anchor-cand
+     十五帧：A–I 带完整外壳（同页同布局，只差光场配方），J–O 裸光场（只剩背景配方 + 两块卡面探针 + 阅读列虚线）。
+       A/B 墨·翡翠 提强度（21/14→23/19）——算下来只有 ΔRGB 1–5，是噪声级，留作反例
+       C/D 纸·湖蓝 提掺入（65/60→75/70）——同上，且方向是让氛围更弱
+       E/F 雪·陶橙 锚点跟正文列（14%12% + 95%95% → 26%14% + 84%90%）
+       G/H 岩·群青 弹窗光场与窗外连续（floating 自带光场 → 透出窗外同一片）
+       I + J/K + L/M 换轴：深底把亮度预算让给彩度（光场色压到"卡面 L*−1.5"，alpha 21/14→45/34）
+     数值账本见同目录 field-math.mjs（解析解，非截图取色）。
+     尺寸说明：真 app 用 clamp(…, 78vw, …) 按窗口算，mock 视口≠窗口，故在 .win 上钉成
+     1040×670 窗口的等值 px（811/570 与 853/603），保持现状帧与建议帧同一条基准。 -->
+<html lang="zh"><head><meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "HarmonyOS Sans SC", system-ui, sans-serif; }
+:root, .theme-scope {
+  /* 强调色混入底色后再铺柔光，避免高饱和色把工作区染成整片彩色。 */
+  --material-tint-primary: #4979df;
+  --material-tint-secondary: #71b7c8;
+  --material-color-primary: color-mix(in srgb, var(--material-tint-primary) 65%, var(--sunken));
+  --material-color-secondary: color-mix(in srgb, var(--material-tint-secondary) 60%, var(--sunken));
+  --material-primary-strength: 23%;
+  --material-secondary-strength: 16%;
+  --material-lock-primary-strength: 28%;
+  --material-lock-secondary-strength: 19%;
+  --material-navigation-strength: 8%;
+  /* 用覆盖范围保留氛围感，控制浓度，让全窗渐变轻柔地融入主题底色。 */
+  --material-field-primary-size: clamp(680px, 78vw, 1500px) clamp(480px, 85vh, 1020px);
+  --material-field-secondary-size: clamp(680px, 82vw, 1580px) clamp(480px, 90vh, 1080px);
+  --material-dither: url('/atmosphere-dither.svg');
+  --material-field:
+    var(--material-dither),
+    radial-gradient(ellipse 65% 75% at 50% 52%, color-mix(in srgb, var(--panel-bg) 28%, transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-field-primary-size) at 14% 12%, color-mix(in srgb, var(--material-color-primary) var(--material-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at 95% 95%, color-mix(in srgb, var(--material-color-secondary) var(--material-secondary-strength), transparent), transparent 100%);
+  --material-lock-field:
+    var(--material-dither),
+    radial-gradient(ellipse 60% 70% at 50% 48%, color-mix(in srgb, var(--panel-bg) 22%, transparent), transparent 90%),
+    radial-gradient(ellipse min(80vw, 1280px) min(94vh, 1000px) at 18% 16%, color-mix(in srgb, var(--material-color-primary) var(--material-lock-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse min(80vw, 1280px) min(90vh, 960px) at 92% 86%, color-mix(in srgb, var(--material-color-secondary) var(--material-lock-secondary-strength), transparent), transparent 100%);
+  --material-floating-field:
+    linear-gradient(color-mix(in srgb, var(--panel-bg) 70%, transparent), color-mix(in srgb, var(--panel-bg) 70%, transparent)),
+    var(--material-field), var(--panel-bg);
+  --material-editor-field:
+    linear-gradient(color-mix(in srgb, var(--bg) 65%, transparent), color-mix(in srgb, var(--bg) 65%, transparent)),
+    var(--material-field), var(--bg);
+  --border-navigation: color-mix(in srgb, var(--text) 3%, transparent);
+
+  --bg-app: var(--material-field), var(--sunken);
+  --bg-toolbar: var(--bg-app);
+  --bg-sidebar: var(--sidebar-bg);
+  --bg-nav-overlay: var(--sidebar-bg);
+  --bg-dialog: var(--panel-bg);
+  --bg-popover: color-mix(in srgb, var(--panel-bg) 96%, transparent);
+  --bg-menu: var(--panel-bg);
+  --bg-dock: var(--panel-bg);
+  --bg-editor: var(--bg);
+  --bg-input: var(--bg);
+  --bg-input-focus: var(--panel-bg);
+  --bg-canvas-input: color-mix(in srgb, var(--text) 7%, transparent);
+  --bg-surface: var(--panel-bg);
+  --bg-surface-hover: var(--hover);
+  --bg-surface-active: var(--active);
+  --bg-tag-default: var(--badge-cat-bg);
+  --bg-mono-chip: var(--sunken);
+  --bg-statusbar: var(--panel-bg);
+  --hover-chrome: color-mix(in srgb, var(--text) 9%, transparent);
+
+  --floating-background-attachment: scroll;
+  --nav-overlay-background-attachment: scroll;
+  --editor-background-attachment: scroll;
+  --text-canvas-meta: var(--text-secondary);
+  --text-nav-label: var(--text-secondary);
+  --text-nav-section: var(--text-secondary);
+
+  --bg-lock: linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%);
+  --material-decoration-display: block;
+
+}
+:root[data-accent="celadon"], .theme-scope[data-accent="celadon"] {
+  --material-tint-primary: #20a87a;
+  --material-tint-secondary: #9fc77f;
+
+}
+:root[data-accent="clay"], .theme-scope[data-accent="clay"] {
+  --material-tint-primary: #d8792d;
+  --material-tint-secondary: #e4bd73;
+
+}
+:root[data-accent="plum"], .theme-scope[data-accent="plum"] {
+  --material-tint-primary: #9664d3;
+  --material-tint-secondary: #c991b2;
+
+}
+:root[data-accent="rose"], .theme-scope[data-accent="rose"] {
+  --material-tint-primary: #cd50ac;
+  --material-tint-secondary: #e7a191;
+
+}
+:root[data-accent="teal"], .theme-scope[data-accent="teal"] {
+  --material-tint-primary: #25a7bc;
+  --material-tint-secondary: #7799cb;
+
+}
+:root[data-accent="forest"], .theme-scope[data-accent="forest"] {
+  --material-tint-primary: #8ba44a;
+  --material-tint-secondary: #c0b477;
+
+}
+:root[data-accent="amber"], .theme-scope[data-accent="amber"] {
+  --material-tint-primary: #c9a533;
+  --material-tint-secondary: #c29d73;
+
+}
+:root[data-accent="coral"], .theme-scope[data-accent="coral"] {
+  --material-tint-primary: #da5c70;
+  --material-tint-secondary: #d9957c;
+
+}
+:root[data-accent="graphite"], .theme-scope[data-accent="graphite"] {
+  --material-tint-primary: #667080;
+  --material-tint-secondary: #aaa1b3;
+
+}
+:root[data-base="light"][data-accent="graphite"], .theme-scope[data-base="light"][data-accent="graphite"] {
+  --material-primary-strength: 26%;
+  --material-secondary-strength: 23%;
+
+}
+:root[data-base="dark"], .theme-scope[data-base="dark"] {
+  --material-primary-strength: 21%;
+  --material-secondary-strength: 14%;
+  --material-lock-primary-strength: 26%;
+  --material-lock-secondary-strength: 18%;
+
+}
+.theme-scope {
+  --material-field-primary-size: 78% 85%;
+  --material-field-secondary-size: 82% 90%;
+
+}
+:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"] {
+  /* 薄底色保留主题冷暖，主侧栏直接透出全窗光场，让分界两侧的颜色连续。 */
+  --bg-sidebar: color-mix(in srgb, var(--sidebar-bg) var(--material-navigation-strength), transparent);
+  /* 抽屉覆盖在正文上，需自带不透明底色，避免透出正文。 */
+  --bg-nav-overlay: var(--material-floating-field);
+  --bg-dialog: var(--material-floating-field);
+  --bg-popover: var(--material-floating-field);
+  --bg-menu: var(--material-floating-field);
+  --bg-dock: var(--material-floating-field);
+  --bg-editor: var(--material-editor-field);
+  --bg-canvas-input: var(--bg-input);
+
+}
+:root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"] {
+  --bg-app: var(--sunken);
+  --bg-lock: var(--bg);
+  --material-decoration-display: none;
+
+}
+:root {
+  /* 间距系统 - 4px 基础 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* 圆角系统 */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  /* 控件档：图标按钮与小型按钮专用。原先它们跟着 --radius-sm 吃 6px，28px 的钮只占短边 21%，
+     是全场最方的一档（卡片 10/56≈18% 但有 14px 弹窗与胶囊压着）。抬到 9px≈32%，落回同一轨。
+     只给按钮——输入字段/标签/气泡仍走 --radius-sm，圆角轴一分为二，别互相牵连。 */
+  --radius-ib: 9px;
+  --radius: 10px;
+  --radius-md: 12px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 99px;
+
+  /* 字号阶梯：所有 UI 文本走这条轴，不再用 10.5/11.5/12.5/13.5/14.5/17.5 这种半像素。
+     编辑器/列表/标题等组件用一档；需要略大或略小时优先调字重，不挤字号档。
+     body 的 15px 走 --text-md。大方化轮整体上抬一档（docs/design/spacious/01-plan.md）。
+     2xs/3xl 是本轮补的两端：
+       · 2xs 只给"嵌在固定小盒子里的辅助信息"（键帽、单位、分组小标、卡脚标签），
+         正文与说明文字不许降到这一档以下（lighten 轮已把 11px 的说明文字抬到 12）；
+       · 3xl 只给"读一个大数值"的读数面（验证码），其余文本停在 2xl。 */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+
+  /* AppIcon :size 走这几档，不再 10/11/12/13/14/15/16/18/24 全谱散布。
+     组件传 :size 时按数值用，CSS 写 width/height 时引用 px 形式。
+     tile 档 18：34px 身份档里的图形，16 显小、20 顶边，与档内 favicon 的 22px 图取同一重量 */
+  --icon-xs-px: 12px;
+  --icon-sm-px: 14px;
+  --icon-md-px: 16px;
+  --icon-tile-px: 18px;
+  --icon-lg-px: 20px;
+  --icon-xl-px: 26px;
+
+  /* 批量浮底栏占位高度：所有列表容器底部要让出这块空间，避免最后一行被遮 */
+  --dock-clearance: 96px;
+
+  /* 过渡 */
+  --transition-fast: 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* 布局尺度 */
+  /* 侧栏三态（V5.2 收编轮 P2）：展开 208 / 图标轨 56 / 收起 0，
+     第三态不占宽，恢复入口在标题栏面包屑左侧 */
+  --sidebar-w: 208px;
+  --sidebar-rail-w: 56px;
+  /* 内容区的最小水平留白；工具栏与卡片共用同一阅读列 */
+  --page-gutter: 24px;
+  /* 经典滚动条占位宽度，::-webkit-scrollbar 与侧栏的槽补偿都取它 */
+  --scrollbar-track: 9px;
+  /* 全屏书写栏宽度：大窗口适度放宽，保留居中留白与阅读行长 */
+  --fs-max: 1200px;
+  /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
+  --stream-max: 1200px;
+  /* 列表页的阅读列上限：按视口给，侧栏展开/折叠不跟着抖。
+     1235 常态窗与 1440 都还吃在 900 下限上，只有最大化（≥1920）才涨到 1120。
+     上限之外的余量由左右两侧均分，阅读列在可用内容区内居中 */
+  --content-max: clamp(900px, calc(100vw - 800px), 1120px);
+  /* 小记卡片正文高度上限：短的小记按实际内容，长的由 JS 收在这里之上最近的整行边界 */
+  --memo-max-h: 144px;
+  --rail-w: 248px;
+  /* 小记顶栏的实际占位高度：粘性日期行和窄窗口下的浮层侧栏都要从它下面开始。
+     一行头方言（Things）后 .page-bar = padding-top 16 + 控件 32 + padding-bottom 16（border-box）= 64px 定高 */
+  --stream-bar-h: 64px;
+  /* 容器窄于此值时收起右栏，筛选降级为浮层 */
+  --rail-min-room: 900px;
+
+}
+:where(:root), [data-theme="paper"] {
+  /* 品牌缺省：墨蓝（accent 覆盖层会按 data-accent 重填这一族） */
+  --accent: #2856c7;
+  --accent-hover: #234bad;
+  --accent-active: #1e4093;
+  --accent-on: #ffffff;
+  --accent-soft: #dde4f6;
+  --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2);
+  --text-brand: #234bad;
+
+  /* 面：暖白五档。卡面不上纯白，悬停比卡面暗一档，避免柔光盖掉反馈。 */
+  --bg: #f8f5f0;
+  --panel-bg: #fcfaf7;
+  --chrome-bg: rgba(248, 245, 240, 0.78);
+  --sunken: #f1ede7;
+  --fill: #e8e2d9;
+  --hover: #f6f3ee;
+  --active: #eae4db;
+  --overlay: rgba(29, 28, 26, 0.42);
+
+  /* 文字：四级近中性，深字浅底一眼可读 */
+  --text: #333230;
+  --text-secondary: #4d4c49;
+  --text-muted: #6b6a66;
+  --text-faint: #95948e;
+
+  /* 描边：层级靠边框，不靠色块 */
+  --border: #e2dbd1;
+  --border-strong: #cec5b8;
+  --border-subtle: #f1ede7;
+  --border-hover: #cec5b8;
+
+  /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
+  --text-url: #4d4c49;
+  --badge-cat-bg: #eee8df;
+  --badge-cat-border: #e2dbd1;
+  --badge-cat-text: #4d4c49;
+  --badge-ver-bg: #dde4f6;
+  --badge-ver-text: #234bad;
+
+  /* 投影带暖褐，纯灰投影在米底上会显脏 */
+  --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  /* 轻量化轮：行卡不再靠宽大软影浮起，阴影只留一丝贴地感，分层交还发丝描边 */
+  --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #cec5b8;
+  --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  /* 批量药丸浮在列表之上，要比任何弹层都高：弥散更深、落点更远，只用当前主题的字色 */
+  --shadow-dock: 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14);
+
+  /* 状态色：一个语义一档强度，浅色下全部 ≥4.5:1 可读写。
+     危险取砖红（与暖纸同色温），成功取青瓷苔绿，警告取土黄。 */
+  --danger: #a9443c;
+  --danger-on: #ffffff;
+  --danger-hover: #8c362f;
+  --danger-soft: #f7ece9;
+  --danger-border: #eacfc8;
+  --success: #3d7355;
+  --success-soft: #ecf3ee;
+  --warning: #96682a;
+  --warning-soft: #f6efdf;
+
+  /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
+  --sidebar-bg: #eae4db;
+  --sidebar-hover: #e2dbd1;
+
+  /* 品牌标渐变 */
+  --brand-g1: #6485d7;
+  --brand-g2: #2856c7;
+  --brand-g3: #1e4093;
+  --brand-knob: #ffffff;
+
+  /* 锁屏 */
+  --lock-wash-a: #fcfaf7;
+  --lock-wash-b: #eae4db;
+  --lock-orb-1: rgba(40, 86, 199, 0.07);
+  --lock-orb-2: rgba(40, 86, 199, 0.045);
+
+  /* 毛玻璃底栏 */
+  --frost-bg: rgba(252, 250, 247, 0.86);
+  --frost-border: #e2dbd1;
+
+  /* 深色面：气泡与 toast */
+  --tip-bg: #26241f;
+  --tip-fg: #f2f0ea;
+  --toast-bg: #26241f;
+  --toast-ok: #9cc4ae;
+  --toast-err: #e09a92;
+  --toast-info: #91baff;
+
+  /* 滚动条与选区 */
+  --scrollbar: rgba(29, 28, 26, 0.16);
+  --scrollbar-hover: rgba(29, 28, 26, 0.28);
+  --selection: rgba(40, 86, 199, 0.22);
+
+  /* 头像：按分类取色，六档同明度同彩度（v2 起只服务内容侧） */
+  --cat-1: #5f62b8;
+  --cat-2: #7b5fb0;
+  --cat-3: #a85b7d;
+  --cat-4: #937042;
+  --cat-5: #46806b;
+  --cat-6: #457f8a;
+  --cat-text: #ffffff;
+
+  /* 文件类型：保留 pdf红/doc蓝/xls绿 的通用认知，只降饱和 */
+  --ft-pdf: #b8564f;
+  --ft-doc: #4a6d9c;
+  --ft-sheet: #3f7a5e;
+  --ft-deck: #a0603a;
+  --ft-arch: #6a5a99;
+  --ft-code: #8a7534;
+  --ft-mark: #5e6672;
+  --ft-img: #9a5a72;
+  --ft-unk: #7a7f88;
+
+  /* 代码块：与界面同一只手的色温（配色收口轮：整族在 --sunken 上顶住 4.5，
+     注释/标点保持"最静"档但不再是看不见） */
+  --code-fg: #1a1b20;
+  --code-kw: #9d5275;
+  --code-str: #3a7256;
+  --code-num: #96593a;
+  --code-type: #7d6a2f;
+  --code-fn: #4a6d9c;
+  --code-var: #5e6672;
+  --code-com: #686a73;
+  --code-tag: #6a5a99;
+  --code-pun: #5e6168;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  /* Consolas 没有中文字形：不在它后面接 UI 中文族，等宽件里的中文（占位符、子路径、代码注释）
+     就会回落到宋体，和同一行的无衬线文字明显两种笔形 */
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="ink"] {
+  --accent: #9bbfff;
+  --accent-hover: #a9c8ff;
+  --accent-active: #86a5dc;
+  --accent-on: #171b22;
+  --accent-soft: rgba(155, 191, 255, 0.1);
+  --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36);
+  --text-brand: #adcbff;
+
+  --bg: #1d1c1a;
+  --panel-bg: #22211e;
+  --chrome-bg: rgba(29, 28, 26, 0.86);
+  --sunken: #181716;
+  --fill: #2a2927;
+  --hover: #282622;
+  --active: #343431;
+  --overlay: rgba(0, 0, 0, 0.62);
+
+  --text: #e6e4de;
+  --text-secondary: #c7c4bd;
+  --text-muted: #aeaba4;
+  --text-faint: #9c9992;
+
+  --border: #30302d;
+  --border-strong: #434340;
+  --border-subtle: #252421;
+  --border-hover: #434340;
+
+  --text-url: #c9c6bf;
+  --badge-cat-bg: #252421;
+  --badge-cat-border: #30302d;
+  --badge-cat-text: #c7c4bd;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1);
+  --badge-ver-text: #adcbff;
+
+  /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* 轻量化轮：墨色行卡去掉 18px 大投影与外圈环，只留顶部高光一丝 */
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* 深色下纯黑弥散等于没有：药丸靠那圈高光边浮起来 */
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+
+  --danger: #e08079;
+  --danger-on: #181716;
+  --danger-hover: #ea9d97;
+  --danger-soft: #271a17;
+  --danger-border: #462924;
+  --success: #6fbf95;
+  --success-soft: #17211c;
+  --warning: #d9a95f;
+  --warning-soft: #241e13;
+
+  --sidebar-bg: #1a1917;
+  --sidebar-hover: #282622;
+
+  --brand-g1: #adcbff;
+  --brand-g2: #9bbfff;
+  --brand-g3: #86a5dc;
+  --brand-knob: #1d1c1a;
+
+  --lock-wash-a: #1d1c1a;
+  --lock-wash-b: #22211e;
+  --lock-orb-1: rgba(155, 191, 255, 0.14);
+  --lock-orb-2: rgba(155, 191, 255, 0.07);
+
+  --frost-bg: rgba(34, 33, 30, 0.88);
+  --frost-border: #30302d;
+
+  /* 深色界面的浮层反过来：亮底暗字 */
+  --tip-bg: #efede8;
+  --tip-fg: #1d1c1a;
+  --toast-bg: #efede8;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #2856c7;
+
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(155, 191, 255, 0.3);
+
+  /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
+  --cat-1: #8a8fd8;
+  --cat-2: #ab8de6;
+  --cat-3: #de8fb8;
+  --cat-4: #d8b078;
+  --cat-5: #6fc0a0;
+  --cat-6: #6fb8c8;
+  --cat-text: #171614;
+
+  --ft-pdf: #f0716b;
+  --ft-doc: #7aa2f7;
+  --ft-sheet: #3fb950;
+  --ft-deck: #e0a45c;
+  --ft-arch: #a98be8;
+  --ft-code: #e0c060;
+  --ft-mark: #8c94a6;
+  --ft-img: #e08bb8;
+  --ft-unk: #6b7280;
+
+  --code-fg: #e4e2dc;
+  --code-kw: #de9ab8;
+  --code-str: #6fd0a8;
+  --code-num: #e0b072;
+  --code-type: #e0c060;
+  --code-fn: #8aa8e0;
+  --code-var: #b6b2a8;
+  --code-com: #9d9991;
+  --code-tag: #ab8de6;
+  --code-pun: #8c94a6;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="snow"] {
+  --accent: #2856c7;
+  --accent-hover: #234bad;
+  --accent-active: #1e4093;
+  --accent-on: #ffffff;
+  --accent-soft: #dde4f6;
+  --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2);
+  --text-brand: #234bad;
+
+  --bg: #f1f2f3;
+  --panel-bg: #fefefe;
+  --chrome-bg: rgba(241, 242, 243, 0.85);
+  --sunken: #ebecee;
+  --fill: #dbdde0;
+  --hover: #f7f8f9;
+  --active: #e1e3e6;
+  --overlay: rgba(18, 19, 22, 0.42);
+
+  --text: #1a1b1d;
+  --text-secondary: #3e3f42;
+  --text-muted: #5b5d61;
+  --text-faint: #85888d;
+
+  --border: #d3d5d9;
+  --border-strong: #b9bdc2;
+  --border-subtle: #e9ebee;
+  --border-hover: #b9bdc2;
+
+  --text-url: #3e3f42;
+  --badge-cat-bg: #ebecee;
+  --badge-cat-border: #d3d5d9;
+  --badge-cat-text: #3e3f42;
+  --badge-ver-bg: #dde4f6;
+  --badge-ver-text: #234bad;
+
+  --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
+  --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(18, 19, 22, 0.05);
+  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2;
+  --shadow-md: 0 6px 16px -6px rgba(18, 19, 22, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(18, 19, 22, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14);
+
+  --danger: #b83a30;
+  --danger-on: #ffffff;
+  --danger-hover: #992e26;
+  --danger-soft: #faecea;
+  --danger-border: #f0cfcb;
+  --success: #2e7a50;
+  --success-soft: #eaf4ee;
+  --warning: #9c681e;
+  --warning-soft: #f9f0df;
+
+  --sidebar-bg: #e3e5e8;
+  --sidebar-hover: #dadee1;
+
+  --brand-g1: #6485d7;
+  --brand-g2: #2856c7;
+  --brand-g3: #1e4093;
+  --brand-knob: #ffffff;
+
+  --lock-wash-a: #fefefe;
+  --lock-wash-b: #e3e5e8;
+  --lock-orb-1: rgba(40, 86, 199, 0.07);
+  --lock-orb-2: rgba(40, 86, 199, 0.045);
+
+  --frost-bg: rgba(254, 254, 254, 0.88);
+  --frost-border: #d3d5d9;
+
+  /* 深色浮层与瓷白同色温：中性近黑，不再为了"跟底翻冷"掺蓝 */
+  --tip-bg: #1f2124;
+  --tip-fg: #f4f5f6;
+  --toast-bg: #1f2124;
+  --toast-ok: #91c9a6;
+  --toast-err: #e28e84;
+  --toast-info: #91baff;
+
+  --scrollbar: rgba(18, 19, 22, 0.16);
+  --scrollbar-hover: rgba(18, 19, 22, 0.28);
+  --selection: rgba(40, 86, 199, 0.22);
+
+  --cat-1: #5465c4;
+  --cat-2: #735eb8;
+  --cat-3: #a6587d;
+  --cat-4: #946e38;
+  --cat-5: #3f8067;
+  --cat-6: #3b808e;
+  --cat-text: #ffffff;
+
+  --ft-pdf: #be4e46;
+  --ft-doc: #3a689e;
+  --ft-sheet: #337d57;
+  --ft-deck: #a65e31;
+  --ft-arch: #6957a0;
+  --ft-code: #8c7324;
+  --ft-mark: #586374;
+  --ft-img: #9d5472;
+  --ft-unk: #6e7580;
+
+  --code-fg: #191a1d;
+  --code-kw: #a04975;
+  --code-str: #2f7351;
+  --code-num: #9b542e;
+  --code-type: #776422;
+  --code-fn: #3a689e;
+  --code-var: #586374;
+  --code-com: #63656f;
+  --code-tag: #6957a0;
+  --code-pun: #5b606a;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="slate"] {
+  --accent: #9bbfff;
+  --accent-hover: #a9c8ff;
+  --accent-active: #86a5dc;
+  --accent-on: #171b22;
+  --accent-soft: rgba(155, 191, 255, 0.1);
+  --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36);
+  --text-brand: #adcbff;
+
+  --bg: #252932;
+  --panel-bg: #2b303a;
+  --chrome-bg: rgba(37, 41, 50, 0.86);
+  --sunken: #1f232b;
+  --fill: #323844;
+  --hover: #323844;
+  --active: #3b4351;
+  --overlay: rgba(0, 0, 0, 0.65);
+
+  --text: #edf0f6;
+  --text-secondary: #d2d7e1;
+  --text-muted: #bbc3d0;
+  --text-faint: #adb6c5;
+
+  --border: #3e4654;
+  --border-strong: #535f71;
+  --border-subtle: #303743;
+  --border-hover: #535f71;
+
+  --text-url: #d2d7e1;
+  --badge-cat-bg: #303743;
+  --badge-cat-border: #3e4654;
+  --badge-cat-text: #d2d7e1;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1);
+  --badge-ver-text: #adcbff;
+
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #535f71;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+
+  --danger: #df817c;
+  --danger-on: #181517;
+  --danger-hover: #e89e99;
+  --danger-soft: #271a19;
+  --danger-border: #472927;
+  --success: #6cbd94;
+  --success-soft: #16221d;
+  --warning: #d9aa63;
+  --warning-soft: #251f15;
+
+  --sidebar-bg: #22262e;
+  --sidebar-hover: #303743;
+
+  --brand-g1: #adcbff;
+  --brand-g2: #9bbfff;
+  --brand-g3: #86a5dc;
+  --brand-knob: #252932;
+
+  --lock-wash-a: #252932;
+  --lock-wash-b: #2b303a;
+  --lock-orb-1: rgba(155, 191, 255, 0.14);
+  --lock-orb-2: rgba(155, 191, 255, 0.07);
+
+  --frost-bg: rgba(43, 48, 58, 0.88);
+  --frost-border: #3e4654;
+
+  --tip-bg: #eef0f5;
+  --tip-fg: #252932;
+  --toast-bg: #eef0f5;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #2856c7;
+
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(155, 191, 255, 0.3);
+
+  --cat-1: #8c90da;
+  --cat-2: #ac8fe6;
+  --cat-3: #dc91b8;
+  --cat-4: #d7b17c;
+  --cat-5: #70c1a2;
+  --cat-6: #71b9c9;
+  --cat-text: #14171c;
+
+  --ft-pdf: #ef726d;
+  --ft-doc: #7ca3f7;
+  --ft-sheet: #42ba54;
+  --ft-deck: #dfa561;
+  --ft-arch: #aa8ce8;
+  --ft-code: #dfc165;
+  --ft-mark: #8f96a7;
+  --ft-img: #df8cb8;
+  --ft-unk: #8f96a7;
+
+  --code-fg: #e2e5eb;
+  --code-kw: #dd9cb8;
+  --code-str: #72d0a8;
+  --code-num: #deb177;
+  --code-type: #dec165;
+  --code-fn: #8ea9df;
+  --code-var: #b8b5ac;
+  --code-com: #9fa098;
+  --code-tag: #ac8fe6;
+  --code-pun: #8f96a7;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="linen"] {
+  --accent: #2856c7;
+  --accent-hover: #234bad;
+  --accent-active: #1e4093;
+  --accent-on: #ffffff;
+  --accent-soft: #dde4f6;
+  --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2);
+  --text-brand: #234bad;
+  --bg: #ebe7e0;
+  --panel-bg: #f5f2ed;
+  --chrome-bg: rgba(235, 231, 224, 0.9);
+  --sunken: #e3dfd8;
+  --fill: #d8d3cb;
+  --hover: #eeebe5;
+  --active: #dcd7cf;
+  --overlay: rgba(29, 28, 26, 0.42);
+  --text: #34322e;
+  --text-secondary: #514e49;
+  --text-muted: #66635d;
+  --text-faint: #67625c;
+  --border: #cec8be;
+  --border-strong: #b4ac9f;
+  --border-subtle: #e5e0d8;
+  --border-hover: #b4ac9f;
+  --text-url: #514e49;
+  --badge-cat-bg: #e3ded5;
+  --badge-cat-border: #cec8be;
+  --badge-cat-text: #514e49;
+  --badge-ver-bg: #dde4f6;
+  --badge-ver-text: #234bad;
+  --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #cec5b8;
+  --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14);
+  --danger: #a4423a;
+  --danger-on: #ffffff;
+  --danger-hover: #8c362f;
+  --danger-soft: #f7ece9;
+  --danger-border: #eacfc8;
+  --success: #396c50;
+  --success-soft: #ecf3ee;
+  --warning: #815924;
+  --warning-soft: #f6efdf;
+  --sidebar-bg: #dcd7cf;
+  --sidebar-hover: #d1cbc1;
+  --brand-g1: #6485d7;
+  --brand-g2: #2856c7;
+  --brand-g3: #1e4093;
+  --brand-knob: #ffffff;
+  --lock-wash-a: #ebe7e0;
+  --lock-wash-b: #e3dfd8;
+  --lock-orb-1: rgba(40, 86, 199, 0.07);
+  --lock-orb-2: rgba(40, 86, 199, 0.045);
+  --frost-bg: rgba(245, 242, 237, 0.94);
+  --frost-border: #cec8be;
+  --tip-bg: #26241f;
+  --tip-fg: #f2f0ea;
+  --toast-bg: #26241f;
+  --toast-ok: #9cc4ae;
+  --toast-err: #e09a92;
+  --toast-info: #91baff;
+  --scrollbar: rgba(29, 28, 26, 0.16);
+  --scrollbar-hover: rgba(29, 28, 26, 0.28);
+  --selection: rgba(40, 86, 199, 0.22);
+  --cat-1: #5f62b8;
+  --cat-2: #7b5fb0;
+  --cat-3: #a85b7d;
+  --cat-4: #937042;
+  --cat-5: #46806b;
+  --cat-6: #457f8a;
+  --cat-text: #ffffff;
+  --ft-pdf: #9b4842;
+  --ft-doc: #43638e;
+  --ft-sheet: #376b53;
+  --ft-deck: #8b5432;
+  --ft-arch: #685896;
+  --ft-code: #71602b;
+  --ft-mark: #5a626d;
+  --ft-img: #895065;
+  --ft-unk: #5e6269;
+  --code-fg: #1a1b20;
+  --code-kw: #904b6c;
+  --code-str: #376c52;
+  --code-num: #8c5336;
+  --code-type: #72602b;
+  --code-fn: #43638e;
+  --code-var: #5a626d;
+  --code-com: #5f6069;
+  --code-tag: #685896;
+  --code-pun: #5e6168;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="mist"] {
+  --accent: #2856c7;
+  --accent-hover: #234bad;
+  --accent-active: #1e4093;
+  --accent-on: #ffffff;
+  --accent-soft: #dde4f6;
+  --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2);
+  --text-brand: #234bad;
+  --bg: #e5e6eb;
+  --panel-bg: #f3f4f7;
+  --chrome-bg: rgba(229, 230, 235, 0.9);
+  --sunken: #dadce2;
+  --fill: #cfd2da;
+  --hover: #e9ebf0;
+  --active: #d4d7df;
+  --overlay: rgba(18, 19, 22, 0.42);
+  --text: #30343d;
+  --text-secondary: #4a505c;
+  --text-muted: #5b606b;
+  --text-faint: #5c616c;
+  --border: #c7cbd4;
+  --border-strong: #adb3c0;
+  --border-subtle: #dfe2e9;
+  --border-hover: #adb3c0;
+  --text-url: #4a505c;
+  --badge-cat-bg: #dee1e8;
+  --badge-cat-border: #c7cbd4;
+  --badge-cat-text: #4a505c;
+  --badge-ver-bg: #dde4f6;
+  --badge-ver-text: #234bad;
+  --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
+  --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(18, 19, 22, 0.05);
+  --shadow: 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2;
+  --shadow-md: 0 6px 16px -6px rgba(18, 19, 22, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(18, 19, 22, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14);
+  --danger: #ab362d;
+  --danger-on: #ffffff;
+  --danger-hover: #992e26;
+  --danger-soft: #faecea;
+  --danger-border: #f0cfcb;
+  --success: #286b46;
+  --success-soft: #eaf4ee;
+  --warning: #815619;
+  --warning-soft: #f9f0df;
+  --sidebar-bg: #d5d8e0;
+  --sidebar-hover: #cacfd8;
+  --brand-g1: #6485d7;
+  --brand-g2: #2856c7;
+  --brand-g3: #1e4093;
+  --brand-knob: #ffffff;
+  --lock-wash-a: #e5e6eb;
+  --lock-wash-b: #dadce2;
+  --lock-orb-1: rgba(40, 86, 199, 0.07);
+  --lock-orb-2: rgba(40, 86, 199, 0.045);
+  --frost-bg: rgba(243, 244, 247, 0.94);
+  --frost-border: #c7cbd4;
+  --tip-bg: #1f2124;
+  --tip-fg: #f4f5f6;
+  --toast-bg: #1f2124;
+  --toast-ok: #91c9a6;
+  --toast-err: #e28e84;
+  --toast-info: #91baff;
+  --scrollbar: rgba(18, 19, 22, 0.16);
+  --scrollbar-hover: rgba(18, 19, 22, 0.28);
+  --selection: rgba(40, 86, 199, 0.22);
+  --cat-1: #5465c4;
+  --cat-2: #735eb8;
+  --cat-3: #a6587d;
+  --cat-4: #946e38;
+  --cat-5: #3f8067;
+  --cat-6: #3b808e;
+  --cat-text: #ffffff;
+  --ft-pdf: #9e413a;
+  --ft-doc: #366193;
+  --ft-sheet: #2b6a4a;
+  --ft-deck: #8d502a;
+  --ft-arch: #66549b;
+  --ft-code: #715d1d;
+  --ft-mark: #556071;
+  --ft-img: #8c4b65;
+  --ft-unk: #5a6069;
+  --code-fg: #191a1d;
+  --code-kw: #95446d;
+  --code-str: #2c6b4b;
+  --code-num: #904e2b;
+  --code-type: #705e20;
+  --code-fn: #366193;
+  --code-var: #556071;
+  --code-com: #5d5f68;
+  --code-tag: #66549b;
+  --code-pun: #5b606a;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="midnight"] {
+  --accent: #9bbfff;
+  --accent-hover: #a9c8ff;
+  --accent-active: #86a5dc;
+  --accent-on: #171b22;
+  --accent-soft: rgba(155, 191, 255, 0.1);
+  --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36);
+  --text-brand: #adcbff;
+  --bg: #34373f;
+  --panel-bg: #3b3f48;
+  --chrome-bg: rgba(52, 55, 63, 0.9);
+  --sunken: #2e3139;
+  --fill: #444953;
+  --hover: #444852;
+  --active: #4b505b;
+  --overlay: rgba(0, 0, 0, 0.65);
+  --text: #d7dbe4;
+  --text-secondary: #c6ccd6;
+  --text-muted: #bbc2cf;
+  --text-faint: #a6afbf;
+  --border: #505560;
+  --border-strong: #666d7b;
+  --border-subtle: #41454f;
+  --border-hover: #666d7b;
+  --text-url: #c6ccd6;
+  --badge-cat-bg: #454a55;
+  --badge-cat-border: #59606e;
+  --badge-cat-text: #d0d6e1;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1);
+  --badge-ver-text: #adcbff;
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #535f71;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+  --danger: #e59894;
+  --danger-on: #181517;
+  --danger-hover: #e89e99;
+  --danger-soft: #271a19;
+  --danger-border: #472927;
+  --success: #6cbd94;
+  --success-soft: #16221d;
+  --warning: #d9aa63;
+  --warning-soft: #251f15;
+  --sidebar-bg: #30333b;
+  --sidebar-hover: #3b3f49;
+  --brand-g1: #adcbff;
+  --brand-g2: #9bbfff;
+  --brand-g3: #86a5dc;
+  --brand-knob: #252932;
+  --lock-wash-a: #34373f;
+  --lock-wash-b: #2e3139;
+  --lock-orb-1: rgba(155, 191, 255, 0.14);
+  --lock-orb-2: rgba(155, 191, 255, 0.07);
+  --frost-bg: rgba(59, 63, 72, 0.94);
+  --frost-border: #505560;
+  --tip-bg: #eef0f5;
+  --tip-fg: #252932;
+  --toast-bg: #eef0f5;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #2856c7;
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(155, 191, 255, 0.3);
+  --cat-1: #8c90da;
+  --cat-2: #ac8fe6;
+  --cat-3: #dc91b8;
+  --cat-4: #d7b17c;
+  --cat-5: #70c1a2;
+  --cat-6: #71b9c9;
+  --cat-text: #14171c;
+  --ft-pdf: #f3918d;
+  --ft-doc: #88abf8;
+  --ft-sheet: #55c165;
+  --ft-deck: #dfa561;
+  --ft-arch: #b8a0ec;
+  --ft-code: #dfc165;
+  --ft-mark: #a7acb9;
+  --ft-img: #e194bd;
+  --ft-unk: #a7acb9;
+  --code-fg: #e2e5eb;
+  --code-kw: #dd9cb8;
+  --code-str: #72d0a8;
+  --code-num: #deb177;
+  --code-type: #dec165;
+  --code-fn: #91ace0;
+  --code-var: #b8b5ac;
+  --code-com: #abaca5;
+  --code-tag: #b89fea;
+  --code-pun: #a7acb9;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-theme="moss"] {
+  --accent: #9bbfff;
+  --accent-hover: #a9c8ff;
+  --accent-active: #86a5dc;
+  --accent-on: #171b22;
+  --accent-soft: rgba(155, 191, 255, 0.1);
+  --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36);
+  --text-brand: #adcbff;
+  --bg: #282b25;
+  --panel-bg: #30332d;
+  --chrome-bg: rgba(40, 43, 37, 0.9);
+  --sunken: #22251f;
+  --fill: #3b3f36;
+  --hover: #393d34;
+  --active: #41463b;
+  --overlay: rgba(0, 0, 0, 0.62);
+  --text: #d8dacf;
+  --text-secondary: #c1c7b9;
+  --text-muted: #adb6a6;
+  --text-faint: #98a18e;
+  --border: #43493d;
+  --border-strong: #5e6755;
+  --border-subtle: #353a30;
+  --border-hover: #5e6755;
+  --text-url: #c1c7b9;
+  --badge-cat-bg: #3b4134;
+  --badge-cat-border: #505947;
+  --badge-cat-text: #cbd3c1;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1);
+  --badge-ver-text: #adcbff;
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+  --danger: #e08079;
+  --danger-on: #181716;
+  --danger-hover: #ea9d97;
+  --danger-soft: #271a17;
+  --danger-border: #462924;
+  --success: #6fbf95;
+  --success-soft: #17211c;
+  --warning: #d9a95f;
+  --warning-soft: #241e13;
+  --sidebar-bg: #252822;
+  --sidebar-hover: #33382e;
+  --brand-g1: #adcbff;
+  --brand-g2: #9bbfff;
+  --brand-g3: #86a5dc;
+  --brand-knob: #1d1c1a;
+  --lock-wash-a: #282b25;
+  --lock-wash-b: #22251f;
+  --lock-orb-1: rgba(155, 191, 255, 0.14);
+  --lock-orb-2: rgba(155, 191, 255, 0.07);
+  --frost-bg: rgba(48, 51, 45, 0.94);
+  --frost-border: #43493d;
+  --tip-bg: #efede8;
+  --tip-fg: #1d1c1a;
+  --toast-bg: #efede8;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #2856c7;
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(155, 191, 255, 0.3);
+  --cat-1: #8a8fd8;
+  --cat-2: #ab8de6;
+  --cat-3: #de8fb8;
+  --cat-4: #d8b078;
+  --cat-5: #6fc0a0;
+  --cat-6: #6fb8c8;
+  --cat-text: #171614;
+  --ft-pdf: #f17771;
+  --ft-doc: #7aa2f7;
+  --ft-sheet: #3fb950;
+  --ft-deck: #e0a45c;
+  --ft-arch: #a98be8;
+  --ft-code: #e0c060;
+  --ft-mark: #949bac;
+  --ft-img: #e08bb8;
+  --ft-unk: #979ca6;
+  --code-fg: #e4e2dc;
+  --code-kw: #de9ab8;
+  --code-str: #6fd0a8;
+  --code-num: #e0b072;
+  --code-type: #e0c060;
+  --code-fn: #8aa8e0;
+  --code-var: #b6b2a8;
+  --code-com: #9f9b93;
+  --code-tag: #ab8de6;
+  --code-pun: #949bac;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+
+}
+[data-base="light"][data-accent="ink"] {
+  --accent: #2856c7; --accent-hover: #234bad; --accent-active: #1e4093;
+  --accent-on: #ffffff; --accent-soft: #dde4f6; --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2); --text-brand: #234bad;
+  --badge-ver-bg: #dde4f6; --badge-ver-text: #234bad;
+  --brand-g1: #6485d7; --brand-g2: #2856c7; --brand-g3: #1e4093;
+  --lock-orb-1: rgba(40, 86, 199, 0.07); --lock-orb-2: rgba(40, 86, 199, 0.045);
+  --selection: rgba(40, 86, 199, 0.22); --toast-info: #91baff;
+
+}
+[data-base="dark"][data-accent="ink"] {
+  --accent: #9bbfff; --accent-hover: #a9c8ff; --accent-active: #86a5dc;
+  --accent-on: #171b22; --accent-soft: rgba(155, 191, 255, 0.1); --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36); --text-brand: #adcbff;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1); --badge-ver-text: #adcbff;
+  --brand-g1: #adcbff; --brand-g2: #9bbfff; --brand-g3: #86a5dc;
+  --lock-orb-1: rgba(155, 191, 255, 0.14); --lock-orb-2: rgba(155, 191, 255, 0.07);
+  --selection: rgba(155, 191, 255, 0.3); --toast-info: #2856c7;
+
+}
+[data-base="light"][data-accent="celadon"] {
+  --accent: #087662; --accent-hover: #076755; --accent-active: #065749;
+  --accent-on: #ffffff; --accent-soft: #d7e9e6; --accent-light: #bad9d3;
+  --accent-ring: rgba(8, 118, 98, 0.2); --text-brand: #076755;
+  --badge-ver-bg: #d7e9e6; --badge-ver-text: #076755;
+  --brand-g1: #4d9c8e; --brand-g2: #087662; --brand-g3: #065749;
+  --lock-orb-1: rgba(8, 118, 98, 0.07); --lock-orb-2: rgba(8, 118, 98, 0.045);
+  --selection: rgba(8, 118, 98, 0.22); --toast-info: #5ed5a9;
+
+}
+[data-base="dark"][data-accent="celadon"] {
+  --accent: #5ed5a9; --accent-hover: #75dbb5; --accent-active: #53b793;
+  --accent-on: #171b22; --accent-soft: rgba(94, 213, 169, 0.1); --accent-light: rgba(94, 213, 169, 0.24);
+  --accent-ring: rgba(94, 213, 169, 0.36); --text-brand: #7bddb8;
+  --badge-ver-bg: rgba(94, 213, 169, 0.1); --badge-ver-text: #7bddb8;
+  --brand-g1: #7bddb8; --brand-g2: #5ed5a9; --brand-g3: #53b793;
+  --lock-orb-1: rgba(94, 213, 169, 0.14); --lock-orb-2: rgba(94, 213, 169, 0.07);
+  --selection: rgba(94, 213, 169, 0.3); --toast-info: #087a65;
+
+}
+[data-base="light"][data-accent="clay"] {
+  --accent: #aa4c0c; --accent-hover: #94420a; --accent-active: #7e3809;
+  --accent-on: #ffffff; --accent-soft: #f1e2d8; --accent-light: #e7cdbb;
+  --accent-ring: rgba(170, 76, 12, 0.2); --text-brand: #94420a;
+  --badge-ver-bg: #f1e2d8; --badge-ver-text: #94420a;
+  --brand-g1: #c27e50; --brand-g2: #aa4c0c; --brand-g3: #7e3809;
+  --lock-orb-1: rgba(170, 76, 12, 0.07); --lock-orb-2: rgba(170, 76, 12, 0.045);
+  --selection: rgba(170, 76, 12, 0.22); --toast-info: #ffac6b;
+
+}
+[data-base="dark"][data-accent="clay"] {
+  --accent: #ffac6b; --accent-hover: #ffb880; --accent-active: #da955f;
+  --accent-on: #171b22; --accent-soft: rgba(255, 172, 107, 0.1); --accent-light: rgba(255, 172, 107, 0.24);
+  --accent-ring: rgba(255, 172, 107, 0.36); --text-brand: #ffbb86;
+  --badge-ver-bg: rgba(255, 172, 107, 0.1); --badge-ver-text: #ffbb86;
+  --brand-g1: #ffbb86; --brand-g2: #ffac6b; --brand-g3: #da955f;
+  --lock-orb-1: rgba(255, 172, 107, 0.14); --lock-orb-2: rgba(255, 172, 107, 0.07);
+  --selection: rgba(255, 172, 107, 0.3); --toast-info: #b04f0c;
+
+}
+[data-base="light"][data-accent="plum"] {
+  --accent: #7542c3; --accent-hover: #6639aa; --accent-active: #573190;
+  --accent-on: #ffffff; --accent-soft: #e9e1f5; --accent-light: #d8caee;
+  --accent-ring: rgba(117, 66, 195, 0.2); --text-brand: #6639aa;
+  --badge-ver-bg: #e9e1f5; --badge-ver-text: #6639aa;
+  --brand-g1: #9c77d4; --brand-g2: #7542c3; --brand-g3: #573190;
+  --lock-orb-1: rgba(117, 66, 195, 0.07); --lock-orb-2: rgba(117, 66, 195, 0.045);
+  --selection: rgba(117, 66, 195, 0.22); --toast-info: #d0a9ff;
+
+}
+[data-base="dark"][data-accent="plum"] {
+  --accent: #d3afff; --accent-hover: #d9baff; --accent-active: #b597dc;
+  --accent-on: #171b22; --accent-soft: rgba(211, 175, 255, 0.1); --accent-light: rgba(211, 175, 255, 0.24);
+  --accent-ring: rgba(211, 175, 255, 0.36); --text-brand: #dbbdff;
+  --badge-ver-bg: rgba(211, 175, 255, 0.1); --badge-ver-text: #dbbdff;
+  --brand-g1: #dbbdff; --brand-g2: #d3afff; --brand-g3: #b597dc;
+  --lock-orb-1: rgba(211, 175, 255, 0.14); --lock-orb-2: rgba(211, 175, 255, 0.07);
+  --selection: rgba(211, 175, 255, 0.3); --toast-info: #7542c3;
+
+}
+[data-base="light"][data-accent="rose"] {
+  --accent: #ac298e; --accent-hover: #96247c; --accent-active: #7f1e69;
+  --accent-on: #ffffff; --accent-soft: #f2dded; --accent-light: #e8c3df;
+  --accent-ring: rgba(172, 41, 142, 0.2); --text-brand: #96247c;
+  --badge-ver-bg: #f2dded; --badge-ver-text: #96247c;
+  --brand-g1: #c365ae; --brand-g2: #ac298e; --brand-g3: #7f1e69;
+  --lock-orb-1: rgba(172, 41, 142, 0.07); --lock-orb-2: rgba(172, 41, 142, 0.045);
+  --selection: rgba(172, 41, 142, 0.22); --toast-info: #fa9cde;
+
+}
+[data-base="dark"][data-accent="rose"] {
+  --accent: #faa2e1; --accent-hover: #fbafe5; --accent-active: #d68cc2;
+  --accent-on: #171b22; --accent-soft: rgba(250, 162, 225, 0.1); --accent-light: rgba(250, 162, 225, 0.24);
+  --accent-ring: rgba(250, 162, 225, 0.36); --text-brand: #fbb3e6;
+  --badge-ver-bg: rgba(250, 162, 225, 0.1); --badge-ver-text: #fbb3e6;
+  --brand-g1: #fbb3e6; --brand-g2: #faa2e1; --brand-g3: #d68cc2;
+  --lock-orb-1: rgba(250, 162, 225, 0.14); --lock-orb-2: rgba(250, 162, 225, 0.07);
+  --selection: rgba(250, 162, 225, 0.3); --toast-info: #ac298e;
+
+}
+[data-base="light"][data-accent="teal"] {
+  --accent: #077190;
+  --accent-hover: #06627d;
+  --accent-active: #05546b;
+  --accent-on: #ffffff;
+  --accent-soft: #d7e8ed;
+  --accent-light: #bad7e0;
+  --accent-ring: rgba(7, 113, 144, 0.2);
+  --text-brand: #06627d;
+  --badge-ver-bg: #d7e8ed;
+  --badge-ver-text: #06627d;
+  --brand-g1: #4c99af;
+  --brand-g2: #077190;
+  --brand-g3: #05546b;
+  --lock-orb-1: rgba(7, 113, 144, 0.07);
+  --lock-orb-2: rgba(7, 113, 144, 0.045);
+  --selection: rgba(7, 113, 144, 0.22);
+  --toast-info: #5bcee5;
+
+}
+[data-base="dark"][data-accent="teal"] {
+  --accent: #5bcee5;
+  --accent-hover: #72d5e9;
+  --accent-active: #50b1c6;
+  --accent-on: #171b22;
+  --accent-soft: rgba(91, 206, 229, 0.1);
+  --accent-light: rgba(91, 206, 229, 0.24);
+  --accent-ring: rgba(91, 206, 229, 0.36);
+  --text-brand: #79d7ea;
+  --badge-ver-bg: rgba(91, 206, 229, 0.1);
+  --badge-ver-text: #79d7ea;
+  --brand-g1: #79d7ea;
+  --brand-g2: #5bcee5;
+  --brand-g3: #50b1c6;
+  --lock-orb-1: rgba(91, 206, 229, 0.14);
+  --lock-orb-2: rgba(91, 206, 229, 0.07);
+  --selection: rgba(91, 206, 229, 0.3);
+  --toast-info: #087493;
+
+}
+[data-base="light"][data-accent="forest"] {
+  --accent: #527221;
+  --accent-hover: #47631d;
+  --accent-active: #3d5418;
+  --accent-on: #ffffff;
+  --accent-soft: #e3e8db;
+  --accent-light: #cfd8c1;
+  --accent-ring: rgba(82, 114, 33, 0.2);
+  --text-brand: #47631d;
+  --badge-ver-bg: #e3e8db;
+  --badge-ver-text: #47631d;
+  --brand-g1: #82995f;
+  --brand-g2: #527221;
+  --brand-g3: #3d5418;
+  --lock-orb-1: rgba(82, 114, 33, 0.07);
+  --lock-orb-2: rgba(82, 114, 33, 0.045);
+  --selection: rgba(82, 114, 33, 0.22);
+  --toast-info: #b5cf70;
+
+}
+[data-base="dark"][data-accent="forest"] {
+  --accent: #b5cf70;
+  --accent-hover: #bfd684;
+  --accent-active: #9cb264;
+  --accent-on: #171b22;
+  --accent-soft: rgba(181, 207, 112, 0.1);
+  --accent-light: rgba(181, 207, 112, 0.24);
+  --accent-ring: rgba(181, 207, 112, 0.36);
+  --text-brand: #c2d88a;
+  --badge-ver-bg: rgba(181, 207, 112, 0.1);
+  --badge-ver-text: #c2d88a;
+  --brand-g1: #c2d88a;
+  --brand-g2: #b5cf70;
+  --brand-g3: #9cb264;
+  --lock-orb-1: rgba(181, 207, 112, 0.14);
+  --lock-orb-2: rgba(181, 207, 112, 0.07);
+  --selection: rgba(181, 207, 112, 0.3);
+  --toast-info: #537422;
+
+}
+[data-base="light"][data-accent="amber"] {
+  --accent: #7f6608;
+  --accent-hover: #6e5907;
+  --accent-active: #5e4b06;
+  --accent-on: #ffffff;
+  --accent-soft: #ebe7d7;
+  --accent-light: #dbd4ba;
+  --accent-ring: rgba(127, 102, 8, 0.2);
+  --text-brand: #6e5907;
+  --badge-ver-bg: #ebe7d7;
+  --badge-ver-text: #6e5907;
+  --brand-g1: #a3914d;
+  --brand-g2: #7f6608;
+  --brand-g3: #5e4b06;
+  --lock-orb-1: rgba(127, 102, 8, 0.07);
+  --lock-orb-2: rgba(127, 102, 8, 0.045);
+  --selection: rgba(127, 102, 8, 0.22);
+  --toast-info: #e7c154;
+
+}
+[data-base="dark"][data-accent="amber"] {
+  --accent: #e7c154;
+  --accent-hover: #eaca6c;
+  --accent-active: #c6a64c;
+  --accent-on: #171b22;
+  --accent-soft: rgba(231, 193, 84, 0.1);
+  --accent-light: rgba(231, 193, 84, 0.24);
+  --accent-ring: rgba(231, 193, 84, 0.36);
+  --text-brand: #ebcc73;
+  --badge-ver-bg: rgba(231, 193, 84, 0.1);
+  --badge-ver-text: #ebcc73;
+  --brand-g1: #ebcc73;
+  --brand-g2: #e7c154;
+  --brand-g3: #c6a64c;
+  --lock-orb-1: rgba(231, 193, 84, 0.14);
+  --lock-orb-2: rgba(231, 193, 84, 0.07);
+  --selection: rgba(231, 193, 84, 0.3);
+  --toast-info: #826808;
+
+}
+[data-base="light"][data-accent="coral"] {
+  --accent: #be3547;
+  --accent-hover: #a52e3e;
+  --accent-active: #8d2735;
+  --accent-on: #ffffff;
+  --accent-soft: #f5dfe2;
+  --accent-light: #edc6cb;
+  --accent-ring: rgba(190, 53, 71, 0.2);
+  --text-brand: #a52e3e;
+  --badge-ver-bg: #f5dfe2;
+  --badge-ver-text: #a52e3e;
+  --brand-g1: #d06e7b;
+  --brand-g2: #be3547;
+  --brand-g3: #8d2735;
+  --lock-orb-1: rgba(190, 53, 71, 0.07);
+  --lock-orb-2: rgba(190, 53, 71, 0.045);
+  --selection: rgba(190, 53, 71, 0.22);
+  --toast-info: #ff9aa6;
+
+}
+[data-base="dark"][data-accent="coral"] {
+  --accent: #ffa6b2;
+  --accent-hover: #ffb2bd;
+  --accent-active: #da909b;
+  --accent-on: #171b22;
+  --accent-soft: rgba(255, 166, 178, 0.1);
+  --accent-light: rgba(255, 166, 178, 0.24);
+  --accent-ring: rgba(255, 166, 178, 0.36);
+  --text-brand: #ffb6c0;
+  --badge-ver-bg: rgba(255, 166, 178, 0.1);
+  --badge-ver-text: #ffb6c0;
+  --brand-g1: #ffb6c0;
+  --brand-g2: #ffa6b2;
+  --brand-g3: #da909b;
+  --lock-orb-1: rgba(255, 166, 178, 0.14);
+  --lock-orb-2: rgba(255, 166, 178, 0.07);
+  --selection: rgba(255, 166, 178, 0.3);
+  --toast-info: #be3547;
+
+}
+[data-base="light"][data-accent="graphite"] {
+  --accent: #555c69;
+  --accent-hover: #4a505b;
+  --accent-active: #3f444e;
+  --accent-on: #ffffff;
+  --accent-soft: #e4e5e7;
+  --accent-light: #cfd1d5;
+  --accent-ring: rgba(85, 92, 105, 0.2);
+  --text-brand: #4a505b;
+  --badge-ver-bg: #e4e5e7;
+  --badge-ver-text: #4a505b;
+  --brand-g1: #858a93;
+  --brand-g2: #555c69;
+  --brand-g3: #3f444e;
+  --lock-orb-1: rgba(85, 92, 105, 0.07);
+  --lock-orb-2: rgba(85, 92, 105, 0.045);
+  --selection: rgba(85, 92, 105, 0.22);
+  --toast-info: #b7bfcc;
+
+}
+[data-base="dark"][data-accent="graphite"] {
+  --accent: #b7bfcc;
+  --accent-hover: #c1c8d3;
+  --accent-active: #9da5b1;
+  --accent-on: #171b22;
+  --accent-soft: rgba(183, 191, 204, 0.1);
+  --accent-light: rgba(183, 191, 204, 0.24);
+  --accent-ring: rgba(183, 191, 204, 0.36);
+  --text-brand: #c4cbd5;
+  --badge-ver-bg: rgba(183, 191, 204, 0.1);
+  --badge-ver-text: #c4cbd5;
+  --brand-g1: #c4cbd5;
+  --brand-g2: #b7bfcc;
+  --brand-g3: #9da5b1;
+  --lock-orb-1: rgba(183, 191, 204, 0.14);
+  --lock-orb-2: rgba(183, 191, 204, 0.07);
+  --selection: rgba(183, 191, 204, 0.3);
+  --toast-info: #555c69;
+
+}
+:root {
+  --sidebar-border: var(--border-navigation);
+  --sidebar-active: var(--accent-soft);
+  --sidebar-text: var(--text-secondary);
+  --sidebar-text-active: var(--accent);
+  --ft-bg: var(--fill);
+  --code-bg: var(--sunken);
+  --code-bd: var(--border);
+
+  --border-focus: var(--accent);
+  --text-primary: var(--text);
+
+  --border-line: var(--border);
+  --border-card-hover: var(--border-hover);
+  --border-input: var(--border);
+  --border-divider: var(--border-subtle);
+  --text-title: var(--text);
+  --text-body: var(--text-secondary);
+  /* --shadow-card 为主题槽位（轻量化轮起只给贴地一丝）：行卡分层靠发丝描边，
+     阴影抬升档（--shadow-card-hover）已退役，hover 反馈改背景+描边显色 */
+  --shadow-popover: var(--shadow-pop);
+  --radius-card: var(--radius-lg);
+  --radius-badge: var(--radius);
+  --radius-menu: var(--radius-lg);
+  --radius-tag: var(--radius-sm);
+  --radius-btn: var(--radius);
+
+}
+[data-base="light"] {
+  --sidebar-active: color-mix(in srgb, var(--accent) 15%, var(--sidebar-bg));
+
+}
+
+/* dither 在 file:// 下取不到 /atmosphere-dither.svg，改内联同一张图（值与 public 版逐字一致） */
+.theme-scope {
+  --material-dither: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128' viewBox='0 0 128 128'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='1' seed='8' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='discrete' tableValues='0 1'/%3E%3CfeFuncG type='discrete' tableValues='0 1'/%3E%3CfeFuncB type='discrete' tableValues='0 1'/%3E%3CfeFuncA type='discrete' tableValues='1 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Cpath fill='%23fff' opacity='.012' filter='url(%23d)' d='M0 0h128v128H0z'/%3E%3C/svg%3E");
+}
+/* 把窗口级光斑尺寸从 vw/vh 钉成 1040×670 等值 px（覆盖 .theme-scope 的预览档 78%/85%） */
+.win.theme-scope {
+  --material-field-primary-size: 811px 570px;
+  --material-field-secondary-size: 853px 603px;
+}
+/* 宽窗档：clamp 按 1440×900 取等值 px，虚线为 720px 阅读列与侧栏右界 */
+.win.wide { width: 1440px; height: 900px; }
+.win.wide.theme-scope {
+  --material-field-primary-size: 1123px 765px;
+  --material-field-secondary-size: 1181px 810px;
+}
+.guide { display: none; position: absolute; top: 42px; bottom: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--text) 20%, transparent);
+  border-right: 1px dashed color-mix(in srgb, var(--text) 20%, transparent); }
+.win.wide .guide { display: block; left: 492px; width: 720px; }
+.win.wide .guide.rail-edge { left: 264px; width: 0; border-right: 0; }
+.probe { position: absolute; width: 260px; height: 84px; border-radius: 12px; padding: 10px 12px;
+  background: var(--panel-bg); border: 1px solid var(--border); box-shadow: var(--shadow-card); }
+.probe.tl { left: 24px; top: 24px; }
+.probe.br { right: 24px; bottom: 24px; }
+.pl { font-size: 11.5px; color: var(--text-muted); }
+
+/* ---- 四组建议配方：只动配方叶子变量，其余令牌全部沿用真值 ---- */
+.win[data-v="dark"] { --material-primary-strength: 23%; --material-secondary-strength: 19%; }
+.win[data-v="tint"] {
+  --material-color-primary: color-mix(in srgb, var(--material-tint-primary) 75%, var(--sunken));
+  --material-color-secondary: color-mix(in srgb, var(--material-tint-secondary) 70%, var(--sunken));
+}
+/* 换轴档：深底把预算从亮度挪到彩度。光场色 = accent 压到"卡面 L* − 1.5"，
+   于是 alpha 敢给到 45/34，而画布峰值 L* 仍低于卡面（墨底卡面 L* 12.7）。
+   数值来自 docs/design/atmosphere/field-math.mjs，改底色/卡面须重算。 */
+.win[data-v="chroma"][data-theme="ink"] {
+  --material-color-primary: rgb(7 34 25);
+  --material-color-secondary: rgb(25 32 20);
+  --material-primary-strength: 45%;
+  --material-secondary-strength: 34%;
+}
+.win[data-v="chroma"][data-theme="slate"] {
+  --material-color-primary: rgb(26 44 80);
+  --material-color-secondary: rgb(29 47 52);
+  --material-primary-strength: 45%;
+  --material-secondary-strength: 34%;
+}
+.win[data-v="anchor"] {
+  --material-field:
+    var(--material-dither),
+    radial-gradient(ellipse 65% 75% at 50% 52%, color-mix(in srgb, var(--panel-bg) 28%, transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-field-primary-size) at 26% 14%, color-mix(in srgb, var(--material-color-primary) var(--material-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at 84% 90%, color-mix(in srgb, var(--material-color-secondary) var(--material-secondary-strength), transparent), transparent 100%);
+}
+
+body { background: #6f6f6f; padding: 28px 28px 44px; display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
+.cap { color: #ededed; font-size: 13px; font-weight: 600; letter-spacing: .04em; margin-bottom: 10px; }
+.cap small { display: block; margin-top: 4px; font-weight: 400; font-size: 12px; color: #bdbdbd; }
+
+/* ---- 外壳：尺寸逐条抄自真 app（rail 56 / 侧栏 208 / 标题栏 42 / 页条 64 / 行卡 78） ---- */
+.win { position: relative; width: 1040px; height: 670px; background: var(--bg-app);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+  box-shadow: var(--shadow-pop); display: flex; }
+.rail { flex-shrink: 0; width: 56px; background: var(--bg-sidebar); border-right: 1px solid var(--sidebar-border);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; }
+.nav { width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center;
+  justify-content: center; color: var(--text-muted); }
+.nav.on { color: var(--accent); background: var(--hover-chrome); }
+.rail .gap { flex: 1; }
+.panel { flex-shrink: 0; width: 208px; background: var(--bg-sidebar); border-right: 1px solid var(--sidebar-border);
+  padding: 8px 10px 12px; }
+.brand { height: 48px; display: flex; align-items: center; gap: 9px; padding: 0 6px;
+  font-size: 14px; font-weight: 700; color: var(--text); }
+.brand .logo { width: 22px; height: 22px; border-radius: 7px; background: var(--accent); }
+.sec { padding: 12px 8px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--text-faint); }
+.mrow { height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: 8px;
+  font-size: 13px; color: var(--text-secondary); }
+.mrow.on { background: var(--sidebar-active); color: var(--text); }
+.mrow .n { margin-left: auto; font-size: 11px; color: var(--text-faint); }
+.mrow svg { color: var(--text-muted); flex-shrink: 0; }
+
+.col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tb { flex-shrink: 0; height: 42px; display: flex; align-items: center; gap: 10px; padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle); }
+.tb h1 { font-size: 13px; font-weight: 600; color: var(--text); }
+.tb .cnt { font-size: 12px; color: var(--text-muted); }
+.tb .r { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--text-muted); }
+.tb .btn { width: 30px; height: 28px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; }
+.tb .sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+.content { flex: 1; min-height: 0; padding: 0 24px 24px; }
+.page-bar { min-height: 64px; display: flex; align-items: center; gap: 8px; }
+.search { height: 32px; width: 220px; border-radius: var(--radius-pill); background: var(--bg-input);
+  border: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 11px;
+  color: var(--text-faint); font-size: 12.5px; }
+.chip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
+  border-radius: var(--radius-pill); background: var(--panel-bg); border: 1px solid var(--border);
+  font-size: 12px; color: var(--text-secondary); }
+.pb-r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.pbtn { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px;
+  border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-on);
+  font-size: 12px; font-weight: 600; box-shadow: 0 4px 14px -3px var(--accent); }
+
+/* 行卡：一层卡 + 24 档面 + 等宽地址行 */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.grid-card { min-height: 78px; padding: 12px 14px; border-radius: 12px; background: var(--panel-bg);
+  border: 1px solid var(--border); box-shadow: var(--shadow-card); }
+.row1 { display: flex; align-items: center; gap: 9px; }
+.slot { width: 24px; height: 24px; border-radius: 7px; font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--text-secondary); }
+.nm { font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.star { margin-left: auto; color: var(--text-faint); }
+.row2 { margin-top: 7px; padding-left: 33px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 小记阅读列 */
+.paper { max-width: 720px; margin: 0 auto; padding: 18px 28px 28px; border-radius: var(--radius-card);
+  background: var(--bg-editor); border: 1px solid var(--border); }
+.paper h2 { font-size: 19px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+.paper .meta { margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+.paper p { margin-top: 14px; font-size: 13.5px; line-height: 23px; color: var(--text-secondary); }
+.paper .h3 { margin-top: 20px; font-size: 14.5px; font-weight: 700; color: var(--text); }
+
+/* 弹窗（G 现状）与对齐光场（H 建议） */
+.veil { position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 22%, transparent); }
+.dlg { position: absolute; left: 240px; top: 96px; width: 560px; height: 460px; overflow: hidden;
+  border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-pop);
+  background: var(--bg-dialog); }
+.dlg .dh { height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 16px;
+  font-size: 13.5px; font-weight: 600; color: var(--text); }
+.dlg .dh .x { margin-left: auto; color: var(--text-muted); }
+.dlg .db { padding: 4px 16px; }
+.drow { height: 46px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border);
+  font-size: 13px; color: var(--text-secondary); }
+.drow:first-child { border-top: 0; }
+.drow .k { flex: 1; }
+.sw { width: 34px; height: 20px; border-radius: 999px; background: var(--accent); position: relative; }
+.sw::after { content: ''; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--accent-on); }
+.sw.off { background: var(--border-strong); }
+.dlg .df { position: absolute; left: 0; right: 0; bottom: 0; height: 46px; display: flex; align-items: center;
+  justify-content: flex-end; gap: 8px; padding: 0 14px; }
+/* H：弹窗不再自带光场，改为透出与窗外同一张配方（层按窗口盒定位、由弹窗裁切） */
+.dlg.thru { background: var(--panel-bg); }
+.dlg.thru .align { position: absolute; left: -240px; top: -96px; width: 1040px; height: 670px;
+  background: var(--material-field); }
+.dlg.thru .wash { position: absolute; inset: 0;
+  background: color-mix(in srgb, var(--panel-bg) 78%, transparent); }
+.dlg.thru .dh, .dlg.thru .db, .dlg.thru .df { position: relative; z-index: 1; }
+</style></head>
+<body>
+<div id="root"></div>
+<script>
+const GRID = `
+  <div class="rail">
+    <div class="nav on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4.72848 16.1369C3.18295 14.5914 2.41018 13.8186 2.12264 12.816C1.83509 11.8134 2.08083 10.7485 2.57231 8.61875L2.85574 7.39057C3.26922 5.59881 3.47597 4.70292 4.08944 4.08944C4.70292 3.47597 5.59881 3.26922 7.39057 2.85574L8.61875 2.57231C10.7485 2.08083 11.8134 1.83509 12.816 2.12264C13.8186 2.41018 14.5914 3.18295 16.1369 4.72848L17.9665 6.55812C20.6555 9.24711 22 10.5916 22 12.2623C22 13.933 20.6555 15.2775 17.9665 17.9665C15.2775 20.6555 13.933 22 12.2623 22C10.5916 22 9.24711 20.6555 6.55812 17.9665L4.72848 16.1369Z"/><circle cx="8.607" cy="8.879" r="2" transform="rotate(-45 8.607 8.879)"/><path d="M11.5417 18.5L18.5208 11.5208"/></g></svg></div>
+    <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3 8C3 5.17157 3 3.75736 3.87868 2.87868C4.75736 2 6.17157 2 9 2H15C17.8284 2 19.2426 2 20.1213 2.87868C21 3.75736 21 5.17157 21 8V16C21 18.8284 21 20.2426 20.1213 21.1213C19.2426 22 17.8284 22 15 22H9C6.17157 22 4.75736 22 3.87868 21.1213C3 20.2426 3 18.8284 3 16V8Z"/><path d="M8 2.5V22"/><path d="M2 12H4"/><path d="M2 16H4"/><path d="M2 8H4"/><path d="M11.5 6.5H16.5"/><path d="M11.5 10H16.5"/></g></svg></div>
+    <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><g><path d="M18 10L13 10"/><path d="M19.9998 6.23751C19.9989 5.94017 19.9946 5.76263 19.9743 5.60842C19.7971 4.26222 18.7378 3.2029 17.3916 3.02567C17.1966 3 16.9644 3 16.5 3H10"/><path d="M2 6.94975C2 6.06722 2 5.62595 2.06935 5.25839C2.37464 3.64031 3.64031 2.37464 5.25839 2.06935C5.62595 2 6.06722 2 6.94975 2C7.33642 2 7.52976 2 7.71557 2.01738C8.51665 2.09229 9.27652 2.40704 9.89594 2.92051C10.0396 3.03961 10.1763 3.17633 10.4497 3.44975L11 4C11.8158 4.81578 12.2237 5.22367 12.7121 5.49543C12.9804 5.64471 13.2651 5.7626 13.5604 5.84678C14.0979 6 14.6747 6 15.8284 6H16.2021C17.9811 6 19.159 6 19.9998 6.23751C20.4031 6.35144 20.7288 6.52002 21.0062 6.76946C21.0849 6.84024 21.1598 6.91514 21.2305 6.99383C22 7.84935 22 9.16554 22 11.7979V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V6.94975Z"/></g></svg></div>
+    <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><g fill="currentColor" stroke="none"><path d="M16.0005 13.5992C16.4972 13.5995 16.9007 14.0029 16.9009 14.4996C16.9009 14.9965 16.4974 15.3997 16.0005 15.4H13.0005C12.5035 15.4 12.1002 14.9967 12.1002 14.4996C12.1004 14.0027 12.5036 13.5992 13.0005 13.5992H16.0005Z"/><path d="M8.03765 8.72811C8.46377 8.47284 9.01638 8.61074 9.27203 9.03671L10.6177 11.2789C10.8836 11.7221 10.8834 12.277 10.6177 12.7203L9.27203 14.9625C9.01633 15.3887 8.46385 15.5267 8.03765 15.2711C7.61143 15.0153 7.47333 14.4629 7.72906 14.0367L8.95074 11.9996L7.72906 9.96249C7.47341 9.53628 7.61146 8.98382 8.03765 8.72811Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M9.3316 2.03768C11.1644 1.54688 13.0268 2.04668 14.356 3.20174C16.0859 2.86512 17.9511 3.36418 19.2935 4.70663C20.6356 6.04882 21.1326 7.91288 20.7964 9.64217C21.9527 10.9716 22.4534 12.8349 21.9625 14.6685C21.4711 16.5025 20.1051 17.8657 18.439 18.439C17.8658 20.1047 16.503 21.47 14.6695 21.9615C12.8356 22.4528 10.9727 21.9519 9.64312 20.7955C7.91371 21.1319 6.04993 20.635 4.70757 19.2926C3.36558 17.9505 2.86659 16.0866 3.20269 14.357C2.04693 13.0273 1.54757 11.1638 2.03863 9.33065C2.52997 7.49759 3.89436 6.13282 5.56011 5.55917C6.13382 3.8935 7.49837 2.52891 9.3316 2.03768ZM13.2623 4.63534C12.3606 3.80149 11.067 3.4361 9.79742 3.77596C8.52745 4.11626 7.58924 5.0796 7.22515 6.25253C7.08145 6.71575 6.71753 7.07928 6.25445 7.22323C5.08133 7.58702 4.11844 8.52622 3.77789 9.79647C3.43759 11.0667 3.80148 12.3606 4.63531 13.2623C4.96467 13.6184 5.09776 14.1154 4.99078 14.5885C4.71939 15.7864 5.05109 17.0891 5.98101 18.0191C6.91085 18.949 8.21345 19.2801 9.41168 19.0084L9.58941 18.9791C9.94695 18.9432 10.3065 19.0397 10.5982 19.2496L10.7378 19.3639L10.9117 19.5142C11.8015 20.2407 13.0127 20.5413 14.2037 20.2223C15.4733 19.8818 16.4111 18.9191 16.775 17.7457C16.9189 17.2824 17.2832 16.9186 17.7466 16.775L17.9634 16.6998C19.0376 16.2923 19.9051 15.3936 20.2242 14.2027C20.5641 12.9328 20.1989 11.6385 19.3648 10.7369C19.0353 10.3806 18.9021 9.88399 19.0093 9.41073L19.0533 9.18514C19.2372 8.0514 18.8917 6.85176 18.0201 5.98006C17.0901 5.05003 15.7865 4.71826 14.5884 4.98983C14.1153 5.09712 13.6186 4.96467 13.2623 4.63534Z"/></g></svg></div>
+    <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><g><path d="M6.00879 8C6.04466 5.52043 6.22859 4.11466 7.17167 3.17157C8.34324 2 10.2289 2 14.0001 2C17.7713 2 19.657 2 20.8285 3.17157C22.0001 4.34315 22.0001 6.22876 22.0001 10V14C22.0001 17.7712 22.0001 19.6569 20.8285 20.8284C19.657 22 17.7713 22 14.0001 22H12"/><path d="M2 14.5C2 13.0955 2 12.3933 2.33706 11.8889C2.48298 11.6705 2.67048 11.483 2.88886 11.3371C3.39331 11 4.09554 11 5.5 11C6.90446 11 7.60669 11 8.11114 11.3371C8.32952 11.483 8.51702 11.6705 8.66294 11.8889C9 12.3933 9 13.0955 9 14.5V18.5C9 19.9045 9 20.6067 8.66294 21.1111C8.51702 21.3295 8.32952 21.517 8.11114 21.6629C7.60669 22 6.90446 22 5.5 22C4.09554 22 3.39331 22 2.88886 21.6629C2.67048 21.517 2.48298 21.3295 2.33706 21.1111C2 20.6067 2 19.9045 2 18.5V14.5Z"/><path d="M17 19H12"/></g></svg></div>
+    <div class="gap"></div>
+    <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="3"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z"/></g></svg></div>
+  </div>
+  <div class="panel">
+    <div class="brand"><span class="logo"></span>desko</div>
+    <div class="sec">收藏</div>
+    <div class="mrow on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.40" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"/><path d="M12 22L12 2.00003"/><path d="M2.00488 11.9951L22.0048 11.9951"/></g></svg><span class="k">全部</span><span class="n">38</span></div>
+    <div class="mrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.40" stroke-linecap="round" stroke-linejoin="round"><path d="M9.15316 5.40838C10.4198 3.13613 11.0531 2 12 2C12.9469 2 13.5802 3.13612 14.8468 5.40837L15.1745 5.99623C15.5345 6.64193 15.7144 6.96479 15.9951 7.17781C16.2757 7.39083 16.6251 7.4699 17.3241 7.62805L17.9605 7.77203C20.4201 8.32856 21.65 8.60682 21.9426 9.54773C22.2352 10.4886 21.3968 11.4691 19.7199 13.4299L19.2861 13.9372C18.8096 14.4944 18.5713 14.773 18.4641 15.1177C18.357 15.4624 18.393 15.8341 18.465 16.5776L18.5306 17.2544C18.7841 19.8706 18.9109 21.1787 18.1449 21.7602C17.3788 22.3417 16.2273 21.8115 13.9243 20.7512L13.3285 20.4768C12.6741 20.1755 12.3469 20.0248 12 20.0248C11.6531 20.0248 11.3259 20.1755 10.6715 20.4768L10.0757 20.7512C7.77268 21.8115 6.62118 22.3417 5.85515 21.7602C5.08912 21.1787 5.21588 19.8706 5.4694 17.2544L5.53498 16.5776C5.60703 15.8341 5.64305 15.4624 5.53586 15.1177C5.42868 14.773 5.19043 14.4944 4.71392 13.9372L4.2801 13.4299C2.60325 11.4691 1.76482 10.4886 2.05742 9.54773C2.35002 8.60682 3.57986 8.32856 6.03954 7.77203L6.67589 7.62805C7.37485 7.4699 7.72433 7.39083 8.00494 7.17781C8.28555 6.96479 8.46553 6.64194 8.82547 5.99623L9.15316 5.40838Z"/></svg><span class="k">已标记</span><span class="n">6</span></div>
+    <div class="mrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.40" stroke-linecap="round" stroke-linejoin="round"><g><path d="M18 10L13 10"/><path d="M2 6.94975C2 6.06722 2 5.62595 2.06935 5.25839C2.37464 3.64031 3.64031 2.37464 5.25839 2.06935C5.62595 2 6.06722 2 6.94975 2C7.33642 2 7.52976 2 7.71557 2.01738C8.51665 2.09229 9.27652 2.40704 9.89594 2.92051C10.0396 3.03961 10.1763 3.17633 10.4497 3.44975L11 4C11.8158 4.81578 12.2237 5.22367 12.7121 5.49543C12.9804 5.64471 13.2651 5.7626 13.5604 5.84678C14.0979 6 14.6747 6 15.8284 6H16.2021C18.8345 6 20.1506 6 21.0062 6.76946C21.0849 6.84024 21.1598 6.91514 21.2305 6.99383C22 7.84935 22 9.16554 22 11.7979V14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14V6.94975Z"/></g></svg><span class="k">研发</span><span class="n">12</span></div>
+    <div class="mrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.40" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9175 17.8068L15.8084 10.2535C16.7558 9.34668 16.7558 7.87637 15.8084 6.96951C14.861 6.06265 13.325 6.06265 12.3776 6.96951L4.54387 14.4681C2.74382 16.1911 2.74382 18.9847 4.54387 20.7077C6.34391 22.4308 9.26237 22.4308 11.0624 20.7077L19.0105 13.0997C21.6632 10.5605 21.6632 6.44362 19.0105 3.90441C16.3578 1.3652 12.0569 1.3652 9.40419 3.90441L3 10.0346"/></svg><span class="k">文档</span><span class="n">9</span></div>
+    <div class="mrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.40" stroke-linecap="round" stroke-linejoin="round"><g><rect x="3" y="3" width="18" height="4.5" rx="2"/><path d="M5 10.5V18C5 19.6569 6.34315 21 8 21H16C17.6569 21 19 19.6569 19 18V10.5"/><path d="M10 14H14"/></g></svg><span class="k">归档</span><span class="n">11</span></div>
+  </div>`;
+
+const TB = `
+  <div class="tb">
+    <h1>收藏</h1><span class="cnt">38 条</span>
+    <div class="r">
+      <span class="btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M3.67981 13L3.67981 11.3333C3.67981 6.73096 7.4402 3 12.0789 3C15.1178 3 17.7799 4.60136 19.2545 7M2 11.3333L3.67981 13L5.35962 11.3333"/><path d="M20.3139 11V12.6667C20.3139 17.269 16.5391 21 11.8827 21C8.83213 21 6.15995 19.3986 4.67969 17M22.0001 12.6667L20.3139 11L18.6277 12.6667"/></g></svg></span>
+      <span class="btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="12" cy="12" r="3"/><path d="M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z"/></g></svg></span>
+      <span class="btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 16C2 13.1716 2 11.7574 2.87868 10.8787C3.75736 10 5.17157 10 8 10H16C18.8284 10 20.2426 10 21.1213 10.8787C22 11.7574 22 13.1716 22 16C22 18.8284 22 20.2426 21.1213 21.1213C20.2426 22 18.8284 22 16 22H8C5.17157 22 3.75736 22 2.87868 21.1213C2 20.2426 2 18.8284 2 16Z"/><path d="M6 10V8C6 4.68629 8.68629 2 12 2C15.3137 2 18 4.68629 18 8V10"/></g></svg></span>
+      <span class="sep"></span>
+      <span class="btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M2 22L9 15M9 20.8571V15H3.14286"/><path d="M22 2L15 9M15 3.14286V9H20.8571"/></g></svg></span>
+      <span class="btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M9 15L2 22M2 16.1429V22H7.85714"/><path d="M15 9L22 2M22 7.85714V2H16.1429"/></g></svg></span>
+      <span class="btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span>
+    </div>
+  </div>`;
+
+const ENTRIES = [
+  ['J', 'Jenkins 前端流水线', 'ci.internal/jenkins/view/web'],
+  ['O', 'ONES 需求看板', 'ones.office/project/team-web'],
+  ['G', 'GitLab 私有实例', 'git.internal/jiang/tools'],
+  ['F', 'Figma 设计交付', 'figma.com/file/xy-client-2026'],
+  ['Y', '语雀组件文档', 'yuque.antfin.com/xy/ui-kit'],
+  ['N', 'Nacos 配置中心', 'nacos.internal:8848/xy-dev'],
+  ['S', 'SonarQube 质量门', 'sonar.internal/dashboard/xy'],
+  ['D', '内网制品库', 'artifact.internal/npm/registry'],
+];
+
+const gridPage = `
+  <div class="content">
+    <div class="page-bar">
+      <div class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="11.5" cy="11.5" r="9.5"/><path d="M18.2173 18.2178L21.9999 22.0004"/></g></svg>搜索名称或地址</div>
+      <span class="chip">全部 38</span><span class="chip">已标记 6</span>
+      <div class="pb-r"><span class="pbtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4 12L20 12"/><path d="M12.0204 4L12.0205 20.0003"/></g></svg>新增</span></div>
+    </div>
+    <div class="card-grid">${ENTRIES.map(([l, n, u]) => `
+      <div class="grid-card">
+        <div class="row1"><span class="slot">${l}</span><span class="nm">${n}</span><span class="star"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><path d="M9.15316 5.40838C10.4198 3.13613 11.0531 2 12 2C12.9469 2 13.5802 3.13612 14.8468 5.40837L15.1745 5.99623C15.5345 6.64193 15.7144 6.96479 15.9951 7.17781C16.2757 7.39083 16.6251 7.4699 17.3241 7.62805L17.9605 7.77203C20.4201 8.32856 21.65 8.60682 21.9426 9.54773C22.2352 10.4886 21.3968 11.4691 19.7199 13.4299L19.2861 13.9372C18.8096 14.4944 18.5713 14.773 18.4641 15.1177C18.357 15.4624 18.393 15.8341 18.465 16.5776L18.5306 17.2544C18.7841 19.8706 18.9109 21.1787 18.1449 21.7602C17.3788 22.3417 16.2273 21.8115 13.9243 20.7512L13.3285 20.4768C12.6741 20.1755 12.3469 20.0248 12 20.0248C11.6531 20.0248 11.3259 20.1755 10.6715 20.4768L10.0757 20.7512C7.77268 21.8115 6.62118 22.3417 5.85515 21.7602C5.08912 21.1787 5.21588 19.8706 5.4694 17.2544L5.53498 16.5776C5.60703 15.8341 5.64305 15.4624 5.53586 15.1177C5.42868 14.773 5.19043 14.4944 4.71392 13.9372L4.2801 13.4299C2.60325 11.4691 1.76482 10.4886 2.05742 9.54773C2.35002 8.60682 3.57986 8.32856 6.03954 7.77203L6.67589 7.62805C7.37485 7.4699 7.72433 7.39083 8.00494 7.17781C8.28555 6.96479 8.46553 6.64194 8.82547 5.99623L9.15316 5.40838Z"/></svg></span></div>
+        <div class="row2">${u}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+
+const notesPage = `
+  <div class="content">
+    <div class="page-bar">
+      <div class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><circle cx="11.5" cy="11.5" r="9.5"/><path d="M18.2173 18.2178L21.9999 22.0004"/></g></svg>搜索小记</div>
+      <span class="chip">本周 14</span>
+      <div class="pb-r"><span class="pbtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.68" stroke-linecap="round" stroke-linejoin="round"><g><path d="M4 12L20 12"/><path d="M12.0204 4L12.0205 20.0003"/></g></svg>新建</span></div>
+    </div>
+    <div class="paper">
+      <h2>氛围光场的三条判据</h2>
+      <div class="meta">2026-10-16 · 未分类</div>
+      <p>光场只负责把窗口的四个方向拉出重量感，一旦开始抢正文的对比度就该收。现在有两处越界：深色底下辅色光斑压到 14%，读不出方向；暖纸底配冷 tint 时，左上角那团与底色色温相反。</p>
+      <div class="h3">锚点为什么不该钉在视口百分比</div>
+      <p>14% 12% 与 95% 95% 在 1040 宽时刚好落在侧栏与行卡外侧；窗口拉到 1600，两团光继续外扩到画布留白里，正文列反而成了一片平色。锚点应跟着内容列的边界走。</p>
+      <p>弹窗同理。它自带一份按窗口尺寸算的配方，画在自己的盒子上，等于把整窗光场压进 560px，看上去是另一张纸，而不是同一个房间里的东西。</p>
+    </div>
+  </div>`;
+
+const dialog = `
+  <div class="veil"></div>
+  <div class="dlg">
+    <div class="dh">设置<span class="x"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span></div>
+    <div class="db">
+      <div class="drow"><span class="k">背景氛围</span><span class="sw"></span></div>
+      <div class="drow"><span class="k">底色</span><span class="chip">岩</span></div>
+      <div class="drow"><span class="k">强调色</span><span class="chip">群青</span></div>
+      <div class="drow"><span class="k">局域网传输</span><span class="sw off"></span></div>
+      <div class="drow"><span class="k">开机自启</span><span class="sw off"></span></div>
+    </div>
+    <div class="df"><span class="chip">取消</span><span class="pbtn">完成</span></div>
+  </div>`;
+
+/* 透出版：弹窗盒不变，光场层按窗口盒定位后被 overflow 裁掉 */
+const dialogThru = `
+  <div class="veil"></div>
+  <div class="dlg thru">
+    <div class="align"></div><div class="wash"></div>
+    <div class="dh">设置<span class="x"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.58" stroke-linecap="round" stroke-linejoin="round"><g><path d="M19.0068 5L5.00684 19"/><path d="M19 19L5 5"/></g></svg></span></div>
+    <div class="db">
+      <div class="drow"><span class="k">背景氛围</span><span class="sw"></span></div>
+      <div class="drow"><span class="k">底色</span><span class="chip">岩</span></div>
+      <div class="drow"><span class="k">强调色</span><span class="chip">群青</span></div>
+      <div class="drow"><span class="k">局域网传输</span><span class="sw off"></span></div>
+      <div class="drow"><span class="k">开机自启</span><span class="sw off"></span></div>
+    </div>
+    <div class="df"><span class="chip">取消</span><span class="pbtn">完成</span></div>
+  </div>`;
+
+const FRAMES = [
+  ['A · 现状', '墨底·翡翠：secondary 14%，暗色把彩色吞掉，四向重量感读不出', 'ink', 'dark', 'celadon', 'base', gridPage],
+  ['B · 建议', '同一配方，secondary 14%→19%、primary 21%→23%（对齐浅底档）', 'ink', 'dark', 'celadon', 'dark', gridPage],
+  ['C · 现状', '纸底·湖蓝：tint 只掺 65% sunken，暖纸上飘一团冷色', 'paper', 'light', 'teal', 'base', gridPage],
+  ['D · 建议', 'tint 掺 sunken 提到 75%/70%，冷光随纸温化开', 'paper', 'light', 'teal', 'tint', gridPage],
+  ['E · 现状', '雪底·陶橙：锚点钉在 14%12% 与 95%95%，正文列居中后两团光都在列外', 'snow', 'light', 'clay', 'base', notesPage],
+  ['F · 建议', '锚点收进内容列两侧（26%14% 与 84%90%），渐变跨过阅读列', 'snow', 'light', 'clay', 'anchor', notesPage],
+  ['G · 现状', '岩底·群青：弹窗自带按窗口尺寸算的光场，压在 560px 盒内成独立亮块', 'slate', 'dark', 'ink', 'base', gridPage + dialog],
+  ['H · 建议', 'floating 改透出窗外同一片光场（等效 background-attachment: fixed），只留 78% 面板洗', 'slate', 'dark', 'ink', 'thru', gridPage + dialogThru],
+  ['I · 换轴（深底）', '墨·翡翠：把亮度预算让给彩度——光场色压到 L* 11.2、alpha 提到 45/34，画布峰值 L* 只到 9.5（卡面 12.7）', 'ink', 'dark', 'celadon', 'chroma', gridPage],
+];
+
+/* 裸光场帧：只剩 background: var(--bg-app) 这一层配方 + 两块卡面探针。
+   探针钉在左上（主光斑峰）与右下（辅光斑峰），用来直接读"卡面还浮不浮得起来"。
+   wide 档用来看锚点在宽窗下的漂移。帧序即截图序号：A…I 带外壳，J… 裸片。 */
+const BARE = [
+  ['J · 墨·翡翠 现状（裸）', '掺 65% sunken + alpha 21/14：峰值推离底色 ΔRGB 14，但画布 L* 顶到 12.4，卡面 12.7 —— 右下角卡与底几乎同色', 'ink', 'dark', 'celadon', 'base', false],
+  ['K · 墨·翡翠 换轴（裸）', '光场色压到 L* 11.2 + alpha 45/34：彩度 0.019→0.044，画布 L* 只到 9.5，卡面分离 ΔRGB 3→13', 'ink', 'dark', 'celadon', 'chroma', false],
+  ['L · 岩·群青 现状（裸）', '同一套配方在岩底：峰值 ΔRGB 16，卡面最小分离 ΔRGB 10', 'slate', 'dark', 'ink', 'base', false],
+  ['M · 岩·群青 换轴（裸）', '光场色压到 L* 18.3 + alpha 45/34：彩度 0.086→0.120，卡面分离 10→14', 'slate', 'dark', 'ink', 'chroma', false],
+  ['N · 雪·陶橙 现状（裸·宽窗）', '1440×900：锚点 14%12% 与 95%95%，两团光落在 720 阅读列（虚线）之外', 'snow', 'light', 'clay', 'base', true],
+  ['O · 雪·陶橙 换锚点（裸·宽窗）', '同尺寸，锚点收进 26%14% 与 84%90%，渐变跨过阅读列', 'snow', 'light', 'clay', 'anchor', true],
+];
+
+const host = document.getElementById('root');
+host.innerHTML = FRAMES.map(([cap, sub, theme, base, accent, v, body]) => `
+  <div>
+    <div class="cap">${cap}<small>${sub}</small></div>
+    <div class="win theme-scope" data-theme="${theme}" data-base="${base}" data-accent="${accent}" data-atmosphere="on" data-v="${v}">
+      ${GRID}<div class="col">${TB}${body}</div>
+    </div>
+  </div>`).join('')
+  + BARE.map(([cap, sub, theme, base, accent, v, wide]) => `
+  <div>
+    <div class="cap">${cap}<small>${sub}</small></div>
+    <div class="win${wide ? ' wide' : ''} theme-scope" data-theme="${theme}" data-base="${base}" data-accent="${accent}" data-atmosphere="on" data-v="${v}">
+      <div class="guide"></div><div class="guide rail-edge"></div>
+      <div class="probe tl"><span class="pl">卡面探针</span></div>
+      <div class="probe br"><span class="pl">卡面探针</span></div>
+    </div>
+  </div>`).join('');
+</script>
+</body></html>

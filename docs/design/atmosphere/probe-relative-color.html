@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>relative color syntax probe</title>
+<style>
+  :root {
+    --accent-light: #3d7355;
+    --accent-dark: #6ee7b7;
+    --sunken: #f1ede7;
+    --material-field-l: 0.85;
+    --material-field-k: 0.45;
+    --f-light: oklch(from var(--accent-light) var(--material-field-l) calc(c * var(--material-field-k)) h);
+    --f-dark: oklch(from var(--accent-dark) var(--material-field-l) calc(c * var(--material-field-k)) h);
+    --comp-num: 46;
+    --comp-deg: 46deg;
+    --f-shift: oklch(from var(--accent-light) var(--material-field-l) calc(c * 0.45) calc(h + 46));
+    --f-num: oklch(from var(--accent-light) var(--material-field-l) calc(c * 0.45) calc(h + var(--comp-num)));
+    --f-deg: oklch(from var(--accent-light) var(--material-field-l) calc(c * 0.45) calc(h + var(--comp-deg)));
+    --f-srgb-mix: color-mix(in srgb, var(--f-light) 35%, var(--sunken));
+  }
+  #a { background: var(--f-light); }
+  #b { background: var(--f-dark); }
+  #c { background: var(--f-shift); }
+  #d { background: var(--f-srgb-mix); }
+  #e { background: oklch(from #3d7355 0.85 calc(c * 0.45) h); }
+  #f { background: oklch(from var(--accent-light) l c h); }
+  #g { background: oklch(from var(--accent-dark) l c h); }
+  #h { background: var(--f-num); }
+  #i { background: var(--f-deg); }
+</style>
+<div id="a"></div><div id="b"></div><div id="c"></div><div id="d"></div><div id="e"></div><div id="f"></div><div id="g"></div><div id="h"></div><div id="i"></div>
+<script>
+  const px = document.createElement('canvas').getContext('2d')
+  const rgb = (id) => {
+    const v = getComputedStyle(document.getElementById(id)).backgroundColor
+    px.fillStyle = v; px.fillRect(0, 0, 1, 1)
+    const [r, g, b] = px.getImageData(0, 0, 1, 1).data
+    return `${v} → #${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`
+  }
+  window.__probe = {
+    supported: CSS.supports('background', 'oklch(from #3d7355 0.85 calc(c * 0.45) h)'),
+    varL: rgb('a'), varLDark: rgb('b'), hueShift: rgb('c'), mixChain: rgb('d'), literal: rgb('e'),
+    accentLight: rgb('f'), accentDark: rgb('g'), companionNum: rgb('h'), companionDeg: rgb('i'),
+    ua: navigator.userAgent,
+  }
+  document.title = JSON.stringify(window.__probe)
+</script>

@@ -13,8 +13,8 @@ test.describe('统一外观状态', () => {
       return { theme: el.getAttribute('data-theme'), image: style.backgroundImage, color: style.backgroundColor }
     }))
     const before = await previews()
-    expect(before).toHaveLength(11)
-    expect(new Set(before.map((preview) => preview.color)).size).toBe(11)
+    expect(before).toHaveLength(8)
+    expect(new Set(before.map((preview) => preview.color)).size).toBe(8)
     for (const preview of before) expect(preview.image, `${preview.theme} 柔光应使用卡片尺寸`).not.toMatch(/[\d.]+v[wh]\b/)
     const images: Buffer[] = []
     const cards = page.locator('.theme-prev')
@@ -67,7 +67,7 @@ test.describe('统一外观状态', () => {
     }, themeModuleUrl)
 
     await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('岩')
-    await expect(dialog.getByRole('radio', { checked: true })).toHaveText('暮瑰')
+    await expect(dialog.getByRole('radio', { checked: true })).toHaveText('洋红')
     await expect(dialog.getByRole('switch', { name: '背景氛围' })).not.toBeChecked()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'slate')
     await expect(page.locator('html')).toHaveAttribute('data-atmosphere', 'off')
@@ -102,7 +102,7 @@ test.describe('统一外观状态', () => {
 
     const reopened = await openSettings(page)
     await expect(reopened.locator('.theme-chip.on .theme-chip-name')).toHaveText('墨')
-    await expect(reopened.getByRole('radio', { checked: true })).toHaveText('青瓷')
+    await expect(reopened.getByRole('radio', { checked: true })).toHaveText('翡翠')
     await expect(reopened.getByRole('switch', { name: '背景氛围' })).not.toBeChecked()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'ink')
     await expect(page.locator('html')).toHaveAttribute('data-accent', 'celadon')

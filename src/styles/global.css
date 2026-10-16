@@ -1555,7 +1555,7 @@ body {
 
 .dialog {
   background: var(--bg-dialog);
-  background-attachment: var(--floating-background-attachment);
+  background-attachment: var(--dialog-background-attachment);
   border: 1px solid var(--border);
   /* 弹窗壳是全站圆角最大的一件，吃 --radius-xl（14）；卡/输入件各在下档。 */
   border-radius: var(--radius-xl);

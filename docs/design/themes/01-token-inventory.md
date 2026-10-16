@@ -1,234 +1,234 @@
 # desko 主题令牌清单（机器导出）
 
 > 由 `node scripts/theme-tokens-dump.mjs` 从 `src/styles/global.css`、`src/styles/materials.css` 与 `src/**` 现场解析生成，请勿手改。
-> 底色槽位 **96** 个，其中跟随 accent 的 **17** 个；底色 4 套 × accent 5 档 = 20 个可见组合，但 accent 覆盖层只按**极性**写，共 10 块。
+> 底色槽位 **96** 个，其中跟随 accent 的 **17** 个；底色 8 套 × accent 10 档 = 80 个可见组合，但 accent 覆盖层只按**极性**写，共 20 块。
 
 ## 1. 契约与读法（这份文件是自包含的，读它的人不需要项目访问权）
 
 **这份清单怎么用**：
-- 第 2 节 = 全部键名逐字列出 + 现有 4 套底色（纸 / 雪 / 墨 / 岩）的当前值，它是**参考系**：新配色必须落在同一套键名上，键名照抄、不许自创也不许省略。
-- 第 3 节 = accent 族 17 槽在 10 个极性组合下的当前值。
+- 第 2 节 = 全部键名逐字列出 + 现有 8 套底色（纸 / 雪 / 绢 / 雾 / 墨 / 岩 / 夜 / 苔）的当前值，它是**参考系**：新配色必须落在同一套键名上，键名照抄、不许自创也不许省略。
+- 第 3 节 = accent 族 17 槽在 20 个极性组合下的当前值。
 - 第 4 节 = 面族明度阶梯（每个面的 L\*、相邻档差多少）；第 5 节 = 对比度实测（字色对四面、彩底上的字、语法色对底）——这两节是**判据**，不是风格建议。
 - 第 6 节 = 从现值反推出的推导公式：新加一档强调色只需要定 1 个主色，其余 16 槽按公式给。
 - 第 7 节 = 不许重设计的东西（别名层跟着源头走，尺度层恒定；材质层按氛围状态覆盖）。
 - 第 9 节 = 交付格式（填空模板，照抄键名回填即可）；第 10 节 = 历史踩过的坑；第 11 节 = 可直接粘贴的任务提示词。
 
 **硬契约**：
-- 底色轴 `[data-theme="paper"|"snow"|"ink"|"slate"]` 各填**完全相同的槽位名**，缺一个槽 = 切过去那块颜色不动。
-- 第二根轴是**极性** `light` / `dark`，由底色决定（纸/雪=light，墨/岩=dark），用户不能单设。
-- accent 覆盖层 `[data-base=x][data-accent=y]` 只许动第 3 节列出的 17 个槽，且 2×5=10 块必须齐全——新增底色**不必**再配一轮 accent，只要在 theme.ts 的 POLARITY 表里登记它属于哪一极。
+- 底色轴 `[data-theme="paper"|"snow"|"linen"|"mist"|"ink"|"slate"|"midnight"|"moss"]` 各填**完全相同的槽位名**，缺一个槽 = 切过去那块颜色不动。
+- 第二根轴是**极性** `light` / `dark`，由底色决定（纸/雪/绢/雾=light，墨/岩/夜/苔=dark），用户不能单设。
+- accent 覆盖层 `[data-base=x][data-accent=y]` 只许动第 3 节列出的 17 个槽，且 2×10=20 块必须齐全——新增底色**不必**再配一轮 accent，只要在 theme.ts 的 POLARITY 表里登记它属于哪一极。
 - 底色块内**只放具体色值**，不许出现 `var()`；accent 块允许 `color-mix()` 引用随底走的槽（如洗底掺 `var(--panel-bg)`）。引用别的槽仍是别名层的活。
 - 第 7 节的派生/尺度槽由 `var()` 指向源头，新配色**不要**给它单独给值，除非确实要断开。
 - 本项目侧的校验（不需要你执行）：`node scripts/check-theme-coverage.mjs`；行为回归：`npx playwright test e2e/specs/theme.spec.ts`。
 
-## 2. 底色层：全部槽位 × 现有 4 套值
+## 2. 底色层：全部槽位 × 现有 8 套值
 
 ### accent 族（17 槽，由覆盖层重填）
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--accent` ⟨accent⟩ | #315f9b | #315f9b | #7faeee | #7faeee | 主强调色：主按钮底、链接、激活描边 | src/styles/global.css ×47, src/components/notes/NoteCard.vue ×10, src/components/codex/CodexModule.vue ×8 +34处 / 共 146 |
-| `--accent-hover` ⟨accent⟩ | #264c80 | #264c80 | #a0c3f5 | #a0c3f5 | 主强调色悬停（比 accent 深一档） | src/styles/global.css ×5, src/components/auth/SetupPage.vue, src/components/auth/UnlockPage.vue +2处 / 共 9 |
-| `--accent-active` ⟨accent⟩ | #1e3d68 | #1e3d68 | #6692d0 | #6692d0 | 主强调色按下 | src/components/notes/NoteEditor.vue ×4, src/styles/global.css ×3, src/components/auth/UnlockPage.vue +2处 / 共 10 |
-| `--accent-on` ⟨accent⟩ | #ffffff | #ffffff | #121e30 | #121e30 | accent 底上的文字，恒为最亮/最暗一点 | src/styles/global.css ×7, src/components/codex/CodexModule.vue ×2, src/components/notes/NoteFullscreen.vue ×2 +5处 / 共 16 |
-| `--accent-soft` ⟨accent⟩ | #e7eef8 | #e7eef8 | rgba(127, 174, 238, 0.16) | rgba(127, 174, 238, 0.16) | accent 的浅水洗底：选中行、浅色徽标 | src/styles/global.css ×17, src/components/notes/NoteCard.vue ×4, src/components/notes/NoteEditor.vue ×2 +12处 / 共 35 |
-| `--accent-light` ⟨accent⟩ | #cfdef1 | #cfdef1 | rgba(127, 174, 238, 0.28) | rgba(127, 174, 238, 0.28) | 比 soft 再重一档的 accent 底 | src/components/codex/CodexUsagePanel.vue ×2, src/components/notes/NoteCard.vue ×2, src/components/codex/CodexTodayUsageChart.vue +5处 / 共 10 |
-| `--accent-ring` ⟨accent⟩ | rgba(49, 95, 155, 0.16) | rgba(49, 95, 155, 0.16) | rgba(127, 174, 238, 0.32) | rgba(127, 174, 238, 0.32) | 焦点环 / 外发光 | src/styles/global.css ×5, src/components/mfa/MfaModule.vue ×2, src/components/notes/NoteCard.vue ×2 +11处 / 共 21 |
-| `--text-brand` ⟨accent⟩ | #264c80 | #264c80 | #b0cef8 | #b0cef8 | accent 族的文字档（链接、激活标签） | src/styles/global.css ×12, src/components/bypass/BypassModule.vue ×2, src/components/layout/Sidebar.vue ×2 +4处 / 共 20 |
-| `--badge-ver-bg` ⟨accent⟩ | #e7eef8 | #e7eef8 | rgba(127, 174, 238, 0.16) | rgba(127, 174, 238, 0.16) | 版本胶囊徽标底 | _无人引用_ |
-| `--badge-ver-text` ⟨accent⟩ | #264c80 | #264c80 | #b0cef8 | #b0cef8 | 版本胶囊徽标字 | _无人引用_ |
-| `--brand-g1` ⟨accent⟩ | #668cbd | #668cbd | #b0cef8 | #b0cef8 | 品牌标渐变上端 | src/components/shared/BrandLogo.vue ×2 / 共 2 |
-| `--brand-g2` ⟨accent⟩ | #315f9b | #315f9b | #7faeee | #7faeee | 品牌标渐变中段（= accent） | src/components/shared/BrandLogo.vue / 共 1 |
-| `--brand-g3` ⟨accent⟩ | #1e3d68 | #1e3d68 | #6692d0 | #6692d0 | 品牌标渐变下端 | src/components/shared/BrandLogo.vue / 共 1 |
-| `--lock-orb-1` ⟨accent⟩ | rgba(49, 95, 155, 0.07) | rgba(49, 95, 155, 0.07) | rgba(127, 174, 238, 0.14) | rgba(127, 174, 238, 0.14) | 历史光晕色槽（保留主题契约；当前材质由 accent 推导） | _无人引用_ |
-| `--lock-orb-2` ⟨accent⟩ | rgba(49, 95, 155, 0.045) | rgba(49, 95, 155, 0.045) | rgba(127, 174, 238, 0.07) | rgba(127, 174, 238, 0.07) | 历史光晕色槽（保留主题契约；当前材质由 accent 推导） | _无人引用_ |
-| `--toast-info` ⟨accent⟩ | #96b7df | #96b7df | #315f9b | #315f9b | 信息 toast 的图标/文字色 | src/components/shared/ToastNotification.vue / 共 1 |
-| `--selection` ⟨accent⟩ | rgba(49, 95, 155, 0.18) | rgba(49, 95, 155, 0.18) | rgba(127, 174, 238, 0.30) | rgba(127, 174, 238, 0.30) | 文本选区底色 | src/styles/global.css / 共 1 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--accent` ⟨accent⟩ | #2856c7 | #2856c7 | #2856c7 | #2856c7 | #9bbfff | #9bbfff | #9bbfff | #9bbfff | 主强调色：主按钮底、链接、激活描边 | src/styles/global.css ×47, src/components/notes/NoteCard.vue ×10, src/components/codex/CodexModule.vue ×8 +40处 / 共 155 |
+| `--accent-hover` ⟨accent⟩ | #234bad | #234bad | #234bad | #234bad | #a9c8ff | #a9c8ff | #a9c8ff | #a9c8ff | 主强调色悬停（比 accent 深一档） | src/styles/global.css ×5, src/components/auth/SetupPage.vue, src/components/auth/UnlockPage.vue +1处 / 共 8 |
+| `--accent-active` ⟨accent⟩ | #1e4093 | #1e4093 | #1e4093 | #1e4093 | #86a5dc | #86a5dc | #86a5dc | #86a5dc | 主强调色按下 | src/components/notes/NoteEditor.vue ×6, src/styles/global.css ×3, src/components/auth/UnlockPage.vue +2处 / 共 12 |
+| `--accent-on` ⟨accent⟩ | #ffffff | #ffffff | #ffffff | #ffffff | #171b22 | #171b22 | #171b22 | #171b22 | accent 底上的文字，恒为最亮/最暗一点 | src/styles/global.css ×7, src/components/codex/CodexModule.vue ×2, src/components/notes/NoteFullscreen.vue ×2 +5处 / 共 16 |
+| `--accent-soft` ⟨accent⟩ | #dde4f6 | #dde4f6 | #dde4f6 | #dde4f6 | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | accent 的浅水洗底：选中行、浅色徽标 | src/styles/global.css ×17, src/components/notes/NoteCard.vue ×4, src/components/notes/NoteEditor.vue ×3 +12处 / 共 36 |
+| `--accent-light` ⟨accent⟩ | #c3d0ef | #c3d0ef | #c3d0ef | #c3d0ef | rgba(155, 191, 255, 0.24) | rgba(155, 191, 255, 0.24) | rgba(155, 191, 255, 0.24) | rgba(155, 191, 255, 0.24) | 比 soft 再重一档的 accent 底 | src/components/notes/NoteCard.vue ×2, src/components/entries/EntriesModule.vue, src/components/fileshare/FileShareModule.vue +3处 / 共 7 |
+| `--accent-ring` ⟨accent⟩ | rgba(40, 86, 199, 0.2) | rgba(40, 86, 199, 0.2) | rgba(40, 86, 199, 0.2) | rgba(40, 86, 199, 0.2) | rgba(155, 191, 255, 0.36) | rgba(155, 191, 255, 0.36) | rgba(155, 191, 255, 0.36) | rgba(155, 191, 255, 0.36) | 焦点环 / 外发光 | src/styles/global.css ×5, src/components/mfa/MfaModule.vue ×2, src/components/notes/NoteCard.vue ×2 +12处 / 共 22 |
+| `--text-brand` ⟨accent⟩ | #234bad | #234bad | #234bad | #234bad | #adcbff | #adcbff | #adcbff | #adcbff | accent 族的文字档（链接、激活标签） | src/styles/global.css ×12, src/components/bypass/BypassModule.vue ×2, src/components/layout/Sidebar.vue ×2 +5处 / 共 21 |
+| `--badge-ver-bg` ⟨accent⟩ | #dde4f6 | #dde4f6 | #dde4f6 | #dde4f6 | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | 版本胶囊徽标底 | _无人引用_ |
+| `--badge-ver-text` ⟨accent⟩ | #234bad | #234bad | #234bad | #234bad | #adcbff | #adcbff | #adcbff | #adcbff | 版本胶囊徽标字 | _无人引用_ |
+| `--brand-g1` ⟨accent⟩ | #6485d7 | #6485d7 | #6485d7 | #6485d7 | #adcbff | #adcbff | #adcbff | #adcbff | 品牌标渐变上端 | src/components/shared/BrandLogo.vue ×2 / 共 2 |
+| `--brand-g2` ⟨accent⟩ | #2856c7 | #2856c7 | #2856c7 | #2856c7 | #9bbfff | #9bbfff | #9bbfff | #9bbfff | 品牌标渐变中段（= accent） | src/components/shared/BrandLogo.vue / 共 1 |
+| `--brand-g3` ⟨accent⟩ | #1e4093 | #1e4093 | #1e4093 | #1e4093 | #86a5dc | #86a5dc | #86a5dc | #86a5dc | 品牌标渐变下端 | src/components/shared/BrandLogo.vue / 共 1 |
+| `--lock-orb-1` ⟨accent⟩ | rgba(40, 86, 199, 0.07) | rgba(40, 86, 199, 0.07) | rgba(40, 86, 199, 0.07) | rgba(40, 86, 199, 0.07) | rgba(155, 191, 255, 0.14) | rgba(155, 191, 255, 0.14) | rgba(155, 191, 255, 0.14) | rgba(155, 191, 255, 0.14) | 历史光晕色槽（保留主题契约；当前材质由 accent 推导） | _无人引用_ |
+| `--lock-orb-2` ⟨accent⟩ | rgba(40, 86, 199, 0.045) | rgba(40, 86, 199, 0.045) | rgba(40, 86, 199, 0.045) | rgba(40, 86, 199, 0.045) | rgba(155, 191, 255, 0.07) | rgba(155, 191, 255, 0.07) | rgba(155, 191, 255, 0.07) | rgba(155, 191, 255, 0.07) | 历史光晕色槽（保留主题契约；当前材质由 accent 推导） | _无人引用_ |
+| `--toast-info` ⟨accent⟩ | #91baff | #91baff | #91baff | #91baff | #2856c7 | #2856c7 | #2856c7 | #2856c7 | 信息 toast 的图标/文字色 | src/components/shared/ToastNotification.vue / 共 1 |
+| `--selection` ⟨accent⟩ | rgba(40, 86, 199, 0.22) | rgba(40, 86, 199, 0.22) | rgba(40, 86, 199, 0.22) | rgba(40, 86, 199, 0.22) | rgba(155, 191, 255, 0.3) | rgba(155, 191, 255, 0.3) | rgba(155, 191, 255, 0.3) | rgba(155, 191, 255, 0.3) | 文本选区底色 | src/styles/global.css / 共 1 |
 
 ### 面 / 底
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--bg` | #f8f5f0 | #f1f2f3 | #1d1c1a | #252932 | 窗体画布底（最外层面） | src/styles/materials.css ×6, src/components/auth/SetupPage.vue ×2, src/components/entries/EntryFields.vue +6处 / 共 15 |
-| `--panel-bg` | #fcfaf7 | #fefefe | #22211e | #2b303a | 卡片/面板/弹窗面（占窗面约七成，刻意非纯白） | src/styles/materials.css ×11 / 共 11 |
-| `--chrome-bg` | rgba(248, 245, 240, 0.78) | rgba(241, 242, 243, 0.85) | rgba(29, 28, 26, 0.86) | rgba(37, 41, 50, 0.86) | 标题栏一类的半透明吸顶底 | _无人引用_ |
-| `--sunken` | #f1ede7 | #ebecee | #181716 | #1f232b | 下陷面：输入槽、代码底、字母块、页栏铺底 | src/styles/global.css ×4, src/styles/materials.css ×3, src/components/bypass/BypassModule.vue +2处 / 共 10 |
-| `--fill` | #e8e2d9 | #dbdde0 | #2a2927 | #323844 | 中性填充：进度槽、占位块、次级底 | src/styles/global.css ×9, src/components/codex/CodexPlanBadge.vue ×2, src/components/codex/CodexTodayUsageChart.vue ×2 +10处 / 共 23 |
-| `--hover` | #f6f3ee | #f7f8f9 | #282622 | #323844 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） | src/styles/global.css ×14, src/components/notes/NoteEditor.vue ×2, src/components/settings/BackupPane.vue ×2 +10处 / 共 29 |
-| `--active` | #eae4db | #e1e3e6 | #343431 | #3b4351 | 行/项按下选中底 | src/styles/materials.css / 共 1 |
-| `--overlay` | rgba(29, 28, 26, 0.42) | rgba(18, 19, 22, 0.42) | rgba(0, 0, 0, 0.62) | rgba(0, 0, 0, 0.65) | 遮罩层（弹窗背后的那层压暗） | src/components/entries/EntryFormDialog.vue, src/components/entries/PathsDialog.vue, src/components/files/FileShortcutsModule.vue +3处 / 共 6 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--bg` | #f8f5f0 | #f1f2f3 | #ebe7e0 | #e5e6eb | #1d1c1a | #252932 | #34373f | #282b25 | 窗体画布底（最外层面） | src/styles/materials.css ×6, src/components/auth/SetupPage.vue ×2, src/components/entries/EntryFields.vue +6处 / 共 15 |
+| `--panel-bg` | #fcfaf7 | #fefefe | #f5f2ed | #f3f4f7 | #22211e | #2b303a | #3b3f48 | #30332d | 卡片/面板/弹窗面（占窗面约七成，刻意非纯白） | src/styles/materials.css ×12 / 共 12 |
+| `--chrome-bg` | rgba(248, 245, 240, 0.78) | rgba(241, 242, 243, 0.85) | rgba(235, 231, 224, 0.9) | rgba(229, 230, 235, 0.9) | rgba(29, 28, 26, 0.86) | rgba(37, 41, 50, 0.86) | rgba(52, 55, 63, 0.9) | rgba(40, 43, 37, 0.9) | 标题栏一类的半透明吸顶底 | _无人引用_ |
+| `--sunken` | #f1ede7 | #ebecee | #e3dfd8 | #dadce2 | #181716 | #1f232b | #2e3139 | #22251f | 下陷面：输入槽、代码底、字母块、页栏铺底 | src/styles/materials.css ×7, src/styles/global.css ×4, src/components/bypass/BypassModule.vue +5处 / 共 17 |
+| `--fill` | #e8e2d9 | #dbdde0 | #d8d3cb | #cfd2da | #2a2927 | #323844 | #444953 | #3b3f36 | 中性填充：进度槽、占位块、次级底 | src/styles/global.css ×9, src/components/codex/CodexPlanBadge.vue ×2, src/components/codex/CodexTodayUsageChart.vue ×2 +12处 / 共 26 |
+| `--hover` | #f6f3ee | #f7f8f9 | #eeebe5 | #e9ebf0 | #282622 | #323844 | #444852 | #393d34 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） | src/styles/global.css ×14, src/components/notes/NoteEditor.vue ×2, src/components/notes/NotesModule.vue ×2 +11处 / 共 31 |
+| `--active` | #eae4db | #e1e3e6 | #dcd7cf | #d4d7df | #343431 | #3b4351 | #4b505b | #41463b | 行/项按下选中底 | src/styles/materials.css / 共 1 |
+| `--overlay` | rgba(29, 28, 26, 0.42) | rgba(18, 19, 22, 0.42) | rgba(29, 28, 26, 0.42) | rgba(18, 19, 22, 0.42) | rgba(0, 0, 0, 0.62) | rgba(0, 0, 0, 0.65) | rgba(0, 0, 0, 0.65) | rgba(0, 0, 0, 0.62) | 遮罩层（弹窗背后的那层压暗） | src/components/entries/EntryFormDialog.vue, src/components/entries/PathsDialog.vue, src/components/files/FileShortcutsModule.vue +4处 / 共 7 |
 
 ### 文字
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--text` | #333230 | #1a1b1d | #e6e4de | #edf0f6 | 正文一级字 | src/styles/global.css ×28, src/components/settings/SettingsDialog.vue ×8, src/components/notes/NoteEditor.vue ×6 +37处 / 共 123 |
-| `--text-secondary` | #4d4c49 | #3e3f42 | #c7c4bd | #d2d7e1 | 二级字（说明、次要字段） | src/styles/global.css ×24, src/components/codex/CodexUsagePanel.vue ×5, src/components/codex/ResetCreditDialog.vue ×4 +29处 / 共 87 |
-| `--text-muted` | #6b6a66 | #5b5d61 | #aeaba4 | #bbc3d0 | 三级字（标签、时间戳） | src/styles/global.css ×35, src/components/codex/CodexUsagePanel.vue ×11, src/components/codex/CodexSessionsPanel.vue ×10 +38处 / 共 159 |
-| `--text-faint` | #95948e | #85888d | #9c9992 | #adb6c5 | 四级字（占位、辅助）——深色下最低 5.8:1 底线 | src/components/codex/CodexTrashPanel.vue ×2, src/components/codex/CodexUsagePanel.vue ×2, src/components/entries/EntriesModule.vue ×2 +15处 / 共 25 |
-| `--text-url` | #4d4c49 | #3e3f42 | #c9c6bf | #d2d7e1 | 裸链接字色 | src/components/fileshare/FileShareModule.vue ×3, src/components/entries/EntriesModule.vue, src/components/files/FileShortcutsModule.vue +2处 / 共 7 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--text` | #333230 | #1a1b1d | #34322e | #30343d | #e6e4de | #edf0f6 | #d7dbe4 | #d8dacf | 正文一级字 | src/styles/global.css ×27, src/components/notes/NoteEditor.vue ×9, src/components/settings/SettingsDialog.vue ×8 +42处 / 共 145 |
+| `--text-secondary` | #4d4c49 | #3e3f42 | #514e49 | #4a505c | #c7c4bd | #d2d7e1 | #c6ccd6 | #c1c7b9 | 二级字（说明、次要字段） | src/styles/global.css ×24, src/components/codex/CodexUsagePanel.vue ×6, src/components/notes/NoteEditor.vue ×6 +36处 / 共 105 |
+| `--text-muted` | #6b6a66 | #5b5d61 | #66635d | #5b606b | #aeaba4 | #bbc3d0 | #bbc2cf | #adb6a6 | 三级字（标签、时间戳） | src/styles/global.css ×35, src/components/codex/CodexSessionsPanel.vue ×11, src/components/codex/CodexUsagePanel.vue ×8 +45处 / 共 173 |
+| `--text-faint` | #95948e | #85888d | #67625c | #5c616c | #9c9992 | #adb6c5 | #a6afbf | #98a18e | 四级字（占位、辅助）——深色下最低 5.8:1 底线 | src/components/codex/CodexTrashPanel.vue ×2, src/components/entries/EntriesModule.vue ×2, src/components/entries/EntryFields.vue ×2 +16处 / 共 26 |
+| `--text-url` | #4d4c49 | #3e3f42 | #514e49 | #4a505c | #c9c6bf | #d2d7e1 | #c6ccd6 | #c1c7b9 | 裸链接字色 | src/components/fileshare/FileShareModule.vue ×3, src/components/entries/EntriesModule.vue, src/components/files/FileShortcutsModule.vue +2处 / 共 7 |
 
 ### 描边
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--border` | #e2dbd1 | #d3d5d9 | #30302d | #3e4654 | 发丝描边：卡片/输入/分隔，分层主力 | src/styles/global.css ×37, src/components/fileshare/FileShareModule.vue ×9, src/components/settings/SettingsDialog.vue ×6 +35处 / 共 126 |
-| `--border-strong` | #cec5b8 | #b9bdc2 | #434340 | #535f71 | 重描边：需要压住的边界、--shadow 的 1px 环 | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×3, src/components/settings/SettingsDialog.vue ×2 +6处 / 共 16 |
-| `--border-subtle` | #f1ede7 | #e9ebee | #252421 | #303743 | 极浅描边（比 --border 更退） | src/components/bypass/BypassProbeDialog.vue, src/styles/global.css / 共 2 |
-| `--border-hover` | #cec5b8 | #b9bdc2 | #434340 | #535f71 | 悬停描边 | src/styles/global.css ×3, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue +1处 / 共 7 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--border` | #e2dbd1 | #d3d5d9 | #cec8be | #c7cbd4 | #30302d | #3e4654 | #505560 | #43493d | 发丝描边：卡片/输入/分隔，分层主力 | src/styles/global.css ×36, src/components/fileshare/FileShareModule.vue ×9, src/components/notes/NoteEditor.vue ×7 +40处 / 共 134 |
+| `--border-strong` | #cec5b8 | #b9bdc2 | #b4ac9f | #adb3c0 | #434340 | #535f71 | #666d7b | #5e6755 | 重描边：需要压住的边界、--shadow 的 1px 环 | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×3, src/components/settings/SettingsDialog.vue ×2 +7处 / 共 17 |
+| `--border-subtle` | #f1ede7 | #e9ebee | #e5e0d8 | #dfe2e9 | #252421 | #303743 | #41454f | #353a30 | 极浅描边（比 --border 更退） | src/components/bypass/BypassProbeDialog.vue, src/components/settings/WebAccessPane.vue, src/styles/global.css / 共 3 |
+| `--border-hover` | #cec5b8 | #b9bdc2 | #b4ac9f | #adb3c0 | #434340 | #535f71 | #666d7b | #5e6755 | 悬停描边 | src/styles/global.css ×3, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue +1处 / 共 7 |
 
 ### 徽标
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--badge-cat-bg` | #eee8df | #ebecee | #252421 | #303743 | 分类胶囊徽标底 | src/styles/materials.css / 共 1 |
-| `--badge-cat-border` | #e2dbd1 | #d3d5d9 | #30302d | #3e4654 | 分类胶囊徽标描边 | _无人引用_ |
-| `--badge-cat-text` | #4d4c49 | #3e3f42 | #c7c4bd | #d2d7e1 | 分类胶囊徽标字 | _无人引用_ |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--badge-cat-bg` | #eee8df | #ebecee | #e3ded5 | #dee1e8 | #252421 | #303743 | #454a55 | #3b4134 | 分类胶囊徽标底 | src/styles/materials.css / 共 1 |
+| `--badge-cat-border` | #e2dbd1 | #d3d5d9 | #cec8be | #c7cbd4 | #30302d | #3e4654 | #59606e | #505947 | 分类胶囊徽标描边 | _无人引用_ |
+| `--badge-cat-text` | #4d4c49 | #3e3f42 | #514e49 | #4a505c | #c7c4bd | #d2d7e1 | #d0d6e1 | #cbd3c1 | 分类胶囊徽标字 | _无人引用_ |
 
 ### 投影
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--shadow-xs` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 最小投影 | src/styles/global.css ×3, src/components/auth/UnlockPage.vue, src/components/notes/NoteComposer.vue +1处 / 共 6 |
-| `--shadow-card` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 行卡投影（轻量化轮起只留一丝贴地感） | src/styles/global.css ×9, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue ×2 +5处 / 共 19 |
-| `--shadow-sm` | 0 1px 3px 0 rgba(29, 28, 26, 0.05) | 0 1px 3px 0 rgba(18, 19, 22, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | 小投影 | src/styles/global.css ×4, src/components/notes/NoteCard.vue ×2, src/components/fileshare/FileShareModule.vue +2处 / 共 9 |
-| `--shadow` | 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #cec5b8 | 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #535f71 | 常规浮层投影（带 1px 描边环） | _无人引用_ |
-| `--shadow-md` | 0 6px 16px -6px rgba(29, 28, 26, 0.10) | 0 6px 16px -6px rgba(18, 19, 22, 0.10) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 中投影 | src/styles/global.css ×2, src/components/auth/SetupPage.vue, src/components/mfa/MfaModule.vue / 共 4 |
-| `--shadow-lg` | 0 12px 28px -8px rgba(29, 28, 26, 0.14) | 0 12px 28px -8px rgba(18, 19, 22, 0.14) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 大投影 | src/components/auth/SetupPage.vue / 共 1 |
-| `--shadow-pop` | 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 弹层/菜单投影（最高一档常规浮面） | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×2, src/components/mfa/MfaModule.vue +2处 / 共 10 |
-| `--shadow-dock` | 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14) | 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 批量操作药丸投影（高于任何弹层） | src/components/notes/NoteFullscreen.vue, src/styles/global.css / 共 2 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--shadow-xs` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 最小投影 | src/styles/global.css ×3, src/components/auth/UnlockPage.vue, src/components/notes/NoteComposer.vue +1处 / 共 6 |
+| `--shadow-card` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 行卡投影（轻量化轮起只留一丝贴地感） | src/styles/global.css ×9, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue ×2 +6处 / 共 20 |
+| `--shadow-sm` | 0 1px 3px 0 rgba(29, 28, 26, 0.05) | 0 1px 3px 0 rgba(18, 19, 22, 0.05) | 0 1px 3px 0 rgba(29, 28, 26, 0.05) | 0 1px 3px 0 rgba(18, 19, 22, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | 小投影 | src/styles/global.css ×4, src/components/notes/NoteCard.vue ×2, src/components/fileshare/FileShareModule.vue +2处 / 共 9 |
+| `--shadow` | 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #cec5b8 | 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2 | 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #cec5b8 | 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #b9bdc2 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #535f71 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #535f71 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340 | 常规浮层投影（带 1px 描边环） | _无人引用_ |
+| `--shadow-md` | 0 6px 16px -6px rgba(29, 28, 26, 0.10) | 0 6px 16px -6px rgba(18, 19, 22, 0.10) | 0 6px 16px -6px rgba(29, 28, 26, 0.10) | 0 6px 16px -6px rgba(18, 19, 22, 0.10) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 中投影 | src/styles/global.css ×2, src/components/auth/SetupPage.vue, src/components/mfa/MfaModule.vue / 共 4 |
+| `--shadow-lg` | 0 12px 28px -8px rgba(29, 28, 26, 0.14) | 0 12px 28px -8px rgba(18, 19, 22, 0.14) | 0 12px 28px -8px rgba(29, 28, 26, 0.14) | 0 12px 28px -8px rgba(18, 19, 22, 0.14) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 大投影 | src/components/auth/SetupPage.vue / 共 1 |
+| `--shadow-pop` | 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 弹层/菜单投影（最高一档常规浮面） | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×4, src/components/layout/WebModuleDrawer.vue +3处 / 共 13 |
+| `--shadow-dock` | 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14) | 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14) | 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14) | 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 批量操作药丸投影（高于任何弹层） | src/styles/global.css / 共 1 |
 
 ### 状态色
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--danger` | #a9443c | #b83a30 | #e08079 | #df817c | 危险/删除实色 | src/styles/global.css ×15, src/components/entries/EntryFields.vue ×4, src/components/codex/CodexBatchDeleteDialog.vue ×3 +15处 / 共 43 |
-| `--danger-on` | #ffffff | #ffffff | #181716 | #181517 | 危险底上的字 | src/components/layout/TitleBar.vue, src/styles/global.css / 共 2 |
-| `--danger-hover` | #8c362f | #992e26 | #ea9d97 | #e89e99 | 危险悬停 | src/components/fileshare/FileShareModule.vue, src/components/tunnel/TunnelModule.vue, src/styles/global.css / 共 3 |
-| `--danger-soft` | #f7ece9 | #faecea | #271a17 | #271a19 | 危险浅底 | src/styles/global.css ×8, src/components/fileshare/FileShareModule.vue ×3, src/components/tunnel/TunnelModule.vue ×2 +4处 / 共 17 |
-| `--danger-border` | #eacfc8 | #f0cfcb | #462924 | #472927 | 危险描边 | src/components/fileshare/FileShareModule.vue ×2, src/components/entries/DetailDialog.vue, src/components/tunnel/TunnelModule.vue +1处 / 共 5 |
-| `--success` | #3d7355 | #2e7a50 | #6fbf95 | #6cbd94 | 成功实色 | src/styles/global.css ×6, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue ×2 +7处 / 共 18 |
-| `--success-soft` | #ecf3ee | #eaf4ee | #17211c | #16221d | 成功浅底 | src/styles/global.css ×4, src/components/codex/ResetCreditDialog.vue / 共 5 |
-| `--warning` | #96682a | #9c681e | #d9a95f | #d9aa63 | 警告实色 | src/styles/global.css ×7, src/components/mfa/MfaModule.vue ×4, src/components/notes/NoteCard.vue ×3 +10处 / 共 30 |
-| `--warning-soft` | #f6efdf | #f9f0df | #241e13 | #251f15 | 警告浅底 | src/styles/global.css ×4, src/components/codex/CodexAuthDialog.vue, src/components/fileshare/FileShareModule.vue +2处 / 共 8 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--danger` | #a9443c | #b83a30 | #a4423a | #ab362d | #e08079 | #df817c | #e59894 | #e08079 | 危险/删除实色 | src/styles/global.css ×15, src/components/entries/EntryFields.vue ×4, src/components/codex/CodexBatchDeleteDialog.vue ×3 +16处 / 共 43 |
+| `--danger-on` | #ffffff | #ffffff | #ffffff | #ffffff | #181716 | #181517 | #181517 | #181716 | 危险底上的字 | src/components/layout/TitleBar.vue, src/styles/global.css / 共 2 |
+| `--danger-hover` | #8c362f | #992e26 | #8c362f | #992e26 | #ea9d97 | #e89e99 | #e89e99 | #ea9d97 | 危险悬停 | src/components/fileshare/FileShareModule.vue, src/components/tunnel/TunnelModule.vue, src/styles/global.css / 共 3 |
+| `--danger-soft` | #f7ece9 | #faecea | #f7ece9 | #faecea | #271a17 | #271a19 | #271a19 | #271a17 | 危险浅底 | src/styles/global.css ×8, src/components/fileshare/FileShareModule.vue ×3, src/components/tunnel/TunnelModule.vue ×2 +3处 / 共 16 |
+| `--danger-border` | #eacfc8 | #f0cfcb | #eacfc8 | #f0cfcb | #462924 | #472927 | #472927 | #462924 | 危险描边 | src/components/fileshare/FileShareModule.vue ×2, src/components/entries/DetailDialog.vue, src/components/tunnel/TunnelModule.vue +1处 / 共 5 |
+| `--success` | #3d7355 | #2e7a50 | #396c50 | #286b46 | #6fbf95 | #6cbd94 | #6cbd94 | #6fbf95 | 成功实色 | src/styles/global.css ×6, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue ×2 +8处 / 共 19 |
+| `--success-soft` | #ecf3ee | #eaf4ee | #ecf3ee | #eaf4ee | #17211c | #16221d | #16221d | #17211c | 成功浅底 | src/styles/global.css ×4, src/components/codex/ResetCreditDialog.vue, src/components/layout/TitleBar.vue / 共 6 |
+| `--warning` | #96682a | #9c681e | #815924 | #815619 | #d9a95f | #d9aa63 | #d9aa63 | #d9a95f | 警告实色 | src/styles/global.css ×7, src/components/mfa/MfaModule.vue ×4, src/components/notes/NoteCard.vue ×3 +9处 / 共 29 |
+| `--warning-soft` | #f6efdf | #f9f0df | #f6efdf | #f9f0df | #241e13 | #251f15 | #251f15 | #241e13 | 警告浅底 | src/styles/global.css ×4, src/components/codex/CodexAuthDialog.vue, src/components/fileshare/FileShareModule.vue +1处 / 共 7 |
 
 ### 侧栏
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--sidebar-bg` | #eae4db | #e3e5e8 | #1a1917 | #22262e | 侧栏底（纸：比画布略深；墨：落在画布与卡面之间） | src/styles/materials.css ×4, src/styles/global.css / 共 5 |
-| `--sidebar-hover` | #e2dbd1 | #dadee1 | #282622 | #303743 | 侧栏项悬停底 | src/components/layout/Sidebar.vue ×2, src/components/notes/NotesModule.vue, src/components/settings/SettingsDialog.vue / 共 4 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--sidebar-bg` | #eae4db | #e3e5e8 | #dcd7cf | #d5d8e0 | #1a1917 | #22262e | #30333b | #252822 | 侧栏底（纸：比画布略深；墨：落在画布与卡面之间） | src/styles/materials.css ×3, src/styles/global.css / 共 4 |
+| `--sidebar-hover` | #e2dbd1 | #dadee1 | #d1cbc1 | #cacfd8 | #282622 | #303743 | #3b3f49 | #33382e | 侧栏项悬停底 | src/components/layout/Sidebar.vue ×2, src/components/notes/NotesModule.vue, src/components/settings/SettingsDialog.vue / 共 4 |
 
 ### 品牌 / 锁屏
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--brand-knob` | #ffffff | #ffffff | #1d1c1a | #252932 | 品牌标上的高光旋钮/最亮点 | src/components/shared/BrandLogo.vue / 共 1 |
-| `--lock-wash-a` | #fcfaf7 | #fefefe | #1d1c1a | #252932 | 锁屏渐变上端 | src/styles/materials.css / 共 1 |
-| `--lock-wash-b` | #eae4db | #e3e5e8 | #22211e | #2b303a | 锁屏渐变下端 | src/styles/materials.css ×2 / 共 2 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--brand-knob` | #ffffff | #ffffff | #ffffff | #ffffff | #1d1c1a | #252932 | #252932 | #1d1c1a | 品牌标上的高光旋钮/最亮点 | src/components/shared/BrandLogo.vue / 共 1 |
+| `--lock-wash-a` | #fcfaf7 | #fefefe | #ebe7e0 | #e5e6eb | #1d1c1a | #252932 | #34373f | #282b25 | 锁屏渐变上端 | src/styles/materials.css / 共 1 |
+| `--lock-wash-b` | #eae4db | #e3e5e8 | #e3dfd8 | #dadce2 | #22211e | #2b303a | #2e3139 | #22251f | 锁屏渐变下端 | src/styles/materials.css / 共 1 |
 
 ### 毛玻璃 / 浮层
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--frost-bg` | rgba(252, 250, 247, 0.86) | rgba(254, 254, 254, 0.88) | rgba(34, 33, 30, 0.88) | rgba(43, 48, 58, 0.88) | 毛玻璃底栏背景 | src/components/notes/NoteFullscreen.vue / 共 1 |
-| `--frost-border` | #e2dbd1 | #d3d5d9 | #30302d | #3e4654 | 毛玻璃底栏描边 | _无人引用_ |
-| `--tip-bg` | #26241f | #1f2124 | #efede8 | #eef0f5 | 气泡提示底（深色主题下反转成亮底） | src/components/notes/NoteAttachments.vue, src/styles/global.css / 共 2 |
-| `--tip-fg` | #f2f0ea | #f4f5f6 | #1d1c1a | #252932 | 气泡提示字 | src/components/notes/NoteAttachments.vue, src/styles/global.css / 共 2 |
-| `--toast-bg` | #26241f | #1f2124 | #efede8 | #eef0f5 | toast 底 | src/components/shared/ToastNotification.vue / 共 1 |
-| `--toast-ok` | #9cc4ae | #91c9a6 | #2f7d52 | #2f7d52 | toast 成功色 | src/components/shared/ToastNotification.vue / 共 1 |
-| `--toast-err` | #e09a92 | #e28e84 | #b23c37 | #b23c37 | toast 错误色 | src/components/shared/ToastNotification.vue / 共 1 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--frost-bg` | rgba(252, 250, 247, 0.86) | rgba(254, 254, 254, 0.88) | rgba(245, 242, 237, 0.94) | rgba(243, 244, 247, 0.94) | rgba(34, 33, 30, 0.88) | rgba(43, 48, 58, 0.88) | rgba(59, 63, 72, 0.94) | rgba(48, 51, 45, 0.94) | 毛玻璃底栏背景 | src/components/notes/NoteFullscreen.vue / 共 1 |
+| `--frost-border` | #e2dbd1 | #d3d5d9 | #cec8be | #c7cbd4 | #30302d | #3e4654 | #505560 | #43493d | 毛玻璃底栏描边 | _无人引用_ |
+| `--tip-bg` | #26241f | #1f2124 | #26241f | #1f2124 | #efede8 | #eef0f5 | #eef0f5 | #efede8 | 气泡提示底（深色主题下反转成亮底） | src/components/notes/NoteAttachments.vue, src/styles/global.css / 共 2 |
+| `--tip-fg` | #f2f0ea | #f4f5f6 | #f2f0ea | #f4f5f6 | #1d1c1a | #252932 | #252932 | #1d1c1a | 气泡提示字 | src/components/notes/NoteAttachments.vue, src/styles/global.css / 共 2 |
+| `--toast-bg` | #26241f | #1f2124 | #26241f | #1f2124 | #efede8 | #eef0f5 | #eef0f5 | #efede8 | toast 底 | src/components/shared/ToastNotification.vue / 共 1 |
+| `--toast-ok` | #9cc4ae | #91c9a6 | #9cc4ae | #91c9a6 | #2f7d52 | #2f7d52 | #2f7d52 | #2f7d52 | toast 成功色 | src/components/shared/ToastNotification.vue / 共 1 |
+| `--toast-err` | #e09a92 | #e28e84 | #e09a92 | #e28e84 | #b23c37 | #b23c37 | #b23c37 | #b23c37 | toast 错误色 | src/components/shared/ToastNotification.vue / 共 1 |
 
 ### 滚动条 / 选区
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--scrollbar` | rgba(29, 28, 26, 0.16) | rgba(18, 19, 22, 0.16) | rgba(255, 255, 255, 0.16) | rgba(255, 255, 255, 0.16) | 滚动条滑块 | src/styles/global.css / 共 1 |
-| `--scrollbar-hover` | rgba(29, 28, 26, 0.28) | rgba(18, 19, 22, 0.28) | rgba(255, 255, 255, 0.26) | rgba(255, 255, 255, 0.26) | 滚动条悬停 | src/styles/global.css / 共 1 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--scrollbar` | rgba(29, 28, 26, 0.16) | rgba(18, 19, 22, 0.16) | rgba(29, 28, 26, 0.16) | rgba(18, 19, 22, 0.16) | rgba(255, 255, 255, 0.16) | rgba(255, 255, 255, 0.16) | rgba(255, 255, 255, 0.16) | rgba(255, 255, 255, 0.16) | 滚动条滑块 | src/styles/global.css / 共 1 |
+| `--scrollbar-hover` | rgba(29, 28, 26, 0.28) | rgba(18, 19, 22, 0.28) | rgba(29, 28, 26, 0.28) | rgba(18, 19, 22, 0.28) | rgba(255, 255, 255, 0.26) | rgba(255, 255, 255, 0.26) | rgba(255, 255, 255, 0.26) | rgba(255, 255, 255, 0.26) | 滚动条悬停 | src/styles/global.css / 共 1 |
 
 ### 头像分类色
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--cat-1` | #5f62b8 | #5465c4 | #8a8fd8 | #8c90da | 分类色板 1（紫蓝）：头像/色相钉，六档同明度同彩度 | _无人引用_ |
-| `--cat-2` | #7b5fb0 | #735eb8 | #ab8de6 | #ac8fe6 | 分类色板 2（紫） | _无人引用_ |
-| `--cat-3` | #a85b7d | #a6587d | #de8fb8 | #dc91b8 | 分类色板 3（玫红） | src/components/mfa/MfaModule.vue / 共 1 |
-| `--cat-4` | #937042 | #946e38 | #d8b078 | #d7b17c | 分类色板 4（褐） | _无人引用_ |
-| `--cat-5` | #46806b | #3f8067 | #6fc0a0 | #70c1a2 | 分类色板 5（苔绿） | _无人引用_ |
-| `--cat-6` | #457f8a | #3b808e | #6fb8c8 | #71b9c9 | 分类色板 6（青蓝） | _无人引用_ |
-| `--cat-text` | #ffffff | #ffffff | #171614 | #14171c | 头像色块上的字 | _无人引用_ |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--cat-1` | #5f62b8 | #5465c4 | #5f62b8 | #5465c4 | #8a8fd8 | #8c90da | #8c90da | #8a8fd8 | 分类色板 1（紫蓝）：头像/色相钉，六档同明度同彩度 | _无人引用_ |
+| `--cat-2` | #7b5fb0 | #735eb8 | #7b5fb0 | #735eb8 | #ab8de6 | #ac8fe6 | #ac8fe6 | #ab8de6 | 分类色板 2（紫） | _无人引用_ |
+| `--cat-3` | #a85b7d | #a6587d | #a85b7d | #a6587d | #de8fb8 | #dc91b8 | #dc91b8 | #de8fb8 | 分类色板 3（玫红） | src/components/mfa/MfaModule.vue / 共 1 |
+| `--cat-4` | #937042 | #946e38 | #937042 | #946e38 | #d8b078 | #d7b17c | #d7b17c | #d8b078 | 分类色板 4（褐） | _无人引用_ |
+| `--cat-5` | #46806b | #3f8067 | #46806b | #3f8067 | #6fc0a0 | #70c1a2 | #70c1a2 | #6fc0a0 | 分类色板 5（苔绿） | _无人引用_ |
+| `--cat-6` | #457f8a | #3b808e | #457f8a | #3b808e | #6fb8c8 | #71b9c9 | #71b9c9 | #6fb8c8 | 分类色板 6（青蓝） | _无人引用_ |
+| `--cat-text` | #ffffff | #ffffff | #ffffff | #ffffff | #171614 | #14171c | #14171c | #171614 | 头像色块上的字 | _无人引用_ |
 
 ### 文件类型色
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--ft-pdf` | #b8564f | #be4e46 | #f0716b | #ef726d | 文件类型图标色：PDF（红） | _无人引用_ |
-| `--ft-doc` | #4a6d9c | #3a689e | #7aa2f7 | #7ca3f7 | 文件类型图标色：文档（蓝） | _无人引用_ |
-| `--ft-sheet` | #3f7a5e | #337d57 | #3fb950 | #42ba54 | 文件类型图标色：表格（绿） | _无人引用_ |
-| `--ft-deck` | #a0603a | #a65e31 | #e0a45c | #dfa561 | 文件类型图标色：演示（橙） | _无人引用_ |
-| `--ft-arch` | #6a5a99 | #6957a0 | #a98be8 | #aa8ce8 | 文件类型图标色：压缩包（紫） | _无人引用_ |
-| `--ft-code` | #8a7534 | #8c7324 | #e0c060 | #dfc165 | 文件类型图标色：代码（黄） | _无人引用_ |
-| `--ft-mark` | #5e6672 | #586374 | #8c94a6 | #8f96a7 | 文件类型图标色：Markdown（中性灰蓝） | _无人引用_ |
-| `--ft-img` | #9a5a72 | #9d5472 | #e08bb8 | #df8cb8 | 文件类型图标色：图片（品红） | _无人引用_ |
-| `--ft-unk` | #7a7f88 | #6e7580 | #6b7280 | #8f96a7 | 文件类型图标色：未知（灰） | _无人引用_ |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--ft-pdf` | #b8564f | #be4e46 | #9b4842 | #9e413a | #f0716b | #ef726d | #f3918d | #f17771 | 文件类型图标色：PDF（红） | _无人引用_ |
+| `--ft-doc` | #4a6d9c | #3a689e | #43638e | #366193 | #7aa2f7 | #7ca3f7 | #88abf8 | #7aa2f7 | 文件类型图标色：文档（蓝） | _无人引用_ |
+| `--ft-sheet` | #3f7a5e | #337d57 | #376b53 | #2b6a4a | #3fb950 | #42ba54 | #55c165 | #3fb950 | 文件类型图标色：表格（绿） | _无人引用_ |
+| `--ft-deck` | #a0603a | #a65e31 | #8b5432 | #8d502a | #e0a45c | #dfa561 | #dfa561 | #e0a45c | 文件类型图标色：演示（橙） | _无人引用_ |
+| `--ft-arch` | #6a5a99 | #6957a0 | #685896 | #66549b | #a98be8 | #aa8ce8 | #b8a0ec | #a98be8 | 文件类型图标色：压缩包（紫） | _无人引用_ |
+| `--ft-code` | #8a7534 | #8c7324 | #71602b | #715d1d | #e0c060 | #dfc165 | #dfc165 | #e0c060 | 文件类型图标色：代码（黄） | _无人引用_ |
+| `--ft-mark` | #5e6672 | #586374 | #5a626d | #556071 | #8c94a6 | #8f96a7 | #a7acb9 | #949bac | 文件类型图标色：Markdown（中性灰蓝） | _无人引用_ |
+| `--ft-img` | #9a5a72 | #9d5472 | #895065 | #8c4b65 | #e08bb8 | #df8cb8 | #e194bd | #e08bb8 | 文件类型图标色：图片（品红） | _无人引用_ |
+| `--ft-unk` | #7a7f88 | #6e7580 | #5e6269 | #5a6069 | #6b7280 | #8f96a7 | #a7acb9 | #979ca6 | 文件类型图标色：未知（灰） | _无人引用_ |
 
 ### 代码语法色
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--code-fg` | #1a1b20 | #191a1d | #e4e2dc | #e2e5eb | 代码块前景/底色字 | src/components/notes/NoteCard.vue, src/components/notes/NoteEditor.vue, src/components/notes/NoteFullscreen.vue / 共 3 |
-| `--code-kw` | #9d5275 | #a04975 | #de9ab8 | #dd9cb8 | 语法色：关键字 | src/styles/global.css / 共 1 |
-| `--code-str` | #3a7256 | #2f7351 | #6fd0a8 | #72d0a8 | 语法色：字符串 | src/styles/global.css / 共 1 |
-| `--code-num` | #96593a | #9b542e | #e0b072 | #deb177 | 语法色：数字 | src/styles/global.css / 共 1 |
-| `--code-type` | #7d6a2f | #776422 | #e0c060 | #dec165 | 语法色：类型名 | src/styles/global.css / 共 1 |
-| `--code-fn` | #4a6d9c | #3a689e | #8aa8e0 | #8ea9df | 语法色：函数名 | src/styles/global.css / 共 1 |
-| `--code-var` | #5e6672 | #586374 | #b6b2a8 | #b8b5ac | 语法色：变量 | src/styles/global.css / 共 1 |
-| `--code-com` | #686a73 | #63656f | #9d9991 | #9fa098 | 语法色：注释（最静档，但必须在 --sunken 上可读） | src/styles/global.css / 共 1 |
-| `--code-tag` | #6a5a99 | #6957a0 | #ab8de6 | #ac8fe6 | 语法色：标签 | src/styles/global.css / 共 1 |
-| `--code-pun` | #5e6168 | #5b606a | #8c94a6 | #8f96a7 | 语法色：标点 | src/styles/global.css / 共 1 |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--code-fg` | #1a1b20 | #191a1d | #1a1b20 | #191a1d | #e4e2dc | #e2e5eb | #e2e5eb | #e4e2dc | 代码块前景/底色字 | src/components/notes/NoteCard.vue, src/components/notes/NoteEditor.vue, src/components/notes/NoteFullscreen.vue / 共 3 |
+| `--code-kw` | #9d5275 | #a04975 | #904b6c | #95446d | #de9ab8 | #dd9cb8 | #dd9cb8 | #de9ab8 | 语法色：关键字 | src/styles/global.css / 共 1 |
+| `--code-str` | #3a7256 | #2f7351 | #376c52 | #2c6b4b | #6fd0a8 | #72d0a8 | #72d0a8 | #6fd0a8 | 语法色：字符串 | src/styles/global.css / 共 1 |
+| `--code-num` | #96593a | #9b542e | #8c5336 | #904e2b | #e0b072 | #deb177 | #deb177 | #e0b072 | 语法色：数字 | src/styles/global.css / 共 1 |
+| `--code-type` | #7d6a2f | #776422 | #72602b | #705e20 | #e0c060 | #dec165 | #dec165 | #e0c060 | 语法色：类型名 | src/styles/global.css / 共 1 |
+| `--code-fn` | #4a6d9c | #3a689e | #43638e | #366193 | #8aa8e0 | #8ea9df | #91ace0 | #8aa8e0 | 语法色：函数名 | src/styles/global.css / 共 1 |
+| `--code-var` | #5e6672 | #586374 | #5a626d | #556071 | #b6b2a8 | #b8b5ac | #b8b5ac | #b6b2a8 | 语法色：变量 | src/styles/global.css / 共 1 |
+| `--code-com` | #686a73 | #63656f | #5f6069 | #5d5f68 | #9d9991 | #9fa098 | #abaca5 | #9f9b93 | 语法色：注释（最静档，但必须在 --sunken 上可读） | src/styles/global.css / 共 1 |
+| `--code-tag` | #6a5a99 | #6957a0 | #685896 | #66549b | #ab8de6 | #ac8fe6 | #b89fea | #ab8de6 | 语法色：标签 | src/styles/global.css / 共 1 |
+| `--code-pun` | #5e6168 | #5b606a | #5e6168 | #5b606a | #8c94a6 | #8f96a7 | #a7acb9 | #949bac | 语法色：标点 | src/styles/global.css / 共 1 |
 
 ### 字体
 
-| 槽位 | paper（纸） | snow（雪） | ink（墨） | slate（岩） | 涂在哪里 | 消费点 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--font-ui` | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | 界面字族（两底色同值，内置 HarmonyOS Sans SC） | src/components/codex/CodexTodayUsageChart.vue, src/styles/global.css / 共 2 |
-| `--font-mono` | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | 等宽字族（Consolas 优先，中文回落族必须接上） | src/components/entries/DetailDialog.vue ×4, src/components/fileshare/FileShareModule.vue ×4, src/components/codex/CodexUsagePanel.vue ×3 +31处 / 共 55 |
-
-## 3. accent 族：17 槽 × 2 极性 × 5 档
-
-同一极的几套底色共用一块（例如纸底和雪底吃到完全相同的 accent 值）；带 ⟨随底⟩ 的槽用了 `var()`/`color-mix()`，会跟着底色走。
-
-| 槽位 | light×ink | dark×ink | light×celadon | dark×celadon | light×clay | dark×clay | light×plum | dark×plum | light×rose | dark×rose |
+| 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `--accent` | #315f9b | #7faeee | #246e60 | #73c5ad | #9b562b | #e1a15f | #7951a8 | #bd9ae0 | #9b3f68 | #e991b6 |
-| `--accent-hover` | #264c80 | #a0c3f5 | #1c594d | #95d6c4 | #804422 | #edbb87 | #63418d | #d1b7ed | #813255 | #f2afcb |
-| `--accent-active` | #1e3d68 | #6692d0 | #16483f | #57a88f | #69361b | #c78848 | #503473 | #a37bc9 | #692846 | #cc7399 |
-| `--accent-on` | #ffffff | #121e30 | #ffffff | #10251e | #ffffff | #2b1b0d | #ffffff | #26162f | #ffffff | #301321 |
-| `--accent-soft` | #e7eef8 | rgba(127, 174, 238, 0.16) | #e4f1ec | rgba(115, 197, 173, 0.16) | #f8ede2 | rgba(225, 161, 95, 0.16) | #f0eaf8 | rgba(189, 154, 224, 0.16) | #f8e8ef | rgba(233, 145, 182, 0.16) |
-| `--accent-light` | #cfdef1 | rgba(127, 174, 238, 0.28) | #c6e5d9 | rgba(115, 197, 173, 0.28) | #eed7bf | rgba(225, 161, 95, 0.28) | #e0d1f0 | rgba(189, 154, 224, 0.28) | #efcedf | rgba(233, 145, 182, 0.28) |
-| `--accent-ring` | rgba(49, 95, 155, 0.16) | rgba(127, 174, 238, 0.32) | rgba(36, 110, 96, 0.16) | rgba(115, 197, 173, 0.32) | rgba(155, 86, 43, 0.16) | rgba(225, 161, 95, 0.32) | rgba(121, 81, 168, 0.16) | rgba(189, 154, 224, 0.32) | rgba(155, 63, 104, 0.16) | rgba(233, 145, 182, 0.32) |
-| `--text-brand` | #264c80 | #b0cef8 | #1c594d | #a4dfce | #804422 | #f2c799 | #63418d | #dcc6f2 | #813255 | #f6bfd7 |
-| `--badge-ver-bg` | #e7eef8 | rgba(127, 174, 238, 0.16) | #e4f1ec | rgba(115, 197, 173, 0.16) | #f8ede2 | rgba(225, 161, 95, 0.16) | #f0eaf8 | rgba(189, 154, 224, 0.16) | #f8e8ef | rgba(233, 145, 182, 0.16) |
-| `--badge-ver-text` | #264c80 | #b0cef8 | #1c594d | #a4dfce | #804422 | #f2c799 | #63418d | #dcc6f2 | #813255 | #f6bfd7 |
-| `--brand-g1` | #668cbd | #b0cef8 | #62a291 | #a4dfce | #be8655 | #f2c799 | #a17bc7 | #dcc6f2 | #c27394 | #f6bfd7 |
-| `--brand-g2` | #315f9b | #7faeee | #246e60 | #73c5ad | #9b562b | #e1a15f | #7951a8 | #bd9ae0 | #9b3f68 | #e991b6 |
-| `--brand-g3` | #1e3d68 | #6692d0 | #16483f | #57a88f | #69361b | #c78848 | #503473 | #a37bc9 | #692846 | #cc7399 |
-| `--lock-orb-1` | rgba(49, 95, 155, 0.07) | rgba(127, 174, 238, 0.14) | rgba(36, 110, 96, 0.07) | rgba(115, 197, 173, 0.14) | rgba(155, 86, 43, 0.07) | rgba(225, 161, 95, 0.14) | rgba(121, 81, 168, 0.07) | rgba(189, 154, 224, 0.14) | rgba(155, 63, 104, 0.07) | rgba(233, 145, 182, 0.14) |
-| `--lock-orb-2` | rgba(49, 95, 155, 0.045) | rgba(127, 174, 238, 0.07) | rgba(36, 110, 96, 0.045) | rgba(115, 197, 173, 0.07) | rgba(155, 86, 43, 0.045) | rgba(225, 161, 95, 0.07) | rgba(121, 81, 168, 0.045) | rgba(189, 154, 224, 0.07) | rgba(155, 63, 104, 0.045) | rgba(233, 145, 182, 0.07) |
-| `--selection` | rgba(49, 95, 155, 0.18) | rgba(127, 174, 238, 0.30) | rgba(36, 110, 96, 0.18) | rgba(115, 197, 173, 0.30) | rgba(155, 86, 43, 0.18) | rgba(225, 161, 95, 0.30) | rgba(121, 81, 168, 0.18) | rgba(189, 154, 224, 0.30) | rgba(155, 63, 104, 0.18) | rgba(233, 145, 182, 0.30) |
-| `--toast-info` | #96b7df | #315f9b | #92ccb8 | #246e60 | #dbb489 | #9b562b | #c3a4e2 | #7951a8 | #e4a3c0 | #9b3f68 |
+| `--font-ui` | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif | 界面字族（两底色同值，内置 HarmonyOS Sans SC） | src/components/codex/CodexTodayUsageChart.vue, src/components/settings/WebAccessPane.vue, src/styles/global.css / 共 3 |
+| `--font-mono` | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace | 等宽字族（Consolas 优先，中文回落族必须接上） | src/components/codex/CodexUsagePanel.vue ×4, src/components/entries/DetailDialog.vue ×4, src/components/fileshare/FileShareModule.vue ×4 +31处 / 共 59 |
+
+## 3. accent 族：17 槽 × 2 极性 × 10 档
+
+同一极的几套底色共用一块（例如纸底和雪底和绢底和雾底吃到完全相同的 accent 值）；带 ⟨随底⟩ 的槽用了 `var()`/`color-mix()`，会跟着底色走。
+
+| 槽位 | light×ink | dark×ink | light×celadon | dark×celadon | light×clay | dark×clay | light×plum | dark×plum | light×rose | dark×rose | light×teal | dark×teal | light×forest | dark×forest | light×amber | dark×amber | light×coral | dark×coral | light×graphite | dark×graphite |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--accent` | #2856c7 | #9bbfff | #087662 | #5ed5a9 | #aa4c0c | #ffac6b | #7542c3 | #d3afff | #ac298e | #faa2e1 | #077190 | #5bcee5 | #527221 | #b5cf70 | #7f6608 | #e7c154 | #be3547 | #ffa6b2 | #555c69 | #b7bfcc |
+| `--accent-hover` | #234bad | #a9c8ff | #076755 | #75dbb5 | #94420a | #ffb880 | #6639aa | #d9baff | #96247c | #fbafe5 | #06627d | #72d5e9 | #47631d | #bfd684 | #6e5907 | #eaca6c | #a52e3e | #ffb2bd | #4a505b | #c1c8d3 |
+| `--accent-active` | #1e4093 | #86a5dc | #065749 | #53b793 | #7e3809 | #da955f | #573190 | #b597dc | #7f1e69 | #d68cc2 | #05546b | #50b1c6 | #3d5418 | #9cb264 | #5e4b06 | #c6a64c | #8d2735 | #da909b | #3f444e | #9da5b1 |
+| `--accent-on` | #ffffff | #171b22 | #ffffff | #171b22 | #ffffff | #171b22 | #ffffff | #171b22 | #ffffff | #171b22 | #ffffff | #171b22 | #ffffff | #171b22 | #ffffff | #171b22 | #ffffff | #171b22 | #ffffff | #171b22 |
+| `--accent-soft` | #dde4f6 | rgba(155, 191, 255, 0.1) | #d7e9e6 | rgba(94, 213, 169, 0.1) | #f1e2d8 | rgba(255, 172, 107, 0.1) | #e9e1f5 | rgba(211, 175, 255, 0.1) | #f2dded | rgba(250, 162, 225, 0.1) | #d7e8ed | rgba(91, 206, 229, 0.1) | #e3e8db | rgba(181, 207, 112, 0.1) | #ebe7d7 | rgba(231, 193, 84, 0.1) | #f5dfe2 | rgba(255, 166, 178, 0.1) | #e4e5e7 | rgba(183, 191, 204, 0.1) |
+| `--accent-light` | #c3d0ef | rgba(155, 191, 255, 0.24) | #bad9d3 | rgba(94, 213, 169, 0.24) | #e7cdbb | rgba(255, 172, 107, 0.24) | #d8caee | rgba(211, 175, 255, 0.24) | #e8c3df | rgba(250, 162, 225, 0.24) | #bad7e0 | rgba(91, 206, 229, 0.24) | #cfd8c1 | rgba(181, 207, 112, 0.24) | #dbd4ba | rgba(231, 193, 84, 0.24) | #edc6cb | rgba(255, 166, 178, 0.24) | #cfd1d5 | rgba(183, 191, 204, 0.24) |
+| `--accent-ring` | rgba(40, 86, 199, 0.2) | rgba(155, 191, 255, 0.36) | rgba(8, 118, 98, 0.2) | rgba(94, 213, 169, 0.36) | rgba(170, 76, 12, 0.2) | rgba(255, 172, 107, 0.36) | rgba(117, 66, 195, 0.2) | rgba(211, 175, 255, 0.36) | rgba(172, 41, 142, 0.2) | rgba(250, 162, 225, 0.36) | rgba(7, 113, 144, 0.2) | rgba(91, 206, 229, 0.36) | rgba(82, 114, 33, 0.2) | rgba(181, 207, 112, 0.36) | rgba(127, 102, 8, 0.2) | rgba(231, 193, 84, 0.36) | rgba(190, 53, 71, 0.2) | rgba(255, 166, 178, 0.36) | rgba(85, 92, 105, 0.2) | rgba(183, 191, 204, 0.36) |
+| `--text-brand` | #234bad | #adcbff | #076755 | #7bddb8 | #94420a | #ffbb86 | #6639aa | #dbbdff | #96247c | #fbb3e6 | #06627d | #79d7ea | #47631d | #c2d88a | #6e5907 | #ebcc73 | #a52e3e | #ffb6c0 | #4a505b | #c4cbd5 |
+| `--badge-ver-bg` | #dde4f6 | rgba(155, 191, 255, 0.1) | #d7e9e6 | rgba(94, 213, 169, 0.1) | #f1e2d8 | rgba(255, 172, 107, 0.1) | #e9e1f5 | rgba(211, 175, 255, 0.1) | #f2dded | rgba(250, 162, 225, 0.1) | #d7e8ed | rgba(91, 206, 229, 0.1) | #e3e8db | rgba(181, 207, 112, 0.1) | #ebe7d7 | rgba(231, 193, 84, 0.1) | #f5dfe2 | rgba(255, 166, 178, 0.1) | #e4e5e7 | rgba(183, 191, 204, 0.1) |
+| `--badge-ver-text` | #234bad | #adcbff | #076755 | #7bddb8 | #94420a | #ffbb86 | #6639aa | #dbbdff | #96247c | #fbb3e6 | #06627d | #79d7ea | #47631d | #c2d88a | #6e5907 | #ebcc73 | #a52e3e | #ffb6c0 | #4a505b | #c4cbd5 |
+| `--brand-g1` | #6485d7 | #adcbff | #4d9c8e | #7bddb8 | #c27e50 | #ffbb86 | #9c77d4 | #dbbdff | #c365ae | #fbb3e6 | #4c99af | #79d7ea | #82995f | #c2d88a | #a3914d | #ebcc73 | #d06e7b | #ffb6c0 | #858a93 | #c4cbd5 |
+| `--brand-g2` | #2856c7 | #9bbfff | #087662 | #5ed5a9 | #aa4c0c | #ffac6b | #7542c3 | #d3afff | #ac298e | #faa2e1 | #077190 | #5bcee5 | #527221 | #b5cf70 | #7f6608 | #e7c154 | #be3547 | #ffa6b2 | #555c69 | #b7bfcc |
+| `--brand-g3` | #1e4093 | #86a5dc | #065749 | #53b793 | #7e3809 | #da955f | #573190 | #b597dc | #7f1e69 | #d68cc2 | #05546b | #50b1c6 | #3d5418 | #9cb264 | #5e4b06 | #c6a64c | #8d2735 | #da909b | #3f444e | #9da5b1 |
+| `--lock-orb-1` | rgba(40, 86, 199, 0.07) | rgba(155, 191, 255, 0.14) | rgba(8, 118, 98, 0.07) | rgba(94, 213, 169, 0.14) | rgba(170, 76, 12, 0.07) | rgba(255, 172, 107, 0.14) | rgba(117, 66, 195, 0.07) | rgba(211, 175, 255, 0.14) | rgba(172, 41, 142, 0.07) | rgba(250, 162, 225, 0.14) | rgba(7, 113, 144, 0.07) | rgba(91, 206, 229, 0.14) | rgba(82, 114, 33, 0.07) | rgba(181, 207, 112, 0.14) | rgba(127, 102, 8, 0.07) | rgba(231, 193, 84, 0.14) | rgba(190, 53, 71, 0.07) | rgba(255, 166, 178, 0.14) | rgba(85, 92, 105, 0.07) | rgba(183, 191, 204, 0.14) |
+| `--lock-orb-2` | rgba(40, 86, 199, 0.045) | rgba(155, 191, 255, 0.07) | rgba(8, 118, 98, 0.045) | rgba(94, 213, 169, 0.07) | rgba(170, 76, 12, 0.045) | rgba(255, 172, 107, 0.07) | rgba(117, 66, 195, 0.045) | rgba(211, 175, 255, 0.07) | rgba(172, 41, 142, 0.045) | rgba(250, 162, 225, 0.07) | rgba(7, 113, 144, 0.045) | rgba(91, 206, 229, 0.07) | rgba(82, 114, 33, 0.045) | rgba(181, 207, 112, 0.07) | rgba(127, 102, 8, 0.045) | rgba(231, 193, 84, 0.07) | rgba(190, 53, 71, 0.045) | rgba(255, 166, 178, 0.07) | rgba(85, 92, 105, 0.045) | rgba(183, 191, 204, 0.07) |
+| `--selection` | rgba(40, 86, 199, 0.22) | rgba(155, 191, 255, 0.3) | rgba(8, 118, 98, 0.22) | rgba(94, 213, 169, 0.3) | rgba(170, 76, 12, 0.22) | rgba(255, 172, 107, 0.3) | rgba(117, 66, 195, 0.22) | rgba(211, 175, 255, 0.3) | rgba(172, 41, 142, 0.22) | rgba(250, 162, 225, 0.3) | rgba(7, 113, 144, 0.22) | rgba(91, 206, 229, 0.3) | rgba(82, 114, 33, 0.22) | rgba(181, 207, 112, 0.3) | rgba(127, 102, 8, 0.22) | rgba(231, 193, 84, 0.3) | rgba(190, 53, 71, 0.22) | rgba(255, 166, 178, 0.3) | rgba(85, 92, 105, 0.22) | rgba(183, 191, 204, 0.3) |
+| `--toast-info` | #91baff | #2856c7 | #5ed5a9 | #087a65 | #ffac6b | #b04f0c | #d0a9ff | #7542c3 | #fa9cde | #ac298e | #5bcee5 | #087493 | #b5cf70 | #537422 | #e7c154 | #826808 | #ff9aa6 | #be3547 | #b7bfcc | #555c69 |
 
 ## 4. 面族明度阶梯（实色层，换主题时这一族定生死）
 
-| 槽（按纸底 L\* 从高到低排） | 纸底值 | 纸 L\* | 雪底值 | 雪 L\* | 墨底值 | 墨 L\* | 岩底值 | 岩 L\* | 说明 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `--panel-bg` | #fcfaf7 | 98.3 | #fefefe | 99.7 | #22211e | 12.7 | #2b303a | 19.8 | 卡片/面板/弹窗面（占窗面约七成，刻意非纯白） |
-| `--bg` | #f8f5f0 | 96.6 | #f1f2f3 | 95.4 | #1d1c1a | 10.3 | #252932 | 16.6 | 窗体画布底（最外层面） |
-| `--hover` | #f6f3ee | 95.9 | #f7f8f9 | 97.5 | #282622 | 15.2 | #323844 | 23.4 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） |
-| `--sunken` | #f1ede7 | 93.9 | #ebecee | 93.4 | #181716 | 7.8 | #1f232b | 13.6 | 下陷面：输入槽、代码底、字母块、页栏铺底 |
-| `--sidebar-bg` | #eae4db | 90.8 | #e3e5e8 | 90.9 | #1a1917 | 8.8 | #22262e | 15.1 | 侧栏底（纸：比画布略深；墨：落在画布与卡面之间） |
-| `--active` | #eae4db | 90.8 | #e1e3e6 | 90.2 | #343431 | 21.6 | #3b4351 | 28.2 | 行/项按下选中底 |
-| `--fill` | #e8e2d9 | 90.1 | #dbdde0 | 88.0 | #2a2927 | 16.6 | #323844 | 23.4 | 中性填充：进度槽、占位块、次级底 |
+| 槽（按纸底 L\* 从高到低排） | 纸底值 | 纸 L\* | 雪底值 | 雪 L\* | 绢底值 | 绢 L\* | 雾底值 | 雾 L\* | 墨底值 | 墨 L\* | 岩底值 | 岩 L\* | 夜底值 | 夜 L\* | 苔底值 | 苔 L\* | 说明 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--panel-bg` | #fcfaf7 | 98.3 | #fefefe | 99.7 | #f5f2ed | 95.6 | #f3f4f7 | 96.2 | #22211e | 12.7 | #2b303a | 19.8 | #3b3f48 | 26.6 | #30332d | 20.8 | 卡片/面板/弹窗面（占窗面约七成，刻意非纯白） |
+| `--bg` | #f8f5f0 | 96.6 | #f1f2f3 | 95.4 | #ebe7e0 | 91.8 | #e5e6eb | 91.3 | #1d1c1a | 10.3 | #252932 | 16.6 | #34373f | 23.1 | #282b25 | 17.0 | 窗体画布底（最外层面） |
+| `--hover` | #f6f3ee | 95.9 | #f7f8f9 | 97.5 | #eeebe5 | 93.1 | #e9ebf0 | 93.0 | #282622 | 15.2 | #323844 | 23.4 | #444852 | 30.6 | #393d34 | 25.1 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） |
+| `--sunken` | #f1ede7 | 93.9 | #ebecee | 93.4 | #e3dfd8 | 89.0 | #dadce2 | 87.8 | #181716 | 7.8 | #1f232b | 13.6 | #2e3139 | 20.3 | #22251f | 14.2 | 下陷面：输入槽、代码底、字母块、页栏铺底 |
+| `--sidebar-bg` | #eae4db | 90.8 | #e3e5e8 | 90.9 | #dcd7cf | 86.2 | #d5d8e0 | 86.3 | #1a1917 | 8.8 | #22262e | 15.1 | #30333b | 21.3 | #252822 | 15.6 | 侧栏底（纸：比画布略深；墨：落在画布与卡面之间） |
+| `--active` | #eae4db | 90.8 | #e1e3e6 | 90.2 | #dcd7cf | 86.2 | #d4d7df | 86.0 | #343431 | 21.6 | #3b4351 | 28.2 | #4b505b | 34.0 | #41463b | 29.0 | 行/项按下选中底 |
+| `--fill` | #e8e2d9 | 90.1 | #dbdde0 | 88.0 | #d8d3cb | 84.7 | #cfd2da | 84.2 | #2a2927 | 16.6 | #323844 | 23.4 | #444953 | 30.9 | #3b3f36 | 26.0 | 中性填充：进度槽、占位块、次级底 |
 
 **从现值反推的阶梯规则（新底色请沿用，别自创一层）**：
 
@@ -241,66 +241,66 @@
 
 字色对四面（卡面 / 下陷 / 画布 / 侧栏）的对比度：
 
-| 槽 | 纸 | 雪 | 墨 | 岩 | 底线 |
-| --- | --- | --- | --- | --- | --- |
-| `--text` | 12.29 / 10.98 / 11.78 / 10.14 | 17.09 / 14.58 / 15.38 / 13.66 | 12.66 / 14.08 / 13.39 / 13.82 | 11.59 / 13.79 / 12.76 / 13.28 | ≥4.5 |
-| `--text-secondary` | 8.24 / 7.36 / 7.90 / 6.80 | 10.44 / 8.91 / 9.39 / 8.34 | 9.25 / 10.28 / 9.78 / 10.09 | 9.17 / 10.91 / 10.09 / 10.51 | ≥4.5 |
-| `--text-muted` | 5.20 / 4.64 / 4.98 / 4.28 | 6.54 / 5.58 / 5.89 / 5.23 | 7.02 / 7.81 / 7.43 / 7.66 | 7.46 / 8.87 / 8.20 / 8.54 | 暗底 ≥5.8 |
-| `--text-faint` | 2.92 / 2.61 / 2.80 / 2.41 | 3.53 / 3.01 / 3.17 / 2.82 | 5.66 / 6.30 / 5.99 / 6.18 | 6.48 / 7.70 / 7.13 / 7.42 | 暗底 ≥5.5（已被 5.8 卡过） |
-| `--text-url` | 8.24 / 7.36 / 7.90 / 6.80 | 10.44 / 8.91 / 9.39 / 8.34 | 9.44 / 10.50 / 9.98 / 10.30 | 9.17 / 10.91 / 10.09 / 10.51 | ≥4.5 |
-| `--danger` | 5.63 / 5.03 / 5.40 / 4.64 | 5.65 / 4.82 / 5.08 / 4.51 | 5.78 / 6.42 / 6.11 / 6.30 | 4.77 / 5.68 / 5.25 / 5.47 | ≥4.5 |
-| `--success` | 5.33 / 4.76 / 5.11 / 4.39 | 5.19 / 4.42 / 4.67 / 4.14 | 7.33 / 8.15 / 7.75 / 8.00 | 5.89 / 7.01 / 6.48 / 6.75 | ≥4.5 |
-| `--warning` | 4.68 / 4.18 / 4.48 / 3.86 | 4.72 / 4.03 / 4.25 / 3.77 | 7.51 / 8.35 / 7.94 / 8.19 | 6.23 / 7.41 / 6.85 / 7.14 | ≥4.5 |
-| `--text-brand` | 8.30 / 7.42 / 7.95 / 6.84 | 8.58 / 7.32 / 7.72 / 6.85 | 9.99 / 11.11 / 10.57 / 10.90 | 8.21 / 9.77 / 9.04 / 9.41 | ≥4.5 |
+| 槽 | 纸 | 雪 | 绢 | 雾 | 墨 | 岩 | 夜 | 苔 | 底线 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--text` | 12.29 / 10.98 / 11.78 / 10.14 | 17.09 / 14.58 / 15.38 / 13.66 | 11.46 / 9.63 / 10.38 / 8.93 | 11.34 / 9.09 / 10.00 / 8.74 | 12.66 / 14.08 / 13.39 / 13.82 | 11.59 / 13.79 / 12.76 / 13.28 | 7.61 / 9.38 / 8.58 / 9.11 | 9.07 / 10.98 / 10.15 / 10.57 | ≥4.5 |
+| `--text-secondary` | 8.24 / 7.36 / 7.90 / 6.80 | 10.44 / 8.91 / 9.39 / 8.34 | 7.42 / 6.24 / 6.72 / 5.78 | 7.36 / 5.91 / 6.50 / 5.68 | 9.25 / 10.28 / 9.78 / 10.09 | 9.17 / 10.91 / 10.09 / 10.51 | 6.54 / 8.06 / 7.37 / 7.83 | 7.41 / 8.97 / 8.30 / 8.64 | ≥4.5 |
+| `--text-muted` | 5.20 / 4.64 / 4.98 / 4.28 | 6.54 / 5.58 / 5.89 / 5.23 | 5.36 / 4.51 / 4.86 / 4.18 | 5.73 / 4.60 / 5.06 / 4.42 | 7.02 / 7.81 / 7.43 / 7.66 | 7.46 / 8.87 / 8.20 / 8.54 | 5.89 / 7.27 / 6.65 / 7.06 | 6.12 / 7.41 / 6.85 / 7.13 | 暗底 ≥5.8 |
+| `--text-faint` | 2.92 / 2.61 / 2.80 / 2.41 | 3.53 / 3.01 / 3.17 / 2.82 | 5.41 / 4.55 / 4.90 / 4.22 | 5.65 / 4.53 / 4.98 / 4.36 | 5.66 / 6.30 / 5.99 / 6.18 | 6.48 / 7.70 / 7.13 / 7.42 | 4.78 / 5.89 / 5.39 / 5.72 | 4.78 / 5.78 / 5.35 / 5.57 | 暗底 ≥5.5（已被 5.8 卡过） |
+| `--text-url` | 8.24 / 7.36 / 7.90 / 6.80 | 10.44 / 8.91 / 9.39 / 8.34 | 7.42 / 6.24 / 6.72 / 5.78 | 7.36 / 5.91 / 6.50 / 5.68 | 9.44 / 10.50 / 9.98 / 10.30 | 9.17 / 10.91 / 10.09 / 10.51 | 6.54 / 8.06 / 7.37 / 7.83 | 7.41 / 8.97 / 8.30 / 8.64 | ≥4.5 |
+| `--danger` | 5.63 / 5.03 / 5.40 / 4.64 | 5.65 / 4.82 / 5.08 / 4.51 | 5.50 / 4.63 / 4.98 / 4.29 | 5.79 / 4.65 / 5.11 / 4.47 | 5.78 / 6.42 / 6.11 / 6.30 | 4.77 / 5.68 / 5.25 / 5.47 | 4.65 / 5.73 / 5.24 / 5.56 | 4.60 / 5.57 / 5.15 / 5.36 | ≥4.5 |
+| `--success` | 5.33 / 4.76 / 5.11 / 4.39 | 5.19 / 4.42 / 4.67 / 4.14 | 5.48 / 4.60 / 4.96 / 4.27 | 5.82 / 4.67 / 5.13 / 4.49 | 7.33 / 8.15 / 7.75 / 8.00 | 5.89 / 7.01 / 6.48 / 6.75 | 4.69 / 5.79 / 5.30 / 5.62 | 5.84 / 7.07 / 6.54 / 6.80 | ≥4.5 |
+| `--warning` | 4.68 / 4.18 / 4.48 / 3.86 | 4.72 / 4.03 / 4.25 / 3.77 | 5.55 / 4.67 / 5.03 / 4.33 | 5.82 / 4.67 / 5.14 / 4.49 | 7.51 / 8.35 / 7.94 / 8.19 | 6.23 / 7.41 / 6.85 / 7.14 | 4.96 / 6.12 / 5.60 / 5.94 | 5.98 / 7.24 / 6.69 / 6.97 | ≥4.5 |
+| `--text-brand` | 7.52 / 6.72 / 7.20 / 6.20 | 7.77 / 6.63 / 6.99 / 6.21 | 7.01 / 5.90 / 6.35 / 5.47 | 7.12 / 5.71 / 6.28 / 5.49 | 9.79 / 10.88 / 10.35 / 10.68 | 8.04 / 9.57 / 8.85 / 9.22 | 6.41 / 7.91 / 7.23 / 7.68 | 7.80 / 9.44 / 8.73 / 9.08 | ≥4.5 |
 
 彩底上的字（`*-on` 与分类/语法色）：
 
-| 前景 | 底色 | 纸 | 雪 | 墨 | 岩 | 判据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `--accent-on` | `--accent` 主按钮字 | 6.48 | 6.48 | 7.33 | 7.33 | 白/近黑取底色阶最亮(纸)最暗(墨)一点 |
-| `--danger-on` | `--danger` 危险按钮字 | 5.87 | 5.70 | 6.42 | 6.53 | 同上 |
-| `--cat-text` | `--cat-1` 头像色板 1 上的字 | 5.35 | 5.20 | 6.03 | 6.09 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
-| `--cat-text` | `--cat-2` 头像色板 2 上的字 | 5.11 | 5.22 | 6.62 | 6.69 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
-| `--cat-text` | `--cat-3` 头像色板 3 上的字 | 4.71 | 4.87 | 7.51 | 7.51 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
-| `--cat-text` | `--cat-4` 头像色板 4 上的字 | 4.53 | 4.62 | 8.96 | 8.96 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
-| `--cat-text` | `--cat-5` 头像色板 5 上的字 | 4.60 | 4.67 | 8.37 | 8.42 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
-| `--cat-text` | `--cat-6` 头像色板 6 上的字 | 4.51 | 4.50 | 8.07 | 8.11 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
-| `--ft-pdf` | `--panel-bg` 文件图标色 | 4.50 | 4.77 | 5.58 | 4.60 | ≥3:1（图形件） |
-| `--ft-doc` | `--panel-bg` 文件图标色 | 5.09 | 5.70 | 6.39 | 5.32 | ≥3:1（图形件） |
-| `--ft-sheet` | `--panel-bg` 文件图标色 | 4.85 | 4.94 | 6.34 | 5.28 | ≥3:1（图形件） |
-| `--ft-code` | `--panel-bg` 文件图标色 | 4.31 | 4.53 | 9.11 | 7.53 | ≥3:1（图形件） |
-| `--ft-unk` | `--panel-bg` 文件图标色 | 3.86 | 4.61 | 3.33 | 4.47 | ≥3:1（图形件） |
-| `--code-fg` | `--sunken` 代码语法色 | 14.74 | 14.72 | 13.82 | 12.48 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-kw` | `--sunken` 代码语法色 | 4.62 | 4.80 | 8.03 | 7.14 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-str` | `--sunken` 代码语法色 | 4.84 | 4.81 | 9.60 | 8.48 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-num` | `--sunken` 代码语法色 | 4.76 | 4.80 | 9.06 | 7.99 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-fn` | `--sunken` 代码语法色 | 4.55 | 4.86 | 7.47 | 6.67 | ≥4.5:1；注释是最静档但仍要可读 |
-| `--code-com` | `--sunken` 代码语法色 | 4.62 | 4.91 | 6.31 | 5.97 | ≥4.5:1；注释是最静档但仍要可读 |
+| 前景 | 底色 | 纸 | 雪 | 绢 | 雾 | 墨 | 岩 | 夜 | 苔 | 判据 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `--accent-on` | `--accent` 主按钮字 | 6.47 | 6.47 | 6.47 | 6.47 | 9.28 | 9.28 | 9.28 | 9.28 | 白/近黑取底色阶最亮(纸)最暗(墨)一点 |
+| `--danger-on` | `--danger` 危险按钮字 | 5.87 | 5.70 | 6.14 | 6.37 | 6.42 | 6.53 | 7.99 | 6.42 | 同上 |
+| `--cat-text` | `--cat-1` 头像色板 1 上的字 | 5.35 | 5.20 | 5.35 | 5.20 | 6.03 | 6.09 | 6.09 | 6.03 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
+| `--cat-text` | `--cat-2` 头像色板 2 上的字 | 5.11 | 5.22 | 5.11 | 5.22 | 6.62 | 6.69 | 6.69 | 6.62 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
+| `--cat-text` | `--cat-3` 头像色板 3 上的字 | 4.71 | 4.87 | 4.71 | 4.87 | 7.51 | 7.51 | 7.51 | 7.51 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
+| `--cat-text` | `--cat-4` 头像色板 4 上的字 | 4.53 | 4.62 | 4.53 | 4.62 | 8.96 | 8.96 | 8.96 | 8.96 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
+| `--cat-text` | `--cat-5` 头像色板 5 上的字 | 4.60 | 4.67 | 4.60 | 4.67 | 8.37 | 8.42 | 8.42 | 8.37 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
+| `--cat-text` | `--cat-6` 头像色板 6 上的字 | 4.51 | 4.50 | 4.51 | 4.50 | 8.07 | 8.11 | 8.11 | 8.07 | 色块上的字：纸底白字 / 墨底近黑字；六档色板本身要求同明度同彩度 |
+| `--ft-pdf` | `--panel-bg` 文件图标色 | 4.50 | 4.77 | 5.53 | 5.84 | 5.58 | 4.60 | 4.64 | 4.65 | ≥3:1（图形件） |
+| `--ft-doc` | `--panel-bg` 文件图标色 | 5.09 | 5.70 | 5.51 | 5.81 | 6.39 | 5.32 | 4.64 | 5.09 | ≥3:1（图形件） |
+| `--ft-sheet` | `--panel-bg` 文件图标色 | 4.85 | 4.94 | 5.55 | 5.85 | 6.34 | 5.28 | 4.62 | 5.05 | ≥3:1（图形件） |
+| `--ft-code` | `--panel-bg` 文件图标色 | 4.31 | 4.53 | 5.51 | 5.81 | 9.11 | 7.53 | 6.01 | 7.26 | ≥3:1（图形件） |
+| `--ft-unk` | `--panel-bg` 文件图标色 | 3.86 | 4.61 | 5.49 | 5.77 | 3.33 | 4.47 | 4.64 | 4.66 | ≥3:1（图形件） |
+| `--code-fg` | `--sunken` 代码语法色 | 14.74 | 14.72 | 12.94 | 12.69 | 13.82 | 12.48 | 10.31 | 11.99 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-kw` | `--sunken` 代码语法色 | 4.62 | 4.80 | 4.64 | 4.61 | 8.03 | 7.14 | 5.90 | 6.97 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-str` | `--sunken` 代码语法色 | 4.84 | 4.81 | 4.61 | 4.62 | 9.60 | 8.48 | 7.00 | 8.33 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-num` | `--sunken` 代码语法色 | 4.76 | 4.80 | 4.64 | 4.63 | 9.06 | 7.99 | 6.60 | 7.85 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-fn` | `--sunken` 代码语法色 | 4.55 | 4.86 | 4.63 | 4.66 | 7.47 | 6.67 | 5.69 | 6.48 | ≥4.5:1；注释是最静档但仍要可读 |
+| `--code-com` | `--sunken` 代码语法色 | 4.62 | 4.91 | 4.70 | 4.64 | 6.31 | 5.97 | 5.68 | 5.61 | ≥4.5:1；注释是最静档但仍要可读 |
 
 > 头像行只看色板本身对卡面：`--cat-text` 是色块上的字（纸底白字 / 墨底近黑字），不落在卡面上。
 
-## 6. accent 族推导配方（把 10 组合的现值反推成公式）
+## 6. accent 族推导配方（把 20 组合的现值反推成公式）
 
 用途：**新加一档 accent 只要定一个主色**，其余 16 槽按这里的配方推导；新底色不吃新值——它只需登记进 POLARITY，复用所在极性的这一列。`+白/面色 n%` 指 `color-mix(in srgb, 主色 n%, 参照色)`，`×k` 指 RGB 等比缩放，`αn%` 指主色按 n% 不透明度叠在面上。
 
 | 槽 | 亮极性（代表底：纸） | 暗极性（代表底：墨） |
 | --- | --- | --- |
-| `--accent-hover` | ink:主色 ×0.82；celadon:主色 ×0.80；clay:主色 ×0.82；plum:主色 ×0.83；rose:主色 ×0.82 | ink:主色 74% + 白 26%；celadon:主色 74% + 白 26%；clay:主色 74% + 白 26%（残差4.185872764319669）；plum:主色 70% + 白 30%；rose:主色 72% + 白 28% |
-| `--accent-active` | ink:主色 ×0.66；celadon:主色 ×0.65；clay:主色 ×0.66；plum:主色 ×0.67；rose:主色 ×0.67 | ink:主色 ×0.85（残差6.283185668953607）；celadon:主色 ×0.83（残差8.18441247880142）；clay:主色 ×0.86（残差9.611118252679063）；plum:主色 ×0.86（残差10.150648189539567）；rose:主色 ×0.85（残差8.090475663512791） |
-| `--accent-on` | ink:纯白实色；celadon:纯白实色；clay:纯白实色；plum:纯白实色；rose:纯白实色 | ink:主色 ×0.18（残差5.329775155508546）；celadon:主色 ×0.17（残差4.090589656308335）；clay:主色 ×0.18；plum:主色 ×0.19（残差7.641484130531964）；rose:主色 ×0.18（残差7.669848208192697） |
-| `--accent-soft` | ink:主色 11% + 白 89%；celadon:主色 12% + 白 88%；clay:主色 + 面色 91%（残差4.469963167823835）；plum:主色 11% + 白 89%；rose:主色 11% + 白 89% | ink:主色 α16%；celadon:主色 α16%；clay:主色 α16%；plum:主色 α16%；rose:主色 α16% |
-| `--accent-light` | ink:主色 21% + 白 79%（残差7.231226613357933）；celadon:主色 24% + 白 76%（残差8.293814378308412）；clay:主色 + 面色 76%（残差9.057121956853734）；plum:主色 24% + 白 76%（残差5.990322754072508）；rose:主色 + 面色 80%（残差6.728076264519416） | ink:主色 α28%；celadon:主色 α28%；clay:主色 α28%；plum:主色 α28%；rose:主色 α28% |
-| `--accent-ring` | ink:主色 α16%；celadon:主色 α16%；clay:主色 α16%；plum:主色 α16%；rose:主色 α16% | ink:主色 α32%；celadon:主色 α32%；clay:主色 α32%；plum:主色 α32%；rose:主色 α32% |
-| `--text-brand` | ink:主色 ×0.82；celadon:主色 ×0.80；clay:主色 ×0.82；plum:主色 ×0.83；rose:主色 ×0.82 | ink:主色 61% + 白 39%；celadon:主色 63% + 白 37%（残差4.365265427108596）；clay:主色 62% + 白 38%（残差5.655761829295898）；plum:主色 55% + 白 45%；rose:主色 57% + 白 43% |
-| `--badge-ver-bg` | ink:主色 11% + 白 89%；celadon:主色 12% + 白 88%；clay:主色 + 面色 91%（残差4.469963167823835）；plum:主色 11% + 白 89%；rose:主色 11% + 白 89% | ink:主色 α16%；celadon:主色 α16%；clay:主色 α16%；plum:主色 α16%；rose:主色 α16% |
-| `--badge-ver-text` | ink:主色 ×0.82；celadon:主色 ×0.80；clay:主色 ×0.82；plum:主色 ×0.83；rose:主色 ×0.82 | ink:主色 61% + 白 39%；celadon:主色 63% + 白 37%（残差4.365265427108596）；clay:主色 62% + 白 38%（残差5.655761829295898）；plum:主色 55% + 白 45%；rose:主色 57% + 白 43% |
-| `--brand-g1` | ink:主色 72% + 白 28%（残差6.425547183351284）；celadon:主色 69% + 白 31%（残差7.532636023210671）；clay:主色 + 面色 25%（残差10.308389266051506）；plum:主色 72% + 白 28%（残差7.044246518879589）；rose:主色 + 面色 31%（残差9.374951794776877） | ink:主色 61% + 白 39%；celadon:主色 63% + 白 37%（残差4.365265427108596）；clay:主色 62% + 白 38%（残差5.655761829295898）；plum:主色 55% + 白 45%；rose:主色 57% + 白 43% |
-| `--brand-g2` | ink:与主色同值；celadon:与主色同值；clay:与主色同值；plum:与主色同值；rose:与主色同值 | ink:与主色同值；celadon:与主色同值；clay:与主色同值；plum:与主色同值；rose:与主色同值 |
-| `--brand-g3` | ink:主色 ×0.66；celadon:主色 ×0.65；clay:主色 ×0.66；plum:主色 ×0.67；rose:主色 ×0.67 | ink:主色 ×0.85（残差6.283185668953607）；celadon:主色 ×0.83（残差8.18441247880142）；clay:主色 ×0.86（残差9.611118252679063）；plum:主色 ×0.86（残差10.150648189539567）；rose:主色 ×0.85（残差8.090475663512791） |
-| `--lock-orb-1` | ink:主色 α7%；celadon:主色 α7%；clay:主色 α7%；plum:主色 α7%；rose:主色 α7% | ink:主色 α14%；celadon:主色 α14%；clay:主色 α14%；plum:主色 α14%；rose:主色 α14% |
-| `--lock-orb-2` | ink:主色 α5%；celadon:主色 α5%；clay:主色 α5%；plum:主色 α5%；rose:主色 α5% | ink:主色 α7%；celadon:主色 α7%；clay:主色 α7%；plum:主色 α7%；rose:主色 α7% |
-| `--selection` | ink:主色 α18%；celadon:主色 α18%；clay:主色 α18%；plum:主色 α18%；rose:主色 α18% | ink:主色 α30%；celadon:主色 α30%；clay:主色 α30%；plum:主色 α30%；rose:主色 α30% |
-| `--toast-info` | ink:主色 47% + 白 53%（残差14.581065149418237）；celadon:主色 45% + 白 55%（残差14.457424125091507）；clay:主色 + 面色 52%（残差13.210097406347472）；plum:主色 47% + 白 53%（残差12.155875342735783）；rose:主色 + 面色 59%（残差15.59482931494594） | ink:主色 ×0.58（残差24.505429455889924）；celadon:主色 ×0.52（残差23.5155130973732）；clay:主色 ×0.62（残差16.152142665155253）；plum:主色 ×0.67（残差21.525704067948155）；rose:主色 ×0.59（残差22.816872314133434） |
+| `--accent-hover` | ink:主色 ×0.87；celadon:主色 ×0.87；clay:主色 ×0.87；plum:主色 ×0.87；rose:主色 ×0.87；teal:主色 ×0.87；forest:主色 ×0.87；amber:主色 ×0.87；coral:主色 ×0.87；graphite:主色 ×0.87 | ink:主色 86% + 白 14%；celadon:主色 86% + 白 14%；clay:主色 86% + 白 14%；plum:主色 86% + 白 14%；rose:主色 86% + 白 14%；teal:主色 86% + 白 14%；forest:主色 86% + 白 14%；amber:主色 86% + 白 14%；coral:主色 86% + 白 14%；graphite:主色 86% + 白 14% |
+| `--accent-active` | ink:主色 ×0.74；celadon:主色 ×0.74；clay:主色 ×0.74；plum:主色 ×0.74；rose:主色 ×0.74；teal:主色 ×0.74；forest:主色 ×0.74；amber:主色 ×0.74；coral:主色 ×0.74；graphite:主色 ×0.74 | ink:主色 ×0.86；celadon:主色 + 面色 16%；clay:主色 + 面色 17%；plum:主色 ×0.86；rose:主色 ×0.86；teal:主色 ×0.86；forest:主色 + 面色 17%；amber:主色 + 面色 17%；coral:主色 + 面色 16%；graphite:主色 ×0.86 |
+| `--accent-on` | ink:纯白实色；celadon:纯白实色；clay:纯白实色；plum:纯白实色；rose:纯白实色；teal:纯白实色；forest:纯白实色；amber:纯白实色；coral:纯白实色；graphite:纯白实色 | ink:主色 ×0.14；celadon:主色 ×0.17（残差8.15171688857744）；clay:主色 + 面色 100%（残差11）；plum:主色 ×0.13（残差4.468791690149889）；rose:主色 ×0.13（残差8.882986890915483）；teal:主色 ×0.15（残差9.378846041993835）；forest:主色 + 面色 100%（残差11）；amber:主色 + 面色 100%（残差11）；coral:主色 ×0.13（残差10.651832776727154）；graphite:主色 ×0.15（残差4.196906421952573） |
+| `--accent-soft` | ink:主色 16% + 白 84%；celadon:主色 16% + 白 84%；clay:主色 16% + 白 84%；plum:主色 16% + 白 84%；rose:主色 16% + 白 84%；teal:主色 16% + 白 84%；forest:主色 16% + 白 84%；amber:主色 16% + 白 84%；coral:主色 16% + 白 84%；graphite:主色 16% + 白 84% | ink:主色 α10%；celadon:主色 α10%；clay:主色 α10%；plum:主色 α10%；rose:主色 α10%；teal:主色 α10%；forest:主色 α10%；amber:主色 α10%；coral:主色 α10%；graphite:主色 α10% |
+| `--accent-light` | ink:主色 28% + 白 72%；celadon:主色 28% + 白 72%；clay:主色 28% + 白 72%；plum:主色 28% + 白 72%；rose:主色 28% + 白 72%；teal:主色 28% + 白 72%；forest:主色 28% + 白 72%；amber:主色 28% + 白 72%；coral:主色 28% + 白 72%；graphite:主色 28% + 白 72% | ink:主色 α24%；celadon:主色 α24%；clay:主色 α24%；plum:主色 α24%；rose:主色 α24%；teal:主色 α24%；forest:主色 α24%；amber:主色 α24%；coral:主色 α24%；graphite:主色 α24% |
+| `--accent-ring` | ink:主色 α20%；celadon:主色 α20%；clay:主色 α20%；plum:主色 α20%；rose:主色 α20%；teal:主色 α20%；forest:主色 α20%；amber:主色 α20%；coral:主色 α20%；graphite:主色 α20% | ink:主色 α36%；celadon:主色 α36%；clay:主色 α36%；plum:主色 α36%；rose:主色 α36%；teal:主色 α36%；forest:主色 α36%；amber:主色 α36%；coral:主色 α36%；graphite:主色 α36% |
+| `--text-brand` | ink:主色 ×0.87；celadon:主色 ×0.87；clay:主色 ×0.87；plum:主色 ×0.87；rose:主色 ×0.87；teal:主色 ×0.87；forest:主色 ×0.87；amber:主色 ×0.87；coral:主色 ×0.87；graphite:主色 ×0.87 | ink:主色 82% + 白 18%；celadon:主色 82% + 白 18%；clay:主色 82% + 白 18%；plum:主色 82% + 白 18%；rose:主色 82% + 白 18%；teal:主色 82% + 白 18%；forest:主色 82% + 白 18%；amber:主色 82% + 白 18%；coral:主色 82% + 白 18%；graphite:主色 82% + 白 18% |
+| `--badge-ver-bg` | ink:主色 16% + 白 84%；celadon:主色 16% + 白 84%；clay:主色 16% + 白 84%；plum:主色 16% + 白 84%；rose:主色 16% + 白 84%；teal:主色 16% + 白 84%；forest:主色 16% + 白 84%；amber:主色 16% + 白 84%；coral:主色 16% + 白 84%；graphite:主色 16% + 白 84% | ink:主色 α10%；celadon:主色 α10%；clay:主色 α10%；plum:主色 α10%；rose:主色 α10%；teal:主色 α10%；forest:主色 α10%；amber:主色 α10%；coral:主色 α10%；graphite:主色 α10% |
+| `--badge-ver-text` | ink:主色 ×0.87；celadon:主色 ×0.87；clay:主色 ×0.87；plum:主色 ×0.87；rose:主色 ×0.87；teal:主色 ×0.87；forest:主色 ×0.87；amber:主色 ×0.87；coral:主色 ×0.87；graphite:主色 ×0.87 | ink:主色 82% + 白 18%；celadon:主色 82% + 白 18%；clay:主色 82% + 白 18%；plum:主色 82% + 白 18%；rose:主色 82% + 白 18%；teal:主色 82% + 白 18%；forest:主色 82% + 白 18%；amber:主色 82% + 白 18%；coral:主色 82% + 白 18%；graphite:主色 82% + 白 18% |
+| `--brand-g1` | ink:主色 72% + 白 28%；celadon:主色 72% + 白 28%；clay:主色 72% + 白 28%；plum:主色 72% + 白 28%；rose:主色 72% + 白 28%；teal:主色 72% + 白 28%；forest:主色 72% + 白 28%；amber:主色 72% + 白 28%；coral:主色 72% + 白 28%；graphite:主色 72% + 白 28% | ink:主色 82% + 白 18%；celadon:主色 82% + 白 18%；clay:主色 82% + 白 18%；plum:主色 82% + 白 18%；rose:主色 82% + 白 18%；teal:主色 82% + 白 18%；forest:主色 82% + 白 18%；amber:主色 82% + 白 18%；coral:主色 82% + 白 18%；graphite:主色 82% + 白 18% |
+| `--brand-g2` | ink:与主色同值；celadon:与主色同值；clay:与主色同值；plum:与主色同值；rose:与主色同值；teal:与主色同值；forest:与主色同值；amber:与主色同值；coral:与主色同值；graphite:与主色同值 | ink:与主色同值；celadon:与主色同值；clay:与主色同值；plum:与主色同值；rose:与主色同值；teal:与主色同值；forest:与主色同值；amber:与主色同值；coral:与主色同值；graphite:与主色同值 |
+| `--brand-g3` | ink:主色 ×0.74；celadon:主色 ×0.74；clay:主色 ×0.74；plum:主色 ×0.74；rose:主色 ×0.74；teal:主色 ×0.74；forest:主色 ×0.74；amber:主色 ×0.74；coral:主色 ×0.74；graphite:主色 ×0.74 | ink:主色 ×0.86；celadon:主色 + 面色 16%；clay:主色 + 面色 17%；plum:主色 ×0.86；rose:主色 ×0.86；teal:主色 ×0.86；forest:主色 + 面色 17%；amber:主色 + 面色 17%；coral:主色 + 面色 16%；graphite:主色 ×0.86 |
+| `--lock-orb-1` | ink:主色 α7%；celadon:主色 α7%；clay:主色 α7%；plum:主色 α7%；rose:主色 α7%；teal:主色 α7%；forest:主色 α7%；amber:主色 α7%；coral:主色 α7%；graphite:主色 α7% | ink:主色 α14%；celadon:主色 α14%；clay:主色 α14%；plum:主色 α14%；rose:主色 α14%；teal:主色 α14%；forest:主色 α14%；amber:主色 α14%；coral:主色 α14%；graphite:主色 α14% |
+| `--lock-orb-2` | ink:主色 α5%；celadon:主色 α5%；clay:主色 α5%；plum:主色 α5%；rose:主色 α5%；teal:主色 α5%；forest:主色 α5%；amber:主色 α5%；coral:主色 α5%；graphite:主色 α5% | ink:主色 α7%；celadon:主色 α7%；clay:主色 α7%；plum:主色 α7%；rose:主色 α7%；teal:主色 α7%；forest:主色 α7%；amber:主色 α7%；coral:主色 α7%；graphite:主色 α7% |
+| `--selection` | ink:主色 α22%；celadon:主色 α22%；clay:主色 α22%；plum:主色 α22%；rose:主色 α22%；teal:主色 α22%；forest:主色 α22%；amber:主色 α22%；coral:主色 α22%；graphite:主色 α22% | ink:主色 α30%；celadon:主色 α30%；clay:主色 α30%；plum:主色 α30%；rose:主色 α30%；teal:主色 α30%；forest:主色 α30%；amber:主色 α30%；coral:主色 α30%；graphite:主色 α30% |
+| `--toast-info` | ink:主色 45% + 白 55%（残差25.376864043530702）；celadon:主色 57% + 白 43%（残差35.43352772750342）；clay:主色 52% + 白 48%（残差43.938208818593296）；plum:主色 39% + 白 61%（残差23.377023901310707）；rose:主色 39% + 白 61%（残差27.12011488984632）；teal:主色 54% + 白 46%（残差33.658853695645234）；forest:主色 + 面色 50%（残差27.513177096746517）；amber:主色 + 面色 47%（残差45.056524035921825）；coral:主色 47% + 白 53%（残差30.304493883501294）；graphite:主色 39% + 白 61%（残差7.334722774435988） | ink:主色 ×0.58（残差50.59519162597287）；celadon:主色 ×0.53（残差41.75301452287171）；clay:主色 ×0.56（残差48.28271323238228）；plum:主色 ×0.61（残差41.3214145579328）；rose:主色 ×0.59（残差53.84106221613128）；teal:主色 ×0.57（残差43.4174082475426）；forest:主色 ×0.49（残差20.432198198606983）；amber:主色 ×0.52（残差35.66940388671595）；coral:主色 ×0.56（残差46.589305114070754）；graphite:主色 ×0.49（残差5.277920169196861） |
 
 读法：纸底的浅水洗底（`--accent-soft` / `--badge-ver-bg`）≈ 主色 10–12% 混白，`--accent-light` ≈ 18–22% 混白，`--accent-ring` 是主色 16% 透明；墨底整族改走半透明（soft 15–16%、light 26–28%、ring 32%、selection 30%），因为墨底上浮层要"透出底下的面"而不是叠一层不透明浅斑。`--accent-hover/active` 纸底是主色等比压暗（×0.82 / ×0.68 上下），墨底反过来提亮（×1.19 上下）。
 
@@ -312,7 +312,7 @@
 
 | 槽位 | 定义 |
 | --- | --- |
-| `--sidebar-border` | var(--border) |
+| `--sidebar-border` | var(--border-navigation) |
 | `--sidebar-active` | var(--accent-soft) |
 | `--sidebar-text` | var(--text-secondary) |
 | `--sidebar-text-active` | var(--accent) |
@@ -394,14 +394,27 @@
 
 | 适用选择器 | 槽位 | 定义 |
 | --- | --- | --- |
-| `:root, .theme-scope` | `--material-tint-primary` | #387ed1 |
-| `:root, .theme-scope` | `--material-tint-secondary` | #6d94d4 |
-| `:root, .theme-scope` | `--material-grain-image` | url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='deskoGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23deskoGrain)' opacity='0.035'/%3E%3C/svg%3E") |
-| `:root, .theme-scope` | `--material-grain-size` | 180px 180px |
-| `:root, .theme-scope` | `--material-field-primary-size` | 68vw 74vh |
-| `:root, .theme-scope` | `--material-field-secondary-size` | 62vw 68vh |
-| `:root, .theme-scope` | `--material-field` | var(--material-grain-image) 0 0 / var(--material-grain-size) repeat, radial-gradient(ellipse var(--material-field-primary-size) at 14% 28%, color-mix(in srgb, var(--material-tint-primary) 24%, transparent), transparent 72%), radial-gradient(ellipse var(--material-field-secondary-size) at 86% 82%, color-mix(in srgb, var(--material-tint-secondary) 24%, transparent), transparent 72%) |
-| `:root, .theme-scope` | `--material-floating-field` | linear-gradient(color-mix(in srgb, var(--panel-bg) 25%, transparent), color-mix(in srgb, var(--panel-bg) 25%, transparent)), var(--material-field), var(--panel-bg) |
+| `:root, .theme-scope` | `--material-field-l` | 0.85 |
+| `:root, .theme-scope` | `--material-field-k` | 0.75 |
+| `:root, .theme-scope` | `--material-field-k-secondary` | 0.62 |
+| `:root, .theme-scope` | `--material-field-companion` | -48 |
+| `:root, .theme-scope` | `--material-color-primary` | oklch(from var(--accent) var(--material-field-l) calc(c * var(--material-field-k)) h) |
+| `:root, .theme-scope` | `--material-color-secondary` | oklch(from var(--accent) var(--material-field-l) calc(c * var(--material-field-k-secondary)) calc(h + var(--material-field-companion))) |
+| `:root, .theme-scope` | `--material-primary-strength` | 30% |
+| `:root, .theme-scope` | `--material-secondary-strength` | 22% |
+| `:root, .theme-scope` | `--material-lock-primary-strength` | 34% |
+| `:root, .theme-scope` | `--material-lock-secondary-strength` | 25% |
+| `:root, .theme-scope` | `--material-navigation-strength` | 8% |
+| `:root, .theme-scope` | `--material-field-primary-size` | clamp(520px, 56vw, 1100px) clamp(400px, 72vh, 820px) |
+| `:root, .theme-scope` | `--material-field-secondary-size` | clamp(480px, 52vw, 1000px) clamp(360px, 64vh, 720px) |
+| `:root, .theme-scope` | `--material-field-primary-position` | max(18%, calc((100% - var(--content-max)) / 2 + 80px)) 8% |
+| `:root, .theme-scope` | `--material-field-secondary-position` | min(91%, calc((100% + var(--content-max)) / 2 - 40px)) 91% |
+| `:root, .theme-scope` | `--material-dither` | url('/atmosphere-dither.svg') |
+| `:root, .theme-scope` | `--material-field` | var(--material-dither), radial-gradient(ellipse 48% 64% at 50% 50%, color-mix(in srgb, var(--panel-bg) 14%, transparent), transparent 90%), radial-gradient(ellipse var(--material-field-primary-size) at var(--material-field-primary-position), color-mix(in srgb, var(--material-color-primary) var(--material-primary-strength), transparent), transparent 100%), radial-gradient(ellipse var(--material-field-secondary-size) at var(--material-field-secondary-position), color-mix(in srgb, var(--material-color-secondary) var(--material-secondary-strength), transparent), transparent 100%) |
+| `:root, .theme-scope` | `--material-lock-field` | var(--material-dither), radial-gradient(ellipse 48% 64% at 50% 50%, color-mix(in srgb, var(--panel-bg) 14%, transparent), transparent 90%), radial-gradient(ellipse var(--material-field-primary-size) at var(--material-field-primary-position), color-mix(in srgb, var(--material-color-primary) var(--material-lock-primary-strength), transparent), transparent 100%), radial-gradient(ellipse var(--material-field-secondary-size) at var(--material-field-secondary-position), color-mix(in srgb, var(--material-color-secondary) var(--material-lock-secondary-strength), transparent), transparent 100%) |
+| `:root, .theme-scope` | `--material-floating-field` | linear-gradient(color-mix(in srgb, var(--panel-bg) 60%, transparent), color-mix(in srgb, var(--panel-bg) 60%, transparent)), var(--material-field), var(--panel-bg) |
+| `:root, .theme-scope` | `--material-editor-field` | linear-gradient(color-mix(in srgb, var(--bg) 65%, transparent), color-mix(in srgb, var(--bg) 65%, transparent)), var(--material-field), var(--bg) |
+| `:root, .theme-scope` | `--border-navigation` | color-mix(in srgb, var(--text) 3%, transparent) |
 | `:root, .theme-scope` | `--bg-app` | var(--material-field), var(--sunken) |
 | `:root, .theme-scope` | `--bg-toolbar` | var(--bg-app) |
 | `:root, .theme-scope` | `--bg-sidebar` | var(--sidebar-bg) |
@@ -413,6 +426,7 @@
 | `:root, .theme-scope` | `--bg-editor` | var(--bg) |
 | `:root, .theme-scope` | `--bg-input` | var(--bg) |
 | `:root, .theme-scope` | `--bg-input-focus` | var(--panel-bg) |
+| `:root, .theme-scope` | `--bg-canvas-input` | color-mix(in srgb, var(--text) 7%, transparent) |
 | `:root, .theme-scope` | `--bg-surface` | var(--panel-bg) |
 | `:root, .theme-scope` | `--bg-surface-hover` | var(--hover) |
 | `:root, .theme-scope` | `--bg-surface-active` | var(--active) |
@@ -421,41 +435,53 @@
 | `:root, .theme-scope` | `--bg-statusbar` | var(--panel-bg) |
 | `:root, .theme-scope` | `--hover-chrome` | color-mix(in srgb, var(--text) 9%, transparent) |
 | `:root, .theme-scope` | `--floating-background-attachment` | scroll |
+| `:root, .theme-scope` | `--dialog-background-attachment` | scroll |
 | `:root, .theme-scope` | `--nav-overlay-background-attachment` | scroll |
-| `:root, .theme-scope` | `--editor-background-attachment` | scroll |
-| `:root, .theme-scope` | `--text-canvas-meta` | var(--text-muted) |
-| `:root, .theme-scope` | `--text-nav-label` | var(--text-muted) |
-| `:root, .theme-scope` | `--text-nav-section` | var(--text-faint) |
+| `:root, .theme-scope` | `--editor-background-attachment` | fixed |
+| `:root, .theme-scope` | `--text-canvas-meta` | var(--text-secondary) |
+| `:root, .theme-scope` | `--text-nav-label` | var(--text-secondary) |
+| `:root, .theme-scope` | `--text-nav-section` | var(--text-secondary) |
 | `:root, .theme-scope` | `--bg-lock` | linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%) |
-| `:root, .theme-scope` | `--bg-lock-wash` | radial-gradient(110% 85% at 50% 40%, var(--lock-wash-b) 0%, var(--bg) 65%), var(--bg) |
-| `:root, .theme-scope` | `--bg-lock-aura-primary` | color-mix(in srgb, var(--material-tint-primary) 24%, transparent) |
-| `:root, .theme-scope` | `--bg-lock-aura-secondary` | color-mix(in srgb, var(--material-tint-secondary) 18%, transparent) |
-| `:root, .theme-scope` | `--bg-lock-aura-neutral` | color-mix(in srgb, var(--panel-bg) 35%, transparent) |
 | `:root, .theme-scope` | `--material-decoration-display` | block |
-| `:root[data-accent="celadon"], .theme-scope[data-accent="celadon"]` | `--material-tint-primary` | #198c74 |
-| `:root[data-accent="celadon"], .theme-scope[data-accent="celadon"]` | `--material-tint-secondary` | #6ebc95 |
-| `:root[data-accent="clay"], .theme-scope[data-accent="clay"]` | `--material-tint-primary` | #cf7836 |
-| `:root[data-accent="clay"], .theme-scope[data-accent="clay"]` | `--material-tint-secondary` | #dcae50 |
-| `:root[data-accent="plum"], .theme-scope[data-accent="plum"]` | `--material-tint-primary` | #8946c6 |
-| `:root[data-accent="plum"], .theme-scope[data-accent="plum"]` | `--material-tint-secondary` | #9a6bd0 |
-| `:root[data-accent="rose"], .theme-scope[data-accent="rose"]` | `--material-tint-primary` | #ce4f83 |
-| `:root[data-accent="rose"], .theme-scope[data-accent="rose"]` | `--material-tint-secondary` | #e68b9d |
-| `.theme-scope` | `--material-grain-size` | 18% auto |
-| `.theme-scope` | `--material-field-primary-size` | 68% 74% |
-| `.theme-scope` | `--material-field-secondary-size` | 62% 68% |
-| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-sidebar` | color-mix(in srgb, var(--sidebar-bg) 18%, transparent) |
-| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-nav-overlay` | var(--material-field), var(--sidebar-bg) |
+| `:root[data-accent="ink"], .theme-scope[data-accent="ink"]` | `--material-field-companion` | -48 |
+| `:root[data-accent="celadon"], .theme-scope[data-accent="celadon"]` | `--material-field-companion` | -32 |
+| `:root[data-accent="clay"], .theme-scope[data-accent="clay"]` | `--material-field-companion` | 28 |
+| `:root[data-accent="plum"], .theme-scope[data-accent="plum"]` | `--material-field-companion` | 41 |
+| `:root[data-accent="rose"], .theme-scope[data-accent="rose"]` | `--material-field-companion` | 54 |
+| `:root[data-accent="teal"], .theme-scope[data-accent="teal"]` | `--material-field-companion` | 46 |
+| `:root[data-accent="forest"], .theme-scope[data-accent="forest"]` | `--material-field-companion` | -24 |
+| `:root[data-accent="amber"], .theme-scope[data-accent="amber"]` | `--material-field-companion` | -21 |
+| `:root[data-accent="coral"], .theme-scope[data-accent="coral"]` | `--material-field-companion` | 28 |
+| `:root[data-accent="graphite"], .theme-scope[data-accent="graphite"]` | `--material-field-companion` | 48 |
+| `:root[data-accent="graphite"], .theme-scope[data-accent="graphite"]` | `--material-color-primary` | color-mix(in srgb, #667080 65%, var(--sunken)) |
+| `:root[data-accent="graphite"], .theme-scope[data-accent="graphite"]` | `--material-color-secondary` | color-mix(in srgb, #aaa1b3 60%, var(--sunken)) |
+| `:root[data-base="light"][data-accent="graphite"], .theme-scope[data-base="light"][data-accent="graphite"]` | `--material-primary-strength` | 26% |
+| `:root[data-base="light"][data-accent="graphite"], .theme-scope[data-base="light"][data-accent="graphite"]` | `--material-secondary-strength` | 23% |
+| `:root[data-base="dark"], .theme-scope[data-base="dark"]` | `--material-primary-strength` | 21% |
+| `:root[data-base="dark"], .theme-scope[data-base="dark"]` | `--material-secondary-strength` | 19% |
+| `:root[data-base="dark"], .theme-scope[data-base="dark"]` | `--material-lock-primary-strength` | 26% |
+| `:root[data-base="dark"], .theme-scope[data-base="dark"]` | `--material-lock-secondary-strength` | 22% |
+| `:root[data-base="dark"]:not([data-accent="graphite"]), .theme-scope[data-base="dark"]:not([data-accent="graphite"])` | `--material-color-primary` | color-mix(in oklch, oklch(from var(--accent) l calc(c * 2) h) 30%, oklch(from var(--sunken) l 0 none)) |
+| `:root[data-base="dark"]:not([data-accent="graphite"]), .theme-scope[data-base="dark"]:not([data-accent="graphite"])` | `--material-color-secondary` | color-mix(in oklch, oklch(from var(--accent) l calc(c * 1.6) calc(h + var(--material-field-companion))) 24%, oklch(from var(--sunken) l 0 none)) |
+| `:root[data-base="dark"]:not([data-accent="graphite"]), .theme-scope[data-base="dark"]:not([data-accent="graphite"])` | `--material-primary-strength` | 28% |
+| `:root[data-base="dark"]:not([data-accent="graphite"]), .theme-scope[data-base="dark"]:not([data-accent="graphite"])` | `--material-secondary-strength` | 22% |
+| `:root[data-base="dark"]:not([data-accent="graphite"]), .theme-scope[data-base="dark"]:not([data-accent="graphite"])` | `--material-lock-primary-strength` | 32% |
+| `:root[data-base="dark"]:not([data-accent="graphite"]), .theme-scope[data-base="dark"]:not([data-accent="graphite"])` | `--material-lock-secondary-strength` | 25% |
+| `:root[data-base="dark"]` | `--material-dither` | url('/atmosphere-dither.svg#dark') |
+| `.theme-scope` | `--material-field-primary-size` | 56% 72% |
+| `.theme-scope` | `--material-field-secondary-size` | 52% 64% |
+| `.theme-scope` | `--material-field-primary-position` | 24% 8% |
+| `.theme-scope` | `--material-field-secondary-position` | 85% 91% |
+| `.theme-scope` | `--material-dither` | none |
+| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-sidebar` | color-mix(in srgb, var(--sidebar-bg) var(--material-navigation-strength), transparent) |
+| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-nav-overlay` | var(--material-floating-field) |
 | `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-dialog` | var(--material-floating-field) |
+| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--dialog-background-attachment` | fixed |
 | `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-popover` | var(--material-floating-field) |
 | `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-menu` | var(--material-floating-field) |
 | `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-dock` | var(--material-floating-field) |
-| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-editor` | var(--material-field), var(--bg) |
-| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--floating-background-attachment` | fixed |
-| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--nav-overlay-background-attachment` | fixed |
-| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--editor-background-attachment` | fixed |
-| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--text-canvas-meta` | var(--text-secondary) |
-| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--text-nav-label` | var(--text-secondary) |
-| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--text-nav-section` | var(--text-secondary) |
+| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-editor` | var(--material-editor-field) |
+| `:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]` | `--bg-canvas-input` | var(--bg-input) |
 | `:root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"]` | `--bg-app` | var(--sunken) |
 | `:root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"]` | `--bg-lock` | var(--bg) |
 | `:root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"]` | `--material-decoration-display` | none |

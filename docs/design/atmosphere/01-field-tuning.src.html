@@ -1,0 +1,325 @@
+<!doctype html>
+<!-- 背景氛围光场调参对拍稿（2026-10-16）。
+     改完重跑：
+       node scripts/mock-build.mjs docs/design/atmosphere/01-field-tuning.src.html docs/design/atmosphere/01-field-tuning.html
+       node scripts/mock-frames.mjs docs/design/atmosphere/01-field-tuning.html docs/design/atmosphere/shots atmo \
+         dark-ink dark-str tint-paper tint-mix anchor-snow anchor-cand dlg-slate dlg-thru dark-chroma \
+         bare-ink-base bare-ink-chroma bare-slate-base bare-slate-chroma bare-anchor bare-anchor-cand
+     十五帧：A–I 带完整外壳（同页同布局，只差光场配方），J–O 裸光场（只剩背景配方 + 两块卡面探针 + 阅读列虚线）。
+       A/B 墨·翡翠 提强度（21/14→23/19）——算下来只有 ΔRGB 1–5，是噪声级，留作反例
+       C/D 纸·湖蓝 提掺入（65/60→75/70）——同上，且方向是让氛围更弱
+       E/F 雪·陶橙 锚点跟正文列（14%12% + 95%95% → 26%14% + 84%90%）
+       G/H 岩·群青 弹窗光场与窗外连续（floating 自带光场 → 透出窗外同一片）
+       I + J/K + L/M 换轴：深底把亮度预算让给彩度（光场色压到"卡面 L*−1.5"，alpha 21/14→45/34）
+     数值账本见同目录 field-math.mjs（解析解，非截图取色）。
+     尺寸说明：真 app 用 clamp(…, 78vw, …) 按窗口算，mock 视口≠窗口，故在 .win 上钉成
+     1040×670 窗口的等值 px（811/570 与 853/603），保持现状帧与建议帧同一条基准。 -->
+<html lang="zh"><head><meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "HarmonyOS Sans SC", system-ui, sans-serif; }
+<!--TOKENS-->
+
+/* dither 在 file:// 下取不到 /atmosphere-dither.svg，改内联同一张图（值与 public 版逐字一致） */
+.theme-scope {
+  --material-dither: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128' viewBox='0 0 128 128'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='1' seed='8' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='discrete' tableValues='0 1'/%3E%3CfeFuncG type='discrete' tableValues='0 1'/%3E%3CfeFuncB type='discrete' tableValues='0 1'/%3E%3CfeFuncA type='discrete' tableValues='1 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Cpath fill='%23fff' opacity='.012' filter='url(%23d)' d='M0 0h128v128H0z'/%3E%3C/svg%3E");
+}
+/* 把窗口级光斑尺寸从 vw/vh 钉成 1040×670 等值 px（覆盖 .theme-scope 的预览档 78%/85%） */
+.win.theme-scope {
+  --material-field-primary-size: 811px 570px;
+  --material-field-secondary-size: 853px 603px;
+}
+/* 宽窗档：clamp 按 1440×900 取等值 px，虚线为 720px 阅读列与侧栏右界 */
+.win.wide { width: 1440px; height: 900px; }
+.win.wide.theme-scope {
+  --material-field-primary-size: 1123px 765px;
+  --material-field-secondary-size: 1181px 810px;
+}
+.guide { display: none; position: absolute; top: 42px; bottom: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--text) 20%, transparent);
+  border-right: 1px dashed color-mix(in srgb, var(--text) 20%, transparent); }
+.win.wide .guide { display: block; left: 492px; width: 720px; }
+.win.wide .guide.rail-edge { left: 264px; width: 0; border-right: 0; }
+.probe { position: absolute; width: 260px; height: 84px; border-radius: 12px; padding: 10px 12px;
+  background: var(--panel-bg); border: 1px solid var(--border); box-shadow: var(--shadow-card); }
+.probe.tl { left: 24px; top: 24px; }
+.probe.br { right: 24px; bottom: 24px; }
+.pl { font-size: 11.5px; color: var(--text-muted); }
+
+/* ---- 四组建议配方：只动配方叶子变量，其余令牌全部沿用真值 ---- */
+.win[data-v="dark"] { --material-primary-strength: 23%; --material-secondary-strength: 19%; }
+.win[data-v="tint"] {
+  --material-color-primary: color-mix(in srgb, var(--material-tint-primary) 75%, var(--sunken));
+  --material-color-secondary: color-mix(in srgb, var(--material-tint-secondary) 70%, var(--sunken));
+}
+/* 换轴档：深底把预算从亮度挪到彩度。光场色 = accent 压到"卡面 L* − 1.5"，
+   于是 alpha 敢给到 45/34，而画布峰值 L* 仍低于卡面（墨底卡面 L* 12.7）。
+   数值来自 docs/design/atmosphere/field-math.mjs，改底色/卡面须重算。 */
+.win[data-v="chroma"][data-theme="ink"] {
+  --material-color-primary: rgb(7 34 25);
+  --material-color-secondary: rgb(25 32 20);
+  --material-primary-strength: 45%;
+  --material-secondary-strength: 34%;
+}
+.win[data-v="chroma"][data-theme="slate"] {
+  --material-color-primary: rgb(26 44 80);
+  --material-color-secondary: rgb(29 47 52);
+  --material-primary-strength: 45%;
+  --material-secondary-strength: 34%;
+}
+.win[data-v="anchor"] {
+  --material-field:
+    var(--material-dither),
+    radial-gradient(ellipse 65% 75% at 50% 52%, color-mix(in srgb, var(--panel-bg) 28%, transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-field-primary-size) at 26% 14%, color-mix(in srgb, var(--material-color-primary) var(--material-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at 84% 90%, color-mix(in srgb, var(--material-color-secondary) var(--material-secondary-strength), transparent), transparent 100%);
+}
+
+body { background: #6f6f6f; padding: 28px 28px 44px; display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
+.cap { color: #ededed; font-size: 13px; font-weight: 600; letter-spacing: .04em; margin-bottom: 10px; }
+.cap small { display: block; margin-top: 4px; font-weight: 400; font-size: 12px; color: #bdbdbd; }
+
+/* ---- 外壳：尺寸逐条抄自真 app（rail 56 / 侧栏 208 / 标题栏 42 / 页条 64 / 行卡 78） ---- */
+.win { position: relative; width: 1040px; height: 670px; background: var(--bg-app);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+  box-shadow: var(--shadow-pop); display: flex; }
+.rail { flex-shrink: 0; width: 56px; background: var(--bg-sidebar); border-right: 1px solid var(--sidebar-border);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 10px; }
+.nav { width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center;
+  justify-content: center; color: var(--text-muted); }
+.nav.on { color: var(--accent); background: var(--hover-chrome); }
+.rail .gap { flex: 1; }
+.panel { flex-shrink: 0; width: 208px; background: var(--bg-sidebar); border-right: 1px solid var(--sidebar-border);
+  padding: 8px 10px 12px; }
+.brand { height: 48px; display: flex; align-items: center; gap: 9px; padding: 0 6px;
+  font-size: 14px; font-weight: 700; color: var(--text); }
+.brand .logo { width: 22px; height: 22px; border-radius: 7px; background: var(--accent); }
+.sec { padding: 12px 8px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--text-faint); }
+.mrow { height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: 8px;
+  font-size: 13px; color: var(--text-secondary); }
+.mrow.on { background: var(--sidebar-active); color: var(--text); }
+.mrow .n { margin-left: auto; font-size: 11px; color: var(--text-faint); }
+.mrow svg { color: var(--text-muted); flex-shrink: 0; }
+
+.col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tb { flex-shrink: 0; height: 42px; display: flex; align-items: center; gap: 10px; padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle); }
+.tb h1 { font-size: 13px; font-weight: 600; color: var(--text); }
+.tb .cnt { font-size: 12px; color: var(--text-muted); }
+.tb .r { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--text-muted); }
+.tb .btn { width: 30px; height: 28px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; }
+.tb .sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+.content { flex: 1; min-height: 0; padding: 0 24px 24px; }
+.page-bar { min-height: 64px; display: flex; align-items: center; gap: 8px; }
+.search { height: 32px; width: 220px; border-radius: var(--radius-pill); background: var(--bg-input);
+  border: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 11px;
+  color: var(--text-faint); font-size: 12.5px; }
+.chip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
+  border-radius: var(--radius-pill); background: var(--panel-bg); border: 1px solid var(--border);
+  font-size: 12px; color: var(--text-secondary); }
+.pb-r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.pbtn { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px;
+  border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-on);
+  font-size: 12px; font-weight: 600; box-shadow: 0 4px 14px -3px var(--accent); }
+
+/* 行卡：一层卡 + 24 档面 + 等宽地址行 */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.grid-card { min-height: 78px; padding: 12px 14px; border-radius: 12px; background: var(--panel-bg);
+  border: 1px solid var(--border); box-shadow: var(--shadow-card); }
+.row1 { display: flex; align-items: center; gap: 9px; }
+.slot { width: 24px; height: 24px; border-radius: 7px; font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--text-secondary); }
+.nm { font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.star { margin-left: auto; color: var(--text-faint); }
+.row2 { margin-top: 7px; padding-left: 33px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 小记阅读列 */
+.paper { max-width: 720px; margin: 0 auto; padding: 18px 28px 28px; border-radius: var(--radius-card);
+  background: var(--bg-editor); border: 1px solid var(--border); }
+.paper h2 { font-size: 19px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+.paper .meta { margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+.paper p { margin-top: 14px; font-size: 13.5px; line-height: 23px; color: var(--text-secondary); }
+.paper .h3 { margin-top: 20px; font-size: 14.5px; font-weight: 700; color: var(--text); }
+
+/* 弹窗（G 现状）与对齐光场（H 建议） */
+.veil { position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 22%, transparent); }
+.dlg { position: absolute; left: 240px; top: 96px; width: 560px; height: 460px; overflow: hidden;
+  border-radius: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-pop);
+  background: var(--bg-dialog); }
+.dlg .dh { height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 16px;
+  font-size: 13.5px; font-weight: 600; color: var(--text); }
+.dlg .dh .x { margin-left: auto; color: var(--text-muted); }
+.dlg .db { padding: 4px 16px; }
+.drow { height: 46px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border);
+  font-size: 13px; color: var(--text-secondary); }
+.drow:first-child { border-top: 0; }
+.drow .k { flex: 1; }
+.sw { width: 34px; height: 20px; border-radius: 999px; background: var(--accent); position: relative; }
+.sw::after { content: ''; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--accent-on); }
+.sw.off { background: var(--border-strong); }
+.dlg .df { position: absolute; left: 0; right: 0; bottom: 0; height: 46px; display: flex; align-items: center;
+  justify-content: flex-end; gap: 8px; padding: 0 14px; }
+/* H：弹窗不再自带光场，改为透出与窗外同一张配方（层按窗口盒定位、由弹窗裁切） */
+.dlg.thru { background: var(--panel-bg); }
+.dlg.thru .align { position: absolute; left: -240px; top: -96px; width: 1040px; height: 670px;
+  background: var(--material-field); }
+.dlg.thru .wash { position: absolute; inset: 0;
+  background: color-mix(in srgb, var(--panel-bg) 78%, transparent); }
+.dlg.thru .dh, .dlg.thru .db, .dlg.thru .df { position: relative; z-index: 1; }
+</style></head>
+<body>
+<div id="root"></div>
+<script>
+const GRID = `
+  <div class="rail">
+    <div class="nav on">{{i:navEntries:22}}</div>
+    <div class="nav">{{i:navNotes:22}}</div>
+    <div class="nav">{{i:navFiles:22}}</div>
+    <div class="nav">{{i:navCodex:22}}</div>
+    <div class="nav">{{i:navLan:22}}</div>
+    <div class="gap"></div>
+    <div class="nav">{{i:gear:22}}</div>
+  </div>
+  <div class="panel">
+    <div class="brand"><span class="logo"></span>desko</div>
+    <div class="sec">收藏</div>
+    <div class="mrow on">{{i:all:18}}<span class="k">全部</span><span class="n">38</span></div>
+    <div class="mrow">{{i:star:18}}<span class="k">已标记</span><span class="n">6</span></div>
+    <div class="mrow">{{i:folder:18}}<span class="k">研发</span><span class="n">12</span></div>
+    <div class="mrow">{{i:clip:18}}<span class="k">文档</span><span class="n">9</span></div>
+    <div class="mrow">{{i:archive:18}}<span class="k">归档</span><span class="n">11</span></div>
+  </div>`;
+
+const TB = `
+  <div class="tb">
+    <h1>收藏</h1><span class="cnt">38 条</span>
+    <div class="r">
+      <span class="btn">{{i:refresh:16}}</span>
+      <span class="btn">{{i:gear:16}}</span>
+      <span class="btn">{{i:lock:16}}</span>
+      <span class="sep"></span>
+      <span class="btn">{{i:min:16}}</span>
+      <span class="btn">{{i:max:16}}</span>
+      <span class="btn">{{i:x:16}}</span>
+    </div>
+  </div>`;
+
+const ENTRIES = [
+  ['J', 'Jenkins 前端流水线', 'ci.internal/jenkins/view/web'],
+  ['O', 'ONES 需求看板', 'ones.office/project/team-web'],
+  ['G', 'GitLab 私有实例', 'git.internal/jiang/tools'],
+  ['F', 'Figma 设计交付', 'figma.com/file/xy-client-2026'],
+  ['Y', '语雀组件文档', 'yuque.antfin.com/xy/ui-kit'],
+  ['N', 'Nacos 配置中心', 'nacos.internal:8848/xy-dev'],
+  ['S', 'SonarQube 质量门', 'sonar.internal/dashboard/xy'],
+  ['D', '内网制品库', 'artifact.internal/npm/registry'],
+];
+
+const gridPage = `
+  <div class="content">
+    <div class="page-bar">
+      <div class="search">{{i:search:15}}搜索名称或地址</div>
+      <span class="chip">全部 38</span><span class="chip">已标记 6</span>
+      <div class="pb-r"><span class="pbtn">{{i:plus:15}}新增</span></div>
+    </div>
+    <div class="card-grid">${ENTRIES.map(([l, n, u]) => `
+      <div class="grid-card">
+        <div class="row1"><span class="slot">${l}</span><span class="nm">${n}</span><span class="star">{{i:star:16}}</span></div>
+        <div class="row2">${u}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+
+const notesPage = `
+  <div class="content">
+    <div class="page-bar">
+      <div class="search">{{i:search:15}}搜索小记</div>
+      <span class="chip">本周 14</span>
+      <div class="pb-r"><span class="pbtn">{{i:plus:15}}新建</span></div>
+    </div>
+    <div class="paper">
+      <h2>氛围光场的三条判据</h2>
+      <div class="meta">2026-10-16 · 未分类</div>
+      <p>光场只负责把窗口的四个方向拉出重量感，一旦开始抢正文的对比度就该收。现在有两处越界：深色底下辅色光斑压到 14%，读不出方向；暖纸底配冷 tint 时，左上角那团与底色色温相反。</p>
+      <div class="h3">锚点为什么不该钉在视口百分比</div>
+      <p>14% 12% 与 95% 95% 在 1040 宽时刚好落在侧栏与行卡外侧；窗口拉到 1600，两团光继续外扩到画布留白里，正文列反而成了一片平色。锚点应跟着内容列的边界走。</p>
+      <p>弹窗同理。它自带一份按窗口尺寸算的配方，画在自己的盒子上，等于把整窗光场压进 560px，看上去是另一张纸，而不是同一个房间里的东西。</p>
+    </div>
+  </div>`;
+
+const dialog = `
+  <div class="veil"></div>
+  <div class="dlg">
+    <div class="dh">设置<span class="x">{{i:x:16}}</span></div>
+    <div class="db">
+      <div class="drow"><span class="k">背景氛围</span><span class="sw"></span></div>
+      <div class="drow"><span class="k">底色</span><span class="chip">岩</span></div>
+      <div class="drow"><span class="k">强调色</span><span class="chip">群青</span></div>
+      <div class="drow"><span class="k">局域网传输</span><span class="sw off"></span></div>
+      <div class="drow"><span class="k">开机自启</span><span class="sw off"></span></div>
+    </div>
+    <div class="df"><span class="chip">取消</span><span class="pbtn">完成</span></div>
+  </div>`;
+
+/* 透出版：弹窗盒不变，光场层按窗口盒定位后被 overflow 裁掉 */
+const dialogThru = `
+  <div class="veil"></div>
+  <div class="dlg thru">
+    <div class="align"></div><div class="wash"></div>
+    <div class="dh">设置<span class="x">{{i:x:16}}</span></div>
+    <div class="db">
+      <div class="drow"><span class="k">背景氛围</span><span class="sw"></span></div>
+      <div class="drow"><span class="k">底色</span><span class="chip">岩</span></div>
+      <div class="drow"><span class="k">强调色</span><span class="chip">群青</span></div>
+      <div class="drow"><span class="k">局域网传输</span><span class="sw off"></span></div>
+      <div class="drow"><span class="k">开机自启</span><span class="sw off"></span></div>
+    </div>
+    <div class="df"><span class="chip">取消</span><span class="pbtn">完成</span></div>
+  </div>`;
+
+const FRAMES = [
+  ['A · 现状', '墨底·翡翠：secondary 14%，暗色把彩色吞掉，四向重量感读不出', 'ink', 'dark', 'celadon', 'base', gridPage],
+  ['B · 建议', '同一配方，secondary 14%→19%、primary 21%→23%（对齐浅底档）', 'ink', 'dark', 'celadon', 'dark', gridPage],
+  ['C · 现状', '纸底·湖蓝：tint 只掺 65% sunken，暖纸上飘一团冷色', 'paper', 'light', 'teal', 'base', gridPage],
+  ['D · 建议', 'tint 掺 sunken 提到 75%/70%，冷光随纸温化开', 'paper', 'light', 'teal', 'tint', gridPage],
+  ['E · 现状', '雪底·陶橙：锚点钉在 14%12% 与 95%95%，正文列居中后两团光都在列外', 'snow', 'light', 'clay', 'base', notesPage],
+  ['F · 建议', '锚点收进内容列两侧（26%14% 与 84%90%），渐变跨过阅读列', 'snow', 'light', 'clay', 'anchor', notesPage],
+  ['G · 现状', '岩底·群青：弹窗自带按窗口尺寸算的光场，压在 560px 盒内成独立亮块', 'slate', 'dark', 'ink', 'base', gridPage + dialog],
+  ['H · 建议', 'floating 改透出窗外同一片光场（等效 background-attachment: fixed），只留 78% 面板洗', 'slate', 'dark', 'ink', 'thru', gridPage + dialogThru],
+  ['I · 换轴（深底）', '墨·翡翠：把亮度预算让给彩度——光场色压到 L* 11.2、alpha 提到 45/34，画布峰值 L* 只到 9.5（卡面 12.7）', 'ink', 'dark', 'celadon', 'chroma', gridPage],
+];
+
+/* 裸光场帧：只剩 background: var(--bg-app) 这一层配方 + 两块卡面探针。
+   探针钉在左上（主光斑峰）与右下（辅光斑峰），用来直接读"卡面还浮不浮得起来"。
+   wide 档用来看锚点在宽窗下的漂移。帧序即截图序号：A…I 带外壳，J… 裸片。 */
+const BARE = [
+  ['J · 墨·翡翠 现状（裸）', '掺 65% sunken + alpha 21/14：峰值推离底色 ΔRGB 14，但画布 L* 顶到 12.4，卡面 12.7 —— 右下角卡与底几乎同色', 'ink', 'dark', 'celadon', 'base', false],
+  ['K · 墨·翡翠 换轴（裸）', '光场色压到 L* 11.2 + alpha 45/34：彩度 0.019→0.044，画布 L* 只到 9.5，卡面分离 ΔRGB 3→13', 'ink', 'dark', 'celadon', 'chroma', false],
+  ['L · 岩·群青 现状（裸）', '同一套配方在岩底：峰值 ΔRGB 16，卡面最小分离 ΔRGB 10', 'slate', 'dark', 'ink', 'base', false],
+  ['M · 岩·群青 换轴（裸）', '光场色压到 L* 18.3 + alpha 45/34：彩度 0.086→0.120，卡面分离 10→14', 'slate', 'dark', 'ink', 'chroma', false],
+  ['N · 雪·陶橙 现状（裸·宽窗）', '1440×900：锚点 14%12% 与 95%95%，两团光落在 720 阅读列（虚线）之外', 'snow', 'light', 'clay', 'base', true],
+  ['O · 雪·陶橙 换锚点（裸·宽窗）', '同尺寸，锚点收进 26%14% 与 84%90%，渐变跨过阅读列', 'snow', 'light', 'clay', 'anchor', true],
+];
+
+const host = document.getElementById('root');
+host.innerHTML = FRAMES.map(([cap, sub, theme, base, accent, v, body]) => `
+  <div>
+    <div class="cap">${cap}<small>${sub}</small></div>
+    <div class="win theme-scope" data-theme="${theme}" data-base="${base}" data-accent="${accent}" data-atmosphere="on" data-v="${v}">
+      ${GRID}<div class="col">${TB}${body}</div>
+    </div>
+  </div>`).join('')
+  + BARE.map(([cap, sub, theme, base, accent, v, wide]) => `
+  <div>
+    <div class="cap">${cap}<small>${sub}</small></div>
+    <div class="win${wide ? ' wide' : ''} theme-scope" data-theme="${theme}" data-base="${base}" data-accent="${accent}" data-atmosphere="on" data-v="${v}">
+      <div class="guide"></div><div class="guide rail-edge"></div>
+      <div class="probe tl"><span class="pl">卡面探针</span></div>
+      <div class="probe br"><span class="pl">卡面探针</span></div>
+    </div>
+  </div>`).join('');
+</script>
+</body></html>

@@ -17,21 +17,12 @@ if (!SRC || !OUT) {
   process.exit(2)
 }
 
-const CSS_SELECTORS = new Set([
-  ':root',
-  ':root, .theme-scope',
-  '.theme-scope',
-  ':root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"]',
-  ':root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"]',
-  ':where(:root), [data-theme="paper"]',
-  '[data-theme="snow"]',
-  '[data-theme="ink"]',
-  '[data-theme="slate"]',
-  '[data-base="light"][data-accent="ink"]',
-  '[data-base="dark"][data-accent="ink"]',
-  // 侧栏激活行按侧栏底现切，写在别名块之后；漏摘这一条，mock 上的激活行还是旧的卡面洗底
-  '[data-base="light"]',
-])
+// 令牌块 = 选择器每一段都只是 :root / .theme-scope / 带 data-theme|base|accent|atmosphere 的属性选择器。
+// 早先这里是手写的白名单，只列了 ink 一档 accent 和四套底色：新增的 linen/mist/midnight/moss
+// 与另外九档 accent（含 materials.css 的氛围 tint、深底强度档）全被漏摘，
+// mock 于是永远按浅底 + 群青出图，对拍稿里的"现状"根本不是真实现状。
+const TOKEN_PART = /^(?:(?::root|:where\(:root\))\s*,\s*)?(?:\.theme-scope|:root|:where\(:root\))?(?:\[data-(?:theme|base|accent|atmosphere)="[\w-]+"\])*$/
+const isTokenSelector = (sel) => sel.split(',').every((part) => TOKEN_PART.test(part.trim()))
 
 /** 扫顶层规则，摘出选择器命中的整块（跳过注释，避免注释里出现的 ":root" 被当选择器） */
 function pickTokenBlocks(css) {
@@ -53,7 +44,7 @@ function pickTokenBlocks(css) {
         if (css[j] === '{') depth++
         else if (css[j] === '}') { depth--; if (depth === 0) break }
       }
-      if (CSS_SELECTORS.has(selector)) out.push(`${selector} {${css.slice(i + 1, j)}\n}`)
+      if (isTokenSelector(selector)) out.push(`${selector} {${css.slice(i + 1, j)}\n}`)
       pending = ''
       i = j + 1
       continue

@@ -1,0 +1,426 @@
+{
+  "date": "2026-10-16",
+  "status": "applied",
+  "source": "src/styles/materials.css",
+  "sourceSha256": "3e2ff12f03fe4cd0d67bbd1cb01b1f4ba6d9eca7fb111e8c4113ac619681cdc7",
+  "candidateMatchesProduction": true,
+  "parameters": {
+    "light": {
+      "L": 0.85,
+      "primaryK": 0.75,
+      "secondaryK": 0.62
+    },
+    "dark": {
+      "L": 0.24,
+      "primaryK": 0.65,
+      "secondaryK": 0.53
+    }
+  },
+  "productionE2E": {
+    "passed": 29,
+    "failed": 0,
+    "themeAccentCombos": 80,
+    "candidateStyleInterception": false
+  },
+  "typecheck": "passed",
+  "build": "passed",
+  "themeCoverage": "passed",
+  "screenshots": {
+    "pairs": 14,
+    "frames": 28,
+    "gallery": "03-accent-source-recalibrated.html"
+  },
+  "colorSweep": {
+    "completedCombos": 80,
+    "combosWithWarnings": 23,
+    "results": {
+      "paper-ink": {
+        "contrastWarnings": []
+      },
+      "paper-rose": {
+        "contrastWarnings": []
+      },
+      "paper-coral": {
+        "contrastWarnings": []
+      },
+      "snow-clay": {
+        "contrastWarnings": []
+      },
+      "snow-forest": {
+        "contrastWarnings": []
+      },
+      "linen-ink": {
+        "contrastWarnings": []
+      },
+      "linen-rose": {
+        "contrastWarnings": []
+      },
+      "linen-coral": {
+        "contrastWarnings": [
+          "4.17  span.tab-count@12",
+          "   4.17  div.day-head@12"
+        ]
+      },
+      "mist-clay": {
+        "contrastWarnings": [
+          "4.09  span.tab-count@12",
+          "   4.09  div.day-head@12"
+        ]
+      },
+      "mist-forest": {
+        "contrastWarnings": [
+          "4.04  span.tab-count@12",
+          "   4.04  div.day-head@12"
+        ]
+      },
+      "ink-ink": {
+        "contrastWarnings": []
+      },
+      "ink-rose": {
+        "contrastWarnings": []
+      },
+      "ink-coral": {
+        "contrastWarnings": []
+      },
+      "slate-clay": {
+        "contrastWarnings": []
+      },
+      "slate-forest": {
+        "contrastWarnings": []
+      },
+      "midnight-ink": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "midnight-rose": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "midnight-coral": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "moss-clay": {
+        "contrastWarnings": []
+      },
+      "moss-forest": {
+        "contrastWarnings": []
+      },
+      "paper-celadon": {
+        "contrastWarnings": []
+      },
+      "paper-teal": {
+        "contrastWarnings": []
+      },
+      "paper-graphite": {
+        "contrastWarnings": []
+      },
+      "snow-plum": {
+        "contrastWarnings": []
+      },
+      "snow-amber": {
+        "contrastWarnings": []
+      },
+      "linen-celadon": {
+        "contrastWarnings": [
+          "4.19  span.tab-count@12",
+          "   4.19  div.day-head@12"
+        ]
+      },
+      "linen-teal": {
+        "contrastWarnings": [
+          "4.19  span.tab-count@12",
+          "   4.19  div.day-head@12"
+        ]
+      },
+      "linen-graphite": {
+        "contrastWarnings": []
+      },
+      "mist-plum": {
+        "contrastWarnings": []
+      },
+      "mist-amber": {
+        "contrastWarnings": [
+          "4.02  span.tab-count@12",
+          "   4.02  div.day-head@12"
+        ]
+      },
+      "ink-celadon": {
+        "contrastWarnings": []
+      },
+      "ink-teal": {
+        "contrastWarnings": []
+      },
+      "ink-graphite": {
+        "contrastWarnings": []
+      },
+      "slate-plum": {
+        "contrastWarnings": []
+      },
+      "slate-amber": {
+        "contrastWarnings": []
+      },
+      "midnight-celadon": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "midnight-teal": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "midnight-graphite": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "moss-plum": {
+        "contrastWarnings": []
+      },
+      "moss-amber": {
+        "contrastWarnings": []
+      },
+      "paper-clay": {
+        "contrastWarnings": []
+      },
+      "paper-forest": {
+        "contrastWarnings": []
+      },
+      "snow-ink": {
+        "contrastWarnings": []
+      },
+      "snow-rose": {
+        "contrastWarnings": []
+      },
+      "snow-coral": {
+        "contrastWarnings": []
+      },
+      "linen-clay": {
+        "contrastWarnings": [
+          "4.22  span.tab-count@12",
+          "   4.22  div.day-head@12"
+        ]
+      },
+      "linen-forest": {
+        "contrastWarnings": [
+          "4.17  span.tab-count@12",
+          "   4.17  div.day-head@12"
+        ]
+      },
+      "mist-ink": {
+        "contrastWarnings": []
+      },
+      "mist-rose": {
+        "contrastWarnings": [
+          "4.42  span.tab-count@12",
+          "   4.42  div.day-head@12"
+        ]
+      },
+      "mist-coral": {
+        "contrastWarnings": [
+          "4.04  span.tab-count@12",
+          "   4.04  div.day-head@12"
+        ]
+      },
+      "ink-clay": {
+        "contrastWarnings": []
+      },
+      "ink-forest": {
+        "contrastWarnings": []
+      },
+      "slate-ink": {
+        "contrastWarnings": []
+      },
+      "slate-rose": {
+        "contrastWarnings": []
+      },
+      "slate-coral": {
+        "contrastWarnings": []
+      },
+      "midnight-clay": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "midnight-forest": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "moss-ink": {
+        "contrastWarnings": []
+      },
+      "moss-rose": {
+        "contrastWarnings": []
+      },
+      "moss-coral": {
+        "contrastWarnings": []
+      },
+      "paper-plum": {
+        "contrastWarnings": []
+      },
+      "paper-amber": {
+        "contrastWarnings": []
+      },
+      "snow-celadon": {
+        "contrastWarnings": []
+      },
+      "snow-teal": {
+        "contrastWarnings": []
+      },
+      "snow-graphite": {
+        "contrastWarnings": []
+      },
+      "linen-plum": {
+        "contrastWarnings": []
+      },
+      "linen-amber": {
+        "contrastWarnings": [
+          "4.15  span.tab-count@12",
+          "   4.15  div.day-head@12"
+        ]
+      },
+      "mist-celadon": {
+        "contrastWarnings": [
+          "4.05  span.tab-count@12",
+          "   4.05  div.day-head@12"
+        ]
+      },
+      "mist-teal": {
+        "contrastWarnings": [
+          "4.06  span.tab-count@12",
+          "   4.06  div.day-head@12"
+        ]
+      },
+      "mist-graphite": {
+        "contrastWarnings": []
+      },
+      "ink-plum": {
+        "contrastWarnings": []
+      },
+      "ink-amber": {
+        "contrastWarnings": []
+      },
+      "slate-celadon": {
+        "contrastWarnings": []
+      },
+      "slate-teal": {
+        "contrastWarnings": []
+      },
+      "slate-graphite": {
+        "contrastWarnings": []
+      },
+      "midnight-plum": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "midnight-amber": {
+        "contrastWarnings": [
+          "3.94  span.grid-slot@11",
+          "   4.41  span.ft-ico@11"
+        ]
+      },
+      "moss-celadon": {
+        "contrastWarnings": []
+      },
+      "moss-teal": {
+        "contrastWarnings": []
+      },
+      "moss-graphite": {
+        "contrastWarnings": []
+      }
+    }
+  },
+  "baselineContrastCheck": [
+    {
+      "theme": "linen",
+      "accent": "teal",
+      "route": "entries",
+      "identical": true,
+      "warnings": {
+        "span.tab-count@12": 4.19
+      }
+    },
+    {
+      "theme": "linen",
+      "accent": "teal",
+      "route": "notes",
+      "identical": true,
+      "warnings": {
+        "div.day-head@12": 4.19
+      }
+    },
+    {
+      "theme": "linen",
+      "accent": "teal",
+      "route": "files",
+      "identical": true,
+      "warnings": {}
+    },
+    {
+      "theme": "mist",
+      "accent": "forest",
+      "route": "entries",
+      "identical": true,
+      "warnings": {
+        "span.tab-count@12": 4.04
+      }
+    },
+    {
+      "theme": "mist",
+      "accent": "forest",
+      "route": "notes",
+      "identical": true,
+      "warnings": {
+        "div.day-head@12": 4.04
+      }
+    },
+    {
+      "theme": "mist",
+      "accent": "forest",
+      "route": "files",
+      "identical": true,
+      "warnings": {}
+    },
+    {
+      "theme": "midnight",
+      "accent": "ink",
+      "route": "entries",
+      "identical": true,
+      "warnings": {
+        "span.grid-slot@11": 3.94
+      }
+    },
+    {
+      "theme": "midnight",
+      "accent": "ink",
+      "route": "notes",
+      "identical": true,
+      "warnings": {}
+    },
+    {
+      "theme": "midnight",
+      "accent": "ink",
+      "route": "files",
+      "identical": true,
+      "warnings": {
+        "span.ft-ico@11": 4.41
+      }
+    }
+  ],
+  "colorSweepLimitations": "对比度提示包含既有小字/图标问题；旧新材质的代表性页面比对一致。游离色列表包含其他局部主题及分类派生色。"
+}

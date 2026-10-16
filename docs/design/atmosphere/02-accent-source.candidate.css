@@ -1,0 +1,159 @@
+/* 材质层：只消费主题颜色，负责不同表面的背景、定位和文字对比。
+   组件选择材质角色，不读取 data-atmosphere；新增表面应接入这里的角色。
+   --bg-surface / --bg-input 保持实底，导航、内容与对话框共用光场，浮层承接较轻的光场。 */
+:root, .theme-scope {
+  /* 明度按极性固定，色相与彩度从当前强调色推导。 */
+  --material-field-l: 0.85;
+  --material-field-k: 0.45;
+  --material-field-k-secondary: 0.37;
+  --material-field-companion: -48;
+  --material-color-primary: oklch(from var(--accent) var(--material-field-l) calc(c * var(--material-field-k)) h);
+  --material-color-secondary: oklch(from var(--accent) var(--material-field-l) calc(c * var(--material-field-k-secondary)) calc(h + var(--material-field-companion)));
+  --material-primary-strength: 23%;
+  --material-secondary-strength: 16%;
+  --material-lock-primary-strength: 28%;
+  --material-lock-secondary-strength: 19%;
+  --material-navigation-strength: 8%;
+  /* 用覆盖范围保留氛围感，控制浓度，让全窗渐变轻柔地融入主题底色。 */
+  --material-field-primary-size: clamp(680px, 78vw, 1500px) clamp(480px, 85vh, 1020px);
+  --material-field-secondary-size: clamp(680px, 82vw, 1580px) clamp(480px, 90vh, 1080px);
+  /* 宽窗把光斑收在居中阅读列两缘；窄窗沿用对角构图。 */
+  --material-field-primary-position: max(14%, calc((100% - var(--content-max)) / 2)) 12%;
+  --material-field-secondary-position: min(95%, calc((100% + var(--content-max)) / 2)) 95%;
+  --material-dither: url('/atmosphere-dither.svg');
+  --material-field:
+    var(--material-dither),
+    radial-gradient(ellipse 65% 75% at 50% 52%, color-mix(in srgb, var(--panel-bg) 28%, transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-field-primary-size) at var(--material-field-primary-position), color-mix(in srgb, var(--material-color-primary) var(--material-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at var(--material-field-secondary-position), color-mix(in srgb, var(--material-color-secondary) var(--material-secondary-strength), transparent), transparent 100%);
+  --material-lock-field:
+    var(--material-dither),
+    radial-gradient(ellipse 65% 75% at 50% 52%, color-mix(in srgb, var(--panel-bg) 28%, transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-field-primary-size) at var(--material-field-primary-position), color-mix(in srgb, var(--material-color-primary) var(--material-lock-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at var(--material-field-secondary-position), color-mix(in srgb, var(--material-color-secondary) var(--material-lock-secondary-strength), transparent), transparent 100%);
+  --material-floating-field:
+    linear-gradient(color-mix(in srgb, var(--panel-bg) 70%, transparent), color-mix(in srgb, var(--panel-bg) 70%, transparent)),
+    var(--material-field), var(--panel-bg);
+  --material-editor-field:
+    linear-gradient(color-mix(in srgb, var(--bg) 65%, transparent), color-mix(in srgb, var(--bg) 65%, transparent)),
+    var(--material-field), var(--bg);
+  --border-navigation: color-mix(in srgb, var(--text) 3%, transparent);
+
+  --bg-app: var(--material-field), var(--sunken);
+  --bg-toolbar: var(--bg-app);
+  --bg-sidebar: var(--sidebar-bg);
+  --bg-nav-overlay: var(--sidebar-bg);
+  --bg-dialog: var(--panel-bg);
+  --bg-popover: color-mix(in srgb, var(--panel-bg) 96%, transparent);
+  --bg-menu: var(--panel-bg);
+  --bg-dock: var(--panel-bg);
+  --bg-editor: var(--bg);
+  --bg-input: var(--bg);
+  --bg-input-focus: var(--panel-bg);
+  --bg-canvas-input: color-mix(in srgb, var(--text) 7%, transparent);
+  --bg-surface: var(--panel-bg);
+  --bg-surface-hover: var(--hover);
+  --bg-surface-active: var(--active);
+  --bg-tag-default: var(--badge-cat-bg);
+  --bg-mono-chip: var(--sunken);
+  --bg-statusbar: var(--panel-bg);
+  --hover-chrome: color-mix(in srgb, var(--text) 9%, transparent);
+
+  --floating-background-attachment: scroll;
+  --dialog-background-attachment: scroll;
+  --nav-overlay-background-attachment: scroll;
+  --editor-background-attachment: scroll;
+  --text-canvas-meta: var(--text-secondary);
+  --text-nav-label: var(--text-secondary);
+  --text-nav-section: var(--text-secondary);
+
+  --bg-lock: linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%);
+  --material-decoration-display: block;
+}
+
+/* 辅光按强调色色相作相邻色旋转；石墨保留原配方。 */
+:root[data-accent="ink"], .theme-scope[data-accent="ink"] {
+  --material-field-companion: -48;
+}
+:root[data-accent="celadon"], .theme-scope[data-accent="celadon"] {
+  --material-field-companion: -32;
+}
+:root[data-accent="clay"], .theme-scope[data-accent="clay"] {
+  --material-field-companion: 28;
+}
+:root[data-accent="plum"], .theme-scope[data-accent="plum"] {
+  --material-field-companion: 41;
+}
+:root[data-accent="rose"], .theme-scope[data-accent="rose"] {
+  --material-field-companion: 54;
+}
+:root[data-accent="teal"], .theme-scope[data-accent="teal"] {
+  --material-field-companion: 46;
+}
+:root[data-accent="forest"], .theme-scope[data-accent="forest"] {
+  --material-field-companion: -24;
+}
+:root[data-accent="amber"], .theme-scope[data-accent="amber"] {
+  --material-field-companion: -21;
+}
+:root[data-accent="coral"], .theme-scope[data-accent="coral"] {
+  --material-field-companion: 28;
+}
+:root[data-accent="graphite"], .theme-scope[data-accent="graphite"] {
+  --material-field-companion: 48;
+  --material-color-primary: color-mix(in srgb, #667080 65%, var(--sunken));
+  --material-color-secondary: color-mix(in srgb, #aaa1b3 60%, var(--sunken));
+}
+
+/* 中性强调色主要靠明暗显形，浅底增加覆盖量，保持与彩色氛围相近的可见性。 */
+:root[data-base="light"][data-accent="graphite"], .theme-scope[data-base="light"][data-accent="graphite"] {
+  --material-primary-strength: 26%;
+  --material-secondary-strength: 23%;
+}
+
+:root[data-base="dark"], .theme-scope[data-base="dark"] {
+  --material-field-l: 0.24;
+  --material-field-k: 0.55;
+  --material-field-k-secondary: 0.45;
+  --material-primary-strength: 21%;
+  --material-secondary-strength: 19%;
+  --material-lock-primary-strength: 26%;
+  --material-lock-secondary-strength: 22%;
+}
+
+/* 深底沿用同一张噪点纹理，以 0.8% 的暗色视图减轻颗粒感。 */
+:root[data-base="dark"] {
+  --material-dither: url('/atmosphere-dither.svg#dark');
+}
+
+/* 局部主题按自己的画布缩放，预览尺寸下省去噪点。 */
+.theme-scope {
+  --material-field-primary-size: 78% 85%;
+  --material-field-secondary-size: 82% 90%;
+  --material-field-primary-position: 14% 12%;
+  --material-field-secondary-position: 95% 95%;
+  --material-dither: none;
+}
+
+:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"] {
+  /* 薄底色保留主题冷暖，主侧栏直接透出全窗光场，让分界两侧的颜色连续。 */
+  --bg-sidebar: color-mix(in srgb, var(--sidebar-bg) var(--material-navigation-strength), transparent);
+  /* 抽屉覆盖在正文上，需自带不透明底色，避免透出正文。 */
+  --bg-nav-overlay: var(--material-floating-field);
+  --bg-dialog: var(--material-floating-field);
+  --dialog-background-attachment: fixed;
+  --bg-popover: var(--material-floating-field);
+  --bg-menu: var(--material-floating-field);
+  --bg-dock: var(--material-floating-field);
+  --bg-editor: var(--material-editor-field);
+  --bg-canvas-input: var(--bg-input);
+}
+
+:root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"] {
+  --bg-app: var(--sunken);
+  --bg-lock: var(--bg);
+  --material-decoration-display: none;
+}
+
+/* 氛围为静态背景，不创建持续动画或额外的模糊合成层。 */
+.material-decoration { display: var(--material-decoration-display); }

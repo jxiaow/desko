@@ -1,0 +1,187 @@
+{
+  "version": "155.0.4283.45",
+  "colors": [
+    {
+      "theme": "paper",
+      "accent": "ink",
+      "scene": "list",
+      "accentColor": "oklch(0.491819 0.183525 264.023)",
+      "primaryColor": "oklch(0.85 0.0825861 264.023)",
+      "secondaryColor": "oklch(0.85 0.0679042 216.023)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.988235 0.980392 0.968627 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.699929 0.807447 1.02264 / 0.23), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb 0.605258 0.853138 0.918712 / 0.16), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "23%",
+        "16%"
+      ]
+    },
+    {
+      "theme": "snow",
+      "accent": "celadon",
+      "scene": "list",
+      "accentColor": "oklch(0.506124 0.0934102 175.129)",
+      "primaryColor": "oklch(0.85 0.0420346 175.129)",
+      "secondaryColor": "oklch(0.85 0.0345618 143.129)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.996078 0.996078 0.996078 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.698617 0.844154 0.800543 / 0.23), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb 0.757204 0.831387 0.751211 / 0.16), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "23%",
+        "16%"
+      ]
+    },
+    {
+      "theme": "linen",
+      "accent": "teal",
+      "scene": "list",
+      "accentColor": "oklch(0.511249 0.0957892 225.754)",
+      "primaryColor": "oklch(0.85 0.0431052 225.754)",
+      "secondaryColor": "oklch(0.85 0.035442 271.754)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.960784 0.94902 0.929412 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.693351 0.832495 0.892217 / 0.23), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb 0.773206 0.80388 0.900925 / 0.16), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "23%",
+        "16%"
+      ]
+    },
+    {
+      "theme": "mist",
+      "accent": "plum",
+      "scene": "list",
+      "accentColor": "oklch(0.509329 0.19124 297.28)",
+      "primaryColor": "oklch(0.85 0.0860579 297.28)",
+      "secondaryColor": "oklch(0.85 0.0707588 338.28)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.952941 0.956863 0.968627 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.829089 0.762378 1.00295 / 0.23), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb 0.931197 0.739151 0.869745 / 0.16), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "23%",
+        "16%"
+      ]
+    },
+    {
+      "theme": "ink",
+      "accent": "celadon",
+      "scene": "list",
+      "accentColor": "oklch(0.792792 0.125742 166.112)",
+      "primaryColor": "oklch(0.24 0.069158 166.112)",
+      "secondaryColor": "oklch(0.24 0.0565839 134.112)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg#dark\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.133333 0.129412 0.117647 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb -0.0610439 0.160257 0.0919793 / 0.21), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb 0.075675 0.144334 0.0250793 / 0.19), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "21%",
+        "19%"
+      ]
+    },
+    {
+      "theme": "slate",
+      "accent": "ink",
+      "scene": "list",
+      "accentColor": "oklch(0.802213 0.0993676 261.665)",
+      "primaryColor": "oklch(0.24 0.0546522 261.665)",
+      "secondaryColor": "oklch(0.24 0.0447154 213.665)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg#dark\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.168627 0.188235 0.227451 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.0633685 0.119614 0.223327 / 0.21), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb -0.010082 0.142867 0.172582 / 0.19), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "21%",
+        "19%"
+      ]
+    },
+    {
+      "theme": "midnight",
+      "accent": "rose",
+      "scene": "list",
+      "accentColor": "oklch(0.818536 0.129973 337.918)",
+      "primaryColor": "oklch(0.24 0.0714853 337.918)",
+      "secondaryColor": "oklch(0.24 0.058488 31.918)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg#dark\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.231373 0.247059 0.282353 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.202008 0.0581786 0.16798 / 0.21), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb 0.21219 0.0735674 0.0488332 / 0.19), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "21%",
+        "19%"
+      ]
+    },
+    {
+      "theme": "moss",
+      "accent": "forest",
+      "scene": "list",
+      "accentColor": "oklch(0.814182 0.124809 121.764)",
+      "primaryColor": "oklch(0.24 0.0686447 121.764)",
+      "secondaryColor": "oklch(0.24 0.0561638 97.7635)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg#dark\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.188235 0.2 0.176471 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.102789 0.139795 -0.0221579 / 0.21), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb 0.151166 0.121164 -0.0160645 / 0.19), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "21%",
+        "19%"
+      ]
+    },
+    {
+      "theme": "snow",
+      "accent": "graphite",
+      "scene": "list",
+      "accentColor": "oklch(0.473401 0.0227815 262.95)",
+      "primaryColor": "color(srgb 0.582549 0.609412 0.652941)",
+      "secondaryColor": "color(srgb 0.768627 0.74902 0.79451)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.996078 0.996078 0.996078 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.582549 0.609412 0.652941 / 0.26), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb 0.768627 0.74902 0.79451 / 0.23), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "26%",
+        "23%"
+      ]
+    },
+    {
+      "theme": "linen",
+      "accent": "teal",
+      "scene": "settings",
+      "accentColor": "oklch(0.511249 0.0957892 225.754)",
+      "primaryColor": "oklch(0.85 0.0431052 225.754)",
+      "secondaryColor": "oklch(0.85 0.035442 271.754)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.960784 0.94902 0.929412 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.693351 0.832495 0.892217 / 0.23), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb 0.773206 0.80388 0.900925 / 0.16), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "23%",
+        "16%"
+      ]
+    },
+    {
+      "theme": "slate",
+      "accent": "ink",
+      "scene": "settings",
+      "accentColor": "oklch(0.802213 0.0993676 261.665)",
+      "primaryColor": "oklch(0.24 0.0546522 261.665)",
+      "secondaryColor": "oklch(0.24 0.0447154 213.665)",
+      "field": "url(\"http://127.0.0.1:1430/atmosphere-dither.svg#dark\"), radial-gradient(65% 75% at 50% 52%, color(srgb 0.168627 0.188235 0.227451 / 0.28), rgba(0, 0, 0, 0) 90%), radial-gradient(811.2px 569.5px at max(14%, 50% - 450px) 12%, color(srgb 0.0633685 0.119614 0.223327 / 0.21), rgba(0, 0, 0, 0) 100%), radial-gradient(852.8px 603px at min(95%, 50% + 450px) 95%, color(srgb -0.010082 0.142867 0.172582 / 0.19), rgba(0, 0, 0, 0) 100%), none",
+      "strength": [
+        "21%",
+        "19%"
+      ]
+    },
+    {
+      "theme": "paper",
+      "accent": "ink",
+      "scene": "lock",
+      "accentColor": "oklch(0.491819 0.183525 264.023)",
+      "primaryColor": "oklch(0.85 0.0825861 264.023)",
+      "secondaryColor": "oklch(0.85 0.0679042 216.023)",
+      "field": "linear-gradient(135deg, rgb(252, 250, 247) 0%, rgb(234, 228, 219) 100%)",
+      "strength": [
+        "23%",
+        "16%"
+      ]
+    },
+    {
+      "theme": "linen",
+      "accent": "teal",
+      "scene": "lock",
+      "accentColor": "oklch(0.511249 0.0957892 225.754)",
+      "primaryColor": "oklch(0.85 0.0431052 225.754)",
+      "secondaryColor": "oklch(0.85 0.035442 271.754)",
+      "field": "linear-gradient(135deg, rgb(235, 231, 224) 0%, rgb(227, 223, 216) 100%)",
+      "strength": [
+        "23%",
+        "16%"
+      ]
+    },
+    {
+      "theme": "ink",
+      "accent": "celadon",
+      "scene": "lock",
+      "accentColor": "oklch(0.792792 0.125742 166.112)",
+      "primaryColor": "oklch(0.24 0.069158 166.112)",
+      "secondaryColor": "oklch(0.24 0.0565839 134.112)",
+      "field": "linear-gradient(135deg, rgb(29, 28, 26) 0%, rgb(34, 33, 30) 100%)",
+      "strength": [
+        "21%",
+        "19%"
+      ]
+    }
+  ]
+}

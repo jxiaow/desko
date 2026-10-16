@@ -1,0 +1,36 @@
+
+    :root, .theme-scope {
+      --material-field-primary-size: clamp(520px, 56vw, 1100px) clamp(400px, 72vh, 820px);
+      --material-field-secondary-size: clamp(480px, 52vw, 1000px) clamp(360px, 64vh, 720px);
+      --material-field-primary-position: max(18%, calc((100% - var(--content-max)) / 2 + 80px)) 8%;
+      --material-field-secondary-position: min(91%, calc((100% + var(--content-max)) / 2 - 40px)) 91%;
+      --material-floating-field:
+        linear-gradient(color-mix(in srgb, var(--panel-bg) 60%, transparent), color-mix(in srgb, var(--panel-bg) 60%, transparent)),
+        var(--material-field), var(--panel-bg);
+      --editor-background-attachment: fixed;
+      --material-field:
+        var(--material-dither),
+        radial-gradient(ellipse 48% 64% at 50% 50%, color-mix(in srgb, var(--panel-bg) 14%, transparent), transparent 90%),
+        radial-gradient(ellipse var(--material-field-primary-size) at var(--material-field-primary-position), color-mix(in srgb, var(--material-color-primary) var(--material-primary-strength), transparent), transparent 100%),
+        radial-gradient(ellipse var(--material-field-secondary-size) at var(--material-field-secondary-position), color-mix(in srgb, var(--material-color-secondary) var(--material-secondary-strength), transparent), transparent 100%);
+      --material-lock-field:
+        var(--material-dither),
+        radial-gradient(ellipse 48% 64% at 50% 50%, color-mix(in srgb, var(--panel-bg) 14%, transparent), transparent 90%),
+        radial-gradient(ellipse var(--material-field-primary-size) at var(--material-field-primary-position), color-mix(in srgb, var(--material-color-primary) var(--material-lock-primary-strength), transparent), transparent 100%),
+        radial-gradient(ellipse var(--material-field-secondary-size) at var(--material-field-secondary-position), color-mix(in srgb, var(--material-color-secondary) var(--material-lock-secondary-strength), transparent), transparent 100%);
+    }
+    :root[data-base="light"], .theme-scope[data-base="light"] {
+      --material-primary-strength: 30%; --material-secondary-strength: 22%;
+      --material-lock-primary-strength: 34%; --material-lock-secondary-strength: 25%;
+    }
+    :root[data-base="dark"]:not([data-accent="graphite"]), .theme-scope[data-base="dark"]:not([data-accent="graphite"]) {
+      --material-color-primary: color-mix(in oklch, oklch(from var(--accent) l calc(c * 2) h) 30%, oklch(from var(--sunken) l 0 none));
+      --material-color-secondary: color-mix(in oklch, oklch(from var(--accent) l calc(c * 1.6) calc(h + var(--material-field-companion))) 24%, oklch(from var(--sunken) l 0 none));
+      --material-primary-strength: 28%; --material-secondary-strength: 22%;
+      --material-lock-primary-strength: 32%; --material-lock-secondary-strength: 25%;
+    }
+    .theme-scope {
+      --material-field-primary-size: 56% 72%; --material-field-secondary-size: 52% 64%;
+      --material-field-primary-position: 24% 8%; --material-field-secondary-position: 85% 91%;
+    }
+  

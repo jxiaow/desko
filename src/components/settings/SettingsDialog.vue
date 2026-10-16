@@ -448,7 +448,7 @@ onMounted(() => {
 .settings-dialog {
   display: flex;
   background: var(--bg-dialog);
-  background-attachment: var(--floating-background-attachment);
+  background-attachment: var(--dialog-background-attachment);
   border-radius: var(--radius-xl);
   width: min(760px, 92vw);
   /* 固定高度，切页时壳体不跳动；小窗口自动收缩，长页在面板内滚动。 */

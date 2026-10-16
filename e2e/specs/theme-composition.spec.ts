@@ -173,6 +173,82 @@ test('八十组主题的全窗氛围轻柔可辨，阅读区域与主按钮保�
   }
 })
 
+test('Codex 常态与宽窗保留分区柔光，深底呈现提亮而非暗色染底', async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  let themeModuleUrl = ''
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === '/src/services/theme.ts') themeModuleUrl = request.url()
+  })
+  await bootUnlocked(page, {
+    settings: { codex_enabled: 'true' },
+    codex: { accounts: [{ email: 'studio@example.com', plan_type: 'pro', weekly: 40 }] },
+  }, '/codex')
+  await expect(page.locator('.acc-row')).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  const sampleCanvas = async () => {
+    const png = await page.screenshot({ animations: 'disabled' })
+    return page.evaluate(async base64 => {
+      const img = new Image()
+      img.src = `data:image/png;base64,${base64}`
+      await img.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0)
+      const sample = (x: number, y: number): RGB => {
+        const data = ctx.getImageData(Math.round(x) - 3, Math.round(y) - 3, 7, 7).data
+        const rgb: RGB = [0, 0, 0]
+        for (let i = 0; i < data.length; i += 4) for (let c = 0; c < 3; c++) rgb[c] += data[i + c] / 49
+        return rgb
+      }
+      const empty = [.15, .35, .55, .75, .9].map(x => sample(img.width * x, img.height * .84))
+      const top = sample(img.width * .3, 20)
+      const card = document.querySelector('.acc-row')!.getBoundingClientRect()
+      const cardPixel = sample(card.right - 20, card.bottom - 16)
+      const style = getComputedStyle(document.documentElement)
+      const color = (name: string): RGB => {
+        ctx.fillStyle = style.getPropertyValue(name).trim()
+        ctx.fillRect(0, 0, 1, 1)
+        return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3) as RGB
+      }
+      return { empty, top, cardPixel, base: color('--sunken'), panel: color('--bg-surface'), meta: color('--text-canvas-meta') }
+    }, png.toString('base64'))
+  }
+  const measurements = []
+  for (const [width, height] of [[1040, 670], [1440, 900], [1920, 1080]]) {
+    await page.setViewportSize({ width, height })
+    for (const [theme, accent] of [['snow', 'teal'], ['ink', 'celadon'], ['slate', 'ink']]) {
+      await page.evaluate(async ([url, theme, accent]) => {
+        const t = await import(/* @vite-ignore */ url)
+        await t.chooseTheme(theme)
+        await t.chooseAccent(accent)
+        await t.chooseBackgroundAtmosphere(true)
+      }, [themeModuleUrl, theme, accent])
+      await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
+      const got = await sampleCanvas()
+      const lightness = got.empty.map(pixel => lab(pixel).L)
+      const span = Math.max(...lightness) - Math.min(...lightness)
+      const topLift = lab(got.top).L - lab(got.base).L
+      const label = `${theme}/${accent} ${width}×${height}`
+      // 旧配方的墨/岩宽窗下方明度跨度不足 1，深底光色甚至比底色更暗。
+      expect.soft(span, `${label} 留白有明暗方向`).toBeGreaterThan(theme === 'snow' ? 1.7 : 2)
+      if (theme !== 'snow') expect.soft(topLift, `${label} 顶光高于底色`).toBeGreaterThan(1)
+      expect.soft(Math.min(...[got.top, ...got.empty].map(bg => contrast(got.meta, bg))), `${label} 辅助文字`).toBeGreaterThanOrEqual(4.5)
+      expect.soft(distance([got.cardPixel], [got.panel]), `${label} 账户卡片保持实底`).toBeLessThan(.5)
+      await page.evaluate(async url => {
+        const t = await import(/* @vite-ignore */ url)
+        await t.chooseBackgroundAtmosphere(false)
+      }, themeModuleUrl)
+      const flat = await sampleCanvas()
+      expect.soft(flat.empty, `${label} 关闭后恢复均匀底色`).toEqual(flat.empty.map(() => flat.empty[0]))
+      expect.soft(flat.cardPixel, `${label} 氛围开关不染色卡片`).toEqual(got.cardPixel)
+      measurements.push({ label, span, topLift })
+    }
+  }
+  await testInfo.attach('codex-canvas-measurements', { body: JSON.stringify(measurements, null, 2), contentType: 'application/json' })
+})
+
 
 for (const [theme, [name, bg, text]] of Object.entries({ paper: ['纸', 'rgb(241, 237, 231)', 'rgb(51, 50, 48)'], snow: ['雪', 'rgb(235, 236, 238)', 'rgb(26, 27, 29)'], ink: ['墨', 'rgb(24, 23, 22)', 'rgb(230, 228, 222)'] })) {
   test(`${name}的氛围开关独立生效，关闭后十种强调色保持画布纯色`, async ({ page }) => {

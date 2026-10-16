@@ -168,9 +168,9 @@ test.describe('主题', () => {
           const miniatureNav = getComputedStyle(preview.querySelector('.tp-rail')!)
           return { app: app.backgroundImage, preview: miniature.backgroundImage, nav: nav.backgroundColor, previewNav: miniatureNav.backgroundColor, swatch: getComputedStyle(preview.querySelector('.tp-row-tag')!).backgroundColor }
         }, base)
-        // 工作区光斑有像素上限，微缩预览按自身尺寸缩放；色相、强度与位置保持一致。
-        const fieldColors = (image: string) => image.replace(/radial-gradient\([^,]+? at /g, 'radial-gradient(at ')
-        expect(fieldColors(surfaces.preview), `${label} 预览画布`).toBe(fieldColors(surfaces.app))
+        // 预览独立缩放、定位并省略噪点；光场各色标的颜色与强度须与工作区一致。
+        const fieldColors = (image: string) => image.match(/(?:color|rgba?)\([^)]*\)/g)
+        expect(fieldColors(surfaces.preview), `${label} 预览画布`).toEqual(fieldColors(surfaces.app))
         expect(surfaces.previewNav, `${label} 预览导航`).toBe(surfaces.nav)
         expect(await preview.evaluate((el) => getComputedStyle(el).getPropertyValue('--accent').trim()), `${label} 预览强调色`).toBe(got.accent)
         swatches.push({ id: accent, color: surfaces.swatch.match(/[\d.]+/g)!.slice(0, 3).map(Number) as [number, number, number] })

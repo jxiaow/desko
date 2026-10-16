@@ -40,7 +40,7 @@ function parseDecls(body) {
   return out
 }
 
-const BASE_RE = /^:root(?:\s*,\s*\[data-theme="([\w-]+)"\])?$/
+const BASE_RE = /^(?::root|:where\(:root\))(?:\s*,\s*\[data-theme="([\w-]+)"\])?$/
 const ACCENT_RE = /^\[data-base="([\w-]+)"\]\[data-accent="([\w-]+)"\]$/
 
 function collectBlocks(css) {

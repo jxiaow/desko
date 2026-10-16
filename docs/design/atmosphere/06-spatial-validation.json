@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-16",
+  "browser": "155.0.4283.45",
+  "sourceSha256": "277e918ac8196c3de71b785137c0a44ba6e09d983f71a8a5cd067493a5d79b89",
+  "visual": {
+    "scenes": 13,
+    "screenshots": 26,
+    "afterUsesProductionStyle": true,
+    "computedBackgroundAndColorsMatchProposal": 13,
+    "galleryInteraction": "passed"
+  },
+  "e2e": {
+    "existing": 29,
+    "added": 1,
+    "passed": 30,
+    "paletteCombinations": 80,
+    "codexViewportCombinations": 9,
+    "originalThresholdsUnchanged": true
+  },
+  "themeCoverage": "passed",
+  "typeCheck": "passed",
+  "productionBuild": "passed",
+  "colorSweep": {
+    "completedCombos": 80,
+    "combosWithWarnings": 23,
+    "changesFromPrevious": [],
+    "note": "全页面检查仍有既有小字与图标对比度提示；渐变上的实际像素另由合成回归检查。"
+  }
+}
