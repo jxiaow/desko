@@ -48,7 +48,7 @@ describe('刷新后的主密码解锁', () => {
   })
 })
 
-it('浏览器入口明确要求单独访问密码，错误不称为主密码', async () => {
+it('浏览器入口使用桌面主密码，错误提示与桌面一致', async () => {
   setActivePinia(createPinia())
   const meta = document.createElement('meta')
   meta.name = 'desko-runtime'
@@ -58,11 +58,11 @@ it('浏览器入口明确要求单独访问密码，错误不称为主密码', a
   const wrapper = mount(UnlockPage, { global: { stubs: { AmbientBackground: true, BrandLogo: true, AppIcon: true } } })
   try {
     ;(wrapper.get('.lock-stack').element as HTMLElement).animate = vi.fn() as any
-    expect(wrapper.get('input').attributes('placeholder')).toBe('输入访问密码')
-    expect(wrapper.text()).toContain('电脑上的 Desko 锁定后仍可使用')
+    expect(wrapper.get('input').attributes('placeholder')).toBe('输入桌面主密码')
+    expect(wrapper.get('.unlock-btn').attributes('aria-label')).toBe('登录')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(wrapper.get('.unlock-error').text()).toBe('访问密码错误，请重试')
+    expect(wrapper.get('.unlock-error').text()).toBe('主密码错误，请重试')
   } finally {
     wrapper.unmount()
     meta.remove()

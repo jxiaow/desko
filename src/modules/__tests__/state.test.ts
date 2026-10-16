@@ -172,7 +172,7 @@ describe('module state', () => {
 })
 
 describe('Web 模块白名单', () => {
-  it('Web 开放七个模块并可修改工具开关，网络直连仍限桌面', async () => {
+  it('Web 登录前不开放模块，登录后读取七个共用开关，网络直连仍限桌面', async () => {
     const meta = document.createElement('meta')
     meta.name = 'desko-runtime'
     meta.content = 'web'
@@ -183,16 +183,34 @@ describe('Web 模块白名单', () => {
       const read = vi.spyOn(settingsApi, 'getSetting').mockResolvedValue('true')
       const write = vi.spyOn(settingsApi, 'setSetting').mockResolvedValue(undefined)
       await s.loadModuleFlags()
-      s.moduleFlags.codex = true
-      s.moduleFlags.tunnel = true
+      expect(s.enabledModules.value).toEqual([])
+      expect(read).not.toHaveBeenCalled()
+      await s.refreshWebModuleFlags()
       expect(s.enabledModules.value.map(module => module.id)).toEqual(['notes', 'entries', 'files', 'mfa', 'fileshare', 'tunnel', 'codex'])
       expect(s.isModuleEnabled('codex')).toBe(true)
-      expect(read).not.toHaveBeenCalled()
+      expect(read).toHaveBeenCalledTimes(7)
       await s.setModuleEnabled('tunnel', true)
       expect(write).toHaveBeenCalledWith('tunnel_enabled', 'true')
       await expect(s.setModuleEnabled('bypass', true)).rejects.toThrow('此模块仅在桌面版可用')
       read.mockRestore()
       write.mockRestore()
+    } finally { meta.remove() }
+  })
+
+  it('Web 核心模块关闭时不强制开启，旧库缺键与桌面缺省一致', async () => {
+    const meta = document.createElement('meta')
+    meta.name = 'desko-runtime'; meta.content = 'web'; document.head.append(meta)
+    try {
+      const state = await loadState()
+      const { settingsApi } = await import('../../services/api/settings')
+      const read = vi.spyOn(settingsApi, 'getSetting').mockResolvedValue('false')
+      await state.refreshWebModuleFlags()
+      expect(state.enabledModules.value).toEqual([])
+      expect(state.landingPath()).toBeNull()
+      read.mockResolvedValue('')
+      await state.refreshWebModuleFlags()
+      expect(state.enabledModules.value.map(module => module.id)).toEqual(['notes', 'entries', 'files'])
+      read.mockRestore()
     } finally { meta.remove() }
   })
 })

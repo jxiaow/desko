@@ -2,10 +2,10 @@ import { test, expect, type Page } from '@playwright/test'
 import { bootUnlocked, e2e, openSettings, waitForToastGone } from '../helpers'
 import { contrast, lab } from '../../scripts/lib/theme-tokens.mjs'
 
-const THEMES = { paper: '纸', snow: '雪', linen: '绢', mist: '雾', ink: '墨', slate: '岩', midnight: '夜', moss: '苔', purewhite: '素白', warmgray: '暖灰', charcoal: '炭黑' } as const
+const THEMES = { paper: '纸', snow: '雪', linen: '绢', mist: '雾', ink: '墨', slate: '岩', midnight: '夜', moss: '苔' } as const
 const ACCENTS = ['ink', 'celadon', 'clay', 'plum', 'rose', 'teal', 'forest', 'amber', 'coral', 'graphite'] as const
 type Theme = keyof typeof THEMES
-const LIGHT_THEMES: Theme[] = ['paper', 'snow', 'linen', 'mist', 'purewhite', 'warmgray']
+const LIGHT_THEMES: Theme[] = ['paper', 'snow', 'linen', 'mist']
 type RGB = [number, number, number]
 
 // 从实际截图取画布空白处的像素，覆盖主光、辅光与中间过渡。
@@ -38,19 +38,43 @@ async function renderedPalette(page: Page) {
     // 避开 1px 分割线和正文，只比较分界两侧相邻的背景。
     const edge = document.querySelector('.sidebar')!.getBoundingClientRect().right
     const seams = [180, 380, 500, 620].map(y => [sample(edge - 8, y), sample(edge + 8, y)])
+    const headerBottom = document.querySelector('.titlebar')!.getBoundingClientRect().bottom
+    const pixel = (x: number, y: number): [number, number, number] => [...ctx.getImageData(Math.round(x), Math.round(y), 1, 1).data].slice(0, 3) as [number, number, number]
+    const separators = [
+      [pixel(edge - 1, 450), pixel(edge - 4, 450)],
+      [pixel(650, headerBottom - 1), pixel(650, headerBottom - 4)],
+    ]
     const root = getComputedStyle(document.documentElement)
     const color = (name: string): [number, number, number] => {
       ctx.fillStyle = root.getPropertyValue(name).trim()
       ctx.fillRect(0, 0, 1, 1)
       return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3) as [number, number, number]
     }
+    const search = document.querySelector<HTMLInputElement>('.page-bar .search-box input')!
+    const searchBox = search.closest('.search-box')!.getBoundingClientRect()
+    const composer = document.querySelector('.composer')!.getBoundingClientRect()
+    const placeholderSamples = [
+      [getComputedStyle(search, '::placeholder').color, sample(searchBox.right - 12, searchBox.top + searchBox.height / 2)],
+      [getComputedStyle(document.querySelector('.composer .ProseMirror p')!, '::before').color, sample(composer.right - 14, composer.top + 20)],
+    ] as const
+    const placeholders = placeholderSamples.map(([text, background]) => {
+      ctx.fillStyle = text
+      ctx.fillRect(0, 0, 1, 1)
+      return [pixel(0, 0), background] as const
+    })
     return {
+      placeholders,
       pixels,
       sidebar: pixels.slice(0, 4),
-      // 主光已移到内容上方，辨色检查取这一区域，底部保留原底色。
-      primary: pixels.filter((_, i) => i % 4 === 0),
+      center: sample(640, 460),
+      ambientEdges: [sample(310, 12), sample(270, 100), sample(980, 640)],
+      separators,
       seams,
       meta: color('--text-canvas-meta'),
+      readingBackground: color('--bg-surface'),
+      readingText: color('--text'),
+      inputBackground: color('--bg-input'),
+      inputText: color('--text-secondary'),
       buttonText: color('--accent-on'),
       buttonStates: ['--accent', '--accent-hover', '--accent-active'].map(color),
     }
@@ -65,7 +89,7 @@ function distance(a: RGB[], b: RGB[]) {
   }, 0) / a.length
 }
 
-test('一百一十组主题的实际合成色保持区别，画布文字与主按钮可读', async ({ page }) => {
+test('八十组主题的全窗氛围轻柔可辨，阅读区域与主按钮保持可读', async ({ page }) => {
   test.setTimeout(180_000)
   await page.setViewportSize({ width: 1040, height: 670 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -83,13 +107,11 @@ test('一百一十组主题的实际合成色保持区别，画布文字与主�
     await page.locator('.sidebar-toggle').click()
   }
   const rendered = {} as Record<Theme, RGB[][]>
-  const primary = {} as Record<Theme, RGB[][]>
   const sidebars = {} as Record<Theme, RGB[][]>
   // 点击、保存与预览同步由 theme.spec 覆盖；本例集中检查全部开/关组合的实际像素。
   expect(themeModuleUrl).not.toBe('')
   for (const theme of Object.keys(THEMES) as Theme[]) {
     rendered[theme] = []
-    primary[theme] = []
     sidebars[theme] = []
     let flatPixels: RGB[] | undefined
     for (const accent of ACCENTS) {
@@ -105,12 +127,17 @@ test('一百一十组主题的实际合成色保持区别，画布文字与主�
       for (const [left, right] of got.seams) {
         expect.soft(distance([left], [right]), `${label} 侧栏与内容背景衔接`).toBeLessThan(4.5)
       }
+      for (const [line, face] of got.separators) {
+        expect.soft(distance([line], [face]), `${label} 框架分割线保持轻淡`).toBeLessThan(4.5)
+      }
       expect(Math.min(...got.pixels.map(bg => contrast(got.meta, bg))), `${label} 画布辅助文字`).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(got.readingText, got.readingBackground), `${label} 正文卡片`).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(got.inputText, got.inputBackground), `${label} 输入区域`).toBeGreaterThanOrEqual(4.5)
+      for (const [text, background] of got.placeholders) expect(contrast(text, background), `${label} 搜索和书写占位提示`).toBeGreaterThanOrEqual(4.5)
       for (const bg of got.buttonStates) {
         expect(contrast(got.buttonText, bg), `${label} 主按钮文字`).toBeGreaterThanOrEqual(4.5)
       }
       rendered[theme].push(got.pixels)
-      primary[theme].push(got.primary)
       sidebars[theme].push(got.sidebar)
       await page.evaluate(async url => {
         const t = await import(/* @vite-ignore */ url)
@@ -118,17 +145,19 @@ test('一百一十组主题的实际合成色保持区别，画布文字与主�
       }, themeModuleUrl)
       await expect(page.locator('.app-root')).toHaveCSS('background-image', 'none')
       const flat = await renderedPalette(page)
-      expect(distance(got.pixels, flat.pixels), `${label} 开启氛围可见`).toBeGreaterThan(1.5)
+      const edgeDifference = Math.max(...got.ambientEdges.map((pixel, i) => distance([pixel], [flat.ambientEdges[i]])))
+      expect.soft(edgeDifference, `${label} 边缘氛围可辨`).toBeGreaterThan(2.5)
+      const canvasDifference = distance(got.pixels.slice(4), flat.pixels.slice(4))
+      expect.soft(canvasDifference, `${label} 氛围覆盖内容周围的留白`).toBeGreaterThan(1.5)
+      expect.soft(canvasDifference, `${label} 留白染色保持轻柔`).toBeLessThan(8)
+      expect(distance([got.center], [flat.center]), `${label} 中部仍保留主题底色`).toBeLessThan(10)
+      if (['linen', 'mist', 'midnight', 'moss'].includes(theme)) {
+        const reading = lab(got.readingBackground)
+        expect(Math.hypot(reading.a, reading.b), `${label} 正文卡片保持低彩度`).toBeLessThan(7)
+      }
       if (flatPixels) expect(flat.pixels, `${label} 关闭氛围后底色不随强调色变化`).toEqual(flatPixels)
       flatPixels = flat.pixels
       expect(Math.min(...flat.pixels.map(bg => contrast(flat.meta, bg))), `${label} 关闭氛围辅助文字`).toBeGreaterThanOrEqual(4.5)
-    }
-    for (let i = 0; i < ACCENTS.length; i++) {
-      for (let j = i + 1; j < ACCENTS.length; j++) {
-        const label = `${theme}: ${ACCENTS[i]} / ${ACCENTS[j]}`
-        expect.soft(distance(primary[theme][i], primary[theme][j]), label)
-          .toBeGreaterThan(LIGHT_THEMES.includes(theme) ? 2 : 2.5)
-      }
     }
   }
   for (let i = 0; i < ACCENTS.length; i++) {
@@ -138,22 +167,19 @@ test('一百一十组主题的实际合成色保持区别，画布文字与主�
     for (const [j, a] of themes.entries()) for (const b of themes.slice(j + 1)) {
       const light = LIGHT_THEMES.includes(a)
       if (light !== LIGHT_THEMES.includes(b)) continue
-      // 中性底色刻意保留相近明度，仍需可辨，但不追求冷暖底色的跨度。
-      const neutral = ['purewhite', 'warmgray', 'charcoal'].some(theme => theme === a || theme === b)
-      const minimum = neutral ? (light ? 2 : 3) : a === 'ink' && b === 'slate' ? 7 : light ? 3 : 5
+      const minimum = a === 'ink' && b === 'slate' ? 7 : light ? 3 : 5
       expect.soft(distance(rendered[a][i], rendered[b][i]), `${THEMES[a]}/${THEMES[b]} × ${ACCENTS[i]}`).toBeGreaterThan(minimum)
     }
   }
 })
 
 
-for (const [theme, [name, bg, text]] of Object.entries({ purewhite: ['素白', 'rgb(245, 245, 245)', 'rgb(44, 44, 44)'], warmgray: ['暖灰', 'rgb(234, 233, 230)', 'rgb(52, 51, 47)'], charcoal: ['炭黑', 'rgb(31, 31, 31)', 'rgb(232, 232, 232)'] })) {
+for (const [theme, [name, bg, text]] of Object.entries({ paper: ['纸', 'rgb(241, 237, 231)', 'rgb(51, 50, 48)'], snow: ['雪', 'rgb(235, 236, 238)', 'rgb(26, 27, 29)'], ink: ['墨', 'rgb(24, 23, 22)', 'rgb(230, 228, 222)'] })) {
   test(`${name}的氛围开关独立生效，关闭后十种强调色保持画布纯色`, async ({ page }) => {
     test.setTimeout(90_000)
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await bootUnlocked(page, { settings: { theme, accent: 'ink', background_atmosphere: 'true' } })
     const dialog = await openSettings(page)
-    await expect(page.locator('html')).toHaveAttribute('data-palette', 'plain')
     await expect(page.locator('body')).toHaveCSS('color', text)
     const toggle = dialog.getByRole('switch', { name: '背景氛围' })
     await expect(toggle).toBeEnabled()
@@ -187,7 +213,7 @@ for (const [theme, [name, bg, text]] of Object.entries({ purewhite: ['素白', '
     for (const bg of got.buttonStates) expect(contrast(got.buttonText, bg)).toBeGreaterThanOrEqual(4.5)
     expect(Math.min(...got.pixels.map(bg => contrast(got.meta, bg)))).toBeGreaterThanOrEqual(4.5)
     await openSettings(page)
-    await dialog.locator('.theme-chip-name').getByText('纸', { exact: true }).click()
+    await dialog.locator('.theme-chip-name').getByText(theme === 'paper' ? '雪' : '纸', { exact: true }).click()
     await waitForToastGone(page)
     await expect(toggle).toBeEnabled()
     await expect(toggle).not.toBeChecked()

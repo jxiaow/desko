@@ -26,6 +26,51 @@ async function args(page: Page) {
   return page.evaluate(command => (window as any).__E2E__.invocations.filter((call: any) => call.cmd === command).at(-1).args, COMMAND)
 }
 
+for (const width of [800, 1235]) {
+  test(`${width}px 下金额和请求数贯通会话、项目、今日、每日及模型明细`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
+      { sessionId: 'priced-today', title: '有缓存的请求', cwd: 'C:\\demo', daysAgo: 0, input: 1_000_000, cached: 800_000, output: 100_000, reasoning: 20_000, model: 'gpt-5.4', turns: 3 },
+      { sessionId: 'priced-history', cwd: 'C:\\demo', daysAgo: 1, input: 500_000, cached: 400_000, output: 50_000, model: 'gpt-5.4-mini', turns: 2 },
+    ] } })
+    await expect(page.locator('.usg-cost')).toHaveText('估算金额 $2.20')
+    await expect(page.locator('.usg-count')).toHaveText('3 次请求 · 1 条会话')
+    await expect(page.locator('.usg-model-cost')).toHaveText('$2.20')
+    await expect(page.locator('.usg-model-requests')).toHaveText('3 次请求')
+    await expect(page.locator('.hour-detail')).toContainText('3 次请求 · 估算 $2.20')
+    await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+    await expect(page.locator('.usg-cost')).toHaveText('估算金额 $2.53')
+    await expect(page.locator('.usg-count')).toHaveText('5 次请求 · 2 条会话')
+    await expect(page.locator('.usg-day-cost')).toHaveText(['$2.20', '$0.33'])
+    await expect(page.locator('.usg-model-cost')).toHaveText(['$2.20', '$0.33'])
+    expect(await page.locator('.content-inner').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(false)
+    await page.screenshot({ path: `.tmp/codex-billing/usage-${width}.png` })
+    await page.getByRole('button', { name: '会话', exact: true }).click()
+    await expect(page.locator('.sess-billing dd')).toHaveText(['$2.53', '5'])
+    await expect(page.locator('.grp-tok')).toContainText('请求 5 次')
+    await expect(page.locator('.grp-tok')).toContainText('估算 $2.53')
+    await page.locator('.grp-head').click()
+    await page.locator('.sess-row[data-sid="priced-today"]').click()
+    const facts = page.locator('.sess-facts')
+    await expect(facts.locator('div').filter({ has: page.getByText('请求数', { exact: true }) }).locator('dd')).toHaveText('3')
+    await expect(facts.locator('div').filter({ has: page.getByText('估算金额（USD）', { exact: true }) }).locator('dd')).toHaveText('$2.20')
+    expect(await page.locator('.content-inner').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(false)
+    await page.screenshot({ path: `.tmp/codex-billing/sessions-${width}.png` })
+  })
+}
+
+test('未知模型不会显示为免费，仍保留请求数和已知模型的金额', async ({ page }) => {
+  await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
+    { sessionId: 'known', cwd: 'demo', daysAgo: 0, input: 1000, output: 100, model: 'gpt-5.4', turns: 2 },
+    { sessionId: 'unknown', cwd: 'demo', daysAgo: 0, input: 500, output: 50, model: 'unpriced-model', turns: 1 },
+  ] } })
+  await expect(page.locator('.usg-cost')).toHaveText('估算金额 未定价')
+  await expect(page.locator('.usg-count')).toHaveText('3 次请求 · 2 条会话')
+  await expect(page.locator('.usg-model-cost')).toHaveText(['$0.004', '未定价'])
+  await page.getByRole('button', { name: '会话', exact: true }).click()
+  await expect(page.locator('.sess-billing dd')).toHaveText(['未定价', '3'])
+})
+
 test('大额用量换算万和亿，悬停仍能核对完整数字', async ({ page }) => {
   await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
     { sessionId: 'large', cwd: 'demo', daysAgo: 0, input: 1_500_000_000, cached: 1_200_000_000, output: 200_000_000 },
@@ -59,7 +104,7 @@ test('默认展示今天的总量、构成与模型，昨天不会计入当天',
   await expect(page.locator('[data-metric="fresh"] dd')).toHaveText('1,300')
   await expect(page.locator('[data-metric="cached"] dd')).toHaveText('1.1万')
   await expect(page.locator('[data-metric="output"] dd')).toHaveText('1,400')
-  await expect(page.locator('.usg-count')).toHaveText('2 轮 · 1 条会话')
+  await expect(page.locator('.usg-count')).toHaveText('2 次请求 · 1 条会话')
   await expect(page.locator('.usg-model-name')).toHaveText('gpt-today')
   await expect(page.getByRole('region', { name: '今日小时用量趋势', exact: true })).toBeVisible()
   await expect(page.locator('.hourly-svg [data-hour]').last()).toHaveAttribute('data-tokens', '13700')
@@ -107,6 +152,8 @@ test('未来时间戳记录被截止上界排除，总数和小时曲线仍然�
 test('今天无记录时明确显示 0，历史记录仍可从近 7 天查看', async ({ page }) => {
   await boot(page, { ...seed, codex: { ...seed.codex, sessions: [seed.codex.sessions[1]] } })
   await expect(page.locator('.usg-num')).toHaveText('0')
+  await expect(page.locator('.usg-cost')).toHaveText('估算金额 $0.00')
+  await expect(page.locator('.usg-count')).toHaveText('0 次请求 · 0 条会话')
   await expect(page.locator('.empty-title')).toHaveText('今天还没有用量记录')
   await expect(page.locator('.hourly-svg')).toBeVisible()
   await expect(page.locator('.hour-line')).toHaveCount(1)

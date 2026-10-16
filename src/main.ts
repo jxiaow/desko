@@ -17,6 +17,8 @@ async function bootstrap() {
   const app = createApp(App)
   app.use(createPinia())
   app.use(router)
+  // 首次导航就绪后再挂载，避免加载中的旧页面覆盖用户刚做的模块切换。
+  await router.isReady()
   setupGlobalTips()
   app.mount('#app')
 }

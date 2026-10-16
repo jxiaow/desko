@@ -17,6 +17,18 @@ beforeEach(() => {
 afterEach(() => { meta.remove(); vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('Web transport session boundaries', () => {
+  it('all seven module switches read the desktop settings instead of browser storage', async () => {
+    const { invoke } = await import('./transport')
+    await invoke('unlock', { password: 'synthetic' })
+    for (const id of ['notes', 'entries', 'files', 'mfa', 'codex', 'fileshare', 'tunnel']) {
+      const key = `${id}_enabled`
+      http.mockResolvedValueOnce(reply('false'))
+      expect(await invoke('get_setting', { key })).toBe('false')
+      expect(http).toHaveBeenLastCalledWith('/api/invoke', expect.objectContaining({ body: JSON.stringify({ command: 'get_setting', args: { key } }) }))
+    }
+    await expect(invoke('get_setting', { key: 'bypass_enabled' })).rejects.toThrow('请在桌面端修改此设置')
+  })
+
   it('desktop keeps native IPC and does not fetch', async () => {
     meta.remove()
     vi.mocked(nativeInvoke).mockResolvedValue('native')

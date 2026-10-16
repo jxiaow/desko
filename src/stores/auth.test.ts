@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from './auth'
 import { authApi } from '../services/api/auth'
+import { prepareWebModules } from '../modules/runtime'
+import { flushPromises } from '@vue/test-utils'
+
+vi.mock('../modules/runtime', () => ({ prepareWebModules: vi.fn() }))
 
 // Mock API
 vi.mock('../services/api/auth', () => ({
@@ -64,6 +68,39 @@ describe('Auth Store', () => {
   })
 
   describe('unlock', () => {
+    it('Web keeps the workspace hidden until shared module flags are ready', async () => {
+      const meta = document.createElement('meta')
+      meta.name = 'desko-runtime'; meta.content = 'web'; document.head.append(meta)
+      try {
+        const store = useAuthStore()
+        const onUnlock = vi.fn()
+        let ready!: () => void
+        vi.mocked(authApi.unlock).mockResolvedValue()
+        vi.mocked(prepareWebModules).mockImplementationOnce(() => new Promise(resolve => { ready = resolve }))
+        const pending = store.unlock('password', onUnlock)
+        await flushPromises()
+        expect(store.appState).toBe('locked')
+        expect(onUnlock).not.toHaveBeenCalled()
+        ready()
+        await pending
+        expect(store.appState).toBe('unlocked')
+        expect(onUnlock).toHaveBeenCalledOnce()
+      } finally { meta.remove() }
+    })
+
+    it('Web module initialization failure revokes the new session and keeps the login screen', async () => {
+      const meta = document.createElement('meta')
+      meta.name = 'desko-runtime'; meta.content = 'web'; document.head.append(meta)
+      try {
+        const store = useAuthStore()
+        vi.mocked(authApi.unlock).mockResolvedValue()
+        vi.mocked(prepareWebModules).mockRejectedValueOnce(new Error('settings unavailable'))
+        await expect(store.unlock('password')).rejects.toThrow('settings unavailable')
+        expect(store.appState).toBe('locked')
+        expect(authApi.lock).toHaveBeenCalledOnce()
+      } finally { meta.remove() }
+    })
+
     it('should unlock app with correct password', async () => {
       const store = useAuthStore()
       vi.mocked(authApi.unlock).mockResolvedValue()

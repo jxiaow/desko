@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CodexSessionUsageReport } from '../../services/api/codex'
-import { formatTokenCount as compact, usageHours, usageWindowFrom, type CodexUsageHour } from '../../utils/codexUsage'
+import { formatTokenCount as compact, formatUsageCost, usageHours, usageWindowFrom, type CodexUsageHour } from '../../utils/codexUsage'
 
 const props = defineProps<{ report: CodexSessionUsageReport; updatedAt: number }>()
 const activeKey = ref('')
@@ -47,7 +47,7 @@ const share = (value: number) => partsTotal.value > 0 ? value / partsTotal.value
 
 function hourTitle(hour: CodexUsageHour, format = num): string {
   const until = hour.endTimestamp === end.value ? '24:00' : hours.value.find(next => next.timestamp === hour.endTimestamp)?.label ?? clock(hour.endTimestamp)
-  return `${hour.label}–${until} · ${format(hour.totalTokens)} Token · ${num(hour.requestCount)} 轮${hour.endTimestamp > asOf.value ? ' · 本小时累计' : ''}`
+  return `${hour.label}–${until} · ${format(hour.totalTokens)} Token · ${num(hour.requestCount)} 次请求 · 估算 ${formatUsageCost(hour.estimatedCostUsd)}${hour.endTimestamp > asOf.value ? ' · 本小时累计' : ''}`
 }
 </script>
 

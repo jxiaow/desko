@@ -131,6 +131,20 @@ pub fn stage_attachment(
     attachment_service::store_file(&file_path)
 }
 
+/// 剪贴板粘进来的位图没有本机路径可收，只能收字节；桌面与 Web 两侧共用这颗命令名，
+/// 落盘口径与选图按钮走的还是同一条服务函数
+#[tauri::command]
+pub fn save_attachment_bytes(
+    state: State<AppState>,
+    name: String,
+    data: String,
+    note_id: Option<String>,
+) -> Result<crate::db::Attachment, AppError> {
+    let _key = services::get_master_key(&state)?;
+    let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
+    attachment_service::save_image_base64(&db, &name, &data, note_id.as_deref())
+}
+
 /// 发布后按正文里的图片路径补附件记录，删小记时才能连带清掉文件
 #[tauri::command]
 pub fn bind_attachments(

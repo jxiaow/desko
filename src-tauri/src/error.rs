@@ -39,6 +39,9 @@ pub enum AppError {
     #[error("FileShare error: {0}")]
     FileShare(String),
 
+    #[error("Attachment error: {0}")]
+    Attachment(String),
+
     #[error("Profile error: {0}")]
     Profile(String),
 
@@ -66,6 +69,8 @@ impl AppError {
             AppError::Backup(msg) => msg.clone(),
             // 局域网传输同理：端口占用、目录创建失败等原因要让用户看见
             AppError::FileShare(msg) => msg.clone(),
+            // 收图被拒的原因（格式、大小）要让用户看见，不能糊成"文件操作失败"
+            AppError::Attachment(msg) => msg.clone(),
             // 档案校验/操作原因（重名、非法字符、删当前档…）直接透出
             AppError::Profile(msg) => msg.clone(),
             // 直连清单：解析失败、hosts 标记区损坏都要让用户看见到底哪一步不对

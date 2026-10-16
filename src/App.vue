@@ -16,6 +16,7 @@ import { stopModuleSync } from './modules/runtime'
 import type { SettingsTabId } from './modules/registry'
 import TitleBar from './components/layout/TitleBar.vue'
 import Sidebar from './components/layout/Sidebar.vue'
+import WebModuleDrawer from './components/layout/WebModuleDrawer.vue'
 import SetupPage from './components/auth/SetupPage.vue'
 import UnlockPage from './components/auth/UnlockPage.vue'
 import { authApi } from './services/api/auth'
@@ -26,6 +27,7 @@ import ChangePasswordDialog from './components/settings/ChangePasswordDialog.vue
 import NoteLockDialog from './components/notes/NoteLockDialog.vue'
 import ToastNotification from './components/shared/ToastNotification.vue'
 import ConfirmDialog from './components/shared/ConfirmDialog.vue'
+import QuitDialog from './components/shared/QuitDialog.vue'
 
 const authStore = useAuthStore()
 const { appState } = storeToRefs(authStore)
@@ -48,6 +50,7 @@ const toastSide = computed(() =>
     : sidebarMode.value === 'rail' ? 'calc(var(--sidebar-rail-w) + 1px)'
     : 'calc(var(--sidebar-w) + 1px)')
 const showSettings = ref(false)
+const showWebModules = ref(false)
 const settingsInitialTab = ref<SettingsTabId>('appearance')
 const showChangePassword = ref(false)
 /** 小记口令没在手时，设置页那一步得先解锁再改，mode 就是当前该问哪一句 */
@@ -76,6 +79,7 @@ let lockGeneration = 0
 let lockIsForced = false
 let lockResetsDrafts = false
 const finishLock = async () => {
+  showWebModules.value = false
   showSettings.value = false
   showChangePassword.value = false
   noteKeyMode.value = null
@@ -206,6 +210,7 @@ function onGlobalKey(e: KeyboardEvent) {
           @open-settings="openSettingsAppearance"
           @lock="doLock"
           @show-sidebar="sidebarMode = 'expanded'"
+          @show-modules="showWebModules = true"
         />
 
         <div class="main-content">
@@ -213,6 +218,11 @@ function onGlobalKey(e: KeyboardEvent) {
         </div>
       </div>
     </div>
+
+    <WebModuleDrawer
+      v-if="showWebModules && appState === 'unlocked' && isWebRuntime()"
+      @close="showWebModules = false"
+    />
 
     <SettingsDialog
       v-if="showSettings && appState === 'unlocked' && !isWebRuntime()"
@@ -244,6 +254,7 @@ function onGlobalKey(e: KeyboardEvent) {
 
     <ToastNotification :toast="toast" />
     <ConfirmDialog v-if="appState === 'unlocked'" :dialog="confirmDialog" @confirm="handleConfirm" @cancel="clearConfirm" />
+    <QuitDialog v-if="!isWebRuntime()" />
   </div>
 </template>
 

@@ -38,6 +38,24 @@ async function gotoNotes(page: Page) {
   await expect(page.locator('.notes-page')).toBeVisible()
 }
 
+/** 真机按 Ctrl+V 在 Playwright 里给不出剪贴板，派发同形事件：DataTransfer 里放图片 File
+ *  就是「剪贴板有图」，只给 text/html 就是「从别处复制的富文本」 */
+async function pasteInto(
+  page: Page,
+  selector: string,
+  { files = [], html }: { files?: { name: string; type: string }[]; html?: string },
+) {
+  await page.evaluate(({ selector, files, html }) => {
+    const transfer = new DataTransfer()
+    for (const file of files) {
+      transfer.items.add(new File([new Uint8Array([137, 80, 78, 71])], file.name, { type: file.type }))
+    }
+    if (html) transfer.setData('text/html', html)
+    ;(document.querySelector(selector) as HTMLElement)
+      .dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }))
+  }, { selector, files, html })
+}
+
 test.describe('Notes 小记', () => {
   for (const variant of ['composer', 'card', 'full'] as const) {
     test(`中文标点与组合输入：${variant} 光标跟随输入且保留连续空格`, async ({ page }) => {
@@ -488,6 +506,92 @@ test.describe('Notes 小记', () => {
     expect(saved).toBeTruthy()
     expect(saved.content_html).toMatch(/style="width: \d+(\.\d+)?%/)
     expect(snap.attachments.some((a: any) => a.file_path.includes('pic.png'))).toBe(true)
+  })
+
+  test('粘贴截图：字节交附件落盘，图片块插回光标处', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('先看这句')
+
+    await pasteInto(page, '.composer .ProseMirror', { files: [{ name: 'shot.png', type: 'image/png' }] })
+    await expect(pm.locator('.img-node')).toHaveCount(1)
+    await expect(pm.locator('> *').first()).toHaveText('先看这句')
+    expect(await e2e.count(page, 'save_attachment_bytes')).toBe(1)
+
+    // 纯文本/富文本粘贴不接管：不该再多跑一趟字节通道
+    await pasteInto(page, '.composer .ProseMirror', { html: '<p>只是文字</p>' })
+    await expect(pm).toContainText('只是文字')
+    expect(await e2e.count(page, 'save_attachment_bytes')).toBe(1)
+  })
+
+  test('拖入图片文件：只收图片，路径走附件落盘补进当前书写面', async ({ page }) => {
+    await gotoNotes(page)
+    await expect
+      .poll(() => e2e.hasListener(page, 'tauri://drag-drop'), { timeout: 10_000 })
+      .toBe(true)
+    await e2e.emitEvent(page, 'tauri://drag-drop', {
+      type: 'drop',
+      paths: ['C:/pics/dropped.png', 'C:/notes.txt'],
+      position: { x: 420, y: 300 },
+    })
+
+    const pm = page.locator('.composer .ProseMirror')
+    await expect(pm.locator('.img-node')).toHaveCount(1)
+    // 没开任何书写面就落胶囊草稿：只 stage，发布时才补附件记录
+    expect(await e2e.count(page, 'stage_attachment')).toBe(1)
+    expect(await e2e.count(page, 'save_attachment_bytes')).toBe(0)
+  })
+
+  test('全屏书写开着时拖图：图落全屏面并按小记登记', async ({ page }) => {
+    await gotoNotes(page)
+    const m = memo(page, '第一条小记')
+    await m.hover()
+    await tipButton(m, '全屏查看').click()
+    await page.locator('section.fs .fs-foot button.eb.primary').click()
+    const pm = page.locator('section.fs .ProseMirror')
+    await expect(pm).toBeVisible()
+    await expect
+      .poll(() => e2e.hasListener(page, 'tauri://drag-drop'), { timeout: 10_000 })
+      .toBe(true)
+
+    await e2e.emitEvent(page, 'tauri://drag-drop', { type: 'drop', paths: ['C:/pics/in-fs.png'], position: { x: 500, y: 300 } })
+    await expect(pm.locator('.img-node')).toHaveCount(1)
+    // 全屏面挂的是已有小记：路径直接按 note_id 登记，不再走草稿 stage
+    expect(await e2e.count(page, 'upload_attachment')).toBe(1)
+    expect(await e2e.count(page, 'stage_attachment')).toBe(0)
+  })
+
+  test('归档视图里拖图：没有书写面，只提示不落盘', async ({ page }) => {
+    await bootUnlocked(page, { notes: [{ title: '丙', content_html: '<p>已经收走</p>', archived: true }] }, '/notes')
+    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
+    await page.locator('.rail button.rail-item', { hasText: '归档' }).click()
+    await expect(page.locator('.composer')).toHaveCount(0)
+    await expect
+      .poll(() => e2e.hasListener(page, 'tauri://drag-drop'), { timeout: 10_000 })
+      .toBe(true)
+
+    await e2e.emitEvent(page, 'tauri://drag-drop', { type: 'drop', paths: ['C:/pics/nope.png'], position: { x: 40, y: 40 } })
+    await expectToast(page, '归档视图里不能写，先退出归档')
+    expect(await e2e.count(page, 'stage_attachment')).toBe(0)
+    expect(await e2e.count(page, 'upload_attachment')).toBe(0)
+  })
+
+  test('粘贴带 base64 内嵌图的富文本：文字进来，图不落库', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await pasteInto(page, '.composer .ProseMirror', {
+      html: '<p>前面<img src="data:image/png;base64,iVBORw0KGgo=">后面</p>',
+    })
+
+    await expect(pm).toHaveText('前面后面')
+    await expect(pm.locator('img')).toHaveCount(0)
+    await page.locator('.composer button.btn-primary').click()
+    const saved = memo(page, '前面后面')
+    await expect(saved.locator('img')).toHaveCount(0)
+    const snap = await e2e.snapshot(page)
+    expect(snap.notes.some((n: any) => n.content_html.includes('data:image'))).toBe(false)
   })
 
   test('置顶与收藏', async ({ page }) => {
@@ -986,6 +1090,108 @@ test.describe('Notes 小记', () => {
     await page.keyboard.press('Control+e')
     await page.keyboard.type('npm test')
     await expect(pm.locator('code')).toHaveText('npm test')
+  })
+
+  /** 把浏览器/IM 里复制的一段带链接文字喂给编辑器 */
+  async function pasteHtml(page: Page, plain: string, html: string) {
+    await page.evaluate(([plain, html]) => {
+      const data = new DataTransfer()
+      data.setData('text/plain', plain)
+      data.setData('text/html', html)
+      document.querySelector('.composer .ProseMirror')!
+        .dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+    }, [plain, html])
+  }
+
+  /** 按文档位置划选区：浮动条要的是真选区，不是 DOM 上的 range */
+  function selectRange(page: Page, from: number, to: number) {
+    return page.locator('.composer .ProseMirror').evaluate((el, range) => {
+      ;(el as HTMLElement & { editor: Editor }).editor.commands.setTextSelection(range)
+    }, { from, to })
+  }
+
+  test('粘贴带链接的文字：地址留在正文里，发布后也还在', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await pasteHtml(page, '看 GitLab 标题', '<p>看 <a href="https://gitlab.test/x">GitLab 标题</a></p>')
+    await expect(pm.locator('a')).toHaveAttribute('href', 'https://gitlab.test/x')
+
+    await page.locator('.composer button.btn-primary').click()
+    const stored = (await e2e.snapshot(page)).notes
+      .find((n: any) => n.content_html.includes('GitLab 标题'))?.content_html
+    expect(stored).toContain('href="https://gitlab.test/x"')
+  })
+
+  test('粘进去的裸地址自动成链', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('看 https://a.test/x ')
+    await expect(pm.locator('a')).toHaveAttribute('href', 'https://a.test/x')
+  })
+
+  test('阅读面点正文链接：交给本机打开，卡片不进编辑态', async ({ page }) => {
+    await bootUnlocked(page, {
+      notes: [
+        { title: '', content_html: '<p>抬头一句</p><p>看 <a href="https://gitlab.test/x">GitLab 标题</a> 收尾</p>' },
+      ],
+    }, '/notes')
+    const link = page.locator('.memo-body a').first()
+    await expect(link).toHaveText('GitLab 标题')
+    await link.click()
+    // openExternal 先动态 import plugin-shell，落账比点击晚一拍
+    await expect
+      .poll(() => page.evaluate(() => (window as any).__E2E__.invocations
+        .filter((i: any) => i.cmd === 'shell:open' && i.args.path === 'https://gitlab.test/x').length))
+      .toBe(1)
+    // 卡片一旦切进编辑态就没这个 .memo 了
+    await expect(page.locator('.memo')).toHaveCount(1)
+  })
+
+  test('选中浮动条：加链接、裸域名补协议、再移除', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    const bar = page.locator('.fmt-bar')
+    await pm.click()
+    await pm.fill('链接目标')
+    // 空选区不该浮出浮条
+    await expect(bar).toHaveCount(0)
+
+    await selectRange(page, 1, 5)
+    await expect(bar).toBeVisible()
+    await bar.locator('[aria-label="添加链接"]').click()
+    await page.locator('.fmt-input').fill('example.com/docs')
+    await page.locator('.fmt-bar [aria-label="确定链接"]').click()
+    await expect(pm.locator('a')).toHaveAttribute('href', 'https://example.com/docs')
+    await expect(bar).toHaveCount(0)
+
+    await selectRange(page, 1, 5)
+    await bar.locator('[aria-label="添加链接"]').click()
+    await expect(page.locator('.fmt-input')).toHaveValue('https://example.com/docs')
+    await bar.locator('.fmt-text').click()
+    await expect(pm.locator('a')).toHaveCount(0)
+  })
+
+  test('选中浮动条：行内码落在选区上，代码块里不浮出', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await pm.fill('跑 npm test')
+    await selectRange(page, 3, 11)
+    await page.locator('.fmt-bar [aria-label="行内代码"]').click()
+    await expect(pm.locator('code')).toHaveText('npm test')
+
+    // 整段搬进代码块后，块里划字是为了复制：浮条只会压住下一行
+    await pm.evaluate(el => {
+      const ed = (el as HTMLElement & { editor: Editor }).editor
+      ed.commands.selectAll()
+      ed.commands.toggleCodeBlock()
+    })
+    await expect(pm.locator('pre')).toHaveCount(1)
+    await pm.locator('pre').click()
+    await page.keyboard.press('Shift+End')
+    await expect(page.locator('.fmt-bar')).toHaveCount(0)
   })
 
   test('卡 meta 行的标签胶囊：点开筛选、再点取消', async ({ page }) => {

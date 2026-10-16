@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { createDraftCipherKey, sealDraft, openDraft, type DraftCipherKey, type SealedDraft } from '../services/draftCipher'
 import { notesApi as api } from '../services/api/notes'
 import { useToastStore } from './toast'
@@ -10,7 +10,6 @@ import type { Note, Attachment, UpdateNoteInput } from '../types'
 import type { NoteDraft, NoteKeyStatus, NotePlain } from '../services/api/notes'
 
 export type NoteView = 'all' | 'pinned' | 'starred' | 'archived'
-export type NoteSort = 'new' | 'old' | 'updated'
 export type NoteSaveState = '' | 'saving' | 'saved'
 
 export interface NoteGroup {
@@ -21,6 +20,11 @@ export interface NoteGroup {
 
 const AUTOSAVE_DELAY = 600
 const SAVED_HINT_DELAY = 1500
+const RAIL_PIN_KEY = 'desko.notes.rail-pinned'
+
+function readRailPinned(): boolean {
+  try { return localStorage.getItem(RAIL_PIN_KEY) === 'true' } catch { return false }
+}
 
 /** content_html -> 派生的纯文本与标签，避免每次筛选都重新解析 */
 const META_CACHE_LIMIT = 400
@@ -53,9 +57,13 @@ export const useNotesStore = defineStore('notes', () => {
   const noteSearchKeyword = ref('')
   const noteView = ref<NoteView>('all')
   const activeTags = ref<Set<string>>(new Set())
-  const noteSort = ref<NoteSort>('new')
   // 右窄栏默认收起，列表占满宽度；顶栏按钮展开后跟着会话走，宽度不够时另有浮层侧栏
   const noteRailCollapsed = ref(true)
+  const noteRailPinned = ref(readRailPinned())
+  // 只保存界面偏好，桌面与浏览器各自记住；存储不可用时仍可在本次会话切换。
+  watch(noteRailPinned, pinned => {
+    try { localStorage.setItem(RAIL_PIN_KEY, String(pinned)) } catch { /* 保留内存状态 */ }
+  }, { flush: 'sync' })
 
   // 批量操作状态：勾选即进、清空即收；工具栏「选择」钮另开一层待选态（显形全部勾选框）
   const selectedNoteIds = ref<Set<string>>(new Set())
@@ -235,12 +243,7 @@ export const useNotesStore = defineStore('notes', () => {
       result = result.filter(n => noteMeta(n.content_html).tags.some(t => activeTags.value.has(t)))
     }
 
-    const sort = noteSort.value
-    result.sort((a, b) => {
-      if (sort === 'old') return a.created_at - b.created_at
-      if (sort === 'updated') return b.updated_at - a.updated_at
-      return b.created_at - a.created_at
-    })
+    result.sort((a, b) => b.created_at - a.created_at)
     return result
   })
 
@@ -259,9 +262,8 @@ export const useNotesStore = defineStore('notes', () => {
       else buckets.set(label, [note])
     })
 
-    const ordered = [...buckets.entries()]
-    if (noteSort.value === 'old') ordered.reverse()
-    ordered.forEach(([label, items]) => groups.push({ label, pinned: false, notes: items }))
+    // Map 的插入序就是 filteredNotes 的进入序，倒序建桶即天然最新一天在前
+    buckets.forEach((items, label) => groups.push({ label, pinned: false, notes: items }))
     return groups
   })
 
@@ -980,8 +982,8 @@ export const useNotesStore = defineStore('notes', () => {
 
   return {
     notes, notesLoading, notesLoadError, noteDraftHtml,
-    noteSearchKeyword, noteView, activeTags, noteSort, hasActiveFilters,
-    noteRailCollapsed,
+    noteSearchKeyword, noteView, activeTags, hasActiveFilters,
+    noteRailCollapsed, noteRailPinned,
     isBatchMode, hasNoteSelection, notePickMode, selectedNoteIds,
     noteAttachments, noteSaveState,
     notePlains, isUnlocked, noteKey,

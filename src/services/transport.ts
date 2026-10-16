@@ -2,7 +2,7 @@ import { invoke as nativeInvoke } from '@tauri-apps/api/core'
 import { isWebRuntime } from './runtime'
 
 const WEB_PREFERENCES = new Set(['theme', 'accent', 'background_atmosphere', 'auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold'])
-const WEB_MODULE_SETTINGS = new Set(['codex_enabled', 'fileshare_enabled', 'tunnel_enabled'])
+const WEB_MODULE_SETTINGS = new Set(['notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'codex_enabled', 'fileshare_enabled', 'tunnel_enabled'])
 const SESSION_EXPIRED = 'Web 会话已失效，请重新登录'
 let generation = 0
 let authenticated = false

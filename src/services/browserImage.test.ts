@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { invoke, webSessionGeneration } from './transport'
-import { pickBrowserImage, uploadBrowserImage } from './browserImage'
+import { pickBrowserImage, uploadImageBytes } from './browserImage'
 
 vi.mock('./transport', () => ({ invoke: vi.fn(), webSessionGeneration: vi.fn(() => 1) }))
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(webSessionGeneration).mockReturnValue(1) })
@@ -13,7 +13,7 @@ it('a session change during file reading cannot upload into the next session', a
     onload = () => {}
     readAsDataURL() { reader = this }
   })
-  const upload = uploadBrowserImage(new File(['synthetic'], 'image.png', { type: 'image/png' }))
+  const upload = uploadImageBytes(new File(['synthetic'], 'image.png', { type: 'image/png' }))
   vi.mocked(webSessionGeneration).mockReturnValue(2)
   reader.onload()
   await expect(upload).rejects.toThrow('会话已变更')
@@ -30,7 +30,7 @@ it('expired session closes the pending image chooser and removes its input', asy
 })
 
 it('empty image is rejected before any upload', async () => {
-  await expect(uploadBrowserImage(new File([], 'empty.png'))).rejects.toThrow('图片应小于')
+  await expect(uploadImageBytes(new File([], 'empty.png'))).rejects.toThrow('图片应小于')
   expect(invoke).not.toHaveBeenCalled()
 })
 

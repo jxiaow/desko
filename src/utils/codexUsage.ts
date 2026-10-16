@@ -3,6 +3,13 @@ import type { CodexUsageBucket } from '../services/api/codex'
 export type UsageRange = 'today' | 'week' | 'month' | 'all'
 
 const usageNumber = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 })
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 })
+
+export function formatUsageCost(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '未定价'
+  if (value > 0 && value < 0.0001) return '<$0.0001'
+  return usd.format(value)
+}
 
 /** 大数按中文阅读单位展示；完整计数保留给明细提示和可访问名称。 */
 export function formatTokenCount(value: number): string {
@@ -53,6 +60,7 @@ export function usageHours(buckets: CodexUsageBucket[], dayStart: number, asOf: 
       outputTokens: bucket?.outputTokens ?? 0,
       totalTokens: bucket?.totalTokens ?? 0,
       requestCount: bucket?.requestCount ?? 0,
+      estimatedCostUsd: bucket ? bucket.estimatedCostUsd : 0,
       timestamp,
       endTimestamp: Math.min(timestamp + 3600, end),
       future: timestamp > asOf,
@@ -83,6 +91,6 @@ export function usageDays(buckets: CodexUsageBucket[], range: UsageRange, asOf: 
     date.setDate(date.getDate() - count + 1 + index)
     const key = localDayKey(date)
     const bucket = byDay.get(key)
-    return { key, label: key, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0, requestCount: 0, ...bucket, recorded: !!bucket }
+    return { key, label: key, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, totalTokens: 0, requestCount: 0, estimatedCostUsd: 0, ...bucket, recorded: !!bucket }
   })
 }

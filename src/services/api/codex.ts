@@ -122,7 +122,7 @@ export interface CodexSessionRecord {
   sessionKind: string
 }
 
-/** 每会话的官方累计 token；进「会话」档一次全量预取 */
+/** 每会话的官方累计 Token、请求数与估算金额；进「会话」档一次全量预取。 */
 export interface CodexSessionTokenStats {
   sessionId: string
   /** 每轮重发的上下文累计，含缓存命中，不等于真实计费输入 */
@@ -134,6 +134,9 @@ export interface CodexSessionTokenStats {
   cacheWriteInputTokens: number
   /** 含在 outputTokens 里的那部分推理输出 */
   reasoningOutputTokens: number
+  requestCount: number
+  /** 模型标准 API 单价估算（美元）；包含未定价模型时为 null。 */
+  estimatedCostUsd: number | null
 }
 
 /** 用量桶：本地日（key = YYYY-MM-DD）、小时（key = Unix 秒）或模型。 */
@@ -145,9 +148,10 @@ export interface CodexUsageBucket {
   outputTokens: number
   totalTokens: number
   requestCount: number
+  estimatedCostUsd: number | null
 }
 
-/** 窗口内的总量；六键口径与 CodexSessionTokenStats 同源，多三位计数 */
+/** 窗口内的总量；Token、请求数与估算金额与会话统计同源。 */
 export interface CodexUsageTotals {
   inputTokens: number
   cachedInputTokens: number
@@ -158,6 +162,7 @@ export interface CodexUsageTotals {
   requestCount: number
   sessionCount: number
   fileCount: number
+  estimatedCostUsd: number | null
 }
 
 /** codex_query_session_usage 的返回（上游同名命令，desko 现扫现算、不建 sqlite 表） */

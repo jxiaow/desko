@@ -92,6 +92,7 @@ fn mime_of(extension: &str) -> &'static str {
         "png" => "image/png",
         "gif" => "image/gif",
         "webp" => "image/webp",
+        "bmp" => "image/bmp",
         "pdf" => "application/pdf",
         "txt" => "text/plain",
         _ => "application/octet-stream",
@@ -112,6 +113,10 @@ fn stored_file_name(id: &str, original: &str) -> String {
 
 /// 把外部文件收进附件目录，返回一条还没入库的记录（note_id 为空）
 pub fn store_file(source_path: &str) -> Result<Attachment, AppError> {
+    store_file_in(&attachments_dir(), source_path)
+}
+
+fn store_file_in(dir: &Path, source_path: &str) -> Result<Attachment, AppError> {
     let source = Path::new(source_path);
     let file_name = source
         .file_name()
@@ -127,8 +132,7 @@ pub fn store_file(source_path: &str) -> Result<Attachment, AppError> {
     )
     .to_string();
 
-    let dir = attachments_dir();
-    fs::create_dir_all(&dir)
+    fs::create_dir_all(dir)
         .map_err(|e| AppError::Io(format!("Failed to create attachments dir: {}", e)))?;
 
     let id = uuid::Uuid::new_v4().to_string();
@@ -153,10 +157,100 @@ pub fn store_file(source_path: &str) -> Result<Attachment, AppError> {
 }
 
 pub fn create_attachment(db: &Database, note_id: &str, source_path: &str) -> Result<Attachment, AppError> {
-    let mut attachment = store_file(source_path)?;
+    create_attachment_in(db, &attachments_dir(), note_id, source_path)
+}
+
+fn create_attachment_in(
+    db: &Database,
+    dir: &Path,
+    note_id: &str,
+    source_path: &str,
+) -> Result<Attachment, AppError> {
+    let mut attachment = store_file_in(dir, source_path)?;
     attachment.note_id = note_id.to_string();
     db.create_attachment(&attachment)?;
     Ok(attachment)
+}
+
+/// 粘贴与浏览器选图只能交来字节，没有本机路径可收。临时文件用 `create_new` 独占，
+/// 写完再走和选图按钮完全相同的那条收进流程，附件目录里因此只有一种来路。
+pub const MAX_PASTED_IMAGE: usize = 15 * 1024 * 1024;
+
+/// 落盘用的扩展名只从白名单里出，绝不让剪贴板给的名字决定文件类型
+fn pasted_image_extension(name: &str) -> Result<String, AppError> {
+    let raw = name
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .unwrap_or_default();
+    if raw.is_empty() {
+        // 截图工具给的位图经常连扩展名都没有，按 png 收
+        return Ok("png".to_string());
+    }
+    if matches!(raw.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp") {
+        return Ok(raw);
+    }
+    Err(AppError::Attachment(format!(
+        "不支持 .{raw} 图片，只能用 png / jpg / gif / webp / bmp"
+    )))
+}
+
+pub fn save_image_base64(
+    db: &Database,
+    name: &str,
+    data: &str,
+    note_id: Option<&str>,
+) -> Result<Attachment, AppError> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let bytes = STANDARD
+        .decode(data)
+        .map_err(|_| AppError::Attachment("图片内容无效".to_string()))?;
+    save_image_bytes(db, name, &bytes, note_id)
+}
+
+pub fn save_image_bytes(
+    db: &Database,
+    name: &str,
+    bytes: &[u8],
+    note_id: Option<&str>,
+) -> Result<Attachment, AppError> {
+    save_image_bytes_in(db, &attachments_dir(), name, bytes, note_id)
+}
+
+fn save_image_bytes_in(
+    db: &Database,
+    dir: &Path,
+    name: &str,
+    bytes: &[u8],
+    note_id: Option<&str>,
+) -> Result<Attachment, AppError> {
+    use std::io::Write;
+    if bytes.is_empty() {
+        return Err(AppError::Attachment("图片内容为空".to_string()));
+    }
+    if bytes.len() > MAX_PASTED_IMAGE {
+        return Err(AppError::Attachment("图片应小于 15 MB".to_string()));
+    }
+    let ext = pasted_image_extension(name)?;
+    fs::create_dir_all(dir)
+        .map_err(|e| AppError::Io(format!("Failed to create attachments dir: {}", e)))?;
+
+    let temp = std::env::temp_dir().join(format!("desko-paste-{}.{}", uuid::Uuid::new_v4(), ext));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(|e| AppError::Io(format!("Failed to stage pasted image: {}", e)))?;
+    // 先放下句柄再收进目录：Windows 上不关文件就删不掉临时件
+    let written = file
+        .write_all(bytes)
+        .map_err(|e| AppError::Io(format!("Failed to stage pasted image: {}", e)));
+    drop(file);
+    let stored = written.and_then(|_| match note_id {
+        Some(id) => create_attachment_in(db, dir, id, &temp.to_string_lossy()),
+        None => store_file_in(dir, &temp.to_string_lossy()),
+    });
+    let _ = fs::remove_file(&temp);
+    stored
 }
 
 /// 草稿里的图片先只落盘，发布拿到 note id 之后再补记录。
@@ -403,6 +497,39 @@ mod orphan_tests {
         assert!(!dir.join(&name).exists());
         drop(db); let _ = std::fs::remove_file(db_path); let _ = std::fs::remove_dir_all(dir);
     }
+    #[test]
+    fn pasted_name_can_only_pick_a_whitelisted_extension() {
+        assert_eq!(pasted_image_extension("a.png").unwrap(), "png");
+        assert_eq!(pasted_image_extension("a.PNG").unwrap(), "png");
+        // 截图工具给的位图常常没有扩展名
+        assert_eq!(pasted_image_extension("Screenshot 2026").unwrap(), "png");
+        for bad in ["a.exe", "a.svg", "a../png", "a.png.exe"] {
+            assert!(pasted_image_extension(bad).is_err(), "{bad} 不该被收下");
+        }
+    }
+
+    #[test]
+    fn pasted_bytes_land_once_in_attachments_with_or_without_note() {
+        let (db, db_path, dir) = setup();
+        db.create_note(&note("n1", "")).unwrap();
+
+        let staged = save_image_bytes_in(&db, &dir, "Screenshot", b"png-bytes", None).unwrap();
+        assert_eq!(staged.mime_type, "image/png");
+        assert!(staged.note_id.is_empty(), "草稿阶段只落盘，不入库");
+        assert!(dir.join(&staged.file_path).is_file());
+
+        let bound = save_image_bytes_in(&db, &dir, "shot.bmp", b"bmp-bytes", Some("n1")).unwrap();
+        assert_eq!(bound.mime_type, "image/bmp", "bmp 不能降成 octet-stream");
+        assert_eq!(db.list_attachments("n1").unwrap()[0].file_path, bound.file_path);
+
+        assert!(save_image_bytes_in(&db, &dir, "clip.tif", b"x", None).is_err());
+        assert!(save_image_bytes_in(&db, &dir, "clip.png", b"", None).is_err());
+        assert_eq!(db.list_attachments("n1").unwrap().len(), 1);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 2, "被拒的字节不该留下文件");
+
+        drop(db); let _ = std::fs::remove_file(db_path); let _ = std::fs::remove_dir_all(dir);
+    }
+
     use crate::db::{Attachment, Note};
     use std::time::Duration;
 

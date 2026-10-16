@@ -945,6 +945,7 @@ watchEffect(() => pageHead.setHead('网络直连', targets.value.length ? `${tar
   border-radius: var(--radius-ib);
   color: var(--text-muted);
 }
+.bp-filter:focus-within { box-shadow: 0 0 0 3px var(--accent-ring); }
 .bp-filter input {
   flex: 1;
   min-width: 0;

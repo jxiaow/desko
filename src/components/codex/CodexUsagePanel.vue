@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import type { CodexUsageBucket } from '../../services/api/codex'
 import { loadUsage, usageBusy, usageError, usageRange, usageReport, usageUpdatedAt } from '../../services/codexState'
-import { formatTokenCount as compact, localDayKey, usageWindowFrom } from '../../utils/codexUsage'
+import { formatTokenCount as compact, formatUsageCost, localDayKey, usageWindowFrom } from '../../utils/codexUsage'
 import AppIcon from '../shared/AppIcon.vue'
 import CodexDailyUsageChart from './CodexDailyUsageChart.vue'
 import CodexTodayUsageChart from './CodexTodayUsageChart.vue'
@@ -80,6 +80,7 @@ function pct(part: number, whole: number): number {
           <div class="usg-sum-main">
             <span class="usg-num" :title="`${num(totals.totalTokens)} Token`">{{ compact(totals.totalTokens) }}</span>
             <span class="usg-sum-label">总 Token</span>
+            <span class="usg-cost">估算金额 <b>{{ formatUsageCost(totals.estimatedCostUsd) }}</b></span>
           </div>
           <dl class="usg-metrics">
             <div class="usg-metric" data-metric="fresh"><dt>净输入</dt><dd :title="`${num(freshInput(totals))} Token`">{{ compact(freshInput(totals)) }}</dd></div>
@@ -88,7 +89,7 @@ function pct(part: number, whole: number): number {
           </dl>
         </div>
         <div class="usg-facts">
-          <span class="usg-count">{{ num(totals.requestCount) }} 轮 · {{ num(totals.sessionCount) }} 条会话</span>
+          <span class="usg-count">{{ num(totals.requestCount) }} 次请求 · {{ num(totals.sessionCount) }} 条会话</span>
           <span>输出中含推理 <b class="mono-ish" :title="`${num(totals.reasoningOutputTokens)} Token`">{{ compact(totals.reasoningOutputTokens) }}</b></span>
           <span class="usg-updated">{{ usageBusy ? '更新中…' : `更新于 ${updatedTime}` }}</span>
         </div>
@@ -109,11 +110,12 @@ function pct(part: number, whole: number): number {
           <div class="usg-heading"><h3>每日明细</h3><span class="usg-period">有记录的日期 · 最近在前</span></div>
           <div class="usg-table-scroll">
             <table>
-              <thead><tr><th scope="col">日期</th><th scope="col">总 Token</th><th scope="col">净输入</th><th scope="col">缓存命中</th><th scope="col">输出</th><th scope="col">轮次</th></tr></thead>
+              <thead><tr><th scope="col">日期</th><th scope="col">总 Token</th><th scope="col">净输入</th><th scope="col">缓存命中</th><th scope="col">输出</th><th scope="col">请求数</th><th scope="col">估算金额（USD）</th></tr></thead>
               <tbody>
                 <tr v-for="d in dailyRows" :key="d.key" class="usg-day-row" :data-day="d.key">
                   <th scope="row">{{ d.key }}<span v-if="d.key === updatedDay" class="usg-today-mark">今天</span></th>
                   <td class="usg-day-total" :title="num(d.totalTokens)">{{ compact(d.totalTokens) }}</td><td :title="num(freshInput(d))">{{ compact(freshInput(d)) }}</td><td :title="num(d.cachedInputTokens)">{{ compact(d.cachedInputTokens) }}</td><td :title="num(d.outputTokens)">{{ compact(d.outputTokens) }}</td><td>{{ num(d.requestCount) }}</td>
+                  <td class="usg-day-cost">{{ formatUsageCost(d.estimatedCostUsd) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -128,11 +130,13 @@ function pct(part: number, whole: number): number {
           <span class="usg-track"><span class="usg-fill" :style="{ width: `${pct(m.totalTokens, totals.totalTokens)}%` }"></span></span>
           <span class="usg-model-num mono-ish" :title="`${num(m.totalTokens)} Token`">{{ compact(m.totalTokens) }}</span>
           <span class="usg-model-pct mono-ish">{{ pct(m.totalTokens, totals.totalTokens).toFixed(1) }}%</span>
+          <span class="usg-model-requests mono-ish">{{ num(m.requestCount) }} 次请求</span>
+          <span class="usg-model-cost mono-ish" title="估算金额（USD）">{{ formatUsageCost(m.estimatedCostUsd) }}</span>
         </div>
       </section>
 
       <div class="usg-foot">
-        <p class="page-note"><AppIcon name="info" :size="13" />输入包含缓存命中，推理已计入输出。回收站中的会话不计入用量。</p>
+        <p class="page-note"><AppIcon name="info" :size="13" />输入包含缓存命中，推理已计入输出。金额按标准 API 单价估算（USD），含未知模型时显示“未定价”，不代表订阅实际扣费。请求按有用量的 Token 记录去重计数；回收站中的会话不计入。</p>
         <span class="usg-scan">扫了 {{ num(totals.fileCount) }} 个文件 · {{ scanSeconds }} s</span>
       </div>
     </template>
@@ -151,6 +155,8 @@ function pct(part: number, whole: number): number {
 .usg-sum-main { display: flex; flex-direction: column; flex: 0 0 25%; gap: 4px; }
 .usg-num { font-size: var(--text-2xl); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; letter-spacing: normal; color: var(--text); }
 .usg-sum-label { font-size: var(--text-xs); color: var(--text-muted); }
+.usg-cost { margin-top: 4px; font-size: var(--text-xs); color: var(--text-muted); }
+.usg-cost b { font-family: var(--font-mono); font-weight: 500; color: var(--text); }
 .usg-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 1; gap: 12px; margin: 0; }
 .usg-metric dt { font-size: var(--text-xs); color: var(--text-muted); }
 .usg-metric dt::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; background: var(--usage-fresh); }
@@ -178,6 +184,7 @@ function pct(part: number, whole: number): number {
 .usg-fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
 .usg-model-num { flex-shrink: 0; min-width: 76px; text-align: right; color: var(--text-secondary); }
 .usg-model-pct { flex-shrink: 0; min-width: 46px; text-align: right; color: var(--text-muted); }
+.usg-model-requests, .usg-model-cost { flex-shrink: 0; min-width: 76px; text-align: right; color: var(--text-secondary); }
 .usg-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 14px; }
 .usg-foot .page-note { margin: 0; }
 .usg-scan { font-size: var(--text-xs); color: var(--text-faint); }
@@ -186,6 +193,8 @@ function pct(part: number, whole: number): number {
   .usg-overview { flex-wrap: wrap; gap: 18px; }
   .usg-sum-main { flex-basis: 100%; }
   .usg-metrics { flex-basis: 100%; }
+  .usg-model-row { flex-wrap: wrap; gap: 6px 12px; padding: 8px 0; }
   .usg-model-name { flex-basis: 32%; }
+  .usg-model-requests { margin-left: auto; }
 }
 </style>

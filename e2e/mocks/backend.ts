@@ -1,6 +1,7 @@
 // E2E 内存版 fake backend —— 镜像 src-tauri/src/commands/*.rs 的行为契约。
 // 仅通过 vite alias 在 E2E 模式下注入，不进入生产构建。
 import type { CodexQuota } from '../../src/services/api/codex'
+import codexSessionPrices from '../../src-tauri/codex-core/resources/codex_session_pricing.json'
 import type { PlannedRow, RouteOption, RouteOverride } from '../../src/services/api/bypass'
 
 export interface E2EEntrySeed {
@@ -502,6 +503,15 @@ interface CodexSessionSeed {
   turns: number
 }
 
+function sessionCostUsd(session: CodexSessionSeed): number | null {
+  if (session.inputTokens + session.outputTokens === 0) return 0
+  const model = session.model.toLowerCase().split('/').at(-1)!.replace(/-(\d{4}-\d{2}-\d{2}|\d{8})$/, '')
+  const price = (codexSessionPrices as Record<string, number[]>)[model]
+  if (!price) return null
+  const cached = Math.min(session.cachedInputTokens, session.inputTokens)
+  return ((session.inputTokens - cached) * price[0] + cached * price[1] + session.outputTokens * price[2]) / 1_000_000
+}
+
 /** desko 回收站里的一条留底：deletedAt 是 unix 秒，与后端 parse_deleted_at 同口径 */
 interface CodexTrashSeed {
   sessionId: string
@@ -641,7 +651,7 @@ function mimeOf(fileName: string): string {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? ''
   const map: Record<string, string> = {
     jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
-    webp: 'image/webp', pdf: 'application/pdf', txt: 'text/plain',
+    webp: 'image/webp', bmp: 'image/bmp', pdf: 'application/pdf', txt: 'text/plain',
   }
   return map[ext] ?? 'application/octet-stream'
 }
@@ -1851,6 +1861,7 @@ class MockBackend {
   // handler 的 args 键名与 src/services/api/*.ts 中 JS 侧发送的一致
   // （Tauri v2 的 camelCase → snake_case 转换发生在 IPC 层，本 mock 在其之上）
   private commands: Record<string, (args: Record<string, any>) => unknown> = {
+    quit_app: () => {},
     // ===== auth.rs =====
     web_access_status: () => ({ ...this.webAccess }),
     web_access_start: ({ input }) => {
@@ -2271,6 +2282,39 @@ class MockBackend {
         file_path: fileName,
         file_size: 0,
         mime_type: 'image/png',
+        created_at: Date.now(),
+      }
+    },
+
+    // 剪贴板/浏览器只给得出字节：与真机同口径，noteId 为空即草稿只暂存
+    save_attachment_bytes: ({ name, data, noteId }) => {
+      this.requireUnlocked()
+      const fileName = String(name).split(/[\\/]/).pop() || String(name)
+      let byteLength = 0
+      try { byteLength = atob(String(data)).length } catch { byteLength = 0 }
+      if (!byteLength) throw '图片内容为空'
+      if (noteId) {
+        this.findNote(noteId)
+        const att: AttachmentRecord = {
+          id: nextId(),
+          note_id: noteId,
+          file_name: fileName,
+          file_path: fileName,
+          file_size: byteLength,
+          mime_type: mimeOf(fileName),
+          created_at: Date.now(),
+        }
+        this.state.attachments.push(att)
+        return { ...att }
+      }
+      this.state.staged.push({ file_path: fileName, file_size: byteLength })
+      return {
+        id: nextId(),
+        note_id: '',
+        file_name: fileName,
+        file_path: fileName,
+        file_size: byteLength,
+        mime_type: mimeOf(fileName),
         created_at: Date.now(),
       }
     },
@@ -3185,6 +3229,8 @@ class MockBackend {
           cachedInputTokens: s.cachedInputTokens,
           cacheWriteInputTokens: 0,
           reasoningOutputTokens: s.reasoningOutputTokens,
+          requestCount: s.turns,
+          estimatedCostUsd: sessionCostUsd(s),
         }))
     },
 
@@ -3206,6 +3252,7 @@ class MockBackend {
         outputTokens: number
         totalTokens: number
         requestCount: number
+        estimatedCostUsd: number | null
       }
       const newBucket = (key: string): Bucket => ({
         key,
@@ -3215,6 +3262,7 @@ class MockBackend {
         outputTokens: 0,
         totalTokens: 0,
         requestCount: 0,
+        estimatedCostUsd: 0,
       })
       const add = (b: Bucket, s: CodexSessionSeed) => {
         b.inputTokens += s.inputTokens
@@ -3222,6 +3270,8 @@ class MockBackend {
         b.outputTokens += s.outputTokens
         b.totalTokens += s.inputTokens + s.outputTokens
         b.requestCount += s.turns
+        const cost = sessionCostUsd(s)
+        b.estimatedCostUsd = b.estimatedCostUsd != null && cost != null ? b.estimatedCostUsd + cost : null
       }
       const byDay = new Map<string, Bucket>()
       const byHour = new Map<number, Bucket>()
@@ -3253,9 +3303,11 @@ class MockBackend {
             acc.reasoningOutputTokens += s.reasoningOutputTokens
             acc.totalTokens += s.inputTokens + s.outputTokens
             acc.requestCount += s.turns
+            const cost = sessionCostUsd(s)
+            acc.estimatedCostUsd = acc.estimatedCostUsd != null && cost != null ? acc.estimatedCostUsd + cost : null
             return acc
           },
-          { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, requestCount: 0 },
+          { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, requestCount: 0, estimatedCostUsd: 0 as number | null },
         ),
         sessionCount: inWindow.length,
         fileCount: this.state.codex.sessions.length,

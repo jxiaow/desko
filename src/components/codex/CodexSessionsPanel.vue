@@ -20,7 +20,7 @@ import {
 import { useConfirmStore } from '../../stores/confirm'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
-import { formatTokenCount as compact } from '../../utils/codexUsage'
+import { formatTokenCount as compact, formatUsageCost } from '../../utils/codexUsage'
 import { isWebRuntime } from '../../services/runtime'
 import { invoke } from '../../services/transport'
 import { useEscapeClose } from '../../composables/useEscapeClose'
@@ -63,6 +63,8 @@ interface TokenSum {
   reasoning: number
   total: number
   known: number
+  requests: number
+  cost: number | null
 }
 
 const emptySum = (): TokenSum => ({
@@ -73,6 +75,8 @@ const emptySum = (): TokenSum => ({
   reasoning: 0,
   total: 0,
   known: 0,
+  requests: 0,
+  cost: 0,
 })
 
 function addSum(acc: TokenSum, t: CodexSessionTokenStats): void {
@@ -83,6 +87,8 @@ function addSum(acc: TokenSum, t: CodexSessionTokenStats): void {
   acc.reasoning += t.reasoningOutputTokens
   acc.total += t.totalTokens
   acc.known += 1
+  acc.requests += t.requestCount
+  acc.cost = acc.cost != null && t.estimatedCostUsd != null ? acc.cost + t.estimatedCostUsd : null
 }
 
 const groups = computed(() => {
@@ -116,6 +122,8 @@ const allSum = computed(() => {
     acc.reasoning += g.sum.reasoning
     acc.total += g.sum.total
     acc.known += g.sum.known
+    acc.requests += g.sum.requests
+    acc.cost = acc.cost != null && g.sum.cost != null ? acc.cost + g.sum.cost : null
   }
   return acc
 })
@@ -192,7 +200,7 @@ function rowTip(s: CodexSessionRecord): string {
 function tokenTip(id: string): string {
   const t = statsOf(id)
   if (!t) return ''
-  return `净输入 ${num(netInput(t))} · 缓存命中 ${num(t.cachedInputTokens)} · 输出 ${num(t.outputTokens)}（含推理 ${num(t.reasoningOutputTokens)}）· 官方累计 ${num(t.totalTokens)}`
+  return `净输入 ${num(netInput(t))} · 缓存命中 ${num(t.cachedInputTokens)} · 输出 ${num(t.outputTokens)}（含推理 ${num(t.reasoningOutputTokens)}）· 官方累计 ${num(t.totalTokens)} · ${num(t.requestCount)} 次请求 · 估算金额 ${formatUsageCost(t.estimatedCostUsd)}`
 }
 
 /** 明细同样换算单位，完整计数放在数字提示里用于核对。 */
@@ -212,13 +220,13 @@ function tokenFacts(id: string): Array<[string, number]> {
 /** 组头只在整组都有数时给合计，半截数会被读成这一组的真实用量 */
 function groupTokText(g: { items: CodexSessionRecord[]; sum: TokenSum }): string {
   if (!g.items.length || g.sum.known < g.items.length) return ''
-  return `累计 ${compact(g.sum.total)} tokens（净输入 ${compact(g.sum.input - g.sum.cached)} · 输出 ${compact(g.sum.output)}）`
+  return `累计 ${compact(g.sum.total)} tokens（净输入 ${compact(g.sum.input - g.sum.cached)} · 输出 ${compact(g.sum.output)}）· ${num(g.sum.requests)} 次请求 · 估算金额 ${formatUsageCost(g.sum.cost)}`
 }
 
 const sumReady = computed(() => sessions.value.length > 0 && allSum.value.known === sessions.value.length)
 const sumText = computed(() => {
   const a = allSum.value
-  return `累计 ${compact(a.total)} tokens（净输入 ${compact(a.input - a.cached)} · 输出 ${compact(a.output)} · 缓存命中 ${compact(a.cached)}）`
+  return `累计 ${compact(a.total)} tokens（净输入 ${compact(a.input - a.cached)} · 输出 ${compact(a.output)} · 缓存命中 ${compact(a.cached)}）· ${num(a.requests)} 次请求 · 估算金额 ${formatUsageCost(a.cost)}`
 })
 const heroSub = computed(() => {
   const a = allSum.value
@@ -318,6 +326,10 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
           </template>
           <span v-else class="hero-pending">Token 统计中 · 已获取 {{ allSum.known }} / {{ sessions.length }} 条</span>
         </div>
+        <dl v-if="sumReady" class="sess-billing" aria-label="会话金额与请求数">
+          <div><dt>估算金额（USD）</dt><dd>{{ formatUsageCost(allSum.cost) }}</dd></div>
+          <div><dt>请求数</dt><dd>{{ num(allSum.requests) }}</dd></div>
+        </dl>
         <p class="hero-sub">{{ sumReady ? heroSub : '' }}</p>
       </div>
 
@@ -337,6 +349,8 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
               <span>累计 <b>{{ compact(g.sum.total) }}</b> Token</span>
               <span>净输入 <b>{{ compact(g.sum.input - g.sum.cached) }}</b></span>
               <span>输出 <b>{{ compact(g.sum.output) }}</b></span>
+              <span>请求 <b>{{ num(g.sum.requests) }}</b> 次</span>
+              <span>估算 <b>{{ formatUsageCost(g.sum.cost) }}</b></span>
             </span>
           </span>
           <AppIcon class="grp-caret" name="chevDown" :size="14" />
@@ -377,6 +391,8 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
                   <dt>{{ k }}</dt>
                   <dd :title="`${num(v)} Token`">{{ compact(v) }}</dd>
                 </div>
+                <div><dt>请求数</dt><dd>{{ num(statsOf(s.sessionId)!.requestCount) }}</dd></div>
+                <div><dt>估算金额（USD）</dt><dd>{{ formatUsageCost(statsOf(s.sessionId)!.estimatedCostUsd) }}</dd></div>
               </dl>
               <p v-else class="sess-no-usage">这条会话没有 Token 记录</p>
               <div class="sess-acts">
@@ -410,6 +426,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
           </div>
         </div>
       </section>
+      <p class="page-note">金额按模型标准 API 单价估算，包含缓存折扣，不代表订阅实际扣费；含未知模型时显示“未定价”。请求数按有用量的 Token 记录去重统计。</p>
     </div>
 
     <p v-if="!groups.length && !sessionsError && !sessionsBusy" class="page-note">
@@ -469,6 +486,10 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
   color: var(--text);
 }
 .hero-unit { font-size: var(--text-xs); color: var(--text-muted); }
+.sess-billing { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 6px 0 10px; }
+.sess-billing > div { display: flex; align-items: baseline; gap: 8px; }
+.sess-billing dt { font-size: var(--text-xs); color: var(--text-muted); }
+.sess-billing dd { margin: 0; font-family: var(--font-mono); font-size: var(--text-md); color: var(--text); }
 .hero-pending { font-size: var(--text-sm); color: var(--text-muted); }
 .hero-sub {
   min-height: 18px;

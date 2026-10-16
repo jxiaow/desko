@@ -14,16 +14,22 @@ import type { Note } from '../../types'
 
 vi.mock('../../services/browserImage', () => ({ pickBrowserImage: vi.fn() }))
 
+// jsdom 里没有 Tauri IPC：窗口级拖放那条通道只登记，不真去取当前 webview
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: async () => () => {} }),
+}))
+
 // Tiptap/ProseMirror 在 jsdom 里不是被测对象，换成轻量替身，只保留父子契约
 vi.mock('./NoteEditor.vue', () => ({
   default: {
     name: 'NoteEditor',
-    props: { variant: String, initialContent: String, placeholder: String },
+    props: { variant: String, initialContent: String, placeholder: String, saveImage: Function },
     emits: ['update', 'submit'],
     template: '<div class="editor-stub"></div>',
     methods: {
       focusEnd() {},
       insertText() {},
+      insertImage() {},
     },
   },
 }))

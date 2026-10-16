@@ -375,7 +375,7 @@ watchEffect(() => {
   } else if (view.value === 'sessions') {
     pageHead.setHead('Codex 会话', `${sessions.value.length} 条`)
   } else if (view.value === 'usage') {
-    pageHead.setHead('Codex 用量', `${usageReport.value?.totals.requestCount ?? 0} 轮`)
+    pageHead.setHead('Codex 用量', `${usageReport.value?.totals.requestCount ?? 0} 次请求`)
   } else {
     pageHead.setHead('Codex 回收站', `${recycledAccounts.value.length} 个账号 · ${trashSessions.value.length} 条会话`)
   }
@@ -589,7 +589,7 @@ watchEffect(() => {
         </div>
       </div>
 
-      <p v-if="view === 'accounts' && accounts.length" class="page-note">
+      <p v-if="view === 'accounts' && visibleAccounts.length" class="page-note">
         <AppIcon name="info" :size="13" />
         切号只改写官方凭据文件，Desko 不代你重启 Codex。
       </p>

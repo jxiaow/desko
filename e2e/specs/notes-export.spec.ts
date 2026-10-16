@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { bootUnlocked, e2e, expectToast, tipButton } from '../helpers'
 
 const seeds = [
-  { title: '项目记录', content_html: '<p>项目正文 #工作</p><img src="attachments/chart.png" alt="图表">' },
+  { title: '项目记录 #工作', content_html: '<p>项目正文 #工作</p><img src="attachments/chart.png" alt="图表">' },
   { title: '生活清单', content_html: '<p>生活正文</p>' },
   { title: '旧记录', content_html: '<p>归档正文</p>', archived: true },
 ]
@@ -32,6 +32,7 @@ test.describe('小记导出', () => {
       expect(result.files).toHaveLength(1)
       expect(result.files[0].name).toMatch(new RegExp(`\\.${extension}$`))
       expect(result.files[0].content).toContain('项目正文')
+      expect(result.files[0].content.match(/#工作/g)).toHaveLength(1)
       expect(result.files[0].content).toContain('data:image/png;base64,')
       expect(result.files[0].content).not.toContain('归档正文')
     })

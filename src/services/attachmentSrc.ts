@@ -11,9 +11,11 @@ import { isWebRuntime } from './runtime'
  */
 export const SRC_DIR = 'attachments'
 
+/** 一张图的来路 → 附件落盘 → 正文里该用的 src。noteId 为空即草稿（只暂存文件，发布时才补记录） */
+export type SaveImage = (source: File | string, noteId: string | null) => Promise<string | null>
+
 /** 本机附件目录；只在运行时用一次，绝不写进数据 */
 let baseDir = ''
-
 /** 取列表前调一次；拿不到（锁屏、纯浏览器测试）就退回相对写法，不报错 */
 export async function ensureAttachmentBase(): Promise<void> {
   if (baseDir) return

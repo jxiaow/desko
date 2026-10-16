@@ -14,14 +14,13 @@ mod web_access;
 
 use db::Database;
 use services::attachment_service;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager,
+    Emitter, Manager,
 };
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -32,24 +31,18 @@ fn show_main_window(app: &tauri::AppHandle) {
 }
 
 fn request_quit(app: &tauri::AppHandle) {
-    // 托盘入口在窗口隐藏、应用锁定时也要能确认；连续点击只打开一个原生弹窗。
-    static PENDING: AtomicBool = AtomicBool::new(false);
-    if PENDING.swap(true, Ordering::SeqCst) {
-        return;
+    // 窗口隐藏或最小化时也先恢复窗口，让应用内确认框可见。
+    show_main_window(app);
+    let _ = app.emit_to("main", "tray-quit", ());
+}
+
+#[tauri::command]
+fn quit_app(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("请在桌面主窗口退出 Desko".into());
     }
-    let app = app.clone();
-    app.dialog()
-        .message("确定退出 Desko？退出后，Web 访问、局域网文件传输和内网穿透服务将停止。")
-        .title("退出 Desko")
-        .kind(MessageDialogKind::Warning)
-        .buttons(MessageDialogButtons::OkCancelCustom("确认退出".into(), "取消".into()))
-        .show(move |confirmed| {
-            if confirmed {
-                app.exit(0);
-            } else {
-                PENDING.store(false, Ordering::SeqCst);
-            }
-        });
+    app.exit(0);
+    Ok(())
 }
 
 pub struct AppState {
@@ -188,6 +181,20 @@ fn main() {
                 if std::fs::create_dir_all(&fav_dir).is_ok() {
                     let _ = window.asset_protocol_scope().allow_directory(&fav_dir, false);
                 }
+                // WebView2 的浏览器加速键整档默认开着：F1/F3/F5/F12 被 webview 吃掉、
+                // 交不回系统，而 desko 一条功能键都没绑（全局只有 Ctrl+B 与 Ctrl+K）。
+                #[cfg(windows)]
+                let _ = window.with_webview(|platform| unsafe {
+                    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+                    use windows_webview::core::Interface;
+                    if let Ok(core) = platform.controller().CoreWebView2() {
+                        if let Ok(settings) = core.Settings() {
+                            if let Ok(settings) = settings.cast::<ICoreWebView2Settings3>() {
+                                let _ = settings.SetAreBrowserAcceleratorKeysEnabled(false);
+                            }
+                        }
+                    }
+                });
             }
 
             // Setup tray menu
@@ -258,6 +265,7 @@ fn main() {
             // 宏展开是不捕获的闭包，标注成 fn 指针供外层闸门闭包捕获
             let base_invoke: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool =
                 tauri::generate_handler![
+            quit_app,
             web_access::web_access_status,
             web_access::web_access_start,
             web_access::web_access_stop,
@@ -315,6 +323,7 @@ fn main() {
             commands::note_lock::reveal_note,
             commands::notes::upload_attachment,
             commands::notes::stage_attachment,
+            commands::notes::save_attachment_bytes,
             commands::notes::bind_attachments,
             commands::notes::delete_attachment,
             commands::notes::attachment_orphans,

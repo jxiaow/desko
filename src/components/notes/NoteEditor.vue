@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { normalizeAssetHtml, resolveAssetHtml } from '../../services/attachmentSrc'
-import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
+import { sanitizeNoteHtml, safeLink, safeImage } from '../../utils/sanitizeNoteHtml'
 import { useEditor, EditorContent, VueNodeViewRenderer } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -38,11 +38,14 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   /** 胶囊输入展开后给三行书写地板 */
   roomy?: boolean
+  /** 剪贴板里的图片交外层落盘，换回正文用的 src。目标小记由包着它的那张面绑好，编辑器不问 */
+  saveImage?: (source: File | string) => Promise<string | null>
 }>(), {
   initialContent: '',
   variant: 'card',
   placeholder: '输入 / 打开命令...',
   roomy: false,
+  saveImage: undefined,
 })
 
 const emit = defineEmits<{
@@ -169,7 +172,12 @@ const NoteImage = Node.create({
     }
   },
   parseHTML() {
-    return [{ tag: 'img[src]' }]
+    // 剪贴板里的富文本最爱带 base64 内嵌图：地址进不了库，可读面清洗器也判它死。
+    // 这里用同一个谓词当场不解析，否则就是「粘进来看得见、重开一次全没了」。
+    return [{
+      tag: 'img[src]',
+      getAttrs: (node) => (safeImage((node as Element).getAttribute('src') ?? '') ? {} : false),
+    }]
   },
   renderHTML({ HTMLAttributes }) {
     return ['img', mergeAttributes(HTMLAttributes, { 'data-note-image': '' })]
@@ -253,6 +261,17 @@ const editor = useEditor({
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
       codeBlock: false,
+      // 正文里存的是地址本身：书写面点击不跳转（阅读面才开链接），地址合法性复用清洗器那一份
+      // 口径，否则「什么算链接」会有两套答案。rel 与清洗器回写的顺序保持一致。
+      // v3 的 StarterKit 自带 Link，只能在这里配置；再注册一颗会得到重复的 link 名。
+      link: {
+        openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+        defaultProtocol: 'https',
+        validate: (href: string) => safeLink(href),
+        HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+      },
     }),
     CodeBlockLowlight.configure({ lowlight }),
     Placeholder.configure({ placeholder: props.placeholder }),
@@ -446,10 +465,125 @@ const onLangChange = (lang: string) => {
   showLangDropdown.value = false
 }
 
+/**
+ * 选中浮动条：标记平时只藏在 markdown 输入规则里，选中文字时在指针上方浮出来。
+ * 浮层沿用斜杠菜单那一套（Teleport + fixed + 按钮 mousedown.prevent）：
+ * 不引第二个浮层库，也免得焦点先跳到按钮上把选区吞掉。
+ */
+const BAR_H = 30
+/** 只用于右缘夹取，条的真实宽度交给内容 */
+const BAR_W_MAX = 268
+
+const showFormatBar = ref(false)
+const formatBarEl = ref<HTMLElement | null>(null)
+const formatBarPos = ref({ top: 0, left: 0 })
+const linkEditing = ref(false)
+const linkHrefText = ref('')
+const linkOnExisting = ref(false)
+const linkBad = ref(false)
+const linkRange = ref<{ from: number; to: number } | null>(null)
+const linkInputEl = ref<HTMLInputElement | null>(null)
+
+const formatBarStyle = computed(() => ({
+  top: `${formatBarPos.value.top}px`,
+  left: `${formatBarPos.value.left}px`,
+}))
+
+const closeFormatBar = () => {
+  showFormatBar.value = false
+  linkEditing.value = false
+  linkRange.value = null
+  linkBad.value = false
+}
+
+const updateFormatBar = (ed: any) => {
+  if (!ed) return
+  const { from, to } = ed.state.selection
+  // 代码块里标记无效；斜杠菜单开着时两个浮层会打架
+  if (to <= from || ed.isActive('codeBlock') || showSlashMenu.value) {
+    if (linkEditing.value) closeFormatBar()
+    else showFormatBar.value = false
+    return
+  }
+  // 地址输入框在浮层里，焦点已离开编辑器——这时不能因为失焦就把条收掉
+  if (!ed.isFocused && !linkEditing.value) {
+    showFormatBar.value = false
+    return
+  }
+  // 先定位再显示：反过来首帧画在旧坐标上
+  const a = ed.view.coordsAtPos(from)
+  const b = ed.view.coordsAtPos(to)
+  const above = Math.min(a.top, b.top) - GAP - BAR_H
+  formatBarPos.value = {
+    top: above >= MARGIN ? above : Math.min(Math.max(a.bottom, b.bottom) + GAP, window.innerHeight - BAR_H - MARGIN),
+    left: Math.max(MARGIN, Math.min(Math.min(a.left, b.left), window.innerWidth - BAR_W_MAX - MARGIN)),
+  }
+  showFormatBar.value = true
+}
+
+const toggleInlineCode = () => {
+  editor.value?.chain().focus().toggleCode().run()
+}
+
+const startLinkEdit = () => {
+  const ed = editor.value
+  if (!ed) return
+  const { from, to } = ed.state.selection
+  linkRange.value = { from, to }
+  linkOnExisting.value = ed.isActive('link')
+  linkHrefText.value = linkOnExisting.value ? String(ed.getAttributes('link').href ?? '') : ''
+  linkBad.value = false
+  linkEditing.value = true
+  nextTick(() => {
+    const el = linkInputEl.value
+    if (!el) return
+    el.focus()
+    el.select()
+  })
+}
+
+/** 光秃秃的 example.com 也当地址：补上协议再走同一份合法性判断 */
+const normalizeHref = (raw: string) => {
+  const href = raw.trim()
+  if (!href || /^[a-z][a-z\d+.-]*:/i.test(href) || href.startsWith('/') || href.startsWith('#')) return href
+  return `https://${href}`
+}
+
+const applyLink = () => {
+  const ed = editor.value
+  const range = linkRange.value
+  if (!ed || !range) return closeFormatBar()
+  const href = normalizeHref(linkHrefText.value)
+  if (!href || !safeLink(href)) {
+    linkBad.value = true
+    return
+  }
+  // 收尾把光标落到选区末尾：留着选中态，focus 补发的那拍事务会把条重新浮出来
+  ed.chain().focus().setTextSelection(range).setLink({ href }).setTextSelection(range.to).run()
+  closeFormatBar()
+}
+
+const removeLink = () => {
+  const ed = editor.value
+  const range = linkRange.value
+  if (!ed || !range) return closeFormatBar()
+  ed.chain().focus().setTextSelection(range).unsetLink().setTextSelection(range.to).run()
+  closeFormatBar()
+}
+
 watch(() => editor.value, (ed) => {
   if (!ed) return
-  ed.on('selectionUpdate', ({ editor: e }) => updateCodeBlockState(e))
-  ed.on('transaction', ({ editor: e }) => updateCodeBlockState(e))
+  ed.on('selectionUpdate', ({ editor: e }) => {
+    updateCodeBlockState(e)
+    updateFormatBar(e)
+  })
+  ed.on('transaction', ({ editor: e }) => {
+    updateCodeBlockState(e)
+    updateFormatBar(e)
+  })
+  ed.on('blur', () => {
+    if (!linkEditing.value) showFormatBar.value = false
+  })
 })
 
 // Click outside to close slash menu
@@ -457,16 +591,27 @@ const handleClickOutside = (e: MouseEvent) => {
   if (showSlashMenu.value && slashMenuEl.value && !slashMenuEl.value.contains(e.target as HTMLElement)) {
     showSlashMenu.value = false
   }
+  // 浮条只认自身之内：地址输入框开着时点了别处，就等于放弃这次改链
+  if (showFormatBar.value && formatBarEl.value && !formatBarEl.value.contains(e.target as HTMLElement)) {
+    closeFormatBar()
+  }
 }
 
 onMounted(() => {
   document.addEventListener('mousedown', handleClickOutside)
+  document.addEventListener('scroll', repositionFormatBar, { capture: true, passive: true })
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleClickOutside)
+  document.removeEventListener('scroll', repositionFormatBar, { capture: true })
   editor.value?.destroy()
 })
+
+/** 选区随滚动挪走而浮条是视口坐标：只在它可见时重算，别给全局滚动加活 */
+function repositionFormatBar() {
+  if (showFormatBar.value) updateFormatBar(editor.value)
+}
 
 const focusEnd = () => {
   editor.value?.chain().focus('end').run()
@@ -480,16 +625,6 @@ const insertText = (text: string) => {
 const undo = () => { editor.value?.chain().focus().undo().run() }
 const redo = () => { editor.value?.chain().focus().redo().run() }
 
-/** 快捷插入芯片走编辑器自己的命令链，不往正文里塞 markdown 源字符 */
-const insertTask = () => {
-  editor.value?.chain().focus().toggleTaskList().run()
-}
-
-/** 芯片不吃焦点（按钮上 mousedown.prevent），所以空选区的 toggleCode 能留住待输入标记 */
-const insertInlineCode = () => {
-  editor.value?.chain().focus().toggleCode().run()
-}
-
 /** 图片块追加到光标处；默认宽度按书写面区分：列表窄栏小图够用，全屏才给大图 */
 const insertImage = (src: string) => {
   const ed = editor.value
@@ -498,11 +633,37 @@ const insertImage = (src: string) => {
   ed.chain().focus().insertContent({ type: 'image', attrs: { src, width } }).run()
 }
 
-defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, undo, redo, canUndo, canRedo })
+/** 截图 Ctrl+V 与复制图片文件粘贴：剪贴板里的图片交外层落盘，回来的地址按当前落点插。
+ *  只接管含图片的那一次粘贴，文本与富文本一律放行，链接那套粘贴行为照旧。 */
+const clipboardImages = (e: ClipboardEvent): File[] => {
+  const items = e.clipboardData?.items
+  if (!items) return []
+  const files: File[] = []
+  for (const item of items) {
+    if (item.kind !== 'file' || !item.type.startsWith('image/')) continue
+    const file = item.getAsFile()
+    if (file) files.push(file)
+  }
+  return files
+}
+
+const onPaste = async (e: ClipboardEvent) => {
+  const save = props.saveImage
+  if (!save) return
+  const files = clipboardImages(e)
+  if (!files.length) return
+  e.preventDefault()
+  for (const file of files) {
+    const src = await save(file)
+    if (src) insertImage(src)
+  }
+}
+
+defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo })
 </script>
 
 <template>
-  <div ref="editorWrapper" class="note-editor" :class="[`v-${variant}`, { roomy: props.roomy }]" @change="relocateCaret">
+  <div ref="editorWrapper" class="note-editor" :class="[`v-${variant}`, { roomy: props.roomy }]" @change="relocateCaret" @paste="onPaste">
     <EditorContent :editor="editor" />
     <Teleport to="body">
       <div
@@ -526,6 +687,55 @@ defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, 
           <span class="sm-hint">{{ cmd.hint }}</span>
         </div>
         <div v-if="!filteredCommands.length" class="sm-empty">没有匹配的块</div>
+      </div>
+    </Teleport>
+    <Teleport to="body">
+      <div v-if="showFormatBar" ref="formatBarEl" class="fmt-bar" :style="formatBarStyle">
+        <template v-if="!linkEditing">
+          <button
+            class="fmt-btn"
+            :class="{ on: editor?.isActive('code') }"
+            type="button"
+            title="行内代码 (Ctrl+E)"
+            aria-label="行内代码"
+            @mousedown.prevent
+            @click="toggleInlineCode"
+          >
+            <AppIcon name="code" :size="14" />
+          </button>
+          <button
+            class="fmt-btn"
+            :class="{ on: editor?.isActive('link') }"
+            type="button"
+            title="添加链接"
+            aria-label="添加链接"
+            @mousedown.prevent
+            @click="startLinkEdit"
+          >
+            <AppIcon name="link" :size="14" />
+          </button>
+        </template>
+        <template v-else>
+          <input
+            ref="linkInputEl"
+            v-model="linkHrefText"
+            class="fmt-input"
+            :class="{ bad: linkBad }"
+            type="text"
+            inputmode="url"
+            placeholder="粘贴或输入地址"
+            aria-label="链接地址"
+            @keydown.enter.prevent="applyLink"
+            @keydown.esc.stop.prevent="closeFormatBar"
+          />
+          <button v-if="linkOnExisting" class="fmt-text" type="button" @mousedown.prevent @click="removeLink">移除</button>
+          <button class="fmt-btn" type="button" title="确定" aria-label="确定链接" @mousedown.prevent @click="applyLink">
+            <AppIcon name="check" :size="14" />
+          </button>
+          <button class="fmt-btn" type="button" title="取消" aria-label="取消" @mousedown.prevent @click="closeFormatBar">
+            <AppIcon name="x" :size="14" />
+          </button>
+        </template>
       </div>
     </Teleport>
     <div v-if="showLangSelector" class="lang-selector" :style="{ top: langSelectorPos.top + 'px', right: langSelectorPos.right + 'px' }">
@@ -701,6 +911,67 @@ defineExpose({ focusEnd, insertText, insertTask, insertInlineCode, insertImage, 
 .slash-item.active .sm-label { color: var(--accent-active); font-weight: 500; }
 .slash-item.active .sm-icon, .slash-item.active .sm-badge { color: var(--accent-active); }
 .slash-item.active .sm-hint { color: var(--accent-active); opacity: 0.6; }
+
+/* 选中浮动条：与 .slash-menu 同一档浮层语言，26px 控件跟着卡面动作排那条轴 */
+.fmt-bar {
+  position: fixed;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: max-content;
+  padding: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-ib);
+  box-shadow: var(--shadow-pop);
+}
+
+.fmt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.fmt-btn:hover { background: var(--hover-chrome); color: var(--text); }
+.fmt-btn.on { background: var(--accent-soft); color: var(--accent-active); }
+
+.fmt-text {
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.fmt-text:hover { background: var(--hover-chrome); color: var(--text); }
+
+.fmt-input {
+  width: 168px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.fmt-input:focus { outline: none; border-color: var(--accent); }
+.fmt-input.bad { border-color: var(--danger); }
 
 .lang-selector {
   position: absolute;

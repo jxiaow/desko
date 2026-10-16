@@ -1,11 +1,11 @@
 /* 主题：颜色（和外设字体栈）会换，尺度（圆角/间距/字号）不动。
  *
  * 外观由「底色 × accent × 背景氛围」独立组合：
- *   底色十一套，每套交出完全相同的 96 槽；
+ *   底色八套，每套交出完全相同的 96 槽；
  *   极性 light / dark 由底色决定（用户不能单设），只用来挂 accent；
  *   accent 十档，覆盖层按 [data-base][data-accent] 填 accent 族 17 槽。
- *   背景氛围独立开关，素色与冷暖底色共用同一套材质规则。
- * 所以组合数 = 底色 11 × accent 10 × 氛围 2 = 220，但 accent 块只有 2×10=20 个——新增底色不必再配一轮 accent。
+ *   背景氛围独立开关，所有底色共用同一套材质规则。
+ * 所以组合数 = 底色 8 × accent 10 × 氛围 2 = 160，但 accent 块只有 2×10=20 个——新增底色不必再配一轮 accent。
  * 这里负责把外观属性挂到 <html> 上，以及存取用户的选择。
  *
  * 读取用的是明文 meta 表，锁屏前也能拿到，所以 main.ts 可以在
@@ -29,6 +29,9 @@ export interface Appearance {
 /** 旧七套 + 更早的退役 ID → 底色。必须是同步查表：
  *  main.ts 在首绘前 await readAppearance，这里多一次 IO 就多一帧闪烁。 */
 const LEGACY_THEME: Record<string, ThemeId> = {
+  warmgray: 'paper',
+  purewhite: 'snow',
+  charcoal: 'ink',
   cool: 'paper',
   white: 'paper',
   classic: 'paper',
@@ -57,26 +60,20 @@ const LEGACY_ACCENT: Record<string, AccentId> = {
   'linear-dark': 'plum',
 }
 
-/** 注册表只保存身份与底色分组；分组不限制背景氛围，预览消费同一套颜色令牌。 */
+/** 底色注册表；背景氛围独立开关，预览消费同一套颜色令牌。 */
 export const THEMES = [
-  { id: 'paper', name: '纸', kind: 'atmosphere' },
-  { id: 'snow', name: '雪', kind: 'atmosphere' },
-  { id: 'linen', name: '绢', kind: 'atmosphere' },
-  { id: 'mist', name: '雾', kind: 'atmosphere' },
-  { id: 'ink', name: '墨', kind: 'atmosphere' },
-  { id: 'slate', name: '岩', kind: 'atmosphere' },
-  { id: 'midnight', name: '夜', kind: 'atmosphere' },
-  { id: 'moss', name: '苔', kind: 'atmosphere' },
-  { id: 'purewhite', name: '素白', kind: 'plain' },
-  { id: 'warmgray', name: '暖灰', kind: 'plain' },
-  { id: 'charcoal', name: '炭黑', kind: 'plain' },
+  { id: 'paper', name: '纸' },
+  { id: 'snow', name: '雪' },
+  { id: 'linen', name: '绢' },
+  { id: 'mist', name: '雾' },
+  { id: 'ink', name: '墨' },
+  { id: 'slate', name: '岩' },
+  { id: 'midnight', name: '夜' },
+  { id: 'moss', name: '苔' },
 ] as const
 
 /** 底色 → accent 覆盖层挂的那一极。新增底色只需在这里登记一行。 */
 export const POLARITY: Record<ThemeId, PolarityId> = {
-  purewhite: 'light',
-  warmgray: 'light',
-  charcoal: 'dark',
   paper: 'light',
   snow: 'light',
   linen: 'light',
@@ -88,15 +85,15 @@ export const POLARITY: Record<ThemeId, PolarityId> = {
 }
 
 export const ACCENTS = [
-  { id: 'ink', name: '墨蓝' },
-  { id: 'celadon', name: '青瓷' },
-  { id: 'clay', name: '赭石' },
-  { id: 'plum', name: '紫罗' },
-  { id: 'rose', name: '暮瑰' },
-  { id: 'teal', name: '碧青' },
-  { id: 'forest', name: '松绿' },
+  { id: 'ink', name: '群青' },
+  { id: 'celadon', name: '翡翠' },
+  { id: 'clay', name: '陶橙' },
+  { id: 'plum', name: '鸢紫' },
+  { id: 'rose', name: '洋红' },
+  { id: 'teal', name: '湖蓝' },
+  { id: 'forest', name: '橄榄' },
   { id: 'amber', name: '琥珀' },
-  { id: 'coral', name: '珊瑚' },
+  { id: 'coral', name: '绯红' },
   { id: 'graphite', name: '石墨' },
 ] as const
 
@@ -109,18 +106,10 @@ const isThemeId = (v: string): v is ThemeId => THEMES.some((t) => t.id === v)
 const isAccentId = (v: string): v is AccentId => ACCENTS.some((a) => a.id === v)
 
 export const polarityOf = (theme: ThemeId): PolarityId => POLARITY[theme]
-export const isPlainTheme = (theme: ThemeId): boolean => THEMES.find(t => t.id === theme)?.kind === 'plain'
-export const THEME_GROUPS = [
-  { label: '素色', themes: THEMES.filter(theme => theme.kind === 'plain') },
-  { label: '冷暖配色', themes: THEMES.filter(theme => theme.kind === 'atmosphere') },
-]
-
-
 const applyAppearance = (ap: Appearance) => {
   Object.assign(state, ap)
   const root = document.documentElement
   root.setAttribute('data-theme', ap.theme)
-  root.setAttribute('data-palette', isPlainTheme(ap.theme) ? 'plain' : 'atmosphere')
   root.setAttribute('data-base', polarityOf(ap.theme))
   root.setAttribute('data-accent', ap.accent)
   root.setAttribute('data-atmosphere', ap.backgroundAtmosphere ? 'on' : 'off')

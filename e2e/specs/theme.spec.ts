@@ -1,36 +1,34 @@
 import { test, expect } from '@playwright/test'
 import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, settingsTab, visiblePane } from '../helpers'
+import { lab } from '../../scripts/lib/theme-tokens.mjs'
 
-/** 底色 11 套 × accent 10 档 = 110 组配色，背景氛围独立开关。
+/** 底色 8 套 × accent 10 档 = 80 组配色，背景氛围独立开关。
  *  底色锚点（bg/text）来自 global.css 的底色块，accent 锚点（--accent）来自
  *  [data-base=x][data-accent=y] 覆盖层——覆盖层挂的是极性，不是底色，
  *  所以 accent 表按 light/dark 两极列，paper 与 snow 共用同一串。
  *  bg/text 用 rgb()：那是 body 计算后的样式。accent 用 #hex：
  *  自定义属性读回来的是令牌原文，浏览器不会帮你转成 rgb()。 */
 const BASES = {
-  purewhite: { name: '素白', pol: 'light', bg: 'rgb(250, 250, 250)', text: 'rgb(44, 44, 44)' },
-  warmgray: { name: '暖灰', pol: 'light', bg: 'rgb(245, 244, 241)', text: 'rgb(52, 51, 47)' },
-  charcoal: { name: '炭黑', pol: 'dark', bg: 'rgb(36, 36, 36)', text: 'rgb(232, 232, 232)' },
   paper: { name: '纸', pol: 'light', bg: 'rgb(248, 245, 240)', text: 'rgb(51, 50, 48)' },
   snow:  { name: '雪', pol: 'light', bg: 'rgb(241, 242, 243)', text: 'rgb(26, 27, 29)' },
-  linen: { name: '绢', pol: 'light', bg: 'rgb(243, 234, 220)', text: 'rgb(60, 51, 40)' },
-  mist: { name: '雾', pol: 'light', bg: 'rgb(237, 243, 238)', text: 'rgb(38, 58, 47)' },
+  linen: { name: '绢', pol: 'light', bg: 'rgb(235, 231, 224)', text: 'rgb(52, 50, 46)' },
+  mist: { name: '雾', pol: 'light', bg: 'rgb(229, 230, 235)', text: 'rgb(48, 52, 61)' },
   ink:   { name: '墨', pol: 'dark',  bg: 'rgb(29, 28, 26)',    text: 'rgb(230, 228, 222)' },
   slate: { name: '岩', pol: 'dark',  bg: 'rgb(37, 41, 50)',    text: 'rgb(237, 240, 246)' },
-  midnight: { name: '夜', pol: 'dark', bg: 'rgb(20, 30, 46)', text: 'rgb(228, 236, 247)' },
-  moss: { name: '苔', pol: 'dark', bg: 'rgb(29, 41, 34)', text: 'rgb(228, 238, 231)' },
+  midnight: { name: '夜', pol: 'dark', bg: 'rgb(52, 55, 63)', text: 'rgb(215, 219, 228)' },
+  moss: { name: '苔', pol: 'dark', bg: 'rgb(40, 43, 37)', text: 'rgb(216, 218, 207)' },
 } as const
 
 const ACCENT_HEX = {
-  light: { ink: '#315f9b', celadon: '#246e60', clay: '#9b562b', plum: '#7951a8', rose: '#9b3f68', teal: '#126b83', forest: '#456d25', amber: '#886008', coral: '#ac443c', graphite: '#56616d' },
-  dark:  { ink: '#7faeee', celadon: '#73c5ad', clay: '#e1a15f', plum: '#bd9ae0', rose: '#e991b6', teal: '#71c8e1', forest: '#a7c97b', amber: '#e9c463', coral: '#f09c92', graphite: '#b5bec9' },
+  light: { ink: '#2856c7', celadon: '#087662', clay: '#aa4c0c', plum: '#7542c3', rose: '#ac298e', teal: '#077190', forest: '#527221', amber: '#7f6608', coral: '#be3547', graphite: '#555c69' },
+  dark: { ink: '#9bbfff', celadon: '#5ed5a9', clay: '#ffac6b', plum: '#d3afff', rose: '#faa2e1', teal: '#5bcee5', forest: '#b5cf70', amber: '#e7c154', coral: '#ffa6b2', graphite: '#b7bfcc' },
 } as const
 
 type BaseId = keyof typeof BASES
 type AccentId = keyof typeof ACCENT_HEX.light
 
 const ACCENT_NAMES: Record<AccentId, string> = {
-  ink: '墨蓝', celadon: '青瓷', clay: '赭石', plum: '紫罗', rose: '暮瑰', teal: '碧青', forest: '松绿', amber: '琥珀', coral: '珊瑚', graphite: '石墨',
+  ink: '群青', celadon: '翡翠', clay: '陶橙', plum: '鸢紫', rose: '洋红', teal: '湖蓝', forest: '橄榄', amber: '琥珀', coral: '绯红', graphite: '石墨',
 }
 
 /** 底色档的 accent 主色：查的是那一极的覆盖层 */
@@ -51,7 +49,7 @@ const readAnchors = (page: import('@playwright/test').Page) =>
   })
 
 test.describe('主题', () => {
-  test('没存过外观时用默认：纸底 × 墨蓝', async ({ page }) => {
+  test('没存过外观时用默认：纸底 × 群青', async ({ page }) => {
     await bootUnlocked(page)
     const got = await readAnchors(page)
     expect(got.theme).toBe('paper')
@@ -109,10 +107,10 @@ test.describe('主题', () => {
     expect(got.accentAttr).toBe('ink')
   })
 
-  test('十一张底色卡 + 十枚 accent 丸，点一张立刻换色并落盘', async ({ page }) => {
+  test('八张底色卡 + 十枚 accent 丸，点一张立刻换色并落盘', async ({ page }) => {
     await bootUnlocked(page)
     const dialog = await openSettings(page)
-    await expect(dialog.locator('.theme-chip')).toHaveCount(11)
+    await expect(dialog.locator('.theme-chip')).toHaveCount(8)
     await expect(dialog.locator('.accent-pill')).toHaveCount(10)
     await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('纸')
 
@@ -139,7 +137,7 @@ test.describe('主题', () => {
     await expect
       .poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()))
       .toBe(accentOf('paper', 'celadon'))
-    await expect(dialog.locator('.accent-pill[aria-checked="true"] .accent-name')).toHaveText('青瓷')
+    await expect(dialog.locator('.accent-pill[aria-checked="true"] .accent-name')).toHaveText('翡翠')
     await waitForToastGone(page)
   })
 
@@ -148,6 +146,7 @@ test.describe('主题', () => {
       await bootUnlocked(page, { settings: { theme: base } })
       const dialog = await openSettings(page)
       const seen = new Set<string>()
+      const swatches: Array<{ id: string; color: [number, number, number] }> = []
       for (const accent of Object.keys(ACCENT_NAMES) as AccentId[]) {
         await dialog.locator(`.accent-pill[data-accent-id="${accent}"]`).click()
         await waitForToastGone(page)
@@ -167,15 +166,21 @@ test.describe('主题', () => {
           const nav = getComputedStyle(document.querySelector('.sidebar')!)
           const miniature = getComputedStyle(preview)
           const miniatureNav = getComputedStyle(preview.querySelector('.tp-rail')!)
-          return { app: app.backgroundImage, preview: miniature.backgroundImage, nav: nav.backgroundColor, previewNav: miniatureNav.backgroundColor }
+          return { app: app.backgroundImage, preview: miniature.backgroundImage, nav: nav.backgroundColor, previewNav: miniatureNav.backgroundColor, swatch: getComputedStyle(preview.querySelector('.tp-row-tag')!).backgroundColor }
         }, base)
-        const relativeField = surfaces.app.replace(/([\d.]+)vw/g, '$1%').replace(/([\d.]+)vh/g, '$1%')
-        expect(surfaces.preview, `${label} 预览画布`).toBe(relativeField)
+        // 工作区光斑有像素上限，微缩预览按自身尺寸缩放；色相、强度与位置保持一致。
+        const fieldColors = (image: string) => image.replace(/radial-gradient\([^,]+? at /g, 'radial-gradient(at ')
+        expect(fieldColors(surfaces.preview), `${label} 预览画布`).toBe(fieldColors(surfaces.app))
         expect(surfaces.previewNav, `${label} 预览导航`).toBe(surfaces.nav)
         expect(await preview.evaluate((el) => getComputedStyle(el).getPropertyValue('--accent').trim()), `${label} 预览强调色`).toBe(got.accent)
+        swatches.push({ id: accent, color: surfaces.swatch.match(/[\d.]+/g)!.slice(0, 3).map(Number) as [number, number, number] })
         seen.add(`${got.bg}|${got.accent}`)
       }
       expect(seen.size).toBe(10)
+      for (const [i, a] of swatches.entries()) for (const b of swatches.slice(i + 1)) {
+        const x = lab(a.color), y = lab(b.color)
+        expect(Math.hypot(x.L - y.L, x.a - y.a, x.b - y.b), `${base}: ${a.id}/${b.id} 实际强调色辨识`).toBeGreaterThan(20)
+      }
     })
   }
 
@@ -211,17 +216,14 @@ test.describe('主题', () => {
 
     // 四套底色各留一档 toast 值：暗极性反转成亮底，且 ink 暖白 / slate 冷白差在 B 通道
     const EXPECT: Record<BaseId, { bg: string; color: string }> = {
-      purewhite: { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },
-      warmgray: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
-      charcoal: { bg: 'rgb(239, 237, 232)', color: 'rgb(47, 125, 82)' },
       ink:   { bg: 'rgb(239, 237, 232)', color: 'rgb(47, 125, 82)' },
       slate: { bg: 'rgb(238, 240, 245)', color: 'rgb(47, 125, 82)' },
       paper: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
       snow:  { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },
-      linen: { bg: 'rgb(53, 45, 36)', color: 'rgb(156, 196, 174)' },
-      mist: { bg: 'rgb(32, 52, 43)', color: 'rgb(145, 201, 166)' },
-      midnight: { bg: 'rgb(232, 238, 247)', color: 'rgb(47, 125, 82)' },
-      moss: { bg: 'rgb(233, 241, 233)', color: 'rgb(47, 125, 82)' },
+      linen: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
+      mist: { bg: 'rgb(31, 33, 36)', color: 'rgb(145, 201, 166)' },
+      midnight: { bg: 'rgb(238, 240, 245)', color: 'rgb(47, 125, 82)' },
+      moss: { bg: 'rgb(239, 237, 232)', color: 'rgb(47, 125, 82)' },
     }
     const order: BaseId[] = ['ink', 'slate', 'paper', 'snow', 'linen', 'mist', 'midnight', 'moss']
     for (const [i, base] of order.entries()) {
@@ -242,7 +244,7 @@ test.describe('主题', () => {
       [...document.querySelectorAll('.brand-logo stop')].map((s) => getComputedStyle(s).stopColor),
     )
     expect(stops.length).toBeGreaterThanOrEqual(6)
-    expect(new Set(stops)).toEqual(new Set(['rgb(161, 123, 199)', 'rgb(121, 81, 168)', 'rgb(80, 52, 115)']))
+    expect(new Set(stops)).toEqual(new Set(['rgb(156, 119, 212)', 'rgb(117, 66, 195)', 'rgb(87, 49, 144)']))
     // 重复 id 会让第二个 logo 静默套用第一个的渐变：不报错，只是颜色不对
     const ids = await page.evaluate(() =>
       [...document.querySelectorAll('.brand-logo linearGradient')].map((g) => g.id),

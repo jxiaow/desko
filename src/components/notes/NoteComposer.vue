@@ -2,10 +2,12 @@
 import { computed, ref } from 'vue'
 import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
+import type { SaveImage } from '../../services/attachmentSrc'
 
 const props = defineProps<{
   html: string
   empty: boolean
+  saveImage?: SaveImage
 }>()
 
 const emit = defineEmits<{
@@ -16,6 +18,9 @@ const emit = defineEmits<{
 }>()
 
 const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
+
+/** 这条面永远写草稿，落盘时 noteId 给空（文件只暂存，发布才补附件记录） */
+const saveImageToDraft = async (source: File | string) => (await props.saveImage?.(source, null)) ?? null
 
 const focus = () => editorRef.value?.focusEnd()
 const insertImage = (src: string) => editorRef.value?.insertImage(src)
@@ -64,6 +69,7 @@ const discard = () => {
       variant="composer"
       :roomy="open"
       :initial-content="props.html"
+      :save-image="saveImageToDraft"
       placeholder="此刻的想法… 用 #标签 归类"
       @update="emit('update', $event)"
       @submit="emit('publish')"
@@ -89,10 +95,10 @@ const discard = () => {
 </template>
 
 <style scoped>
-/* 安静态（空 + 失焦）是一枚灰底 inset pill，无描边无阴影——与搜索框同一 dialect。
+/* 安静态（空 + 失焦）与搜索框共用材质，无描边无阴影；增强氛围下保持实底。
    聚焦或有草稿时 .open 升回白卡，把「唯一书写面」抬起来。 */
 .composer {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
+  background: var(--bg-canvas-input);
   border: 1px solid transparent;
   border-radius: var(--radius-lg);
   box-shadow: none;

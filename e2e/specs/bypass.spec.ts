@@ -374,6 +374,9 @@ test.describe('网络直连', () => {
 
     // 筛选只收 chip 那一排，异常卡常驻
     await page.locator('.bp-filter input').fill('qa')
+    await expect(page.locator('.bp-filter input')).toHaveCSS('border-top-width', '0px')
+    await expect(page.locator('.bp-filter input')).toHaveCSS('box-shadow', 'none')
+    await expect(page.locator('.bp-filter')).not.toHaveCSS('box-shadow', 'none')
     await expect(chip(page)).toHaveCount(1)
     await expect(chip(page, 'qa.example.com')).toBeVisible()
     await expect(secHead(page, '直连可用')).toContainText('1 / 2 项')

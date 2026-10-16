@@ -3,13 +3,13 @@ import { computed, reactive } from 'vue'
 import { settingsApi } from '../services/api/settings'
 import { MODULES, moduleById, type ModuleDef, type ModuleId } from './registry'
 
-const WEB_MODULES = new Set<ModuleId>(['notes', 'entries', 'files', 'mfa', 'codex', 'fileshare', 'tunnel'])
-export const WEB_EXTRA_MODULES = ['codex', 'fileshare', 'tunnel'] as const
+export const WEB_MODULE_IDS = ['notes', 'entries', 'files', 'mfa', 'fileshare', 'tunnel', 'codex'] as const
+const WEB_MODULES = new Set<ModuleId>(WEB_MODULE_IDS)
 const availableInRuntime = (id: ModuleId) => !isWebRuntime() || WEB_MODULES.has(id)
 
-/** 各模块总开关的当前值。默认按注册表缺省播种，首帧即是终态候选，不靠异步填。 */
+/** 桌面按注册表缺省初始化；Web 登录并读取共用开关之前全部关闭。 */
 export const moduleFlags = reactive<Record<ModuleId, boolean>>(
-  Object.fromEntries(MODULES.map((m) => [m.id, availableInRuntime(m.id) && (isWebRuntime() || m.defaultEnabled)])) as Record<ModuleId, boolean>
+  Object.fromEntries(MODULES.map((m) => [m.id, !isWebRuntime() && m.defaultEnabled])) as Record<ModuleId, boolean>
 )
 
 let loaded = false
@@ -22,11 +22,8 @@ function parseFlag(raw: string, m: ModuleDef): boolean {
 /** bootstrap 阶段跑一次：路由、侧栏、设置页都必须在挂载前就看到终态开关 */
 export async function loadModuleFlags(): Promise<void> {
   if (loaded) return
-  if (isWebRuntime()) {
-    for (const module of MODULES) moduleFlags[module.id] = WEB_MODULES.has(module.id)
-    loaded = true
-    return
-  }
+  // Browser module settings require a login; keep every route closed until then.
+  if (isWebRuntime()) return
   await Promise.all(
     MODULES.filter(m => availableInRuntime(m.id)).map(async (m) => {
       try {
@@ -37,6 +34,14 @@ export async function loadModuleFlags(): Promise<void> {
     })
   )
   loaded = true
+}
+
+export async function refreshWebModuleFlags(): Promise<void> {
+  const flags = await Promise.all(WEB_MODULE_IDS.map(async id => {
+    const module = moduleById(id)
+    return [id, parseFlag(await settingsApi.getSetting(module.settingKey), module)] as const
+  }))
+  for (const [id, on] of flags) moduleFlags[id] = on
 }
 
 export function isModuleEnabled(id: ModuleId): boolean {
@@ -75,19 +80,6 @@ export async function setModuleEnabled(id: ModuleId, on: boolean): Promise<void>
 
 /** 解锁后只给启用的模块补它那份数据；关掉的模块连一次 invoke 都不该发 */
 export async function bootEnabledModules(): Promise<void> {
-  if (isWebRuntime()) {
-    await Promise.all(WEB_EXTRA_MODULES.map(async id => {
-      try { moduleFlags[id] = await settingsApi.getSetting(moduleById(id).settingKey) === 'true' }
-      catch { moduleFlags[id] = false }
-    }))
-    const { default: router, syncModuleRoutes } = await import('../router')
-    syncModuleRoutes()
-    if (WEB_EXTRA_MODULES.some(id => router.currentRoute.value.path === '/' + id && !moduleFlags[id])) {
-      await router.replace(landingPath() ?? '/start')
-    }
-    const { startModuleSync } = await import('./runtime')
-    await startModuleSync()
-  }
   await Promise.all(enabledModules.value.map((m) => m.boot?.()))
 }
 

@@ -19,6 +19,7 @@ const emit = defineEmits<{
   openSettings: []
   lock: []
   showSidebar: []
+  showModules: []
 }>()
 
 const webRuntime = isWebRuntime()
@@ -119,6 +120,16 @@ onUnmounted(() => {
 
     <div v-if="!isLocked" class="titlebar-left" @mousedown="startDrag" @dblclick="toggleMaximize">
       <button
+        v-if="webRuntime"
+        class="titlebar-btn tb-util web-modules-toggle"
+        title="打开模块导航"
+        aria-label="打开模块导航"
+        aria-haspopup="dialog"
+        @click="emit('showModules')"
+      >
+        <AppIcon name="panel" :size="20" />
+      </button>
+      <button
         v-if="sidebarHidden"
         class="titlebar-btn tb-util sidebar-restore"
         title="显示侧栏 (Ctrl+B)"
@@ -178,7 +189,7 @@ onUnmounted(() => {
   height: 42px;
   /* 停靠态：透明并入画布，但留一条发丝下界把顶栏与页面身份行分开 */
   background: transparent;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-navigation);
   display: flex;
   align-items: center;
   position: relative;
@@ -307,4 +318,5 @@ onUnmounted(() => {
   margin: 0 4px;
   align-self: center;
 }
+.web-modules-toggle { display: none; }
 </style>

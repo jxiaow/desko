@@ -120,7 +120,7 @@ pub fn classify_session_kind(title: &str, cwd: &str) -> String {
 }
 
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexSessionTokenStats {
     pub session_id: String,
@@ -132,10 +132,13 @@ pub struct CodexSessionTokenStats {
     pub cached_input_tokens: u64,
     pub cache_write_input_tokens: u64,
     pub reasoning_output_tokens: u64,
+    pub request_count: u64,
+    /// 按模型标准 API 单价估算；任一请求的模型未定价时为 None。
+    pub estimated_cost_usd: Option<f64>,
 }
 
 
-/// rollout 里 `event_msg/token_count` 的 `info.total_token_usage` 原样六项
+/// rollout 里 `event_msg/token_count` 的累计或本次用量六项。
 #[derive(Debug, Clone, Copy)]
 pub struct RolloutTokenUsage {
     pub input_tokens: u64,
@@ -588,36 +591,38 @@ pub fn get_session_token_stats_across_instances(
     }
 
     let instances = collect_instances()?;
-    let mut pending_ids = requested_ids.clone();
     let mut stats_by_session_id = HashMap::<String, CodexSessionTokenStats>::new();
 
     for instance in &instances {
-        if pending_ids.is_empty() {
-            break;
-        }
-
         for snapshot in load_thread_snapshots(instance)? {
-            if !pending_ids.contains(&snapshot.id) {
+            if !requested_ids.contains(&snapshot.id) {
                 continue;
             }
 
-            let Some(usage) = read_token_stats_from_rollout(&snapshot.rollout_path) else {
+            let Some(_) = read_token_stats_from_rollout(&snapshot.rollout_path) else {
                 continue;
             };
-
-            stats_by_session_id.insert(
-                snapshot.id.clone(),
+            let entry = load_usage_events(&snapshot.rollout_path)?;
+            // 同一会话的分页文件全部累加，与用量页共享增量，排除续接历史。
+            let stats = stats_by_session_id.entry(snapshot.id.clone()).or_insert_with(|| {
                 CodexSessionTokenStats {
                     session_id: snapshot.id.clone(),
-                    input_tokens: usage.input_tokens,
-                    output_tokens: usage.output_tokens,
-                    total_tokens: usage.total_tokens,
-                    cached_input_tokens: usage.cached_input_tokens,
-                    cache_write_input_tokens: usage.cache_write_input_tokens,
-                    reasoning_output_tokens: usage.reasoning_output_tokens,
-                },
-            );
-            pending_ids.remove(&snapshot.id);
+                    estimated_cost_usd: Some(0.0),
+                    ..CodexSessionTokenStats::default()
+                }
+            });
+            for event in &entry.events {
+                stats.input_tokens += event.usage.input_tokens;
+                stats.cached_input_tokens += event.usage.cached_input_tokens;
+                stats.cache_write_input_tokens += event.usage.cache_write_input_tokens;
+                stats.output_tokens += event.usage.output_tokens;
+                stats.reasoning_output_tokens += event.usage.reasoning_output_tokens;
+                stats.total_tokens += event.usage.total_tokens;
+                stats.estimated_cost_usd = stats.estimated_cost_usd
+                    .zip(event.estimated_cost_usd)
+                    .map(|(total, cost)| total + cost);
+            }
+            stats.request_count += entry.events.len() as u64;
         }
     }
 
@@ -638,10 +643,11 @@ pub struct CodexUsageBucket {
     pub output_tokens: u64,
     pub total_tokens: u64,
     pub request_count: u64,
+    pub estimated_cost_usd: Option<f64>,
 }
 
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexUsageTotals {
     pub input_tokens: u64,
@@ -653,8 +659,25 @@ pub struct CodexUsageTotals {
     pub request_count: u64,
     pub session_count: u64,
     pub file_count: u64,
+    pub estimated_cost_usd: Option<f64>,
 }
 
+impl Default for CodexUsageTotals {
+    fn default() -> Self {
+        Self {
+            input_tokens: 0,
+            cached_input_tokens: 0,
+            cache_write_input_tokens: 0,
+            output_tokens: 0,
+            reasoning_output_tokens: 0,
+            total_tokens: 0,
+            request_count: 0,
+            session_count: 0,
+            file_count: 0,
+            estimated_cost_usd: Some(0.0),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -675,6 +698,7 @@ struct UsageEvent {
     timestamp: i64,
     usage: RolloutTokenUsage,
     model_index: usize,
+    estimated_cost_usd: Option<f64>,
 }
 
 
@@ -682,6 +706,7 @@ struct UsageEvent {
 struct UsageFileEntry {
     file_len: u64,
     modified_at: Option<SystemTime>,
+    session_id: Option<String>,
     models: Vec<String>,
     events: Vec<UsageEvent>,
 }
@@ -731,7 +756,7 @@ fn load_usage_events(rollout_path: &Path) -> Result<UsageFileEntry, String> {
 
 
 /// 顺序读满整份 rollout：模型跟着 `session_meta`/`turn_context` 走，
-/// `token_count` 的累计快照与上一条相减才是这一轮的用量。
+/// 首条优先取本次用量以排除续接历史，其余累计快照与上一条相减。
 fn scan_usage_events(
     rollout_path: &Path,
     file_len: u64,
@@ -742,6 +767,7 @@ fn scan_usage_events(
     let reader = BufReader::with_capacity(USAGE_READ_CHUNK_BYTES, file);
 
     let mut models: Vec<String> = Vec::new();
+    let mut session_id = None;
     let mut model_indexes = HashMap::<String, usize>::new();
     let mut current_model: Option<usize> = None;
     let mut previous: Option<RolloutTokenUsage> = None;
@@ -772,12 +798,17 @@ fn scan_usage_events(
         };
         match parsed.get("type").and_then(JsonValue::as_str) {
             Some("session_meta") | Some("turn_context") => {
+                if parsed.get("type").and_then(JsonValue::as_str) == Some("session_meta") && session_id.is_none() {
+                    session_id = session_meta_id(&parsed);
+                }
                 if let Some(model) = parsed
                     .get("payload")
                     .and_then(|payload| payload.get("model"))
                     .and_then(JsonValue::as_str)
                 {
-                    current_model = Some(intern_model(model, &mut models, &mut model_indexes));
+                    current_model = Some(intern_model(
+                        &normalize_usage_model(model), &mut models, &mut model_indexes,
+                    ));
                 }
             }
             Some("event_msg") => {
@@ -788,17 +819,39 @@ fn scan_usage_events(
                     continue;
                 }
                 // info 为 null 的快照只带额度，不带用量；跳过但保留 previous。
-                let Some(usage) = payload
+                let Some(info) = payload
                     .and_then(|value| value.get("info"))
-                    .and_then(|info| info.get("total_token_usage"))
+                    .filter(|info| !info.is_null())
                 else {
                     continue;
                 };
+                let Some(usage) = info.get("total_token_usage") else {
+                    continue;
+                };
+                if let Some(model) = info
+                    .get("model")
+                    .or_else(|| info.get("model_name"))
+                    .or_else(|| payload.and_then(|value| value.get("model")))
+                    .and_then(JsonValue::as_str)
+                {
+                    current_model = Some(intern_model(
+                        &normalize_usage_model(model), &mut models, &mut model_indexes,
+                    ));
+                }
                 let Some(timestamp) = parse_rollout_line_timestamp_seconds(&parsed) else {
                     continue;
                 };
                 let cumulative = parse_rollout_usage(usage);
-                let delta = usage_delta(previous, cumulative);
+                let delta = if previous.is_none() {
+                    // IDE 续接的文件会沿用历史累计，首条累计不是这次请求的用量。
+                    // 后续仍以累计做差，重复快照不会重复计费；旧格式缺 last 时兼容原口径。
+                    info.get("last_token_usage")
+                        .filter(|usage| usage.get("total_tokens").and_then(JsonValue::as_u64).is_some())
+                        .map(parse_rollout_usage)
+                        .unwrap_or(cumulative)
+                } else {
+                    usage_delta(previous, cumulative)
+                };
                 previous = Some(cumulative);
                 if delta.total_tokens == 0 {
                     continue;
@@ -807,6 +860,8 @@ fn scan_usage_events(
                     timestamp,
                     usage: delta,
                     model_index: current_model.unwrap_or(UNKNOWN_MODEL_INDEX),
+                    estimated_cost_usd: current_model
+                        .and_then(|index| estimate_usage_cost(&models[index], delta)),
                 });
             }
             _ => {}
@@ -816,9 +871,36 @@ fn scan_usage_events(
     Ok(UsageFileEntry {
         file_len,
         modified_at,
+        session_id,
         models,
         events,
     })
+}
+
+/// 与 cockpit-tools 的会话估算口径一致：标准 USD / 百万 Token，推理不重复计费。
+/// 价格表来源：codex_local_access_routing_pricing.rs / codex_local_access_historical_pricing.rs。
+/// https://github.com/jlcodes99/cockpit-tools/tree/main/src-tauri/src/modules
+/// JSON 每项依次为：净输入、缓存输入、输出的标准单价。
+fn estimate_usage_cost(model: &str, usage: RolloutTokenUsage) -> Option<f64> {
+    static PRICES: LazyLock<HashMap<String, [f64; 3]>> = LazyLock::new(|| {
+        serde_json::from_str(include_str!("../../resources/codex_session_pricing.json"))
+            .expect("内置 Codex 会话价格表格式正确")
+    });
+    let [input, cached, output] = PRICES.get(model)?;
+    let cached_tokens = usage.cached_input_tokens.min(usage.input_tokens);
+    Some(((usage.input_tokens - cached_tokens) as f64 * input
+        + cached_tokens as f64 * cached
+        + usage.output_tokens as f64 * output) / 1_000_000.0)
+}
+
+fn normalize_usage_model(raw: &str) -> String {
+    // 支持带 YYYY-MM-DD / YYYYMMDD 日期版本的模型名，未知型号保持未定价。
+    static DATE_SUFFIX: LazyLock<regex::Regex> = LazyLock::new(|| {
+        regex::Regex::new(r"-(?:[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{8})$")
+            .expect("模型日期后缀正则格式正确")
+    });
+    let model = raw.trim().rsplit('/').next().unwrap_or("").to_ascii_lowercase();
+    DATE_SUFFIX.replace(&model, "").into_owned()
 }
 
 
@@ -898,7 +980,7 @@ pub fn query_session_usage(
     let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
     let mut by_model = HashMap::<String, CodexUsageBucket>::new();
     let mut totals = CodexUsageTotals::default();
-    let mut active_sessions = 0_u64;
+    let mut active_sessions = HashSet::new();
 
     for path in usage_rollout_files()? {
         totals.file_count += 1;
@@ -912,11 +994,11 @@ pub fn query_session_usage(
             &mut by_model,
             &mut totals,
         ) {
-            active_sessions += 1;
+            active_sessions.insert(entry.session_id.clone().unwrap_or_else(|| format!("file:{}", path.display())));
         }
     }
 
-    totals.session_count = active_sessions;
+    totals.session_count = active_sessions.len() as u64;
 
     let mut by_day = by_day.into_values().collect::<Vec<_>>();
     by_day.sort_by(|left, right| left.key.cmp(&right.key));
@@ -970,6 +1052,9 @@ fn accumulate_usage_entry(
         totals.reasoning_output_tokens += event.usage.reasoning_output_tokens;
         totals.total_tokens += event.usage.total_tokens;
         totals.request_count += 1;
+        totals.estimated_cost_usd = totals.estimated_cost_usd
+            .zip(event.estimated_cost_usd)
+            .map(|(total, cost)| total + cost);
 
         let Some((day, hour, hour_label)) = local_usage_keys(event.timestamp) else {
             continue;
@@ -986,18 +1071,21 @@ fn accumulate_usage_entry(
                 .entry(day.clone())
                 .or_insert_with(|| new_bucket(day.clone(), day)),
             event.usage,
+            event.estimated_cost_usd,
         );
         add_to_bucket(
             by_hour
                 .entry(hour)
                 .or_insert_with(|| new_bucket(hour.to_string(), hour_label)),
             event.usage,
+            event.estimated_cost_usd,
         );
         add_to_bucket(
             by_model
                 .entry(model_key.clone())
                 .or_insert_with(|| new_bucket(model_key, model_label)),
             event.usage,
+            event.estimated_cost_usd,
         );
     }
 
@@ -1014,16 +1102,18 @@ fn new_bucket(key: String, label: String) -> CodexUsageBucket {
         output_tokens: 0,
         total_tokens: 0,
         request_count: 0,
+        estimated_cost_usd: Some(0.0),
     }
 }
 
 
-fn add_to_bucket(bucket: &mut CodexUsageBucket, usage: RolloutTokenUsage) {
+fn add_to_bucket(bucket: &mut CodexUsageBucket, usage: RolloutTokenUsage, cost: Option<f64>) {
     bucket.input_tokens += usage.input_tokens;
     bucket.cached_input_tokens += usage.cached_input_tokens;
     bucket.output_tokens += usage.output_tokens;
     bucket.total_tokens += usage.total_tokens;
     bucket.request_count += 1;
+    bucket.estimated_cost_usd = bucket.estimated_cost_usd.zip(cost).map(|(total, cost)| total + cost);
 }
 
 
@@ -2525,6 +2615,153 @@ mod tests {
             }
         })
         .to_string()
+    }
+
+    #[test]
+    fn session_and_usage_billing_share_models_cache_discount_and_request_deduplication() {
+        let _lock = modules::test_support::env_lock().lock().unwrap();
+        struct ResetHome(Option<std::ffi::OsString>);
+        impl Drop for ResetHome {
+            fn drop(&mut self) {
+                match &self.0 {
+                    Some(value) => std::env::set_var("CODEX_HOME", value),
+                    None => std::env::remove_var("CODEX_HOME"),
+                }
+            }
+        }
+        let _reset = ResetHome(std::env::var_os("CODEX_HOME"));
+        let root = make_temp_dir("codex-session-billing");
+        let dir = root.join("sessions");
+        fs::create_dir_all(&dir).unwrap();
+        // 续接的文件首条累计中已有历史用量，本次请求仅为 100 万输入 / 10 万输出。
+        let mut first: JsonValue = serde_json::from_str(&usage_snapshot_line(
+            "2026-10-11T02:00:00Z", 10_000_000, 8_000_000, 1_000_000,
+        )).unwrap();
+        first["payload"]["info"]["last_token_usage"] = json!({
+            "input_tokens": 1_000_000, "cached_input_tokens": 800_000,
+            "cache_write_input_tokens": 0, "output_tokens": 100_000,
+            "reasoning_output_tokens": 0, "total_tokens": 1_100_000
+        });
+        let lines = [
+            json!({"type":"session_meta","payload":{"id":"billing","model":"openai/gpt-5.4-2026-03-05"}}).to_string(),
+            first.to_string(),
+            first.to_string(),
+            usage_model_line("turn_context", "gpt-5.4-mini"),
+            usage_snapshot_line("2026-10-11T03:00:00Z", 10_500_000, 8_400_000, 1_050_000),
+            // CLI / IDE 的重复快照不能再加金额或请求数。
+            usage_snapshot_line("2026-10-11T03:00:01Z", 10_500_000, 8_400_000, 1_050_000),
+            r#"{"timestamp":"2026-10-11T03:00:02Z","type":"event_msg","payload":{"type":"token_count","info":null}}"#.to_string(),
+        ];
+        let path = dir.join("rollout-billing.jsonl");
+        fs::write(&path, lines.join("\n")).unwrap();
+        std::env::set_var("CODEX_HOME", &root);
+        let stats = get_session_token_stats_across_instances(vec!["billing".into()]).unwrap();
+        let report = query_session_usage(None, None).unwrap();
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].request_count, 2);
+        assert_eq!(stats[0].input_tokens, 1_500_000);
+        assert_eq!(stats[0].cached_input_tokens, 1_200_000);
+        assert_eq!(stats[0].output_tokens, 150_000);
+        assert_eq!(stats[0].total_tokens, 1_650_000);
+        assert_eq!(report.totals.request_count, stats[0].request_count);
+        assert!((stats[0].estimated_cost_usd.unwrap() - 2.53).abs() < 1e-10);
+        assert_eq!(report.totals.estimated_cost_usd, stats[0].estimated_cost_usd);
+        assert_eq!(report.totals.total_tokens, stats[0].total_tokens);
+        assert!((report.by_day.iter().map(|row| row.estimated_cost_usd.unwrap()).sum::<f64>() - 2.53).abs() < 1e-10);
+        assert!((report.by_hour.iter().map(|row| row.estimated_cost_usd.unwrap()).sum::<f64>() - 2.53).abs() < 1e-10);
+        assert!((report.by_model.iter().map(|row| row.estimated_cost_usd.unwrap()).sum::<f64>() - 2.53).abs() < 1e-10);
+        // 缓存必须限制在输入以内；推理已在输出内，不再叠加。
+        let usage = RolloutTokenUsage { input_tokens: 100, cached_input_tokens: 200,
+            cache_write_input_tokens: 0, output_tokens: 10, reasoning_output_tokens: 8, total_tokens: 110 };
+        assert!((estimate_usage_cost("gpt-5.4", usage).unwrap() - 0.000175).abs() < 1e-10);
+        // 时间窗口只筛选增量，不能把前一天的累计按新模型再次计价。
+        let from = DateTime::parse_from_rfc3339("2026-10-11T02:30:00Z").unwrap().timestamp();
+        let filtered = query_session_usage(Some(from), None).unwrap();
+        assert_eq!(filtered.totals.request_count, 1);
+        assert!((filtered.totals.estimated_cost_usd.unwrap() - 0.33).abs() < 1e-10);
+
+        // 同一线程换分页文件后，会话页必须继续累加，不能只拿其中一个文件。
+        let mut continued: JsonValue = serde_json::from_str(&usage_snapshot_line(
+            "2026-10-11T03:30:00Z", 10_500_000, 8_400_000, 1_050_000,
+        )).unwrap();
+        continued["payload"]["info"]["last_token_usage"] = json!({"total_tokens": 0});
+        fs::write(dir.join("rollout-billing-part2.jsonl"), [
+            json!({"type":"session_meta","payload":{"id":"billing","model":"gpt-5.4-mini"}}).to_string(),
+            continued.to_string(),
+            usage_snapshot_line("2026-10-11T04:00:00Z", 10_600_000, 8_480_000, 1_060_000),
+        ].join("\n")).unwrap();
+        let combined = get_session_token_stats_across_instances(vec!["billing".into()]).unwrap();
+        let report = query_session_usage(None, None).unwrap();
+        assert_eq!(combined.len(), 1);
+        assert_eq!(combined[0].request_count, 3);
+        assert_eq!(combined[0].input_tokens, 1_600_000);
+        assert_eq!(combined[0].cached_input_tokens, 1_280_000);
+        assert_eq!(combined[0].output_tokens, 160_000);
+        assert_eq!(combined[0].total_tokens, 1_760_000);
+        assert!((combined[0].estimated_cost_usd.unwrap() - 2.596).abs() < 1e-10);
+        assert_eq!(report.totals.estimated_cost_usd, combined[0].estimated_cost_usd);
+        assert_eq!(report.totals.total_tokens, combined[0].total_tokens);
+        assert_eq!(report.totals.file_count, 2);
+        assert_eq!(report.totals.session_count, 1);
+        for buckets in [&report.by_day, &report.by_hour, &report.by_model] {
+            assert!((buckets.iter().map(|row| row.estimated_cost_usd.unwrap()).sum::<f64>() - 2.596).abs() < 1e-10);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn usage_resumed_zero_snapshot_sets_baseline_without_charging_history() {
+        let dir = make_temp_dir("codex-resumed-zero");
+        let mut first: JsonValue = serde_json::from_str(&usage_snapshot_line(
+            "2026-10-11T02:00:00Z", 1_000_000, 800_000, 100_000,
+        )).unwrap();
+        first["payload"]["info"]["last_token_usage"] = json!({
+            "input_tokens": 0, "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0, "output_tokens": 0,
+            "reasoning_output_tokens": 0, "total_tokens": 0
+        });
+        let entry = scan_usage_lines(&dir, &[
+            usage_model_line("turn_context", "gpt-5.4"),
+            first.to_string(),
+            first.to_string(),
+            usage_snapshot_line("2026-10-11T03:00:00Z", 1_100_000, 880_000, 110_000),
+        ]);
+        assert_eq!(entry.events.len(), 1);
+        assert_eq!(entry.events[0].usage.input_tokens, 100_000);
+        assert_eq!(entry.events[0].usage.cached_input_tokens, 80_000);
+        assert_eq!(entry.events[0].usage.output_tokens, 10_000);
+        assert!((entry.events[0].estimated_cost_usd.unwrap() - 0.22).abs() < 1e-10);
+
+        // 缺少有效的本次用量时，旧记录继续使用累计值。
+        for last in [JsonValue::Null, json!({})] {
+            first["payload"]["info"]["last_token_usage"] = last;
+            let legacy = scan_usage_lines(&dir, &[first.to_string()]);
+            assert_eq!(legacy.events.len(), 1);
+            assert_eq!(legacy.events[0].usage.input_tokens, 1_000_000);
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn usage_cost_keeps_unpriced_models_distinct_from_zero() {
+        assert_eq!(CodexUsageTotals::default().estimated_cost_usd, Some(0.0));
+        let dir = make_temp_dir("codex-unpriced-billing");
+        let entry = scan_usage_lines(&dir, &[
+            usage_model_line("turn_context", "gpt-6.1-sol"),
+            usage_snapshot_line("2026-10-11T02:00:00Z", 100, 80, 5),
+            usage_model_line("turn_context", "custom/未知模型"),
+            usage_snapshot_line("2026-10-11T03:00:00Z", 150, 120, 9),
+        ]);
+        let mut totals = CodexUsageTotals::default();
+        let (mut days, mut hours, mut models) = (HashMap::new(), HashMap::new(), HashMap::new());
+        accumulate_usage_entry(&entry, None, None, &mut days, &mut hours, &mut models, &mut totals);
+        assert_eq!(totals.request_count, 2);
+        assert_eq!(totals.estimated_cost_usd, None);
+        assert_eq!(days.values().next().unwrap().estimated_cost_usd, None);
+        assert!(models["gpt-6.1-sol"].estimated_cost_usd.unwrap() > 0.0);
+        assert_eq!(models["未知模型"].estimated_cost_usd, None);
+        assert_eq!(normalize_usage_model("OpenAI/GPT-6.1-SOL-20261001"), "gpt-6.1-sol");
+        fs::remove_dir_all(dir).unwrap();
     }
 
     fn usage_model_line(kind: &str, model: &str) -> String {

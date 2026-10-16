@@ -4,51 +4,14 @@
 @media (max-width: 640px), (hover: none) and (max-width: 1024px) {
   .app-root.web-runtime {
     --page-gutter: 14px;
-    --dock-clearance: 164px;
+    --dock-clearance: calc(96px + env(safe-area-inset-bottom));
     --toast-side: 0px !important;
   }
   .app-root.web-runtime .app-layout { flex-direction: column; }
-  .app-root.web-runtime .main-area { height: auto; min-height: 0; order: 1; }
-
-  /* 模块沿底部横向滚动，新增入口仍保留完整的触摸宽度。 */
-  .app-root.web-runtime .app-layout > .sidebar {
-    order: 2;
-    width: 100%;
-    height: auto;
-    padding: 4px max(8px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px, env(safe-area-inset-left));
-    border-right: 0;
-    border-top: 1px solid var(--border-navigation);
-    background: var(--bg-sidebar);
-  }
-  .app-root.web-runtime .sidebar-top,
-  .app-root.web-runtime .sidebar-sec { display: none; }
-  .app-root.web-runtime .sidebar .sidebar-nav {
-    display: grid;
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(66px, 1fr);
-    gap: 4px;
-    margin: 0;
-    padding: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-gutter: auto;
-  }
-  .app-root.web-runtime .sidebar .nav-item {
-    height: 58px;
-    min-width: 0;
-    padding: 7px 2px;
-    flex-direction: column;
-    justify-content: center;
-    gap: 4px;
-    font-size: 11px;
-    border-radius: 8px;
-  }
-  .app-root.web-runtime .sidebar.collapsed .nav-text,
-  .app-root.web-runtime .sidebar .nav-text { display: block; flex: none; }
-  .app-root.web-runtime .sidebar .nav-count { display: none; }
-  .app-root.web-runtime .sidebar .nav-icon,
-  .app-root.web-runtime .sidebar .nav-icon svg { width: 21px; height: 21px; }
+  .app-root.web-runtime .main-area { height: auto; min-height: 0; }
+  .app-root.web-runtime .app-layout > .sidebar { display: none; }
+  .app-root.web-runtime .web-modules-toggle { display: flex; flex-shrink: 0; }
+  .app-root.web-runtime .sidebar-restore { display: none; }
   .app-root.web-runtime .titlebar { height: 52px; padding-top: env(safe-area-inset-top); box-sizing: content-box; }
   .app-root.web-runtime .titlebar-btn { min-width: 44px; min-height: 44px; }
   .app-root.web-runtime .titlebar-left { min-width: 0; padding-left: var(--page-gutter); }
@@ -57,6 +20,7 @@
   .app-root.web-runtime .page-bar { gap: 6px; min-height: 64px; padding-block: 12px; }
   .app-root.web-runtime .page-bar .bar-btn { min-width: 40px; height: 40px; }
   .app-root.web-runtime .page-bar .btn-primary { min-height: 40px; }
+  .app-root.web-runtime .rail-heading .ib { width: 44px; height: 44px; }
   .app-root.web-runtime .notes-page.rail-over .page-bar { padding-right: 0; }
   .app-root.web-runtime .search-box { height: 40px; }
   .app-root.web-runtime input:not([type='checkbox']):not([type='radio']),
@@ -98,7 +62,7 @@
   .app-root.web-runtime .grid-acts .ib { width: 38px; height: 40px; }
   .app-root.web-runtime .mfa-card .card-del { opacity: 1; width: 36px; height: 40px; }
   .app-root.web-runtime .batch-dock {
-    bottom: calc(76px + env(safe-area-inset-bottom));
+    bottom: calc(12px + env(safe-area-inset-bottom));
     width: calc(100% - 24px);
     max-width: none;
     height: auto;

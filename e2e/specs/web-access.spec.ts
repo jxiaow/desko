@@ -2,11 +2,12 @@ import { test, expect, type Page } from '@playwright/test'
 import { bootUnlocked, tipButton } from '../helpers'
 import type { E2EConfig } from '../mocks/backend'
 
-async function webApp(page: Page, config: E2EConfig = {}) {
+async function webApp(page: Page, config: E2EConfig = {}, initialPath = '/notes') {
   let authorized = false
   let expired = false
   const invocations: string[] = []
   const errors: string[] = []
+  const events: { id: number; event: string; payload: unknown }[] = []
   page.on('pageerror', e => errors.push(e.message))
   await page.addInitScript(config => {
     ;(window as any).__E2E_CONFIG__ = {
@@ -15,6 +16,7 @@ async function webApp(page: Page, config: E2EConfig = {}) {
       fileShortcuts: [{ name: 'demo.txt', path: 'C:/Work/demo.txt', shortcut_type: 'file' }, { name: 'Web 目录', path: 'C:/Work', shortcut_type: 'folder' }],
       mfaTokens: [{ label: 'Web 验证码', secret: 'JBSWY3DPEHPK3PXP' }],
       ...config,
+      settings: { mfa_enabled: 'true', ...config.settings },
     }
   }, config)
   await page.route(/^http:\/\/127\.0\.0\.1:\d+\/api\//, async route => {
@@ -45,14 +47,13 @@ async function webApp(page: Page, config: E2EConfig = {}) {
     if (path === '/api/invoke') {
       const body = route.request().postDataJSON()
       invocations.push(body.command)
-      if (body.command === 'web_poll_events') return send(200, { cursor: 0, events: [] })
+      if (body.command === 'web_poll_events') return send(200, { cursor: events.length, events: events.filter(event => body.args.after != null && event.id > body.args.after) })
       if (body.command === 'web_codex_read_session') return send(200, '{\"type\":\"message\",\"content\":\"Web 会话正文\"}')
       if (body.command === 'web_seal_draft') return send(200, { iv: 'fixture-draft-iv', ciphertext: Buffer.from(body.args.plaintext).toString('base64') })
       if (body.command === 'web_open_draft') return send(200, Buffer.from(body.args.sealed.ciphertext, 'base64').toString())
       try {
         const value = await page.evaluate(async ({ command, args }) => {
           const { getBackend } = await import('/e2e/mocks/backend.ts' as string)
-          if (command === 'web_upload_attachment') return getBackend().invoke(args.noteId ? 'upload_attachment' : 'stage_attachment', { noteId: args.noteId, filePath: `C:/web-upload/${args.name}` })
           return getBackend().invoke(command, args)
         }, body)
         return send(200, value ?? null)
@@ -60,20 +61,84 @@ async function webApp(page: Page, config: E2EConfig = {}) {
     }
     return send(404, { error: '资源不存在' })
   })
-  await page.route(/http:\/\/127\.0\.0\.1:\d+\/(?:notes|entries|files|mfa|codex|fileshare|tunnel)?$/, async route => {
+  await page.route(/http:\/\/127\.0\.0\.1:\d+\/(?:start|notes|entries|files|mfa|codex|fileshare|tunnel)?$/, async route => {
     const response = await route.fetch()
     const html = (await response.text()).replace('<head>', '<head><meta name="desko-runtime" content="web">')
     await route.fulfill({ response, body: html })
   })
-  await page.goto('/notes')
-  await expect(page.getByRole('heading', { name: 'Desko 浏览器访问' })).toBeVisible()
-  const login = async () => {
+  await page.goto(initialPath)
+  await expect(page.getByRole('heading', { name: 'Desko', exact: true })).toBeVisible()
+  const login = async (selector = '.notes-page') => {
     await page.locator('input[type="password"]').fill('e2e-master-123')
     await page.locator('input[type="password"]').press('Enter')
-    await expect(page.locator('.notes-page')).toBeVisible()
+    await expect(page.locator(selector)).toBeVisible()
   }
-  return { login, errors, invocations, expire: () => { expired = true } }
+  const desktopModuleChange = async (id: string, enabled: boolean) => {
+    await page.evaluate(async ({ id, enabled }) => {
+      const { getBackend } = await import('/e2e/mocks/backend.ts' as string)
+      await getBackend().invoke('set_setting', { key: `${id}_enabled`, value: String(enabled) })
+    }, { id, enabled })
+    events.push({ id: events.length + 1, event: 'desko:module-changed', payload: { id, enabled } })
+  }
+  return { login, errors, invocations, desktopModuleChange, expire: () => { expired = true } }
 }
+
+async function selectModule(page: Page, name: string) {
+  const toggle = page.getByRole('button', { name: '打开模块导航', exact: true })
+  if (await toggle.isVisible()) await toggle.click()
+  await page.getByRole('navigation', { name: '模块导航' }).getByRole('link', { name, exact: true }).click()
+}
+
+const allWebModulesOff = Object.fromEntries(['notes', 'entries', 'files', 'mfa', 'fileshare', 'tunnel', 'codex'].map(id => [`${id}_enabled`, 'false']))
+
+for (const width of [390, 1440]) {
+  test(`Web ${width}px 全部关闭：不保留固定模块，直接网址也不能打开`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 })
+    const app = await webApp(page, { settings: allWebModulesOff })
+    await app.login('.empty-state')
+    await expect(page).toHaveURL(/\/start$/)
+    await expect(page.locator('.empty-title')).toHaveText('暂无已启用的模块')
+    await expect(page.locator('.nav-item')).toHaveCount(0)
+    for (const path of ['/entries', '/files', '/mfa']) {
+      await page.goto(path)
+      await app.login('.empty-state')
+      await expect(page).toHaveURL(/\/start$/)
+    }
+    for (const command of ['list_notes', 'list_entries_with_paths', 'list_file_shortcuts', 'mfa_codes']) expect(app.invocations).not.toContain(command)
+    await page.getByRole('button', { name: '管理模块', exact: true }).click()
+    const settings = page.getByRole('dialog', { name: '浏览器设置', exact: true })
+    await expect(settings.getByRole('switch')).toHaveCount(7)
+    for (const toggle of await settings.getByRole('switch').all()) await expect(toggle).not.toBeChecked()
+    await settings.getByRole('switch', { name: '网址收藏', exact: true }).check()
+    await settings.getByRole('button', { name: '完成', exact: true }).click()
+    await selectModule(page, '网址收藏')
+    await expect(page.locator('.entry-card')).toBeVisible()
+    await expect(page.locator('.nav-item')).toHaveCount(1)
+    expect(app.errors).toEqual([])
+  })
+}
+
+test('桌面关闭最后一个核心模块后，Web 自动退出该模块；重新开启后可访问', async ({ page }) => {
+  const app = await webApp(page, { settings: { ...allWebModulesOff, notes_enabled: 'true' } })
+  await app.login()
+  await app.desktopModuleChange('notes', false)
+  await expect(page).toHaveURL(/\/start$/)
+  await expect(page.locator('.memo')).toHaveCount(0)
+  await expect(page.locator('.nav-item')).toHaveCount(0)
+  await app.desktopModuleChange('entries', true)
+  await expect(page.locator('a.nav-item[href="/entries"]')).toBeVisible()
+  await expect(page).toHaveURL(/\/entries$/)
+  await expect(page.locator('.entry-card')).toBeVisible()
+  expect(app.errors).toEqual([])
+})
+
+test('Web 登录保留已启用模块的直接网址，并跳过关闭的小记预取', async ({ page }) => {
+  const app = await webApp(page, { settings: { ...allWebModulesOff, entries_enabled: 'true' } }, '/entries')
+  await app.login('.entry-card')
+  await expect(page).toHaveURL(/\/entries$/)
+  expect(app.invocations).not.toContain('list_notes')
+  expect(app.errors).toEqual([])
+})
 
 test('Web 登录、四个入口、发布小记和独立外观设置', async ({ page }) => {
   const app = await webApp(page)
@@ -87,9 +152,9 @@ test('Web 登录、四个入口、发布小记和独立外观设置', async ({ p
   await editor.fill('通过 Web 新建的小记')
   await page.getByRole('button', { name: '发布', exact: true }).click()
   await expect(page.locator('.memo').filter({ hasText: '通过 Web 新建的小记' })).toBeVisible()
-  await page.getByRole('link', { name: '网址收藏' }).click()
+  await selectModule(page, '网址收藏')
   await expect(page.locator('.entry-card')).toContainText('Web 收藏')
-  await page.getByRole('link', { name: '验证码' }).click()
+  await selectModule(page, '验证码')
   await expect(page.getByText('Web 验证码', { exact: true })).toBeVisible()
   await tipButton(page, '设置').click()
   const settings = page.getByRole('dialog', { name: '浏览器设置' })
@@ -132,6 +197,14 @@ test('桌面 Web 设置默认仅本机，开放局域网需确认并可停止', 
   await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
   await expect(settings.getByText('服务运行中', { exact: true })).toBeVisible()
   await expect(settings.getByText('http://192.168.1.2:8420', { exact: true })).toBeVisible()
+  const addresses = settings.locator('.web-addresses')
+  await expect(addresses.locator('.web-address')).toHaveCount(2)
+  const uiFont = await page.locator('body').evaluate(body => getComputedStyle(body).fontFamily)
+  await expect(addresses.locator('.web-address-url').first()).toHaveCSS('font-family', uiFont)
+  await expect(addresses).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await settings.screenshot({ path: '.tmp/web-navigation/addresses-light.png', animations: 'disabled' })
+  await page.evaluate(async () => { const { chooseTheme } = await import('/src/services/theme.ts' as string); await chooseTheme('midnight') })
+  await settings.screenshot({ path: '.tmp/web-navigation/addresses-dark.png', animations: 'disabled' })
   await settings.getByRole('button', { name: '停止服务', exact: true }).click()
   await page.getByRole('dialog', { name: '停止 Web 服务？' }).getByRole('button', { name: '确定', exact: true }).click()
   await expect(settings.getByText('服务未启动', { exact: true })).toBeVisible()
@@ -149,7 +222,7 @@ test('Web 文件目录浏览与流式下载、图片选择不调用本机对话�
   await expect(page.locator('.composer img')).toHaveAttribute('src', /\/api\/attachments\//)
   await page.getByRole('button', { name: '发布', exact: true }).click()
   await expect(page.locator('.memo img')).toHaveCount(1)
-  await page.getByRole('link', { name: '文件快捷' }).click()
+  await selectModule(page, '文件快捷')
   await expect(page.getByRole('button', { name: '添加快捷方式' })).toHaveCount(0)
   await page.getByRole('button', { name: '浏览 Web 目录' }).click()
   const directory = page.getByRole('dialog', { name: '浏览文件：Web 目录' })
@@ -160,11 +233,11 @@ test('Web 文件目录浏览与流式下载、图片选择不调用本机对话�
   await directory.getByRole('button', { name: /子目录/ }).click()
   await expect(directory.getByText('目录为空', { exact: true })).toBeVisible()
   await directory.getByRole('button', { name: '关闭', exact: true }).click()
-  await page.getByRole('link', { name: '验证码' }).click()
+  await selectModule(page, '验证码')
   await page.getByRole('button', { name: '新增', exact: true }).click()
   await expect(page.getByLabel('选择二维码图片')).toHaveAttribute('type', 'file')
   expect(app.invocations).not.toContain('mfa_read_image')
-  expect(app.invocations).toContain('web_upload_attachment')
+  expect(app.invocations).toContain('save_attachment_bytes')
   expect(app.errors).toEqual([])
 })
 
@@ -174,7 +247,7 @@ test('Web 窄屏可读取小记与收藏', async ({ page }) => {
   await app.login()
   await expect(page.locator('.memo')).toContainText('浏览器中的原有小记')
   await page.screenshot({ path: '.tmp/app-review/app-web-audit/web-notes-390.png' })
-  await page.getByRole('link', { name: '网址收藏' }).click()
+  await selectModule(page, '网址收藏')
   await expect(page.locator('.entry-card')).toContainText('Web 收藏')
   const add = page.getByRole('button', { name: '新增条目', exact: true })
   await expect(add).toBeVisible()
@@ -236,18 +309,41 @@ test('Web 与桌面共用主密码和小记口令，支持找回且重新登录�
   expect(app.errors).toEqual([])
 })
 
+test.describe('Web 小记侧栏', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test('固定后触摸外部和切换筛选保持展开，取消固定恢复外部收起', async ({ page }) => {
+    test.setTimeout(30_000)
+    const app = await webApp(page)
+    await app.login()
+    await page.getByRole('button', { name: '展开侧栏', exact: true }).tap()
+    await page.getByRole('button', { name: '固定侧栏', exact: true }).tap()
+    const pinned = page.getByRole('button', { name: '取消固定侧栏', exact: true })
+    expect((await pinned.boundingBox())!.width).toBeGreaterThanOrEqual(44)
+    await page.locator('.notes-page .search-box input').tap({ position: { x: 8, y: 10 } })
+    await expect(page.locator('.rail.overlay')).toBeVisible()
+    await page.locator('.rail .rail-item', { hasText: '归档' }).tap()
+    await expect(page.locator('.rail.overlay')).toBeVisible()
+    await page.getByRole('button', { name: '关闭小记筛选', exact: true }).tap()
+    await expect(page.locator('.rail')).toHaveCount(0)
+    await page.getByRole('button', { name: '展开侧栏', exact: true }).tap()
+    await expect(pinned).toHaveAttribute('aria-pressed', 'true')
+    await pinned.tap()
+    await page.locator('.notes-page .search-box input').tap({ position: { x: 8, y: 10 } })
+    await expect(page.locator('.rail')).toHaveCount(0)
+    expect(app.errors).toEqual([])
+  })
+})
+
 for (const width of [320, 390, 768, 1440, 1920]) {
   test(`Web ${width}px：四个模块可操作，阅读列居中且不溢出`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 })
     const app = await webApp(page)
     await app.login()
     const mobile = width <= 640
-    const navigation = page.getByRole('navigation', { name: '模块导航' })
-    await expect(navigation.getByRole('link')).toHaveCount(4)
     if (mobile) {
-      const navBox = await navigation.boundingBox()
-      expect(navBox!.y).toBeGreaterThan(750)
-      await expect(navigation.getByText('小记', { exact: true })).toBeVisible()
+      await expect(page.locator('.app-layout > .sidebar')).toBeHidden()
+      await expect(page.getByRole('button', { name: '打开模块导航', exact: true })).toBeVisible()
       await expect(page.locator('.memo-acts')).toHaveCSS('opacity', '1')
       await page.locator('.memo-edit').click()
       await expect(page.locator('.memo.editing .ProseMirror')).toBeVisible()
@@ -268,8 +364,9 @@ for (const width of [320, 390, 768, 1440, 1920]) {
       })
       expect(centered).toBeLessThanOrEqual(1)
     }
+    if (!mobile) await expect(page.getByRole('navigation', { name: '模块导航' }).getByRole('link')).toHaveCount(4)
     for (const [label, selector] of [['小记', '.memo'], ['网址收藏', '.entry-card'], ['文件快捷', '.shortcut-row'], ['验证码', '.mfa-card']]) {
-      await navigation.getByRole('link', { name: label, exact: true }).click()
+      await selectModule(page, label)
       await expect(page.locator(selector).first()).toBeVisible()
       const layout = await page.locator(selector).first().evaluate(element => {
         const box = element.getBoundingClientRect()
@@ -298,16 +395,19 @@ for (const width of [320, 390, 768, 1440, 1920]) {
 
 test.describe('手机横屏', () => {
   test.use({ isMobile: true, hasTouch: true })
-  test('844px 触屏保留底部导航和常显操作', async ({ page }) => {
+  test('844px 触屏使用模块抽屉并保留常显操作', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 })
     const app = await webApp(page)
     await app.login()
-    const navigation = page.getByRole('navigation', { name: '模块导航' })
-    await expect(navigation.getByText('小记', { exact: true })).toBeVisible()
+    await expect(page.locator('.app-layout > .sidebar')).toBeHidden()
     await expect(page.locator('.memo-acts')).toHaveCSS('opacity', '1')
+    await page.getByRole('button', { name: '打开模块导航', exact: true }).tap()
+    const navigation = page.getByRole('navigation', { name: '模块导航' })
     const box = await navigation.boundingBox()
-    expect(box!.y).toBeGreaterThan(320)
+    expect(box!.y).toBeLessThan(150)
+    expect(box!.height).toBeLessThan(390 - box!.y)
     await navigation.getByRole('link', { name: '网址收藏', exact: true }).tap()
+    await expect(page.getByRole('dialog', { name: '模块', exact: true })).toHaveCount(0)
     await expect(page.locator('.entry-card')).toBeVisible()
     expect(app.errors).toEqual([])
   })
@@ -322,6 +422,56 @@ const expandedWeb: E2EConfig = {
   fileshare: { shareDirs: ['C:/Work/shared'] },
   tunnel: { bound: true, installed: true, authorized: true, tunnelId: 'web-tunnel', services: [{ hostname: 'files.example.com', port: 8000, label: '文件服务', preset: 'fileshare', routed: true, hasPublicPassword: true }] },
 }
+
+test('Web 模块抽屉：七个入口、焦点限制、遮罩和 Esc 关闭、宽屏恢复及会话失效', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const app = await webApp(page, expandedWeb)
+  await app.login()
+  const toggle = page.getByRole('button', { name: '打开模块导航', exact: true })
+  const drawer = page.getByRole('dialog', { name: '模块', exact: true })
+  await expect(drawer).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: '模块导航' })).toHaveCount(0)
+  await toggle.click()
+  await expect(drawer).toBeVisible()
+  await expect(drawer.getByRole('link')).toHaveCount(7)
+  await expect(drawer.getByRole('link', { name: '小记', exact: true })).toHaveAttribute('aria-current', 'page')
+  const close = drawer.getByRole('button', { name: '关闭模块导航', exact: true })
+  await expect(close).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(drawer.getByRole('link').last()).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(close).toBeFocused()
+  await page.screenshot({ path: '.tmp/web-navigation/drawer-light-390.png', animations: 'disabled' })
+  await page.keyboard.press('Escape')
+  await expect(drawer).toHaveCount(0)
+  await expect(toggle).toBeFocused()
+  await toggle.click()
+  await page.mouse.click(370, 420)
+  await expect(drawer).toHaveCount(0)
+  await toggle.click()
+  await drawer.getByRole('link', { name: '小记', exact: true }).click()
+  await expect(drawer).toHaveCount(0)
+  await selectModule(page, '网址收藏')
+  await expect(page.locator('.entry-card')).toBeVisible()
+  await expect(drawer).toHaveCount(0)
+  await page.evaluate(async () => { const { chooseTheme } = await import('/src/services/theme.ts' as string); await chooseTheme('midnight') })
+  await toggle.click()
+  await page.screenshot({ path: '.tmp/web-navigation/drawer-dark-390.png', animations: 'disabled' })
+  await page.setViewportSize({ width: 1280, height: 844 })
+  await expect(drawer).toHaveCount(0)
+  await expect(toggle).toBeHidden()
+  await expect(page.getByRole('navigation', { name: '模块导航' }).getByRole('link')).toHaveCount(7)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await toggle.click()
+  app.expire()
+  await page.evaluate(async () => {
+    const { invoke } = await import('/src/services/transport.ts' as string)
+    try { await invoke('mfa_codes') } catch { /* The expired session must close private navigation. */ }
+  })
+  await expect(page.locator('.unlock-page')).toBeVisible()
+  await expect(drawer).toHaveCount(0)
+  expect(app.errors).toEqual([])
+})
 
 test('Web 小记首次设置与修改口令沿用桌面流程', async ({ page }) => {
   const app = await webApp(page)
@@ -360,7 +510,7 @@ test('Web 七个模块：Codex 账号切换、会话搜索、文件查看、用�
   const app = await webApp(page, expandedWeb)
   await app.login()
   await expect(page.locator('.sidebar .nav-item')).toHaveCount(7)
-  await page.getByRole('link', { name: 'Codex', exact: true }).click()
+  await selectModule(page, 'Codex')
   await expect(page.locator('.acc-row')).toHaveCount(2)
   const backup = page.locator('.acc-row[data-email="backup@example.com"]')
   await backup.locator('.action-btn.primary').click()
@@ -395,7 +545,7 @@ test('Web 七个模块：Codex 账号切换、会话搜索、文件查看、用�
 test('Web 局域网传输上传、设置与隧道启停均可在浏览器完成', async ({ page }) => {
   const app = await webApp(page, expandedWeb)
   await app.login()
-  await page.getByRole('link', { name: '局域网传输', exact: true }).click()
+  await selectModule(page, '局域网传输')
   await page.getByRole('button', { name: '启动服务', exact: true }).click()
   await expect(page.locator('.banner-title')).toContainText('同网段设备可访问')
   await page.getByLabel('上传到共享目录').setInputFiles({ name: '手机文件.txt', mimeType: 'text/plain', buffer: Buffer.from('browser upload') })
@@ -404,7 +554,7 @@ test('Web 局域网传输上传、设置与隧道启停均可在浏览器完成'
   const settings = page.getByRole('dialog', { name: '浏览器设置', exact: true })
   await expect(settings.getByText('仅本机访问', { exact: true })).toBeVisible()
   await settings.getByRole('button', { name: '完成', exact: true }).click()
-  await page.getByRole('link', { name: '内网穿透', exact: true }).click()
+  await selectModule(page, '内网穿透')
   await expect(page.locator('.svc-row')).toContainText('files.example.com')
   await page.getByRole('button', { name: '启动隧道', exact: true }).click()
   await expect(page.locator('.page-bar .chip').first()).toContainText('已连上边缘')
@@ -436,7 +586,7 @@ for (const width of [320, 390, 768, 1440]) {
     const app = await webApp(page, expandedWeb)
     await app.login()
     for (const name of ['Codex', '局域网传输', '内网穿透']) {
-      await page.getByRole('link', { name, exact: true }).click()
+      await selectModule(page, name)
       await expect(page.locator('.content-inner')).toBeVisible()
       const overflow = await page.locator('.content-inner').evaluate(el => el.scrollWidth - el.clientWidth)
       expect(overflow).toBeLessThanOrEqual(1)

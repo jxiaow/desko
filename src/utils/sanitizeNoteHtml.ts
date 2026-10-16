@@ -9,13 +9,15 @@ const DROP_WITH_CONTENT = new Set([
   'video', 'audio', 'link', 'meta', 'base', 'button', 'textarea', 'select', 'option',
 ])
 
-function safeLink(value: string): boolean {
+/** 正文链接的合法地址口径：编辑器 setLink 与渲染清洗共用这一份 */
+export function safeLink(value: string): boolean {
   const url = value.trim()
   if (!url || /[\u0000-\u001f\u007f]/.test(url)) return false
   return /^(https?:\/\/|mailto:|\/[^/]|#)/i.test(url)
 }
 
-function safeImage(value: string): boolean {
+/** 正文图片的合法地址口径：编辑器解析剪贴板与渲染清洗共用这一份（data:、blob: 一律不收） */
+export function safeImage(value: string): boolean {
   const url = value.trim()
   if (!url || /[\u0000-\u001f\u007f]/.test(url)) return false
   if (/^attachments\/[^/\\]+$/i.test(url)) {

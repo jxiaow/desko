@@ -1,5 +1,4 @@
 @import './materials.css';
-@import './plain-themes.css';
 
 /* ═══════════════════════════════════════════════════════════════════
    第 1 层 · 尺度 —— 主题之间恒定。
@@ -105,9 +104,9 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   第 2 层 · 主题 —— 两轴结构：十一种底色 × 十种强调色。
+   第 2 层 · 主题 —— 两轴结构：八种底色 × 十种强调色。
 
-   · [data-theme] 十一块交出**完全相同**的 96 个槽位名。少填一个，切过去
+   · [data-theme] 八块交出**完全相同**的 96 个槽位名。少填一个，切过去
      那个位置就留着上一套的值，变成一块切换后不动的颜色。
    · accent 族 17 槽由 [data-base=x][data-accent=y] 覆盖层填，
      20 个组合必须齐全（缺省态 = 墨蓝，与底色块内的值保持一致）。
@@ -119,8 +118,8 @@
      用几个色相、什么决定它是全局定死的；主题只负责给它填 hex。
      v2 起分类色只服务内容侧（头像/徽章/色相钉），界面层只吃灰阶+accent。
 
-   :where(:root) 提供 paper+墨蓝 的缺省值，低优先级让导入的主题也能覆盖。
-   素色三套（plain-themes.css）：素白 / 暖灰 / 炭黑；氛围八套：纸 / 雪 / 绢 / 雾 / 墨 / 岩 / 夜 / 苔。
+   :where(:root) 提供 paper+墨蓝 的缺省值。
+   八套底色：纸 / 雪 / 绢 / 雾 / 墨 / 岩 / 夜 / 苔，背景氛围独立开关。
    每套交出完全相同的 96 槽；accent 十档只按极性覆盖
    accent 族 17 槽，所以新增底色不必再配一轮 accent。
    ═══════════════════════════════════════════════════════════════════ */
@@ -129,14 +128,14 @@
    与雪的净白分开；文字沿用暖炭灰，层级由浅色差与描边共同承接。 ---------- */
 :where(:root), [data-theme="paper"] {
   /* 品牌缺省：墨蓝（accent 覆盖层会按 data-accent 重填这一族） */
-  --accent: #315f9b;
-  --accent-hover: #264c80;
-  --accent-active: #1e3d68;
+  --accent: #2856c7;
+  --accent-hover: #234bad;
+  --accent-active: #1e4093;
   --accent-on: #ffffff;
-  --accent-soft: #e7eef8;
-  --accent-light: #cfdef1;
-  --accent-ring: rgba(49, 95, 155, 0.16);
-  --text-brand: #264c80;
+  --accent-soft: #dde4f6;
+  --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2);
+  --text-brand: #234bad;
 
   /* 面：暖白五档。卡面不上纯白，悬停比卡面暗一档，避免柔光盖掉反馈。 */
   --bg: #f8f5f0;
@@ -165,8 +164,8 @@
   --badge-cat-bg: #eee8df;
   --badge-cat-border: #e2dbd1;
   --badge-cat-text: #4d4c49;
-  --badge-ver-bg: #e7eef8;
-  --badge-ver-text: #264c80;
+  --badge-ver-bg: #dde4f6;
+  --badge-ver-text: #234bad;
 
   /* 投影带暖褐，纯灰投影在米底上会显脏 */
   --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
@@ -197,16 +196,16 @@
   --sidebar-hover: #e2dbd1;
 
   /* 品牌标渐变 */
-  --brand-g1: #668cbd;
-  --brand-g2: #315f9b;
-  --brand-g3: #1e3d68;
+  --brand-g1: #6485d7;
+  --brand-g2: #2856c7;
+  --brand-g3: #1e4093;
   --brand-knob: #ffffff;
 
   /* 锁屏 */
   --lock-wash-a: #fcfaf7;
   --lock-wash-b: #eae4db;
-  --lock-orb-1: rgba(49, 95, 155, 0.07);
-  --lock-orb-2: rgba(49, 95, 155, 0.045);
+  --lock-orb-1: rgba(40, 86, 199, 0.07);
+  --lock-orb-2: rgba(40, 86, 199, 0.045);
 
   /* 毛玻璃底栏 */
   --frost-bg: rgba(252, 250, 247, 0.86);
@@ -218,12 +217,12 @@
   --toast-bg: #26241f;
   --toast-ok: #9cc4ae;
   --toast-err: #e09a92;
-  --toast-info: #96b7df;
+  --toast-info: #91baff;
 
   /* 滚动条与选区 */
   --scrollbar: rgba(29, 28, 26, 0.16);
   --scrollbar-hover: rgba(29, 28, 26, 0.28);
-  --selection: rgba(49, 95, 155, 0.18);
+  --selection: rgba(40, 86, 199, 0.22);
 
   /* 头像：按分类取色，六档同明度同彩度（v2 起只服务内容侧） */
   --cat-1: #5f62b8;
@@ -275,14 +274,14 @@
    连带槽沿用旧的对应关系而不是另取：--chrome-bg / --brand-knob / --lock-wash-a 跟 --bg，
    --lock-wash-b 跟 --panel-bg，--danger-on 跟 --sunken，--shadow 的 1px 环跟 --border-strong。 ---------- */
 [data-theme="ink"] {
-  --accent: #7faeee;
-  --accent-hover: #a0c3f5;
-  --accent-active: #6692d0;
-  --accent-on: #121e30;
-  --accent-soft: rgba(127, 174, 238, 0.16);
-  --accent-light: rgba(127, 174, 238, 0.28);
-  --accent-ring: rgba(127, 174, 238, 0.32);
-  --text-brand: #b0cef8;
+  --accent: #9bbfff;
+  --accent-hover: #a9c8ff;
+  --accent-active: #86a5dc;
+  --accent-on: #171b22;
+  --accent-soft: rgba(155, 191, 255, 0.1);
+  --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36);
+  --text-brand: #adcbff;
 
   --bg: #1d1c1a;
   --panel-bg: #22211e;
@@ -307,8 +306,8 @@
   --badge-cat-bg: #252421;
   --badge-cat-border: #30302d;
   --badge-cat-text: #c7c4bd;
-  --badge-ver-bg: rgba(127, 174, 238, 0.16);
-  --badge-ver-text: #b0cef8;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1);
+  --badge-ver-text: #adcbff;
 
   /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -335,15 +334,15 @@
   --sidebar-bg: #1a1917;
   --sidebar-hover: #282622;
 
-  --brand-g1: #b0cef8;
-  --brand-g2: #7faeee;
-  --brand-g3: #6692d0;
+  --brand-g1: #adcbff;
+  --brand-g2: #9bbfff;
+  --brand-g3: #86a5dc;
   --brand-knob: #1d1c1a;
 
   --lock-wash-a: #1d1c1a;
   --lock-wash-b: #22211e;
-  --lock-orb-1: rgba(127, 174, 238, 0.14);
-  --lock-orb-2: rgba(127, 174, 238, 0.07);
+  --lock-orb-1: rgba(155, 191, 255, 0.14);
+  --lock-orb-2: rgba(155, 191, 255, 0.07);
 
   --frost-bg: rgba(34, 33, 30, 0.88);
   --frost-border: #30302d;
@@ -354,11 +353,11 @@
   --toast-bg: #efede8;
   --toast-ok: #2f7d52;
   --toast-err: #b23c37;
-  --toast-info: #315f9b;
+  --toast-info: #2856c7;
 
   --scrollbar: rgba(255, 255, 255, 0.16);
   --scrollbar-hover: rgba(255, 255, 255, 0.26);
-  --selection: rgba(127, 174, 238, 0.30);
+  --selection: rgba(155, 191, 255, 0.3);
 
   /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
   --cat-1: #8a8fd8;
@@ -398,14 +397,14 @@
    画布与卡面以明度分层，代码色维持下陷面上 ≥4.5 的对比。
    accent 族填亮极性缺省档（墨蓝）。 ---------- */
 [data-theme="snow"] {
-  --accent: #315f9b;
-  --accent-hover: #264c80;
-  --accent-active: #1e3d68;
+  --accent: #2856c7;
+  --accent-hover: #234bad;
+  --accent-active: #1e4093;
   --accent-on: #ffffff;
-  --accent-soft: #e7eef8;
-  --accent-light: #cfdef1;
-  --accent-ring: rgba(49, 95, 155, 0.16);
-  --text-brand: #264c80;
+  --accent-soft: #dde4f6;
+  --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2);
+  --text-brand: #234bad;
 
   --bg: #f1f2f3;
   --panel-bg: #fefefe;
@@ -430,8 +429,8 @@
   --badge-cat-bg: #ebecee;
   --badge-cat-border: #d3d5d9;
   --badge-cat-text: #3e3f42;
-  --badge-ver-bg: #e7eef8;
-  --badge-ver-text: #264c80;
+  --badge-ver-bg: #dde4f6;
+  --badge-ver-text: #234bad;
 
   --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
@@ -455,15 +454,15 @@
   --sidebar-bg: #e3e5e8;
   --sidebar-hover: #dadee1;
 
-  --brand-g1: #668cbd;
-  --brand-g2: #315f9b;
-  --brand-g3: #1e3d68;
+  --brand-g1: #6485d7;
+  --brand-g2: #2856c7;
+  --brand-g3: #1e4093;
   --brand-knob: #ffffff;
 
   --lock-wash-a: #fefefe;
   --lock-wash-b: #e3e5e8;
-  --lock-orb-1: rgba(49, 95, 155, 0.07);
-  --lock-orb-2: rgba(49, 95, 155, 0.045);
+  --lock-orb-1: rgba(40, 86, 199, 0.07);
+  --lock-orb-2: rgba(40, 86, 199, 0.045);
 
   --frost-bg: rgba(254, 254, 254, 0.88);
   --frost-border: #d3d5d9;
@@ -474,11 +473,11 @@
   --toast-bg: #1f2124;
   --toast-ok: #91c9a6;
   --toast-err: #e28e84;
-  --toast-info: #96b7df;
+  --toast-info: #91baff;
 
   --scrollbar: rgba(18, 19, 22, 0.16);
   --scrollbar-hover: rgba(18, 19, 22, 0.28);
-  --selection: rgba(49, 95, 155, 0.18);
+  --selection: rgba(40, 86, 199, 0.22);
 
   --cat-1: #5465c4;
   --cat-2: #735eb8;
@@ -517,14 +516,14 @@
    字阶随新卡面提亮，避免强调色和柔光叠加后损失可读性。
    accent 族填暗极性缺省档（墨蓝）。 ---------- */
 [data-theme="slate"] {
-  --accent: #7faeee;
-  --accent-hover: #a0c3f5;
-  --accent-active: #6692d0;
-  --accent-on: #121e30;
-  --accent-soft: rgba(127, 174, 238, 0.16);
-  --accent-light: rgba(127, 174, 238, 0.28);
-  --accent-ring: rgba(127, 174, 238, 0.32);
-  --text-brand: #b0cef8;
+  --accent: #9bbfff;
+  --accent-hover: #a9c8ff;
+  --accent-active: #86a5dc;
+  --accent-on: #171b22;
+  --accent-soft: rgba(155, 191, 255, 0.1);
+  --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36);
+  --text-brand: #adcbff;
 
   --bg: #252932;
   --panel-bg: #2b303a;
@@ -549,8 +548,8 @@
   --badge-cat-bg: #303743;
   --badge-cat-border: #3e4654;
   --badge-cat-text: #d2d7e1;
-  --badge-ver-bg: rgba(127, 174, 238, 0.16);
-  --badge-ver-text: #b0cef8;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1);
+  --badge-ver-text: #adcbff;
 
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -574,15 +573,15 @@
   --sidebar-bg: #22262e;
   --sidebar-hover: #303743;
 
-  --brand-g1: #b0cef8;
-  --brand-g2: #7faeee;
-  --brand-g3: #6692d0;
+  --brand-g1: #adcbff;
+  --brand-g2: #9bbfff;
+  --brand-g3: #86a5dc;
   --brand-knob: #252932;
 
   --lock-wash-a: #252932;
   --lock-wash-b: #2b303a;
-  --lock-orb-1: rgba(127, 174, 238, 0.14);
-  --lock-orb-2: rgba(127, 174, 238, 0.07);
+  --lock-orb-1: rgba(155, 191, 255, 0.14);
+  --lock-orb-2: rgba(155, 191, 255, 0.07);
 
   --frost-bg: rgba(43, 48, 58, 0.88);
   --frost-border: #3e4654;
@@ -592,11 +591,11 @@
   --toast-bg: #eef0f5;
   --toast-ok: #2f7d52;
   --toast-err: #b23c37;
-  --toast-info: #315f9b;
+  --toast-info: #2856c7;
 
   --scrollbar: rgba(255, 255, 255, 0.16);
   --scrollbar-hover: rgba(255, 255, 255, 0.26);
-  --selection: rgba(127, 174, 238, 0.30);
+  --selection: rgba(155, 191, 255, 0.3);
 
   --cat-1: #8c90da;
   --cat-2: #ac8fe6;
@@ -631,38 +630,38 @@
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- 绢：亚麻暖砂，卡面保留暖白。 ---------- */
+/* ---------- 绢：低彩度米灰，暖白卡面与柔和炭灰文字。 ---------- */
 [data-theme="linen"] {
-  --accent: #315f9b;
-  --accent-hover: #264c80;
-  --accent-active: #1e3d68;
+  --accent: #2856c7;
+  --accent-hover: #234bad;
+  --accent-active: #1e4093;
   --accent-on: #ffffff;
-  --accent-soft: #e7eef8;
-  --accent-light: #cfdef1;
-  --accent-ring: rgba(49, 95, 155, 0.16);
-  --text-brand: #264c80;
-  --bg: #f3eadc;
-  --panel-bg: #faf5eb;
-  --chrome-bg: rgba(243, 234, 220, 0.86);
-  --sunken: #e8ddcc;
-  --fill: #e0d2bd;
-  --hover: #f2e8d9;
-  --active: #e4d7c3;
+  --accent-soft: #dde4f6;
+  --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2);
+  --text-brand: #234bad;
+  --bg: #ebe7e0;
+  --panel-bg: #f5f2ed;
+  --chrome-bg: rgba(235, 231, 224, 0.9);
+  --sunken: #e3dfd8;
+  --fill: #d8d3cb;
+  --hover: #eeebe5;
+  --active: #dcd7cf;
   --overlay: rgba(29, 28, 26, 0.42);
-  --text: #3c3328;
-  --text-secondary: #574a3b;
-  --text-muted: #71614e;
-  --text-faint: #96836c;
-  --border: #d9c9b2;
-  --border-strong: #bfa88b;
-  --border-subtle: #e9dfcf;
-  --border-hover: #bfa88b;
-  --text-url: #574a3b;
-  --badge-cat-bg: #ebe0cf;
-  --badge-cat-border: #d9c9b2;
-  --badge-cat-text: #574a3b;
-  --badge-ver-bg: #e7eef8;
-  --badge-ver-text: #264c80;
+  --text: #34322e;
+  --text-secondary: #514e49;
+  --text-muted: #66635d;
+  --text-faint: #67625c;
+  --border: #cec8be;
+  --border-strong: #b4ac9f;
+  --border-subtle: #e5e0d8;
+  --border-hover: #b4ac9f;
+  --text-url: #514e49;
+  --badge-cat-bg: #e3ded5;
+  --badge-cat-border: #cec8be;
+  --badge-cat-text: #514e49;
+  --badge-ver-bg: #dde4f6;
+  --badge-ver-text: #234bad;
   --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
@@ -671,36 +670,36 @@
   --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
   --shadow-dock: 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14);
-  --danger: #a9443c;
+  --danger: #a4423a;
   --danger-on: #ffffff;
   --danger-hover: #8c362f;
   --danger-soft: #f7ece9;
   --danger-border: #eacfc8;
-  --success: #3d7355;
+  --success: #396c50;
   --success-soft: #ecf3ee;
-  --warning: #926326;
+  --warning: #815924;
   --warning-soft: #f6efdf;
-  --sidebar-bg: #dfd1ba;
-  --sidebar-hover: #d6c5aa;
-  --brand-g1: #668cbd;
-  --brand-g2: #315f9b;
-  --brand-g3: #1e3d68;
+  --sidebar-bg: #dcd7cf;
+  --sidebar-hover: #d1cbc1;
+  --brand-g1: #6485d7;
+  --brand-g2: #2856c7;
+  --brand-g3: #1e4093;
   --brand-knob: #ffffff;
-  --lock-wash-a: #faf5eb;
-  --lock-wash-b: #dfd1ba;
-  --lock-orb-1: rgba(49, 95, 155, 0.07);
-  --lock-orb-2: rgba(49, 95, 155, 0.045);
-  --frost-bg: rgba(250, 245, 235, 0.88);
-  --frost-border: #d9c9b2;
-  --tip-bg: #352d24;
-  --tip-fg: #f7f0e5;
-  --toast-bg: #352d24;
+  --lock-wash-a: #ebe7e0;
+  --lock-wash-b: #e3dfd8;
+  --lock-orb-1: rgba(40, 86, 199, 0.07);
+  --lock-orb-2: rgba(40, 86, 199, 0.045);
+  --frost-bg: rgba(245, 242, 237, 0.94);
+  --frost-border: #cec8be;
+  --tip-bg: #26241f;
+  --tip-fg: #f2f0ea;
+  --toast-bg: #26241f;
   --toast-ok: #9cc4ae;
   --toast-err: #e09a92;
-  --toast-info: #96b7df;
+  --toast-info: #91baff;
   --scrollbar: rgba(29, 28, 26, 0.16);
   --scrollbar-hover: rgba(29, 28, 26, 0.28);
-  --selection: rgba(49, 95, 155, 0.18);
+  --selection: rgba(40, 86, 199, 0.22);
   --cat-1: #5f62b8;
   --cat-2: #7b5fb0;
   --cat-3: #a85b7d;
@@ -708,61 +707,61 @@
   --cat-5: #46806b;
   --cat-6: #457f8a;
   --cat-text: #ffffff;
-  --ft-pdf: #b8564f;
-  --ft-doc: #4a6d9c;
-  --ft-sheet: #3f7a5e;
-  --ft-deck: #a0603a;
-  --ft-arch: #6a5a99;
-  --ft-code: #8a7534;
-  --ft-mark: #5e6672;
-  --ft-img: #9a5a72;
-  --ft-unk: #7a7f88;
-  --code-fg: #17181d;
-  --code-kw: #8d4a69;
-  --code-str: #34674d;
-  --code-num: #875034;
-  --code-type: #705f2a;
-  --code-fn: #43628c;
-  --code-var: #555c67;
-  --code-com: #5e5f68;
-  --code-tag: #5f518a;
-  --code-pun: #55575e;
+  --ft-pdf: #9b4842;
+  --ft-doc: #43638e;
+  --ft-sheet: #376b53;
+  --ft-deck: #8b5432;
+  --ft-arch: #685896;
+  --ft-code: #71602b;
+  --ft-mark: #5a626d;
+  --ft-img: #895065;
+  --ft-unk: #5e6269;
+  --code-fg: #1a1b20;
+  --code-kw: #904b6c;
+  --code-str: #376c52;
+  --code-num: #8c5336;
+  --code-type: #72602b;
+  --code-fn: #43638e;
+  --code-var: #5a626d;
+  --code-com: #5f6069;
+  --code-tag: #685896;
+  --code-pun: #5e6168;
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- 雾：浅鼠尾草灰，柔和的绿调工作面。 ---------- */
+/* ---------- 雾：浅雾灰，轻微冷调与中性文字，减少绿染。 ---------- */
 [data-theme="mist"] {
-  --accent: #315f9b;
-  --accent-hover: #264c80;
-  --accent-active: #1e3d68;
+  --accent: #2856c7;
+  --accent-hover: #234bad;
+  --accent-active: #1e4093;
   --accent-on: #ffffff;
-  --accent-soft: #e7eef8;
-  --accent-light: #cfdef1;
-  --accent-ring: rgba(49, 95, 155, 0.16);
-  --text-brand: #264c80;
-  --bg: #edf3ee;
-  --panel-bg: #f7fbf8;
-  --chrome-bg: rgba(237, 243, 238, 0.86);
-  --sunken: #e2ebe4;
-  --fill: #d5e1d8;
-  --hover: #edf4ef;
-  --active: #dce8df;
+  --accent-soft: #dde4f6;
+  --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2);
+  --text-brand: #234bad;
+  --bg: #e5e6eb;
+  --panel-bg: #f3f4f7;
+  --chrome-bg: rgba(229, 230, 235, 0.9);
+  --sunken: #dadce2;
+  --fill: #cfd2da;
+  --hover: #e9ebf0;
+  --active: #d4d7df;
   --overlay: rgba(18, 19, 22, 0.42);
-  --text: #263a2f;
-  --text-secondary: #40574a;
-  --text-muted: #5d7164;
-  --text-faint: #81998a;
-  --border: #cbd9ce;
-  --border-strong: #aec3b3;
-  --border-subtle: #e2ebe4;
-  --border-hover: #aec3b3;
-  --text-url: #40574a;
-  --badge-cat-bg: #e1ece4;
-  --badge-cat-border: #cbd9ce;
-  --badge-cat-text: #40574a;
-  --badge-ver-bg: #e7eef8;
-  --badge-ver-text: #264c80;
+  --text: #30343d;
+  --text-secondary: #4a505c;
+  --text-muted: #5b606b;
+  --text-faint: #5c616c;
+  --border: #c7cbd4;
+  --border-strong: #adb3c0;
+  --border-subtle: #dfe2e9;
+  --border-hover: #adb3c0;
+  --text-url: #4a505c;
+  --badge-cat-bg: #dee1e8;
+  --badge-cat-border: #c7cbd4;
+  --badge-cat-text: #4a505c;
+  --badge-ver-bg: #dde4f6;
+  --badge-ver-text: #234bad;
   --shadow-xs: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-card: 0 1px 2px 0 rgba(18, 19, 22, 0.04);
   --shadow-sm: 0 1px 3px 0 rgba(18, 19, 22, 0.05);
@@ -771,36 +770,36 @@
   --shadow-lg: 0 12px 28px -8px rgba(18, 19, 22, 0.14);
   --shadow-pop: 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
   --shadow-dock: 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14);
-  --danger: #b83a30;
+  --danger: #ab362d;
   --danger-on: #ffffff;
   --danger-hover: #992e26;
   --danger-soft: #faecea;
   --danger-border: #f0cfcb;
-  --success: #2e7a50;
+  --success: #286b46;
   --success-soft: #eaf4ee;
-  --warning: #9c681e;
+  --warning: #815619;
   --warning-soft: #f9f0df;
-  --sidebar-bg: #d8e5db;
-  --sidebar-hover: #ceded2;
-  --brand-g1: #668cbd;
-  --brand-g2: #315f9b;
-  --brand-g3: #1e3d68;
+  --sidebar-bg: #d5d8e0;
+  --sidebar-hover: #cacfd8;
+  --brand-g1: #6485d7;
+  --brand-g2: #2856c7;
+  --brand-g3: #1e4093;
   --brand-knob: #ffffff;
-  --lock-wash-a: #f7fbf8;
-  --lock-wash-b: #d8e5db;
-  --lock-orb-1: rgba(49, 95, 155, 0.07);
-  --lock-orb-2: rgba(49, 95, 155, 0.045);
-  --frost-bg: rgba(247, 251, 248, 0.88);
-  --frost-border: #cbd9ce;
-  --tip-bg: #20342b;
-  --tip-fg: #f1f7f3;
-  --toast-bg: #20342b;
+  --lock-wash-a: #e5e6eb;
+  --lock-wash-b: #dadce2;
+  --lock-orb-1: rgba(40, 86, 199, 0.07);
+  --lock-orb-2: rgba(40, 86, 199, 0.045);
+  --frost-bg: rgba(243, 244, 247, 0.94);
+  --frost-border: #c7cbd4;
+  --tip-bg: #1f2124;
+  --tip-fg: #f4f5f6;
+  --toast-bg: #1f2124;
   --toast-ok: #91c9a6;
   --toast-err: #e28e84;
-  --toast-info: #96b7df;
+  --toast-info: #91baff;
   --scrollbar: rgba(18, 19, 22, 0.16);
   --scrollbar-hover: rgba(18, 19, 22, 0.28);
-  --selection: rgba(49, 95, 155, 0.18);
+  --selection: rgba(40, 86, 199, 0.22);
   --cat-1: #5465c4;
   --cat-2: #735eb8;
   --cat-3: #a6587d;
@@ -808,61 +807,61 @@
   --cat-5: #3f8067;
   --cat-6: #3b808e;
   --cat-text: #ffffff;
-  --ft-pdf: #be4e46;
-  --ft-doc: #3a689e;
-  --ft-sheet: #337d57;
-  --ft-deck: #a65e31;
-  --ft-arch: #6957a0;
-  --ft-code: #8c7324;
-  --ft-mark: #586374;
-  --ft-img: #9d5472;
-  --ft-unk: #6e7580;
-  --code-fg: #16171a;
-  --code-kw: #904269;
-  --code-str: #2a6849;
-  --code-num: #8c4c29;
-  --code-type: #6b5a1f;
-  --code-fn: #345e8e;
-  --code-var: #4f5968;
-  --code-com: #595b64;
-  --code-tag: #5e4e90;
-  --code-pun: #52565f;
+  --ft-pdf: #9e413a;
+  --ft-doc: #366193;
+  --ft-sheet: #2b6a4a;
+  --ft-deck: #8d502a;
+  --ft-arch: #66549b;
+  --ft-code: #715d1d;
+  --ft-mark: #556071;
+  --ft-img: #8c4b65;
+  --ft-unk: #5a6069;
+  --code-fg: #191a1d;
+  --code-kw: #95446d;
+  --code-str: #2c6b4b;
+  --code-num: #904e2b;
+  --code-type: #705e20;
+  --code-fn: #366193;
+  --code-var: #556071;
+  --code-com: #5d5f68;
+  --code-tag: #66549b;
+  --code-pun: #5b606a;
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- 夜：深海蓝，保留清晰的面与字阶。 ---------- */
+/* ---------- 夜：柔和夜灰，抬升暗部明度，降低蓝染与文字眩光。 ---------- */
 [data-theme="midnight"] {
-  --accent: #7faeee;
-  --accent-hover: #a0c3f5;
-  --accent-active: #6692d0;
-  --accent-on: #121e30;
-  --accent-soft: rgba(127, 174, 238, 0.16);
-  --accent-light: rgba(127, 174, 238, 0.28);
-  --accent-ring: rgba(127, 174, 238, 0.32);
-  --text-brand: #b0cef8;
-  --bg: #141e2e;
-  --panel-bg: #1b283c;
-  --chrome-bg: rgba(20, 30, 46, 0.88);
-  --sunken: #0f1826;
-  --fill: #25354b;
-  --hover: #24344a;
-  --active: #30445e;
+  --accent: #9bbfff;
+  --accent-hover: #a9c8ff;
+  --accent-active: #86a5dc;
+  --accent-on: #171b22;
+  --accent-soft: rgba(155, 191, 255, 0.1);
+  --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36);
+  --text-brand: #adcbff;
+  --bg: #34373f;
+  --panel-bg: #3b3f48;
+  --chrome-bg: rgba(52, 55, 63, 0.9);
+  --sunken: #2e3139;
+  --fill: #444953;
+  --hover: #444852;
+  --active: #4b505b;
   --overlay: rgba(0, 0, 0, 0.65);
-  --text: #e4ecf7;
-  --text-secondary: #c5d2e5;
-  --text-muted: #afbed3;
-  --text-faint: #a5b5cb;
-  --border: #30445f;
-  --border-strong: #4b6586;
-  --border-subtle: #23334a;
-  --border-hover: #4b6586;
-  --text-url: #c5d2e5;
-  --badge-cat-bg: #25364d;
-  --badge-cat-border: #30445f;
-  --badge-cat-text: #c5d2e5;
-  --badge-ver-bg: rgba(127, 174, 238, 0.16);
-  --badge-ver-text: #b0cef8;
+  --text: #d7dbe4;
+  --text-secondary: #c6ccd6;
+  --text-muted: #bbc2cf;
+  --text-faint: #a6afbf;
+  --border: #505560;
+  --border-strong: #666d7b;
+  --border-subtle: #41454f;
+  --border-hover: #666d7b;
+  --text-url: #c6ccd6;
+  --badge-cat-bg: #454a55;
+  --badge-cat-border: #59606e;
+  --badge-cat-text: #d0d6e1;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1);
+  --badge-ver-text: #adcbff;
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
@@ -871,36 +870,36 @@
   --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
   --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
   --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
-  --danger: #df817c;
+  --danger: #e59894;
   --danger-on: #181517;
   --danger-hover: #e89e99;
-  --danger-soft: #38252e;
-  --danger-border: #61404a;
+  --danger-soft: #271a19;
+  --danger-border: #472927;
   --success: #6cbd94;
-  --success-soft: #1c3231;
+  --success-soft: #16221d;
   --warning: #d9aa63;
-  --warning-soft: #342e24;
-  --sidebar-bg: #101b2c;
-  --sidebar-hover: #22334b;
-  --brand-g1: #b0cef8;
-  --brand-g2: #7faeee;
-  --brand-g3: #6692d0;
+  --warning-soft: #251f15;
+  --sidebar-bg: #30333b;
+  --sidebar-hover: #3b3f49;
+  --brand-g1: #adcbff;
+  --brand-g2: #9bbfff;
+  --brand-g3: #86a5dc;
   --brand-knob: #252932;
-  --lock-wash-a: #141e2e;
-  --lock-wash-b: #1b283c;
-  --lock-orb-1: rgba(127, 174, 238, 0.14);
-  --lock-orb-2: rgba(127, 174, 238, 0.07);
-  --frost-bg: rgba(27, 40, 60, 0.9);
-  --frost-border: #30445f;
-  --tip-bg: #e8eef7;
-  --tip-fg: #172439;
-  --toast-bg: #e8eef7;
+  --lock-wash-a: #34373f;
+  --lock-wash-b: #2e3139;
+  --lock-orb-1: rgba(155, 191, 255, 0.14);
+  --lock-orb-2: rgba(155, 191, 255, 0.07);
+  --frost-bg: rgba(59, 63, 72, 0.94);
+  --frost-border: #505560;
+  --tip-bg: #eef0f5;
+  --tip-fg: #252932;
+  --toast-bg: #eef0f5;
   --toast-ok: #2f7d52;
   --toast-err: #b23c37;
-  --toast-info: #315f9b;
+  --toast-info: #2856c7;
   --scrollbar: rgba(255, 255, 255, 0.16);
   --scrollbar-hover: rgba(255, 255, 255, 0.26);
-  --selection: rgba(127, 174, 238, 0.30);
+  --selection: rgba(155, 191, 255, 0.3);
   --cat-1: #8c90da;
   --cat-2: #ac8fe6;
   --cat-3: #dc91b8;
@@ -908,61 +907,61 @@
   --cat-5: #70c1a2;
   --cat-6: #71b9c9;
   --cat-text: #14171c;
-  --ft-pdf: #ef726d;
-  --ft-doc: #7ca3f7;
-  --ft-sheet: #42ba54;
+  --ft-pdf: #f3918d;
+  --ft-doc: #88abf8;
+  --ft-sheet: #55c165;
   --ft-deck: #dfa561;
-  --ft-arch: #aa8ce8;
+  --ft-arch: #b8a0ec;
   --ft-code: #dfc165;
-  --ft-mark: #8f96a7;
-  --ft-img: #df8cb8;
-  --ft-unk: #8f96a7;
+  --ft-mark: #a7acb9;
+  --ft-img: #e194bd;
+  --ft-unk: #a7acb9;
   --code-fg: #e2e5eb;
   --code-kw: #dd9cb8;
   --code-str: #72d0a8;
   --code-num: #deb177;
   --code-type: #dec165;
-  --code-fn: #8ea9df;
+  --code-fn: #91ace0;
   --code-var: #b8b5ac;
-  --code-com: #9fa098;
-  --code-tag: #ac8fe6;
-  --code-pun: #8f96a7;
+  --code-com: #abaca5;
+  --code-tag: #b89fea;
+  --code-pun: #a7acb9;
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
 
-/* ---------- 苔：深苔绿，低亮度的自然色底。 ---------- */
+/* ---------- 苔：低彩度灰绿，绿意留在暗部，正文使用柔和灰白。 ---------- */
 [data-theme="moss"] {
-  --accent: #7faeee;
-  --accent-hover: #a0c3f5;
-  --accent-active: #6692d0;
-  --accent-on: #121e30;
-  --accent-soft: rgba(127, 174, 238, 0.16);
-  --accent-light: rgba(127, 174, 238, 0.28);
-  --accent-ring: rgba(127, 174, 238, 0.32);
-  --text-brand: #b0cef8;
-  --bg: #1d2922;
-  --panel-bg: #25342b;
-  --chrome-bg: rgba(29, 41, 34, 0.88);
-  --sunken: #17221b;
-  --fill: #304135;
-  --hover: #2d4033;
-  --active: #3b5141;
+  --accent: #9bbfff;
+  --accent-hover: #a9c8ff;
+  --accent-active: #86a5dc;
+  --accent-on: #171b22;
+  --accent-soft: rgba(155, 191, 255, 0.1);
+  --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36);
+  --text-brand: #adcbff;
+  --bg: #282b25;
+  --panel-bg: #30332d;
+  --chrome-bg: rgba(40, 43, 37, 0.9);
+  --sunken: #22251f;
+  --fill: #3b3f36;
+  --hover: #393d34;
+  --active: #41463b;
   --overlay: rgba(0, 0, 0, 0.62);
-  --text: #e4eee7;
-  --text-secondary: #c3d0c7;
-  --text-muted: #b4c4b8;
-  --text-faint: #abbcaf;
-  --border: #3a5141;
-  --border-strong: #55735e;
-  --border-subtle: #2b3d31;
-  --border-hover: #55735e;
-  --text-url: #c3d0c7;
-  --badge-cat-bg: #2c4032;
-  --badge-cat-border: #3a5141;
-  --badge-cat-text: #c3d0c7;
-  --badge-ver-bg: rgba(127, 174, 238, 0.16);
-  --badge-ver-text: #b0cef8;
+  --text: #d8dacf;
+  --text-secondary: #c1c7b9;
+  --text-muted: #adb6a6;
+  --text-faint: #98a18e;
+  --border: #43493d;
+  --border-strong: #5e6755;
+  --border-subtle: #353a30;
+  --border-hover: #5e6755;
+  --text-url: #c1c7b9;
+  --badge-cat-bg: #3b4134;
+  --badge-cat-border: #505947;
+  --badge-cat-text: #cbd3c1;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1);
+  --badge-ver-text: #adcbff;
   --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
@@ -974,33 +973,33 @@
   --danger: #e08079;
   --danger-on: #181716;
   --danger-hover: #ea9d97;
-  --danger-soft: #372a29;
-  --danger-border: #62423e;
+  --danger-soft: #271a17;
+  --danger-border: #462924;
   --success: #6fbf95;
-  --success-soft: #203c2b;
+  --success-soft: #17211c;
   --warning: #d9a95f;
-  --warning-soft: #3b3524;
-  --sidebar-bg: #19271e;
-  --sidebar-hover: #2b3e31;
-  --brand-g1: #b0cef8;
-  --brand-g2: #7faeee;
-  --brand-g3: #6692d0;
+  --warning-soft: #241e13;
+  --sidebar-bg: #252822;
+  --sidebar-hover: #33382e;
+  --brand-g1: #adcbff;
+  --brand-g2: #9bbfff;
+  --brand-g3: #86a5dc;
   --brand-knob: #1d1c1a;
-  --lock-wash-a: #1d2922;
-  --lock-wash-b: #25342b;
-  --lock-orb-1: rgba(127, 174, 238, 0.14);
-  --lock-orb-2: rgba(127, 174, 238, 0.07);
-  --frost-bg: rgba(37, 52, 43, 0.9);
-  --frost-border: #3a5141;
-  --tip-bg: #e9f1e9;
-  --tip-fg: #203628;
-  --toast-bg: #e9f1e9;
+  --lock-wash-a: #282b25;
+  --lock-wash-b: #22251f;
+  --lock-orb-1: rgba(155, 191, 255, 0.14);
+  --lock-orb-2: rgba(155, 191, 255, 0.07);
+  --frost-bg: rgba(48, 51, 45, 0.94);
+  --frost-border: #43493d;
+  --tip-bg: #efede8;
+  --tip-fg: #1d1c1a;
+  --toast-bg: #efede8;
   --toast-ok: #2f7d52;
   --toast-err: #b23c37;
-  --toast-info: #315f9b;
+  --toast-info: #2856c7;
   --scrollbar: rgba(255, 255, 255, 0.16);
   --scrollbar-hover: rgba(255, 255, 255, 0.26);
-  --selection: rgba(127, 174, 238, 0.30);
+  --selection: rgba(155, 191, 255, 0.3);
   --cat-1: #8a8fd8;
   --cat-2: #ab8de6;
   --cat-3: #de8fb8;
@@ -1008,15 +1007,15 @@
   --cat-5: #6fc0a0;
   --cat-6: #6fb8c8;
   --cat-text: #171614;
-  --ft-pdf: #f0716b;
+  --ft-pdf: #f17771;
   --ft-doc: #7aa2f7;
   --ft-sheet: #3fb950;
   --ft-deck: #e0a45c;
   --ft-arch: #a98be8;
   --ft-code: #e0c060;
-  --ft-mark: #8c94a6;
+  --ft-mark: #949bac;
   --ft-img: #e08bb8;
-  --ft-unk: #6b7280;
+  --ft-unk: #979ca6;
   --code-fg: #e4e2dc;
   --code-kw: #de9ab8;
   --code-str: #6fd0a8;
@@ -1024,9 +1023,9 @@
   --code-type: #e0c060;
   --code-fn: #8aa8e0;
   --code-var: #b6b2a8;
-  --code-com: #9d9991;
+  --code-com: #9f9b93;
   --code-tag: #ab8de6;
-  --code-pun: #8c94a6;
+  --code-pun: #949bac;
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
 }
@@ -1036,309 +1035,309 @@
    浅档用实色水洗（按纸底卡面切），深档用半透明（天然跟底走）；
    toast-info 在浅底 toast 上取 accent 深一档。 ═══ */
 
-/* ---- 墨蓝 ink（缺省档：与底色块的 accent 族同值，显式列出保组合齐全） ---- */
+/* ---- 群青 ink（缺省档：与底色块的 accent 族同值，显式列出保组合齐全） ---- */
 [data-base="light"][data-accent="ink"] {
-  --accent: #315f9b; --accent-hover: #264c80; --accent-active: #1e3d68;
-  --accent-on: #ffffff; --accent-soft: #e7eef8; --accent-light: #cfdef1;
-  --accent-ring: rgba(49, 95, 155, 0.16); --text-brand: #264c80;
-  --badge-ver-bg: #e7eef8; --badge-ver-text: #264c80;
-  --brand-g1: #668cbd; --brand-g2: #315f9b; --brand-g3: #1e3d68;
-  --lock-orb-1: rgba(49, 95, 155, 0.07); --lock-orb-2: rgba(49, 95, 155, 0.045);
-  --selection: rgba(49, 95, 155, 0.18); --toast-info: #96b7df;
+  --accent: #2856c7; --accent-hover: #234bad; --accent-active: #1e4093;
+  --accent-on: #ffffff; --accent-soft: #dde4f6; --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2); --text-brand: #234bad;
+  --badge-ver-bg: #dde4f6; --badge-ver-text: #234bad;
+  --brand-g1: #6485d7; --brand-g2: #2856c7; --brand-g3: #1e4093;
+  --lock-orb-1: rgba(40, 86, 199, 0.07); --lock-orb-2: rgba(40, 86, 199, 0.045);
+  --selection: rgba(40, 86, 199, 0.22); --toast-info: #91baff;
 }
 [data-base="dark"][data-accent="ink"] {
-  --accent: #7faeee; --accent-hover: #a0c3f5; --accent-active: #6692d0;
-  --accent-on: #121e30; --accent-soft: rgba(127, 174, 238, 0.16); --accent-light: rgba(127, 174, 238, 0.28);
-  --accent-ring: rgba(127, 174, 238, 0.32); --text-brand: #b0cef8;
-  --badge-ver-bg: rgba(127, 174, 238, 0.16); --badge-ver-text: #b0cef8;
-  --brand-g1: #b0cef8; --brand-g2: #7faeee; --brand-g3: #6692d0;
-  --lock-orb-1: rgba(127, 174, 238, 0.14); --lock-orb-2: rgba(127, 174, 238, 0.07);
-  --selection: rgba(127, 174, 238, 0.30); --toast-info: #315f9b;
+  --accent: #9bbfff; --accent-hover: #a9c8ff; --accent-active: #86a5dc;
+  --accent-on: #171b22; --accent-soft: rgba(155, 191, 255, 0.1); --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36); --text-brand: #adcbff;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1); --badge-ver-text: #adcbff;
+  --brand-g1: #adcbff; --brand-g2: #9bbfff; --brand-g3: #86a5dc;
+  --lock-orb-1: rgba(155, 191, 255, 0.14); --lock-orb-2: rgba(155, 191, 255, 0.07);
+  --selection: rgba(155, 191, 255, 0.3); --toast-info: #2856c7;
 }
 
-/* ---- 青瓷 celadon（玉石青绿） ---- */
+/* ---- 翡翠 celadon（玉石绿） ---- */
 [data-base="light"][data-accent="celadon"] {
-  --accent: #246e60; --accent-hover: #1c594d; --accent-active: #16483f;
-  --accent-on: #ffffff; --accent-soft: #e4f1ec; --accent-light: #c6e5d9;
-  --accent-ring: rgba(36, 110, 96, 0.16); --text-brand: #1c594d;
-  --badge-ver-bg: #e4f1ec; --badge-ver-text: #1c594d;
-  --brand-g1: #62a291; --brand-g2: #246e60; --brand-g3: #16483f;
-  --lock-orb-1: rgba(36, 110, 96, 0.07); --lock-orb-2: rgba(36, 110, 96, 0.045);
-  --selection: rgba(36, 110, 96, 0.18); --toast-info: #92ccb8;
+  --accent: #087662; --accent-hover: #076755; --accent-active: #065749;
+  --accent-on: #ffffff; --accent-soft: #d7e9e6; --accent-light: #bad9d3;
+  --accent-ring: rgba(8, 118, 98, 0.2); --text-brand: #076755;
+  --badge-ver-bg: #d7e9e6; --badge-ver-text: #076755;
+  --brand-g1: #4d9c8e; --brand-g2: #087662; --brand-g3: #065749;
+  --lock-orb-1: rgba(8, 118, 98, 0.07); --lock-orb-2: rgba(8, 118, 98, 0.045);
+  --selection: rgba(8, 118, 98, 0.22); --toast-info: #5ed5a9;
 }
 [data-base="dark"][data-accent="celadon"] {
-  --accent: #73c5ad; --accent-hover: #95d6c4; --accent-active: #57a88f;
-  --accent-on: #10251e; --accent-soft: rgba(115, 197, 173, 0.16); --accent-light: rgba(115, 197, 173, 0.28);
-  --accent-ring: rgba(115, 197, 173, 0.32); --text-brand: #a4dfce;
-  --badge-ver-bg: rgba(115, 197, 173, 0.16); --badge-ver-text: #a4dfce;
-  --brand-g1: #a4dfce; --brand-g2: #73c5ad; --brand-g3: #57a88f;
-  --lock-orb-1: rgba(115, 197, 173, 0.14); --lock-orb-2: rgba(115, 197, 173, 0.07);
-  --selection: rgba(115, 197, 173, 0.30); --toast-info: #246e60;
+  --accent: #5ed5a9; --accent-hover: #75dbb5; --accent-active: #53b793;
+  --accent-on: #171b22; --accent-soft: rgba(94, 213, 169, 0.1); --accent-light: rgba(94, 213, 169, 0.24);
+  --accent-ring: rgba(94, 213, 169, 0.36); --text-brand: #7bddb8;
+  --badge-ver-bg: rgba(94, 213, 169, 0.1); --badge-ver-text: #7bddb8;
+  --brand-g1: #7bddb8; --brand-g2: #5ed5a9; --brand-g3: #53b793;
+  --lock-orb-1: rgba(94, 213, 169, 0.14); --lock-orb-2: rgba(94, 213, 169, 0.07);
+  --selection: rgba(94, 213, 169, 0.3); --toast-info: #087a65;
 }
 
-/* ---- 赭石 clay（陶土橙，接旧暖纸墨的血脉） ---- */
+/* ---- 陶橙 clay（陶土橙） ---- */
 [data-base="light"][data-accent="clay"] {
-  --accent: #9b562b; --accent-hover: #804422; --accent-active: #69361b;
-  --accent-on: #ffffff; --accent-soft: #f8ede2; --accent-light: #eed7bf;
-  --accent-ring: rgba(155, 86, 43, 0.16); --text-brand: #804422;
-  --badge-ver-bg: #f8ede2; --badge-ver-text: #804422;
-  --brand-g1: #be8655; --brand-g2: #9b562b; --brand-g3: #69361b;
-  --lock-orb-1: rgba(155, 86, 43, 0.07); --lock-orb-2: rgba(155, 86, 43, 0.045);
-  --selection: rgba(155, 86, 43, 0.18); --toast-info: #dbb489;
+  --accent: #aa4c0c; --accent-hover: #94420a; --accent-active: #7e3809;
+  --accent-on: #ffffff; --accent-soft: #f1e2d8; --accent-light: #e7cdbb;
+  --accent-ring: rgba(170, 76, 12, 0.2); --text-brand: #94420a;
+  --badge-ver-bg: #f1e2d8; --badge-ver-text: #94420a;
+  --brand-g1: #c27e50; --brand-g2: #aa4c0c; --brand-g3: #7e3809;
+  --lock-orb-1: rgba(170, 76, 12, 0.07); --lock-orb-2: rgba(170, 76, 12, 0.045);
+  --selection: rgba(170, 76, 12, 0.22); --toast-info: #ffac6b;
 }
 [data-base="dark"][data-accent="clay"] {
-  --accent: #e1a15f; --accent-hover: #edbb87; --accent-active: #c78848;
-  --accent-on: #2b1b0d; --accent-soft: rgba(225, 161, 95, 0.16); --accent-light: rgba(225, 161, 95, 0.28);
-  --accent-ring: rgba(225, 161, 95, 0.32); --text-brand: #f2c799;
-  --badge-ver-bg: rgba(225, 161, 95, 0.16); --badge-ver-text: #f2c799;
-  --brand-g1: #f2c799; --brand-g2: #e1a15f; --brand-g3: #c78848;
-  --lock-orb-1: rgba(225, 161, 95, 0.14); --lock-orb-2: rgba(225, 161, 95, 0.07);
-  --selection: rgba(225, 161, 95, 0.30); --toast-info: #9b562b;
+  --accent: #ffac6b; --accent-hover: #ffb880; --accent-active: #da955f;
+  --accent-on: #171b22; --accent-soft: rgba(255, 172, 107, 0.1); --accent-light: rgba(255, 172, 107, 0.24);
+  --accent-ring: rgba(255, 172, 107, 0.36); --text-brand: #ffbb86;
+  --badge-ver-bg: rgba(255, 172, 107, 0.1); --badge-ver-text: #ffbb86;
+  --brand-g1: #ffbb86; --brand-g2: #ffac6b; --brand-g3: #da955f;
+  --lock-orb-1: rgba(255, 172, 107, 0.14); --lock-orb-2: rgba(255, 172, 107, 0.07);
+  --selection: rgba(255, 172, 107, 0.3); --toast-info: #b04f0c;
 }
 
-/* ---- 紫罗 plum（紫调，与墨蓝保持明确的色相距离） ---- */
+/* ---- 鸢紫 plum（紫调，与墨蓝保持明确的色相距离） ---- */
 [data-base="light"][data-accent="plum"] {
-  --accent: #7951a8; --accent-hover: #63418d; --accent-active: #503473;
-  --accent-on: #ffffff; --accent-soft: #f0eaf8; --accent-light: #e0d1f0;
-  --accent-ring: rgba(121, 81, 168, 0.16); --text-brand: #63418d;
-  --badge-ver-bg: #f0eaf8; --badge-ver-text: #63418d;
-  --brand-g1: #a17bc7; --brand-g2: #7951a8; --brand-g3: #503473;
-  --lock-orb-1: rgba(121, 81, 168, 0.07); --lock-orb-2: rgba(121, 81, 168, 0.045);
-  --selection: rgba(121, 81, 168, 0.18); --toast-info: #c3a4e2;
+  --accent: #7542c3; --accent-hover: #6639aa; --accent-active: #573190;
+  --accent-on: #ffffff; --accent-soft: #e9e1f5; --accent-light: #d8caee;
+  --accent-ring: rgba(117, 66, 195, 0.2); --text-brand: #6639aa;
+  --badge-ver-bg: #e9e1f5; --badge-ver-text: #6639aa;
+  --brand-g1: #9c77d4; --brand-g2: #7542c3; --brand-g3: #573190;
+  --lock-orb-1: rgba(117, 66, 195, 0.07); --lock-orb-2: rgba(117, 66, 195, 0.045);
+  --selection: rgba(117, 66, 195, 0.22); --toast-info: #d0a9ff;
 }
 [data-base="dark"][data-accent="plum"] {
-  --accent: #bd9ae0; --accent-hover: #d1b7ed; --accent-active: #a37bc9;
-  --accent-on: #26162f; --accent-soft: rgba(189, 154, 224, 0.16); --accent-light: rgba(189, 154, 224, 0.28);
-  --accent-ring: rgba(189, 154, 224, 0.32); --text-brand: #dcc6f2;
-  --badge-ver-bg: rgba(189, 154, 224, 0.16); --badge-ver-text: #dcc6f2;
-  --brand-g1: #dcc6f2; --brand-g2: #bd9ae0; --brand-g3: #a37bc9;
-  --lock-orb-1: rgba(189, 154, 224, 0.14); --lock-orb-2: rgba(189, 154, 224, 0.07);
-  --selection: rgba(189, 154, 224, 0.30); --toast-info: #7951a8;
+  --accent: #d3afff; --accent-hover: #d9baff; --accent-active: #b597dc;
+  --accent-on: #171b22; --accent-soft: rgba(211, 175, 255, 0.1); --accent-light: rgba(211, 175, 255, 0.24);
+  --accent-ring: rgba(211, 175, 255, 0.36); --text-brand: #dbbdff;
+  --badge-ver-bg: rgba(211, 175, 255, 0.1); --badge-ver-text: #dbbdff;
+  --brand-g1: #dbbdff; --brand-g2: #d3afff; --brand-g3: #b597dc;
+  --lock-orb-1: rgba(211, 175, 255, 0.14); --lock-orb-2: rgba(211, 175, 255, 0.07);
+  --selection: rgba(211, 175, 255, 0.3); --toast-info: #7542c3;
 }
 
-/* ---- 暮瑰 rose（玫红） ---- */
+/* ---- 洋红 rose（红紫） ---- */
 [data-base="light"][data-accent="rose"] {
-  --accent: #9b3f68; --accent-hover: #813255; --accent-active: #692846;
-  --accent-on: #ffffff; --accent-soft: #f8e8ef; --accent-light: #efcedf;
-  --accent-ring: rgba(155, 63, 104, 0.16); --text-brand: #813255;
-  --badge-ver-bg: #f8e8ef; --badge-ver-text: #813255;
-  --brand-g1: #c27394; --brand-g2: #9b3f68; --brand-g3: #692846;
-  --lock-orb-1: rgba(155, 63, 104, 0.07); --lock-orb-2: rgba(155, 63, 104, 0.045);
-  --selection: rgba(155, 63, 104, 0.18); --toast-info: #e4a3c0;
+  --accent: #ac298e; --accent-hover: #96247c; --accent-active: #7f1e69;
+  --accent-on: #ffffff; --accent-soft: #f2dded; --accent-light: #e8c3df;
+  --accent-ring: rgba(172, 41, 142, 0.2); --text-brand: #96247c;
+  --badge-ver-bg: #f2dded; --badge-ver-text: #96247c;
+  --brand-g1: #c365ae; --brand-g2: #ac298e; --brand-g3: #7f1e69;
+  --lock-orb-1: rgba(172, 41, 142, 0.07); --lock-orb-2: rgba(172, 41, 142, 0.045);
+  --selection: rgba(172, 41, 142, 0.22); --toast-info: #fa9cde;
 }
 [data-base="dark"][data-accent="rose"] {
-  --accent: #e991b6; --accent-hover: #f2afcb; --accent-active: #cc7399;
-  --accent-on: #301321; --accent-soft: rgba(233, 145, 182, 0.16); --accent-light: rgba(233, 145, 182, 0.28);
-  --accent-ring: rgba(233, 145, 182, 0.32); --text-brand: #f6bfd7;
-  --badge-ver-bg: rgba(233, 145, 182, 0.16); --badge-ver-text: #f6bfd7;
-  --brand-g1: #f6bfd7; --brand-g2: #e991b6; --brand-g3: #cc7399;
-  --lock-orb-1: rgba(233, 145, 182, 0.14); --lock-orb-2: rgba(233, 145, 182, 0.07);
-  --selection: rgba(233, 145, 182, 0.30); --toast-info: #9b3f68;
+  --accent: #faa2e1; --accent-hover: #fbafe5; --accent-active: #d68cc2;
+  --accent-on: #171b22; --accent-soft: rgba(250, 162, 225, 0.1); --accent-light: rgba(250, 162, 225, 0.24);
+  --accent-ring: rgba(250, 162, 225, 0.36); --text-brand: #fbb3e6;
+  --badge-ver-bg: rgba(250, 162, 225, 0.1); --badge-ver-text: #fbb3e6;
+  --brand-g1: #fbb3e6; --brand-g2: #faa2e1; --brand-g3: #d68cc2;
+  --lock-orb-1: rgba(250, 162, 225, 0.14); --lock-orb-2: rgba(250, 162, 225, 0.07);
+  --selection: rgba(250, 162, 225, 0.3); --toast-info: #ac298e;
 }
 
-/* ---- 碧青 teal ---- */
+/* ---- 湖蓝 teal ---- */
 [data-base="light"][data-accent="teal"] {
-  --accent: #126b83;
-  --accent-hover: #0d566b;
-  --accent-active: #084657;
+  --accent: #077190;
+  --accent-hover: #06627d;
+  --accent-active: #05546b;
   --accent-on: #ffffff;
-  --accent-soft: #eaf2f4;
-  --accent-light: #cbdee4;
-  --accent-ring: rgba(18, 107, 131, 0.16);
-  --text-brand: #0d566b;
-  --badge-ver-bg: #eaf2f4;
-  --badge-ver-text: #0d566b;
-  --brand-g1: #5997a8;
-  --brand-g2: #126b83;
-  --brand-g3: #084657;
-  --lock-orb-1: rgba(18, 107, 131, 0.07);
-  --lock-orb-2: rgba(18, 107, 131, 0.045);
-  --selection: rgba(18, 107, 131, 0.18);
-  --toast-info: #71c8e1;
+  --accent-soft: #d7e8ed;
+  --accent-light: #bad7e0;
+  --accent-ring: rgba(7, 113, 144, 0.2);
+  --text-brand: #06627d;
+  --badge-ver-bg: #d7e8ed;
+  --badge-ver-text: #06627d;
+  --brand-g1: #4c99af;
+  --brand-g2: #077190;
+  --brand-g3: #05546b;
+  --lock-orb-1: rgba(7, 113, 144, 0.07);
+  --lock-orb-2: rgba(7, 113, 144, 0.045);
+  --selection: rgba(7, 113, 144, 0.22);
+  --toast-info: #5bcee5;
 }
 
 [data-base="dark"][data-accent="teal"] {
-  --accent: #71c8e1;
-  --accent-hover: #94d9eb;
-  --accent-active: #50a9c1;
-  --accent-on: #10232b;
-  --accent-soft: rgba(113, 200, 225, 0.16);
-  --accent-light: rgba(113, 200, 225, 0.28);
-  --accent-ring: rgba(113, 200, 225, 0.32);
-  --text-brand: #b8e4f0;
-  --badge-ver-bg: rgba(113, 200, 225, 0.16);
-  --badge-ver-text: #b8e4f0;
-  --brand-g1: #b8e4f0;
-  --brand-g2: #71c8e1;
-  --brand-g3: #50a9c1;
-  --lock-orb-1: rgba(113, 200, 225, 0.14);
-  --lock-orb-2: rgba(113, 200, 225, 0.07);
-  --selection: rgba(113, 200, 225, 0.3);
-  --toast-info: #126b83;
+  --accent: #5bcee5;
+  --accent-hover: #72d5e9;
+  --accent-active: #50b1c6;
+  --accent-on: #171b22;
+  --accent-soft: rgba(91, 206, 229, 0.1);
+  --accent-light: rgba(91, 206, 229, 0.24);
+  --accent-ring: rgba(91, 206, 229, 0.36);
+  --text-brand: #79d7ea;
+  --badge-ver-bg: rgba(91, 206, 229, 0.1);
+  --badge-ver-text: #79d7ea;
+  --brand-g1: #79d7ea;
+  --brand-g2: #5bcee5;
+  --brand-g3: #50b1c6;
+  --lock-orb-1: rgba(91, 206, 229, 0.14);
+  --lock-orb-2: rgba(91, 206, 229, 0.07);
+  --selection: rgba(91, 206, 229, 0.3);
+  --toast-info: #087493;
 }
 
-/* ---- 松绿 forest ---- */
+/* ---- 橄榄 forest ---- */
 [data-base="light"][data-accent="forest"] {
-  --accent: #456d25;
-  --accent-hover: #36591c;
-  --accent-active: #2a4615;
+  --accent: #527221;
+  --accent-hover: #47631d;
+  --accent-active: #3d5418;
   --accent-on: #ffffff;
-  --accent-soft: #eef2eb;
-  --accent-light: #d6dfcf;
-  --accent-ring: rgba(69, 109, 37, 0.16);
-  --text-brand: #36591c;
-  --badge-ver-bg: #eef2eb;
-  --badge-ver-text: #36591c;
-  --brand-g1: #7d9966;
-  --brand-g2: #456d25;
-  --brand-g3: #2a4615;
-  --lock-orb-1: rgba(69, 109, 37, 0.07);
-  --lock-orb-2: rgba(69, 109, 37, 0.045);
-  --selection: rgba(69, 109, 37, 0.18);
-  --toast-info: #a7c97b;
+  --accent-soft: #e3e8db;
+  --accent-light: #cfd8c1;
+  --accent-ring: rgba(82, 114, 33, 0.2);
+  --text-brand: #47631d;
+  --badge-ver-bg: #e3e8db;
+  --badge-ver-text: #47631d;
+  --brand-g1: #82995f;
+  --brand-g2: #527221;
+  --brand-g3: #3d5418;
+  --lock-orb-1: rgba(82, 114, 33, 0.07);
+  --lock-orb-2: rgba(82, 114, 33, 0.045);
+  --selection: rgba(82, 114, 33, 0.22);
+  --toast-info: #b5cf70;
 }
 
 [data-base="dark"][data-accent="forest"] {
-  --accent: #a7c97b;
-  --accent-hover: #bedb9b;
-  --accent-active: #8caf5e;
-  --accent-on: #1b2612;
-  --accent-soft: rgba(167, 201, 123, 0.16);
-  --accent-light: rgba(167, 201, 123, 0.28);
-  --accent-ring: rgba(167, 201, 123, 0.32);
-  --text-brand: #d3e4bd;
-  --badge-ver-bg: rgba(167, 201, 123, 0.16);
-  --badge-ver-text: #d3e4bd;
-  --brand-g1: #d3e4bd;
-  --brand-g2: #a7c97b;
-  --brand-g3: #8caf5e;
-  --lock-orb-1: rgba(167, 201, 123, 0.14);
-  --lock-orb-2: rgba(167, 201, 123, 0.07);
-  --selection: rgba(167, 201, 123, 0.3);
-  --toast-info: #456d25;
+  --accent: #b5cf70;
+  --accent-hover: #bfd684;
+  --accent-active: #9cb264;
+  --accent-on: #171b22;
+  --accent-soft: rgba(181, 207, 112, 0.1);
+  --accent-light: rgba(181, 207, 112, 0.24);
+  --accent-ring: rgba(181, 207, 112, 0.36);
+  --text-brand: #c2d88a;
+  --badge-ver-bg: rgba(181, 207, 112, 0.1);
+  --badge-ver-text: #c2d88a;
+  --brand-g1: #c2d88a;
+  --brand-g2: #b5cf70;
+  --brand-g3: #9cb264;
+  --lock-orb-1: rgba(181, 207, 112, 0.14);
+  --lock-orb-2: rgba(181, 207, 112, 0.07);
+  --selection: rgba(181, 207, 112, 0.3);
+  --toast-info: #537422;
 }
 
 /* ---- 琥珀 amber ---- */
 [data-base="light"][data-accent="amber"] {
-  --accent: #886008;
-  --accent-hover: #704d06;
-  --accent-active: #5c3e05;
+  --accent: #7f6608;
+  --accent-hover: #6e5907;
+  --accent-active: #5e4b06;
   --accent-on: #ffffff;
-  --accent-soft: #f4f1e9;
-  --accent-light: #e5dcc9;
-  --accent-ring: rgba(136, 96, 8, 0.16);
-  --text-brand: #704d06;
-  --badge-ver-bg: #f4f1e9;
-  --badge-ver-text: #704d06;
-  --brand-g1: #ac9052;
-  --brand-g2: #886008;
-  --brand-g3: #5c3e05;
-  --lock-orb-1: rgba(136, 96, 8, 0.07);
-  --lock-orb-2: rgba(136, 96, 8, 0.045);
-  --selection: rgba(136, 96, 8, 0.18);
-  --toast-info: #e9c463;
+  --accent-soft: #ebe7d7;
+  --accent-light: #dbd4ba;
+  --accent-ring: rgba(127, 102, 8, 0.2);
+  --text-brand: #6e5907;
+  --badge-ver-bg: #ebe7d7;
+  --badge-ver-text: #6e5907;
+  --brand-g1: #a3914d;
+  --brand-g2: #7f6608;
+  --brand-g3: #5e4b06;
+  --lock-orb-1: rgba(127, 102, 8, 0.07);
+  --lock-orb-2: rgba(127, 102, 8, 0.045);
+  --selection: rgba(127, 102, 8, 0.22);
+  --toast-info: #e7c154;
 }
 
 [data-base="dark"][data-accent="amber"] {
-  --accent: #e9c463;
-  --accent-hover: #f2d88d;
-  --accent-active: #cbaa45;
-  --accent-on: #2a210d;
-  --accent-soft: rgba(233, 196, 99, 0.16);
-  --accent-light: rgba(233, 196, 99, 0.28);
-  --accent-ring: rgba(233, 196, 99, 0.32);
-  --text-brand: #f4e2b1;
-  --badge-ver-bg: rgba(233, 196, 99, 0.16);
-  --badge-ver-text: #f4e2b1;
-  --brand-g1: #f4e2b1;
-  --brand-g2: #e9c463;
-  --brand-g3: #cbaa45;
-  --lock-orb-1: rgba(233, 196, 99, 0.14);
-  --lock-orb-2: rgba(233, 196, 99, 0.07);
-  --selection: rgba(233, 196, 99, 0.3);
-  --toast-info: #886008;
+  --accent: #e7c154;
+  --accent-hover: #eaca6c;
+  --accent-active: #c6a64c;
+  --accent-on: #171b22;
+  --accent-soft: rgba(231, 193, 84, 0.1);
+  --accent-light: rgba(231, 193, 84, 0.24);
+  --accent-ring: rgba(231, 193, 84, 0.36);
+  --text-brand: #ebcc73;
+  --badge-ver-bg: rgba(231, 193, 84, 0.1);
+  --badge-ver-text: #ebcc73;
+  --brand-g1: #ebcc73;
+  --brand-g2: #e7c154;
+  --brand-g3: #c6a64c;
+  --lock-orb-1: rgba(231, 193, 84, 0.14);
+  --lock-orb-2: rgba(231, 193, 84, 0.07);
+  --selection: rgba(231, 193, 84, 0.3);
+  --toast-info: #826808;
 }
 
-/* ---- 珊瑚 coral ---- */
+/* ---- 绯红 coral ---- */
 [data-base="light"][data-accent="coral"] {
-  --accent: #ac443c;
-  --accent-hover: #8d342e;
-  --accent-active: #732822;
+  --accent: #be3547;
+  --accent-hover: #a52e3e;
+  --accent-active: #8d2735;
   --accent-on: #ffffff;
-  --accent-soft: #f8eeed;
-  --accent-light: #edd6d4;
-  --accent-ring: rgba(172, 68, 60, 0.16);
-  --text-brand: #8d342e;
-  --badge-ver-bg: #f8eeed;
-  --badge-ver-text: #8d342e;
-  --brand-g1: #c57c76;
-  --brand-g2: #ac443c;
-  --brand-g3: #732822;
-  --lock-orb-1: rgba(172, 68, 60, 0.07);
-  --lock-orb-2: rgba(172, 68, 60, 0.045);
-  --selection: rgba(172, 68, 60, 0.18);
-  --toast-info: #f09c92;
+  --accent-soft: #f5dfe2;
+  --accent-light: #edc6cb;
+  --accent-ring: rgba(190, 53, 71, 0.2);
+  --text-brand: #a52e3e;
+  --badge-ver-bg: #f5dfe2;
+  --badge-ver-text: #a52e3e;
+  --brand-g1: #d06e7b;
+  --brand-g2: #be3547;
+  --brand-g3: #8d2735;
+  --lock-orb-1: rgba(190, 53, 71, 0.07);
+  --lock-orb-2: rgba(190, 53, 71, 0.045);
+  --selection: rgba(190, 53, 71, 0.22);
+  --toast-info: #ff9aa6;
 }
 
 [data-base="dark"][data-accent="coral"] {
-  --accent: #f09c92;
-  --accent-hover: #f7b8b0;
-  --accent-active: #d78176;
-  --accent-on: #301714;
-  --accent-soft: rgba(240, 156, 146, 0.16);
-  --accent-light: rgba(240, 156, 146, 0.28);
-  --accent-ring: rgba(240, 156, 146, 0.32);
-  --text-brand: #f8cec8;
-  --badge-ver-bg: rgba(240, 156, 146, 0.16);
-  --badge-ver-text: #f8cec8;
-  --brand-g1: #f8cec8;
-  --brand-g2: #f09c92;
-  --brand-g3: #d78176;
-  --lock-orb-1: rgba(240, 156, 146, 0.14);
-  --lock-orb-2: rgba(240, 156, 146, 0.07);
-  --selection: rgba(240, 156, 146, 0.3);
-  --toast-info: #ac443c;
+  --accent: #ffa6b2;
+  --accent-hover: #ffb2bd;
+  --accent-active: #da909b;
+  --accent-on: #171b22;
+  --accent-soft: rgba(255, 166, 178, 0.1);
+  --accent-light: rgba(255, 166, 178, 0.24);
+  --accent-ring: rgba(255, 166, 178, 0.36);
+  --text-brand: #ffb6c0;
+  --badge-ver-bg: rgba(255, 166, 178, 0.1);
+  --badge-ver-text: #ffb6c0;
+  --brand-g1: #ffb6c0;
+  --brand-g2: #ffa6b2;
+  --brand-g3: #da909b;
+  --lock-orb-1: rgba(255, 166, 178, 0.14);
+  --lock-orb-2: rgba(255, 166, 178, 0.07);
+  --selection: rgba(255, 166, 178, 0.3);
+  --toast-info: #be3547;
 }
 
 /* ---- 石墨 graphite ---- */
 [data-base="light"][data-accent="graphite"] {
-  --accent: #56616d;
-  --accent-hover: #444e59;
-  --accent-active: #363e48;
+  --accent: #555c69;
+  --accent-hover: #4a505b;
+  --accent-active: #3f444e;
   --accent-on: #ffffff;
-  --accent-soft: #f0f1f2;
-  --accent-light: #dadcdf;
-  --accent-ring: rgba(86, 97, 109, 0.16);
-  --text-brand: #444e59;
-  --badge-ver-bg: #f0f1f2;
-  --badge-ver-text: #444e59;
-  --brand-g1: #899099;
-  --brand-g2: #56616d;
-  --brand-g3: #363e48;
-  --lock-orb-1: rgba(86, 97, 109, 0.07);
-  --lock-orb-2: rgba(86, 97, 109, 0.045);
-  --selection: rgba(86, 97, 109, 0.18);
-  --toast-info: #b5bec9;
+  --accent-soft: #e4e5e7;
+  --accent-light: #cfd1d5;
+  --accent-ring: rgba(85, 92, 105, 0.2);
+  --text-brand: #4a505b;
+  --badge-ver-bg: #e4e5e7;
+  --badge-ver-text: #4a505b;
+  --brand-g1: #858a93;
+  --brand-g2: #555c69;
+  --brand-g3: #3f444e;
+  --lock-orb-1: rgba(85, 92, 105, 0.07);
+  --lock-orb-2: rgba(85, 92, 105, 0.045);
+  --selection: rgba(85, 92, 105, 0.22);
+  --toast-info: #b7bfcc;
 }
 
 [data-base="dark"][data-accent="graphite"] {
-  --accent: #b5bec9;
-  --accent-hover: #cdd3db;
-  --accent-active: #98a3b0;
-  --accent-on: #19212b;
-  --accent-soft: rgba(181, 190, 201, 0.16);
-  --accent-light: rgba(181, 190, 201, 0.28);
-  --accent-ring: rgba(181, 190, 201, 0.32);
-  --text-brand: #dadee4;
-  --badge-ver-bg: rgba(181, 190, 201, 0.16);
-  --badge-ver-text: #dadee4;
-  --brand-g1: #dadee4;
-  --brand-g2: #b5bec9;
-  --brand-g3: #98a3b0;
-  --lock-orb-1: rgba(181, 190, 201, 0.14);
-  --lock-orb-2: rgba(181, 190, 201, 0.07);
-  --selection: rgba(181, 190, 201, 0.3);
-  --toast-info: #56616d;
+  --accent: #b7bfcc;
+  --accent-hover: #c1c8d3;
+  --accent-active: #9da5b1;
+  --accent-on: #171b22;
+  --accent-soft: rgba(183, 191, 204, 0.1);
+  --accent-light: rgba(183, 191, 204, 0.24);
+  --accent-ring: rgba(183, 191, 204, 0.36);
+  --text-brand: #c4cbd5;
+  --badge-ver-bg: rgba(183, 191, 204, 0.1);
+  --badge-ver-text: #c4cbd5;
+  --brand-g1: #c4cbd5;
+  --brand-g2: #b7bfcc;
+  --brand-g3: #9da5b1;
+  --lock-orb-1: rgba(183, 191, 204, 0.14);
+  --lock-orb-2: rgba(183, 191, 204, 0.07);
+  --selection: rgba(183, 191, 204, 0.3);
+  --toast-info: #555c69;
 }
 
 /* ---------- 别名槽位：不填 hex，只指向别的槽，所以各套主题不必各写一遍。
@@ -2215,7 +2214,7 @@ body {
   min-width: 140px;
   height: 32px;
   margin-right: var(--space-2);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
+  background: var(--bg-canvas-input);
   border: 0;
   border-radius: 9px;
 }
@@ -2962,7 +2961,8 @@ input[type="datetime-local"]:focus-visible {
    书写区两条同理：列表页的环归 .composer:focus-within（描边+环一体），全屏页整块纸面就是唯一
    书写件、光标本身即焦点回执，套 3px accent 环等于给正文框一道"输入框边"，压回 none。 */
 .search-box input:focus-visible,
-.probe-box input:focus-visible { box-shadow: none; }
+.probe-box input:focus-visible,
+.bp-filter input:focus-visible { box-shadow: none; }
 .ProseMirror:focus-visible { box-shadow: none; }
 
 /* ---------- 弹簧微反馈：只给 transform 换弹性曲线 ----------

@@ -132,7 +132,7 @@ async function main() {
     needCert()
     let rows = Object.values(s.tunnels)
     if (typeof flags.name === 'string') rows = rows.filter((t) => t.name === flags.name)
-    console.log(JSON.stringify(rows.map((t) => ({ created_at: t.createdAt, id: t.id, name: t.name, connections: t.connections || 0 }))))
+    console.log(JSON.stringify(rows.length ? rows.map((t) => ({ created_at: t.createdAt, id: t.id, name: t.name, connections: null })) : null, null, 2))
     return
   }
 
@@ -150,7 +150,7 @@ async function main() {
     if (creds) {
       writeAt(creds, JSON.stringify({ AccountID: 'mock-account', TunnelID: id, TunnelSecret: 'bW9jaw==' }))
     }
-    console.log(JSON.stringify({ id, name, created_at: s.tunnels[id].createdAt }))
+    console.log(JSON.stringify({ id, name, created_at: s.tunnels[id].createdAt, connections: null }, null, 2))
     save(s)
     return
   }
@@ -192,7 +192,7 @@ async function main() {
     const injected = process.env.DESKO_MOCK_CONNECTORS
       ? JSON.parse(process.env.DESKO_MOCK_CONNECTORS)
       : s.connectors[t.id] || []
-    console.log(JSON.stringify({ id: t.id, name: t.name, status: 'healthy', created_at: t.createdAt, connectors: injected }))
+    console.log(JSON.stringify({ id: t.id, name: t.name, createdAt: t.createdAt, conns: injected }, null, 2))
     return
   }
 

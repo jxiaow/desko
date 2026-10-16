@@ -14,7 +14,7 @@ const router = createRouter({
     {
       path: EMPTY_PATH,
       name: 'start',
-      meta: { title: '模块' },
+      meta: { title: '首页' },
       component: () => import('../views/ModulesEmptyView.vue'),
     },
     // 关掉模块即撤表，直敲 URL 也进不去；这条兜底把它领回落地页

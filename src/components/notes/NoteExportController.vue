@@ -117,7 +117,7 @@ onMounted(() => { if (props.format) void exportNotes() })
 .export-lead { margin: 0 0 16px; color: var(--text-secondary); }
 .seg { display: flex; padding: 3px; gap: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--sunken); }
 .seg button { flex: 1; }
-.note-export-dialog .seg button.on { background: var(--panel-bg); box-shadow: var(--shadow-card); }
+.note-export-dialog .seg button.on { background: var(--bg-surface); box-shadow: var(--shadow-card); }
 .export-format-note { min-height: 42px; margin: 14px 0; color: var(--text-secondary); line-height: 1.7; }
 .export-filename { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: var(--radius-sm); background: var(--bg-mono-chip); color: var(--text-secondary); }
 .export-filename strong { color: var(--text); font-weight: 500; overflow-wrap: anywhere; }

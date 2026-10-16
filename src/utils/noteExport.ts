@@ -1,8 +1,7 @@
 import TurndownService from 'turndown'
 import type { Note } from '../types'
 import { attachmentNameFromSrc } from '../services/attachmentSrc'
-import { extractTags, htmlToTagText, formatAbsTime } from './format'
-import { sanitizeNoteHtml } from './sanitizeNoteHtml'
+import { extractTags, htmlToTagText, formatAbsTime, stripTagsFromHtml, stripTagsFromText } from './format'
 
 export const NOTE_EXPORT_FORMATS = [
   { id: 'markdown', label: 'Markdown', extension: 'md' },
@@ -14,6 +13,7 @@ export type NoteExportFormat = (typeof NOTE_EXPORT_FORMATS)[number]['id']
 export interface NoteExportFile { name: string; content: string }
 
 const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+const exportTitle = (title: string) => stripTagsFromText(title).trim() || '小记'
 
 export function noteExportExtension(format: NoteExportFormat, count: number): string {
   return format === 'pdf' ? 'pdf' : count > 1 ? 'zip' : NOTE_EXPORT_FORMATS.find(f => f.id === format)!.extension
@@ -27,7 +27,8 @@ export function noteExportFilename(title: string): string {
 
 function exportBody(html: string, images: Record<string, string>) {
   const body = document.createElement('div')
-  body.innerHTML = sanitizeNoteHtml(html)
+  // 标签统一在文档头部展示，正文沿用列表的标签隐藏规则（同时清洗 HTML）。
+  body.innerHTML = stripTagsFromHtml(html)
   let missingImages = 0
   for (const image of body.querySelectorAll('img')) {
     const name = attachmentNameFromSrc(image.getAttribute('src'))
@@ -69,7 +70,7 @@ function markdown(body: HTMLElement) {
 function printStyles() {
   const probe = document.createElement('div')
   probe.className = 'theme-scope'
-  probe.dataset.theme = 'purewhite'
+  probe.dataset.theme = 'snow'
   probe.dataset.base = 'light'
   probe.dataset.accent = document.documentElement.dataset.accent || 'ink'
   probe.hidden = true
@@ -93,7 +94,7 @@ export function buildNoteExport(notes: Note[], format: NoteExportFormat, images:
   for (const note of notes) {
     const { body, missingImages: missing } = exportBody(note.content_html, images)
     missingImages += missing
-    const title = note.title || '小记'
+    const title = exportTitle(note.title)
     const tags = extractTags(htmlToTagText(note.content_html)).map(tag => '#' + tag).join(' ')
     const dates = `创建于 ${formatAbsTime(note.created_at)} · 更新于 ${formatAbsTime(note.updated_at)}`
     const article = `<article><header><h1>${escape(title)}</h1><p>${escape(dates)}</p>${tags ? `<p>${escape(tags)}</p>` : ''}</header>${body.innerHTML}</article>`
@@ -109,6 +110,6 @@ export function buildNoteExport(notes: Note[], format: NoteExportFormat, images:
       : (format === 'word' ? '\ufeff' : '') + documentHtml(title, [article], format === 'word')
     files.push({ name, content })
   }
-  if (format === 'pdf' && notes.length) files.push({ name: '小记导出.pdf', content: documentHtml(notes.length === 1 ? notes[0].title : '小记导出', articles, false) })
+  if (format === 'pdf' && notes.length) files.push({ name: '小记导出.pdf', content: documentHtml(notes.length === 1 ? exportTitle(notes[0].title) : '小记导出', articles, false) })
   return { files, missingImages }
 }

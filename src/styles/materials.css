@@ -2,21 +2,37 @@
    组件选择材质角色，不读取 data-atmosphere；新增表面应接入这里的角色。
    --bg-surface / --bg-input 保持实底，导航与内容共用光场，浮层独立承接较轻的光场。 */
 :root, .theme-scope {
-  /* 两处局部柔光之间留出底色，避免整张画布被同一层颜色冲淡。 */
-  --material-tint-primary: #4b82c1;
-  --material-tint-secondary: #83a3cd;
-  --material-primary-strength: 26%;
-  --material-secondary-strength: 18%;
+  /* 强调色混入底色后再铺柔光，避免高饱和色把工作区染成整片彩色。 */
+  --material-tint-primary: #4979df;
+  --material-tint-secondary: #71b7c8;
+  --material-color-primary: color-mix(in srgb, var(--material-tint-primary) 65%, var(--sunken));
+  --material-color-secondary: color-mix(in srgb, var(--material-tint-secondary) 60%, var(--sunken));
+  --material-primary-strength: 23%;
+  --material-secondary-strength: 16%;
+  --material-lock-primary-strength: 28%;
+  --material-lock-secondary-strength: 19%;
   --material-navigation-strength: 8%;
-  --material-field-primary-size: 68vw 74vh;
-  --material-field-secondary-size: 62vw 68vh;
+  /* 用覆盖范围保留氛围感，控制浓度，让全窗渐变轻柔地融入主题底色。 */
+  --material-field-primary-size: clamp(680px, 78vw, 1500px) clamp(480px, 85vh, 1020px);
+  --material-field-secondary-size: clamp(680px, 82vw, 1580px) clamp(480px, 90vh, 1080px);
+  --material-dither: url('/atmosphere-dither.svg');
   --material-field:
-    radial-gradient(ellipse var(--material-field-primary-size) at 36% 18%, color-mix(in srgb, var(--material-tint-primary) var(--material-primary-strength), transparent), transparent 72%),
-    radial-gradient(ellipse var(--material-field-secondary-size) at 86% 82%, color-mix(in srgb, var(--material-tint-secondary) var(--material-secondary-strength), transparent), transparent 72%);
+    var(--material-dither),
+    radial-gradient(ellipse 65% 75% at 50% 52%, color-mix(in srgb, var(--panel-bg) 28%, transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-field-primary-size) at 14% 12%, color-mix(in srgb, var(--material-color-primary) var(--material-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at 95% 95%, color-mix(in srgb, var(--material-color-secondary) var(--material-secondary-strength), transparent), transparent 100%);
+  --material-lock-field:
+    var(--material-dither),
+    radial-gradient(ellipse 60% 70% at 50% 48%, color-mix(in srgb, var(--panel-bg) 22%, transparent), transparent 90%),
+    radial-gradient(ellipse min(80vw, 1280px) min(94vh, 1000px) at 18% 16%, color-mix(in srgb, var(--material-color-primary) var(--material-lock-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse min(80vw, 1280px) min(90vh, 960px) at 92% 86%, color-mix(in srgb, var(--material-color-secondary) var(--material-lock-secondary-strength), transparent), transparent 100%);
   --material-floating-field:
     linear-gradient(color-mix(in srgb, var(--panel-bg) 70%, transparent), color-mix(in srgb, var(--panel-bg) 70%, transparent)),
     var(--material-field), var(--panel-bg);
-  --border-navigation: color-mix(in srgb, var(--text) 10%, transparent);
+  --material-editor-field:
+    linear-gradient(color-mix(in srgb, var(--bg) 65%, transparent), color-mix(in srgb, var(--bg) 65%, transparent)),
+    var(--material-field), var(--bg);
+  --border-navigation: color-mix(in srgb, var(--text) 3%, transparent);
 
   --bg-app: var(--material-field), var(--sunken);
   --bg-toolbar: var(--bg-app);
@@ -29,6 +45,7 @@
   --bg-editor: var(--bg);
   --bg-input: var(--bg);
   --bg-input-focus: var(--panel-bg);
+  --bg-canvas-input: color-mix(in srgb, var(--text) 7%, transparent);
   --bg-surface: var(--panel-bg);
   --bg-surface-hover: var(--hover);
   --bg-surface-active: var(--active);
@@ -50,51 +67,59 @@
 
 /* 氛围色与强调色同源切换；局部预览覆盖自身颜色，不继承当前主题的光场。 */
 :root[data-accent="celadon"], .theme-scope[data-accent="celadon"] {
-  --material-tint-primary: #489f85;
-  --material-tint-secondary: #82b69e;
+  --material-tint-primary: #20a87a;
+  --material-tint-secondary: #9fc77f;
 }
 :root[data-accent="clay"], .theme-scope[data-accent="clay"] {
-  --material-tint-primary: #c18b5e;
-  --material-tint-secondary: #cba987;
+  --material-tint-primary: #d8792d;
+  --material-tint-secondary: #e4bd73;
 }
 :root[data-accent="plum"], .theme-scope[data-accent="plum"] {
-  --material-tint-primary: #945fc5;
-  --material-tint-secondary: #b18bd0;
+  --material-tint-primary: #9664d3;
+  --material-tint-secondary: #c991b2;
 }
 :root[data-accent="rose"], .theme-scope[data-accent="rose"] {
-  --material-tint-primary: #c17094;
-  --material-tint-secondary: #d49faf;
+  --material-tint-primary: #cd50ac;
+  --material-tint-secondary: #e7a191;
 }
 :root[data-accent="teal"], .theme-scope[data-accent="teal"] {
-  --material-tint-primary: #259aab;
-  --material-tint-secondary: #70c3be;
+  --material-tint-primary: #25a7bc;
+  --material-tint-secondary: #7799cb;
 }
 :root[data-accent="forest"], .theme-scope[data-accent="forest"] {
-  --material-tint-primary: #58a135;
-  --material-tint-secondary: #9cc970;
+  --material-tint-primary: #8ba44a;
+  --material-tint-secondary: #c0b477;
 }
 :root[data-accent="amber"], .theme-scope[data-accent="amber"] {
-  --material-tint-primary: #b69912;
-  --material-tint-secondary: #d9be5a;
+  --material-tint-primary: #c9a533;
+  --material-tint-secondary: #c29d73;
 }
 :root[data-accent="coral"], .theme-scope[data-accent="coral"] {
-  --material-tint-primary: #e33d46;
-  --material-tint-secondary: #ef8e80;
+  --material-tint-primary: #da5c70;
+  --material-tint-secondary: #d9957c;
 }
 :root[data-accent="graphite"], .theme-scope[data-accent="graphite"] {
-  --material-tint-primary: #697582;
-  --material-tint-secondary: #9aa3ad;
+  --material-tint-primary: #667080;
+  --material-tint-secondary: #aaa1b3;
+}
+
+/* 中性强调色主要靠明暗显形，浅底增加覆盖量，保持与彩色氛围相近的可见性。 */
+:root[data-base="light"][data-accent="graphite"], .theme-scope[data-base="light"][data-accent="graphite"] {
+  --material-primary-strength: 26%;
+  --material-secondary-strength: 23%;
 }
 
 :root[data-base="dark"], .theme-scope[data-base="dark"] {
-  --material-primary-strength: 22%;
-  --material-secondary-strength: 16%;
+  --material-primary-strength: 21%;
+  --material-secondary-strength: 14%;
+  --material-lock-primary-strength: 26%;
+  --material-lock-secondary-strength: 18%;
 }
 
 /* 局部主题按自己的画布缩放，避免窗口大小的光斑在微缩预览里变成整块强调色。 */
 .theme-scope {
-  --material-field-primary-size: 68% 74%;
-  --material-field-secondary-size: 62% 68%;
+  --material-field-primary-size: 78% 85%;
+  --material-field-secondary-size: 82% 90%;
 }
 
 :root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"] {
@@ -106,7 +131,8 @@
   --bg-popover: var(--material-floating-field);
   --bg-menu: var(--material-floating-field);
   --bg-dock: var(--material-floating-field);
-  --bg-editor: var(--material-field), var(--bg);
+  --bg-editor: var(--material-editor-field);
+  --bg-canvas-input: var(--bg-input);
 }
 
 :root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"] {

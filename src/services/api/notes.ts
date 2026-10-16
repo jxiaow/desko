@@ -1,4 +1,4 @@
-import { uploadBrowserImage } from '../browserImage'
+import { uploadImageBytes } from '../browserImage'
 import { invoke } from '../transport'
 import type { Note, CreateNoteInput, UpdateNoteInput, Attachment } from '../../types'
 import type { NoteExportFile, NoteExportFormat } from '../../utils/noteExport'
@@ -59,10 +59,10 @@ export const notesApi = {
   listAttachments: (noteId: string): Promise<Attachment[]> =>
     invoke('list_attachments', { noteId }),
   uploadAttachment: (noteId: string, filePath: string | File): Promise<Attachment> =>
-    typeof filePath === 'string' ? invoke('upload_attachment', { noteId, filePath }) : uploadBrowserImage(filePath, noteId),
+    typeof filePath === 'string' ? invoke('upload_attachment', { noteId, filePath }) : uploadImageBytes(filePath, noteId),
   /** 草稿还没有 note id：先把文件收进附件目录，发布时再补记录 */
   stageAttachment: (filePath: string | File): Promise<Attachment> =>
-    typeof filePath === 'string' ? invoke('stage_attachment', { filePath }) : uploadBrowserImage(filePath),
+    typeof filePath === 'string' ? invoke('stage_attachment', { filePath }) : uploadImageBytes(filePath),
   bindAttachments: (noteId: string, paths: string[]): Promise<Attachment[]> =>
     invoke('bind_attachments', { noteId, paths }),
   deleteAttachment: (id: string): Promise<void> =>

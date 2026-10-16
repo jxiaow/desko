@@ -1,6 +1,5 @@
 use super::{Backend, Resource};
 use crate::{commands, error::AppError, AppState};
-use base64::Engine;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -8,6 +7,37 @@ use std::{
     sync::Arc,
 };
 use tauri::{AppHandle, Manager};
+
+const WEB_MODULE_KEYS: &[&str] = &["notes_enabled", "entries_enabled", "files_enabled", "mfa_enabled", "codex_enabled", "fileshare_enabled", "tunnel_enabled"];
+
+fn require_module(state: &AppState, key: &str) -> Result<(), String> {
+    let db = state.db.lock().map_err(|_| "无法读取模块设置")?;
+    let stored = db.get_meta(key).map_err(|e| e.user_message())?;
+    let enabled = if matches!(key, "notes_enabled" | "entries_enabled" | "files_enabled") {
+        stored.as_deref() != Some("false")
+    } else {
+        stored.as_deref() == Some("true")
+    };
+    if enabled { Ok(()) } else { Err("模块未启用，请在设置的模块页打开开关".into()) }
+}
+
+#[cfg(test)]
+mod module_tests {
+    #[test]
+    fn web_module_access_uses_desktop_defaults_and_live_switches() {
+        let state = crate::test_state();
+        for key in super::WEB_MODULE_KEYS {
+            let default_on = matches!(*key, "notes_enabled" | "entries_enabled" | "files_enabled");
+            assert_eq!(super::require_module(&state, key).is_ok(), default_on, "{key}");
+            state.db.lock().unwrap().set_meta(key, "false").unwrap();
+            assert!(super::require_module(&state, key).is_err(), "{key}");
+            state.db.lock().unwrap().set_meta(key, "true").unwrap();
+            assert!(super::require_module(&state, key).is_ok(), "{key}");
+            state.db.lock().unwrap().set_meta(key, "false").unwrap();
+            assert!(super::require_module(&state, key).is_err(), "{key}");
+        }
+    }
+}
 
 pub(super) struct AppBackend {
     app: AppHandle,
@@ -80,6 +110,16 @@ fn within(root: &Path, relative: &str) -> Result<PathBuf, String> {
     Ok(target)
 }
 impl Backend for AppBackend {
+    fn public_hosts(&self, port: u16) -> Vec<String> {
+        let state = self.app.state::<AppState>();
+        let Ok(db) = state.db.lock() else { return Vec::new(); };
+        if db.get_meta("tunnel_enabled").ok().flatten().as_deref() != Some("true") {
+            return Vec::new();
+        }
+        db.list_tunnel_services().unwrap_or_default().into_iter()
+            .filter(|service| service.routed && service.port == i64::from(port))
+            .map(|service| service.hostname).collect()
+    }
     fn epoch(&self) -> Option<u64> {
         self.vault.epoch()
     }
@@ -96,10 +136,22 @@ impl Backend for AppBackend {
         Ok(Some(Arc::new(Self { app: self.app.clone(), vault, draft_key: self.draft_key.clone(), events: self.events.clone() })))
     }
     fn invoke(&self, command: &str, args: Value, expected_epoch: u64) -> Result<Value, String> {
-        macro_rules! call { ($module:ident::$name:ident $(, $key:literal)* ) => { result(commands::$module::$name(self.state() $(, arg(&args, $key)?)*)) }; }
+        macro_rules! call { ($module:ident::$name:ident $(, $key:literal)* ) => {{
+            // Pending drafts and key revocation must still finish after a module closes.
+            if !matches!(stringify!($name), "stage_note_drafts" | "note_key_relock") {
+                self.require_module(match stringify!($module) {
+                    "notes" | "note_lock" => "notes_enabled",
+                    "entries" | "url_paths" => "entries_enabled",
+                    "mfa" => "mfa_enabled",
+                    _ => return Err("Web 端不支持此操作".into()),
+                })?;
+            }
+            result(commands::$module::$name(self.state() $(, arg(&args, $key)?)*))
+        }}; }
         // A favicon fetch can wait on a remote server. It neither mutates local
         // credentials nor returns secrets; the HTTP layer rechecks its session.
         if command == "favicon_get" {
+            self.require_module("entries_enabled")?;
             return Ok(json!(tauri::async_runtime::block_on(
                 commands::favicons::favicon_get(arg(&args, "url")?)
             )
@@ -134,7 +186,7 @@ impl Backend for AppBackend {
                     "web_poll_events" => Ok(self.events.since(arg(&args, "after")?)),
                     "get_setting" | "set_setting" => {
                         let key: String = arg(&args, "key")?;
-                        if !matches!(key.as_str(), "codex_enabled" | "fileshare_enabled" | "tunnel_enabled") {
+                        if !WEB_MODULE_KEYS.contains(&key.as_str()) {
                             return Err("请在桌面端修改此设置".into());
                         }
                         let db = self.vault.state.db.lock().map_err(|_| "无法读取模块设置")?;
@@ -159,21 +211,23 @@ impl Backend for AppBackend {
                     "recover_note_drafts" => call!(notes::recover_note_drafts),
                     "note_key_status" => call!(note_lock::note_key_status),
                     "note_key_recover" => call!(note_lock::note_key_recover),
-                    "note_key_setup" => result(commands::note_lock::note_key_setup_with_state(&self.vault.state, arg(&args, "passphrase")?)),
-                    "note_key_change" => result(commands::note_lock::note_key_change_with_state(&self.vault.state, arg(&args, "passphrase")?)),
+                    "note_key_setup" => { self.require_module("notes_enabled")?; result(commands::note_lock::note_key_setup_with_state(&self.vault.state, arg(&args, "passphrase")?)) },
+                    "note_key_change" => { self.require_module("notes_enabled")?; result(commands::note_lock::note_key_change_with_state(&self.vault.state, arg(&args, "passphrase")?)) },
                     "note_key_relock" => call!(note_lock::note_key_relock),
-                    "note_key_unlock" => result(commands::note_lock::note_key_unlock_with_state(&self.vault.state, arg(&args, "passphrase")?)),
+                    "note_key_unlock" => { self.require_module("notes_enabled")?; result(commands::note_lock::note_key_unlock_with_state(&self.vault.state, arg(&args, "passphrase")?)) },
                     "lock_note" => call!(note_lock::lock_note, "id"),
                     "unlock_note" => call!(note_lock::unlock_note, "id"),
                     "relock_note" => call!(note_lock::relock_note, "id"),
                     "remove_note_lock" => call!(note_lock::remove_note_lock, "id", "input"),
                     "reveal_note" => call!(note_lock::reveal_note, "id"),
                     "list_attachments" => {
+                        self.require_module("notes_enabled")?;
                         let id: String = arg(&args, "noteId")?;
                         self.vault.require_note_access(&id).map_err(|e| e.user_message())?;
                         result(commands::notes::list_attachments(self.state(), id))
                     }
                     "bind_attachments" => {
+                        self.require_module("notes_enabled")?;
                         let id: String = arg(&args, "noteId")?;
                         let paths: Vec<String> = arg(&args, "paths")?;
                         self.vault.require_note_access(&id).map_err(|e| e.user_message())?;
@@ -184,6 +238,7 @@ impl Backend for AppBackend {
                         result(commands::notes::bind_attachments(self.state(), id, paths))
                     }
                     "delete_attachment" => {
+                        self.require_module("notes_enabled")?;
                         let id: String = arg(&args, "id")?;
                         let attachment = self.vault.state.db.lock().map_err(|_| "无法读取附件")?.get_attachment(&id).map_err(|e| e.user_message())?;
                         if let Some(attachment) = attachment {
@@ -191,7 +246,7 @@ impl Backend for AppBackend {
                         }
                         result(commands::notes::delete_attachment(self.state(), id))
                     }
-                    "web_upload_attachment" => self.upload(&args),
+                    "save_attachment_bytes" => self.upload(&args),
                     "web_seal_draft" => result(super::drafts::seal(
                         &self.draft_key,
                         arg(&args, "plaintext")?,
@@ -210,7 +265,7 @@ impl Backend for AppBackend {
                     "create_url_path" => call!(url_paths::create_url_path, "input"),
                     "update_url_path" => call!(url_paths::update_url_path, "id", "input"),
                     "delete_url_path" => call!(url_paths::delete_url_path, "id"),
-                    "list_file_shortcuts" => result(
+                    "list_file_shortcuts" => { self.require_module("files_enabled")?; result(
                         commands::file_shortcuts::list_file_shortcuts(self.state()).map(
                             |mut shortcuts| {
                                 for shortcut in &mut shortcuts {
@@ -219,7 +274,7 @@ impl Backend for AppBackend {
                                 shortcuts
                             },
                         ),
-                    ),
+                    ) },
                     "mfa_add_uri" => call!(mfa::mfa_add_uri, "uri"),
                     "mfa_add_manual" => call!(mfa::mfa_add_manual, "label", "issuer", "secret"),
                     "mfa_codes" => call!(mfa::mfa_codes),
@@ -237,6 +292,7 @@ impl Backend for AppBackend {
         let url =
             reqwest::Url::parse(&format!("http://localhost{path}")).map_err(|_| "路径无效")?;
         if let Some(name) = url.path().strip_prefix("/api/attachments/") {
+            self.require_module("notes_enabled")?;
             let name = crate::webdav::percent_decode(name);
             self.vault.require_attachment_access(&name).map_err(|e| e.user_message())?;
             return self.image(
@@ -246,6 +302,7 @@ impl Backend for AppBackend {
             );
         }
         if let Some(name) = url.path().strip_prefix("/api/favicons/") {
+            self.require_module("entries_enabled")?;
             return self.image(
                 &crate::services::favicon_service::favicons_dir(),
                 &crate::webdav::percent_decode(name),
@@ -253,6 +310,7 @@ impl Backend for AppBackend {
             );
         }
         let id = url.path().strip_prefix("/api/files/").ok_or("资源不存在")?;
+        self.require_module("files_enabled")?;
         let shortcuts = commands::file_shortcuts::list_file_shortcuts(self.state())
             .map_err(|e| e.user_message())?;
         let shortcut = shortcuts
@@ -354,11 +412,7 @@ fn image_path(dir: &Path, name: &str, allow_svg: bool) -> Result<(PathBuf, &'sta
 }
 impl AppBackend {
     fn require_module(&self, key: &str) -> Result<(), String> {
-        let db = self.vault.state.db.lock().map_err(|_| "无法读取模块设置")?;
-        if db.get_meta(key).map_err(|e| e.user_message())?.as_deref() != Some("true") {
-            return Err("模块未启用，请在设置的模块页打开开关".into());
-        }
-        Ok(())
+        require_module(&self.vault.state, key)
     }
     fn image(&self, dir: &Path, name: &str, allow_svg: bool) -> Result<Resource, String> {
         let (path, mime) = image_path(dir, name, allow_svg)?;
@@ -371,50 +425,24 @@ impl AppBackend {
             mime,
         ))
     }
+    /// 手机端选或粘来的图只有字节、没有本机路径：解码之后交给桌面端同一颗服务函数，
+    /// 这一侧只留模块开关与逐条小记的访问闸门
     fn upload(&self, args: &Value) -> Result<Value, String> {
-        if let Some(id) = args.get("noteId").and_then(Value::as_str) {
+        self.require_module("notes_enabled")?;
+        let note_id: Option<String> =
+            args.get("noteId").and_then(Value::as_str).map(str::to_string);
+        if let Some(id) = &note_id {
             self.vault.require_note_access(id).map_err(|e| e.user_message())?;
         }
         let name: String = arg(args, "name")?;
-        let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
-        if !matches!(
-            ext.as_str(),
-            "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp"
-        ) {
-            return Err("只支持 png / jpg / gif / webp / bmp 图片".into());
-        }
         let data: String = arg(args, "data")?;
-        let data = base64::engine::general_purpose::STANDARD
-            .decode(data)
-            .map_err(|_| "图片内容无效")?;
-        if data.is_empty() || data.len() > 15 * 1024 * 1024 {
-            return Err("图片应小于 15 MB".into());
-        }
-        let temp = std::env::temp_dir().join(format!("desko-web-{}.{}", uuid::Uuid::new_v4(), ext));
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(|_| "无法暂存图片")?;
-        use std::io::Write;
-        let outcome = file
-            .write_all(&data)
-            .map_err(|_| "无法暂存图片".to_string())
-            .and_then(|_| {
-                let path = temp.to_string_lossy().into_owned();
-                if let Some(id) = args.get("noteId").and_then(Value::as_str) {
-                    result(commands::notes::upload_attachment(
-                        self.state(),
-                        id.into(),
-                        path,
-                    ))
-                } else {
-                    result(commands::notes::stage_attachment(self.state(), path))
-                }
-            });
-        drop(file);
-        let _ = std::fs::remove_file(temp);
-        outcome
+        let db = self.vault.state.db.lock().map_err(|_| "无法读取附件")?;
+        result(crate::services::attachment_service::save_image_base64(
+            &db,
+            &name,
+            &data,
+            note_id.as_deref(),
+        ))
     }
 }
 

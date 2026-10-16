@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { isWebRuntime } from '../../services/runtime'
+import { openLinkFromClick } from '../../utils/openExternal'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
@@ -8,7 +9,7 @@ import NoteAttachments from './NoteAttachments.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatAbsTime, highlightTagsInHtml, htmlToText, wordCount } from '../../utils/format'
 import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
-import { collectAttachmentNames, resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
+import { collectAttachmentNames, resolveAssetHtml, unreferencedAttachments, type SaveImage } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import type { NoteSaveState } from '../../stores/notes'
 
@@ -20,6 +21,8 @@ const props = withDefaults(defineProps<{
   saveState?: NoteSaveState
   /** view = 只读浏览已存的小记；edit = 书写面 */
   mode?: 'edit' | 'view'
+  /** 全屏书写面把剪贴板图片落盘的回调 */
+  saveImage?: SaveImage
 }>(), {
   attachments: () => [],
   saveState: '',
@@ -61,6 +64,9 @@ const onUpdate = (value: string) => {
 
 const insertTag = () => editorRef.value?.insertText(' #')
 const insertImage = (src: string) => editorRef.value?.insertImage(src)
+/** 全屏面既写已存的小记也写草稿，note 为空就是草稿 */
+const saveImageToSurface = async (source: File | string) =>
+  (await props.saveImage?.(source, props.note?.id ?? null)) ?? null
 
 /** 编辑器把 canUndo/canRedo 挂在暴露的 ref 上，这里包一层只读给底栏那两颗钮 */
 const canUndo = computed(() => !!editorRef.value?.canUndo)
@@ -109,12 +115,13 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
           <span>{{ wordCount(text) }} 字</span>
         </div>
 
-        <div v-if="viewMode" class="fs-view" v-html="displayHtml" />
+        <div v-if="viewMode" class="fs-view" v-html="displayHtml" @click="openLinkFromClick" />
         <NoteEditor
           v-else
           ref="editorRef"
           variant="full"
           :initial-content="html"
+          :save-image="saveImageToSurface"
           :placeholder="props.note ? '' : '此刻的想法…'"
           @update="onUpdate"
           @submit="onPrimary"
@@ -192,14 +199,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   z-index: 150;
   display: flex;
   flex-direction: column;
-  /* 阅读面与 .app-root 同一条画布配方（materials.css --bg-app）：这张纸要比桌亮才读得出
-     是「拿起写好的一页」，桌面压到 --sunken 那档才有 1.069 的纸/桌差 */
-  background: var(--bg-app);
-  background-attachment: fixed;
-}
-/* 书写面分档回浅场：--bg 亮一档，柔光与颗粒复用工作画布的氛围场。
-   侧栏轨本来就吃 --sidebar-bg（与画布已有 1.045 的界），所以这里换底不新增一种接缝 */
-.fs:not(.fs-read) {
+  /* 阅读与书写使用更轻的柔光，让正文保持接近底色。 */
   background: var(--bg-editor);
   background-attachment: var(--editor-background-attachment);
 }

@@ -3,8 +3,10 @@ use std::sync::atomic::AtomicU64;
 struct Fake {
     epoch: AtomicU64,
     invocations: AtomicU64,
+    public_hosts: Mutex<Vec<String>>,
 }
 impl Backend for Fake {
+    fn public_hosts(&self, _: u16) -> Vec<String> { self.public_hosts.lock().unwrap().clone() }
     fn verify_password(&self, password: &str) -> Result<(), String> {
         if password == "test-password" { Ok(()) } else { Err("密码错误".into()) }
     }
@@ -35,6 +37,7 @@ fn service() -> (Running, Arc<Fake>, String) {
     let fake = Arc::new(Fake {
         epoch: AtomicU64::new(1),
         invocations: AtomicU64::new(0),
+        public_hosts: Mutex::new(Vec::new()),
     });
     let service = start(fake.clone(), 0, false).unwrap();
     let url = service.status.urls[0].clone();
@@ -140,12 +143,64 @@ fn http_rejects_foreign_origin_rebinding_native_commands_and_invalid_json() {
 }
 #[test]
 fn host_validation_is_explicit() {
-    assert!(valid_host("127.0.0.1:8420", 8420, false));
-    assert!(!valid_host("192.168.1.2:8420", 8420, false));
-    assert!(valid_host("192.168.1.2:8420", 8420, true));
-    assert!(!valid_host("evil.example:8420", 8420, true));
-    assert!(!valid_host("127.0.0.1:8421", 8420, true));
+    let lan = Some("172.33.122.31".parse().unwrap());
+    assert!(valid_host("127.0.0.1:8420", 8420, false, None));
+    assert!(!valid_host("172.33.122.31:8420", 8420, false, lan));
+    assert!(valid_host("172.33.122.31:8420", 8420, true, lan));
+    assert!(!valid_host("172.33.122.32:8420", 8420, true, lan));
+    assert!(valid_host("192.168.1.2:8420", 8420, true, lan));
+    assert!(valid_host("192.168.1.2:8420", 8420, true, None));
+    assert!(!valid_host("evil.example:8420", 8420, true, lan));
+    assert!(!valid_host("127.0.0.1:8421", 8420, true, lan));
+}
 
+#[test]
+fn lan_service_accepts_login_and_rpc_at_every_advertised_address() {
+    let fake = Arc::new(Fake {
+        epoch: AtomicU64::new(1),
+        invocations: AtomicU64::new(0),
+        public_hosts: Mutex::new(Vec::new()),
+    });
+    let running = start(fake, 0, true).unwrap();
+    if let Some(ip) = running.context.lan_ip {
+        assert_eq!(running.status.urls.len(), 2);
+        assert!(running.status.urls.contains(&format!("http://{ip}:{}", running.status.port)));
+    }
+    for url in &running.status.urls {
+        let cookie = login(url);
+        assert_eq!(status(ureq::post(&format!("{url}/api/invoke"))
+            .set("Origin", url).set("Cookie", &cookie)
+            .set("Content-Type", "application/json")
+            .send_string(r#"{"command":"list_notes"}"#)), 200);
+        println!("LAN HTTP login and RPC verified: {url}");
+    }
+    running.stop_and_wait();
+}
+
+#[test]
+fn tunnel_host_supports_https_login_and_rpc_without_allowing_foreign_origins() {
+    let (_service, fake, url) = service();
+    let host = "desk.example.com";
+    let get = || ureq::get(&format!("{url}/notes")).set("Host", host).call();
+    assert_eq!(status(get()), 403);
+    fake.public_hosts.lock().unwrap().push(host.into());
+    assert_eq!(status(get()), 200);
+    let login = |origin: &str| ureq::post(&format!("{url}/api/login"))
+        .set("Host", host).set("Origin", origin).set("Sec-Fetch-Site", "same-origin")
+        .set("Content-Type", "application/json")
+        .send_string(r#"{"password":"test-password"}"#);
+    assert_eq!(status(login("https://evil.example")), 403);
+    let cookie = login("https://desk.example.com").unwrap().header("Set-Cookie").unwrap().to_string();
+    assert_eq!(status(ureq::post(&format!("{url}/api/invoke"))
+        .set("Host", host).set("Origin", "https://desk.example.com")
+        .set("Sec-Fetch-Site", "same-origin").set("Cookie", &cookie)
+        .set("Content-Type", "application/json").send_string(r#"{"command":"list_notes"}"#)), 200);
+    assert_eq!(status(ureq::get(&url).set("Host", host).set("Sec-Fetch-Site", "cross-site").call()), 403);
+    assert_eq!(status(ureq::get(&url).set("Host", "evil.example")
+        .set("X-Forwarded-Host", host).set("X-Forwarded-Proto", "https").call()), 403);
+    assert_eq!(status(ureq::get(&url).set("Host", "desk.example.com:8420").call()), 403);
+    fake.public_hosts.lock().unwrap().clear();
+    assert_eq!(status(get()), 403);
 }
 
 #[test]

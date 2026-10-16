@@ -562,15 +562,11 @@ describe('Notes Store', () => {
       expect(store.filteredNotes.map(n => n.id)).toEqual(['a'])
     })
 
-    it('排序：最新 / 最早 / 最近更新', async () => {
+    it('排序：一律最新在前', async () => {
       const store = useNotesStore()
       seed(store)
 
       expect(store.filteredNotes.map(n => n.id)).toEqual(['b', 'c', 'a'])
-      store.noteSort = 'old'
-      expect(store.filteredNotes.map(n => n.id)).toEqual(['a', 'c', 'b'])
-      store.noteSort = 'updated'
-      expect(store.filteredNotes.map(n => n.id)).toEqual(['c', 'b', 'a'])
     })
 
     it('清空筛选后恢复全量', async () => {

@@ -220,8 +220,9 @@ try {
 /* 定义集包含样式入口导入的材质层、尺度层、底色层、accent 层与别名块。 */
 const defined = new Set(css.match(/--[\w-]+(?=\s*:)/g) || [])
 /* 组件局部变量：在 .vue / 页面作用域里自定自用，不归全局主题管
-   --h / --ftc 由组件内联给；--toast-side 由 App.vue 按侧栏三态喂；--gc-hue 由收藏页按分类哈希给 */
-const LOCAL_SLOTS = new Set(['--h', '--ftc', '--toast-side', '--gc-hue'])
+   --h / --ftc 由组件内联给；--toast-side 由 App.vue 按侧栏三态喂；--gc-hue 由收藏页按分类哈希给；
+   --usage-* 由 CodexUsagePanel 按极性提供给图表子组件。 */
+const LOCAL_SLOTS = new Set(['--h', '--ftc', '--toast-side', '--gc-hue', '--usage-fresh', '--usage-cached', '--usage-output'])
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {

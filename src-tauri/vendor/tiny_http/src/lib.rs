@@ -481,7 +481,19 @@ impl Server {
         if self.close.swap(true, Relaxed) { return; }
         // Wake accept so its listener is released before an explicit shutdown returns.
         let maybe_stream = match &self.listening_addr {
-            ListenAddr::IP(addr) => TcpStream::connect(addr).map(Connection::from),
+            ListenAddr::IP(addr) => {
+                // Windows cannot connect to an unspecified bind address.
+                // Wake a wildcard listener through the matching loopback family.
+                let mut target = *addr;
+                if target.ip().is_unspecified() {
+                    target.set_ip(if target.is_ipv4() {
+                        std::net::Ipv4Addr::LOCALHOST.into()
+                    } else {
+                        std::net::Ipv6Addr::LOCALHOST.into()
+                    });
+                }
+                TcpStream::connect_timeout(&target, Duration::from_secs(1)).map(Connection::from)
+            },
             #[cfg(unix)]
             ListenAddr::Unix(addr) => std::os::unix::net::UnixStream::connect(addr.as_pathname().unwrap()).map(Connection::from),
         };

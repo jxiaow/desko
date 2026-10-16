@@ -795,30 +795,26 @@ fn cli_error(stdout: &str, stderr: &str) -> AppError {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TunnelRow {
-    #[serde(default)]
     pub id: String,
-    #[serde(default)]
     pub name: String,
-    /// 边缘侧已建立的连接数：本机没在跑它却非零，说明别处也在跑这条隧道
-    #[serde(default)]
-    pub connections: u32,
 }
 
-/// 结果 JSON 与 JSON 日志行会混在同一条 stdout 上，所以逐行试解析。
-/// `None` = 这行不是结果（日志行、人读文本）；`Some(rows)` = 这就是列表结果，**空数组也算**——
-/// "远端一条也没有"是幂等判据里最有价值的一格，不能和"没读懂"混成一谈。
-/// 认作结果的行必须带非空 `id`：全字段带 default 的结构体能把任何一行日志都"解析成功"。
-fn rows_from_line(line: &str) -> Option<Vec<TunnelRow>> {
-    let trimmed = line.trim();
-    if trimmed.starts_with('[') {
-        let rows = serde_json::from_str::<Vec<TunnelRow>>(trimmed).ok()?;
-        return Some(rows.into_iter().filter(|r| !r.id.is_empty()).collect());
-    }
-    if trimmed.starts_with('{') {
-        let row = serde_json::from_str::<TunnelRow>(trimmed).ok()?;
-        return (!row.id.is_empty()).then_some(vec![row]);
-    }
-    None
+/// cloudflared 的结果带缩进与换行；JSON 日志和人读提示可能夹在结果前后。
+fn cli_documents(mut stdout: &str) -> impl Iterator<Item = serde_json::Value> + '_ {
+    std::iter::from_fn(move || loop {
+        stdout = stdout.trim_start();
+        if stdout.is_empty() { return None; }
+        if stdout.starts_with(['[', '{']) || stdout.starts_with("null") {
+            let mut stream = serde_json::Deserializer::from_str(stdout).into_iter::<serde_json::Value>();
+            if let Some(Ok(value)) = stream.next() {
+                stdout = &stdout[stream.byte_offset()..];
+                return Some(value);
+            }
+            // 不把损坏结果内部的子对象当成完整的隧道列表。
+            return None;
+        }
+        stdout = stdout.split_once('\n')?.1;
+    })
 }
 
 /// 解析不出就必须报错，不能返回空列表：空列表的含义是"远端没有这条隧道"，
@@ -826,8 +822,15 @@ fn rows_from_line(line: &str) -> Option<Vec<TunnelRow>> {
 pub fn parse_tunnel_list(stdout: &str) -> Result<Vec<TunnelRow>, AppError> {
     let mut seen: Vec<TunnelRow> = vec![];
     let mut matched = false;
-    for line in stdout.lines() {
-        if let Some(rows) = rows_from_line(line) {
+    for value in cli_documents(stdout) {
+        let rows = if value.is_null() {
+            Some(Vec::new())
+        } else if value.is_array() {
+            serde_json::from_value::<Vec<TunnelRow>>(value).ok()
+        } else {
+            serde_json::from_value::<TunnelRow>(value).ok().map(|row| vec![row])
+        };
+        if let Some(rows) = rows.filter(|rows| rows.iter().all(|row| !row.id.is_empty())) {
             matched = true;
             for row in rows {
                 if !seen.iter().any(|s| s.id == row.id) {
@@ -898,27 +901,23 @@ pub struct ConnectorRow {
     pub id: String,
     #[serde(default)]
     pub version: String,
-    #[serde(default)]
-    pub num_connections: u32,
+    #[serde(default, rename = "conns")]
+    connections: Vec<serde_json::Value>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 struct InfoDoc {
     #[serde(default)]
     id: String,
-    #[serde(default)]
+    #[serde(rename = "conns")]
     connectors: Vec<ConnectorRow>,
 }
 
 /// 劈流探测的判据：边缘侧列出的活 connector。本机 DNS 返 fake-IP，进程表也看不见别处，
 /// 只有这个读的是真话。
 pub fn parse_connectors(stdout: &str) -> Result<Vec<ConnectorRow>, AppError> {
-    for line in stdout.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with('{') {
-            continue;
-        }
-        if let Ok(doc) = serde_json::from_str::<InfoDoc>(trimmed) {
+    for value in cli_documents(stdout) {
+        if let Ok(doc) = serde_json::from_value::<InfoDoc>(value) {
             // 日志行同样是对象：只认带 tunnel 编号的那一行
             if !doc.id.is_empty() {
                 return Ok(doc.connectors);
@@ -928,10 +927,10 @@ pub fn parse_connectors(stdout: &str) -> Result<Vec<ConnectorRow>, AppError> {
     Err(AppError::Tunnel("穿透程序返回的 connector 信息格式不认识".to_string()))
 }
 
-/// 活 connector 数：`num_connections` 是每条 connector 到边缘的连接数，非零才算真在服役
+/// 每条 connector 的 conns 数组非空才算仍在服役。
 pub fn live_connectors(rows: &[ConnectorRow]) -> Vec<ConnectorRow> {
     rows.iter()
-        .filter(|c| c.num_connections > 0)
+        .filter(|c| !c.connections.is_empty())
         .cloned()
         .collect()
 }
@@ -1265,12 +1264,12 @@ mod tests {
         let mut envs = mock_envs(&root, &[]);
         envs.push((
             "DESKO_MOCK_CONNECTORS".to_string(),
-            r#"[{"id":"a","version":"2026.10.0","num_connections":4},{"id":"b","version":"2026.10.0","num_connections":0}]"#.to_string(),
+            r#"[{"id":"a","version":"2026.10.0","conns":[{},{},{},{}]},{"id":"b","version":"2026.10.0","conns":[]}]"#.to_string(),
         ));
         let out = run_mock(&build_info_args(&root, &id), &envs, std::time::Duration::from_secs(20)).unwrap();
         let rows = parse_connectors(&out).unwrap();
         let live = live_connectors(&rows);
-        assert_eq!(live.len(), 1, "num_connections=0 的那条早已断开，不算在服役");
+        assert_eq!(live.len(), 1, "conns 为空的那条早已断开，不算在服役");
         assert_eq!(live[0].id, "a");
     }
 
@@ -1293,12 +1292,38 @@ mod tests {
 
     #[test]
     fn named_tunnel_plan_refuses_a_stranger_with_the_same_name() {
-        let row = TunnelRow { id: "other".into(), name: "desko".into(), connections: 0 };
+        let row = TunnelRow { id: "other".into(), name: "desko".into() };
         assert_eq!(plan_named_tunnel(&[], false), TunnelPlan::Create);
         assert_eq!(plan_named_tunnel(&[], true), TunnelPlan::Create);
         // 本机没记录 + 远端有同名 = 默认不认：认了就落进静默劈流
         assert_eq!(plan_named_tunnel(&[row.clone()], false), TunnelPlan::NameTaken("other".into()));
         assert_eq!(plan_named_tunnel(&[row], true), TunnelPlan::Adopt("other".into()));
+    }
+
+    #[test]
+    fn cli_parses_cloudflared_pretty_json_with_connection_arrays() {
+        let created = r#"{
+          "id": "26bf1975-271b-4e99-8c02-777777777777",
+          "name": "desko-test",
+          "connections": null
+        }"#;
+        assert_eq!(parse_created(created).unwrap().name, "desko-test");
+        let listed = format!("{{\"level\":\"info\",\"message\":\"checking\"}}\n[\n{created},\n{{\"id\":\"other\",\"name\":\"other\",\"connections\":[{{\"colo_name\":\"SJC\"}}]}}\n]\n");
+        let rows = parse_tunnel_list(&listed).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].name, "desko-test");
+        assert_eq!(rows[1].name, "other");
+        assert!(parse_tunnel_list("[]\n").unwrap().is_empty());
+        assert!(parse_tunnel_list("null\n").unwrap().is_empty());
+        assert!(parse_tunnel_list("{\"level\":\"error\",\"message\":\"no result\"}").is_err());
+        assert!(parse_tunnel_list("[\n{\"name\":\"missing-id\"}\n]").is_err());
+        let info = r#"{
+          "id": "26bf1975-271b-4e99-8c02-777777777777",
+          "conns": [
+            {"id": "connector-1", "conns": [{}, {}, {}, {}]}
+          ]
+        }"#;
+        assert_eq!(live_connectors(&parse_connectors(info).unwrap()).len(), 1);
     }
 
     #[test]

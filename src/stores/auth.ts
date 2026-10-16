@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { authApi as api } from '../services/api/auth'
 import type { AppState } from '../types'
+import { isWebRuntime } from '../services/runtime'
 
 export const useAuthStore = defineStore('auth', () => {
   const appState = ref<AppState>('locked')
@@ -25,6 +26,15 @@ export const useAuthStore = defineStore('auth', () => {
 
   const unlock = async (password: string, onUnlock?: () => void) => {
     await api.unlock(password)
+    if (isWebRuntime()) {
+      try {
+        const { prepareWebModules } = await import('../modules/runtime')
+        await prepareWebModules()
+      } catch (error) {
+        try { await api.lock() } catch { /* Keep the login page visible if initialization fails. */ }
+        throw error
+      }
+    }
     if (onUnlock) onUnlock()
     appState.value = 'unlocked'
   }

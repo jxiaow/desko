@@ -573,7 +573,7 @@ test.describe('Codex 会话档', () => {
     // 净输入：官方累计的 12.3K 输入里 11K 是缓存重发；行上不摆数，整行悬停给五口径
     await expect(page.locator('.sess-row').first()).toHaveAttribute(
       'title',
-      '修全屏小记的排版\n净输入 1,300 · 缓存命中 11,000 · 输出 1,400（含推理 400）· 官方累计 13,700',
+      '修全屏小记的排版\n净输入 1,300 · 缓存命中 11,000 · 输出 1,400（含推理 400）· 官方累计 13,700 · 1 次请求 · 估算金额 $0.017',
     )
     // 无标题那条：完整 ID 上屏，悬停保留用量明细。
     const idRow = page.locator('.sess-row').last()
@@ -616,7 +616,7 @@ test.describe('Codex 会话档', () => {
     await gotoSessions(page)
     await expect(page.locator('.hero-num')).toHaveText('6.51万')
     await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 4 条会话 · 净输入 8,800 · 输出 5,020 · 缓存命中 5.13万')
-    await expect(page.locator('.grp-head').first().locator('.grp-tok > span')).toHaveText(['累计 1.69万 Token', '净输入 3,800', '输出 1,820'])
+    await expect(page.locator('.grp-head').first().locator('.grp-tok > span')).toHaveText(['累计 1.69万 Token', '净输入 3,800', '输出 1,820', '请求 3 次', '估算 $0.0185'])
 
     await expandGroup(page, 'demo-notes')
     const row = page.locator('.sess-row').first()
@@ -624,8 +624,8 @@ test.describe('Codex 会话档', () => {
     await expect(row.locator('.sess-time')).toBeVisible()
     await row.click()
     const facts = page.locator('.sess-card .sess-facts')
-    await expect(facts.locator('dt')).toHaveText(['净输入', '缓存命中', '缓存写入', '输出', '其中推理', '官方累计'])
-    await expect(facts.locator('dd')).toHaveText(['1,300', '1.1万', '0', '1,400', '400', '1.37万'])
+    await expect(facts.locator('dt')).toHaveText(['净输入', '缓存命中', '缓存写入', '输出', '其中推理', '官方累计', '请求数', '估算金额（USD）'])
+    await expect(facts.locator('dd')).toHaveText(['1,300', '1.1万', '0', '1,400', '400', '1.37万', '1', '$0.017'])
   })
 
   test('标题搜索走后端：只填 trim 后的 titleQuery，contentQuery 恒 null', async ({ page }) => {
@@ -1173,8 +1173,8 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('[data-metric="cached"] dd')).toHaveText('5.13万')
     await expect(page.locator('[data-metric="output"] dd')).toHaveText('5,020')
     await expect(page.locator('.usg-facts')).toContainText('输出中含推理 1,300')
-    await expect(page.locator('.usg-count')).toHaveText('5 轮 · 4 条会话')
-    await expect(page.locator('.titlebar-count')).toHaveText('5 轮')
+    await expect(page.locator('.usg-count')).toHaveText('5 次请求 · 4 条会话')
+    await expect(page.locator('.titlebar-count')).toHaveText('5 次请求')
 
     // 四条会话落在四个本地日上，最满那天按输入 + 输出 = 48.2K 标定。
     await expect(page.locator('.usg-col')).toHaveCount(30)
@@ -1272,7 +1272,7 @@ test.describe('Codex 用量图', () => {
     await page.locator('.cx-tab', { hasText: '用量' }).click()
     await expect(page.locator('.usg-num')).toHaveText('5.14万')
     await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(3)
-    await expect(page.locator('.titlebar-count')).toHaveText('4 轮')
+    await expect(page.locator('.titlebar-count')).toHaveText('4 次请求')
     // 图是官方目录的镜子：只有这一次移动值得重扫，来回切档不再打第二次
     expect(await e2e.count(page, USAGE_CMD)).toBe(3)
   })

@@ -7,10 +7,11 @@ import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import { formatRelativeTime, stripTagsFromHtml, stripTagsFromText } from '../../utils/format'
 import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
-import { resolveAssetHtml, unreferencedAttachments } from '../../services/attachmentSrc'
+import { resolveAssetHtml, unreferencedAttachments, type SaveImage } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
 import { noteMeta, type NoteSaveState } from '../../stores/notes'
 import { isWebRuntime } from '../../services/runtime'
+import { openLinkFromClick } from '../../utils/openExternal'
 import { NOTE_EXPORT_FORMATS, type NoteExportFormat } from '../../utils/noteExport'
 
 const props = withDefaults(defineProps<{
@@ -27,6 +28,8 @@ const props = withDefaults(defineProps<{
   /** 本卡渲染在归档视图里：动作排换成「取消归档」，书写类动作照旧 */
   archivedView?: boolean
   exportDisabled?: boolean
+  /** 就地编辑时把剪贴板里的图片落盘到这张小记 */
+  saveImage?: SaveImage
 }>(), {
   editing: false,
   isBatchMode: false,
@@ -234,6 +237,8 @@ const onBodyClick = (e: MouseEvent) => {
     toggleTask(e, box)
     return
   }
+  // 正文里的链接是内容不是入口：点开交给本机浏览器，别顺路把卡片切到编辑态
+  if (openLinkFromClick(e)) return
   // 展开收起交给正文下的显式按钮：正文单击曾是唯一的展开入口，但它和框选文字冲突
 }
 
@@ -251,6 +256,8 @@ const onUpdate = (value: string) => {
 
 const insertTag = () => editorRef.value?.insertText(' #')
 const insertImage = (src: string) => editorRef.value?.insertImage(src)
+/** 就地编辑写的就是这张卡，落盘时替编辑器把目标报上 */
+const saveImageToNote = async (source: File | string) => (await props.saveImage?.(source, props.note.id)) ?? null
 const canUndo = computed(() => !!editorRef.value?.canUndo)
 const canRedo = computed(() => !!editorRef.value?.canRedo)
 
@@ -472,6 +479,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       ref="editorRef"
       variant="card"
       :initial-content="draft"
+      :save-image="saveImageToNote"
       placeholder="此刻的想法…"
       @update="onUpdate"
       @submit="emit('close')"

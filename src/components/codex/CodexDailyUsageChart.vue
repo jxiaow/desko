@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CodexUsageBucket } from '../../services/api/codex'
-import { formatTokenCount as compact, usageDays, type UsageRange } from '../../utils/codexUsage'
+import { formatTokenCount as compact, formatUsageCost, usageDays, type UsageRange } from '../../utils/codexUsage'
 
 const props = defineProps<{ buckets: CodexUsageBucket[]; range: UsageRange; updatedAt: number }>()
 const days = computed(() => usageDays(props.buckets, props.range, new Date(props.updatedAt)))
@@ -18,7 +18,7 @@ const fresh = (day: CodexUsageBucket) => Math.max(0, day.inputTokens - day.cache
 const height = (value: number) => `${value / maximum.value * 100}%`
 const label = (index: number) => days.value.length <= 8 || index === 0 || index === days.value.length - 1 || index % 5 === 0
 const title = (day: CodexUsageBucket & { recorded: boolean }) => day.recorded
-  ? `${day.key} · 合计 ${num(day.totalTokens)} Token · 净输入 ${num(fresh(day))} · 缓存 ${num(day.cachedInputTokens)} · 输出 ${num(day.outputTokens)} · ${num(day.requestCount)} 轮`
+  ? `${day.key} · 合计 ${num(day.totalTokens)} Token · 净输入 ${num(fresh(day))} · 缓存 ${num(day.cachedInputTokens)} · 输出 ${num(day.outputTokens)} · ${num(day.requestCount)} 次请求 · 估算 ${formatUsageCost(day.estimatedCostUsd)}`
   : `${day.key} · 无本地用量记录`
 function move(event: KeyboardEvent) {
   const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']

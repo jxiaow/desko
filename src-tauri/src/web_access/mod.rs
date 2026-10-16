@@ -53,6 +53,7 @@ pub(super) struct Resource {
     pub file: Option<std::fs::File>,
 }
 pub(super) trait Backend: Send + Sync + 'static {
+    fn public_hosts(&self, _: u16) -> Vec<String> { Vec::new() }
     fn epoch(&self) -> Option<u64>;
     fn verify_password(&self, password: &str) -> Result<(), String>;
     /// Stateful backends give each browser its own note keys and pending drafts.
@@ -98,6 +99,7 @@ struct Context {
     security: Mutex<Security>,
     stopped: AtomicBool,
     lan: bool,
+    lan_ip: Option<Ipv4Addr>,
     port: u16,
 }
 struct Running {
@@ -151,7 +153,7 @@ fn header<'a>(req: &'a Request, name: &str) -> Option<&'a str> {
         .find(|h| h.field.as_str().as_str().eq_ignore_ascii_case(name))
         .map(|h| h.value.as_str())
 }
-fn valid_host(host: &str, port: u16, lan: bool) -> bool {
+fn valid_host(host: &str, port: u16, lan: bool, lan_ip: Option<Ipv4Addr>) -> bool {
     let Some((name, number)) = host.rsplit_once(':') else {
         return false;
     };
@@ -162,18 +164,27 @@ fn valid_host(host: &str, port: u16, lan: bool) -> bool {
         return true;
     }
     name.parse::<Ipv4Addr>()
-        .map(|ip| ip.is_loopback() || (lan && (ip.is_private() || ip.is_link_local())))
+        .map(|ip| ip.is_loopback() || (lan && (ip.is_private() || ip.is_link_local() || lan_ip == Some(ip))))
         .unwrap_or(false)
 }
 fn same_origin(req: &Request, context: &Context) -> bool {
     let Some(host) = header(req, "Host") else {
         return false;
     };
-    if !valid_host(host, context.port, context.lan) {
+    // cloudflared connects to loopback and preserves the registered public Host.
+    // Never infer a trusted host from client-supplied forwarding headers.
+    let public = req.remote_addr().is_some_and(|addr| addr.ip().is_loopback())
+        && !valid_host(host, context.port, context.lan, context.lan_ip)
+        && context.backend.public_hosts(context.port).iter().any(|name| {
+            host.eq_ignore_ascii_case(name)
+                || host.eq_ignore_ascii_case(&format!("{name}:443"))
+                || host.eq_ignore_ascii_case(&format!("{name}:80"))
+        });
+    if !public && !valid_host(host, context.port, context.lan, context.lan_ip) {
         return false;
     }
     if let Some(origin) = header(req, "Origin") {
-        if origin != format!("http://{host}") {
+        if origin != format!("http://{host}") && !(public && origin == format!("https://{host}")) {
             return false;
         }
     }
@@ -350,7 +361,7 @@ fn error(req: Request, code: u16, message: &str) {
 }
 fn handle(mut req: Request, ctx: &Arc<Context>) {
     if !same_origin(&req, ctx) {
-        return error(req, 403, "仅允许通过本机或局域网地址同源访问");
+        return error(req, 403, "访问地址未授权或请求来源不匹配");
     }
     let path = req.url().to_string();
     let method = req.method().clone();
@@ -589,6 +600,11 @@ fn start(
         .to_ip()
         .ok_or("无法读取监听端口")?
         .port();
+    // Trust the address selected from this computer's routes. Some office LANs
+    // use addresses outside RFC 1918, which must not be discarded as remote hosts.
+    let lan_ip = lan.then(fileshare_core::net::choose_lan_ip)
+        .and_then(|ip| ip.parse::<Ipv4Addr>().ok())
+        .filter(|ip| !ip.is_loopback() && fileshare_core::net::is_acceptable_lan_octets(ip.octets()));
     let ctx = Arc::new(Context {
         backend,
         security: Mutex::new(Security {
@@ -597,6 +613,7 @@ fn start(
         }),
         stopped: AtomicBool::new(false),
         lan,
+        lan_ip,
         port,
     });
     let mut workers = Vec::new();
@@ -614,13 +631,8 @@ fn start(
         }));
     }
     let mut urls = vec![format!("http://127.0.0.1:{port}")];
-    if lan {
-        let ip = fileshare_core::net::choose_lan_ip();
-        let host = format!("{ip}:{port}");
-        if valid_host(&host, port, true) && ip.parse::<Ipv4Addr>().is_ok_and(|ip| !ip.is_loopback())
-        {
-            urls.push(format!("http://{host}"));
-        }
+    if let Some(ip) = lan_ip {
+        urls.push(format!("http://{ip}:{port}"));
     }
     Ok(Running {
         server,

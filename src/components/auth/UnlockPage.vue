@@ -121,8 +121,7 @@ onUnmounted(() => {
 
         <section class="lock-stack" ref="stackEl">
         <div class="lock-tile"><BrandLogo /></div>
-        <h1 class="lock-title">{{ webRuntime ? 'Desko 浏览器访问' : 'Desko' }}</h1>
-        <p v-if="webRuntime" class="web-access-hint">使用当前档案的桌面主密码登录，电脑上的 Desko 锁定后仍可使用。</p>
+        <h1 class="lock-title">Desko</h1>
 
         <form class="lock-form" :aria-busy="unlocking" @submit.prevent="doUnlock">
           <div class="unlock-field">
@@ -269,8 +268,6 @@ onUnmounted(() => {
   color: var(--text);
   margin-bottom: 22px;
 }
-
-.web-access-hint { margin: -8px 0 18px; text-align: center; font-size: var(--text-xs); line-height: 1.6; color: var(--text-muted); }
 
 .lock-form { width: 100%; }
 

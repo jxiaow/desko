@@ -13,7 +13,8 @@ import NoteLockDialog from './NoteLockDialog.vue'
 import NoteExportController from './NoteExportController.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { htmlToLinkText, htmlToText } from '../../utils/format'
-import { attachmentSrc, collectAttachmentNames } from '../../services/attachmentSrc'
+import { attachmentSrc, collectAttachmentNames, type SaveImage } from '../../services/attachmentSrc'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import type { IconName } from '../../utils/icons'
 import type { Note } from '../../types'
 import type { NoteView } from '../../stores/notes'
@@ -34,7 +35,7 @@ const toastStore = useToastStore()
 const { copyRichToClipboard } = useClipboard()
 const {
   notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, hasActiveFilters,
-  noteRailCollapsed, noteDraftHtml: draftHtml,
+  noteRailCollapsed, noteRailPinned, noteDraftHtml: draftHtml,
   isBatchMode, hasNoteSelection, selectedNoteIds, noteAttachments, noteSaveState, notePlains, noteKey,
   tagCounts, viewCounts, filteredNotes, groupedNotes, archivedNotes, archiveSummary,
 } = storeToRefs(notesStore)
@@ -47,6 +48,8 @@ const {
 } = notesStore
 
 const pageEl = ref<HTMLElement | null>(null)
+const railEl = ref<HTMLElement | null>(null)
+const railToggleEl = ref<HTMLButtonElement | null>(null)
 const searchEl = ref<HTMLInputElement | null>(null)
 const composerRef = ref<InstanceType<typeof NoteComposer> | null>(null)
 const fsRef = ref<InstanceType<typeof NoteFullscreen> | null>(null)
@@ -104,26 +107,33 @@ const toggleNoteDomain = () => {
 
 const railRoom = ref(true)
 /** 窄窗口下用户手动叫出来的浮层侧栏。放不下的时候开关也不能消失，否则侧栏就再也回不来了 */
-const railPinned = ref(false)
+const railFloatingOpen = ref(false)
 
 /** 侧栏真正在流内可见 = 放得下 且 用户没收起 */
 const railOpen = computed(() => railRoom.value && !noteRailCollapsed.value)
-const railOverlay = computed(() => !railRoom.value && railPinned.value)
+const railOverlay = computed(() => !railRoom.value && railFloatingOpen.value)
 const railVisible = computed(() => railOpen.value || railOverlay.value)
+const closeRail = () => {
+  noteRailCollapsed.value = true
+  railFloatingOpen.value = false
+}
 const toggleRail = () => {
-  if (railRoom.value) {
-    noteRailCollapsed.value = !noteRailCollapsed.value
-    railPinned.value = false
-  } else {
-    railPinned.value = !railPinned.value
-  }
+  if (railVisible.value) return closeRail()
+  noteRailCollapsed.value = false
+  railFloatingOpen.value = !railRoom.value
+}
+const onRailPointerDown = (event: PointerEvent) => {
+  if (!railVisible.value || noteRailPinned.value || !(event.target instanceof Node)) return
+  if (railEl.value?.contains(event.target) || railToggleEl.value?.contains(event.target)) return
+  closeRail()
 }
 const selectView = (view: NoteView) => {
   noteView.value = view
-  if (isWebRuntime() && railOverlay.value) railPinned.value = false
+  if (isWebRuntime() && railOverlay.value && !noteRailPinned.value) closeRail()
 }
 watch(railRoom, (room) => {
-  if (room) railPinned.value = false
+  if (room) railFloatingOpen.value = false
+  else if (noteRailPinned.value && !noteRailCollapsed.value) railFloatingOpen.value = true
 })
 
 const draftText = computed(() => htmlToText(draftHtml.value))
@@ -217,15 +227,35 @@ const pickImagePath = async (): Promise<string | File | null> => {
   }
 }
 
+/** 一张图的三条来路（选图按钮、Ctrl+V、拖进来的文件）都收口到这一颗：落盘 → 正文该用的 src */
+const saveImage: SaveImage = async (source, noteId) => {
+  // 页面已经收掉就不能再落盘：迟到的选图/拖放会写进下一段会话
+  if (!active) return null
+  const att = noteId ? await uploadAttachment(noteId, source) : await stageImage(source)
+  if (!active || !att?.mime_type.startsWith('image/')) return null
+  return attachmentSrc(att.file_path)
+}
+
+/** 图落好盘，补进当前那张书写面：全屏优先，其次就地展开的卡，最后胶囊草稿 */
+const applyImage = (target: 'new' | string, src: string) => {
+  if (fsTarget.value === target) fsRef.value?.insertImage(src)
+  else if (target === 'new') composerRef.value?.insertImage(src)
+  else cardRefs.value?.find((c) => c.noteId === target)?.insertImage(src)
+}
+
+/** 现在该往哪张面写：全屏 → 就地展开的卡 → 胶囊草稿；归档视图里没有书写面 */
+const imageTarget = (): 'new' | string | null => {
+  if (fsTarget.value) return fsTarget.value
+  if (editingId.value) return editingId.value
+  return isArchivedView.value ? null : 'new'
+}
+
 /** 已有小记配图：落盘即登记附件，再把图片块补进当前打开的书写面 */
 const addImageToNote = async (noteId: string) => {
   const path = await pickImagePath()
-  if (!active || !path) return
-  const att = await uploadAttachment(noteId, path)
-  if (!active || !att?.mime_type.startsWith('image/')) return
-  const src = attachmentSrc(att.file_path)
-  if (fsTarget.value === noteId) fsRef.value?.insertImage(src)
-  else cardRefs.value?.find((c) => c.noteId === noteId)?.insertImage(src)
+  if (!path) return
+  const src = await saveImage(path, noteId)
+  if (src) applyImage(noteId, src)
 }
 
 /** 上下键只搬焦点：焦点落到哪张卡，:focus-visible 的微环就长在哪张卡上 */
@@ -243,12 +273,36 @@ const onStreamKeydown = (event: KeyboardEvent) => {
 /** 新小记配图：文件只收进附件目录（stage），发布时才按正文补附件记录——纯图小记也发得出去 */
 const addImageToDraft = async () => {
   const path = await pickImagePath()
-  if (!active || !path) return
-  const att = await stageImage(path)
-  if (!active || !att) return
-  const src = attachmentSrc(att.file_path)
-  if (fsTarget.value === 'new') fsRef.value?.insertImage(src)
-  else composerRef.value?.insertImage(src)
+  if (!path) return
+  const src = await saveImage(path, null)
+  if (src) applyImage('new', src)
+}
+
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i
+
+/** 拖进小记页只收图片：别的文件该走局域网传输那条。
+ *  桌面侧路径来自窗口级原生事件（HTML5 的 dataTransfer 在这里给不出真实路径），
+ *  只有浏览器那侧才拿得到 File，走 DOM 事件 */
+const dropImages = async (sources: (File | string)[]) => {
+  const images = sources.filter((source) =>
+    typeof source === 'string' ? IMAGE_EXT.test(source) : source.type.startsWith('image/'))
+  if (!images.length) return
+  const target = imageTarget()
+  if (!target) {
+    toastStore.showToast('归档视图里不能写，先退出归档', 'error')
+    return
+  }
+  for (const source of images) {
+    const src = await saveImage(source, target === 'new' ? null : target)
+    if (src) applyImage(target, src)
+  }
+}
+
+const onDomDragOver = (event: DragEvent) => { if (isWebRuntime()) event.preventDefault() }
+const onDomDrop = (event: DragEvent) => {
+  if (!isWebRuntime()) return
+  event.preventDefault()
+  void dropImages(Array.from(event.dataTransfer?.files ?? []))
 }
 
 const copyNote = (note: Note) =>
@@ -265,6 +319,7 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (e.key !== 'Escape' || fsTarget.value) return
   if (editingId.value) closeCard()
   else if (isBatchMode.value) exitNoteBatch()
+  else if (railVisible.value && !noteRailPinned.value) closeRail()
 }
 
 // 全屏里删掉当前这条之后，书写面要跟着收掉
@@ -273,8 +328,20 @@ watch(notes, () => {
 })
 
 let observer: ResizeObserver | null = null
+let unlistenDrag: (() => void) | undefined
 onMounted(() => {
   document.addEventListener('keydown', onKeyDown)
+  document.addEventListener('pointerdown', onRailPointerDown, true)
+  if (!isWebRuntime()) {
+    // 桌面侧拖进来的文件只有原生层知道路径，与局域网传输吃同一窗口级事件；
+    // 落点坐标在这套事件里不可靠，所以只看"当前哪张书写面开着"
+    void getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'drop') void dropImages(event.payload.paths)
+    }).then((unlisten) => {
+      if (active) unlistenDrag = unlisten
+      else unlisten()
+    })
+  }
   const root = pageEl.value
   if (!root) return
   const minRoom = parseFloat(
@@ -291,6 +358,8 @@ onBeforeUnmount(() => {
   active = false
   void flushNoteSave().catch(() => {})
   document.removeEventListener('keydown', onKeyDown)
+  document.removeEventListener('pointerdown', onRailPointerDown, true)
+  unlistenDrag?.()
   observer?.disconnect()
   observer = null
 })
@@ -300,7 +369,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
 </script>
 
 <template>
-  <div ref="pageEl" class="notes-page" :class="{ 'rail-over': railOverlay }">
+  <div ref="pageEl" class="notes-page" :class="{ 'rail-over': railOverlay }" @dragover="onDomDragOver" @drop="onDomDrop">
     <div class="stream">
       <div class="stream-inner" @keydown="onStreamKeydown">
         <div class="page-bar">
@@ -353,6 +422,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
             </button>
           </template>
           <button
+            ref="railToggleEl"
             class="bar-btn"
             :class="{ active: railVisible }"
             type="button"
@@ -378,6 +448,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
           ref="composerRef"
           :html="draftHtml"
           :empty="draftEmpty"
+          :save-image="saveImage"
           @update="draftHtml = $event"
           @publish="publishDraft"
           @add-image="addImageToDraft"
@@ -406,6 +477,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
                 ref="cardRefs"
                 :note="note"
                 :editing="editingId === note.id"
+                :save-image="saveImage"
                 :is-batch-mode="isBatchMode"
                 :is-selected="selectedNoteIds.has(note.id)"
                 :attachments="noteAttachments[note.id] ?? []"
@@ -456,8 +528,16 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       </div>
     </div>
 
-    <aside v-if="railVisible" class="rail" :class="{ overlay: railOverlay }">
-      <div class="rail-title rail-heading"><span>视图</span><button v-if="railOverlay && isWebRuntime()" class="ib" type="button" aria-label="关闭小记筛选" @click="railPinned = false"><AppIcon name="x" :size="16" /></button></div>
+    <aside v-if="railVisible" ref="railEl" class="rail" :class="{ overlay: railOverlay }">
+      <div class="rail-title rail-heading">
+        <span>视图</span>
+        <div class="rail-heading-actions">
+          <button class="ib" :class="{ on: noteRailPinned }" type="button" :title="noteRailPinned ? '取消固定侧栏' : '固定侧栏'" :aria-label="noteRailPinned ? '取消固定侧栏' : '固定侧栏'" :aria-pressed="noteRailPinned" @click="noteRailPinned = !noteRailPinned">
+            <AppIcon :name="noteRailPinned ? 'unpin' : 'pin'" :size="16" />
+          </button>
+          <button v-if="railOverlay && isWebRuntime()" class="ib" type="button" aria-label="关闭小记筛选" @click="closeRail"><AppIcon name="x" :size="16" /></button>
+        </div>
+      </div>
       <button
         v-for="v in VIEWS"
         :key="v.key"
@@ -545,6 +625,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       ref="fsRef"
       :note="fsNote"
       :mode="fsMode"
+      :save-image="saveImage"
       :initial-html="fsTarget === 'new' ? draftHtml : fsNote?.content_html ?? ''"
       :attachments="fsNote ? noteAttachments[fsNote.id] ?? [] : []"
       :save-state="fsNote ? noteSaveState : ''"
@@ -580,6 +661,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
   position: relative;
 }
 .rail-heading { display: flex; align-items: center; justify-content: space-between; }
+.rail-heading-actions { display: flex; align-items: center; gap: var(--space-1); }
 
 .stream {
   flex: 1;

@@ -6,7 +6,7 @@ import ProfilesPane from './ProfilesPane.vue'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { settingsApi } from '../../services/api/settings'
-import { THEME_GROUPS, isPlainTheme, ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
+import { THEMES, ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
 import type { ThemeId, AccentId } from '../../services/theme'
 import { moduleFlags, loadModuleFlags } from '../../modules/state'
 import { MODULES, moduleById, type ModuleId, type SettingsTabId } from '../../modules/registry'
@@ -249,7 +249,7 @@ onMounted(() => {
 
           <!-- 模块 -->
           <section v-show="tab === 'modules'" class="settings-pane">
-            <p class="pane-hint">关一个模块只是收起它的侧栏入口，数据与口令都留在本机，重开即用。</p>
+            <p class="pane-hint">关闭模块后将隐藏入口，已保存的数据和口令会保留。</p>
             <div class="group-content">
               <div v-for="m in MODULES" :key="m.id" class="setting-item">
                 <div class="setting-info">
@@ -281,11 +281,9 @@ onMounted(() => {
           <!-- 外观 -->
           <section v-show="tab === 'appearance'" class="settings-pane">
             <div class="settings-section-label">底色</div>
-            <div v-for="group in THEME_GROUPS" :key="group.label" class="theme-group">
-              <div class="theme-group-label">{{ group.label }}</div>
-              <div class="theme-row">
+            <div class="theme-row">
               <button
-                v-for="t in group.themes"
+                v-for="t in THEMES"
                 :key="t.id"
                 class="theme-chip"
                 :class="{ on: appearance.theme === t.id }"
@@ -295,7 +293,6 @@ onMounted(() => {
                 <span
                   class="theme-prev theme-scope"
                   :data-theme="t.id"
-                  :data-palette="isPlainTheme(t.id) ? 'plain' : 'atmosphere'"
                   :data-base="polarityOf(t.id)"
                   :data-accent="appearance.accent"
                   :data-atmosphere="appearance.backgroundAtmosphere ? 'on' : 'off'"
@@ -322,7 +319,6 @@ onMounted(() => {
                 </span>
                 <span class="theme-chip-name">{{ t.name }}</span>
               </button>
-              </div>
             </div>
             <div class="settings-section-label">强调色</div>
             <div class="accent-row" role="radiogroup" aria-label="强调色">
@@ -613,8 +609,6 @@ onMounted(() => {
 /* 主题选择：每块卡里画一个等比缩小的微缩界面——侧栏、三行行卡
    （中间一行是悬浮态底色）、行尾一枚强调色小块。所见即所得，不配文字解释。
    边框固定 2px 占位，选中只换颜色，切换时不跳布局。 */
-.theme-group + .theme-group { margin-top: var(--space-3); }
-.theme-group-label { margin-bottom: var(--space-2); font-size: var(--text-xs); color: var(--text-muted); }
 .theme-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));

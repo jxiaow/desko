@@ -1,8 +1,8 @@
 import { invoke, webSessionGeneration } from './transport'
 import type { Attachment } from '../types'
 
-/** Upload bytes selected by the browser, never a path on the computer running Desko. */
-export async function uploadBrowserImage(file: File, noteId?: string): Promise<Attachment> {
+/** 只有字节、没有本机路径的图片（剪贴板粘贴、浏览器里选的 File）走这颗命令 */
+export async function uploadImageBytes(file: File, noteId?: string): Promise<Attachment> {
   const epoch = webSessionGeneration()
   if (!file.size || file.size > 15 * 1024 * 1024) throw new Error('图片应小于 15 MB')
   const data = await new Promise<string>((resolve, reject) => {
@@ -12,7 +12,7 @@ export async function uploadBrowserImage(file: File, noteId?: string): Promise<A
     reader.readAsDataURL(file)
   })
   if (epoch !== webSessionGeneration()) throw new Error('Web 会话已变更，请重新选择图片')
-  return invoke('web_upload_attachment', { name: file.name, data, noteId: noteId ?? null })
+  return invoke('save_attachment_bytes', { name: file.name, data, noteId: noteId ?? null })
 }
 export function pickBrowserImage(): Promise<File | null> {
   const epoch = webSessionGeneration()
