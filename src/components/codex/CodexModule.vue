@@ -409,6 +409,11 @@ watchEffect(() => {
         </nav>
 
         <template v-if="view === 'accounts'">
+          <div class="search-box">
+            <span class="search-icon"><AppIcon name="search" :size="15" /></span>
+            <input v-model="accountQuery" type="text" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
+            <button v-if="accountQuery" class="search-clear" type="button" aria-label="清除账号搜索" @click="accountQuery = ''"><AppIcon name="x" :size="13" /></button>
+          </div>
           <button class="btn-secondary bar-btn" type="button" :disabled="!accounts.length" @click="refreshQuotas(accounts.map((a) => a.id))">
             <AppIcon name="refresh" :size="13" />
             刷新配额
@@ -481,11 +486,6 @@ watchEffect(() => {
       </p>
 
       <div v-if="view === 'accounts' && accounts.length" class="account-filters">
-        <div class="search-box flat">
-          <span class="search-icon"><AppIcon name="search" :size="15" /></span>
-          <input v-model="accountQuery" type="text" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
-          <button v-if="accountQuery" class="search-clear" type="button" aria-label="清除账号搜索" @click="accountQuery = ''"><AppIcon name="x" :size="13" /></button>
-        </div>
         <OptionSelect :model-value="accountAuth" aria-label="账号类型" :options="[
           { value: 'all', label: '全部类型' }, { value: 'oauth', label: 'OAuth' }, { value: 'apikey', label: 'API Key' },
         ]" @update:model-value="accountAuth = String($event) as CodexAccountAuthFilter" />
@@ -679,12 +679,11 @@ watchEffect(() => {
 
 .add-btn { margin-left: auto }
 .account-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
-.account-filters .search-box { flex: 1 1 180px; min-width: 160px; }
 .account-summary { flex-basis: 100%; display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-muted); }
 .filter-reset { margin-left: auto; border: none; background: transparent; color: var(--accent); cursor: pointer; font: inherit; }
 .account-filters :deep(.opt-trigger) { min-width: 100px; }
 .session-search-mode { display: flex; align-items: center; flex-shrink: 0; }
-/* 会话搜索与另两页同档：可随栏伸缩但封顶 320，刷新钮已 margin-left:auto 钉右端 */
+/* 搜索框与其他页面同档：随工具栏伸缩，最大宽度 320px。 */
 .page-bar .search-box { flex: 1; min-width: 140px; max-width: 320px; }
 
 /* 页内第二档的切换件：照收藏页分类 tab 的下划线档，去掉滑块——页级换档不是滑动语义 */

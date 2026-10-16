@@ -13,22 +13,18 @@ const WEB_MODULE_KEYS: &[&str] = &["notes_enabled", "entries_enabled", "files_en
 fn require_module(state: &AppState, key: &str) -> Result<(), String> {
     let db = state.db.lock().map_err(|_| "无法读取模块设置")?;
     let stored = db.get_meta(key).map_err(|e| e.user_message())?;
-    let enabled = if matches!(key, "notes_enabled" | "entries_enabled" | "files_enabled") {
-        stored.as_deref() != Some("false")
-    } else {
-        stored.as_deref() == Some("true")
-    };
+    let enabled = stored.as_deref() == Some("true");
     if enabled { Ok(()) } else { Err("模块未启用，请在设置的模块页打开开关".into()) }
 }
 
 #[cfg(test)]
 mod module_tests {
     #[test]
-    fn web_module_access_uses_desktop_defaults_and_live_switches() {
+    fn web_module_access_follows_the_stored_switch() {
         let state = crate::test_state();
         for key in super::WEB_MODULE_KEYS {
-            let default_on = matches!(*key, "notes_enabled" | "entries_enabled" | "files_enabled");
-            assert_eq!(super::require_module(&state, key).is_ok(), default_on, "{key}");
+            // 与桌面一致：库里没写过这个键就没有入口，只有显式 true 才放行
+            assert!(super::require_module(&state, key).is_err(), "{key}");
             state.db.lock().unwrap().set_meta(key, "false").unwrap();
             assert!(super::require_module(&state, key).is_err(), "{key}");
             state.db.lock().unwrap().set_meta(key, "true").unwrap();

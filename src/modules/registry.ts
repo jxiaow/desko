@@ -42,10 +42,6 @@ export interface ModuleDef {
   /** 设置「模块」页签里那句功能差异说明 */
   desc: string
   icon: IconName
-  /** 读不到键时的缺省值。true 走 `!== 'false'`，false 走 `=== 'true'` */
-  defaultEnabled: boolean
-  /** 默认就开着的三块主页面；只影响文案，不影响能不能关 */
-  core: boolean
   view: () => Promise<Component>
   /** 侧栏计数位；不声明就没有计数 */
   count?: () => number
@@ -78,8 +74,6 @@ export const MODULES: ModuleDef[] = [
     title: '小记',
     desc: '随手记文本与图片，可给单条上口令',
     icon: 'navNotes',
-    defaultEnabled: true,
-    core: true,
     count: () => useNotesStore().notes.length,
     boot: () => useNotesStore().fetchNotes(),
     beforeLock: () => useNotesStore().prepareNoteLock(),
@@ -98,8 +92,6 @@ export const MODULES: ModuleDef[] = [
     title: '网址收藏',
     desc: '网址与随行的账号口令，按标签分组',
     icon: 'navEntries',
-    defaultEnabled: true,
-    core: true,
     count: () => useEntriesStore().entries.length,
     boot: () =>
       useEntriesStore().fetchEntries((msg) => useToastStore().showToast(msg, 'error')),
@@ -116,8 +108,6 @@ export const MODULES: ModuleDef[] = [
     title: '文件快捷',
     desc: '本机文件与目录的快捷入口，一键打开或进终端',
     icon: 'navFiles',
-    defaultEnabled: true,
-    core: true,
     count: () => useFileShortcutsStore().shortcuts.length,
     boot: () => useFileShortcutsStore().fetchShortcuts(),
     view: async () => (await import('../views/FilesView.vue')).default,
@@ -133,8 +123,6 @@ export const MODULES: ModuleDef[] = [
     title: '验证码',
     desc: '管理 TOTP 动态码',
     icon: 'navMfa',
-    defaultEnabled: false,
-    core: false,
     view: async () => (await import('../views/MfaView.vue')).default,
   },
   {
@@ -144,8 +132,6 @@ export const MODULES: ModuleDef[] = [
     title: '局域网传输',
     desc: '同网段设备用浏览器互传文件',
     icon: 'navLan',
-    defaultEnabled: false,
-    core: false,
     onDisable: () => fileshareApi.stop(),
     view: async () => (await import('../views/FileshareView.vue')).default,
     settings: {
@@ -162,8 +148,6 @@ export const MODULES: ModuleDef[] = [
     title: '内网穿透',
     desc: '把本机服务经 Cloudflare 隧道暴露到公网',
     icon: 'navTunnel',
-    defaultEnabled: false,
-    core: false,
     onDisable: () => tunnelApi.stop(),
     view: async () => (await import('../views/TunnelView.vue')).default,
   },
@@ -173,8 +157,6 @@ export const MODULES: ModuleDef[] = [
     title: '网络直连',
     desc: '探测域名、IPv4 地址和网段，配置本机 hosts 与直连路由',
     icon: 'navBypass',
-    defaultEnabled: false,
-    core: false,
     view: async () => (await import('../views/BypassView.vue')).default,
   },
   {
@@ -184,8 +166,6 @@ export const MODULES: ModuleDef[] = [
     title: 'Codex',
     desc: '管理多个 Codex 账号并切换官方凭据',
     icon: 'navCodex',
-    defaultEnabled: false,
-    core: false,
     view: async () => (await import('../views/CodexView.vue')).default,
     settings: {
       label: 'Codex',

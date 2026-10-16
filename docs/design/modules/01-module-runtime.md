@@ -35,9 +35,9 @@
 
 | id | 标题 | 设置键 | 默认 | 备注 |
 |---|---|---|---|---|
-| `notes` | 小记 | `notes_enabled`（新增） | 开 | 缺键时按开读 |
-| `entries` | 网址收藏 | `entries_enabled`（新增） | 开 | 同上 |
-| `files` | 文件快捷 | `files_enabled`（新增） | 开 | 同上 |
+| `notes` | 小记 | `notes_enabled`（新增） | 关 | 缺键按关读 |
+| `entries` | 网址收藏 | `entries_enabled`（新增） | 关 | 同上 |
+| `files` | 文件快捷 | `files_enabled`（新增） | 关 | 同上 |
 | `mfa` | 验证码 | `mfa_enabled` | 关 | 沿用现键 |
 | `fileshare` | 局域网传输 | `fileshare_enabled` | 关 | 关闭停监听 |
 | `tunnel` | 内网穿透 | `tunnel_enabled` | 关 | 关闭停隧道进程 |
@@ -46,7 +46,7 @@
 
 排序沿用当前侧栏顺序（小记 → 收藏 → 文件 → 验证码 → 局域网 → 穿透 → 直连 → Codex）。
 
-**核心三页的默认值必须特殊处理**：现有 `readXFeature` 用 `=== 'true'`，对老用户等于"升级后三个主页面全消失"。注册表按 `defaultEnabled` 决定判据——默认开的键读 `!== 'false'`（缺键=开），默认关的键读 `=== 'true'`（缺键=关）。这条是本方案唯一的破坏性风险点。
+**判据只有一条**（2026-10-16 改定）：八块一律 `raw === 'true'`，库里没写过这个键就没有入口，落地页交给 `/start` 空态。本节最初写的「核心三页缺键按开读」和注册表里的 `defaultEnabled`/`core` 两个字段已随之删除——`!== 'false'` 那半棵留着只会让人以为还有第二档缺省。同一条判据在 `src-tauri/src/web_access/bridge.rs` 的 `require_module` 里另有一份，改判据必须同时改它，否则 Web 侧比桌面侧多开三块。e2e mock 代表的是「三个主页面已被用户打开」的库（`e2e/mocks/backend.ts` 的 settings 缺省），测空态的用例显式写 `'false'`。
 
 ### 注册表
 
@@ -60,8 +60,6 @@ export interface ModuleDef {
   icon: IconName             // 现 AppIcon 的 nav* 键
   navClass: string           // 现 m-not / m-ent …，类名不动以免动 global.css 与 shots 锚点
   order: number
-  defaultEnabled: boolean
-  core: boolean              // 只用于设置页文案（"关闭只隐藏入口，数据保留"），不作不可关约束
   view: () => Promise<Component>            // 现 router 里的动态 import，原样搬进来
   boot?: () => Promise<void>                // 解锁后要预取的数据（收藏列表 / 侧栏计数所需）
   count?: () => number                       // 侧栏计数位，只有三页有
@@ -96,7 +94,7 @@ bootstrap(main.ts)
 
 ### 零模块态
 
-`src/views/ModulesEmptyView.vue`（新增，不属于任何模块、不可关）：主区域一块空态，一句话说明"当前没有任何模块开启"，一颗「开启模块」按钮直达设置「模块」页签（走现成的 `desko:open-settings-tab` 事件通道，`settingsInitialTab` 联合类型加 `'modules'`）。这是允许全关后必须补的兜底，否则 `/` 重定向无处可去。
+`src/views/ModulesEmptyView.vue`（不属于任何模块、不可关）：首次设置主密码后进入 `/start`，沿用原有零模块空态，显示「暂无已启用的模块」及直达设置「模块」页签的「管理模块」按钮，不展示引导列表。侧栏只显示已启用模块，没有额外的添加入口。E2E 中 `initialized: false` 使用新库缺省，其他用例仍使用已添加三个主模块的测试库。
 
 ### 设置「模块」页签
 

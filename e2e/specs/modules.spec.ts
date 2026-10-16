@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, openSettings, visiblePane, waitForToastGone } from '../helpers'
+import { bootUnlocked, e2e, expectToast, openSettings, startApp, visiblePane, waitForToastGone } from '../helpers'
+import { AuthPage } from '../pages/auth-page'
 
 /** 8 个页面模块全关 */
 const OFF = {
@@ -28,6 +29,34 @@ const loadedViewChunks = (page: Page) =>
   )
 
 test.describe('模块开关', () => {
+  test('首次设置后不预置模块，进入原有空态并通过设置启用', async ({ page }) => {
+    await startApp(page, { config: { initialized: false } })
+    const auth = new AuthPage(page)
+    await auth.completeSetup('abcdef', 'abcdef')
+    await auth.expectUnlocked()
+    await expect(page).toHaveURL(/\/start$/)
+    await expect(page.locator('a.nav-item')).toHaveCount(0)
+    await expect(page.getByRole('navigation', { name: '模块导航' }).getByRole('link')).toHaveCount(0)
+    await expect(page.locator('.empty-title')).toHaveText('暂无已启用的模块')
+    for (const cmd of ['list_notes', 'list_entries_with_paths', 'list_file_shortcuts', 'list_codex_accounts']) {
+      expect(await e2e.count(page, cmd)).toBe(0)
+    }
+
+    await page.getByRole('button', { name: '管理模块', exact: true }).click()
+    const dialog = page.locator('.settings-dialog')
+    await expect(dialog.locator('.nav-tab.on')).toHaveText('模块')
+    await moduleNameRow(page, '小记').locator('.switch-slider').click()
+    await dialog.locator('.dialog-close').click()
+    await expect(page).toHaveURL(/\/notes$/)
+    await expect(page.locator('a.nav-item')).toHaveCount(1)
+    await expect(page.locator('.notes-page')).toBeVisible()
+    expect((await e2e.snapshot(page)).settings.notes_enabled).toBe('true')
+
+    const settings = (await e2e.snapshot(page)).settings
+    expect(settings.entries_enabled).toBeUndefined()
+    expect(settings.files_enabled).toBeUndefined()
+  })
+
   test('模块页签：8 行齐全，顺序即侧栏顺序', async ({ page }) => {
     await bootUnlocked(page)
     const dialog = await openSettings(page, 'modules')
@@ -93,7 +122,7 @@ test.describe('模块开关', () => {
 
   test('零模块态：空页按钮直达设置「模块」页签，开一个就落地', async ({ page }) => {
     await bootUnlocked(page, OFF)
-    await page.locator('.empty-state .action-btn').click()
+    await page.getByRole('button', { name: '管理模块', exact: true }).click()
     const dialog = page.locator('.settings-dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.locator('.nav-tab.on')).toHaveText('模块')

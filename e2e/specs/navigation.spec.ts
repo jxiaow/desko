@@ -12,7 +12,7 @@ test.describe('导航与布局', () => {
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(0)
 
     await page.locator('.sidebar-toggle').click()
-    // 验证码模块默认关着，侧栏只有三个常驻入口
+    // 测试库已启用三个模块，侧栏只显示对应入口。
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(3)
     // 侧栏骨架：顶部品牌行 + 「模块」段标 + 导航三块，别无他物
     await expect(page.locator('.sidebar > *')).toHaveCount(3)

@@ -21,6 +21,8 @@ it.each([
   ['warmgray', 'paper', 'light'],
   ['purewhite', 'snow', 'light'],
   ['charcoal', 'ink', 'dark'],
+  ['linen', 'apricot', 'light'],
+  ['mist', 'seafoam', 'light'],
 ])('%s 恢复为 %s，保留强调色与氛围开关', async (legacy, theme, polarity) => {
   for (const enabled of [false, true]) {
     const settings: Record<string, string> = { theme: legacy, accent: 'plum', background_atmosphere: String(enabled) }

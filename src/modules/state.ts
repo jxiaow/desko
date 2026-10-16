@@ -1,22 +1,21 @@
 import { isWebRuntime } from '../services/runtime'
 import { computed, reactive } from 'vue'
 import { settingsApi } from '../services/api/settings'
-import { MODULES, moduleById, type ModuleDef, type ModuleId } from './registry'
+import { MODULES, moduleById, type ModuleId } from './registry'
 
 export const WEB_MODULE_IDS = ['notes', 'entries', 'files', 'mfa', 'fileshare', 'tunnel', 'codex'] as const
 const WEB_MODULES = new Set<ModuleId>(WEB_MODULE_IDS)
 const availableInRuntime = (id: ModuleId) => !isWebRuntime() || WEB_MODULES.has(id)
 
-/** 桌面按注册表缺省初始化；Web 登录并读取共用开关之前全部关闭。 */
+/** 八块模块一律默认关：库里没写过这个键就没有侧栏入口，落地页交给 /start 空态。 */
 export const moduleFlags = reactive<Record<ModuleId, boolean>>(
-  Object.fromEntries(MODULES.map((m) => [m.id, !isWebRuntime() && m.defaultEnabled])) as Record<ModuleId, boolean>
+  Object.fromEntries(MODULES.map((m) => [m.id, false])) as Record<ModuleId, boolean>
 )
 
 let loaded = false
 
-/** 默认开的模块读 `!== 'false'`：老库里没有这个键，按 `=== 'true'` 判会把主页面整个变没 */
-function parseFlag(raw: string, m: ModuleDef): boolean {
-  return m.defaultEnabled ? raw !== 'false' : raw === 'true'
+function parseFlag(raw: string): boolean {
+  return raw === 'true'
 }
 
 /** bootstrap 阶段跑一次：路由、侧栏、设置页都必须在挂载前就看到终态开关 */
@@ -27,7 +26,7 @@ export async function loadModuleFlags(): Promise<void> {
   await Promise.all(
     MODULES.filter(m => availableInRuntime(m.id)).map(async (m) => {
       try {
-        moduleFlags[m.id] = parseFlag(await settingsApi.getSetting(m.settingKey), m)
+        moduleFlags[m.id] = parseFlag(await settingsApi.getSetting(m.settingKey))
       } catch {
         /* 读不到就按注册表缺省 */
       }
@@ -39,7 +38,7 @@ export async function loadModuleFlags(): Promise<void> {
 export async function refreshWebModuleFlags(): Promise<void> {
   const flags = await Promise.all(WEB_MODULE_IDS.map(async id => {
     const module = moduleById(id)
-    return [id, parseFlag(await settingsApi.getSetting(module.settingKey), module)] as const
+    return [id, parseFlag(await settingsApi.getSetting(module.settingKey))] as const
   }))
   for (const [id, on] of flags) moduleFlags[id] = on
 }

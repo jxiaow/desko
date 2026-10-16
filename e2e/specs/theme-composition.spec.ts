@@ -2,10 +2,10 @@ import { test, expect, type Page } from '@playwright/test'
 import { bootUnlocked, e2e, openSettings, waitForToastGone } from '../helpers'
 import { contrast, lab } from '../../scripts/lib/theme-tokens.mjs'
 
-const THEMES = { paper: '纸', snow: '雪', linen: '绢', mist: '雾', ink: '墨', slate: '岩', midnight: '夜', moss: '苔' } as const
+const THEMES = { paper: '纸', snow: '雪', apricot: '杏', seafoam: '汐', ink: '墨', slate: '岩', midnight: '夜', moss: '苔' } as const
 const ACCENTS = ['ink', 'celadon', 'clay', 'plum', 'rose', 'teal', 'forest', 'amber', 'coral', 'graphite'] as const
 type Theme = keyof typeof THEMES
-const LIGHT_THEMES: Theme[] = ['paper', 'snow', 'linen', 'mist']
+const LIGHT_THEMES: Theme[] = ['paper', 'snow', 'apricot', 'seafoam']
 type RGB = [number, number, number]
 
 // 从实际截图取画布空白处的像素，覆盖主光、辅光与中间过渡。
@@ -138,10 +138,11 @@ test('八十组主题的全窗氛围轻柔可辨，阅读区域与主按钮保�
         expect(contrast(got.buttonText, bg), `${label} 主按钮文字`).toBeGreaterThanOrEqual(4.5)
       }
       if (LIGHT_THEMES.includes(theme)) {
+        const tinted = theme === 'apricot' || theme === 'seafoam'
         for (const pixel of got.pixels) {
           const background = lab(pixel)
-          expect.soft(background.L, `${label} 浅色画布保持明亮`).toBeGreaterThan(93)
-          expect.soft(Math.hypot(background.a, background.b), `${label} 浅色画布减少灰染和彩色雾面`).toBeLessThan(8)
+          expect.soft(background.L, `${label} 浅色画布保持明亮`).toBeGreaterThan(tinted ? 88 : 93)
+          expect.soft(Math.hypot(background.a, background.b), `${label} 浅色画布控制染色强度`).toBeLessThan(tinted ? 18 : 8)
         }
       }
       rendered[theme].push(got.pixels)
@@ -158,7 +159,7 @@ test('八十组主题的全窗氛围轻柔可辨，阅读区域与主按钮保�
       expect.soft(canvasDifference, `${label} 氛围覆盖内容周围的留白`).toBeGreaterThan(.15)
       expect.soft(canvasDifference, `${label} 留白染色保持轻柔`).toBeLessThan(LIGHT_THEMES.includes(theme) ? 3 : 8)
       expect(distance([got.center], [flat.center]), `${label} 中部仍保留主题底色`).toBeLessThan(10)
-      if (['linen', 'mist', 'midnight', 'moss'].includes(theme)) {
+      if (['apricot', 'seafoam', 'midnight', 'moss'].includes(theme)) {
         const reading = lab(got.readingBackground)
         expect(Math.hypot(reading.a, reading.b), `${label} 正文卡片保持低彩度`).toBeLessThan(7)
       }
@@ -174,7 +175,7 @@ test('八十组主题的全窗氛围轻柔可辨，阅读区域与主按钮保�
     for (const [j, a] of themes.entries()) for (const b of themes.slice(j + 1)) {
       const light = LIGHT_THEMES.includes(a)
       if (light !== LIGHT_THEMES.includes(b)) continue
-      const minimum = a === 'ink' && b === 'slate' ? 7 : light ? 1 : 5
+      const minimum = a === 'ink' && b === 'slate' ? 7 : light ? (a === 'paper' && b === 'snow' ? 1 : 6) : 5
       expect.soft(distance(rendered[a][i], rendered[b][i]), `${THEMES[a]}/${THEMES[b]} × ${ACCENTS[i]}`).toBeGreaterThan(minimum)
     }
   }

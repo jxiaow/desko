@@ -770,7 +770,10 @@ class MockBackend {
         file_path: n,
         file_size: 2048,
       })),
-      settings: { ...(config.settings ?? {}) },
+      // 产品侧八块模块一律默认关，而绝大多数用例要落在三个主页面：mock 代表的是
+      // 「这三块已被用户打开」的库。用例显式写 key 即覆盖（含写 'false' 测空态）。
+      // 首次设置使用真实的新库缺省，不预置任何模块开关。
+      settings: { ...(config.initialized === false ? {} : { notes_enabled: 'true', entries_enabled: 'true', files_enabled: 'true' }), ...(config.settings ?? {}) },
       backup: { hasPassword: false, files: [], exports: [], busy: false },
       cloud: { configured: false, server: '', account: '', lastSyncAt: 0, packages: [], attachments: [] },
       fileshare: { running: false, port: 8000, boundPort: null, shareDirs: [], localOnly: false, hasPassword: false, imported: [] },

@@ -34,31 +34,28 @@ describe('module state', () => {
     vi.clearAllMocks()
   })
 
-  it('默认关的模块：读不到设置也不出现入口', async () => {
+  it('读不到设置就没有入口：八块一律默认关', async () => {
     const { loadModuleFlags, moduleFlags } = await loadState()
     mockInvoke.mockRejectedValue(new Error('db down'))
     await loadModuleFlags()
-    expect(moduleFlags.mfa).toBe(false)
-    expect(moduleFlags.fileshare).toBe(false)
-    expect(moduleFlags.tunnel).toBe(false)
-    expect(moduleFlags.bypass).toBe(false)
-    expect(moduleFlags.codex).toBe(false)
+    expect(Object.values(moduleFlags).filter(Boolean)).toEqual([])
   })
 
-  it('默认开的模块：老库缺键按开读，只有显式 false 才关', async () => {
+  it('老库缺键按关读，只有显式 true 才开', async () => {
     const { loadModuleFlags, moduleFlags } = await loadState()
     answerWith({})
     await loadModuleFlags()
-    expect(moduleFlags.notes).toBe(true)
-    expect(moduleFlags.entries).toBe(true)
-    expect(moduleFlags.files).toBe(true)
+    expect(moduleFlags.notes).toBe(false)
+    expect(moduleFlags.entries).toBe(false)
+    expect(moduleFlags.files).toBe(false)
 
     vi.resetModules()
     const reloaded = await loadState()
-    answerWith({ entries_enabled: 'false' })
+    answerWith({ notes_enabled: 'true', files_enabled: 'false' })
     await reloaded.loadModuleFlags()
-    expect(reloaded.moduleFlags.entries).toBe(false)
     expect(reloaded.moduleFlags.notes).toBe(true)
+    expect(reloaded.moduleFlags.files).toBe(false)
+    expect(reloaded.moduleFlags.entries).toBe(false)
   })
 
   it('读一次就够：第二次不再打后端', async () => {
@@ -138,9 +135,11 @@ describe('module state', () => {
   })
   it('落地页取启用模块里排最前的那个，全关时没有页面可去', async () => {
     const { landingPath, moduleFlags } = await loadState()
-    expect(landingPath()).toBe('/notes')
-    moduleFlags.notes = false
+    expect(landingPath()).toBeNull()
+    moduleFlags.entries = true
     expect(landingPath()).toBe('/entries')
+    moduleFlags.notes = true
+    expect(landingPath()).toBe('/notes')
     for (const id of Object.keys(moduleFlags)) moduleFlags[id as ModuleId] = false
     expect(landingPath()).toBeNull()
   })
@@ -197,7 +196,7 @@ describe('Web 模块白名单', () => {
     } finally { meta.remove() }
   })
 
-  it('Web 核心模块关闭时不强制开启，旧库缺键与桌面缺省一致', async () => {
+  it('Web 不强制开启任何模块：显式关与旧库缺键都保持关闭', async () => {
     const meta = document.createElement('meta')
     meta.name = 'desko-runtime'; meta.content = 'web'; document.head.append(meta)
     try {
@@ -209,7 +208,7 @@ describe('Web 模块白名单', () => {
       expect(state.landingPath()).toBeNull()
       read.mockResolvedValue('')
       await state.refreshWebModuleFlags()
-      expect(state.enabledModules.value.map(module => module.id)).toEqual(['notes', 'entries', 'files'])
+      expect(state.enabledModules.value).toEqual([])
       read.mockRestore()
     } finally { meta.remove() }
   })
