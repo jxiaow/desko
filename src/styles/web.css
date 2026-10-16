@@ -79,6 +79,9 @@
   .app-root.web-runtime .fs-head,
   .app-root.web-runtime .fs-scroll:has(.fs-doc) { padding-inline: 14px; }
   .app-root.web-runtime .fs-doc { padding: 16px; }
+  /* 首栏右侧的阅读态动作与退出钮一起抬到触摸档 */
+  .app-root.web-runtime .fs-head .fs-exit,
+  .app-root.web-runtime .fs-head .bar-btn { min-height: 40px; }
   .app-root.web-runtime .fs-foot { padding: 8px 12px; height: auto; min-height: 54px; flex-wrap: wrap; }
   .app-root.web-runtime .fs-foot .eb { min-height: 40px; }
   .app-root.web-runtime .lock-stack { max-width: calc(100vw - 40px); }

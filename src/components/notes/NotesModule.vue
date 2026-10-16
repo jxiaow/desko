@@ -122,7 +122,9 @@ const toggleRail = () => {
   noteRailCollapsed.value = false
   railFloatingOpen.value = !railRoom.value
 }
-const onRailPointerDown = (event: PointerEvent) => {
+/** 收侧栏会抽走一整列宽（--rail-w）：按下去就收，同一次点击的 mousedown/mouseup 会落到不同元素上，
+    行尾那颗动作钮（以及它下面的卡头）就成了被吞掉的第一击。改在 click 之后收，钮自己先吃完这次点击 */
+const onRailOutsideClick = (event: MouseEvent) => {
   if (!railVisible.value || noteRailPinned.value || !(event.target instanceof Node)) return
   if (railEl.value?.contains(event.target) || railToggleEl.value?.contains(event.target)) return
   closeRail()
@@ -331,7 +333,7 @@ let observer: ResizeObserver | null = null
 let unlistenDrag: (() => void) | undefined
 onMounted(() => {
   document.addEventListener('keydown', onKeyDown)
-  document.addEventListener('pointerdown', onRailPointerDown, true)
+  document.addEventListener('click', onRailOutsideClick, true)
   if (!isWebRuntime()) {
     // 桌面侧拖进来的文件只有原生层知道路径，与局域网传输吃同一窗口级事件；
     // 落点坐标在这套事件里不可靠，所以只看"当前哪张书写面开着"
@@ -358,7 +360,7 @@ onBeforeUnmount(() => {
   active = false
   void flushNoteSave().catch(() => {})
   document.removeEventListener('keydown', onKeyDown)
-  document.removeEventListener('pointerdown', onRailPointerDown, true)
+  document.removeEventListener('click', onRailOutsideClick, true)
   unlistenDrag?.()
   observer?.disconnect()
   observer = null
@@ -637,6 +639,12 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       @add-image="fsNote ? addImageToNote(fsNote.id) : addImageToDraft()"
       @toggle-pin="fsNote && togglePin(fsNote)"
       @toggle-star="fsNote && toggleStar(fsNote)"
+      @toggle-archive="fsNote && setArchived(fsNote, !fsNote.archived)"
+      @copy="fsNote && copyNote(fsNote)"
+      @export="fsNote && exportNotes([fsNote.id], '单条小记', $event)"
+      @encrypt="fsNote && requestEncrypt(fsNote.id)"
+      @relock="fsNote && relockNote(fsNote.id)"
+      @remove-lock="fsNote && requestRemoveLock(fsNote.id)"
       @delete="fsNote && doDeleteNote(fsNote)"
       @remove-attachment="fsNote && deleteAttachment(fsNote.id, $event)"
     />

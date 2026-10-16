@@ -518,6 +518,32 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
+  it('收侧栏排在这次点击之后：按下不收，否则行尾钮的第一击会被整列位移吞掉', async () => {
+    stageNotes([makeNote()])
+    vi.mocked(notesApi.noteKeyStatus).mockResolvedValue({ is_set: false, is_open: false })
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const wrapper = mount(NotesModule, { attachTo: host })
+    await flushPromises()
+    await useNotesStore().fetchNotes()
+    await flushPromises()
+
+    await wrapper.find('.bar-btn[aria-label="展开侧栏"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.rail').exists()).toBe(true)
+
+    await wrapper.find('.memo').trigger('pointerdown')
+    await flushPromises()
+    // 按下只表示「可能要点这里」，此刻收栏就抽走整列宽度，mouseup 落到别处、动作钮再也收不到 click
+    expect(wrapper.find('.rail').exists()).toBe(true)
+
+    await wrapper.find('.memo').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.rail').exists()).toBe(false)
+    wrapper.unmount()
+    host.remove()
+  })
+
   it('starts with the rail collapsed and keeps the opened state across remounts', async () => {
     stageNotes([makeNote()])
     const wrapper = await mountModule()

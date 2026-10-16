@@ -3,8 +3,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
+import NoteMoreMenu from './NoteMoreMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
-import PopoverMenu from '../shared/PopoverMenu.vue'
 import { formatRelativeTime, stripTagsFromHtml, stripTagsFromText } from '../../utils/format'
 import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { resolveAssetHtml, unreferencedAttachments, type SaveImage } from '../../services/attachmentSrc'
@@ -12,7 +12,7 @@ import type { Note, Attachment } from '../../types'
 import { noteMeta, type NoteSaveState } from '../../stores/notes'
 import { isWebRuntime } from '../../services/runtime'
 import { openLinkFromClick } from '../../utils/openExternal'
-import { NOTE_EXPORT_FORMATS, type NoteExportFormat } from '../../utils/noteExport'
+import type { NoteExportFormat } from '../../utils/noteExport'
 
 const props = withDefaults(defineProps<{
   note: Note
@@ -65,8 +65,6 @@ const emit = defineEmits<{
 }>()
 
 const draft = ref(props.note.content_html)
-const exportButton = ref<HTMLElement | null>(null)
-const exportMenuOpen = ref(false)
 const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
 const bodyEl = ref<HTMLElement | null>(null)
 const clipped = ref(false)
@@ -116,35 +114,7 @@ const applyClamp = async () => {
 const onResize = () => applyClamp()
 
 onMounted(() => window.addEventListener('resize', onResize))
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', onResize)
-  if (copiedTimer) window.clearTimeout(copiedTimer)
-})
-
-/* 复制 morph：钮面短暂翻成对勾做回执（写剪贴板与 toast 在父层） */
-const copied = ref(false)
-let copiedTimer: number | undefined
-const onCopy = () => {
-  emit('copy')
-  copied.value = true
-  if (copiedTimer) window.clearTimeout(copiedTimer)
-  copiedTimer = window.setTimeout(() => { copied.value = false }, 1200)
-}
-
-/* ⋯ 菜单：加密系与删除这些低频/危险动作收进来，快捷排只留高频 */
-const moreBtn = ref<HTMLElement | null>(null)
-const menuOpen = ref(false)
-const toggleMenu = () => { menuOpen.value = !menuOpen.value }
-const onMenu = (action: 'encrypt' | 'relock' | 'removeLock' | 'delete' | 'pin' | 'star' | 'copy') => {
-  menuOpen.value = false
-  if (action === 'encrypt') emit('encrypt')
-  else if (action === 'relock') emit('relock')
-  else if (action === 'removeLock') emit('removeLock')
-  else if (action === 'pin') emit('togglePin')
-  else if (action === 'star') emit('toggleStar')
-  else if (action === 'copy') void onCopy()
-  else emit('delete')
-}
+onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 
 // 只读正文在编辑态会整个卸掉，回来时是一个新元素，组件本身不会重新挂载
 watch(bodyEl, applyClamp)
@@ -287,12 +257,15 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       </span>
       <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
 
-      <!-- hover 显形的动作排：压在卡头右侧（时间让位），实底不吃正文 -->
+      <!-- hover 显形的动作排：只留这条最常做的四颗，其余进 ⋯（时间在排后让位，实底不吃正文） -->
       <span class="memo-acts">
-        <button v-if="locked" class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
-          <AppIcon name="unlock" :size="14" />
-        </button>
-        <template v-if="!locked">
+        <template v-if="locked">
+          <button class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
+            <AppIcon name="unlock" :size="14" />
+          </button>
+          <NoteMoreMenu v-if="!isWebRuntime()" sealed :note="props.note" :export-disabled="props.exportDisabled" @export="emit('export', $event)" />
+        </template>
+        <template v-else>
           <button class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
             <AppIcon name="eye" :size="14" />
           </button>
@@ -311,47 +284,29 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
             <AppIcon name="pin" :size="14" />
           </button>
           <button
-            v-if="!props.archivedView"
+            v-else
             class="ib"
             type="button"
-            :class="{ on: props.note.starred, warn: props.note.starred }"
-            :title="props.note.starred ? '取消收藏' : '收藏'"
-            :aria-label="props.note.starred ? '取消收藏' : '收藏'"
-            @click.stop="emit('toggleStar')"
-          >
-            <AppIcon name="star" :size="14" :filled="props.note.starred" />
-          </button>
-        </template>
-        <button v-if="!isWebRuntime()" ref="exportButton" class="ib" type="button" title="导出" aria-label="导出" :disabled="props.exportDisabled" @click.stop="exportMenuOpen = !exportMenuOpen; menuOpen = false">
-          <AppIcon name="download" :size="14" />
-        </button>
-        <template v-if="!locked">
-          <button
-            class="ib"
-            type="button"
-            :title="props.archivedView ? '取消归档，放回「全部」' : '归档（从「全部」收起）'"
-            :aria-label="props.archivedView ? '取消归档' : '归档'"
+            title="取消归档，放回「全部」"
+            aria-label="取消归档"
             @click.stop="emit('toggleArchive')"
           >
-            <AppIcon :name="props.archivedView ? 'unarchive' : 'archive'" :size="14" />
+            <AppIcon name="unarchive" :size="14" />
           </button>
-          <!-- 归档视图是这些条目的唯一入口，就地删除省一趟绕路 -->
-          <button v-if="props.archivedView" class="ib danger" type="button" title="删除" aria-label="删除" @click.stop="emit('delete')">
-            <AppIcon name="trash" :size="14" />
-          </button>
-          <button v-if="!props.archivedView" class="ib" :class="{ copied }" type="button" :title="copied ? '已复制' : '复制正文'" aria-label="复制正文" @click.stop="onCopy">
-            <AppIcon :name="copied ? 'check' : 'copy'" :size="14" />
-          </button>
-          <button
-            ref="moreBtn"
-            class="ib"
-            type="button"
-            title="更多操作"
-            aria-label="更多操作"
-            @click.stop="toggleMenu"
-          >
-            <AppIcon name="dots" :size="14" />
-          </button>
+          <NoteMoreMenu
+            :note="props.note"
+            :archived-view="props.archivedView"
+            :export-disabled="props.exportDisabled"
+            @copy="emit('copy')"
+            @toggle-pin="emit('togglePin')"
+            @toggle-star="emit('toggleStar')"
+            @toggle-archive="emit('toggleArchive')"
+            @export="emit('export', $event)"
+            @encrypt="emit('encrypt')"
+            @relock="emit('relock')"
+            @remove-lock="emit('removeLock')"
+            @delete="emit('delete')"
+          />
         </template>
       </span>
     </div>
@@ -401,55 +356,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         >#{{ t }}</button>
       </span>
     </div>
-
-    <!-- 低频与危险动作收进 ⋯；归档视图的快捷排换成「找回 + 删除」，
-         被让位的置顶/收藏/复制搬到这里，两边不出现同一颗 -->
-    <PopoverMenu v-if="exportMenuOpen" :anchor="exportButton" :width="184" @close="exportMenuOpen = false">
-      <div class="export-menu-title" :title="`导出「${titleText}」`">导出「{{ titleText }}」</div>
-      <button v-for="item in NOTE_EXPORT_FORMATS" :key="item.id" class="pop-item" type="button" role="menuitem" :aria-label="`${item.label} (.${item.extension})`" @click.stop="exportMenuOpen = false; emit('export', item.id)">
-        <AppIcon name="download" :size="14" />{{ item.label }}<span class="export-menu-extension">.{{ item.extension }}</span>
-      </button>
-      <span class="pop-sep"></span>
-      <div class="export-menu-hint">图片附件随文件导出</div>
-    </PopoverMenu>
-    <PopoverMenu v-if="menuOpen" :anchor="moreBtn" :width="136" @close="menuOpen = false">
-      <template v-if="props.archivedView">
-        <button class="pop-item" type="button" @click="onMenu('pin')">
-          <AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="14" />
-          {{ props.note.pinned ? '取消置顶' : '置顶' }}
-        </button>
-        <button class="pop-item" type="button" @click="onMenu('star')">
-          <AppIcon name="star" :size="14" :filled="props.note.starred" />
-          {{ props.note.starred ? '取消收藏' : '收藏' }}
-        </button>
-        <button class="pop-item" type="button" @click="onMenu('copy')">
-          <AppIcon name="copy" :size="14" />
-          复制正文
-        </button>
-        <span class="pop-sep"></span>
-      </template>
-      <button v-if="!props.note.encrypted" class="pop-item" type="button" @click="onMenu('encrypt')">
-        <AppIcon name="lock" :size="14" />
-        加密
-      </button>
-      <template v-else>
-        <button class="pop-item" type="button" @click="onMenu('relock')">
-          <AppIcon name="lock" :size="14" />
-          重新锁定
-        </button>
-        <button class="pop-item" type="button" @click="onMenu('removeLock')">
-          <AppIcon name="lockOff" :size="14" />
-          解除加密
-        </button>
-      </template>
-      <template v-if="!props.archivedView">
-        <span class="pop-sep"></span>
-        <button class="pop-item danger" type="button" @click="onMenu('delete')">
-          <AppIcon name="trash" :size="14" />
-          删除
-        </button>
-      </template>
-    </PopoverMenu>
   </article>
 
   <article v-else class="memo editing">
@@ -491,9 +397,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 </template>
 
 <style scoped>
-.export-menu-title { padding: 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--text-muted); }
-.export-menu-extension { margin-left: auto; font-size: var(--text-xs); color: var(--text-faint); }
-.export-menu-hint { padding: 4px 10px 6px; font-size: var(--text-xs); color: var(--text-muted); }
 .memo {
   position: relative;
   background: var(--bg-surface);
@@ -645,7 +548,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 }
 .tag-pill:hover { background: var(--accent-soft); color: var(--accent); }
 .tag-pill.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
-/* 状态标只在不悬停时出现：悬停后动作排上的同一个图标已带状态，两个并排就是重复 */
+/* 状态标与时间一起让位：悬停后动作排压住卡头右端，留着就是叠字 */
 .memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
 .memo:hover .memo-state, .memo:focus-within .memo-state { opacity: 0; }
 .state-star { color: var(--warning); display: inline-flex; }
@@ -671,7 +574,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo:not(.editing):hover .memo-time, .memo:not(.editing):focus-within .memo-time { opacity: 0; }
 .memo-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
 .memo-acts .ib :deep(svg) { width: 15px; height: 15px; }
-.memo-acts .ib.danger { color: var(--danger); }
 
 .memo-check {
   position: absolute;

@@ -228,11 +228,10 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('[aria-label="展开侧栏"]')).toBeVisible()
   })
 
-  test('一键复制正文：快捷按钮出纯文本', async ({ page }) => {
+  test('复制正文：⋯ 菜单出纯文本', async ({ page }) => {
     await gotoNotes(page)
     const m = memo(page, '第一条小记')
-    await m.hover()
-    await tipButton(m, '复制正文').click()
+    await (await noteMenu(page, m)).locator('.pop-item:text-is("复制正文")').click()
     await expectToast(page, '小记已复制')
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('第一条小记：周会纪要与待办')
   })
@@ -242,8 +241,7 @@ test.describe('Notes 小记', () => {
       notes: [{ title: '链接', content_html: '<p>看 <a href="https://gitlab.test/x">GitLab 标题</a></p>' }],
     }, '/notes')
     const m = memo(page, 'GitLab 标题')
-    await m.hover()
-    await tipButton(m, '复制正文').click()
+    await (await noteMenu(page, m)).locator('.pop-item:text-is("复制正文")').click()
     await expectToast(page, '小记已复制')
 
     expect(await page.evaluate(() => navigator.clipboard.readText()))
@@ -548,7 +546,7 @@ test.describe('Notes 小记', () => {
     const m = memo(page, '第一条小记')
     await m.hover()
     await tipButton(m, '全屏查看').click()
-    await page.locator('section.fs .fs-foot button.eb.primary').click()
+    await page.locator('section.fs .fs-head .bar-btn.primary').click()
     const pm = page.locator('section.fs .ProseMirror')
     await expect(pm).toBeVisible()
     await expect
@@ -606,9 +604,10 @@ test.describe('Notes 小记', () => {
     expect((await e2e.snapshot(page)).notes.find((n: any) => n.content_html.includes('第三条')).pinned).toBe(true)
 
     await target.hover()
-    await target.locator('button.ib[title="收藏"]').click()
-    await expect(tipButton(target, '取消收藏')).toHaveClass(/on warn/)
-    // 悬停时状态标让位（opacity 归零），否则同一行出现两个星
+    // 收藏住在 ⋯ 里：卡头右端被动作排压住，状态只由实心星在离开悬停后说明
+    await (await noteMenu(page, target)).locator('.pop-item:text-is("收藏")').click()
+    await expect((await noteMenu(page, target)).locator('.pop-item:text-is("取消收藏")')).toHaveCount(1)
+    // 悬停时状态标让位（opacity 归零），否则它躲在动作排底下一半
     // opacity 带过渡动画，单次采样会读到中间值，轮询到收敛
     await expect
       .poll(() => target.locator('.memo-state').evaluate((el) => getComputedStyle(el).opacity))
@@ -641,16 +640,18 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.composer')).toHaveCount(0)
     const archived = memo(page, '已经收走')
     await archived.hover()
-    // 归档视图的快捷排只留「找回 + 删除」，让位的三颗搬进 ⋯，两边不重复
-    await expect(archived.locator('.memo-acts button')).toHaveCount(6)
-    await tipButton(archived, '更多操作').click()
-    await expect(page.locator('.popover .pop-item')).toHaveText(['置顶', '收藏', '复制正文', '加密'])
+    // 归档视图的快捷排与「全部」同构四颗，被让位的开关与低频/危险动作都在 ⋯ 里
+    await expect(archived.locator('.memo-acts button')).toHaveCount(4)
+    await tipButton(archived, '更多操作').first().click()
+    await expect(page.locator('.popover .pop-item')).toHaveText(['复制正文', '收藏', '置顶', '导出', '加密', '删除'])
     await page.keyboard.press('Escape')
     await expect(page.locator('.popover')).toHaveCount(0)
     await tipButton(archived, '取消归档，放回「全部」').click()
     await expectToast(page, '已取消归档，回到「全部」')
     await waitForToastGone(page)
     await expect(page.locator('.empty-title')).toHaveText('还没有归档的小记')
+    // 内容区那几击把浮层侧栏收掉了（点内容即收），要读条数得再叫出来
+    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
     await expect(archivedRail.locator('.tab-count')).toHaveText('0')
     expect((await e2e.snapshot(page)).notes.find((n: any) => n.title === '丙').archived).toBe(false)
 
@@ -658,8 +659,7 @@ test.describe('Notes 小记', () => {
     await page.locator('.rail button.rail-item', { hasText: '全部' }).click()
     await expect(page.locator('.memo')).toHaveCount(3)
     const target = memo(page, '在册乙')
-    await target.hover()
-    await tipButton(target, '归档（从「全部」收起）').click()
+    await (await noteMenu(page, target)).locator('.pop-item:text-is("归档")').click()
     await expectToast(page, '已归档，可在侧栏「归档」里找回')
     await expect(page.locator('.memo')).toHaveCount(2)
     const snap = (await e2e.snapshot(page)).notes.find((n: any) => n.title === '乙')
@@ -809,13 +809,14 @@ test.describe('Notes 小记', () => {
     const fs = page.locator('section.fs')
     await expect(fs).toBeVisible()
     await expect(fs.locator('.fs-view')).toContainText('第一条小记：周会纪要与待办')
-    // 只读层没有编辑器，底栏换成「编辑」主按钮
+    // 只读层没有编辑器，动作住在首栏右侧，底栏不再出现
     await expect(fs.locator('.ProseMirror')).toHaveCount(0)
     await expect(fs.locator('.save-hint')).toHaveText('只读浏览')
     await expect(fs.locator('.fs-hint')).toHaveCount(0)
+    await expect(fs.locator('.fs-foot')).toHaveCount(0)
 
     // 查看转编辑：书写面接管同一条正文
-    await fs.locator('.fs-foot button.eb.primary').click()
+    await fs.locator('.fs-head .bar-btn.primary').click()
     await expect(fs.locator('.fs-view')).toHaveCount(0)
     await expect(fs.locator('.ProseMirror')).toContainText('第一条小记')
 
@@ -842,7 +843,7 @@ test.describe('Notes 小记', () => {
     // 锁着的条目可解锁或发起明文导出；加密动作仍在明文卡的 ⋯ 里
     await expect(sealed.locator('.memo-acts button')).toHaveCount(2)
     await expect(sealed.getByRole('button', { name: '导出', exact: true })).toHaveCount(1)
-    await expect(plain.locator('.memo-acts button')).toHaveCount(8)
+    await expect(plain.locator('.memo-acts button')).toHaveCount(4)
 
     // 首次加密就是立全库口令，只有这一次要输两格
     await (await noteMenu(page, plain)).locator('.pop-item:text-is("加密")').click()
@@ -1121,6 +1122,72 @@ test.describe('Notes 小记', () => {
     const stored = (await e2e.snapshot(page)).notes
       .find((n: any) => n.content_html.includes('GitLab 标题'))?.content_html
     expect(stored).toContain('href="https://gitlab.test/x"')
+  })
+
+  test('粘贴网页链接先保留网址，再由提示转换为标题', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    const url = 'https://gitlab.test/rtcsdk/cpp-sdk/-/merge_requests/1108'
+    const title = 'fix: forward AI hotword result callbacks (!1108) · GitLab'
+    await pm.click()
+    await pasteHtml(page, url, `<a href="${url}">${title}</a>`)
+    await expect(pm).toHaveText(url)
+    await expect(pm.locator('a')).toHaveAttribute('href', url)
+    await expect(page.locator('.slash-menu')).toHaveCount(0)
+    const prompt = page.getByRole('group', { name: '链接粘贴选项' })
+    await expect(prompt).toContainText(title)
+    await prompt.getByRole('button', { name: '转换为标题' }).click()
+    await expect(pm.locator('a')).toHaveText(title)
+    await expect(pm.locator('a')).toHaveAttribute('href', url)
+    await expect(prompt).toHaveCount(0)
+
+    await pm.press('End')
+    await pm.press('Enter')
+    await pasteHtml(page, url, `<a href="${url}">${title}</a>`)
+    await prompt.getByRole('button', { name: '保留网址' }).click()
+    await expect(pm.locator('a').last()).toHaveText(url)
+    await expect(prompt).toHaveCount(0)
+  })
+
+  test('粘贴纯网址不弹转换提示，仍保留可点击链接', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    const url = 'https://gitlab.test/x'
+    await pm.click()
+    await pasteHtml(page, url, '')
+    await expect(pm.locator('a')).toHaveText(url)
+    await expect(pm.locator('a')).toHaveAttribute('href', url)
+    await expect(page.getByRole('group', { name: '链接粘贴选项' })).toHaveCount(0)
+  })
+
+  test('选中文字时粘贴网址，以网址替换选区', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    const url = 'https://gitlab.test/x'
+    await pm.fill('待替换')
+    await selectRange(page, 1, 4)
+    await pasteHtml(page, url, `<a href="${url}">GitLab 标题</a>`)
+    await expect(pm).toHaveText(url)
+    await expect(pm.locator('a')).toHaveAttribute('href', url)
+    await expect(page.getByRole('group', { name: '链接粘贴选项' })).toBeVisible()
+  })
+
+  test('撤销粘贴网址时关闭转换提示，编辑器仍可继续输入', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    const url = 'https://gitlab.test/x'
+    await pm.click()
+    await pasteHtml(page, url, `<a href="${url}">GitLab 标题</a>`)
+    const prompt = page.getByRole('group', { name: '链接粘贴选项' })
+    await expect(prompt).toBeVisible()
+    await pm.press('Control+z')
+    await expect(pm).toHaveText('')
+    await expect(prompt).toHaveCount(0)
+    await pm.fill('继续写小记')
+    await expect(pm).toHaveText('继续写小记')
+    expect(errors).toEqual([])
   })
 
   test('粘进去的裸地址自动成链', async ({ page }) => {

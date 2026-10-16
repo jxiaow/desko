@@ -69,7 +69,7 @@ for (const combo of COMBOS) {
   await page.screenshot({ path: `${OUT}/${combo}-view.png` })
   await measure('只读纸面', '.fs .fs-view')
 
-  await page.locator('.fs-foot button.eb.primary').first().click()
+  await page.locator('.fs-head .bar-btn.primary').first().click()
   await page.waitForSelector('.fs .note-editor.v-full .ProseMirror')
   await page.waitForTimeout(300)
   await page.screenshot({ path: `${OUT}/${combo}-edit.png` })

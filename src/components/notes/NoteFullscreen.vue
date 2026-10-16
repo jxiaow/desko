@@ -6,10 +6,12 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
+import NoteMoreMenu from './NoteMoreMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatAbsTime, highlightTagsInHtml, htmlToText, wordCount } from '../../utils/format'
 import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { collectAttachmentNames, resolveAssetHtml, unreferencedAttachments, type SaveImage } from '../../services/attachmentSrc'
+import type { NoteExportFormat } from '../../utils/noteExport'
 import type { Note, Attachment } from '../../types'
 import type { NoteSaveState } from '../../stores/notes'
 
@@ -38,7 +40,13 @@ const emit = defineEmits<{
   addImage: []
   togglePin: []
   toggleStar: []
+  toggleArchive: []
+  copy: []
   delete: []
+  export: [format: NoteExportFormat]
+  encrypt: []
+  relock: []
+  removeLock: []
   removeAttachment: [attachmentId: string]
 }>()
 
@@ -95,7 +103,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
 </script>
 
 <template>
-  <section class="fs" :class="{ 'fs-read': viewMode }" role="dialog" aria-modal="true" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'">
+  <section class="fs" role="dialog" aria-modal="true" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'">
     <header class="fs-head" @mousedown="startDrag">
       <button class="fs-exit" type="button" @click="emit('close')">
         <AppIcon name="min" :size="13" />
@@ -105,6 +113,35 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
       <span class="save-hint" :class="props.saveState">
         {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '未发布') }}
       </span>
+
+      <!-- 阅读态的动作住在首栏右侧：粘性一行，滚到正文中段也够得着 -->
+      <template v-if="viewMode && props.note">
+        <button
+          class="bar-btn"
+          type="button"
+          :class="{ active: props.note.pinned }"
+          :title="props.note.pinned ? '取消置顶' : '置顶'"
+          :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
+          @click="emit('togglePin')"
+        >
+          <AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="13" />{{ props.note.pinned ? '已置顶' : '置顶' }}
+        </button>
+        <button class="bar-btn primary" type="button" title="进入全屏编辑" aria-label="编辑" @click="emit('edit')">
+          <AppIcon name="edit" :size="13" />编辑
+        </button>
+        <NoteMoreMenu
+          variant="bar"
+          :note="props.note"
+          @copy="emit('copy')"
+          @toggle-star="emit('toggleStar')"
+          @toggle-archive="emit('toggleArchive')"
+          @export="emit('export', $event)"
+          @encrypt="emit('encrypt')"
+          @relock="emit('relock')"
+          @remove-lock="emit('removeLock')"
+          @delete="emit('delete')"
+        />
+      </template>
     </header>
 
     <div class="fs-scroll">
@@ -133,35 +170,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
       </div>
     </div>
 
-    <footer class="fs-foot">
-      <template v-if="viewMode && props.note">
-        <button
-          class="eb"
-          type="button"
-          :class="{ on: props.note.pinned }"
-          :title="props.note.pinned ? '取消置顶' : '置顶'"
-          @click="emit('togglePin')"
-        >
-          <AppIcon name="pin" :size="12" />{{ props.note.pinned ? '已置顶' : '置顶' }}
-        </button>
-        <button
-          class="eb"
-          type="button"
-          :class="{ on: props.note.starred, warn: props.note.starred }"
-          :title="props.note.starred ? '取消收藏' : '收藏'"
-          @click="emit('toggleStar')"
-        >
-          <AppIcon name="star" :size="12" :filled="props.note.starred" />{{ props.note.starred ? '已收藏' : '收藏' }}
-        </button>
-        <span class="spacer"></span>
-        <button class="eb danger" type="button" title="删除这条小记" @click="emit('delete')">
-          <AppIcon name="trash" :size="12" />删除
-        </button>
-        <button class="eb primary" type="button" title="进入全屏编辑" @click="emit('edit')">
-          <AppIcon name="edit" :size="12" />编辑
-        </button>
-      </template>
-      <NoteToolbar v-else
+    <footer v-if="!viewMode" class="fs-foot">
+      <NoteToolbar
         :note="props.note"
         :save-state="props.saveState"
         :primary-label="props.note ? '退出编辑' : '发布'"
@@ -314,45 +324,10 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
   backdrop-filter: blur(10px);
 }
 
-/* ---------- 阅读态：底栏收成居中胶囊 ----------
-   通高底板 + border-top + 磨砂那套在拆面轮已经从顶栏撤掉，阅读面不该留一份。
-   但它必须占住一条真实行高，不能浮在 .fs-scroll 上方：浮岛盖的是通高正文，
-   滚到中段时胶囊正好压在一条正文行上（09-30 那版 fixed 的实测遮挡）。
-   现在胶囊自己占 50 + 20 下衬，正文滚到它就停，画布底从四周透出来，看着仍是浮着的一粒。 */
-.fs-read .fs-foot {
-  position: static;
-  align-self: center;
-  margin: 0 0 var(--space-5);
-  height: 50px;
-  gap: 2px;
-  padding: 0 var(--space-2) 0 var(--space-3);
-  max-width: calc(100% - 40px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-dock);
-  backdrop-filter: none;
-}
-.fs-read .fs-foot > .spacer { flex: 0 0 auto; width: 0; margin: 0 var(--space-1); }
-/* 胶囊里的动作 = .dock-btn 方言：34px 无底胶囊，常态不描边 */
-.fs-read .fs-foot .eb {
-  height: 34px;
-  padding: 0 9px;
-  gap: 6px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-pill);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
-.fs-read .fs-foot .eb:hover:not(:disabled) { background: var(--hover-chrome); color: var(--text); border: none; }
-.fs-read .fs-foot .eb.on { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
-.fs-read .fs-foot .eb.on.warn { color: var(--warning); background: var(--warning-soft); }
-.fs-read .fs-foot .eb.danger { color: var(--danger); }
-.fs-read .fs-foot .eb.danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); border: none; }
-.fs-read .fs-foot .eb.primary { background: var(--accent); color: var(--accent-on); font-weight: 600; border: none; }
-.fs-read .fs-foot .eb.primary:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-on); }
+/* ---------- 阅读态动作住在首栏右侧：与退出钮同一档 30px，主按钮只给「编辑」一颗 ---------- */
+.fs-head .bar-btn { height: 30px; }
+.fs-head .bar-btn.primary { background: var(--accent); color: var(--accent-on); font-weight: 600; padding: 0 14px; }
+.fs-head .bar-btn.primary:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-on); }
 
 .fs-hint {
   font-size: var(--text-2xs);

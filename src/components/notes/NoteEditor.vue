@@ -244,6 +244,7 @@ const editor = useEditor({
   // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
   autofocus: false,
   editorProps: {
+    handlePaste: (view, event) => pasteLinkAsUrl(view, event),
     handleTextInput: (view, from, to, text, defaultTransaction) => {
       // 候选文字和标点可能一次提交，不能只接收单个标点。
       if (view.composing || !/[，。！？；：、]$/.test(text)) return false
@@ -483,6 +484,58 @@ const linkOnExisting = ref(false)
 const linkBad = ref(false)
 const linkRange = ref<{ from: number; to: number } | null>(null)
 const linkInputEl = ref<HTMLInputElement | null>(null)
+const pastedLink = ref<{ from: number; to: number; url: string; title: string } | null>(null)
+const pastedLinkPos = ref({ top: 0, left: 0 })
+
+/** 浏览器复制链接常同时给出 URL 和「网页标题」HTML；先保留 URL，标题由用户决定是否采用。 */
+const pasteLinkAsUrl = (view: import('@tiptap/pm/view').EditorView, event: ClipboardEvent) => {
+  const url = event.clipboardData?.getData('text/plain').trim() ?? ''
+  if (!/^https?:\/\/\S+$/i.test(url) || !safeLink(url)) return false
+
+  const html = event.clipboardData?.getData('text/html') ?? ''
+  const body = new DOMParser().parseFromString(html, 'text/html').body
+  const links = body.querySelectorAll('a[href]')
+  const title = links.length === 1 && links[0].getAttribute('href') === url
+    ? links[0].textContent?.trim() ?? ''
+    : ''
+  const offeredTitle = title !== url && body.textContent?.trim() === title ? title : ''
+
+  const linkType = view.state.schema.marks.link
+  const marks = linkType && view.state.selection.$from.parent.type.allowsMarkType(linkType)
+    ? [linkType.create({ href: url })]
+    : []
+  view.dispatch(view.state.tr.replaceSelectionWith(view.state.schema.text(url, marks), false).scrollIntoView())
+  showSlashMenu.value = false
+  pastedLink.value = null
+  if (offeredTitle && marks.length) {
+    const to = view.state.selection.from
+    pastedLink.value = { from: to - url.length, to, url, title: offeredTitle }
+    positionPastedLink(view)
+  }
+  return true
+}
+
+const positionPastedLink = (view: import('@tiptap/pm/view').EditorView) => {
+  const link = pastedLink.value
+  if (!link) return
+  const caret = view.coordsAtPos(link.to)
+  pastedLinkPos.value = {
+    top: caret.bottom + GAP + 38 < window.innerHeight ? caret.bottom + GAP : caret.top - GAP - 38,
+    left: Math.max(MARGIN, Math.min(caret.left, window.innerWidth - 360 - MARGIN)),
+  }
+}
+
+const convertPastedLink = () => {
+  const link = pastedLink.value
+  const ed = editor.value
+  pastedLink.value = null
+  if (!ed || !link || ed.state.doc.textBetween(link.from, link.to) !== link.url) return
+  const mark = ed.state.schema.marks.link.create({ href: link.url })
+  const tr = ed.state.tr.replaceWith(link.from, link.to, ed.state.schema.text(link.title, [mark]))
+  ed.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, link.from + link.title.length)).scrollIntoView())
+  showSlashMenu.value = false
+  ed.commands.focus()
+}
 
 const formatBarStyle = computed(() => ({
   top: `${formatBarPos.value.top}px`,
@@ -577,7 +630,11 @@ watch(() => editor.value, (ed) => {
     updateCodeBlockState(e)
     updateFormatBar(e)
   })
-  ed.on('transaction', ({ editor: e }) => {
+  ed.on('transaction', ({ editor: e, transaction }) => {
+    if (pastedLink.value && (transaction.docChanged || e.state.selection.from !== pastedLink.value.to
+      || e.state.selection.to !== pastedLink.value.to)) {
+      pastedLink.value = null
+    }
     updateCodeBlockState(e)
     updateFormatBar(e)
   })
@@ -595,6 +652,7 @@ const handleClickOutside = (e: MouseEvent) => {
   if (showFormatBar.value && formatBarEl.value && !formatBarEl.value.contains(e.target as HTMLElement)) {
     closeFormatBar()
   }
+  if (pastedLink.value && !(e.target as HTMLElement).closest('.paste-link-prompt')) pastedLink.value = null
 }
 
 onMounted(() => {
@@ -611,6 +669,7 @@ onBeforeUnmount(() => {
 /** 选区随滚动挪走而浮条是视口坐标：只在它可见时重算，别给全局滚动加活 */
 function repositionFormatBar() {
   if (showFormatBar.value) updateFormatBar(editor.value)
+  if (pastedLink.value && editor.value) positionPastedLink(editor.value.view)
 }
 
 const focusEnd = () => {
@@ -633,8 +692,7 @@ const insertImage = (src: string) => {
   ed.chain().focus().insertContent({ type: 'image', attrs: { src, width } }).run()
 }
 
-/** 截图 Ctrl+V 与复制图片文件粘贴：剪贴板里的图片交外层落盘，回来的地址按当前落点插。
- *  只接管含图片的那一次粘贴，文本与富文本一律放行，链接那套粘贴行为照旧。 */
+/** 截图 Ctrl+V 与复制图片文件粘贴：剪贴板里的图片交外层落盘，回来的地址按当前落点插。 */
 const clipboardImages = (e: ClipboardEvent): File[] => {
   const items = e.clipboardData?.items
   if (!items) return []
@@ -736,6 +794,13 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
             <AppIcon name="x" :size="14" />
           </button>
         </template>
+      </div>
+    </Teleport>
+    <Teleport to="body">
+      <div v-if="pastedLink" class="paste-link-prompt" :style="{ top: pastedLinkPos.top + 'px', left: pastedLinkPos.left + 'px' }" role="group" aria-label="链接粘贴选项">
+        <span class="paste-link-title" :title="pastedLink.title">网页标题：{{ pastedLink.title }}</span>
+        <button type="button" @mousedown.prevent @click="convertPastedLink">转换为标题</button>
+        <button type="button" aria-label="保留网址" title="保留网址" @mousedown.prevent @click="pastedLink = null"><AppIcon name="x" :size="14" /></button>
       </div>
     </Teleport>
     <div v-if="showLangSelector" class="lang-selector" :style="{ top: langSelectorPos.top + 'px', right: langSelectorPos.right + 'px' }">
@@ -972,6 +1037,25 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 
 .fmt-input:focus { outline: none; border-color: var(--accent); }
 .fmt-input.bad { border-color: var(--danger); }
+
+.paste-link-prompt {
+  position: fixed;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(360px, calc(100vw - 24px));
+  padding: 4px 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-ib);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--text-xs);
+}
+
+.paste-link-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.paste-link-prompt button { flex-shrink: 0; border: 0; border-radius: 6px; padding: 4px 6px; background: transparent; color: var(--accent-active); cursor: pointer; }
+.paste-link-prompt button:hover { background: var(--hover-chrome); }
 
 .lang-selector {
   position: absolute;

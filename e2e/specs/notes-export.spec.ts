@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import { bootUnlocked, e2e, expectToast, tipButton } from '../helpers'
 
 const seeds = [
@@ -15,13 +15,20 @@ async function openAll(page: Page) {
   return page.getByRole('dialog', { name: '导出小记', exact: true })
 }
 
+/** 在册小记的导出住在 ⋯ 里：先开更多操作，再进格式子菜单 */
+async function openFormatsOf(page: Page, card: Locator) {
+  await card.hover()
+  await tipButton(card, '更多操作').first().click()
+  await page.locator('.popover .pop-item:text-is("导出")').click()
+}
+
 test.describe('小记导出', () => {
   for (const [label, format, extension] of [['Markdown', 'markdown', 'md'], ['HTML', 'html', 'html'], ['Word', 'word', 'doc'], ['PDF', 'pdf', 'pdf']]) {
     test(`单条 ${label}：格式菜单直达保存，图片内嵌`, async ({ page }) => {
       await bootUnlocked(page, { notes: seeds, staged: ['chart.png'] }, '/notes')
       const card = page.locator('.memo').filter({ hasText: '项目正文' })
       await card.hover()
-      await tipButton(card, '导出').click()
+      await openFormatsOf(page, card)
       await expect(page.getByRole('dialog', { name: '导出小记' })).toHaveCount(0)
       await e2e.queueDialog(page, `C:\\exports\\note.${extension}`)
       await page.getByRole('menuitem', { name: `${label} (.${extension})`, exact: true }).click()
