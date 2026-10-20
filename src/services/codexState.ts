@@ -392,8 +392,10 @@ export const sessionOpenId = ref('')
 
 /** 全扫期间又来一次（边扫边改搜索词）：先记下，本轮结束立刻补一次，别让新词被吞掉 */
 let rescanQueued = false
+let sessionTokensVersion = 0
+let sessionSourcesVersion = 0
 
-export async function loadSessions(): Promise<void> {
+export async function loadSessions({ background = false }: { background?: boolean } = {}): Promise<void> {
   if (sessionsBusy.value) {
     rescanQueued = true
     return
@@ -401,26 +403,43 @@ export async function loadSessions(): Promise<void> {
   sessionsBusy.value = true
   sessionsError.value = ''
   const epoch = accountEpoch
+  const sourcesVersion = sessionSourcesVersion
+  let refreshed = false
   try {
     const list = await codexApi.listSessions(
       sessionSearchMode.value === 'title' ? sessionQuery.value : undefined,
       sessionSearchMode.value === 'content' ? sessionQuery.value : undefined,
     )
     if (epoch !== accountEpoch) return
-    sessions.value = list
-    sessionsLoaded.value = true
+    if (sourcesVersion !== sessionSourcesVersion) {
+      rescanQueued = true
+    } else {
+      sessions.value = list
+      sessionsLoaded.value = true
+      refreshed = true
+      // 刷新沿用旧数字直到新统计返回；旧请求不能覆盖这一轮的结果。
+      sessionTokensVersion++
+      const ids = new Set(list.map(s => s.sessionId))
+      sessionTokens.value = Object.fromEntries(Object.entries(sessionTokens.value).filter(([id]) => ids.has(id)))
+    }
   } catch (e) {
     if (epoch !== accountEpoch) return
-    sessions.value = []
-    sessionsLoaded.value = false
-    sessionsError.value = errText(e)
+    if (sourcesVersion !== sessionSourcesVersion) {
+      rescanQueued = true
+    } else if (!background || !sessionsLoaded.value) {
+      sessions.value = []
+      sessionsLoaded.value = false
+      sessionsError.value = errText(e)
+    } else {
+      sessionsError.value = errText(e)
+    }
   } finally {
     if (epoch === accountEpoch) sessionsBusy.value = false
   }
   if (epoch !== accountEpoch) return
   // 列表一出来就把全部会话的 token 一次带走：本机实测 67 个 rollout 尾扫 218 ms，
   // 等展开才取等于把合计量永远藏在水下。不 await，别让数字拖慢首屏的目录名。
-  if (sessionsLoaded.value) void loadSessionTokens(sessions.value.map((s) => s.sessionId))
+  if (refreshed && !rescanQueued) void loadSessionTokens(sessions.value.map((s) => s.sessionId), true)
   if (rescanQueued) {
     rescanQueued = false
     await loadSessions()
@@ -434,13 +453,14 @@ export async function reloadSessions(): Promise<void> {
 }
 
 /** 按 id 批量取 token，只问缺的那几条。列表已经出来了，所以失败只留空与 console.warn，不播 toast */
-export async function loadSessionTokens(ids: string[]): Promise<void> {
-  const missing = ids.filter((id) => !sessionTokens.value[id])
+export async function loadSessionTokens(ids: string[], force = false): Promise<void> {
+  const missing = ids.filter((id) => force || !sessionTokens.value[id])
   if (!missing.length) return
   const epoch = accountEpoch
+  const version = sessionTokensVersion
   try {
     const records = await codexApi.sessionTokenStats(missing)
-    if (epoch !== accountEpoch) return
+    if (epoch !== accountEpoch || version !== sessionTokensVersion) return
     const next = { ...sessionTokens.value }
     for (const r of records) next[r.sessionId] = r
     sessionTokens.value = next
@@ -480,6 +500,8 @@ export async function moveSessionToTrash(sessionId: string): Promise<string> {
   const epoch = accountEpoch
   const summary = await codexApi.moveToTrash([sessionId])
   if (epoch !== accountEpoch) return ''
+  sessionSourcesVersion++
+  sessionTokensVersion++
   sessions.value = sessions.value.filter((s) => s.sessionId !== sessionId)
   const next = { ...sessionTokens.value }
   delete next[sessionId]
@@ -494,6 +516,7 @@ export async function restoreTrashedSession(sessionId: string): Promise<string> 
   const epoch = accountEpoch
   const summary = await codexApi.restoreFromTrash([sessionId])
   if (epoch !== accountEpoch) return ''
+  sessionSourcesVersion++
   dropTrashRow(sessionId)
   await reloadSessions()
   if (epoch !== accountEpoch) return ''
@@ -810,7 +833,6 @@ async function saveUsageSetting(key: string, value: string): Promise<void> {
   await settingsApi.setSetting(key, value)
   if (epoch !== accountEpoch) return
   const refresh = usageReport.value !== null || usageBusy.value
-  usageSourcesVersion++
   invalidateUsage()
   usageError.value = ''
   if (refresh) void loadUsage()
@@ -860,6 +882,7 @@ export async function setUsageRange(range: UsageRange): Promise<void> {
 
 /** 会话被移走或恢复，官方目录少了一份或多一份文件，图的账随之变；标脏后下次进档重扫 */
 export function invalidateUsage(): void {
+  usageSourcesVersion++
   usageReport.value = null
   usageUpdatedAt.value = null
 }

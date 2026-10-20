@@ -50,6 +50,7 @@ import {
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import AppIcon from '../shared/AppIcon.vue'
+import CreateAction from '../shared/CreateAction.vue'
 import OptionSelect from '../shared/OptionSelect.vue'
 import {
   filterCodexAccounts,
@@ -77,6 +78,13 @@ const confirmStore = useConfirmStore()
 
 /** 同一份官方数据的四档视图：账号（desko 的档案）、会话（官方目录）、回收站（desko 留底）、用量（现扫官方 rollout） */
 const view = ref<'accounts' | 'sessions' | 'usage' | 'trash'>('accounts')
+const locateSessionId = ref('')
+function openUsageSession(sessionId: string) {
+  sessionQuery.value = ''
+  sessionSearchMode.value = 'title'
+  locateSessionId.value = sessionId
+  view.value = 'sessions'
+}
 
 const USAGE_RANGES: Array<{ key: UsageRange; label: string }> = [
   { key: 'today', label: '今天' },
@@ -422,10 +430,7 @@ watchEffect(() => {
             <AppIcon :name="isBatchMode ? 'check' : 'checkall'" :size="13" />
             {{ isBatchMode ? '退出选择' : '选择' }}
           </button>
-          <button class="btn-primary add-btn" type="button" @click="openAddAuth">
-            <AppIcon name="plus" :size="13" />
-            添加账号
-          </button>
+          <CreateAction class="add-btn" label="添加账号" @click="openAddAuth" />
         </template>
 
         <template v-else-if="view === 'sessions'">
@@ -442,7 +447,7 @@ watchEffect(() => {
               <AppIcon name="x" :size="13" />
             </button>
           </div>
-          <button class="btn-secondary bar-btn cx-refresh" type="button" :disabled="sessionsBusy" @click="reloadSessions()">
+          <button class="btn-secondary bar-btn cx-refresh" type="button" title="当前页面每 30 秒自动刷新，点击立即刷新" :disabled="sessionsBusy" @click="reloadSessions()">
             <AppIcon name="refresh" :size="13" />
             刷新
           </button>
@@ -462,7 +467,7 @@ watchEffect(() => {
               {{ option.label }}
             </button>
           </nav>
-          <button class="btn-secondary bar-btn cx-refresh" type="button" :disabled="usageBusy" @click="loadUsage()">
+          <button class="btn-secondary bar-btn cx-refresh" type="button" title="当前页面每 30 秒自动刷新，点击立即统计" :disabled="usageBusy" @click="loadUsage()">
             <AppIcon name="refresh" :size="13" />
             重新统计
           </button>
@@ -476,8 +481,8 @@ watchEffect(() => {
         </template>
       </div>
 
-      <CodexSessionsPanel v-if="view === 'sessions'" />
-      <CodexUsagePanel v-else-if="view === 'usage'" />
+      <CodexSessionsPanel v-if="view === 'sessions'" :locate-session-id="locateSessionId" @located="locateSessionId = ''" />
+      <CodexUsagePanel v-else-if="view === 'usage'" @open-session="openUsageSession" />
       <CodexTrashPanel v-else-if="view === 'trash'" />
 
       <p v-if="view === 'accounts' && switchStep" class="switch-line">

@@ -6,9 +6,10 @@ import { enabledModules } from '../../modules/state'
 import { modulePath } from '../../modules/registry'
 import AppIcon from '../shared/AppIcon.vue'
 
-defineProps<{
+withDefaults(defineProps<{
   collapsed: boolean
-}>()
+  showToggle?: boolean
+}>(), { showToggle: true })
 
 defineEmits<{
   'update:collapsed': [value: boolean]
@@ -33,7 +34,7 @@ const onDragDblclick = (e: MouseEvent) => {
 <template>
   <div class="sidebar" :class="{ collapsed }">
     <!-- 顶部品牌行：全高骨架里侧栏自己承担窗口拖拽 -->
-    <div class="sidebar-top" @mousedown="startDrag" @dblclick="onDragDblclick">
+    <div v-if="showToggle || !collapsed" class="sidebar-top" @mousedown="startDrag" @dblclick="onDragDblclick">
       <span v-if="!collapsed" class="sidebar-name">Desko</span>
       <button class="sidebar-toggle" :title="collapsed ? '展开侧栏' : '收起侧栏'" @click="$emit('update:collapsed', !collapsed)">
         <AppIcon name="panel" :size="collapsed ? 20 : 18" />
@@ -69,9 +70,8 @@ const onDragDblclick = (e: MouseEvent) => {
 <style scoped>
 .sidebar {
   width: var(--sidebar-w);
-  /* Things 式暖灰目录列：体积感靠这一档底色，右界只留发丝线 */
+  /* 暖灰目录列：用底色与留白区分导航和内容。 */
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-navigation);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;

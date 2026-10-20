@@ -1,24 +1,32 @@
 import { onUnmounted, watch } from 'vue'
 
-type EscapeEntry = { when: () => boolean; close: () => void }
+type EscapeEntry = { when: () => boolean; close: () => void; afterTarget: boolean }
 
 /** 可见弹窗的注册表，后开的排在后面。 */
 const stack: EscapeEntry[] = []
 
-const onKeydown = (e: KeyboardEvent) => {
-  if (e.key !== 'Escape') return
+const onKeydown = (e: KeyboardEvent, afterTarget: boolean) => {
+  if (e.key !== 'Escape' || e.isComposing || e.defaultPrevented) return
   for (let i = stack.length - 1; i >= 0; i--) {
     if (!stack[i].when()) continue
-    // 捕获阶段截住：页面级的小记展开/收起不跟弹窗抢同一次按键
+    // 编辑器先处理自己的菜单；底下的目录与页面不能接走同一次 Escape。
+    if (stack[i].afterTarget !== afterTarget) return
     e.stopPropagation()
     stack[i].close()
     return
   }
 }
+const onCapture = (e: KeyboardEvent) => onKeydown(e, false)
+const onBubble = (e: KeyboardEvent) => onKeydown(e, true)
 
 const syncListener = () => {
-  if (stack.length) window.addEventListener('keydown', onKeydown, true)
-  else window.removeEventListener('keydown', onKeydown, true)
+  if (stack.length) {
+    window.addEventListener('keydown', onCapture, true)
+    window.addEventListener('keydown', onBubble)
+  } else {
+    window.removeEventListener('keydown', onCapture, true)
+    window.removeEventListener('keydown', onBubble)
+  }
 }
 
 /**
@@ -27,9 +35,10 @@ const syncListener = () => {
  * @param close 关闭动作
  * @param when 是否可见；组件本身随弹窗挂载时用默认的 () => true，
  *             常驻组件（确认框、页面内弹窗）要传进来，否则注册顺序会按挂载算而不是按打开算
+ * @param options afterTarget 让编辑器优先关闭命令菜单，未消费的 Escape 才关闭外层
  */
-export function useEscapeClose(close: () => void, when: () => boolean = () => true): void {
-  const entry: EscapeEntry = { when, close }
+export function useEscapeClose(close: () => void, when: () => boolean = () => true, options: { afterTarget?: boolean } = {}): void {
+  const entry: EscapeEntry = { when, close, afterTarget: options.afterTarget === true }
   let open = when()
   if (open) {
     stack.push(entry)

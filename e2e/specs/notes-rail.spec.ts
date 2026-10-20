@@ -1,57 +1,48 @@
 import { test, expect } from '@playwright/test'
-import { bootUnlocked, E2E_PASSWORD } from '../helpers'
+import { bootUnlocked, e2e } from '../helpers'
 
-for (const width of [1280, 760]) {
-  test(`小记侧栏 ${width}px：未固定点外部收起，固定后只手动收起`, async ({ page }) => {
+for (const width of [1280, 800]) {
+  test(`小记目录 ${width}px：默认收起，窄窗选择后关闭，宽窗保持展开`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 })
-    await bootUnlocked(page, {}, '/notes')
-    const open = page.locator('.notes-page button[aria-label="展开侧栏"]')
-    const close = page.locator('.notes-page button[aria-label="收起侧栏"]')
-    const outside = page.locator('.notes-page .search-box input')
-    const rail = page.locator('.rail')
-    await open.click()
-    await expect(rail).toBeVisible()
-    await outside.click()
-    await expect(rail).toHaveCount(0)
-
-    await open.click()
-    await page.getByRole('button', { name: '固定侧栏', exact: true }).click()
-    await expect(page.getByRole('button', { name: '取消固定侧栏', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await outside.click()
-    await expect(rail).toBeVisible()
-    await page.locator('.rail .rail-item', { hasText: '收藏' }).click()
-    await expect(rail).toBeVisible()
-    await close.click()
-    await expect(rail).toHaveCount(0)
-
-    await open.click()
-    await outside.click()
-    await expect(rail).toBeVisible()
-    await page.getByRole('button', { name: '取消固定侧栏', exact: true }).click()
-    await outside.click()
-    await expect(rail).toHaveCount(0)
+    await bootUnlocked(page, { notes: [{ title: '待办', content_html: '<p>待办 #工作</p>', pinned: true }] }, '/notes')
+    const panel = page.locator('.workspace-directory')
+    const toggle = page.locator('#workspace-directory-toggle')
+    await expect(panel).toBeHidden()
+    await toggle.click()
+    await expect(panel).toBeVisible()
+    await panel.getByRole('button', { name: /置顶/ }).click()
+    await expect(page.locator('.memo')).toHaveCount(1)
+    if (width < 1100) {
+      await expect(panel).toBeHidden()
+      await toggle.click()
+      await page.locator('.search-box input').click()
+      await expect(panel).toBeHidden()
+    } else {
+      await page.locator('.search-box input').fill('待办')
+      await expect(panel).toBeVisible()
+      await toggle.click()
+      await expect(panel).toBeHidden()
+    }
   })
 }
 
-test('小记侧栏固定状态跨页面与重启保留，窗口变窄仍展开', async ({ page }) => {
+test('固定小记目录独立于收藏目录，跨页面和重启恢复，缩放不改变偏好', async ({ page, context }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await bootUnlocked(page, {}, '/notes')
-  await page.locator('.notes-page button[aria-label="展开侧栏"]').click()
-  await page.getByRole('button', { name: '固定侧栏', exact: true }).click()
+  await page.locator('#workspace-directory-toggle').click()
+  await page.getByRole('button', { name: '固定目录', exact: true }).click()
   await page.locator('a.nav-item[href="/entries"]').click()
-  await expect(page).toHaveURL(/\/entries$/)
+  await expect(page.locator('.workspace-directory')).toBeHidden()
   await page.locator('a.nav-item[href="/notes"]').click()
-  await expect(page.locator('.rail')).toBeVisible()
-  await page.setViewportSize({ width: 760, height: 800 })
-  await expect(page.locator('.rail.overlay')).toBeVisible()
+  await expect(page.locator('.workspace-directory')).toBeVisible()
+  await page.setViewportSize({ width: 800, height: 800 })
+  await expect(page.locator('.directory-docked .workspace-directory')).toBeVisible()
   await page.setViewportSize({ width: 1280, height: 800 })
-  await expect(page.locator('.rail:not(.overlay)')).toBeVisible()
-
-  await page.reload()
-  await page.locator('.unlock-input').fill(E2E_PASSWORD)
-  await page.locator('.unlock-btn').click()
-  await page.locator('.notes-page button[aria-label="展开侧栏"]').click()
-  await expect(page.getByRole('button', { name: '取消固定侧栏', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await page.locator('.notes-page .search-box input').click()
-  await expect(page.locator('.rail')).toBeVisible()
+  await expect(page.locator('.directory-docked .workspace-directory')).toBeVisible()
+  await expect.poll(async () => (await e2e.snapshot(page)).settings.workspace_directory_open).toBe('{"notes":true}')
+  const saved = (await e2e.snapshot(page)).settings
+  const restarted = await context.newPage()
+  await bootUnlocked(restarted, { settings: saved }, '/notes')
+  await expect(restarted.locator('.workspace-directory')).toBeVisible()
+  await restarted.close()
 })

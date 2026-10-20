@@ -20,8 +20,8 @@ const probeLabel = (kind: ProbeJob['kind']) => ({ probe: '正在探测', row: '�
   <section class="bp-probe" aria-label="目标探测">
     <div class="probe-heading">目标探测<span>确认网络状态后，再加入直连清单</span></div>
     <form class="page-bar" @submit.prevent="emit('probe')">
-      <label class="probe-box">
-        <AppIcon name="link" :size="16" />
+      <label class="search-box lg probe-box">
+        <span class="search-icon"><AppIcon name="link" :size="16" /></span>
         <input
           :value="input"
           type="text"
@@ -58,12 +58,7 @@ const probeLabel = (kind: ProbeJob['kind']) => ({ probe: '正在探测', row: '�
 .probe-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-3); font-size: var(--text-base); font-weight: 600; color: var(--text); }
 .probe-heading span { font-size: var(--text-xs); font-weight: 400; color: var(--text-muted); }
 .bp-probe .page-bar { height: auto; min-height: 0; margin: 0; padding: 0; gap: var(--space-2); }
-.probe-box { flex: 1; min-width: 0; height: 36px; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-ib); color: var(--text-muted); transition: box-shadow var(--transition), border-color var(--transition); }
-.probe-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-.probe-box input {
-  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
-  color: var(--text); font-family: inherit; font-size: var(--text-sm); line-height: 1.5;
-}
+.bp-probe .probe-box { flex: 1 1 auto; min-width: 0; margin-right: 0; }
 .bp-probe .btn-primary { height: 36px; flex-shrink: 0; }
 .probe-help { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--text-muted); }
 .bp-probe-progress { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); min-height: 28px; color: var(--text-brand); }

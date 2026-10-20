@@ -696,8 +696,8 @@ watchEffect(() => pageHead.setHead('网络直连', targets.value.length ? `${tar
           <h3>直连可用</h3>
           <span>{{ filter.trim() ? `${okShown.length} / ${okTargets.length}` : `${okTargets.length}` }} 项</span>
           <span class="sec-when" :title="`上次检查 ${clockOf(lastOkCheck)}`">上次检查 {{ clockOf(lastOkCheck) }}</span>
-          <label class="bp-filter">
-            <AppIcon name="search" :size="14" />
+          <label class="search-box flat bp-filter">
+            <span class="search-icon"><AppIcon name="search" :size="14" /></span>
             <input v-model="filter" type="text" spellcheck="false" placeholder="筛选目标" aria-label="按名称筛选清单" />
           </label>
         </div>
@@ -934,28 +934,7 @@ watchEffect(() => pageHead.setHead('网络直连', targets.value.length ? `${tar
 .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
 .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.bp-filter {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 140px;
-  height: 32px;
-  padding: 0 var(--space-3);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: var(--radius-ib);
-  color: var(--text-muted);
-}
-.bp-filter:focus-within { box-shadow: 0 0 0 3px var(--accent-ring); }
-.bp-filter input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--text);
-  font-family: inherit;
-  font-size: var(--text-xs);
-}
+.bp-filter { width: 140px; flex-shrink: 0; }
 
 .bp-nohit { margin: var(--space-2) 2px 0; font-size: var(--text-xs); color: var(--text-muted); }
 

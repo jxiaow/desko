@@ -9,6 +9,7 @@ import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
+import CreateAction from '../shared/CreateAction.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { isWebRuntime } from '../../services/runtime'
 import { writeClipboardText } from '../../utils/clipboard'
@@ -265,10 +266,7 @@ watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.va
 <template>
   <div class="content-inner" @paste="onPaste">
     <div class="page-bar">
-      <button class="btn-primary" @click="openAdd">
-        <AppIcon name="plus" :size="14" />
-        新增
-      </button>
+      <CreateAction label="新增验证码" @click="openAdd" />
     </div>
 
     <div v-if="loading" class="card-grid">
@@ -331,7 +329,7 @@ watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.va
     <div v-else class="empty-state">
       <div class="empty-icon"><AppIcon name="navMfa" :size="24" /></div>
       <div class="empty-title">暂无验证码</div>
-      <div class="empty-desc">点击「新增」，粘贴 otpauth 链接或识别二维码</div>
+      <div class="empty-desc">点击右上角 +，粘贴 otpauth 链接或识别二维码</div>
     </div>
 
     <!-- Add Dialog -->

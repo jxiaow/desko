@@ -52,13 +52,12 @@ test.describe('Files 文件快捷', () => {
     expect(calls).toEqual([{ path: 'C:/e2e/project' }])
   })
 
-  test('窄窗口 + 展开侧边栏时动作列仍在可视区内', async ({ page }) => {
-    // 800x600 是窗口最小尺寸（tauri.conf minWidth/minHeight），侧边栏展开占 190px，
-    // 这是最吃宽度的一档；两个文字列的下限必须是 0，否则动作列被顶出去点不到
+  test('最小窗口下动作列仍可点击，长名称省略', async ({ page }) => {
+    // 正式桌面的最小窗口尺寸，检查长文本不会把动作列顶出内容面。
     await gotoFiles(page)
     await page.setViewportSize({ width: 800, height: 600 })
-    await page.locator('.sidebar-toggle').click()
-    await expect(page.locator('.sidebar')).not.toHaveClass(/collapsed/)
+    await expect(page.locator('.sidebar')).toBeVisible()
+    await expect(page.locator('#workspace-directory-toggle')).toHaveCount(0)
 
     const row = shortcutRow(page, '项目资料')
     await row.hover()

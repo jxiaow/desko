@@ -13,6 +13,7 @@ import NoteLockDialog from './NoteLockDialog.vue'
 import NoteExportController from './NoteExportController.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { htmlToLinkText, htmlToText } from '../../utils/format'
+import { isPageShortcutBlocked } from '../../utils/pageShortcuts'
 import { attachmentSrc, collectAttachmentNames, type SaveImage } from '../../services/attachmentSrc'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import type { IconName } from '../../utils/icons'
@@ -20,6 +21,10 @@ import type { Note } from '../../types'
 import type { NoteView } from '../../stores/notes'
 import { usePageHeadStore } from '../../stores/pageHead'
 import type { NoteExportFormat } from '../../utils/noteExport'
+import { useWorkspaceLayout, workspaceDirectoryTarget, workspaceToolbarTarget, workspaceSurfaceTarget } from '../layout/workspaceLayout'
+import WorkspaceDirectoryToggle from '../layout/WorkspaceDirectoryToggle.vue'
+
+const workspaceLayout = useWorkspaceLayout()
 
 const VIEWS: { key: NoteView; label: string; icon: IconName }[] = [
   { key: 'all', label: '全部', icon: 'all' },
@@ -59,6 +64,7 @@ const cardRefs = ref<InstanceType<typeof NoteCard>[]>([])
 const editingId = ref<string | null>(null)
 const fsTarget = ref<'new' | string | null>(null)
 const fsMode = ref<'edit' | 'view'>('edit')
+let fullscreenReturnFocus: HTMLElement | null = null
 /** 全库小记口令弹窗：mode 决定要输什么，thenLock 是口令到手后要补做的那次加密 */
 const keyDialog = ref<{ mode: 'setup' | 'unlock' | 'change'; thenLock?: string } | null>(null)
 const exportRequest = ref<{ ids: string[]; scopeLabel: string; format?: NoteExportFormat } | null>(null)
@@ -111,8 +117,8 @@ const railFloatingOpen = ref(false)
 
 /** 侧栏真正在流内可见 = 放得下 且 用户没收起 */
 const railOpen = computed(() => railRoom.value && !noteRailCollapsed.value)
-const railOverlay = computed(() => !railRoom.value && railFloatingOpen.value)
-const railVisible = computed(() => railOpen.value || railOverlay.value)
+const railOverlay = computed(() => !workspaceLayout && !railRoom.value && railFloatingOpen.value)
+const railVisible = computed(() => workspaceLayout || railOpen.value || railOverlay.value)
 const closeRail = () => {
   noteRailCollapsed.value = true
   railFloatingOpen.value = false
@@ -125,7 +131,7 @@ const toggleRail = () => {
 /** 收侧栏会抽走一整列宽（--rail-w）：按下去就收，同一次点击的 mousedown/mouseup 会落到不同元素上，
     行尾那颗动作钮（以及它下面的卡头）就成了被吞掉的第一击。改在 click 之后收，钮自己先吃完这次点击 */
 const onRailOutsideClick = (event: MouseEvent) => {
-  if (!railVisible.value || noteRailPinned.value || !(event.target instanceof Node)) return
+  if (workspaceLayout || !railVisible.value || noteRailPinned.value || !(event.target instanceof Node)) return
   if (railEl.value?.contains(event.target) || railToggleEl.value?.contains(event.target)) return
   closeRail()
 }
@@ -184,6 +190,7 @@ const closeCard = async () => {
   editingId.value = null
 }
 const openFullscreen = async (target: 'new' | string, mode: 'edit' | 'view' = 'edit') => {
+  fullscreenReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
   await flushNoteSave()
   if (target !== 'new') loadAttachments(target)
   editingId.value = null
@@ -195,10 +202,11 @@ const closeFullscreen = async () => {
   await flushNoteSave()
   const wasNew = fsTarget.value === 'new'
   fsTarget.value = null
-  if (wasNew) {
-    await nextTick()
-    composerRef.value?.focus()
-  }
+  // 阅读切编辑会重建全屏组件，返回位置由页面保存，等原页重新可见再恢复。
+  await nextTick()
+  if (wasNew) composerRef.value?.focus()
+  else if (fullscreenReturnFocus?.isConnected) fullscreenReturnFocus.focus({ preventScroll: true })
+  fullscreenReturnFocus = null
 }
 /** 放弃只针对尚未发布的内容；已有小记的修改通过编辑器历史回退。 */
 const discardFullscreen = () => {
@@ -311,7 +319,7 @@ const copyNote = (note: Note) =>
   copyRichToClipboard(note.content_html, htmlToLinkText(note.content_html), '小记')
 
 const onKeyDown = (e: KeyboardEvent) => {
-  if (e.defaultPrevented) return
+  if (isPageShortcutBlocked(e)) return
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     if (fsTarget.value) return
     e.preventDefault()
@@ -321,7 +329,7 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (e.key !== 'Escape' || fsTarget.value) return
   if (editingId.value) closeCard()
   else if (isBatchMode.value) exitNoteBatch()
-  else if (railVisible.value && !noteRailPinned.value) closeRail()
+  else if (!workspaceLayout && railVisible.value && !noteRailPinned.value) closeRail()
 }
 
 // 全屏里删掉当前这条之后，书写面要跟着收掉
@@ -333,7 +341,7 @@ let observer: ResizeObserver | null = null
 let unlistenDrag: (() => void) | undefined
 onMounted(() => {
   document.addEventListener('keydown', onKeyDown)
-  document.addEventListener('click', onRailOutsideClick, true)
+  if (!workspaceLayout) document.addEventListener('click', onRailOutsideClick, true)
   if (!isWebRuntime()) {
     // 桌面侧拖进来的文件只有原生层知道路径，与局域网传输吃同一窗口级事件；
     // 落点坐标在这套事件里不可靠，所以只看"当前哪张书写面开着"
@@ -345,7 +353,7 @@ onMounted(() => {
     })
   }
   const root = pageEl.value
-  if (!root) return
+  if (!root || workspaceLayout) return
   const minRoom = parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue('--rail-min-room'))
     || RAIL_FALLBACK_ROOM
@@ -374,6 +382,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
   <div ref="pageEl" class="notes-page" :class="{ 'rail-over': railOverlay }" @dragover="onDomDragOver" @drop="onDomDrop">
     <div class="stream">
       <div class="stream-inner" @keydown="onStreamKeydown">
+        <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout" defer>
         <div class="page-bar">
           <div class="search-box">
             <span class="search-icon"><AppIcon name="search" :size="16" /></span>
@@ -424,6 +433,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
             </button>
           </template>
           <button
+            v-if="!workspaceLayout"
             ref="railToggleEl"
             class="bar-btn"
             :class="{ active: railVisible }"
@@ -434,7 +444,9 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
           >
             <AppIcon name="panel" :size="16" />
           </button>
+          <WorkspaceDirectoryToggle v-if="workspaceLayout" />
         </div>
+        </Teleport>
 
         <div v-if="isArchivedView" class="archive-bar">
           <span class="ab-lead"><b>归档中 {{ viewCounts.archived }} 条</b> · 不再出现在「全部」与搜索里</span>
@@ -530,10 +542,11 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       </div>
     </div>
 
-    <aside v-if="railVisible" ref="railEl" class="rail" :class="{ overlay: railOverlay }">
-      <div class="rail-title rail-heading">
+    <Teleport :to="workspaceDirectoryTarget" :disabled="!workspaceLayout" defer>
+    <aside v-if="railVisible" ref="railEl" class="rail" :class="{ overlay: railOverlay, 'directory-notes': workspaceLayout }">
+      <div v-if="!workspaceLayout" class="rail-title rail-heading">
         <span>视图</span>
-        <div class="rail-heading-actions">
+        <div v-if="!workspaceLayout" class="rail-heading-actions">
           <button class="ib" :class="{ on: noteRailPinned }" type="button" :title="noteRailPinned ? '取消固定侧栏' : '固定侧栏'" :aria-label="noteRailPinned ? '取消固定侧栏' : '固定侧栏'" :aria-pressed="noteRailPinned" @click="noteRailPinned = !noteRailPinned">
             <AppIcon :name="noteRailPinned ? 'unpin' : 'pin'" :size="16" />
           </button>
@@ -544,8 +557,9 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
         v-for="v in VIEWS"
         :key="v.key"
         class="rail-item"
-        :class="{ active: noteView === v.key }"
+        :class="{ active: noteView === v.key, 'directory-link': workspaceLayout }"
         type="button"
+        :aria-pressed="noteView === v.key"
         @click="selectView(v.key)"
       >
         <AppIcon :name="v.icon" :size="16" />
@@ -553,14 +567,15 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
         <span class="tab-count">{{ viewCounts[v.key] }}</span>
       </button>
 
-      <div class="rail-sep"></div>
-      <div class="rail-title">标签 · {{ tagCounts.length }}</div>
+      <div v-if="!workspaceLayout" class="rail-sep"></div>
+      <div class="rail-title" :class="{ 'directory-section-heading': workspaceLayout }"><span>标签</span><span v-if="workspaceLayout" class="directory-count">{{ tagCounts.length }}</span><template v-else> · {{ tagCounts.length }}</template></div>
       <button
         v-for="[tag, count] in tagCounts"
         :key="tag"
         class="rail-item"
-        :class="{ active: activeTags.has(tag) }"
+        :class="{ active: activeTags.has(tag), 'directory-link': workspaceLayout }"
         type="button"
+        :aria-pressed="activeTags.has(tag)"
         @click="toggleTagFilter(tag)"
       >
         <span class="nm">#{{ tag }}</span>
@@ -569,8 +584,8 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       <div v-if="!tagCounts.length" class="rail-empty">还没有标签</div>
 
       <template v-if="hasActiveFilters">
-        <div class="rail-sep"></div>
-        <button class="rail-item danger" type="button" @click="clearFilters">
+        <div v-if="!workspaceLayout" class="rail-sep"></div>
+        <button class="rail-item danger" :class="{ 'directory-link directory-reset': workspaceLayout }" type="button" @click="clearFilters">
           <AppIcon name="x" :size="16" />
           <span class="nm">清空筛选</span>
         </button>
@@ -578,6 +593,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
 
       <div class="rail-foot">{{ railSummary }}</div>
     </aside>
+    </Teleport>
 
     <div v-if="hasNoteSelection && !fsTarget" class="batch-dock">
       <span class="dock-count">已选 {{ selectedNoteIds.size }} 条</span>
@@ -621,6 +637,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       </button>
     </div>
 
+    <Teleport :to="workspaceSurfaceTarget" :disabled="!workspaceLayout" defer>
     <NoteFullscreen
       v-if="fsTarget"
       :key="`${fsTarget}:${fsMode}`"
@@ -648,6 +665,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       @delete="fsNote && doDeleteNote(fsNote)"
       @remove-attachment="fsNote && deleteAttachment(fsNote.id, $event)"
     />
+    </Teleport>
 
     <NoteExportController v-if="exportRequest" :ids="exportRequest.ids" :format="exportRequest.format" :scope-label="exportRequest.scopeLabel" @close="exportRequest = null" />
 

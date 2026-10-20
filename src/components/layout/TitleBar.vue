@@ -5,6 +5,8 @@ import { isWebRuntime } from '../../services/runtime'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { releaseHover, suppressHover } from '../../utils/hoverGuard'
 import AppIcon from '../shared/AppIcon.vue'
+import BrandLogo from '../shared/BrandLogo.vue'
+import PopoverMenu from '../shared/PopoverMenu.vue'
 import BackupBadge from './BackupBadge.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { webAccessApi, type WebAccessStatus } from '../../services/api/webAccess'
@@ -13,6 +15,7 @@ defineProps<{
   isLocked?: boolean
   /** 侧栏收到 0 宽时，恢复入口挪到这里 */
   sidebarHidden?: boolean
+  outer?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -25,6 +28,12 @@ const emit = defineEmits<{
 const webRuntime = isWebRuntime()
 const appWindow = webRuntime ? null : getCurrentWindow()
 const isMaximized = ref(false)
+const appMenuOpen = ref(false)
+const appMenuAnchor = ref<HTMLButtonElement | null>(null)
+function openAppPane(tab: 'profiles' | 'about') {
+  appMenuOpen.value = false
+  window.dispatchEvent(new CustomEvent('desko:open-settings-tab', { detail: tab }))
+}
 const webStatus = ref<WebAccessStatus | null>(null)
 const webStatusTitle = computed(() => `Web 运行中 · ${webStatus.value?.lan ? '本机与局域网' : '仅本机'} · ${webStatus.value?.port}`)
 let statusGeneration = 0
@@ -115,8 +124,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="titlebar" :class="{ 'titlebar-locked': isLocked }">
+  <div class="titlebar" :class="{ 'titlebar-locked': isLocked, 'titlebar-outer': outer }">
     <div class="titlebar-drag" @mousedown="startDrag" @dblclick="toggleMaximize"></div>
+
+    <button v-if="outer && !isLocked" ref="appMenuAnchor" class="titlebar-app" type="button" aria-label="Desko 菜单" title="Desko" aria-haspopup="menu" :aria-expanded="appMenuOpen" @click="appMenuOpen = !appMenuOpen" @dblclick.stop><BrandLogo /></button>
+    <PopoverMenu v-if="appMenuOpen" :anchor="appMenuAnchor" align="start" :width="176" @close="appMenuOpen = false">
+      <div class="app-menu-title">Desko</div>
+      <button class="pop-item" type="button" role="menuitem" @click="openAppPane('profiles')"><AppIcon name="user" :size="15" />档案管理</button>
+      <button class="pop-item" type="button" role="menuitem" @click="openAppPane('about')"><AppIcon name="info" :size="15" />关于 Desko</button>
+    </PopoverMenu>
 
     <div v-if="!isLocked" class="titlebar-left" @mousedown="startDrag" @dblclick="toggleMaximize">
       <button
@@ -155,7 +171,6 @@ onUnmounted(() => {
         <button  class="titlebar-btn tb-util" @click="emit('lock')" :title="webRuntime ? '退出浏览器访问' : '锁定'">
           <AppIcon name="lock" :size="16" />
         </button>
-        <div v-if="!webRuntime" class="titlebar-divider"></div>
       </template>
       <button v-if="!webRuntime" class="titlebar-btn" @click="minimize" title="最小化">
         <svg width="12" height="12" viewBox="0 0 12 12">
@@ -182,14 +197,19 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.titlebar-outer .titlebar-left { padding-left: 59px; }
+.titlebar-app { position: absolute; left: 12px; top: 5px; z-index: 2; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.titlebar-app:hover, .titlebar-app[aria-expanded="true"] { background: var(--hover-chrome); }
+.app-menu-title { padding: 8px 12px 6px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.titlebar-outer .titlebar-btn:not(.tb-util) { width: 44px; height: 100%; border-radius: 0; }
+.titlebar-outer .titlebar-buttons { padding-right: 0; }
 .web-running { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; margin-right: 4px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--success); background: var(--success-soft); font: inherit; font-size: 11px; cursor: pointer; }
 .web-running:disabled { cursor: default; }
 .web-running-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .titlebar {
   height: 42px;
-  /* 停靠态：透明并入画布，但留一条发丝下界把顶栏与页面身份行分开 */
+  /* 顶栏透明并入画布，页名与窗口操作用留白分组。 */
   background: transparent;
-  border-bottom: 1px solid var(--border-navigation);
   display: flex;
   align-items: center;
   position: relative;
@@ -298,9 +318,6 @@ onUnmounted(() => {
   height: 28px;
 }
 
-/* 侧栏收进 0 宽后唯一的恢复入口：与右端设置/锁定同档 */
-.sidebar-restore { margin-right: var(--space-1); }
-
 .titlebar-btn:hover {
   background: var(--hover-chrome);
   color: var(--text);
@@ -311,12 +328,5 @@ onUnmounted(() => {
   color: var(--danger-on);
 }
 
-.titlebar-divider {
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-  margin: 0 4px;
-  align-self: center;
-}
 .web-modules-toggle { display: none; }
 </style>

@@ -82,12 +82,12 @@ test.describe('Settings 设置', () => {
     // 三级动作的最高档：能按时是品牌实底；按不动时洗成 --fill、字色不跟着淡掉
     // （禁用态整颗 opacity .45 曾把标签压到 2.19:1，读不出这颗是干什么的）
     const backup = pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn.primary')
-    await expect(backup).toHaveCSS('background-color', 'rgb(239, 237, 233)')
+    await expect(backup).toHaveCSS('background-color', 'rgb(238, 238, 237)')
     await expect(backup).toHaveCSS('color', 'rgb(83, 81, 77)')
     await expect(backup).toHaveCSS('opacity', '1')
     // 补齐备份密码 → schedulable，这一档才现出品牌底
     await setBackupPwd(page, pane)
-    await expect(backup).toHaveCSS('background-color', 'rgb(40, 86, 199)')
+    await expect(backup).toHaveCSS('background-color', 'rgb(83, 109, 133)')
     await expect(backup).toHaveCSS('color', 'rgb(255, 255, 255)')
   })
 

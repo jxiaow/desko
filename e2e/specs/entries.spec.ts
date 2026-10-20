@@ -67,16 +67,10 @@ test.describe('Entries 网址收藏', () => {
     await expect(page.locator('.entry-card')).toHaveCount(3)
   })
 
-  test('按分类 tab 过滤：常驻钮直点，收进「更多」的走下拉', async ({ page }) => {
+  test('展开收藏目录后按分类筛选并返回全部', async ({ page }) => {
     await bootEntries(page, SEED)
-    // 分类聚合顺序不保证等于 seed 声明顺序：可见就直点，否则开「更多」面板点
-    const tab = page.locator('.tabs .tab:not(.tab-more)', { hasText: '邮箱' })
-    if (await tab.count()) {
-      await tab.click()
-    } else {
-      await page.locator('.tab-more').click()
-      await page.locator('.popover .pop-item', { hasText: '邮箱' }).click()
-    }
+    await page.getByRole('button', { name: '展开目录', exact: true }).click()
+    await page.locator('.workspace-directory .tab', { hasText: '邮箱' }).click()
     await expect(page.locator('.entry-card')).toHaveCount(1)
     await expect(entryCard(page, 'Gmail')).toBeVisible()
     await page.locator('.tabs .tab', { hasText: '全部' }).click()
@@ -319,8 +313,8 @@ test.describe('Entries 网址收藏', () => {
     // 顶沿：标题栏 42 + 10；横向：侧栏以右那一片的正中
     const box = await toast.boundingBox()
     expect(box.y).toBe(52)
-    const side = 57 // 图标轨 56 + 发丝线 1
-    expect(Math.abs(box.x + box.width / 2 - (side + (1040 - side) / 2))).toBeLessThanOrEqual(1)
+    const main = (await page.locator('.workspace-body > .main-content').boundingBox())!
+    expect(Math.abs(box.x + box.width / 2 - (main.x + main.width / 2))).toBeLessThanOrEqual(1)
 
     const style = await toast.evaluate((el) => {
       const cs = getComputedStyle(el)
@@ -397,15 +391,14 @@ test.describe('Entries 网址收藏', () => {
       })),
     })
     await expect(page.locator('.entry-card')).toHaveCount(40)
-    const gap = () =>
-      page.evaluate(() => {
-        const bar = document.querySelector('.page-bar') as HTMLElement
-        const scroller = bar.closest('.content-inner') as HTMLElement
-        scroller.scrollTop = 240
-        return new Promise<number>((res) =>
-          setTimeout(() => res(Math.round(bar.getBoundingClientRect().top - scroller.getBoundingClientRect().top)), 150),
-        )
-      })
-    expect(await gap()).toBe(0)
+    const bar = page.locator('#workspace-page-toolbar')
+    const before = await bar.boundingBox()
+    await page.locator('.content-inner').evaluate(el => el.scrollTo({ top: 400, behavior: 'instant' }))
+    await expect.poll(() => page.locator('.content-inner').evaluate(el => el.scrollTop)).toBeGreaterThan(0)
+    expect(await bar.boundingBox()).toEqual(before)
+    const content = (await page.locator('.content-inner').boundingBox())!
+    expect(content.y).toBe(before!.y + before!.height)
+    await page.locator('.search-box input').fill('条目 12')
+    await expect(page.locator('.entry-card')).toHaveCount(1)
   })
 })

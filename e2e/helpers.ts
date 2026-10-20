@@ -44,6 +44,8 @@ export async function bootUnlocked(
   const auth = new AuthPage(page)
   await auth.unlock(E2E_PASSWORD)
   await auth.expectUnlocked()
+  const webRuntime = await page.locator('meta[name="desko-runtime"][content="web"]').count() > 0
+  await expect(page.locator('html')).toHaveAttribute('data-layout', webRuntime ? 'classic' : 'workspace')
   await expect
     .poll(() => e2e.hasListener(page, 'tray-lock'), { timeout: 30_000 })
     .toBe(true)

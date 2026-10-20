@@ -6,7 +6,7 @@ import ProfilesPane from './ProfilesPane.vue'
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { settingsApi } from '../../services/api/settings'
-import { THEMES, ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
+import { THEMES, ACCENTS, WORKSPACE_THEMES, WORKSPACE_ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
 import type { ThemeId, AccentId } from '../../services/theme'
 import { moduleFlags, loadModuleFlags } from '../../modules/state'
 import { MODULES, moduleById, type ModuleId, type SettingsTabId } from '../../modules/registry'
@@ -36,7 +36,9 @@ const FIXED_TAB_LABELS = {
   about: '关于',
 } as const
 
-const props = defineProps<{ initialTab?: SettingsTabId }>()
+const props = defineProps<{ initialTab?: SettingsTabId; workspaceLayout?: boolean }>()
+const themes = computed(() => props.workspaceLayout ? WORKSPACE_THEMES : THEMES)
+const accents = computed(() => props.workspaceLayout ? WORKSPACE_ACCENTS : ACCENTS)
 
 const isValidTab = (id?: SettingsTabId): id is SettingsTabId => {
   if (!id) return false
@@ -283,7 +285,7 @@ onMounted(() => {
             <div class="settings-section-label">底色</div>
             <div class="theme-row">
               <button
-                v-for="t in THEMES"
+                v-for="t in themes"
                 :key="t.id"
                 class="theme-chip"
                 :class="{ on: appearance.theme === t.id }"
@@ -292,6 +294,7 @@ onMounted(() => {
               >
                 <span
                   class="theme-prev theme-scope"
+                  :class="{ 'workspace-theme-prev': workspaceLayout }"
                   :data-theme="t.id"
                   :data-base="polarityOf(t.id)"
                   :data-accent="appearance.accent"
@@ -316,6 +319,7 @@ onMounted(() => {
                       <span class="tp-row-tag" />
                     </span>
                   </span>
+                  <span v-if="workspaceLayout" class="tp-workspace-context" />
                 </span>
                 <span class="theme-chip-name">{{ t.name }}</span>
               </button>
@@ -323,7 +327,7 @@ onMounted(() => {
             <div class="settings-section-label">强调色</div>
             <div class="accent-row" role="radiogroup" aria-label="强调色">
               <button
-                v-for="a in ACCENTS"
+                v-for="a in accents"
                 :key="a.id"
                 class="accent-pill"
                 :class="{ on: appearance.accent === a.id }"
@@ -342,7 +346,7 @@ onMounted(() => {
               <div class="setting-item">
                 <div class="setting-info">
                   <span class="setting-name">背景氛围</span>
-                  <span id="background-atmosphere-desc" class="setting-desc">在任意底色上叠加随强调色变化的柔光</span>
+                  <span id="background-atmosphere-desc" class="setting-desc">{{ workspaceLayout ? '为外框、内容留白和辅助面板增加柔和光照' : '在任意底色上叠加随强调色变化的柔光' }}</span>
                 </div>
                 <label class="switch">
                   <input
@@ -750,6 +754,14 @@ onMounted(() => {
   border-radius: var(--radius-pill);
 }
 .tp-row:nth-child(2) { background: var(--bg-surface-hover); }
+.workspace-theme-prev { background: var(--bg-workspace-frame); }
+.workspace-theme-prev .tp-rail { width: 12%; background: transparent; border: 0; }
+.workspace-theme-prev .tp-rail-dot { left: 3px; top: 12px; width: 4px; height: 5px; }
+.workspace-theme-prev .tp-rail-line { left: 3px; top: 26px; width: 4px; }
+.workspace-theme-prev .tp-rail-line.short { top: 37px; width: 4px; }
+.workspace-theme-prev .tp-rows { left: 14%; right: 3px; top: 8px; bottom: 3px; padding: 5px 28% 5px 5px; gap: 4px; justify-content: center; border-radius: 5px; background: var(--bg-workspace); }
+.workspace-theme-prev .tp-row { height: 11px; flex-shrink: 0; padding: 0 3px; }
+.tp-workspace-context { position: absolute; top: 16px; right: 3px; bottom: 3px; width: 20%; border-left: 1px solid var(--border); border-radius: 0 0 5px 0; background: var(--bg-inspector); }
 .theme-chip-name { font-size: var(--text-sm); font-weight: 600; color: var(--text); line-height: 1.3; }
 
 /* 关于面板只有三行内容，居中排成一块，比顶格加一屏空白更像介绍页。 */

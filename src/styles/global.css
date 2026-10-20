@@ -1753,14 +1753,13 @@ body {
    原先这里另有一组按分类取纯色的 .card-avatar.c0..c5（36px 彩底白字），
    详情弹窗用它、列表卡用 .grid-slot，同一条目的两张脸对不上，且彩底白字对比只有 3.5:1。 */
 
-/* 搜索框：与行卡同一套扁平语言（白底 + 发丝描边，阴影只留贴地一丝），
-   圆角与行卡同档，跟 34px 控件尺寸成比例 */
+/* 搜索框默认保留清晰描边，聚焦时转为强调色；圆角与行卡同档。 */
 .search-box {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   background: var(--bg-surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-search);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
   padding: 0 var(--space-3);
@@ -1769,7 +1768,7 @@ body {
 }
 .search-box:focus-within {
   border-color: var(--accent);
-  box-shadow: var(--shadow-card), 0 0 0 1px var(--accent-ring);
+  box-shadow: 0 0 0 1px var(--accent-ring);
 }
 .search-box input {
   flex: 1;
@@ -1918,7 +1917,8 @@ body {
 .action-btn,
 .select,
 .select-input,
-.number-input {
+.number-input,
+.text-input {
   height: 28px;
   font-family: inherit;
   font-size: var(--text-xs);
@@ -1942,6 +1942,7 @@ body {
 .select,
 .select-input { padding: 0 10px; color: var(--text); cursor: pointer; flex-shrink: 0; }
 .number-input { width: 56px; padding: 0 8px; text-align: right; color: var(--text); }
+.text-input { min-width: 0; padding: 0 10px; color: var(--text); }
 
 .action-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .select:hover:not(:disabled),
@@ -2196,18 +2197,27 @@ body {
   align-items: center;
   gap: var(--space-2);
 }
-/* 搜索框的工具条档：32px、无描边、12px 字，底色交给 --bg-canvas-input。页栏内默认吃这一档；
+/* 搜索框的工具条档：32px、12px 字，底色交给 --bg-canvas-input，描边沿用基础样式。页栏内默认吃这一档；
    栏外的第二行工具条（如 Codex 账号筛选行）给元素加 .flat 认领同一档，
    不要再抄一遍令牌——基础 .search-box 那棵是弹窗/表单里的 36px 白底描边档。 */
 .page-bar .search-box,
 .search-box.flat {
   height: 32px;
   background: var(--bg-canvas-input);
-  border: 0;
   border-radius: 9px;
 }
 .page-bar .search-box input,
 .search-box.flat input { font-size: var(--text-xs); }
+/* 主输入档：与主按钮同排的探测框显式认领基础 36px 白底描边档，
+   不因落在 .page-bar 里被压成 32px 工具条档。 */
+.search-box.lg,
+.page-bar .search-box.lg {
+  height: 36px;
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+}
+.search-box.lg input,
+.page-bar .search-box.lg input { font-size: var(--text-sm); }
 /* 窄窗先让搜索让位，动作键不许被挤走。 */
 .page-bar .search-box {
   flex: 0 1 220px;
@@ -2942,7 +2952,8 @@ input[type="datetime-local"]:focus-visible {
 /* 文本类控件鼠标点进去也要有回执，跟 .form-group 字段同一套 :focus 配方 */
 .select:focus,
 .select-input:focus,
-.number-input:focus {
+.number-input:focus,
+.text-input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-ring);
@@ -2952,12 +2963,9 @@ input[type="datetime-local"]:focus-visible {
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 /* 环画在容器上，容器里的输入件本体不再叠第二圈。
-   直连页的 .probe-box 是 .search-box 的同配方变体（环在 label 上），走同一条豁免。
    书写区两条同理：列表页的环归 .composer:focus-within（描边+环一体），全屏页整块纸面就是唯一
    书写件、光标本身即焦点回执，套 3px accent 环等于给正文框一道"输入框边"，压回 none。 */
-.search-box input:focus-visible,
-.probe-box input:focus-visible,
-.bp-filter input:focus-visible { box-shadow: none; }
+.search-box input:focus-visible { box-shadow: none; }
 .ProseMirror:focus-visible { box-shadow: none; }
 
 /* ---------- 弹簧微反馈：只给 transform 换弹性曲线 ----------

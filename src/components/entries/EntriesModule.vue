@@ -3,15 +3,20 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } f
 import type { Entry, Tab } from '../../types'
 import { splitUrlHostPath } from '../../utils/format'
 import { avatarLetter } from '../../utils/avatar'
+import { isPageShortcutBlocked } from '../../utils/pageShortcuts'
 import { faviconSrcFor } from '../../services/favicon'
 import { useGridKeys } from '../../composables/useGridKeys'
 import AppIcon from '../shared/AppIcon.vue'
+import CreateAction from '../shared/CreateAction.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import EntryActionMenu from './EntryActionMenu.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { isWebRuntime } from '../../services/runtime'
+import { useWorkspaceLayout, workspaceDirectoryTarget, workspaceToolbarTarget } from '../layout/workspaceLayout'
+import WorkspaceDirectoryToggle from '../layout/WorkspaceDirectoryToggle.vue'
 
 const webRuntime = isWebRuntime()
+const workspaceLayout = useWorkspaceLayout()
 
 const props = defineProps<{
   searchKeyword: string
@@ -55,6 +60,7 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 const kbdHint = computed(() => (isMac ? '⌘K' : 'Ctrl K'))
 
 const onGlobalKey = (e: KeyboardEvent) => {
+  if (isPageShortcutBlocked(e)) return
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
     searchRef.value?.focus()
@@ -82,8 +88,8 @@ const slotClass = (item: Entry) => (favOf(item) ? 'grid-slot--icon' : hasCat(ite
 const slotStyle = (item: Entry) => (!favOf(item) && hasCat(item) ? { '--gc-hue': hueOf(item.category) } : undefined)
 
 /* ── 分类标签：全部 + 前 2 枚高频常驻，其余收进「更多」下拉（面板内可搜索） ── */
-const visibleTabs = computed(() => props.tabs.slice(0, 3))
-const hiddenTabs = computed(() => props.tabs.slice(3))
+const visibleTabs = computed(() => workspaceLayout ? props.tabs : props.tabs.slice(0, 3))
+const hiddenTabs = computed(() => workspaceLayout ? [] : props.tabs.slice(3))
 /** 选中的分类藏在「更多」里时，触发器要顶出激活态 */
 const activeHiddenTab = computed(() =>
   hiddenTabs.value.find(t => t.id === props.activeTab) ?? null)
@@ -189,6 +195,7 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
 <template>
   <div class="content-inner" :class="{ 'web-runtime': webRuntime }">
     <!-- 身份行 + 工具栏：搜索、分类、计数和两个动作；分类超出宽度改为横向滚动 -->
+    <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout" defer>
     <div class="page-bar">
       <div class="search-box">
         <span class="search-icon">
@@ -200,18 +207,22 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
           <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <nav ref="tabsRef" class="tabs">
+      <Teleport :to="workspaceDirectoryTarget" :disabled="!workspaceLayout" defer>
+      <nav ref="tabsRef" class="tabs" :class="{ 'directory-list': workspaceLayout }" aria-label="收藏分类">
         <span class="tab-thumb" :style="thumbStyle" aria-hidden="true"></span>
-        <div
+        <button
           v-for="t in visibleTabs"
           :key="t.id"
           class="tab"
-          :class="{ active: activeTab === t.id }"
+          :class="{ active: activeTab === t.id, 'directory-link': workspaceLayout }"
+          type="button"
+          :aria-pressed="activeTab === t.id"
           @click="pickTab(t.id)"
         >
-          {{ t.name }}
+          <AppIcon v-if="workspaceLayout" :name="t.id === 'all' ? 'all' : 'tag'" :size="14" />
+          <span class="directory-label">{{ t.name }}</span>
           <span class="tab-count">{{ t.count }}</span>
-        </div>
+        </button>
         <button
           v-if="hiddenTabs.length"
           class="tab tab-more"
@@ -220,9 +231,10 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
           @click="toggleMore($event.currentTarget as HTMLElement)"
         >{{ activeHiddenTab ? activeHiddenTab.name : '更多' }} ({{ hiddenTabs.length }}) ▾</button>
       </nav>
+      </Teleport>
       <PopoverMenu v-if="moreOpen && moreAnchor" :anchor="moreAnchor" align="start" @close="moreOpen = false">
         <div class="tab-pop">
-          <div class="tab-pop-search">
+          <div class="search-box tab-pop-search">
             <AppIcon name="search" :size="13" />
             <input v-model="tabQuery" placeholder="搜索分类…" />
           </div>
@@ -252,11 +264,10 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
       >
         <AppIcon name="checkall" :size="16" />
       </button>
-      <button class="btn-primary" @click="emit('openAdd')">
-        <AppIcon name="plus" :size="14" />
-        新增条目
-      </button>
+      <CreateAction label="新增条目" @click="emit('openAdd')" />
+      <WorkspaceDirectoryToggle v-if="workspaceLayout" />
     </div>
+    </Teleport>
 
     <div v-if="loading" class="card-grid">
       <div class="skeleton-card" v-for="n in 6" :key="n">
@@ -363,7 +374,7 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navEntries'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无条目' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」添加' }}</div>
+      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击右上角 + 添加条目' }}</div>
       <div v-if="!searchKeyword" class="empty-motto" aria-hidden="true">
         <span class="d"></span><span class="w">收一处 · 启一窗</span><span class="d mid"></span><span class="w">开一页</span><span class="d"></span>
       </div>
@@ -415,7 +426,7 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
   padding: 2px 0;
 }
 .tabs::-webkit-scrollbar { display: none; }
-.tabs .tab { position: relative; z-index: 1; height: 30px; display: inline-flex; align-items: center; padding: 0 10px; font-size: var(--text-xs); color: var(--text-muted); border-radius: var(--radius-tag); }
+.tabs .tab { position: relative; z-index: 1; height: 30px; display: inline-flex; align-items: center; padding: 0 10px; font-family: inherit; font-size: var(--text-xs); color: var(--text-muted); border-radius: var(--radius-tag); }
 /* 滑块：减重轮起胶囊底，改 2px accent 下划线，切换时仍沿弹簧曲线滑到位 */
 .tab-thumb {
   position: absolute;
@@ -443,7 +454,6 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
   padding: 0 8px;
   color: var(--text-muted);
   background: var(--bg-mono-chip);
-  border: 1px solid var(--border-input);
   border-radius: var(--radius-tag);
 }
 .tab-pop-search input {

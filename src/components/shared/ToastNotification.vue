@@ -20,13 +20,13 @@ defineProps<{
 <style scoped>
 /* 内容区顶沿居中的反色胶囊（2026-10-12 搬家轮，见 docs/design/toast/）：
    右下角在余光区、800ms 根本捕不到；顶沿居中落在动作后的视线停留区。
-   居中参考系是「侧栏以右」：--toast-side 由 App.vue 按侧栏三态喂宽度，
+   居中参考系是正文区域：App.vue 用 --toast-side / --toast-right 扣除两侧面板，
    左上角是模块名、右上是六颗钮，都不相干。top = 标题栏 42 + 10。
    反色面由主题给：--toast-bg 纸底是暗胶囊、墨底翻成亮胶囊，字色走 --toast-* 三档。 */
 .toast {
   position: fixed;
   top: 52px;
-  left: calc(var(--toast-side, 56px) + (100vw - var(--toast-side, 56px)) / 2);
+  left: calc(var(--toast-side, 56px) + (100vw - var(--toast-side, 56px) - var(--toast-right, 0px)) / 2);
   transform: translateX(-50%);
   padding: 6px 14px;
   border-radius: var(--radius-pill);

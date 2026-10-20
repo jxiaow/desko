@@ -17,6 +17,39 @@ const mountDialog = (close: () => void, visible?: Ref<boolean>) =>
   )
 
 describe('useEscapeClose', () => {
+  it('组合输入中的 Escape 留给输入法，不关闭弹窗', () => {
+    const close = vi.fn()
+    const wrapper = mountDialog(close)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true }))
+    expect(close).not.toHaveBeenCalled()
+    esc()
+    expect(close).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('书写面先让编辑器处理 Escape，命令菜单处理后不关闭书写面或下层目录', () => {
+    const under = vi.fn(), over = vi.fn()
+    const a = mountDialog(under)
+    const b = mount(defineComponent({
+      setup() {
+        useEscapeClose(over, undefined, { afterTarget: true })
+        return () => h('input')
+      },
+    }), { attachTo: document.body })
+    const input = b.element
+    input.addEventListener('keydown', (e: Event) => e.preventDefault(), { once: true })
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    expect(over).not.toHaveBeenCalled()
+    expect(under).not.toHaveBeenCalled()
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    expect(over).toHaveBeenCalledTimes(1)
+    expect(under).not.toHaveBeenCalled()
+    b.unmount()
+    esc()
+    expect(under).toHaveBeenCalledTimes(1)
+    a.unmount()
+  })
+
   it('Esc 触发关闭', () => {
     const close = vi.fn()
     const wrapper = mountDialog(close)

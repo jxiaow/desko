@@ -342,6 +342,55 @@ describe('codexState 会话档', () => {
     vi.clearAllMocks()
   })
 
+  it('后台刷新保留旧读数直到新统计到手，目录暂不可读也不清空现有会话', async () => {
+    const s = await loadState()
+    s.sessions.value = [sessionRec('a')]
+    s.sessionsLoaded.value = true
+    s.sessionTokens.value = { a: { sessionId: 'a', totalTokens: 11 } as any }
+    let finish!: (result: any) => void
+    mockInvoke.mockImplementation(cmd => cmd === LIST_CMD ? Promise.resolve([sessionRec('a')]) : new Promise(resolve => { finish = resolve }))
+    await s.loadSessions({ background: true })
+    expect(s.sessionTokens.value.a.totalTokens).toBe(11)
+    finish([{ sessionId: 'a', totalTokens: 22 }])
+    await vi.waitFor(() => expect(s.sessionTokens.value.a.totalTokens).toBe(22))
+    mockInvoke.mockRejectedValue('目录暂不可读')
+    await s.loadSessions({ background: true })
+    expect(s.sessions.value.map(item => item.sessionId)).toEqual(['a'])
+    expect(s.sessionsLoaded.value).toBe(true)
+    expect(s.sessionsError.value).toBe('目录暂不可读')
+    expect(s.sessionTokens.value.a.totalTokens).toBe(22)
+  })
+
+  it('刷新前发出的旧统计请求不能覆盖新一轮数字', async () => {
+    const s = await loadState()
+    let finishOld!: (result: any) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const old = s.loadSessionTokens(['a'])
+    mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [sessionRec('a')] : [{ sessionId: 'a', totalTokens: 22 }])
+    await s.loadSessions({ background: true })
+    await Promise.resolve()
+    finishOld([{ sessionId: 'a', totalTokens: 11 }])
+    await old
+    expect(s.sessionTokens.value.a.totalTokens).toBe(22)
+  })
+
+  it('后台扫描期间删除会话，迟到的列表不能重新显示已删除会话', async () => {
+    const s = await loadState()
+    s.sessions.value = [sessionRec('a')]
+    s.sessionsLoaded.value = true
+    let finishOld!: (result: any) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const old = s.loadSessions({ background: true })
+    mockInvoke.mockResolvedValueOnce({ message: '已删除' })
+    await s.moveSessionToTrash('a')
+    expect(s.sessions.value).toEqual([])
+    mockInvoke.mockResolvedValue([])
+    finishOld([sessionRec('a')])
+    await old
+    expect(s.sessions.value).toEqual([])
+    expect(callsOf(LIST_CMD)).toHaveLength(2)
+  })
+
   it('读不到目录：清空列表、留错误、标记没扫过；重试成功即复位', async () => {
     const s = await loadState()
     mockInvoke.mockRejectedValueOnce('官方会话目录不可读')
@@ -632,6 +681,7 @@ const usageReportFixture = (totalTokens = 1000) => ({
   ],
   byHour: [],
   byModel: [],
+  modelSessions: {},
   fromTimestamp: null,
   toTimestamp: null,
   scanMillis: 1681,
@@ -641,6 +691,22 @@ describe('codexState 用量档', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+  })
+
+  it('用量扫描期间删除会话，旧报告作废并补扫最新目录', async () => {
+    const s = await loadState()
+    let finish!: (result: any) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const old = s.loadUsage()
+    mockInvoke.mockResolvedValueOnce({ message: '已删除' })
+    await s.moveSessionToTrash('a')
+    const latest = usageReportFixture()
+    latest.totals.totalTokens = 0
+    mockInvoke.mockResolvedValue(latest)
+    finish(usageReportFixture())
+    await old
+    expect(s.usageReport.value!.totals.totalTokens).toBe(0)
+    expect(callsOf('codex_query_session_usage')).toHaveLength(2)
   })
 
   const localMidnightSec = () => {

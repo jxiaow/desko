@@ -18,15 +18,15 @@ test.describe('背景材质', () => {
     const sidebar = (await background('.sidebar')).color
     expect(sidebar).toMatch(/rgba|\/\s*0\./)
     expect((await background('.settings-dialog')).image).toContain('radial-gradient')
-    expect((await background('.settings-nav')).color).toBe(sidebar)
+    expect((await background('.settings-nav')).color).toMatch(/rgba|\/\s*0\./)
 
     await control.locator('label.switch').click()
     await expect(toggle).toBeEnabled()
     expect((await e2e.snapshot(page)).settings.background_atmosphere).toBe('false')
     expect((await background('.app-root')).image).toBe('none')
     expect((await background('.settings-dialog')).image).toBe('none')
-    expect((await background('.sidebar')).color).not.toMatch(/rgba/)
-    expect((await background('.sidebar')).color).not.toBe(sidebar)
+    // 图标轨透出外层画布；开关改变的是画布，轨道本身保持透明。
+    expect((await background('.sidebar')).color).toBe(sidebar)
 
     await control.locator('label.switch').click()
     await expect(toggle).toBeEnabled()

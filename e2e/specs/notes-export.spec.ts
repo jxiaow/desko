@@ -89,7 +89,7 @@ test.describe('小记导出', () => {
 
   test('归档中的全量导出仅包含归档小记', async ({ page }) => {
     await bootUnlocked(page, { notes: seeds }, '/notes')
-    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
+    await page.getByRole('button', { name: '展开目录', exact: true }).click()
     await page.locator('.rail button.rail-item', { hasText: '归档' }).click()
     await page.getByRole('button', { name: '导出全部归档', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '导出小记', exact: true })

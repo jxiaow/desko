@@ -1,0 +1,132 @@
+/* 新布局的底色、强调色与光照。经典布局继续消费原有配方。
+   背景以主题中性色为主；柔光进入画布留白，卡片与输入框保持实底。 */
+:root[data-layout="workspace"], .workspace-theme-prev[data-base] {
+  --workspace-accent-source: #536d85;
+  --accent: var(--workspace-accent-source);
+  --accent-hover: oklch(from var(--accent) calc(l - 0.045) c h);
+  --accent-active: oklch(from var(--accent) calc(l - 0.08) c h);
+  --accent-on: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-light: color-mix(in srgb, var(--accent) 20%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 24%, transparent);
+  --text-brand: var(--accent-active);
+  --badge-ver-bg: var(--accent-soft);
+  --badge-ver-text: var(--text-brand);
+  --brand-g1: oklch(from var(--accent) calc(l + 0.1) calc(c * 0.8) h);
+  --brand-g2: var(--accent);
+  --brand-g3: var(--accent-active);
+  --lock-orb-1: color-mix(in srgb, var(--accent) 10%, transparent);
+  --lock-orb-2: color-mix(in srgb, var(--accent) 5%, transparent);
+  --selection: color-mix(in srgb, var(--accent) 22%, transparent);
+  --toast-info: oklch(from var(--accent) 0.78 calc(c * 0.7) h);
+
+  --workspace-frame: #efefee;
+  --workspace-light: #ffffff;
+}
+
+:root[data-layout="workspace"][data-theme="paper"], .workspace-theme-prev[data-theme="paper"] {
+  --bg: #fcfcfc;
+  --panel-bg: #ffffff;
+  --sunken: #f3f3f2;
+  --fill: #eeeeed;
+  --hover: #f3f3f2;
+  --active: #e8e8e6;
+  --border: #e5e5e3;
+  --border-strong: #cdcdca;
+  --border-subtle: #efefed;
+  --border-hover: #c1c1be;
+}
+
+:root[data-layout="workspace"][data-base="light"][data-accent="ink"], .workspace-theme-prev[data-base="light"][data-accent="ink"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="ink"] { --workspace-accent-source: #536d85; }
+:root[data-layout="workspace"][data-base="light"][data-accent="celadon"], .workspace-theme-prev[data-base="light"][data-accent="celadon"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="celadon"] { --workspace-accent-source: #52735b; }
+:root[data-layout="workspace"][data-base="light"][data-accent="clay"], .workspace-theme-prev[data-base="light"][data-accent="clay"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="clay"] { --workspace-accent-source: #97644b; }
+:root[data-layout="workspace"][data-base="light"][data-accent="plum"], .workspace-theme-prev[data-base="light"][data-accent="plum"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="plum"] { --workspace-accent-source: #7f6489; }
+:root[data-layout="workspace"][data-base="light"][data-accent="graphite"], .workspace-theme-prev[data-base="light"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="graphite"] { --workspace-accent-source: #646b70; }
+:root[data-layout="workspace"][data-base="light"][data-accent="rose"], .workspace-theme-prev[data-base="light"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="rose"] { --workspace-accent-source: #9c5875; }
+:root[data-layout="workspace"][data-base="light"][data-accent="amber"], .workspace-theme-prev[data-base="light"][data-accent="amber"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="amber"] { --workspace-accent-source: #87702e; }
+
+/* 清新配色：操作文字用深色，按钮与色点使用对应的浅彩。 */
+:root[data-layout="workspace"][data-base="light"][data-accent="sage"], .workspace-theme-prev[data-base="light"][data-accent="sage"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="sage"] {
+  --workspace-accent-source: #3e6d53;
+  --workspace-accent-wash: #cce4d4;
+  --workspace-accent-swatch: #b4d7c0;
+}
+:root[data-layout="workspace"][data-base="light"][data-accent="sky"], .workspace-theme-prev[data-base="light"][data-accent="sky"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="sky"] {
+  --workspace-accent-source: #3e6988;
+  --workspace-accent-wash: #cde6f5;
+  --workspace-accent-swatch: #b7d8ef;
+}
+:root[data-layout="workspace"][data-base="light"][data-accent="lavender"], .workspace-theme-prev[data-base="light"][data-accent="lavender"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="lavender"] {
+  --workspace-accent-source: #70548d;
+  --workspace-accent-wash: #e3d8f3;
+  --workspace-accent-swatch: #d4c2e9;
+}
+:root[data-layout="workspace"][data-base="light"][data-accent="peach"], .workspace-theme-prev[data-base="light"][data-accent="peach"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="peach"] {
+  --workspace-accent-source: #915848;
+  --workspace-accent-wash: #f4d9cb;
+  --workspace-accent-swatch: #edc3af;
+}
+
+:root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
+  /* 中性炭灰分为外框、正文、交互面；文字字阶独立于背景层级。 */
+  --bg: #1e1e1d;
+  --panel-bg: #252524;
+  --sunken: #191918;
+  --sidebar-bg: #262625;
+  --sidebar-hover: var(--hover);
+  --chrome-bg: color-mix(in srgb, var(--bg) 90%, transparent);
+  --fill: #292928;
+  --hover: #2d2d2b;
+  --active: #353532;
+  --border: #333332;
+  --border-strong: #4b4b47;
+  --border-subtle: #2a2a28;
+  --border-hover: #555550;
+  --shadow-xs: none;
+  --shadow-card: none;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 18%);
+  --shadow: 0 4px 14px -2px rgb(0 0 0 / 35%);
+  --text: #cecdc8;
+  --text-secondary: #aaa9a3;
+  --text-muted: #93928c;
+  --text-faint: #797872;
+  --text-url: var(--text-secondary);
+  --code-fg: var(--text);
+  --badge-cat-bg: var(--fill);
+  --badge-cat-border: var(--border);
+  --badge-cat-text: var(--text-secondary);
+  --accent-hover: oklch(from var(--accent) calc(l + 0.035) c h);
+  --accent-active: oklch(from var(--accent) calc(l - 0.035) c h);
+  --accent-on: #20201e;
+  --text-brand: color-mix(in oklab, var(--accent) 80%, var(--text));
+  --tip-bg: var(--panel-bg);
+  --tip-fg: var(--text);
+  --toast-bg: var(--panel-bg);
+  --toast-ok: #9ab5a5;
+  --toast-err: #d4a1a0;
+  --toast-info: var(--text-brand);
+  --brand-knob: var(--bg);
+  --lock-wash-a: var(--sidebar-bg);
+  --lock-wash-b: var(--bg);
+  --frost-bg: color-mix(in srgb, var(--panel-bg) 94%, transparent);
+  --frost-border: var(--border);
+  --workspace-frame: var(--sidebar-bg);
+  --workspace-light: #383836;
+}
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="ink"], .workspace-theme-prev[data-base="dark"][data-accent="ink"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="ink"] { --workspace-accent-source: #94a9c0; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="celadon"], .workspace-theme-prev[data-base="dark"][data-accent="celadon"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="celadon"] { --workspace-accent-source: #97b59a; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="clay"], .workspace-theme-prev[data-base="dark"][data-accent="clay"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="clay"] { --workspace-accent-source: #bfa185; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="plum"], .workspace-theme-prev[data-base="dark"][data-accent="plum"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="plum"] { --workspace-accent-source: #b5a0c1; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="graphite"], .workspace-theme-prev[data-base="dark"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="graphite"] { --workspace-accent-source: #abadad; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="rose"], .workspace-theme-prev[data-base="dark"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="rose"] { --workspace-accent-source: #c59aad; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="amber"], .workspace-theme-prev[data-base="dark"][data-accent="amber"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="amber"] { --workspace-accent-source: #c1ad78; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="sage"], .workspace-theme-prev[data-base="dark"][data-accent="sage"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="sage"] { --workspace-accent-source: #9ccbb1; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="sky"], .workspace-theme-prev[data-base="dark"][data-accent="sky"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="sky"] { --workspace-accent-source: #9ac5e4; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="lavender"], .workspace-theme-prev[data-base="dark"][data-accent="lavender"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="lavender"] { --workspace-accent-source: #c7b1e4; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="peach"], .workspace-theme-prev[data-base="dark"][data-accent="peach"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="peach"] { --workspace-accent-source: #d9b09e; }
+
+:root[data-layout="workspace"] .accent-dot { --accent: var(--workspace-accent-source); --workspace-accent-swatch: var(--workspace-accent-source); background: var(--workspace-accent-swatch); }
+:root[data-layout="workspace"] .btn-primary { background: var(--bg-workspace-primary); color: var(--text-workspace-primary); }
+:root[data-layout="workspace"] .btn-primary:hover:not(:disabled) { background: var(--bg-workspace-primary-hover); }
+:root[data-layout="workspace"] .btn-primary:active:not(:disabled) { background: var(--bg-workspace-primary-active); }

@@ -33,7 +33,7 @@ const egressOf = (t: BypassTarget) => t.interfaceName || '未查询到出口接�
       <span class="row-edit-label">原始输入</span>
       <input
         v-model="draft"
-        class="mono"
+        class="mono text-input"
         type="text"
         spellcheck="false"
         aria-label="该条目的原始输入"
@@ -81,20 +81,8 @@ const egressOf = (t: BypassTarget) => t.interfaceName || '未查询到出口接�
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
-/* 改原文：输入框走 28px 档，与按钮同高同排 */
+/* 改原文：输入框走 28px 控制轴档，与按钮同高同排 */
 .row-edit { display: flex; align-items: center; gap: var(--space-2); }
 .row-edit-label { flex-shrink: 0; font-size: var(--text-xs); color: var(--text-muted); }
-.row-edit input {
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  padding: 0 var(--space-3);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-.row-edit input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.row-edit input { flex: 1; min-width: 0; }
 </style>

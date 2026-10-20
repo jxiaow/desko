@@ -9,7 +9,7 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Extension, mergeAttributes, Node } from '@tiptap/core'
 import { Plugin, TextSelection } from '@tiptap/pm/state'
-import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { createLowlight } from 'lowlight'
 import ts from 'highlight.js/lib/languages/typescript'
@@ -51,6 +51,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   update: [html: string]
   submit: []
+  escape: []
 }>()
 
 // Wrapper ref for position calculation
@@ -132,10 +133,18 @@ const SlashCommandExtension = Extension.create({
         executeCommand(filteredCommands.value[slashMenuIndex.value])
         return true
       },
-      Escape: ({ editor: _editor }) => {
-        if (!showSlashMenu.value) return false
-        showSlashMenu.value = false
-        return true
+      Escape: ({ editor }) => {
+        if (editor.view.composing) return false
+        if (showSlashMenu.value) {
+          showSlashMenu.value = false
+          return true
+        }
+        if (props.variant === 'full') {
+          // StarterKit 会消费 Escape 来选择父节点；全屏书写面交给外层退出。
+          emit('escape')
+          return true
+        }
+        return false
       },
       'Ctrl-Enter': () => {
         if (showSlashMenu.value) return false
@@ -236,6 +245,34 @@ const isBlankContent = (html: string | undefined): boolean => {
 const canUndo = ref(false)
 const canRedo = ref(false)
 
+// 跟踪整次输入法合成的范围。标点可能先写入正文，再以相同文字确认一次；
+// 第二次只改变选区，不会经过 handleTextInput，不能仅靠正文变化修光标。
+type CompositionRange = { from: number; to: number; committed: string | null }
+let compositionRange: CompositionRange | null = null
+let punctuationTimer: ReturnType<typeof setTimeout> | undefined
+const punctuationAtEnd = /[，。！？；：、…—·“”‘’（）【】《》〈〉「」『』〔〕［］｛｝]$/
+const punctuationPairs: Record<string, string> = { '（': '）', '【': '】', '《': '》', '〈': '〉', '「': '」', '『': '』', '〔': '〕', '［': '］', '｛': '｝', '“': '”', '‘': '’' }
+function finishPunctuation(view: EditorView, range: CompositionRange): boolean {
+  if (compositionRange !== range || range.committed === null) return false
+  compositionRange = null
+  if (view.isDestroyed || view.composing || !view.hasFocus() || !punctuationAtEnd.test(range.committed)) return false
+  const { doc, selection } = view.state
+  if (!selection.empty || selection.head < range.from || selection.head > range.to) return false
+  if (doc.textBetween(range.from, range.to) !== range.committed) return false
+  const domSelection = view.dom.ownerDocument.getSelection()
+  if (!domSelection?.isCollapsed || !domSelection.focusNode || !view.dom.contains(domSelection.focusNode)) return false
+  const domHead = view.posAtDOM(domSelection.focusNode, domSelection.focusOffset)
+  if (domHead < range.from || domHead > range.to) return false
+  if (selection.head === range.to && domHead === range.to) return false
+  const offset = domHead - range.from
+  if (offset > 0 && punctuationPairs[range.committed[offset - 1]] === range.committed[offset]) return false
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(doc, range.to)).scrollIntoView())
+  // 状态选区可能已经正确、原生选区尚未同步；相同选区事务不保证重写 DOM。
+  view.focus()
+  return true
+}
+onBeforeUnmount(() => clearTimeout(punctuationTimer))
+
 const editor = useEditor({
   // 库里存的是 attachments/<名>，编辑器里要看到真图；存回去时再洗回相对形态
   content: resolveAssetHtml(sanitizeNoteHtml(props.initialContent || '')),
@@ -245,15 +282,58 @@ const editor = useEditor({
   autofocus: false,
   editorProps: {
     handlePaste: (view, event) => pasteLinkAsUrl(view, event),
+    handleDOMEvents: {
+      compositionstart: (view) => {
+        if (compositionRange) finishPunctuation(view, compositionRange)
+        clearTimeout(punctuationTimer)
+        compositionRange = { from: view.state.selection.from, to: view.state.selection.to, committed: null }
+        return false
+      },
+      compositionend: (view, event) => {
+        const range = compositionRange
+        if (range) {
+          range.committed = event.data
+          clearTimeout(punctuationTimer)
+          // ProseMirror 在 20ms 后结束合成清理；等原生选区同步完成再校正。
+          punctuationTimer = setTimeout(() => finishPunctuation(view, range), 25)
+        }
+        return false
+      },
+      keydown: (view, event) => {
+        if (!view.composing && /^(Arrow|Home$|End$|Page|Escape$)/.test(event.key)) compositionRange = null
+        else if (!view.composing && compositionRange) finishPunctuation(view, compositionRange)
+        return false
+      },
+      beforeinput: (view, event) => {
+        // 下一次输入先到时，先结清上一笔提交，避免新文字落在旧标点之前。
+        if (view.composing || !compositionRange || !event.cancelable || event.inputType !== 'insertText' || !event.data) return false
+        if (!finishPunctuation(view, compositionRange)) return false
+        // 浏览器已为本次原生输入缓存旧选区；修正后由编辑器接手这次输入，
+        // 仍经过 handleTextInput 链，保留输入规则与各插件的处理。
+        event.preventDefault()
+        const { from, to } = view.state.selection
+        const text = event.data
+        const defaultTransaction = () => view.state.tr.insertText(text, from, to).scrollIntoView()
+        if (!view.someProp('handleTextInput', handler => handler(view, from, to, text, defaultTransaction))) {
+          view.dispatch(defaultTransaction())
+        }
+        return true
+      },
+      pointerdown: () => { compositionRange = null; return false },
+      blur: () => { compositionRange = null; return false },
+    },
     handleTextInput: (view, from, to, text, defaultTransaction) => {
       // 候选文字和标点可能一次提交，不能只接收单个标点。
-      if (view.composing || !/[，。！？；：、]$/.test(text)) return false
+      if (view.composing || !punctuationAtEnd.test(text)) return false
       // 合成提交会替换整段拼音，原光标可以在替换范围末尾。
       if (view.state.selection.from < from || view.state.selection.to > to) return false
       const tr = defaultTransaction()
       const end = from + text.length
       // 光标也可能已到候选文字末尾、仍在标点前；只修正本次提交范围内的折叠选区。
       if (!tr.selection.empty || tr.selection.head < from || tr.selection.head >= end) return false
+      const offset = tr.selection.head - from
+      // 输入法成对补全括号或引号时，光标应留在这一对符号之间。
+      if (offset > 0 && punctuationPairs[text[offset - 1]] === text[offset]) return false
       view.dispatch(tr.setSelection(TextSelection.create(tr.doc, end)).scrollIntoView())
       return true
     },
@@ -292,7 +372,23 @@ const editor = useEditor({
     emit('update', normalizeAssetHtml(editor.getHTML()))
     checkSlashMenu(editor)
   },
-  onTransaction: ({ editor }) => {
+  onTransaction: ({ editor, transaction }) => {
+    if (compositionRange && transaction.docChanged) {
+      for (const map of transaction.mapping.maps) {
+        const { from, to } = compositionRange
+        let mappedFrom = map.map(from, -1)
+        let mappedTo = map.map(to, 1)
+        // 确认候选词时也可能替换光标之前的拼音，纳入实际替换范围。
+        map.forEach((oldFrom, oldTo, newFrom, newTo) => {
+          if (oldFrom <= to && oldTo >= from && newTo > newFrom) {
+            mappedFrom = Math.min(mappedFrom, newFrom)
+            mappedTo = Math.max(mappedTo, newTo)
+          }
+        })
+        compositionRange.from = mappedFrom
+        compositionRange.to = mappedTo
+      }
+    }
     canUndo.value = editor.can().undo()
     canRedo.value = editor.can().redo()
   },

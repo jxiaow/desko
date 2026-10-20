@@ -579,7 +579,7 @@ test.describe('Codex 会话档', () => {
     await expect(page.locator(until).first()).toBeVisible()
   }
 
-  test('停在账号档不发会话命令，切过去取一次，切回不重取', async ({ page }) => {
+  test('停在账号档不发会话命令，进入及返回会话档时刷新', async ({ page }) => {
     await bootUnlocked(page, SEED_SESSIONS)
     await page.locator('a.nav-item[href="/codex"]').click()
     await expect(page.locator('.acc-row').first()).toBeVisible()
@@ -593,7 +593,7 @@ test.describe('Codex 会话档', () => {
     await expect(page.locator('.acc-row').first()).toBeVisible()
     await page.locator('.cx-tab', { hasText: '会话' }).click()
     await expect(page.locator('.grp-head').first()).toBeVisible()
-    expect(await e2e.count(page, LIST_CMD)).toBe(1)
+    expect(await e2e.count(page, LIST_CMD)).toBe(2)
   })
 
   test('首屏所有项目默认收起，进档预取 token，展开不再补取', async ({ page }) => {
@@ -654,8 +654,8 @@ test.describe('Codex 会话档', () => {
     await expect(page.locator('.grp-head')).toHaveCount(2)
     await expect(icons).toHaveAttribute('aria-expanded', 'true')
     await expect(page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]')).toBeVisible()
-    // 面板卸挂重挂不该重扫目录，也不该重新播种把用户翻开的组抢走
-    expect(await e2e.count(page, LIST_CMD)).toBe(1)
+    // 返回时重扫目录，但保留用户翻开的组。
+    expect(await e2e.count(page, LIST_CMD)).toBe(2)
   })
 
   test('合计量上屏：hero 一笔、组头一位，展开行给六个口径', async ({ page }) => {
@@ -751,7 +751,7 @@ test.describe('Codex 会话回收站', () => {
     const row = page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')
     await row.click()
     await expect(row).toHaveAttribute('aria-expanded', 'true')
-    await expect(page.locator('.sess-acts .action-btn')).toHaveCount(3)
+    await expect(page.locator('.sess-acts').getByRole('button')).toHaveText(['复制会话 ID', '复制工作目录', '打开位置', '打开会话文件', '移到回收站'])
 
     await page.locator('.sess-card .trash-btn').click()
     const confirm = page.locator('.confirm-dialog')
@@ -835,7 +835,7 @@ test.describe('Codex 会话回收站', () => {
     expect(await e2e.count(page, LIST_CMD)).toBe(1)
     await page.locator('.cx-tab', { hasText: '会话' }).click()
     await expect(page.locator('.grp-head')).toHaveCount(2)
-    expect(await e2e.count(page, LIST_CMD)).toBe(1)
+    expect(await e2e.count(page, LIST_CMD)).toBe(2)
   })
 
   test('打开位置与打开会话文件：按 sessionId 调用，成功不播 toast', async ({ page }) => {
@@ -844,10 +844,10 @@ test.describe('Codex 会话回收站', () => {
     await expandGroup(page, 'demo-icons')
     await page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]').click()
 
-    await page.locator('.sess-acts .action-btn').first().click()
+    await page.locator('.sess-acts').getByRole('button', { name: '打开位置', exact: true }).click()
     expect(await e2e.count(page, OPEN_DIR_CMD)).toBe(1)
     expect(await argOf(page, OPEN_DIR_CMD, 'sessionId')).toBe('sess-k1l2m3n4o5')
-    await page.locator('.sess-acts .action-btn').nth(1).click()
+    await page.locator('.sess-acts').getByRole('button', { name: '打开会话文件', exact: true }).click()
     expect(await e2e.count(page, OPEN_FILE_CMD)).toBe(1)
     expect(await argOf(page, OPEN_FILE_CMD, 'sessionId')).toBe('sess-k1l2m3n4o5')
     await expect(page.locator('.toast')).toHaveCount(0)
@@ -860,7 +860,7 @@ test.describe('Codex 会话回收站', () => {
     await gotoTab(page, '会话', '.grp-head')
     await expandGroup(page, 'demo-notes')
     await page.locator('.sess-row').first().click()
-    await page.locator('.sess-acts .action-btn').first().click()
+    await page.locator('.sess-acts').getByRole('button', { name: '打开位置', exact: true }).click()
     await expectToast(page, '打开系统程序失败（e2e）')
     await expect(page.locator('.sess-row')).toHaveCount(1)
   })

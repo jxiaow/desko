@@ -686,11 +686,21 @@ pub struct CodexSessionUsageReport {
     pub by_day: Vec<CodexUsageBucket>,
     pub by_hour: Vec<CodexUsageBucket>,
     pub by_model: Vec<CodexUsageBucket>,
+    pub model_sessions: HashMap<String, Vec<CodexUsageSession>>,
     pub from_timestamp: Option<i64>,
     pub to_timestamp: Option<i64>,
     pub scan_millis: u64,
 }
 
+/// 当前窗口内、单个模型在某条会话中的增量；key 为会话 ID，label 为会话标题。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexUsageSession {
+    #[serde(flatten)]
+    pub usage: CodexUsageBucket,
+    pub cwd: String,
+    pub last_used_at: i64,
+}
 
 /// 一条 `token_count` 快照差出来的本轮用量；模型存下标，免得每份缓存都复制一遍字符串
 #[derive(Debug, Clone, Copy)]
@@ -707,6 +717,7 @@ struct UsageFileEntry {
     file_len: u64,
     modified_at: Option<SystemTime>,
     session_id: Option<String>,
+    cwd: String,
     models: Vec<String>,
     events: Vec<UsageEvent>,
 }
@@ -830,6 +841,7 @@ fn scan_usage_events(
 
     let mut models: Vec<String> = Vec::new();
     let mut session_id = None;
+    let mut cwd = String::new();
     let mut model_indexes = HashMap::<String, usize>::new();
     let mut current_model: Option<usize> = None;
     let mut previous: Option<RolloutTokenUsage> = None;
@@ -862,6 +874,7 @@ fn scan_usage_events(
             Some("session_meta") | Some("turn_context") => {
                 if parsed.get("type").and_then(JsonValue::as_str) == Some("session_meta") && session_id.is_none() {
                     session_id = session_meta_id(&parsed);
+                    cwd = session_meta_cwd(&parsed).unwrap_or_default();
                 }
                 if let Some(model) = parsed
                     .get("payload")
@@ -934,6 +947,7 @@ fn scan_usage_events(
         file_len,
         modified_at,
         session_id,
+        cwd,
         models,
         events,
     })
@@ -1049,22 +1063,59 @@ fn query_session_usage_with_config(
     let mut by_day = HashMap::<String, CodexUsageBucket>::new();
     let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
     let mut by_model = HashMap::<String, CodexUsageBucket>::new();
+    let mut model_sessions = HashMap::<String, HashMap<String, CodexUsageSession>>::new();
+    let mut display_contexts = HashMap::new();
     let mut totals = CodexUsageTotals::default();
     let mut active_sessions = HashSet::new();
 
     for path in usage_rollout_files(config)? {
         totals.file_count += 1;
         let entry = load_usage_events(&path)?;
+        let mut file_models = HashMap::new();
         if accumulate_usage_entry(
             &entry,
             from_timestamp,
             to_timestamp,
             &mut by_day,
             &mut by_hour,
-            &mut by_model,
+            &mut file_models,
             &mut totals,
         ) {
-            active_sessions.insert(entry.session_id.clone().unwrap_or_else(|| format!("file:{}", path.display())));
+            let session_id = entry.session_id.clone().unwrap_or_else(|| format!("file:{}", path.display()));
+            active_sessions.insert(session_id.clone());
+            // 按来源目录读取展示信息，额外目录及 WSL 会话也能找到自己的标题。
+            let data_dir = path.ancestors().find(|parent| {
+                parent.file_name().and_then(|name| name.to_str())
+                    .is_some_and(|name| SESSION_DIRS.contains(&name))
+            }).and_then(Path::parent).unwrap_or_else(|| Path::new(""));
+            let (display, index) = display_contexts.entry(data_dir.to_path_buf()).or_insert_with(|| (
+                modules::codex_session_display::SessionDisplayContext::load(data_dir),
+                read_session_index_map(data_dir).unwrap_or_default(),
+            ));
+            let index_title = index.get(&session_id).and_then(session_index_title);
+            let title = display.resolve_title(&session_id, index_title.as_deref()).unwrap_or_else(|| session_id.clone());
+            let mut latest_by_model = HashMap::<&str, i64>::new();
+            for event in entry.events.iter().filter(|event| {
+                !from_timestamp.is_some_and(|from| event.timestamp < from)
+                    && !to_timestamp.is_some_and(|to| event.timestamp >= to)
+            }) {
+                let model = entry.models.get(event.model_index).map(String::as_str).unwrap_or("unknown");
+                let latest = latest_by_model.entry(model).or_insert(event.timestamp);
+                *latest = (*latest).max(event.timestamp);
+            }
+            for (model, bucket) in file_models {
+                merge_usage_bucket(by_model.entry(model.clone())
+                    .or_insert_with(|| new_bucket(model.clone(), bucket.label.clone())), &bucket);
+                let last_used_at = latest_by_model.get(model.as_str()).copied().unwrap_or_default();
+                let session = model_sessions.entry(model).or_default().entry(session_id.clone())
+                    .or_insert_with(|| CodexUsageSession {
+                        usage: new_bucket(session_id.clone(), title.clone()),
+                        cwd: entry.cwd.clone(),
+                        last_used_at,
+                    });
+                session.last_used_at = session.last_used_at.max(last_used_at);
+                merge_usage_bucket(&mut session.usage, &bucket);
+            }
         }
     }
 
@@ -1087,6 +1138,12 @@ fn query_session_usage_with_config(
         by_day,
         by_hour: by_hour.into_iter().map(|(_, bucket)| bucket).collect(),
         by_model,
+        model_sessions: model_sessions.into_iter().map(|(model, sessions)| {
+            let mut sessions = sessions.into_values().collect::<Vec<_>>();
+            sessions.sort_by(|left, right| right.usage.total_tokens.cmp(&left.usage.total_tokens)
+                .then_with(|| left.usage.key.cmp(&right.usage.key)));
+            (model, sessions)
+        }).collect(),
         from_timestamp,
         to_timestamp,
         scan_millis: started.elapsed().as_millis() as u64,
@@ -1186,6 +1243,15 @@ fn add_to_bucket(bucket: &mut CodexUsageBucket, usage: RolloutTokenUsage, cost: 
     bucket.estimated_cost_usd = bucket.estimated_cost_usd.zip(cost).map(|(total, cost)| total + cost);
 }
 
+fn merge_usage_bucket(target: &mut CodexUsageBucket, source: &CodexUsageBucket) {
+    target.input_tokens += source.input_tokens;
+    target.cached_input_tokens += source.cached_input_tokens;
+    target.output_tokens += source.output_tokens;
+    target.total_tokens += source.total_tokens;
+    target.request_count += source.request_count;
+    target.estimated_cost_usd = target.estimated_cost_usd.zip(source.estimated_cost_usd)
+        .map(|(total, cost)| total + cost);
+}
 
 fn model_label_of(entry: &UsageFileEntry, model_index: usize) -> String {
     entry
@@ -2769,7 +2835,7 @@ mod tests {
             "reasoning_output_tokens": 0, "total_tokens": 1_100_000
         });
         let lines = [
-            json!({"type":"session_meta","payload":{"id":"billing","model":"openai/gpt-5.4-2026-03-05"}}).to_string(),
+            json!({"type":"session_meta","payload":{"id":"billing","cwd":"C:\\billing","model":"openai/gpt-5.4-2026-03-05"}}).to_string(),
             first.to_string(),
             first.to_string(),
             usage_model_line("turn_context", "gpt-5.4-mini"),
@@ -2780,6 +2846,7 @@ mod tests {
         ];
         let path = dir.join("rollout-billing.jsonl");
         fs::write(&path, lines.join("\n")).unwrap();
+        fs::write(root.join(SESSION_INDEX_FILE), json!({"id":"billing","thread_name":"Billing session"}).to_string()).unwrap();
         std::env::set_var("CODEX_HOME", &root);
         let stats = get_session_token_stats_across_instances(vec!["billing".into()]).unwrap();
         let report = query_session_usage_with_config(None, None, &config).unwrap();
@@ -2796,6 +2863,20 @@ mod tests {
         assert!((report.by_day.iter().map(|row| row.estimated_cost_usd.unwrap()).sum::<f64>() - 2.53).abs() < 1e-10);
         assert!((report.by_hour.iter().map(|row| row.estimated_cost_usd.unwrap()).sum::<f64>() - 2.53).abs() < 1e-10);
         assert!((report.by_model.iter().map(|row| row.estimated_cost_usd.unwrap()).sum::<f64>() - 2.53).abs() < 1e-10);
+        for model in &report.by_model {
+            let sessions = &report.model_sessions[&model.key];
+            assert_eq!(sessions.len(), 1);
+            assert_eq!(sessions[0].usage.key, "billing");
+            assert_eq!(sessions[0].usage.label, "Billing session");
+            assert_eq!(sessions[0].cwd, "C:\\billing");
+            assert_eq!(sessions[0].usage.total_tokens, model.total_tokens);
+            assert_eq!(sessions[0].usage.cached_input_tokens, model.cached_input_tokens);
+            assert_eq!(sessions[0].usage.request_count, model.request_count);
+            assert_eq!(sessions[0].usage.estimated_cost_usd, model.estimated_cost_usd);
+        }
+        let wire = serde_json::to_value(&report).unwrap();
+        assert_eq!(wire["modelSessions"]["gpt-5.4"][0]["key"], "billing");
+        assert_eq!(wire["modelSessions"]["gpt-5.4"][0]["totalTokens"], 1_100_000);
         // 缓存必须限制在输入以内；推理已在输出内，不再叠加。
         let usage = RolloutTokenUsage { input_tokens: 100, cached_input_tokens: 200,
             cache_write_input_tokens: 0, output_tokens: 10, reasoning_output_tokens: 8, total_tokens: 110 };
@@ -2805,6 +2886,8 @@ mod tests {
         let filtered = query_session_usage_with_config(Some(from), None, &config).unwrap();
         assert_eq!(filtered.totals.request_count, 1);
         assert!((filtered.totals.estimated_cost_usd.unwrap() - 0.33).abs() < 1e-10);
+        assert!(!filtered.model_sessions.contains_key("gpt-5.4"));
+        assert_eq!(filtered.model_sessions["gpt-5.4-mini"][0].usage.total_tokens, 550_000);
 
         // 同一线程换分页文件后，会话页必须继续累加，不能只拿其中一个文件。
         let mut continued: JsonValue = serde_json::from_str(&usage_snapshot_line(
@@ -2829,8 +2912,34 @@ mod tests {
         assert_eq!(report.totals.total_tokens, combined[0].total_tokens);
         assert_eq!(report.totals.file_count, 2);
         assert_eq!(report.totals.session_count, 1);
+        let mini = &report.model_sessions["gpt-5.4-mini"];
+        assert_eq!(mini.len(), 1);
+        assert_eq!(mini[0].usage.total_tokens, 660_000);
+        assert_eq!(mini[0].usage.request_count, 2);
+        assert_eq!(mini[0].last_used_at, DateTime::parse_from_rfc3339("2026-10-11T04:00:00Z").unwrap().timestamp());
         for buckets in [&report.by_day, &report.by_hour, &report.by_model] {
             assert!((buckets.iter().map(|row| row.estimated_cost_usd.unwrap()).sum::<f64>() - 2.596).abs() < 1e-10);
+        }
+        // 额外来源保留自己的标题与目录；没有模型的用量也必须能追溯。
+        let extra_home = root.join("extra");
+        fs::create_dir_all(extra_home.join("archived_sessions")).unwrap();
+        fs::write(extra_home.join(SESSION_INDEX_FILE), json!({"id":"extra","thread_name":"Extra session"}).to_string()).unwrap();
+        fs::write(extra_home.join("archived_sessions/rollout-extra.jsonl"), [
+            json!({"type":"session_meta","payload":{"id":"extra","cwd":"/home/user/demo"}}).to_string(),
+            usage_snapshot_line("2026-10-11T05:00:00Z", 100, 80, 10),
+        ].join("\n")).unwrap();
+        let extra_config = modules::config::UserConfig {
+            codex_usage_extra_dirs: vec![extra_home.to_string_lossy().to_string()], ..config
+        };
+        let report = query_session_usage_with_config(None, None, &extra_config).unwrap();
+        let unknown = &report.model_sessions["unknown"][0];
+        assert_eq!(unknown.usage.key, "extra");
+        assert_eq!(unknown.usage.label, "Extra session");
+        assert_eq!(unknown.cwd, "/home/user/demo");
+        assert_eq!(unknown.usage.total_tokens, 110);
+        assert_eq!(unknown.usage.estimated_cost_usd, None);
+        for model in &report.by_model {
+            assert_eq!(report.model_sessions[&model.key].iter().map(|session| session.usage.total_tokens).sum::<u64>(), model.total_tokens);
         }
         fs::remove_dir_all(root).unwrap();
     }

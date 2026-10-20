@@ -151,6 +151,12 @@ export interface CodexUsageBucket {
   estimatedCostUsd: number | null
 }
 
+/** 某模型在当前时间窗口内的会话用量；key 为会话 ID，label 为会话标题。 */
+export interface CodexUsageSession extends CodexUsageBucket {
+  cwd: string
+  lastUsedAt: number
+}
+
 /** 窗口内的总量；Token、请求数与估算金额与会话统计同源。 */
 export interface CodexUsageTotals {
   inputTokens: number
@@ -172,6 +178,7 @@ export interface CodexSessionUsageReport {
   /** 小时桶：key 为起点的 Unix 秒，label 为本地 HH:mm。 */
   byHour: CodexUsageBucket[]
   byModel: CodexUsageBucket[]
+  modelSessions: Record<string, CodexUsageSession[]>
   fromTimestamp?: number | null
   toTimestamp?: number | null
   scanMillis: number

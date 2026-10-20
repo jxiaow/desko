@@ -6,50 +6,24 @@ test.describe('导航与布局', () => {
     await expect(page).toHaveURL(/\/notes$/)
   })
 
-  test('侧栏收起/展开与三视图切换', async ({ page }) => {
+  test('图标导航常驻，模块切换更新外层标题并保留业务数据', async ({ page }) => {
     await bootUnlocked(page)
-    // 默认收起：导航文字不渲染，只剩图标
     await expect(page.locator('.sidebar .nav-text')).toHaveCount(0)
-
-    await page.locator('.sidebar-toggle').click()
-    // 测试库已启用三个模块，侧栏只显示对应入口。
-    await expect(page.locator('.sidebar .nav-text')).toHaveCount(3)
-    // 侧栏骨架：顶部品牌行 + 「模块」段标 + 导航三块，别无他物
-    await expect(page.locator('.sidebar > *')).toHaveCount(3)
-    // 常驻三项的顺序钉死：小记打头（收藏/文件紧随），改顺序要连这条一起改
+    await expect(page.locator('.sidebar-toggle')).toHaveCount(0)
     expect(await page.locator('.sidebar-nav .nav-item').evaluateAll(
-      (els) => els.map((el) => el.getAttribute('href')),
+      els => els.map(el => el.getAttribute('href')),
     )).toEqual(['/notes', '/entries', '/files'])
-    // 标题栏只放模块名（品牌位已移入全高侧栏顶部）；默认落点是侧栏第一项小记
-    await expect(page.locator('.titlebar-crumb')).toHaveText('小记')
-    await expect(page.locator('.notes-page')).toBeVisible()
-
-    // 激活态=淡染行（Things 方言）：accent-soft 铺底 + 无投影。
-    // 用当前项（已 active、指针没压着）来量——点过的那条会带 hover 填充，量不到激活态本身
     await expect(page.locator('a.nav-item[href="/notes"]')).toHaveClass(/active/)
     await expect(page.locator('a.nav-item[href="/notes"]')).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-    await expect(page.locator('a.nav-item[href="/notes"]')).toHaveCSS('box-shadow', 'none')
     expect(await e2e.count(page, 'list_notes')).toBe(1)
-
-    // 网址收藏
-    await page.locator('a.nav-item[href="/entries"]').click()
-    await expect(page).toHaveURL(/\/entries$/)
-    await expect(page.locator('.titlebar-crumb')).toHaveText('网址收藏')
-
-    // 文件快捷（数据在解锁时由注册表 boot 拉一次，切路由不再重取）；未 seed 数据时渲染空态
-    await page.locator('a.nav-item[href="/files"]').click()
-    await expect(page).toHaveURL(/\/files$/)
-    await expect(page.locator('.empty-title')).toHaveText('暂无快捷方式')
+    for (const [path, title] of [['entries', '网址收藏'], ['files', '文件快捷'], ['notes', '小记']]) {
+      await page.locator(`a.nav-item[href="/${path}"]`).click()
+      await expect(page).toHaveURL(new RegExp(`/${path}$`))
+      await expect(page.locator('.titlebar-outer .titlebar-brand')).toContainText(title)
+      await expect(page.locator('.sidebar')).toBeVisible()
+      if (path === 'files') await expect(page.locator('.empty-title')).toHaveText('暂无快捷方式')
+    }
     expect(await e2e.count(page, 'list_file_shortcuts')).toBe(1)
-
-    // 回条目
-    await page.locator('a.nav-item[href="/entries"]').click()
-    await expect(page).toHaveURL(/\/entries$/)
-    await expect(page.locator('.page-bar')).toBeVisible()
-
-    // 收起侧栏
-    await page.locator('.sidebar-toggle').click()
-    await expect(page.locator('.sidebar .nav-text')).toHaveCount(0)
   })
 
   test('失焦冻结 hover、重新获得焦点当场解冻：回来第一下点击不该被遮罩吞', async ({ page }) => {
@@ -74,23 +48,18 @@ test.describe('导航与布局', () => {
     expect(await hit()).toBe('button')
   })
 
-  test('Ctrl+B 三态循环：图标轨 → 展开 → 收起，收起态恢复钮在标题栏', async ({ page }) => {
+  test('Ctrl+B 只切换有目录的页面，模块图标保持可用', async ({ page }) => {
     await bootUnlocked(page)
-    const width = async () => (await page.locator('.sidebar').boundingBox())?.width ?? 0
-
-    // 缺省落图标轨
-    await expect(page.locator('.sidebar')).toHaveClass(/collapsed/)
-    await expect.poll(width).toBe(56)
-
+    await expect(page.locator('.workspace-directory')).toBeHidden()
+    await page.locator('.titlebar-brand').click()
     await page.keyboard.press('Control+b')
-    await expect.poll(width).toBe(208)
-
+    await expect(page.locator('.workspace-directory')).toBeVisible()
     await page.keyboard.press('Control+b')
-    await expect(page.locator('.sidebar')).toHaveCount(0)
-    await expect(page.locator('.sidebar-restore')).toBeVisible()
-
-    await page.locator('.sidebar-restore').click()
-    await expect.poll(width).toBe(208)
+    await expect(page.locator('.workspace-directory')).toBeHidden()
+    await page.locator('a.nav-item[href="/files"]').click()
+    await page.keyboard.press('Control+b')
+    await expect(page.locator('.workspace-directory')).toBeHidden()
+    await expect(page.locator('.sidebar')).toBeVisible()
     await expect(page.locator('.sidebar-restore')).toHaveCount(0)
   })
 

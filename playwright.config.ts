@@ -11,7 +11,8 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: 'http://127.0.0.1:1430',
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
     permissions: ['clipboard-read', 'clipboard-write'],
   },
   projects: [

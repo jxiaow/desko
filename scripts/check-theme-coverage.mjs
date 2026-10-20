@@ -217,12 +217,12 @@ try {
 }
 
 /* ---- 6. 全项目引用了没人定义的槽位 ---- */
-/* 定义集包含样式入口导入的材质层、尺度层、底色层、accent 层与别名块。 */
+/* 定义集包含样式入口及下方扫描到的独立样式、组件局部样式。 */
 const defined = new Set(css.match(/--[\w-]+(?=\s*:)/g) || [])
 /* 组件局部变量：在 .vue / 页面作用域里自定自用，不归全局主题管
-   --h / --ftc 由组件内联给；--toast-side 由 App.vue 按侧栏三态喂；--gc-hue 由收藏页按分类哈希给；
+   --h / --ftc 由组件内联给；--toast-side / --toast-right 由 App.vue 按内容区域边距喂；--gc-hue 由收藏页按分类哈希给；
    --usage-* 由 CodexUsagePanel 按极性提供给图表子组件。 */
-const LOCAL_SLOTS = new Set(['--h', '--ftc', '--toast-side', '--gc-hue', '--usage-fresh', '--usage-cached', '--usage-output'])
+const LOCAL_SLOTS = new Set(['--h', '--ftc', '--toast-side', '--toast-right', '--gc-hue', '--usage-fresh', '--usage-cached', '--usage-output'])
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -251,6 +251,7 @@ for (const file of walk(join(ROOT, 'src'))) {
       ? [...text.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n')
       : text
     const clean = stripComments(styles)
+    for (const name of clean.match(/--[\w-]+(?=\s*:)/g) || []) defined.add(name)
     if (file !== join(ROOT, 'src', 'styles', 'materials.css') && /\[data-atmosphere\b/.test(clean)) {
       problems.push(`${relative(ROOT, file)} 在材质层之外判断背景氛围，请改为消费材质角色`)
     }

@@ -13,8 +13,8 @@ test.describe('统一外观状态', () => {
       return { theme: el.getAttribute('data-theme'), image: style.backgroundImage, color: style.backgroundColor }
     }))
     const before = await previews()
-    expect(before).toHaveLength(8)
-    expect(new Set(before.map((preview) => preview.color)).size).toBe(8)
+    expect(before).toHaveLength(2)
+    expect(new Set(before.map((preview) => preview.color)).size).toBe(2)
     for (const preview of before) expect(preview.image, `${preview.theme} 柔光应使用卡片尺寸`).not.toMatch(/[\d.]+v[wh]\b/)
     const images: Buffer[] = []
     const cards = page.locator('.theme-prev')
@@ -66,12 +66,12 @@ test.describe('统一外观状态', () => {
       await theme.chooseBackgroundAtmosphere(false)
     }, themeModuleUrl)
 
-    await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('岩')
-    await expect(dialog.getByRole('radio', { checked: true })).toHaveText('洋红')
+    await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('墨')
+    await expect(dialog.getByRole('radio', { checked: true })).toHaveText('玫瑰')
     await expect(dialog.getByRole('switch', { name: '背景氛围' })).not.toBeChecked()
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'slate')
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'ink')
     await expect(page.locator('html')).toHaveAttribute('data-atmosphere', 'off')
-    expect((await e2e.snapshot(page)).settings).toMatchObject({ theme: 'slate', accent: 'rose', background_atmosphere: 'false' })
+    expect((await e2e.snapshot(page)).settings).toMatchObject({ theme: 'ink', accent: 'rose', background_atmosphere: 'false' })
     expect(await reads()).toBe(readCount)
   })
 
@@ -102,7 +102,7 @@ test.describe('统一外观状态', () => {
 
     const reopened = await openSettings(page)
     await expect(reopened.locator('.theme-chip.on .theme-chip-name')).toHaveText('墨')
-    await expect(reopened.getByRole('radio', { checked: true })).toHaveText('翡翠')
+    await expect(reopened.getByRole('radio', { checked: true })).toHaveText('绿')
     await expect(reopened.getByRole('switch', { name: '背景氛围' })).not.toBeChecked()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'ink')
     await expect(page.locator('html')).toHaveAttribute('data-accent', 'celadon')
@@ -113,15 +113,15 @@ test.describe('统一外观状态', () => {
   test('未选中的主题预览直接跟随 CSS 色值，且不影响当前主题', async ({ page }) => {
     await bootUnlocked(page, { settings: { theme: 'paper', accent: 'rose' } })
     const dialog = await openSettings(page)
-    await page.addStyleTag({ content: '[data-theme="slate"] { --panel-bg: rgb(13, 29, 47); } [data-base="dark"][data-accent="rose"] { --accent: rgb(121, 61, 97); }' })
+    await page.addStyleTag({ content: '.workspace-theme-prev[data-theme="ink"] { --panel-bg: rgb(13, 29, 47); } .workspace-theme-prev[data-base="dark"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="rose"] { --workspace-accent-source: rgb(121, 61, 97); }' })
 
-    const preview = dialog.locator('.theme-prev[data-theme="slate"]')
+    const preview = dialog.locator('.theme-prev[data-theme="ink"]')
     await expect(preview.locator('.tp-row').first()).toHaveCSS('background-color', 'rgb(13, 29, 47)')
     await expect(preview.locator('.tp-rail-dot')).toHaveCSS('background-color', 'rgb(121, 61, 97)')
     await expect(dialog.locator('.theme-prev[data-theme="paper"] .tp-row').first()).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper')
 
-    await dialog.locator('.theme-chip', { hasText: '岩' }).click()
+    await dialog.locator('.theme-chip', { hasText: '墨' }).click()
     await expect(dialog.locator('.accent-pill[data-accent-id="rose"] .accent-dot')).toHaveCSS('background-color', 'rgb(121, 61, 97)')
   })
 })

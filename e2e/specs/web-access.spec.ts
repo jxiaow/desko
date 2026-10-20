@@ -234,7 +234,7 @@ test('Web 文件目录浏览与流式下载、图片选择不调用本机对话�
   await expect(directory.getByText('目录为空', { exact: true })).toBeVisible()
   await directory.getByRole('button', { name: '关闭', exact: true }).click()
   await selectModule(page, '验证码')
-  await page.getByRole('button', { name: '新增', exact: true }).click()
+  await page.getByRole('button', { name: '新增验证码', exact: true }).click()
   await expect(page.getByLabel('选择二维码图片')).toHaveAttribute('type', 'file')
   expect(app.invocations).not.toContain('mfa_read_image')
   expect(app.invocations).toContain('save_attachment_bytes')

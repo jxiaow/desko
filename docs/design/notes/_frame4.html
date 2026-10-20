@@ -1,0 +1,31 @@
+<style>
+body{background:var(--sunken)}
+.wrap{flex:1;display:grid;place-items:center;padding:24px}
+</style>
+<div class="titlebar">
+  <div class="tb-name">小记</div><div class="titlebar-count">12 条</div>
+  <div class="tb-spacer"></div>
+  <div class="tb-btn"><svg width="16" height="16"><use href="#s-search"/></svg></div>
+</div>
+<div class="wrap">
+  <div class="dialog">
+    <div class="dlg-head">导出 3 条小记</div>
+    <div class="dlg-body">
+      <div class="dlg-lead">选一种格式，导出后系统另存对话框决定落点。</div>
+      <div class="seg">
+        <div class="on">Markdown</div><div>HTML</div><div>Word</div><div>PDF</div>
+      </div>
+      <div class="fmt-note">
+        Markdown / HTML — 图片附件内嵌，单条走单文件<br>
+        Word — <code>.doc</code>（Word 直接打开的富文本，非 <code>.docx</code>）<br>
+        PDF — A4 纵向，走系统打印引擎，多条合并成一份
+      </div>
+      <div class="fname">多条与全库<span><b>小记导出 2026-10-14.zip</b>（选目录时同名落盘）</span></div>
+      <div class="hint">加密小记需先解锁域；解锁失败的条目会跳过，完成后提示「3 条中 2 条已导出」。</div>
+    </div>
+    <div class="dlg-foot">
+      <div class="btn ghost">取消</div>
+      <div class="btn primary">导出…</div>
+    </div>
+  </div>
+</div>

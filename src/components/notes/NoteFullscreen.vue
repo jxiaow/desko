@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { isWebRuntime } from '../../services/runtime'
 import { openLinkFromClick } from '../../utils/openExternal'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -14,6 +14,7 @@ import { collectAttachmentNames, resolveAssetHtml, unreferencedAttachments, type
 import type { NoteExportFormat } from '../../utils/noteExport'
 import type { Note, Attachment } from '../../types'
 import type { NoteSaveState } from '../../stores/notes'
+import { useEscapeClose } from '../../composables/useEscapeClose'
 
 const props = withDefaults(defineProps<{
   /** null 表示这是一条还没发布的小记（从胶囊输入进入全屏） */
@@ -93,17 +94,28 @@ const startDrag = (e: MouseEvent) => {
   getCurrentWindow().startDragging().catch(() => {})
 }
 
-const onKeyDown = (e: KeyboardEvent) => {
-  if (e.key !== 'Escape') return
-  emit('close')
-}
+// 和目录、确认框共用关闭栈：Escape 只关闭最上层。
+useEscapeClose(() => emit('close'), undefined, { afterTarget: true })
 
-onMounted(() => document.addEventListener('keydown', onKeyDown))
-onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
+const surfaceRef = ref<HTMLElement | null>(null)
+onMounted(() => {
+  if (!surfaceRef.value?.contains(document.activeElement)) surfaceRef.value?.focus()
+})
+
+function trapFocus(event: KeyboardEvent) {
+  if (event.defaultPrevented) return
+  const controls = Array.from(surfaceRef.value!.querySelectorAll<HTMLElement>(
+    'button, a[href], input, textarea, select, [tabindex], [contenteditable="true"]',
+  )).filter(el => el.tabIndex >= 0 && !el.matches(':disabled') && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden')
+  const at = controls.indexOf(document.activeElement as HTMLElement)
+  if (!controls.length) { event.preventDefault(); surfaceRef.value?.focus() }
+  else if (event.shiftKey && at <= 0) { event.preventDefault(); controls[controls.length - 1].focus() }
+  else if (!event.shiftKey && (at < 0 || at === controls.length - 1)) { event.preventDefault(); controls[0].focus() }
+}
 </script>
 
 <template>
-  <section class="fs" role="dialog" aria-modal="true" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'">
+  <section ref="surfaceRef" class="fs" role="dialog" aria-modal="true" tabindex="-1" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'" @keydown.tab="trapFocus">
     <header class="fs-head" @mousedown="startDrag">
       <button class="fs-exit" type="button" @click="emit('close')">
         <AppIcon name="min" :size="13" />
@@ -162,6 +174,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeyDown))
           :placeholder="props.note ? '' : '此刻的想法…'"
           @update="onUpdate"
           @submit="onPrimary"
+          @escape="emit('close')"
         />
 
         <div v-if="visibleAtts.length" class="fs-atts">

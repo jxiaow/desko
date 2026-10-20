@@ -17,6 +17,11 @@ function memo(page: Page, text: string) {
   return page.locator('.memo').filter({ hasText: text })
 }
 
+async function openDirectory(page: Page) {
+  const button = page.getByRole('button', { name: '展开目录', exact: true })
+  if (await button.isVisible()) await button.click()
+}
+
 /** 加密系与删除这些低频动作住在卡头 ⋯ 里：悬停露排 → 开菜单 → 按文字点。
     菜单项前有图标，文字要用 :text-is 精确比（hasText 的正则不吃首尾空白） */
 async function noteMenu(page: Page, card: Locator): Promise<Locator> {
@@ -224,8 +229,8 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.titlebar-count')).toHaveText('3 条')
     expect(await e2e.count(page, 'list_notes')).toBe(1)
     // 窄栏默认收起，列表占满宽度
-    await expect(page.locator('.rail')).toHaveCount(0)
-    await expect(page.locator('[aria-label="展开侧栏"]')).toBeVisible()
+    await expect(page.locator('.workspace-directory')).toBeHidden()
+    await expect(page.locator('[aria-label="展开目录"]')).toBeVisible()
   })
 
   test('复制正文：⋯ 菜单出纯文本', async ({ page }) => {
@@ -562,7 +567,7 @@ test.describe('Notes 小记', () => {
 
   test('归档视图里拖图：没有书写面，只提示不落盘', async ({ page }) => {
     await bootUnlocked(page, { notes: [{ title: '丙', content_html: '<p>已经收走</p>', archived: true }] }, '/notes')
-    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
+    await openDirectory(page)
     await page.locator('.rail button.rail-item', { hasText: '归档' }).click()
     await expect(page.locator('.composer')).toHaveCount(0)
     await expect
@@ -631,7 +636,7 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.titlebar-count')).toHaveText('2 条')
 
     // 窄窗默认收侧栏，视图切换要先展开
-    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
+    await openDirectory(page)
     const archivedRail = page.locator('.rail button.rail-item', { hasText: '归档' })
     await expect(archivedRail.locator('.tab-count')).toHaveText('1')
     await archivedRail.click()
@@ -651,7 +656,7 @@ test.describe('Notes 小记', () => {
     await waitForToastGone(page)
     await expect(page.locator('.empty-title')).toHaveText('还没有归档的小记')
     // 内容区那几击把浮层侧栏收掉了（点内容即收），要读条数得再叫出来
-    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
+    await openDirectory(page)
     await expect(archivedRail.locator('.tab-count')).toHaveText('0')
     expect((await e2e.snapshot(page)).notes.find((n: any) => n.title === '丙').archived).toBe(false)
 
@@ -686,7 +691,7 @@ test.describe('Notes 小记', () => {
     await waitForToastGone(page)
     await expect(page.locator('.memo')).toHaveCount(0)
 
-    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
+    await openDirectory(page)
     await page.locator('.rail button.rail-item', { hasText: '归档' }).click()
     await expect(page.locator('.memo')).toHaveCount(3)
     await page.locator('.archive-bar .ab-btn').click()
@@ -707,7 +712,7 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.memo')).toHaveCount(3)
 
     // 窄栏默认收起，视图筛选要先展开它
-    await tipButton(page.locator('.page-bar'), '展开侧栏').click()
+    await openDirectory(page)
     await page.locator('.rail button.rail-item', { hasText: '收藏' }).click()
     await expect(page.locator('.empty-title')).toHaveText('未找到匹配的小记')
     await page.locator('.rail button.rail-item.danger', { hasText: '清空筛选' }).click()
@@ -725,8 +730,8 @@ test.describe('Notes 小记', () => {
     await memo(page, '第二条小记').click()
     await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
     await expect(memo(page, '第一条小记')).toHaveClass(/is-sel/)
-    // 选中态：浸润底 + 1px 全包裹微环（锚点 = paper 底色 × 墨蓝 accent）
-    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'rgb(40, 86, 199) 0px 0px 0px 1px, rgba(29, 28, 26, 0.05) 0px 1px 3px 0px')
+    // 选中后可见的 1px 环随当前强调色变化。
+    await expect.poll(() => memo(page, '第一条小记').evaluate(el => getComputedStyle(el).boxShadow)).toContain('0px 0px 0px 1px')
     // 上下键换焦点，微环跟着走
     await page.locator('.memo').first().focus()
     await page.keyboard.press('ArrowDown')

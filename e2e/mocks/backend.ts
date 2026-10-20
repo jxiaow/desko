@@ -630,7 +630,7 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'theme', 'accent', 'background_atmosphere', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'fileshare_enabled', 'tunnel_enabled', 'codex_enabled', 'bypass_enabled', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'theme', 'accent', 'background_atmosphere', 'workspace_directory_open', 'workspace_directory_pinned', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'fileshare_enabled', 'tunnel_enabled', 'codex_enabled', 'bypass_enabled', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold']
 
 /** 与 Rust 端 backup::LOCAL_FLOOR 对齐：传上云的包本地只留这么几份兜底 */
 const LOCAL_FLOOR = 3
@@ -3280,6 +3280,7 @@ class MockBackend {
       const byDay = new Map<string, Bucket>()
       const byHour = new Map<number, Bucket>()
       const byModel = new Map<string, Bucket>()
+      const modelSessions: Record<string, (Bucket & { cwd: string; lastUsedAt: number })[]> = {}
       const inWindow = this.state.codex.sessions.filter((s) => s.updatedAt >= from && s.updatedAt < to)
       for (const s of inWindow) {
         const dk = dayKey(s.updatedAt)
@@ -3297,6 +3298,10 @@ class MockBackend {
         byDay.set(dk, day)
         byHour.set(hourStart, hour)
         byModel.set(s.model, model)
+        const session = newBucket(s.sessionId)
+        session.label = s.title || s.sessionId
+        add(session, s)
+        ;(modelSessions[s.model] ??= []).push({ ...session, cwd: s.cwd, lastUsedAt: s.updatedAt })
       }
       const totals = {
         ...inWindow.reduce(
@@ -3325,6 +3330,7 @@ class MockBackend {
         byDay: days,
         byHour: [...byHour.entries()].sort(([left], [right]) => left - right).map(([, bucket]) => bucket),
         byModel: models,
+        modelSessions: Object.fromEntries(Object.entries(modelSessions).map(([model, sessions]) => [model, sessions.sort((a, b) => b.totalTokens - a.totalTokens || a.key.localeCompare(b.key))])),
         fromTimestamp: fromTimestamp ?? null,
         toTimestamp: toTimestamp ?? null,
         scanMillis: this.state.codex.usageScanMillis,

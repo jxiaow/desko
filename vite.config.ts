@@ -28,8 +28,8 @@ export default defineConfig(({ mode }) => {
       port: 1420,
       strictPort: true,
       watch: {
-        // 否则 vite 会 watch 编译产物里的 desko.exe，运行中被占用直接 EBUSY 崩溃
-        ignored: ['**/src-tauri/target/**'],
+        // 编译产物和测试档案可能包含被原生进程独占的文件，不能交给源码监听。
+        ignored: ['**/src-tauri/target/**', '**/.tmp/**', '**/test-results/**', '**/playwright-report/**'],
       },
       ...(isE2E
         ? {

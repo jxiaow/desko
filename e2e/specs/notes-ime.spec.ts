@@ -3,11 +3,11 @@ import type { Editor } from '@tiptap/core'
 import { bootUnlocked, tipButton } from '../helpers'
 
 const task = (text: string) => `<ul data-type="taskList"><li data-type="taskItem" data-checked="false"><div><p>${text}</p></div></li></ul>`
-const commits = [['，', 0], ['新内容，', 0], ['新内容，', 3]] as const
+const commits = [['，', 0], ['新内容，', 0], ['新内容，', 1], ['新内容，', 3], ['”', 0], ['）', 0], ['…', 0]] as const
 const taskLines = [['甲乙', 1], ['甲乙', 2], ['', 0], ['<strong>甲乙</strong>', 1], ['<strong>甲乙</strong>', 2]] as const
 
 for (const variant of ['composer', 'card', 'full'] as const) {
-  test(`Todo 中文逗号：${variant} 在行中、行尾、空项和粗体中支持标点及候选词合并提交`, async ({ page }) => {
+  test(`Todo 中文标点：${variant} 在行中、行尾、空项和粗体中支持标点及候选词合并提交`, async ({ page }) => {
     await bootUnlocked(page, { notes: [{ content_html: '<p>待编辑的小记</p>' }] }, '/notes')
     if (variant === 'card') {
       await page.locator('.memo').hover()
@@ -30,7 +30,7 @@ for (const variant of ['composer', 'card', 'full'] as const) {
         return start + offset
       }, { html: task(text), offset })
       const composing = composition !== 'none'
-      if (composing) await pm.dispatchEvent('compositionstart', { data: '' })
+      if (composing) await pm.evaluate(el => el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' })))
       await pm.evaluate((el, { composition, composing, inputText, caretOffset }) => {
         const selection = window.getSelection()!
         let node = selection.focusNode!
@@ -55,11 +55,32 @@ for (const variant of ['composer', 'card', 'full'] as const) {
       const plain = text.replace(/<[^>]*>/g, '')
       if (composition === 'end-after-flush') {
         await expect.poll(async () => (await state()).text).toBe(plain.slice(0, offset) + inputText + plain.slice(offset))
-        await pm.dispatchEvent('compositionend', { data: inputText })
+        await pm.evaluate((el, data) => el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data })), inputText)
       }
       await expect.poll(state, `${variant}/${text}/${offset}/${composition}/caret:${caretOffset}`).toEqual({ text: plain.slice(0, offset) + inputText + plain.slice(offset), head: before + inputText.length, domHead: before + inputText.length })
       await page.keyboard.insertText('续')
       await expect.poll(state).toEqual({ text: plain.slice(0, offset) + inputText + '续' + plain.slice(offset), head: before + inputText.length + 1, domHead: before + inputText.length + 1 })
+    }
+    // 成对补全时保留符号中间的合法落点，不能把后续文字推到右括号之外。
+    for (const pair of ['（）', '“”', '【】']) {
+      await pm.evaluate((el, { html, pair }) => {
+        const editor = (el as HTMLElement & { editor: Editor }).editor
+        editor.commands.setContent(html)
+        editor.commands.focus('start')
+        editor.commands.setTextSelection(editor.state.selection.head + 1)
+        const selection = window.getSelection()!
+        const node = selection.focusNode as Text
+        const offset = selection.focusOffset
+        node.insertData(offset, pair)
+        selection.collapse(node, offset + 1)
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: pair }))
+      }, { html: task('甲乙'), pair })
+      await expect.poll(() => pm.evaluate(el => {
+        const editor = (el as HTMLElement & { editor: Editor }).editor
+        return editor.state.doc.textBetween(editor.state.selection.head, editor.state.selection.head + 1)
+      })).toBe(pair[1])
+      await page.keyboard.insertText('续')
+      await expect.poll(() => pm.evaluate(el => (el as HTMLElement & { editor: Editor }).editor.state.doc.textContent)).toBe(`甲${pair[0]}续${pair[1]}乙`)
     }
     const start = await pm.evaluate((el, html) => {
       const editor = (el as HTMLElement & { editor: Editor }).editor

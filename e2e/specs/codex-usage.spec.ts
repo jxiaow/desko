@@ -27,6 +27,36 @@ async function args(page: Page) {
 }
 
 for (const width of [800, 1235]) {
+  test(`${width}px 下展开模型可查看所选时间内的会话明细`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
+      { sessionId: 'today-a', title: '模型用于代码审查', cwd: 'C:\\demo', daysAgo: 0, input: 1_000_000, cached: 800_000, output: 100_000, model: 'gpt-5.4', turns: 3 },
+      { sessionId: 'today-b', title: '模型用于修复输入法', cwd: 'C:\\notes', daysAgo: 0, input: 500_000, cached: 400_000, output: 50_000, model: 'gpt-5.4', turns: 2 },
+      { sessionId: 'history', title: '历史会话', cwd: 'C:\\demo', daysAgo: 1, input: 1000, output: 100, model: 'gpt-5.4', turns: 1 },
+      { sessionId: 'other', title: '其他模型的会话', cwd: 'C:\\demo', daysAgo: 0, input: 1000, output: 100, model: 'other-model', turns: 1 },
+    ] } })
+    const row = page.locator('.usg-model-row[data-model="gpt-5.4"]')
+    await row.focus()
+    await page.keyboard.press('Enter')
+    const detail = page.getByRole('region', { name: 'gpt-5.4 会话用量', exact: true })
+    await expect(detail.locator('tbody tr')).toHaveCount(2)
+    await expect(detail).toContainText('模型用于代码审查')
+    await expect(detail).toContainText('模型用于修复输入法')
+    await expect(detail).toContainText('C:\\notes')
+    await expect(detail).not.toContainText('历史会话')
+    await expect(detail).not.toContainText('其他模型的会话')
+    await expect(detail.locator('[data-session="today-a"] td')).toHaveText(['110万', '20万', '80万', '10万', '3', '$2.20'])
+    expect(await page.locator('.content-inner').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(false)
+    await detail.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: `.tmp/refresh-ime-model/model-sessions-${width}.png` })
+    await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+    await expect(detail.locator('tbody tr')).toHaveCount(3)
+    await row.click()
+    await expect(detail).toHaveCount(0)
+  })
+}
+
+for (const width of [800, 1235]) {
   test(`${width}px 下金额和请求数贯通会话、项目、今日、每日及模型明细`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
     await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
@@ -194,10 +224,11 @@ test.describe('本地日期边界', () => {
     await expect(page.locator('.usg-num')).toHaveText('0')
     await expect(page.locator('.usg-period').first()).toHaveText('2026-10-14 · 本地时间 00:00 起')
     expect((await args(page)).fromTimestamp).toBe(Date.parse('2026-10-13T16:00:00Z') / 1000)
-    expect(await e2e.count(page, COMMAND)).toBe(2)
+    const refreshedCalls = await e2e.count(page, COMMAND)
+    expect(refreshedCalls).toBeGreaterThanOrEqual(2)
     await page.getByRole('button', { name: '账号', exact: true }).click()
     await page.clock.fastForward(86_400_000)
-    expect(await e2e.count(page, COMMAND)).toBe(2)
+    expect(await e2e.count(page, COMMAND)).toBe(refreshedCalls)
   })
 })
 

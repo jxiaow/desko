@@ -1,0 +1,54 @@
+<style>
+.menu{position:absolute;right:14px;top:132px;width:148px;background:var(--panel-bg);border:1px solid var(--border-strong);
+  border-radius:var(--radius);box-shadow:0 12px 32px -12px rgba(29,28,26,.3);padding:5px;z-index:5}
+.menu-title{font-size:11px;color:var(--text-faint);padding:4px 8px 6px}
+.mi{height:30px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:7px;font-size:13px;color:var(--text-secondary)}
+.mi .sub{margin-left:auto;font-size:11px;color:var(--text-faint)}
+.menu-sep{height:1px;background:var(--border);margin:4px 2px}
+</style>
+<div class="titlebar">
+  <div class="tb-name">小记</div><div class="titlebar-count">9 条</div>
+  <div class="tb-spacer"></div>
+  <div class="tb-btn"><svg width="16" height="16"><use href="#s-search"/></svg></div>
+  <div class="tb-btn"><svg width="16" height="16"><use href="#s-list"/></svg></div>
+</div>
+<div class="body">
+  <div class="main">
+    <div class="page-bar">
+      <div class="search"><svg width="14" height="14"><use href="#s-search"/></svg>搜索小记</div>
+      <div class="pb-sp"></div>
+      <div class="pb-btn"><svg width="14" height="14"><use href="#s-export"/></svg>选择小记</div>
+      <div class="pb-btn square"><svg width="15" height="15"><use href="#s-lock"/></svg></div>
+    </div>
+    <div class="content" style="position:relative">
+      <div class="day">今天</div>
+      <div class="card show">
+        <div class="row1"><span class="ttl">键盘映射备忘</span><span class="badge">#工具</span><span class="sp"></span><span class="ago">今天 20:14</span></div>
+        <div class="row2">Ctrl+Alt+L 格式化；Win+Shift+S 截图…</div>
+        <div class="act"><span class="a-btn"><svg width="15" height="15"><use href="#s-expand"/></svg></span> <span class="a-btn"><svg width="15" height="15"><use href="#s-edit"/></svg></span> <span class="a-btn"><svg width="15" height="15"><use href="#s-pin"/></svg></span> <span class="a-btn"><svg width="15" height="15"><use href="#s-star"/></svg></span> <span class="a-btn" style="background:var(--fill);color:var(--text)"><svg width="15" height="15"><use href="#s-download"/></svg></span> <span class="a-btn"><svg width="15" height="15"><use href="#s-archive"/></svg></span> <span class="a-btn"><svg width="15" height="15"><use href="#s-copy"/></svg></span> <span class="a-btn"><svg width="15" height="15"><use href="#s-dots"/></svg></span></div>
+      </div>
+      <div class="menu">
+        <div class="menu-title">导出「键盘映射备忘」</div>
+<div class="mi"><svg width="14" height="14"><use href="#s-download"/></svg>Markdown<span class="sub">.md</span></div><div class="mi"><svg width="14" height="14"><use href="#s-download"/></svg>HTML<span class="sub">.html</span></div><div class="mi"><svg width="14" height="14"><use href="#s-download"/></svg>Word<span class="sub">.doc</span></div><div class="mi"><svg width="14" height="14"><use href="#s-download"/></svg>PDF<span class="sub">.pdf</span></div>
+        <div class="menu-sep"></div>
+        <div class="mi" style="color:var(--text-muted)">附件内嵌 · 图片随文件走</div>
+      </div>
+      <div class="card" style="margin-top:132px">
+        <div class="row1"><span class="ttl">周报草稿</span><span class="badge">#工作</span><span class="sp"></span><span class="ago">今天 09:02</span></div>
+        <div class="row2">本周把穿透模块的三条硬洞补齐了…</div>
+      </div>
+      <div class="note">主列表 hover 动作排在既有 全屏·编辑·置顶·收藏 之后插入 <b>导出</b>、<b>归档</b> 两枚，再接 复制·⋯。点导出直接弹 4 档格式菜单（单条不再套一层对话框，省一跳）；批量与全库导出才走 save() 面板。⋯ 菜单保持 加密/锁回/解除加密/删除，不与 hover 重复。</div>
+    </div>
+  </div>
+  <aside class="rail">
+    <div class="rail-title">视图</div>
+    <button class="rail-item active"><svg width="16" height="16"><use href="#s-all"/></svg><span class="nm">全部</span><span class="tab-count">9</span></button>
+    <button class="rail-item"><svg width="16" height="16"><use href="#s-pin"/></svg><span class="nm">置顶</span><span class="tab-count">2</span></button>
+    <button class="rail-item"><svg width="16" height="16"><use href="#s-star"/></svg><span class="nm">收藏</span><span class="tab-count">3</span></button>
+    <button class="rail-item"><svg width="16" height="16"><use href="#s-archive"/></svg><span class="nm">归档</span><span class="tab-count">3</span></button>
+    <div class="rail-sep"></div>
+    <div class="rail-title">标签 · 5</div>
+    <button class="rail-item"><span class="nm">#工作</span><span class="tab-count">4</span></button>
+    <div class="rail-foot">9 条在库 · 3 条归档</div>
+  </aside>
+</div>

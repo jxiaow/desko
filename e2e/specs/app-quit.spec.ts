@@ -51,7 +51,7 @@ for (const initialized of [true, false]) {
   })
 }
 
-for (const theme of ['snow', 'ink']) {
+for (const theme of ['paper', 'ink']) {
   test(`${theme} 退出框使用当前主题且在窄窗口完整显示`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1040, height: 670 })
     await bootUnlocked(page, { settings: { theme } })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { CodexSessionRecord, CodexSessionTokenStats } from '../../services/api/codex'
 import { codexApi } from '../../services/api/codex'
 import { errText } from '../../services/api/backup'
@@ -24,6 +24,11 @@ import { formatTokenCount as compact, formatUsageCost } from '../../utils/codexU
 import { isWebRuntime } from '../../services/runtime'
 import { invoke } from '../../services/transport'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { usePageAutoRefresh } from '../../composables/usePageAutoRefresh'
+import { writeClipboardText } from '../../utils/clipboard'
+
+const props = defineProps<{ locateSessionId?: string }>()
+const emit = defineEmits<{ located: [] }>()
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
@@ -49,10 +54,35 @@ function downloadSessionFile() {
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
-/** 官方目录一次全扫是重 I/O：进这一档才扫，扫过就留在内存，切回不重取 */
-onMounted(() => {
-  if (!sessionsLoaded.value) void loadSessions()
+/** 重进页面与后台轮询保留已有读数、分组及会话展开态。 */
+let locationReady = false
+let locationHandled = false
+async function locateRequestedSession() {
+  const id = props.locateSessionId
+  if (!active || !locationReady || locationHandled || !id || sessionsBusy.value || sessionsError.value) return
+  locationHandled = true
+  const target = sessions.value.find(session => session.sessionId === id)
+  if (target) {
+    sessionOpenGroups.value = new Set([...sessionOpenGroups.value, target.cwd.trim() || '∅'])
+    sessionOpenId.value = id
+    await nextTick()
+    if (!active) return
+    const row = document.querySelector<HTMLButtonElement>(`.sess-row[data-sid="${CSS.escape(id)}"]`)
+    row?.focus({ preventScroll: true })
+    row?.scrollIntoView({ block: 'center' })
+  } else {
+    sessionOpenId.value = ''
+    toastStore.showToast('这条会话已不在当前本地目录中', 'error')
+  }
+  emit('located')
+}
+onMounted(async () => {
+  await loadSessions({ background: sessionsLoaded.value })
+  locationReady = true
+  void locateRequestedSession()
 })
+watch([sessionsBusy, sessions, sessionsError], () => { void locateRequestedSession() }, { flush: 'post' })
+usePageAutoRefresh(() => loadSessions({ background: true }), () => sessionsBusy.value || !!busyId.value || debounce !== null)
 
 /** token 合计：known 用来区分「一条都没取到」与「真的没有用量」 */
 interface TokenSum {
@@ -236,7 +266,10 @@ const heroSub = computed(() => {
 let debounce: ReturnType<typeof setTimeout> | null = null
 watch([sessionQuery, sessionSearchMode], () => {
   if (debounce) clearTimeout(debounce)
-  debounce = setTimeout(() => void loadSessions(), 300)
+  debounce = setTimeout(() => {
+    debounce = null
+    void loadSessions()
+  }, 300)
 })
 onUnmounted(() => {
   active = false
@@ -289,6 +322,15 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
     }
   })
 }
+
+async function copySessionValue(value: string, label: string) {
+  try {
+    await writeClipboardText(value)
+    if (active) toastStore.showToast(`${label}已复制`)
+  } catch (error) {
+    if (active) toastStore.showToast(errText(error), 'error')
+  }
+}
 </script>
 
 <template>
@@ -300,7 +342,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
       </div>
     </div>
 
-    <div v-else-if="sessionsError" class="rcard empty-state">
+    <div v-else-if="sessionsError && !groups.length" class="rcard empty-state">
       <div class="empty-icon"><AppIcon name="alert" :size="24" /></div>
       <div class="empty-title">读不到官方会话目录</div>
       <div class="empty-desc" :title="sessionsError">{{ sessionsError }}</div>
@@ -318,6 +360,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
     </div>
 
     <div v-else class="rcard-list">
+      <p v-if="sessionsError" class="page-note" role="status">刷新失败，显示上次结果：{{ sessionsError }}</p>
       <div class="rcard sess-hero" :title="sumReady ? sumText : undefined">
         <div class="hero-line">
           <template v-if="sumReady">
@@ -396,6 +439,8 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
               </dl>
               <p v-else class="sess-no-usage">这条会话没有 Token 记录</p>
               <div class="sess-acts">
+                <button class="action-btn" type="button" @click="copySessionValue(s.sessionId, '会话 ID')"><AppIcon name="copy" :size="13" />复制会话 ID</button>
+                <button v-if="s.cwd" class="action-btn" type="button" @click="copySessionValue(s.cwd, '工作目录')"><AppIcon name="copy" :size="13" />复制工作目录</button>
                 <button
                   class="action-btn"
                   type="button"
@@ -444,6 +489,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
 </template>
 
 <style scoped>
+.sess-view { font-family: var(--font-ui); letter-spacing: normal; }
 .session-file-dialog { width: 800px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
 .session-file-dialog .dialog-body { overflow: auto; }
 .session-file-dialog pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-xs); }
@@ -458,7 +504,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
-/* 用量 hero：与直连页 hero 同壳同字号，数字是账目不是健康判定，所以吃 --text 不吃 --success */
+/* 总量作为列表摘要，收敛字号和字重，让会话标题保持清晰。 */
 .sess-hero {
   display: flex;
   flex-direction: column;
@@ -475,13 +521,12 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
   display: flex;
   align-items: baseline;
   gap: 6px;
-  min-height: 40px;
+  min-height: 32px;
 }
 .hero-num {
-  font-size: 34px;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.25;
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
@@ -489,7 +534,7 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
 .sess-billing { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 6px 0 10px; }
 .sess-billing > div { display: flex; align-items: baseline; gap: 8px; }
 .sess-billing dt { font-size: var(--text-xs); color: var(--text-muted); }
-.sess-billing dd { margin: 0; font-family: var(--font-mono); font-size: var(--text-md); color: var(--text); }
+.sess-billing dd { margin: 0; font-size: var(--text-base); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text); }
 .hero-pending { font-size: var(--text-sm); color: var(--text-muted); }
 .hero-sub {
   min-height: 18px;
@@ -503,8 +548,8 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
 .grp-tok > span { white-space: nowrap; }
 .grp-tok b {
   margin-left: 4px;
-  font-size: var(--text-sm);
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
 }
@@ -539,9 +584,9 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
 .grp-name {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.5;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -576,8 +621,8 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 40px;
-  padding: 0 14px 0 26px;
+  min-height: 44px;
+  padding: 6px 14px 6px 26px;
   border: none;
   background: transparent;
   font: inherit;
@@ -589,15 +634,15 @@ function openVia(fn: (id: string) => Promise<void>, id: string, failText: string
 .sess-title {
   flex: 1;
   min-width: 0;
-  font-size: var(--text-sm);
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: 400;
   line-height: 1.5;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sess-title.mono { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+.sess-title.mono { font-size: var(--text-sm); overflow: visible; white-space: normal; overflow-wrap: anywhere; }
 .sess-time { flex-shrink: 0; font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--text-muted); white-space: nowrap; }
 .sess-card {
   padding: 12px 14px 12px 26px;

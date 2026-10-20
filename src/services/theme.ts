@@ -17,7 +17,7 @@ import { reactive, readonly } from 'vue'
 import { settingsApi } from './api/settings'
 
 export type ThemeId = (typeof THEMES)[number]['id']
-export type AccentId = (typeof ACCENTS)[number]['id']
+export type AccentId = (typeof ACCENTS)[number]['id'] | (typeof WORKSPACE_ACCENTS)[number]['id']
 export type PolarityId = 'light' | 'dark'
 
 export interface Appearance {
@@ -99,13 +99,39 @@ export const ACCENTS = [
   { id: 'graphite', name: '石墨' },
 ] as const
 
+/** 新布局只提供差异明确的配色；旧 ID 留给经典布局与已保存设置。 */
+export const WORKSPACE_THEMES = THEMES.filter(t => ['paper', 'ink'].includes(t.id))
+export const WORKSPACE_ACCENTS = [
+  { id: 'ink', name: '蓝' },
+  { id: 'celadon', name: '绿' },
+  { id: 'clay', name: '橙' },
+  { id: 'amber', name: '琥珀' },
+  { id: 'plum', name: '紫' },
+  { id: 'rose', name: '玫瑰' },
+  { id: 'graphite', name: '灰' },
+  { id: 'sage', name: '鼠尾草' },
+  { id: 'sky', name: '雾蓝' },
+  { id: 'lavender', name: '薰衣草' },
+  { id: 'peach', name: '蜜桃' },
+] as const
+const WORKSPACE_THEME_MAP: Partial<Record<ThemeId, ThemeId>> = {
+  snow: 'paper', linen: 'paper', mist: 'paper', slate: 'ink', midnight: 'ink', moss: 'ink',
+}
+const WORKSPACE_ACCENT_MAP: Partial<Record<AccentId, AccentId>> = {
+  teal: 'celadon', forest: 'celadon', coral: 'clay',
+}
+const CLASSIC_ACCENT_MAP: Partial<Record<AccentId, AccentId>> = {
+  sage: 'celadon', sky: 'ink', lavender: 'plum', peach: 'clay',
+}
+let workspaceLayout = false
+
 export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink', backgroundAtmosphere: false }
 const state = reactive<Appearance>({ ...DEFAULT_APPEARANCE })
 /** 全应用共享的当前外观；只能通过选择入口更新，避免状态和根属性各自变化。 */
 export const appearance = readonly(state)
 
 const isThemeId = (v: string): v is ThemeId => THEMES.some((t) => t.id === v)
-const isAccentId = (v: string): v is AccentId => ACCENTS.some((a) => a.id === v)
+const isAccentId = (v: string): v is AccentId => ACCENTS.some(a => a.id === v) || WORKSPACE_ACCENTS.some(a => a.id === v)
 
 export const polarityOf = (theme: ThemeId): PolarityId => POLARITY[theme]
 const applyAppearance = (ap: Appearance) => {
@@ -136,8 +162,16 @@ const readAppearance = async (): Promise<Appearance> => {
 }
 
 /** 仅在 bootstrap 首绘前恢复持久化外观；组件直接读取共享状态。 */
-export const initializeAppearance = async () => {
-  applyAppearance(await readAppearance())
+export const initializeAppearance = async (options: { workspaceLayout?: boolean } = {}) => {
+  workspaceLayout = options.workspaceLayout ?? false
+  const restored = await readAppearance()
+  if (workspaceLayout) {
+    restored.theme = WORKSPACE_THEME_MAP[restored.theme] ?? restored.theme
+    restored.accent = WORKSPACE_ACCENT_MAP[restored.accent] ?? restored.accent
+  } else {
+    restored.accent = CLASSIC_ACCENT_MAP[restored.accent] ?? restored.accent
+  }
+  applyAppearance(restored)
 }
 
 /* 切换瞬间挂一次全局补间类（global.css 的 html.theme-anim），
@@ -171,6 +205,6 @@ const chooseAppearance = async <K extends keyof Appearance>(key: K, value: Appea
   }
 }
 
-export const chooseTheme = (id: ThemeId) => chooseAppearance('theme', id)
-export const chooseAccent = (id: AccentId) => chooseAppearance('accent', id)
+export const chooseTheme = (id: ThemeId) => chooseAppearance('theme', workspaceLayout ? WORKSPACE_THEME_MAP[id] ?? id : id)
+export const chooseAccent = (id: AccentId) => chooseAppearance('accent', (workspaceLayout ? WORKSPACE_ACCENT_MAP[id] : CLASSIC_ACCENT_MAP[id]) ?? id)
 export const chooseBackgroundAtmosphere = (enabled: boolean) => chooseAppearance('backgroundAtmosphere', enabled)

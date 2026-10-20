@@ -310,13 +310,16 @@ onMounted(() => {
         </button>
       </div>
 
-      <div class="dialog-body">
-        <div class="seg" role="tablist">
-          <button class="seg-btn" :class="{ on: mode === 'oauth' }" type="button" role="tab" @click="mode = 'oauth'">浏览器登录</button>
-          <button class="seg-btn" :class="{ on: mode === 'device' }" type="button" role="tab" @click="mode = 'device'">设备码</button>
-          <button class="seg-btn" :class="{ on: mode === 'apikey' }" type="button" role="tab" @click="mode = 'apikey'">API Key</button>
-          <button class="seg-btn" :class="{ on: mode === 'import' }" type="button" role="tab" @click="mode = 'import'">导入</button>
+      <div class="auth-tabs">
+        <div class="seg" role="tablist" aria-label="账号添加方式">
+          <button id="codex-auth-oauth" class="seg-btn" :class="{ on: mode === 'oauth' }" type="button" role="tab" :aria-selected="mode === 'oauth'" aria-controls="codex-auth-content" @click="mode = 'oauth'">浏览器登录</button>
+          <button id="codex-auth-device" class="seg-btn" :class="{ on: mode === 'device' }" type="button" role="tab" :aria-selected="mode === 'device'" aria-controls="codex-auth-content" @click="mode = 'device'">设备码</button>
+          <button id="codex-auth-apikey" class="seg-btn" :class="{ on: mode === 'apikey' }" type="button" role="tab" :aria-selected="mode === 'apikey'" aria-controls="codex-auth-content" @click="mode = 'apikey'">API Key</button>
+          <button id="codex-auth-import" class="seg-btn" :class="{ on: mode === 'import' }" type="button" role="tab" :aria-selected="mode === 'import'" aria-controls="codex-auth-content" @click="mode = 'import'">导入</button>
         </div>
+      </div>
+
+      <div id="codex-auth-content" class="dialog-body auth-content" role="tabpanel" :aria-labelledby="`codex-auth-${mode}`">
 
         <!-- 浏览器登录：官方 OAuth 授权码流程，desko 只在本机收回调 -->
         <template v-if="mode === 'oauth'">
@@ -466,7 +469,11 @@ onMounted(() => {
 .token-import summary { color: var(--text-secondary); font-size: var(--text-sm); cursor: pointer; }
 .token-modes { display: flex; gap: var(--space-2); margin-block: var(--space-3); }
 .token-modes button[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); }
-.auth-dialog { width: 520px; }
+.auth-dialog { width: 520px; height: min(560px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); }
+.auth-tabs { padding: 0 var(--space-4); flex-shrink: 0; }
+.auth-tabs .seg { margin-bottom: 0; }
+.auth-content { min-height: 0; }
+.auth-dialog .dialog-footer { min-height: 54px; flex-wrap: wrap; padding-block: 8px; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
 
 /* 页签分段控件与说明句（.lead）走 global.css 的弹窗档 */
