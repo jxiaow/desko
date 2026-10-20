@@ -55,15 +55,17 @@ describe('会话分组与重要操作生命周期', () => {
     }
   })
 
-  it('默认收起；补取用量期间可立即展开和收起，迟到结果不改展开态', async () => {
+  it('首次全部收起，补取用量期间可展开和收起，迟到结果不重新展开', async () => {
     let finish!: (value: CodexSessionTokenStats[]) => void
     vi.mocked(codexApi.sessionTokenStats).mockImplementation(() => new Promise(resolve => { finish = resolve }))
     const wrapper = mount(CodexSessionsPanel)
+    await flushPromises()
     const group = wrapper.get('.grp-head')
     expect(group.attributes('aria-expanded')).toBe('false')
     expect(wrapper.find('.sess-row').exists()).toBe(false)
     await group.trigger('click')
     expect(group.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('.sess-row').exists()).toBe(true)
     await group.trigger('click')
     expect(group.attributes('aria-expanded')).toBe('false')
     finish([])
@@ -76,6 +78,7 @@ describe('会话分组与重要操作生命周期', () => {
   it('会话删除确认打开后锁屏卸载，旧回调不能移动会话', async () => {
     vi.mocked(codexApi.sessionTokenStats).mockResolvedValue([])
     const wrapper = mount(CodexSessionsPanel)
+    await flushPromises()
     await wrapper.get('.grp-head').trigger('click')
     await wrapper.get('.sess-row').trigger('click')
     await wrapper.get('.trash-btn').trigger('click')

@@ -167,16 +167,18 @@ usePageHeadStore().setHead('内网穿透')
           <span class="dot" aria-hidden="true"></span>
           {{ services.length }} 项服务<span v-if="unrouted" class="chip-warn-text"> · {{ unrouted }} 条未应用</span>
         </span>
-        <button
-          class="btn-primary toggle-btn"
-          :class="{ 'ghost-danger': status?.alive }"
-          :disabled="busy || !bound"
-          :title="bound ? '' : (services.length ? '本机还没有可启动的隧道' : '还没有登记要挂出去的本地服务')"
-          @click="toggle"
-        >
-          <AppIcon :name="status?.alive ? 'x' : 'external'" :size="13" />
-          {{ status?.alive ? '停止隧道' : '启动隧道' }}
-        </button>
+        <div class="page-actions">
+          <button
+            class="btn-primary toggle-btn"
+            :class="{ 'ghost-danger': status?.alive }"
+            :disabled="busy || !bound"
+            :title="bound ? '' : (services.length ? '本机还没有可启动的隧道' : '还没有登记要挂出去的本地服务')"
+            @click="toggle"
+          >
+            <AppIcon :name="status?.alive ? 'x' : 'external'" :size="13" />
+            {{ status?.alive ? '停止隧道' : '启动隧道' }}
+          </button>
+        </div>
       </div>
 
       <!-- 准备流：缺东西时才摊开，齐了收成一行摘要 -->
@@ -274,14 +276,13 @@ usePageHeadStore().setHead('内网穿透')
 .content-inner { --font-mono: Consolas, 'Cascadia Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace; }
 .mono { font-family: var(--font-mono); }
 
-.toggle-btn { margin-left: auto }
-.toggle-btn.ghost-danger {
+.toggle-btn.ghost-danger:not(:disabled) {
   background: var(--danger-soft);
   color: var(--danger);
   border: 1px solid var(--danger-border);
   box-shadow: none;
 }
-.toggle-btn.ghost-danger:hover {
+.toggle-btn.ghost-danger:hover:not(:disabled) {
   background: var(--danger-soft);
   border-color: var(--danger);
   color: var(--danger-hover);

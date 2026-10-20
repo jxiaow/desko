@@ -129,13 +129,13 @@ pub(crate) fn read_official_oauth_identity(base_dir: &Path) -> Option<CodexOffic
     })
 }
 
-/// 将官方 profile 身份与本地账号身份进行强字段优先匹配。
+/// 将两份 OAuth 身份进行强字段优先匹配。
 ///
 /// account ID、组织 ID 和 user ID 只要双方都有就必须一致；如果没有任何强字段，
 /// 才回退到不区分大小写的 email，避免 profile 串号时把错误状态写入绑定账号。
 pub(crate) fn compare_official_oauth_identity(
     identity: &CodexOfficialOAuthIdentity,
-    account: &CodexAccount,
+    account: &CodexOfficialOAuthIdentity,
 ) -> CodexOfficialOAuthIdentityMatch {
     let account_id_pair = (
         account.account_id.as_deref(),

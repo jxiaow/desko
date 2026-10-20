@@ -60,28 +60,50 @@ onMounted(() => { void refresh(); poll = setInterval(() => { if (!busy.value) vo
 onUnmounted(() => { active = false; clearInterval(poll) })
 </script>
 <template>
-  <div class="web-access-pane">
+  <div class="group-content web-access-pane">
     <div class="web-status"><span :class="{ running: status.running }">{{ status.running ? '服务运行中' : '服务未启动' }}</span><span v-if="status.running">{{ status.lan ? '本机与局域网' : '仅本机' }}</span></div>
     <template v-if="status.running">
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-name">当前端口</span>
+          <span class="setting-desc">停止服务后可修改端口与访问范围。</span>
+        </div>
+        <code>{{ status.port }}</code>
+      </div>
       <div class="web-addresses" aria-label="访问地址">
         <div class="web-address" v-for="url in status.urls" :key="url">
           <span class="web-address-url">{{ url }}</span>
-          <button class="web-address-copy" @click="copy(url)"><AppIcon name="copy" :size="14" />复制地址</button>
+          <button class="action-btn" type="button" @click="copy(url)"><AppIcon name="copy" :size="14" />复制地址</button>
         </div>
       </div>
       <p class="pane-hint" v-if="status.lan && status.urls.length < 2">未获取局域网地址，请使用本机 IPv4 地址与端口 {{ status.port }}。</p>
-      <button class="btn btn-secondary" :disabled="busy" @click="requestStop">{{ busy ? '正在停止…' : '停止服务' }}</button>
+      <button class="action-btn" type="button" :disabled="busy" @click="requestStop">{{ busy ? '正在停止…' : '停止服务' }}</button>
     </template>
     <form v-else @submit.prevent="requestStart">
-      <label class="web-field">端口<input v-model.number="port" type="number" min="1024" max="65535" :disabled="busy" /></label>
-      <label class="web-lan"><input type="checkbox" v-model="lan" :disabled="busy" />允许局域网设备访问</label>
-      <button class="btn btn-primary" :disabled="busy">{{ busy ? '正在启动…' : '启动 Web 服务' }}</button>
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-name" for="web-access-port">端口</label>
+          <span class="setting-desc">可使用 1024～65535，启动前请确认端口空闲。</span>
+        </div>
+        <input id="web-access-port" v-model.number="port" class="number-input web-port" type="number" min="1024" max="65535" :disabled="busy" />
+      </div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-name" for="web-access-lan">允许局域网设备访问</label>
+          <span class="setting-desc">关闭时仅本机可访问。</span>
+        </div>
+        <label class="switch">
+          <input id="web-access-lan" v-model="lan" type="checkbox" role="switch" :disabled="busy" />
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <button class="action-btn primary" type="submit" :disabled="busy">{{ busy ? '正在启动…' : '启动 Web 服务' }}</button>
     </form>
     <p v-if="failure" class="web-error" role="alert">{{ failure }}</p>
   </div>
 </template>
 <style scoped>
-.web-access-pane { display:flex; flex-direction:column; gap:var(--space-4); }
+.web-access-pane { display:flex; flex-direction:column; gap:var(--space-3); }
 .web-access-pane p { margin:0; line-height:1.7; }
 .web-status { display:flex; gap:var(--space-3); align-items:center; color:var(--text-muted); font-size:var(--text-sm); }
 .web-status > span:first-child { font-weight:600; color:var(--text-secondary); }
@@ -90,12 +112,12 @@ onUnmounted(() => { active = false; clearInterval(poll) })
 .web-address { display:flex; align-items:center; gap:var(--space-3); min-width:0; padding:var(--space-3) 0; }
 .web-address + .web-address { border-top:1px solid var(--border-subtle); }
 .web-address-url { flex:1; min-width:0; overflow-wrap:anywhere; color:var(--text-secondary); font-family:var(--font-ui); font-size:var(--text-sm); font-variant-numeric:tabular-nums; line-height:1.6; user-select:text; }
-.web-address-copy { display:inline-flex; align-items:center; justify-content:center; gap:6px; flex-shrink:0; align-self:center; min-height:32px; padding:6px 8px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--text-secondary); font:inherit; font-size:var(--text-xs); white-space:nowrap; cursor:pointer; transition:background var(--transition), color var(--transition); }
-.web-address-copy:hover { background:var(--fill); color:var(--text); }
-.web-field { display:flex; flex-direction:column; gap:var(--space-2); font-size:var(--text-sm); color:var(--text-secondary); }
-form { display:flex; flex-direction:column; gap:var(--space-4); }
-.web-field input { width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-input, var(--bg-surface)); color:var(--text); font:inherit; }
-.web-lan { display:flex; gap:var(--space-2); align-items:center; font-size:var(--text-sm); }
+.web-address .action-btn { flex-shrink:0; }
+.web-port { width:84px; }
+.switch input { position:absolute; inset:0; width:100%; height:100%; margin:0; z-index:1; cursor:pointer; }
+.switch input:focus-visible + .switch-slider { outline:2px solid var(--accent); outline-offset:2px; }
+form { display:flex; flex-direction:column; }
+form > button { margin-top:var(--space-3); }
 button { align-self:flex-start; }
 .web-error { color:var(--danger); font-size:var(--text-sm); }
 </style>

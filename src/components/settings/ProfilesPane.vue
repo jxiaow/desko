@@ -98,7 +98,7 @@ const doSwitch = (p: Profile) => {
       try {
         const notesStore = useNotesStore()
         if (htmlHasContent(notesStore.noteDraftHtml)) {
-          throw new Error('请先发布或放弃未发布的小记，再切换档案')
+          throw new Error('请先保存或放弃未保存的小记，再切换档案')
         }
         await notesStore.flushNoteSave()
         await profilesApi.switchTo(p.id)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useNotesStore } from '../../stores/notes'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
@@ -15,16 +15,22 @@ const pw = ref('')
 const pw2 = ref('')
 const err = ref('')
 const busy = ref(false)
+const pwEl = ref<HTMLInputElement | null>(null)
+onMounted(() => pwEl.value?.focus())
 
 // 设置页那条链会在同一个实例上从 unlock 续到 change，确认格必须是活的；
 // 定死的 const 会让续上的改密格永远少一格，提交钮永远点不动
 const needsConfirm = computed(() => props.mode !== 'unlock')
 // unlock 续到 change 时把刚输的口令清掉：别让旧口令悄悄顶着"新口令"交上去
-watch(() => props.mode, () => { pw.value = ''; pw2.value = ''; err.value = '' })
+watch(() => props.mode, async () => {
+  pw.value = ''; pw2.value = ''; err.value = ''
+  await nextTick()
+  pwEl.value?.focus()
+})
 const MIN_LEN = 8
 
 const title = computed(() =>
-  props.mode === 'unlock' ? '解锁加密小记' : props.mode === 'setup' ? '设置小记口令' : '修改小记口令')
+  props.mode === 'unlock' ? '解锁全部加密小记' : props.mode === 'setup' ? '设置小记口令' : '修改小记口令')
 
 // 长度规矩只管立口令的时候：解锁那一格填的是既有口令，卡位数会把短口令挡在门外
 const canSubmit = computed(() => {
@@ -75,11 +81,12 @@ useEscapeClose(() => emit('close'))
         <p v-else-if="props.mode === 'change'" class="lead">
           改口令不影响已加密的小记，旧口令立即失效。
         </p>
-        <p v-else class="lead">输错不计数，不会锁定窗口。</p>
+        <p v-else class="lead">小记共用一把口令，解锁本次会话内的全部加密小记。</p>
 
         <div class="form-group">
           <label>{{ props.mode === 'unlock' ? '小记口令' : '新口令' }}</label>
           <input
+            ref="pwEl"
             v-model="pw"
             type="password"
             :placeholder="props.mode === 'unlock' ? '输入口令' : `至少 ${MIN_LEN} 位，可用一句短语`"
@@ -93,7 +100,7 @@ useEscapeClose(() => emit('close'))
         <p v-if="needsConfirm && pw2 && pw !== pw2" class="dialog-err">两次口令不一致</p>
 
         <button v-if="props.mode === 'unlock'" class="link-btn" type="button" @click="recover">
-          忘了口令？用主密码找回
+          忘了口令？用主密码直接恢复
         </button>
         <p v-if="err" class="dialog-err">{{ err }}</p>
       </div>

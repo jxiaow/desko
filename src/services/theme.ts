@@ -99,28 +99,33 @@ export const ACCENTS = [
   { id: 'graphite', name: '石墨' },
 ] as const
 
-/** 新布局只提供差异明确的配色；旧 ID 留给经典布局与已保存设置。 */
+/** 新布局只保留纸/墨两套底色；旧六套在读取时归并，界面不再暴露。 */
 export const WORKSPACE_THEMES = THEMES.filter(t => ['paper', 'ink'].includes(t.id))
 export const WORKSPACE_ACCENTS = [
   { id: 'ink', name: '蓝' },
-  { id: 'celadon', name: '绿' },
-  { id: 'clay', name: '橙' },
-  { id: 'amber', name: '琥珀' },
+  { id: 'indigo', name: '靛' },
   { id: 'plum', name: '紫' },
   { id: 'rose', name: '玫瑰' },
+  { id: 'brick', name: '砖红' },
+  { id: 'clay', name: '橙' },
+  { id: 'amber', name: '琥珀' },
+  { id: 'olive', name: '橄榄' },
+  { id: 'celadon', name: '绿' },
+  { id: 'teal', name: '青' },
   { id: 'graphite', name: '灰' },
-  { id: 'sage', name: '鼠尾草' },
-  { id: 'sky', name: '雾蓝' },
-  { id: 'lavender', name: '薰衣草' },
-  { id: 'peach', name: '蜜桃' },
+  { id: 'sand', name: '砂' },
 ] as const
 const WORKSPACE_THEME_MAP: Partial<Record<ThemeId, ThemeId>> = {
-  snow: 'paper', linen: 'paper', mist: 'paper', slate: 'ink', midnight: 'ink', moss: 'ink',
+  snow: 'paper', linen: 'paper', mist: 'paper',
+  midnight: 'ink', slate: 'ink', moss: 'ink',
 }
 const WORKSPACE_ACCENT_MAP: Partial<Record<AccentId, AccentId>> = {
-  teal: 'celadon', forest: 'celadon', coral: 'clay',
+  forest: 'olive', coral: 'brick',
 }
 const CLASSIC_ACCENT_MAP: Partial<Record<AccentId, AccentId>> = {
+  indigo: 'plum', brick: 'coral', olive: 'forest', sand: 'graphite',
+}
+const RETIRED_ACCENT: Record<string, AccentId> = {
   sage: 'celadon', sky: 'ink', lavender: 'plum', peach: 'clay',
 }
 let workspaceLayout = false
@@ -152,7 +157,7 @@ const readAppearance = async (): Promise<Appearance> => {
     const rawTheme = await settingsApi.getSetting('theme')
     theme = isThemeId(rawTheme) ? rawTheme : LEGACY_THEME[rawTheme] ?? null
     const rawAccent = await settingsApi.getSetting('accent')
-    accent = isAccentId(rawAccent) ? rawAccent : LEGACY_ACCENT[rawTheme] ?? null
+    accent = RETIRED_ACCENT[rawAccent] ?? (isAccentId(rawAccent) ? rawAccent : LEGACY_ACCENT[rawTheme] ?? null)
     const rawAtmosphere = await settingsApi.getSetting('background_atmosphere')
     if (rawAtmosphere === 'true' || rawAtmosphere === 'false') backgroundAtmosphere = rawAtmosphere === 'true'
   } catch {

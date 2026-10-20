@@ -1345,13 +1345,16 @@
   --text-primary: var(--text);
 
   --border-line: var(--border);
+  --border-card: var(--border);
   --border-card-hover: var(--border-hover);
   --border-input: var(--border);
   --border-divider: var(--border-subtle);
   --text-title: var(--text);
   --text-body: var(--text-secondary);
-  /* --shadow-card 为主题槽位（轻量化轮起只给贴地一丝）：行卡分层靠发丝描边，
-     阴影抬升档（--shadow-card-hover）已退役，hover 反馈改背景+描边显色 */
+  /* 卡片的常态与悬停角色可独立减重，输入框和浮层继续使用原有主题阴影。 */
+  --shadow-card-rest: var(--shadow-card);
+  --shadow-card-hover: var(--shadow-md);
+  --weight-card-title: 600;
   --shadow-popover: var(--shadow-pop);
   --radius-card: var(--radius-lg);
   --radius-badge: var(--radius);
@@ -1753,7 +1756,7 @@ body {
    原先这里另有一组按分类取纯色的 .card-avatar.c0..c5（36px 彩底白字），
    详情弹窗用它、列表卡用 .grid-slot，同一条目的两张脸对不上，且彩底白字对比只有 3.5:1。 */
 
-/* 搜索框默认保留清晰描边，聚焦时转为强调色；圆角与行卡同档。 */
+/* 搜索框默认使用轻边界，聚焦时转为强调色；圆角与行卡同档。 */
 .search-box {
   display: flex;
   align-items: center;
@@ -1761,7 +1764,7 @@ body {
   background: var(--bg-surface);
   border: 1px solid var(--border-search);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
   padding: 0 var(--space-3);
   height: 36px;
   transition: all var(--transition);
@@ -2046,10 +2049,7 @@ body {
 .empty-icon svg { width: 24px; height: 24px; }
 .empty-title { font-size: var(--text-base); font-weight: 600; color: var(--text); margin-bottom: var(--space-1); }
 .empty-desc { font-size: var(--text-sm); color: var(--text-muted); }
-/* 空态三点节奏：中点落 accent，与微光画布同色系；纯装饰，不带语义 */
 .empty-motto { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 22px; }
-.empty-motto .d { width: 4px; height: 4px; border-radius: 50%; background: var(--border-strong); }
-.empty-motto .d.mid { width: 6px; height: 6px; background: var(--accent); opacity: 0.8; }
 .empty-motto .w { font-size: var(--text-2xs); color: var(--text-faint); letter-spacing: 0.14em; }
 
 /* 滚动条：轨道透明，thumb 是浮在 9px 槽中的一根 3px 细胶囊（3px 透明内衬 + padding-box 裁切），
@@ -2197,6 +2197,14 @@ body {
   align-items: center;
   gap: var(--space-2);
 }
+/* 搜索与筛选留在左侧；页面操作整组靠右，窄窗换行时保持组内顺序与间距。 */
+.page-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+  margin-left: auto;
+}
 /* 搜索框的工具条档：32px、12px 字，底色交给 --bg-canvas-input，描边沿用基础样式。页栏内默认吃这一档；
    栏外的第二行工具条（如 Codex 账号筛选行）给元素加 .flat 认领同一档，
    不要再抄一遍令牌——基础 .search-box 那棵是弹窗/表单里的 36px 白底描边档。 */
@@ -2229,7 +2237,7 @@ body {
 .page-bar .bar-btn { height: 32px; }
 /* 栏内主钮改淡染方言：accent-soft 底 + brand 字，不做实心深蓝大胶囊。
    圆角收到 8px 方角档，去掉彩色投影与 hover 抬升（ Things 静默控件）。 */
-.page-bar .btn-primary {
+.page-bar .btn-primary:where(:not(.ghost-danger)) {
   background: var(--accent-soft);
   color: var(--text-brand);
   border: none;
@@ -2237,13 +2245,13 @@ body {
   font-weight: 600;
   box-shadow: none;
 }
-.page-bar .btn-primary:hover {
+.page-bar .btn-primary:hover:not(:disabled):not(.ghost-danger) {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--text-brand);
   transform: none;
   box-shadow: none;
 }
-.page-bar .btn-primary:active {
+.page-bar .btn-primary:active:not(:disabled):not(.ghost-danger) {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--text-brand);
   transform: none;
@@ -2258,9 +2266,9 @@ body {
   flex-direction: column;
   margin-top: var(--space-3);
   background: var(--bg-surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
   overflow: hidden;
 }
 .rowlist > * + * { border-top: 1px solid var(--border); }
@@ -2280,9 +2288,9 @@ body {
    scoped 到组件就跨不进子组件，所以与 .rowlist/.card-grid 一起放骨架里。 */
 .tn-card {
   background: var(--bg-surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: 12px;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
   margin-bottom: var(--space-3);
   overflow: hidden;
 }
@@ -2293,7 +2301,7 @@ body {
   height: 44px;
   padding: 0 14px;
   font-size: var(--text-base);
-  font-weight: 600;
+  font-weight: var(--weight-card-title);
   color: var(--text);
   border-bottom: 1px solid var(--border);
 }
@@ -2381,14 +2389,14 @@ body {
    行档 64：岛里最厚的件是「主名 + 一句细字」，低于这一档两行字会顶到描边。 */
 .rcard {
   background: var(--bg-surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: 12px;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
   margin-bottom: 10px;
   overflow: hidden;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
-.rcard:hover:not(.empty-state) { border-color: var(--border-hover); box-shadow: var(--shadow-md) }
+.rcard:hover:not(.empty-state) { border-color: var(--border-card-hover); box-shadow: var(--shadow-card-hover) }
 /* 空态那颗借同一层描边，但里面没有可点的东西，所以不抬影 */
 .rcard.empty-state { box-shadow: none }
 .rcard-list {
@@ -2457,18 +2465,18 @@ body {
   padding: 12px 14px;
   cursor: pointer;
   background: var(--bg-surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: 12px;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
   transition: transform var(--transition), background-color var(--transition),
     border-color var(--transition), box-shadow var(--transition), padding-left var(--transition);
 }
-/* hover 抬 1px + md 影 + 描边升一档。
+/* hover 抬 1px，描边与阴影由卡片角色统一控制。
    亮极性下卡面是整窗最亮的一档，hover 不洗底等于没换色，这里改吃 --sunken。 */
 .grid-card:hover {
   transform: translateY(-1px);
-  border-color: var(--border-hover);
-  box-shadow: var(--shadow-md);
+  border-color: var(--border-card-hover);
+  box-shadow: var(--shadow-card-hover);
 }
 [data-base="light"] .grid-card:hover:not(.selected) { background: var(--sunken); }
 [data-base="dark"] .grid-card:hover:not(.selected) { background: var(--hover); }
@@ -2626,10 +2634,10 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   gap: 8px;
   min-height: 78px;
   padding: 12px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: 12px;
   background: var(--bg-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 .skeleton-slot { width: 24px; height: 24px; border-radius: 7px; background: var(--fill); flex-shrink: 0; }
@@ -2642,10 +2650,10 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   gap: var(--space-3);
   height: 52px;
   padding: 0 var(--space-4);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: var(--radius-card);
   background: var(--bg-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 .skeleton-block {
@@ -2723,9 +2731,8 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   border-radius: var(--radius-pill);
   box-shadow: var(--shadow-dock);
   padding: 0 var(--space-2) 0 var(--space-4);
-  animation: dock-in var(--transition-slow) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-@keyframes dock-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+.dock-hint { font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; }
 .dock-count {
   font-size: var(--text-sm);
   font-weight: 600;
@@ -2857,9 +2864,10 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
 
 /* Teleport 到 body 的分类下拉：脱离组件作用域，样式只能挂全局。
    与 .popover 同一套浮层语言（大圆角 + pop 阴影 + 内衬间距），条目落 .pop-item 同档 */
-.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--bg-menu); background-attachment: var(--floating-background-attachment); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); padding: var(--space-1); max-height: 200px; overflow-y: auto; scrollbar-gutter: stable; }
-.category-dropdown-teleported .category-option { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); border-radius: var(--radius-sm); cursor: pointer; transition: background var(--transition-fast); }
+.category-dropdown-teleported { position: fixed; z-index: 10000; background: var(--bg-menu); background-attachment: var(--floating-background-attachment); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); padding: var(--space-1); max-height: 202px; overflow-y: auto; scrollbar-gutter: stable; }
+.category-dropdown-teleported .category-option { height: 32px; line-height: 32px; padding: 0 var(--space-3); font-size: var(--text-sm); border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background var(--transition-fast); }
 .category-dropdown-teleported .category-option:hover { background: var(--hover); }
+.category-dropdown-teleported .category-option.highlighted { background: var(--hover); }
 .category-dropdown-teleported .category-option.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 .category-dropdown-teleported .category-empty { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); color: var(--text-muted); }
 

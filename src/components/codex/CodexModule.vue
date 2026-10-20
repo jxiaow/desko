@@ -43,6 +43,7 @@ import {
   switchTo,
   cancelSwitch,
   loadQuotaSettings,
+  autoSyncWslAuthOnEnter,
   startQuotaTicker,
   stopQuotaTicker,
   syncDeleteTicker,
@@ -359,6 +360,7 @@ onMounted(async () => {
   // 自动刷新的间隔与阈值先落进 state，定时器才能按上一次的选择起
   await loadQuotaSettings()
   if (!active) return
+  void autoSyncWslAuthOnEnter()
   syncDeleteTicker()
   void refreshAccounts().then(() => {
     if (!active) return
@@ -422,21 +424,23 @@ watchEffect(() => {
             <input v-model="accountQuery" type="text" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
             <button v-if="accountQuery" class="search-clear" type="button" aria-label="清除账号搜索" @click="accountQuery = ''"><AppIcon name="x" :size="13" /></button>
           </div>
-          <button class="btn-secondary bar-btn" type="button" :disabled="!accounts.length" @click="refreshQuotas(accounts.map((a) => a.id))">
-            <AppIcon name="refresh" :size="13" />
-            刷新配额
-          </button>
-          <button class="btn-secondary bar-btn" type="button" :disabled="!accounts.length" @click="togglePick">
-            <AppIcon :name="isBatchMode ? 'check' : 'checkall'" :size="13" />
-            {{ isBatchMode ? '退出选择' : '选择' }}
-          </button>
-          <CreateAction class="add-btn" label="添加账号" @click="openAddAuth" />
+          <div class="page-actions">
+            <button class="btn-secondary bar-btn" type="button" :disabled="!accounts.length" @click="refreshQuotas(accounts.map((a) => a.id))">
+              <AppIcon name="refresh" :size="13" />
+              刷新配额
+            </button>
+            <button class="btn-secondary bar-btn" type="button" :disabled="!accounts.length" @click="togglePick">
+              <AppIcon :name="isBatchMode ? 'check' : 'checkall'" :size="13" />
+              {{ isBatchMode ? '退出选择' : '选择' }}
+            </button>
+            <CreateAction class="add-btn" label="添加账号" @click="openAddAuth" />
+          </div>
         </template>
 
         <template v-else-if="view === 'sessions'">
-          <div class="session-search-mode" role="group" aria-label="会话搜索范围">
-            <button class="cx-tab" :class="{ active: sessionSearchMode === 'title' }" type="button" :aria-pressed="sessionSearchMode === 'title'" @click="sessionSearchMode = 'title'">标题</button>
-            <button class="cx-tab" :class="{ active: sessionSearchMode === 'content' }" type="button" :aria-pressed="sessionSearchMode === 'content'" @click="sessionSearchMode = 'content'">正文</button>
+          <div class="session-search-mode seg" role="group" aria-label="会话搜索范围">
+            <button class="seg-btn" :class="{ on: sessionSearchMode === 'title' }" type="button" :aria-pressed="sessionSearchMode === 'title'" @click="sessionSearchMode = 'title'">标题</button>
+            <button class="seg-btn" :class="{ on: sessionSearchMode === 'content' }" type="button" :aria-pressed="sessionSearchMode === 'content'" @click="sessionSearchMode = 'content'">正文</button>
           </div>
           <div class="search-box">
             <span class="search-icon">
@@ -447,19 +451,21 @@ watchEffect(() => {
               <AppIcon name="x" :size="13" />
             </button>
           </div>
-          <button class="btn-secondary bar-btn cx-refresh" type="button" title="当前页面每 30 秒自动刷新，点击立即刷新" :disabled="sessionsBusy" @click="reloadSessions()">
-            <AppIcon name="refresh" :size="13" />
-            刷新
-          </button>
+          <div class="page-actions">
+            <button class="btn-secondary bar-btn cx-refresh" type="button" title="当前页面每 30 秒自动刷新，点击立即刷新" :disabled="sessionsBusy" @click="reloadSessions()">
+              <AppIcon name="refresh" :size="13" />
+              刷新
+            </button>
+          </div>
         </template>
 
         <template v-else-if="view === 'usage'">
-          <nav class="cx-tabs" aria-label="统计窗口">
+          <nav class="usage-ranges seg" aria-label="统计窗口">
             <button
               v-for="option in USAGE_RANGES"
               :key="option.key"
-              class="cx-tab"
-              :class="{ active: usageRange === option.key }"
+              class="seg-btn"
+              :class="{ on: usageRange === option.key }"
               :aria-pressed="usageRange === option.key"
               type="button"
               @click="setUsageRange(option.key)"
@@ -467,17 +473,21 @@ watchEffect(() => {
               {{ option.label }}
             </button>
           </nav>
-          <button class="btn-secondary bar-btn cx-refresh" type="button" title="当前页面每 30 秒自动刷新，点击立即统计" :disabled="usageBusy" @click="loadUsage()">
-            <AppIcon name="refresh" :size="13" />
-            重新统计
-          </button>
+          <div class="page-actions">
+            <button class="btn-secondary bar-btn cx-refresh" type="button" title="当前页面每 30 秒自动刷新，点击立即统计" :disabled="usageBusy" @click="loadUsage()">
+              <AppIcon name="refresh" :size="13" />
+              重新统计
+            </button>
+          </div>
         </template>
 
         <template v-else-if="view === 'trash'">
-          <button class="btn-secondary bar-btn cx-refresh" type="button" :disabled="trashBusy || recycledBusy" @click="reloadTrashBin">
-            <AppIcon name="refresh" :size="13" />
-            刷新
-          </button>
+          <div class="page-actions">
+            <button class="btn-secondary bar-btn cx-refresh" type="button" :disabled="trashBusy || recycledBusy" @click="reloadTrashBin">
+              <AppIcon name="refresh" :size="13" />
+              刷新
+            </button>
+          </div>
         </template>
       </div>
 
@@ -503,9 +513,9 @@ watchEffect(() => {
           { value: 'default', label: '默认排序' }, { value: 'quota', label: '可用配额优先' },
           { value: 'recent', label: '最近使用优先' }, { value: 'name', label: '按名称排序' },
         ]" @update:model-value="accountSort = String($event) as CodexAccountSort" />
-        <p class="account-summary">
-          {{ accountFiltersActive ? `${visibleAccounts.length} / ${accounts.length}` : accounts.length }} 个账号
-          <span v-if="attentionCount">· {{ attentionCount }} 个需处理</span>
+        <p v-if="accountFiltersActive || attentionCount" class="account-summary">
+          <span v-if="accountFiltersActive">{{ visibleAccounts.length }} / {{ accounts.length }} 个账号</span>
+          <span v-if="attentionCount">{{ accountFiltersActive ? '· ' : '' }}{{ attentionCount }} 个需处理</span>
           <button v-if="accountFiltersActive" type="button" class="filter-reset" @click="clearAccountFilters">清除筛选</button>
         </p>
       </div>
@@ -682,14 +692,34 @@ watchEffect(() => {
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
 .page-note { font-size: var(--text-xs); }
 
-.add-btn { margin-left: auto }
 .account-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
 .account-summary { flex-basis: 100%; display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-muted); }
 .filter-reset { margin-left: auto; border: none; background: transparent; color: var(--accent); cursor: pointer; font: inherit; }
 .account-filters :deep(.opt-trigger) { min-width: 100px; }
-.session-search-mode { display: flex; align-items: center; flex-shrink: 0; }
-/* 搜索框与其他页面同档：随工具栏伸缩，最大宽度 320px。 */
-.page-bar .search-box { flex: 1; min-width: 140px; max-width: 320px; }
+.session-search-mode, .usage-ranges { display: flex; align-items: center; flex-shrink: 0; gap: 2px; }
+.usage-ranges { margin-left: 8px; }
+/* 工具栏不在 .dialog 内，需显式使用与弹窗分段选择一致的样式。 */
+.session-search-mode > button, .usage-ranges > button {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.session-search-mode > button:hover:not(.on), .usage-ranges > button:hover:not(.on) { color: var(--text-secondary); }
+.session-search-mode > button.on, .usage-ranges > button.on { background: var(--hover-chrome); color: var(--text); font-weight: 600; }
+.usage-ranges > button { font-size: var(--text-xs); }
+.usage-ranges > button.on { font-weight: 500; }
+/* 搜索框随工具栏伸缩，桌面使用共享上限，浏览器保留原有宽度。 */
+.page-bar .search-box { flex: 1; min-width: 140px; max-width: var(--page-search-max, 320px); }
 
 /* 页内第二档的切换件：照收藏页分类 tab 的下划线档，去掉滑块——页级换档不是滑动语义 */
 .cx-tabs {
@@ -716,6 +746,7 @@ watchEffect(() => {
   color: var(--text-muted);
   cursor: pointer;
 }
+:global(.codex-layout .cx-tabs) { padding-block: 1px; }
 .cx-tab:hover { color: var(--text-secondary); background: var(--hover-chrome); }
 .cx-tab.active { color: var(--text); font-weight: 600; }
 .cx-tab.active::after {
@@ -728,8 +759,6 @@ watchEffect(() => {
   border-radius: 1px;
   background: var(--accent);
 }
-/* 会话档的动作只有刷新，推到最右与账号档的「添加账号」同位 */
-.cx-refresh { margin-left: auto; }
 
 /* 切号进度：只在切的那几秒出现，一行字，不遮罩整页 */
 .switch-line {
@@ -775,7 +804,7 @@ watchEffect(() => {
 .acc-l1 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; min-width: 0 }
 .acc-l1 .mail {
   min-width: 0; max-width: 100%;
-  font-size: var(--text-md); font-weight: 600; color: var(--text);
+  font-size: var(--text-md); font-weight: var(--weight-card-title); color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .acc-badges { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }

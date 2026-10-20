@@ -721,7 +721,7 @@ watchEffect(() => pageHead.setHead('网络直连', targets.value.length ? `${tar
       <div v-if="!targets.length" class="rcard empty-state">
         <div class="empty-icon"><AppIcon name="navBypass" :size="24" /></div>
         <div class="empty-title">清单为空</div>
-        <div class="empty-desc">管理域名、IPv4 地址和网段的直连配置。先探测并加入清单，再确认配置；探测和加入清单不会修改系统。</div>
+        <div class="empty-desc bypass-empty-desc">管理域名、IPv4 地址和网段的直连配置。先探测并加入清单，再确认配置；探测和加入清单不会修改系统。</div>
       </div>
     </template>
 
@@ -795,6 +795,7 @@ watchEffect(() => pageHead.setHead('网络直连', targets.value.length ? `${tar
 </template>
 
 <style scoped>
+.bypass-empty-desc { max-width: 560px; margin-inline: auto; line-height: 1.7; text-wrap: pretty; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
 .page-note { font-size: var(--text-xs); }
 

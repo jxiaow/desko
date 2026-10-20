@@ -64,7 +64,7 @@ async function changeModule(id: typeof WEB_MODULE_IDS[number], event: Event) {
         <template v-else>
         <h4>底色</h4>
         <div class="web-choices" role="group" aria-label="底色">
-          <button v-for="theme in THEMES" :key="theme.id" type="button" class="web-theme theme-scope" :data-theme="theme.id" :data-base="polarityOf(theme.id)" :data-accent="appearance.accent" :data-atmosphere="appearance.backgroundAtmosphere ? 'on' : 'off'" :aria-pressed="appearance.theme === theme.id" :disabled="saving" @click="save(() => chooseTheme(theme.id))">{{ theme.name }}</button>
+          <button v-for="theme in THEMES" :key="theme.id" type="button" class="web-theme theme-scope" :data-theme="theme.id" :data-base="polarityOf(theme.id)" data-accent="graphite" data-atmosphere="off" :aria-pressed="appearance.theme === theme.id" :disabled="saving" @click="save(() => chooseTheme(theme.id))">{{ theme.name }}</button>
         </div>
         <h4>强调色</h4>
         <div class="web-choices" role="group" aria-label="强调色">

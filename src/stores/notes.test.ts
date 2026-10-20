@@ -84,6 +84,19 @@ describe('Notes Store', () => {
     vi.useRealTimers()
   })
 
+  it('归档摘要按本地日历区分昨天，旧条目编辑不改变创建日期分组', () => {
+    vi.setSystemTime(new Date(2026, 9, 20, 0, 10))
+    const store = useNotesStore()
+    const created = new Date(2025, 9, 19, 23, 55).getTime()
+    store.notes = [mockNote({ created_at: created, archived: true, archived_at: new Date(2026, 9, 19, 23, 55).getTime() })]
+    expect(store.archiveSummary).toBe('最近一次归档：昨天')
+    store.noteView = 'archived'
+    const label = store.groupedNotes[0].label
+    store.saveNoteContent('1', '<p>改写的旧记录</p>')
+    expect(store.groupedNotes[0].label).toBe(label)
+    expect(store.notes[0].created_at).toBe(created)
+  })
+
   describe('lock boundary for asynchronous reads', () => {
     it('ignores a list returned after lock, including its loading state', async () => {
       const store = useNotesStore()

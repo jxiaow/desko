@@ -86,6 +86,54 @@ export interface StoragePaths {
   authPath: string
 }
 
+/** WSL 登录态同步（后端 rename_all = "camelCase"）；token 原文不出后端。 */
+export type CodexWslAuthTargetState =
+  | 'empty'
+  | 'same'
+  | 'outdated'
+  | 'newer'
+  | 'different-account'
+  | 'unreadable'
+  | 'unknown'
+
+export interface CodexWslAuthSource {
+  available: boolean
+  path: string
+  authMode: string | null
+  email: string | null
+  plan: string | null
+  /** unix 秒 */
+  accessExpiresAt: number | null
+  expired: boolean
+  error: string | null
+}
+
+export interface CodexWslAuthTarget {
+  distro: string
+  user: string
+  /** 目标 .codex 目录（Windows UNC 路径） */
+  homePath: string
+  state: CodexWslAuthTargetState
+  email: string | null
+  /** unix 秒 */
+  accessExpiresAt: number | null
+  expired: boolean
+}
+
+export interface CodexWslAuthStatus {
+  autoSync: boolean
+  source: CodexWslAuthSource
+  targets: CodexWslAuthTarget[]
+  targetError: string | null
+}
+
+export interface CodexWslAuthSyncResult {
+  distro: string
+  user: string
+  status: 'synced' | 'skipped' | 'failed'
+  message: string | null
+}
+
 /** 会话可见性修复账本（后端带 rename_all = "camelCase"），只取界面要播报的几项 */
 export interface SessionVisibilityRepairSummary {
   mutatedInstanceCount: number
@@ -362,6 +410,8 @@ export const codexApi = {
     invoke('export_codex_accounts', { accountIds }),
 
   storagePaths: (): Promise<StoragePaths> => invoke('get_codex_storage_paths'),
+  wslAuthStatus: (): Promise<CodexWslAuthStatus> => invoke('get_codex_wsl_auth_status'),
+  syncWslAuth: (): Promise<CodexWslAuthSyncResult[]> => invoke('sync_codex_auth_to_wsl'),
   openConfigToml: (): Promise<void> => invoke('open_codex_config_toml'),
 
   /** 官方 config.toml 里生效的 model_provider：官方客户端按它过滤侧栏会话 */

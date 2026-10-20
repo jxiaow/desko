@@ -92,7 +92,7 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
         :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
         @click="emit('togglePin')"
       >
-        <AppIcon name="pin" :size="iconSize" /><span v-if="!props.dense">{{ props.note.pinned ? '已置顶' : '置顶' }}</span>
+        <AppIcon name="pin" :size="iconSize" /><span v-if="!props.dense">{{ props.note.pinned ? '取消置顶' : '置顶' }}</span>
       </button>
       <button
         :class="[btnCls, { on: props.note.starred, warn: props.note.starred }]"
@@ -101,7 +101,7 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
         :aria-label="props.note.starred ? '取消收藏' : '收藏'"
         @click="emit('toggleStar')"
       >
-        <AppIcon name="star" :size="iconSize" :filled="props.note.starred" /><span v-if="!props.dense">{{ props.note.starred ? '已收藏' : '收藏' }}</span>
+        <AppIcon name="star" :size="iconSize" :filled="props.note.starred" /><span v-if="!props.dense">{{ props.note.starred ? '取消收藏' : '收藏' }}</span>
       </button>
     </template>
 

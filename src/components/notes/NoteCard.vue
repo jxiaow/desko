@@ -5,7 +5,8 @@ import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
 import NoteMoreMenu from './NoteMoreMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
-import { formatRelativeTime, stripTagsFromHtml, stripTagsFromText } from '../../utils/format'
+import { formatAbsTime, formatRelativeTime, stripTagsFromHtml } from '../../utils/format'
+import { noteDisplay } from '../../utils/noteDisplay'
 import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { resolveAssetHtml, unreferencedAttachments, type SaveImage } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
@@ -166,23 +167,14 @@ const toggleTask = (e: MouseEvent, box: HTMLInputElement) => {
 const locked = computed(() => props.note.encrypted && !props.unlocked)
 
 /**
- * 首块是纯文本块（p / 标题 / 引用）时提升为标题行、正文里藏掉它，避免标题与正文重复；
- * 列表 / 任务 / 图片等首块必须留在正文（任务勾选、配图都靠它），标题退化为库里的 label。
+ * 只有明确设置标题格式的首块才显示为标题行；普通段落、引用和自动摘要都不充当标题。
+ * 列表 / 任务 / 图片等结构始终保留在正文。
  * 藏用 display:none 而非删节点：toggleTask 靠「渲染序 == 库序」对位，删了会错位。
  */
-const PROMOTABLE = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE'])
-const firstBlock = computed(() => {
-  const div = document.createElement('div')
-  div.innerHTML = bodyHtml.value
-  return div.firstElementChild as HTMLElement | null
-})
-const promote = computed(() => {
-  if (locked.value) return false
-  const el = firstBlock.value
-  return !!el && PROMOTABLE.has(el.tagName.toUpperCase()) && !!((el.textContent ?? '').trim())
-})
-const titleText = computed(() =>
-  (promote.value ? (firstBlock.value?.textContent ?? '').trim() : stripTagsFromText(props.note.title).trim()) || '小记')
+const display = computed(() => noteDisplay(locked.value ? '' : bodyHtml.value))
+const promote = computed(() => display.value.hideFirstBlock)
+const titleText = computed(() => display.value.title || props.note.title || '未命名')
+const edited = computed(() => props.note.updated_at - props.note.created_at > 60_000)
 
 /** 列表标签只在底部展示，与筛选、分类共用 noteMeta 的派生结果。 */
 const noteTags = computed(() => (locked.value ? [] : noteMeta(props.note.content_html).tags))
@@ -195,6 +187,7 @@ const onHeadClick = (e: MouseEvent) => {
 
 const onBodyClick = (e: MouseEvent) => {
   if (props.isBatchMode) {
+    e.preventDefault()
     emit('select')
     return
   }
@@ -213,9 +206,10 @@ const onBodyClick = (e: MouseEvent) => {
 }
 
 const onKeydown = (e: KeyboardEvent) => {
-  if ((e.key !== 'Enter' && e.key !== ' ') || props.isBatchMode) return
+  if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
   e.preventDefault()
-  if (locked.value) emit('unlock')
+  if (props.isBatchMode) emit('select')
+  else if (locked.value) emit('unlock')
   else emit('open')
 }
 
@@ -239,10 +233,11 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   <article
     v-if="!props.editing"
     class="memo"
-    :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected }"
+    :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected, 'without-title': !display.title }"
     tabindex="0"
     role="button"
-    :aria-label="locked ? `已加密小记${props.note.title ? '：' + props.note.title : ''}（${formatRelativeTime(props.note.created_at)}，单击解锁）` : `小记：${props.note.title}（Enter 或悬停按钮编辑）`"
+    :aria-pressed="props.isBatchMode ? props.isSelected : undefined"
+    :aria-label="props.isBatchMode ? `选择小记：${titleText}` : locked ? `已加密小记${props.note.title ? '：' + props.note.title : ''}（${formatRelativeTime(props.note.created_at)}，点击解锁）` : `小记：${titleText}（Enter 或悬停按钮编辑）`"
     @click="onBodyClick"
     @keydown="onKeydown"
   >
@@ -251,14 +246,14 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     </span>
 
     <div class="memo-head" @click="onHeadClick">
-      <span class="memo-title">{{ titleText }}</span>
+      <span v-if="display.title" class="memo-title">{{ display.title }}</span>
       <span class="memo-state">
         <span v-if="props.note.starred" class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
       </span>
-      <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
+      <span class="memo-time" :title="edited ? `更新于 ${formatAbsTime(props.note.updated_at)}` : undefined">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
 
       <!-- hover 显形的动作排：只留这条最常做的四颗，其余进 ⋯（时间在排后让位，实底不吃正文） -->
-      <span class="memo-acts">
+      <span v-if="!props.isBatchMode" class="memo-acts">
         <template v-if="locked">
           <button class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
             <AppIcon name="unlock" :size="14" />
@@ -315,7 +310,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       <span class="lock-disc"><AppIcon name="lock" :size="16" /></span>
       <span class="lock-meta">
         <span v-if="props.note.title" class="locked-title">{{ props.note.title }}</span>
-        <span class="locked-hint">{{ props.note.title ? '· 单击解锁' : '已加密 · 单击解锁' }}</span>
+        <span class="locked-hint">{{ props.note.title ? '· 点击解锁' : '已加密 · 点击解锁' }}</span>
       </span>
     </div>
     <template v-else>
@@ -327,7 +322,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
         @load.capture="applyClamp"
       />
       <button
-        v-if="clipped"
+        v-if="clipped && !props.isBatchMode"
         class="memo-unfold"
         type="button"
         :aria-expanded="expanded"
@@ -350,6 +345,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           class="tag-pill"
           :class="{ on: props.activeTags.has(t) }"
           type="button"
+          :disabled="props.isBatchMode"
           :title="props.activeTags.has(t) ? `取消按 #${t} 筛选` : `按 #${t} 筛选`"
           :aria-pressed="props.activeTags.has(t)"
           @click.stop="emit('tagClick', t)"
@@ -360,7 +356,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 
   <article v-else class="memo editing">
     <div class="edit-bar">
-      <span class="memo-time">{{ formatRelativeTime(props.note.created_at) }}</span>
+      <span class="memo-time" :title="edited ? `更新于 ${formatAbsTime(props.note.updated_at)}` : undefined">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
       <NoteToolbar
         dense
         :show-state-actions="false"
@@ -400,12 +396,12 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo {
   position: relative;
   background: var(--bg-surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: var(--radius-card);
   /* 左侧留勾选位：批量态显形时文字不位移（勾选即进，无布局跳动）。
      原型对拍轮从 32 收到 24——那颗钮九成时间是隐形的，不该让正文为它缩进一大截 */
   padding: 14px var(--space-4) 14px var(--space-6);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
   transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition), transform var(--transition);
 }
 /* hover 与收藏/文件行卡同一配方：描边显色 + 背景微沉（轻量化轮，抬影退役） */
@@ -510,6 +506,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   margin-bottom: 3px;
   min-height: 20px;
@@ -519,7 +516,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   flex: 1;
   min-width: 0;
   font-size: 14.5px;
-  font-weight: 600;
+  font-weight: var(--weight-card-title);
   letter-spacing: -0.01em;
   color: var(--text);
   white-space: nowrap;
@@ -527,6 +524,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   text-overflow: ellipsis;
 }
 .memo-time { font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; transition: opacity var(--transition); }
+.memo.batchable .memo-tags { pointer-events: none; }
 /* 底部 meta 行：附件数 + 标签胶囊（对齐 mock .tags，从顶部 meta 行下移） */
 .memo-foot { display: flex; align-items: center; gap: 10px; margin-top: 2px; min-height: 20px; }
 .memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; }
@@ -550,7 +548,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .tag-pill.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 /* 状态标与时间一起让位：悬停后动作排压住卡头右端，留着就是叠字 */
 .memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
-.memo:hover .memo-state, .memo:focus-within .memo-state { opacity: 0; }
+.memo:not(.batchable):hover .memo-state, .memo:not(.batchable):focus-within .memo-state { opacity: 0; }
 .state-star { color: var(--warning); display: inline-flex; }
 /* 动作排就地顶替时间：底取悬停后的卡面档，看不出另贴了一块；正文永不被压 */
 .memo-acts {
@@ -571,7 +569,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 /* 悬停/聚焦才显形，且不吞正文点击（透明态 pointer-events 关） */
 .memo:hover .memo-acts, .memo:focus-within .memo-acts { opacity: 1; pointer-events: auto; }
 /* 时间让位给动作排：实底只有排这么宽，长标题会被右缘裁掉，留着时间就是叠字 */
-.memo:not(.editing):hover .memo-time, .memo:not(.editing):focus-within .memo-time { opacity: 0; }
+.memo:not(.editing):not(.batchable):hover .memo-time, .memo:not(.editing):not(.batchable):focus-within .memo-time { opacity: 0; }
 .memo-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
 .memo-acts .ib :deep(svg) { width: 15px; height: 15px; }
 
@@ -608,6 +606,27 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 }
 /* 小记标题在独立标题行，选中时跟着上主色 */
 .memo.is-sel .memo-title { color: var(--text-brand); }
+
+/* 无标题时正文直接起笔，时间和操作仍在右上角；只让正文开头避让控件。 */
+.memo.without-title { --memo-controls-width: 160px; }
+.memo.without-title .memo-head {
+  position: absolute;
+  top: 14px;
+  right: var(--space-4);
+  width: var(--memo-controls-width);
+  margin: 0;
+}
+.memo.without-title .memo-body::before {
+  content: '';
+  float: right;
+  width: var(--memo-controls-width);
+  height: 28px;
+}
+.memo.without-title .memo-locked { padding-right: var(--memo-controls-width); }
+.memo.without-title .memo-body :deep(> img:first-child),
+.memo.without-title .memo-body :deep(> :first-child img) {
+  max-width: calc(100% - var(--memo-controls-width));
+}
 
 .edit-atts { margin-top: var(--space-3); }
 /* 动作条挪到卡顶：与只读态右上动作排同一位置语言，分隔线跟着翻成下沿虚线。

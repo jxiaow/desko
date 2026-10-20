@@ -111,7 +111,7 @@ const confirmDelete = (c: MfaCode) => {
     } catch (e) {
       toastStore.showToast(errText(e), 'error')
     }
-  })
+  }, '删除')
 }
 
 /* ---------- 添加弹窗 ---------- */
@@ -266,7 +266,9 @@ watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.va
 <template>
   <div class="content-inner" @paste="onPaste">
     <div class="page-bar">
-      <CreateAction label="新增验证码" @click="openAdd" />
+      <div class="page-actions">
+        <CreateAction label="新增验证码" @click="openAdd" />
+      </div>
     </div>
 
     <div v-if="loading" class="card-grid">
@@ -305,6 +307,7 @@ watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.va
         <!-- 码行：24px 等宽六位/八位码 + 右下圆环倒计时（环心读秒） -->
         <div class="card-code-row">
           <div class="card-code" :class="{ copied: copiedId === c.id }" aria-live="polite">{{ copiedId === c.id ? '已复制' : grouped(c) }}</div>
+          <AppIcon class="card-copy" name="copy" :size="15" />
           <span class="ring" aria-hidden="true">
             <svg width="32" height="32">
               <circle cx="16" cy="16" r="14" fill="none" stroke="var(--fill)" stroke-width="2.5" />
@@ -398,9 +401,10 @@ watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.va
 </template>
 
 <style scoped>
+.card-copy { color: var(--text-muted); flex-shrink: 0; }
+.mfa-card:is(:hover, :focus-visible) .card-copy { color: var(--accent); }
 .qr-file-input { display: none; }
 /* .content-inner / .page-bar / 主按钮走 global.css 的页面骨架；本页计数顶左、动作钮顶右 */
-.page-bar .btn-primary { margin-left: auto; }
 
 /* 96px 双行令牌卡（mock .otp）：身份行 + 码行（右下圆环倒计时），网格壳走全局 .card-grid */
 .mfa-card {
@@ -411,20 +415,20 @@ watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.va
   gap: 10px;
   min-height: 96px;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: 12px;
   background: var(--bg-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
   padding: 13px 15px;
   cursor: pointer;
   transition: transform var(--transition), border-color var(--transition),
     box-shadow var(--transition), background-color var(--transition);
 }
-/* 与收藏/文件浮岛卡同一 hover 语言：抬 1px + md 影 + 描边升一档 */
+/* 与收藏/文件卡片使用相同的悬停反馈。 */
 .mfa-card:hover {
   transform: translateY(-1px);
-  border-color: var(--border-hover);
-  box-shadow: var(--shadow-md);
+  border-color: var(--border-card-hover);
+  box-shadow: var(--shadow-card-hover);
 }
 [data-base="light"] .mfa-card:hover { background: var(--sunken); }
 [data-base="dark"] .mfa-card:hover { background: var(--hover); }
@@ -443,7 +447,7 @@ watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.va
   flex: 0 1 auto;
   min-width: 0;
   font-size: var(--text-base);
-  font-weight: 600;
+  font-weight: var(--weight-card-title);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -506,7 +510,7 @@ html.hover-suppressed .mfa-card:hover .card-del { opacity: 0; }
   cursor: default;
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
-.mfa-card.skeleton:hover { transform: none; border-color: var(--border); background: var(--bg-surface); box-shadow: var(--shadow-card); }
+.mfa-card.skeleton:hover { transform: none; border-color: var(--border-card); background: var(--bg-surface); box-shadow: var(--shadow-card-rest); }
 .skeleton-line { height: 12px; border-radius: 5px; }
 .skeleton-line.tall { height: 26px; width: 120px; }
 

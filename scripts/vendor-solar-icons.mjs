@@ -50,7 +50,7 @@ const MAP = {
   unlock: 'lock-unlocked',
   lockOff: '!lock-broken',
   folder: 'folder',
-  terminal: 'command',
+  terminal: 'file-terminal',
   plus: 'add',
   user: 'user',
   mapPin: 'map-point',

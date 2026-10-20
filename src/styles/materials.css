@@ -36,7 +36,8 @@
     linear-gradient(color-mix(in srgb, var(--bg) 65%, transparent), color-mix(in srgb, var(--bg) 65%, transparent)),
     var(--material-field), var(--bg);
   --border-navigation: color-mix(in srgb, var(--text) 3%, transparent);
-  --border-search: color-mix(in oklab, var(--border-strong) 80%, var(--text-muted));
+  --border-search: var(--border);
+  --border-composer: var(--border);
 
   --bg-app: var(--material-field), var(--sunken);
   --bg-toolbar: var(--bg-app);
@@ -153,39 +154,40 @@
 /* 氛围为静态背景，不创建持续动画或额外的模糊合成层。 */
 .material-decoration { display: var(--material-decoration-display); }
 
-/* 内嵌布局：中性底色承接色光，画布留白、外框与辅助面板共用固定光场。 */
+/* 工作区柔光：主光与辅光落在留白两端，卡片、输入与书写面保持实底。
+   经典布局与锁屏材质沿用上方配方。 */
 :root[data-layout="workspace"], .workspace-theme-prev[data-base] {
-  --material-workspace-frame-base: var(--workspace-frame);
-  --material-inspector-base: color-mix(in oklab, var(--sunken) 65%, var(--panel-bg));
-  --material-workspace-highlight: var(--workspace-light);
-  --material-workspace-key: oklch(from var(--accent) 0.87 calc(c * 0.95) h);
-  --material-workspace-fill: oklch(from var(--accent) 0.87 calc(c * 0.8) calc(h + 35));
-  --material-workspace-key-strength: 48%;
-  --material-workspace-fill-strength: 58%;
-  --material-workspace-key-size: 85% 85%;
-  --material-workspace-fill-size: 75% 90%;
-  --material-workspace-canvas-veil: 25%;
-  --material-workspace-navigation-strength: 66%;
-  --material-workspace-navigation-color: oklch(from var(--accent) 0.87 calc(c * 0.95) h);
-  --material-workspace-navigation-field:
-    radial-gradient(ellipse 18% 80% at 0% 24%, color-mix(in srgb, var(--material-workspace-navigation-color) var(--material-workspace-navigation-strength), transparent), transparent 90%);
-  --material-inspector-key: oklch(from var(--accent) 0.87 calc(c * 1.1) h);
-  --material-inspector-fill: oklch(from var(--accent) 0.9 calc(c * 0.8) calc(h + 25));
-  --material-inspector-key-strength: 32%;
-  --material-workspace-key-tinted: color-mix(in oklab, var(--material-workspace-key) 85%, var(--workspace-light));
-  --material-workspace-fill-tinted: color-mix(in oklab, var(--material-workspace-fill) 85%, var(--workspace-light));
-  --material-inspector-field:
-    radial-gradient(ellipse 110% 65% at 100% 100%, color-mix(in srgb, color-mix(in oklab, var(--material-inspector-key) 40%, var(--material-inspector-fill)) var(--material-inspector-key-strength), transparent), transparent 90%);
+  --material-inspector-base: #f7f7f6;
+  --material-workspace-key: oklch(from var(--accent) 0.9 calc(c * 0.55) h);
+  --material-workspace-fill: oklch(from var(--accent) 0.92 calc(c * 0.5) calc(h + 24));
+  --material-workspace-key-strength: 22%;
+  --material-workspace-fill-strength: 22%;
+  /* 光源移入可见区域：左上主光、右下辅光；外框与画布使用相同发散点。 */
+  --material-workspace-key-position: 12% 16%;
+  --material-workspace-fill-position: 88% 84%;
+  --material-workspace-key-size: 68% 78%;
+  --material-workspace-fill-size: 72% 80%;
   --material-workspace-field:
-    radial-gradient(ellipse 65% 75% at 0% 0%, color-mix(in srgb, var(--material-workspace-highlight) 60%, transparent), transparent 85%),
-    radial-gradient(ellipse var(--material-workspace-key-size) at 100% 0%, color-mix(in srgb, var(--material-workspace-key-tinted) var(--material-workspace-key-strength), transparent), transparent 90%),
-    radial-gradient(ellipse var(--material-workspace-fill-size) at 0% 100%, color-mix(in srgb, var(--material-workspace-fill-tinted) var(--material-workspace-fill-strength), transparent), transparent 90%);
+    radial-gradient(ellipse var(--material-workspace-key-size) at var(--material-workspace-key-position), color-mix(in srgb, var(--material-workspace-key) var(--material-workspace-key-strength), transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-workspace-fill-size) at var(--material-workspace-fill-position), color-mix(in srgb, var(--material-workspace-fill) var(--material-workspace-fill-strength), transparent), transparent 90%);
+  --material-floating-field:
+    radial-gradient(ellipse 80% 65% at var(--material-workspace-key-position), color-mix(in srgb, var(--material-workspace-key) 10%, transparent), transparent 90%),
+    var(--panel-bg);
+  /* 对话框在自己的边界内布光，大小和窗口位置变化时仍能看到两端柔光。 */
+  --material-dialog-field:
+    radial-gradient(ellipse 78% 72% at 0% 0%, color-mix(in srgb, var(--material-workspace-key) 18%, transparent), transparent 100%),
+    radial-gradient(ellipse 78% 72% at 100% 100%, color-mix(in srgb, var(--material-workspace-fill) 14%, transparent), transparent 100%),
+    var(--panel-bg);
+  --material-workspace-rim:
+    inset 0 1px 0 color-mix(in srgb, #fff 80%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 5%, transparent);
   --bg-workspace: var(--bg);
-  --bg-workspace-frame: var(--material-workspace-frame-base);
+  --bg-workspace-frame: var(--workspace-frame);
   --bg-inspector: var(--material-inspector-base);
+  --bg-editor: var(--bg);
   --bg-workspace-selected: color-mix(in oklab, var(--accent) 10%, var(--panel-bg));
   --bg-workspace-hover: color-mix(in oklab, var(--text) 5%, var(--panel-bg));
-  --bg-workspace-search: color-mix(in oklab, var(--panel-bg) 72%, var(--material-workspace-frame-base));
+  --bg-workspace-search: color-mix(in oklab, var(--panel-bg) 72%, var(--workspace-frame));
   --bg-workspace-primary: var(--accent);
   --bg-workspace-primary-hover: var(--accent-hover);
   --bg-workspace-primary-active: var(--accent-active);
@@ -193,62 +195,51 @@
 }
 
 :root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
-  /* 暗色的柔光集中在外框和辅助面；正文只接收少量中性光，保留实底层级。 */
-  --material-workspace-frame-base: var(--workspace-frame);
-  --material-inspector-base: var(--sunken);
-  --material-workspace-highlight: var(--workspace-light);
-  --material-workspace-key: #383836;
-  --material-workspace-fill: #30302e;
-  --material-workspace-key-strength: 32%;
-  --material-workspace-fill-strength: 26%;
-  --material-workspace-canvas-veil: 78%;
-  --material-workspace-navigation-strength: 36%;
-  --material-workspace-navigation-color: #343432;
-  --material-inspector-key: oklch(from var(--accent) 0.34 calc(c * 0.35) h);
-  --material-inspector-fill: oklch(from var(--accent) 0.32 calc(c * 0.3) h);
-  --material-inspector-key-strength: 32%;
-  --material-color-primary: #343432;
-  --material-color-secondary: #2d2d2b;
+  --material-inspector-base: #1b1c1f;
+  --material-workspace-key: oklch(from var(--accent) 0.48 calc(c * 0.85) h);
+  --material-workspace-fill: oklch(from var(--accent) 0.46 calc(c * 0.7) calc(h + 24));
+  --material-workspace-key-strength: 10%;
+  --material-workspace-fill-strength: 10%;
+  --material-workspace-rim:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 20%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, #fff 3%, transparent);
   --bg-workspace-primary: color-mix(in oklab, var(--accent) 14%, var(--bg));
   --bg-workspace-primary-hover: color-mix(in oklab, var(--accent) 17%, var(--bg));
   --bg-workspace-primary-active: color-mix(in oklab, var(--accent) 20%, var(--bg));
   --text-workspace-primary: color-mix(in oklab, var(--accent) 50%, var(--text));
 }
 
-/* 清新强调色在浅色布局使用浅彩底、深色字；暗色继续使用暗底操作。 */
-:root[data-layout="workspace"][data-base="light"]:is([data-accent="sage"], [data-accent="sky"], [data-accent="lavender"], [data-accent="peach"]),
-.workspace-theme-prev[data-base="light"]:is([data-accent="sage"], [data-accent="sky"], [data-accent="lavender"], [data-accent="peach"]) {
-  --bg-workspace-primary: var(--workspace-accent-wash);
-  --bg-workspace-primary-hover: color-mix(in oklab, var(--workspace-accent-wash) 90%, var(--accent));
-  --bg-workspace-primary-active: color-mix(in oklab, var(--workspace-accent-wash) 80%, var(--accent));
-  --text-workspace-primary: var(--text-brand);
-  --bg-workspace-selected: color-mix(in oklab, var(--workspace-accent-wash) 75%, var(--panel-bg));
-  /* 光色单独保留彩度，避免浅彩按钮底再混白后失去颜色；上方仍保持较高明度。 */
-  --material-workspace-key: oklch(from var(--accent) 0.9 calc(c * 0.95) h);
-  --material-workspace-fill: oklch(from var(--accent) 0.88 calc(c * 0.9) h);
-  --material-workspace-navigation-color: var(--material-workspace-key);
-  --material-inspector-key: var(--material-workspace-key);
-  --material-inspector-fill: var(--material-workspace-fill);
+/* 中性色只改变光的明暗，避免把大面积留白再刷成灰色。 */
+:root[data-layout="workspace"]:is([data-accent="graphite"], [data-accent="sand"]),
+.workspace-theme-prev:is([data-accent="graphite"], [data-accent="sand"]) {
+  --material-workspace-key: oklch(from var(--accent) 0.96 0 none);
+  --material-workspace-fill: oklch(from var(--accent) 0.96 0 none);
 }
-
-/* 石墨用中性的明暗变化形成光照，避免低彩度下开关效果消失。 */
-:root[data-layout="workspace"][data-base="light"][data-accent="graphite"], .workspace-theme-prev[data-base="light"][data-accent="graphite"] {
-  --material-workspace-key: #cbd0d4;
-  --material-workspace-fill: #d5d3ce;
+:root[data-layout="workspace"][data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]),
+.workspace-theme-prev[data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]) {
+  --material-workspace-key: oklch(from var(--accent) 0.48 0 none);
+  --material-workspace-fill: oklch(from var(--accent) 0.48 0 none);
 }
 
 :root[data-layout="workspace"][data-atmosphere="on"], .workspace-theme-prev[data-atmosphere="on"] {
-  --bg-workspace-frame: var(--material-workspace-navigation-field), var(--material-workspace-field), var(--material-workspace-frame-base);
-  --bg-workspace:
-    linear-gradient(color-mix(in srgb, var(--bg) var(--material-workspace-canvas-veil), transparent), color-mix(in srgb, var(--bg) var(--material-workspace-canvas-veil), transparent)),
-    var(--material-workspace-field), var(--bg);
-  --bg-inspector: var(--material-inspector-field), var(--material-inspector-base);
+  --bg-dialog: var(--material-dialog-field);
+  --dialog-background-attachment: scroll;
+  --bg-workspace: var(--material-workspace-field), var(--bg);
+  --bg-workspace-frame:
+    radial-gradient(ellipse var(--material-workspace-key-size) at var(--material-workspace-key-position), color-mix(in srgb, var(--material-workspace-key) 32%, transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-workspace-fill-size) at var(--material-workspace-fill-position), color-mix(in srgb, var(--material-workspace-fill) 28%, transparent), transparent 90%),
+    var(--workspace-frame);
+  --bg-inspector:
+    radial-gradient(ellipse 100% 75% at 100% 100%, color-mix(in srgb, var(--material-workspace-key) 12%, transparent), transparent 90%),
+    var(--material-inspector-base);
 }
 
-:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"], .workspace-theme-prev[data-base="dark"][data-atmosphere="on"] {
-  /* 外层光照弱于内容留白，保留外框与内容面的层次。 */
-  --bg-workspace-frame:
-    var(--material-workspace-navigation-field),
-    linear-gradient(color-mix(in srgb, var(--material-workspace-frame-base) 55%, transparent), color-mix(in srgb, var(--material-workspace-frame-base) 55%, transparent)),
-    var(--material-workspace-field), var(--material-workspace-frame-base);
+:root[data-layout="workspace"][data-atmosphere="on"] .workspace-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: var(--material-workspace-rim);
 }

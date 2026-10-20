@@ -33,7 +33,7 @@ const onKeydown = (e: KeyboardEvent) => {
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
-useEscapeClose(() => emit('close'))
+useEscapeClose(() => emit('close'), () => true, { afterTarget: true })
 </script>
 
 <template>

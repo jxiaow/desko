@@ -7,6 +7,7 @@ import NoteComposer from './NoteComposer.vue'
 import NoteFullscreen from './NoteFullscreen.vue'
 import NoteLockDialog from './NoteLockDialog.vue'
 import { useNotesStore } from '../../stores/notes'
+import { usePageHeadStore } from '../../stores/pageHead'
 import * as attachmentFiles from '../../services/attachmentSrc'
 import { pickBrowserImage } from '../../services/browserImage'
 import { notesApi } from '../../services/api/notes'
@@ -198,7 +199,7 @@ describe('NotesModule', () => {
     let wrapper = await mountModule()
     wrapper.findComponent(NoteComposer).vm.$emit('fullscreen')
     await flushPromises()
-    expect(wrapper.find('.save-hint').text()).toBe('未发布')
+    expect(wrapper.find('.save-hint').text()).toBe('未保存')
     wrapper.findComponent(NoteFullscreen).vm.$emit('update', '<p>切换页面后继续写 #工作</p>')
     await flushPromises()
     wrapper.unmount()
@@ -325,7 +326,7 @@ describe('NotesModule', () => {
     expect(wrapper.find('.memo-body').text()).toContain('甲内容')
 
     // 锁回全部：整库重新上锁，之后再要口令
-    await wrapper.find('.page-bar button[aria-label="锁回全部加密小记"]').trigger('click')
+    await wrapper.find('.page-bar button[aria-label="锁定全部加密小记"]').trigger('click')
     await flushPromises()
     expect(notesApi.noteKeyRelock).toHaveBeenCalledTimes(1)
     expect(wrapper.find('.memo-locked').exists()).toBe(true)
@@ -348,7 +349,7 @@ describe('NotesModule', () => {
     expect(wrapper.find('.memo-body').text()).toContain('甲内容')
 
     // 兜底：格子空着也能走「用主密码解开」，一键开全库
-    await wrapper.find('.page-bar button[aria-label="锁回全部加密小记"]').trigger('click')
+    await wrapper.find('.page-bar button[aria-label="锁定全部加密小记"]').trigger('click')
     await flushPromises()
     wrapper.findComponent(NoteCard).vm.$emit('unlock')
     await flushPromises()
@@ -374,7 +375,7 @@ describe('NotesModule', () => {
     expect(cards[0].find('.memo-locked').text()).toContain('三月调档')
     expect(cards[0].find('.memo-body').exists()).toBe(false)
     expect(cards[1].find('.locked-title').exists()).toBe(false)
-    expect(cards[1].find('.memo-locked').text()).toContain('已加密 · 单击解锁')
+    expect(cards[1].find('.memo-locked').text()).toContain('已加密 · 点击解锁')
     wrapper.unmount()
   })
 
@@ -481,7 +482,8 @@ describe('NotesModule', () => {
     expect(store.selectedNoteIds.size).toBe(2)
     expect(wrapper.findAll('.memo.is-sel')).toHaveLength(2)
 
-    await wrapper.findAll('.dock-btn').find(button => button.text() === '置顶')!.trigger('click')
+    await wrapper.find('.dock-btn[aria-haspopup="menu"]').trigger('click')
+    document.querySelector<HTMLButtonElement>('.popover .pop-item')!.click()
     await flushPromises()
     expect(store.notes.every(n => n.pinned)).toBe(true)
 
@@ -490,6 +492,92 @@ describe('NotesModule', () => {
     expect(store.notes).toHaveLength(0)
     // 清空即收：删除后选中归零，批量态自动退出
     expect(store.isBatchMode).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('批量待选保留出口、隐藏书写面，键盘选择不会触发卡片编辑或标签筛选', async () => {
+    stageNotes([makeNote(), makeNote({ id: 'b', title: '乙', content_html: '<p>乙 #生活</p>' })])
+    const wrapper = await mountModule()
+    await wrapper.find('.bar-btn[aria-label="选择小记"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.dock-count').text()).toBe('已选 0 条')
+    expect(wrapper.findComponent(NoteComposer).exists()).toBe(false)
+    expect(wrapper.find('.memo-acts').exists()).toBe(false)
+    expect(wrapper.find('.tag-pill').attributes('disabled')).toBeDefined()
+    const card = wrapper.findAll('.memo')[0]
+    await card.trigger('keydown', { key: 'Enter' })
+    expect(useNotesStore().selectedNoteIds.has('a')).toBe(true)
+    expect(card.attributes('aria-pressed')).toBe('true')
+    await card.trigger('keydown', { key: ' ' })
+    expect(useNotesStore().selectedNoteIds.size).toBe(0)
+    expect(wrapper.find('.batch-dock').exists()).toBe(true)
+    expect(wrapper.find('.memo.editing').exists()).toBe(false)
+    await wrapper.find('.bar-btn[aria-label="完成选择"]').trigger('click')
+    expect(wrapper.findComponent(NoteComposer).exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('进入批量前保存编辑，写入失败时保留编辑面，重试成功后才进入待选', async () => {
+    stageNotes([makeNote()])
+    const wrapper = await mountModule()
+    await openCard(wrapper)
+    wrapper.findComponent(NoteCard).vm.$emit('update', '<p>待保存修改</p>')
+    vi.mocked(notesApi.updateNote).mockRejectedValueOnce(new Error('磁盘忙'))
+    await wrapper.find('.bar-btn[aria-label="选择小记"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.memo.editing').exists()).toBe(true)
+    expect(useNotesStore().isBatchMode).toBe(false)
+    expect(useNotesStore().notes[0].content_html).toContain('待保存修改')
+    await wrapper.find('.bar-btn[aria-label="选择小记"]').trigger('click')
+    await flushPromises()
+    expect(notesApi.updateNote).toHaveBeenLastCalledWith('a', expect.objectContaining({ content_html: '<p>待保存修改</p>' }))
+    expect(wrapper.find('.memo.editing').exists()).toBe(false)
+    expect(wrapper.find('.dock-count').text()).toBe('已选 0 条')
+    wrapper.unmount()
+  })
+
+  it('勾选另一张卡前保存当前编辑，再收起书写面', async () => {
+    stageNotes([makeNote(), makeNote({ id: 'b', content_html: '<p>乙</p>' })])
+    const wrapper = await mountModule()
+    await openCard(wrapper)
+    wrapper.findAllComponents(NoteCard)[0].vm.$emit('update', '<p>甲的新内容</p>')
+    await wrapper.find('.memo-check').trigger('click')
+    await flushPromises()
+    expect(notesApi.updateNote).toHaveBeenCalledWith('a', expect.objectContaining({ content_html: '<p>甲的新内容</p>' }))
+    expect(useNotesStore().selectedNoteIds.has('b')).toBe(true)
+    expect(wrapper.find('.memo.editing').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('口令弹窗打开及从解锁续到改密时聚焦第一格', async () => {
+    const wrapper = mount(NoteLockDialog, { attachTo: document.body, props: { mode: 'unlock' } })
+    const field = wrapper.find('input')
+    expect(field.element).toBe(document.activeElement)
+    await field.setValue('旧口令')
+    ;(wrapper.find('.dialog-close').element as HTMLElement).focus()
+    await wrapper.setProps({ mode: 'change' })
+    await flushPromises()
+    expect(wrapper.find('input').element).toBe(document.activeElement)
+    expect((wrapper.find('input').element as HTMLInputElement).value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('全屏沿用卡片标题与编辑时间，标签点击退出阅读并筛选', async () => {
+    stageNotes([makeNote({ content_html: '<h2>甲内容 #工作</h2><p>正文</p>', updated_at: NOW + 61_000 }), makeNote({ id: 'b', content_html: '<p>乙 #生活</p>' })])
+    const wrapper = await mountModule()
+    expect(wrapper.find('.memo-time').text()).toContain('已编辑')
+    wrapper.findAllComponents(NoteCard)[0].vm.$emit('view')
+    await flushPromises()
+    expect(wrapper.find('.fs-title').text()).toBe('甲内容')
+    expect(wrapper.find('.fs-meta').text()).toContain('创建于')
+    expect(wrapper.find('.fs-meta').text()).toContain('已编辑')
+    expect(wrapper.find('.fs-view').classes()).toContain('promoted')
+    expect(wrapper.find('.fs-view').text()).not.toContain('#工作')
+    await wrapper.find('.fs-tags button').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(NoteFullscreen).exists()).toBe(false)
+    expect(useNotesStore().activeTags.has('工作')).toBe(true)
+    expect(wrapper.findAll('.memo')).toHaveLength(1)
     wrapper.unmount()
   })
 
@@ -604,7 +692,12 @@ describe('NotesModule', () => {
 
     expect(wrapper.findComponent(NoteComposer).exists()).toBe(false)
     expect(wrapper.findAll('.memo')).toHaveLength(1)
-    expect(wrapper.find('.archive-bar').text()).toContain('归档中 1 条')
+    expect(wrapper.find('.archive-bar').text()).toContain('已归档')
+    expect(usePageHeadStore().count).toBe('1 条')
+    store.noteSearchKeyword = '丙'
+    await flushPromises()
+    expect(usePageHeadStore().count).toBe('1 / 1 条')
+    store.noteSearchKeyword = ''
     expect(wrapper.find('.ab-btn').text()).toContain('全部取消归档')
 
     vi.mocked(notesApi.batchSetArchived).mockResolvedValue(1)

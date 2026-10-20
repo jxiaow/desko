@@ -23,6 +23,8 @@ export interface E2ENoteSeed {
   encrypted?: boolean
   /** 预置归档小记：只在归档视图里出现 */
   archived?: boolean
+  created_at?: number
+  updated_at?: number
 }
 
 export interface E2EFileShortcutSeed {
@@ -249,6 +251,23 @@ export interface E2EConfig {
     deleteStepMs?: number
     /** 这些邮箱第一轮删不动、重试才成功：演「失败明细 + 重试接着走」 */
     deleteFailEmails?: string[]
+    /** WSL 登录态同步：源与目标都是可摆的状态，默认源可用、无目标，不污染既有设置页用例 */
+    wslAuth?: {
+      available?: boolean
+      expired?: boolean
+      error?: string
+      targets?: {
+        distro: string
+        user: string
+        state: 'empty' | 'same' | 'outdated' | 'newer' | 'different-account' | 'unreadable' | 'unknown'
+        email?: string
+        /** unix 秒；不给按 expired 推 */
+        expiresAt?: number
+        expired?: boolean
+      }[]
+      /** 这些 WSL 用户名同步必失败，用来演失败明细 */
+      syncFailures?: string[]
+    }
   }
   /** 档案注册表：不给就用单个 default 档；activeId 缺省取列表首项 */
   profiles?: {
@@ -467,7 +486,7 @@ interface BackendState {
     pollFail: string | null
   }
   /** currentId 是显式指针，与后端 index.current_account_id 同构：导入/新增不动它，只有切号与登录落库才改 */
-  codex: { accounts: CodexAccountRecord[]; portBusy: boolean; loginId: string; currentId: string; repairFail: boolean; repairDelayMs: number; repairRows: number; switchDelayMs: number; switchCancel: boolean; sessionsFail: boolean; statsFail: boolean; sessions: CodexSessionSeed[]; trash: CodexTrashSeed[]; trashFail: boolean; recycled: CodexRecycledSeed[]; recycledFail: boolean; openFail: boolean; usageFail: boolean; usageScanMillis: number; deleteStepMs: number; deleteFailEmails: string[]; deleteJobs: Record<string, CodexDeleteJob> }
+  codex: { accounts: CodexAccountRecord[]; portBusy: boolean; loginId: string; currentId: string; repairFail: boolean; repairDelayMs: number; repairRows: number; switchDelayMs: number; switchCancel: boolean; sessionsFail: boolean; statsFail: boolean; sessions: CodexSessionSeed[]; trash: CodexTrashSeed[]; trashFail: boolean; recycled: CodexRecycledSeed[]; recycledFail: boolean; openFail: boolean; usageFail: boolean; usageScanMillis: number; deleteStepMs: number; deleteFailEmails: string[]; deleteJobs: Record<string, CodexDeleteJob>; wslAuth: { available: boolean; expired: boolean; error: string; syncFailures: string[]; targets: { distro: string; user: string; homePath: string; state: string; email: string | null; accessExpiresAt: number | null; expired: boolean }[] } }
   bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probeDelay: number; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string; applyDelay: number; applyCancel: boolean; applyLost: string; applyBlocked: string[]; routeOptions: Record<string, RouteOption[]>; applyFailed: string[]; applySkipped: string[]; applyRollbackFail: boolean; recheckDelay: number; recheckVerdict: string; revertFail: string; rollbackBatch: string }
   profiles: { activeId: string; list: ProfileRecord[] }
 }
@@ -826,7 +845,7 @@ class MockBackend {
         revertFail: config.bypass?.revertFail ?? '',
         rollbackBatch: '',
       },
-      codex: { accounts: [], portBusy: false, loginId: '', currentId: '', repairFail: false, repairDelayMs: 0, repairRows: 3, switchDelayMs: 0, switchCancel: false, sessionsFail: false, statsFail: false, sessions: [], trash: [], trashFail: false, recycled: [], recycledFail: false, openFail: false, usageFail: false, usageScanMillis: 0, deleteStepMs: 0, deleteFailEmails: [], deleteJobs: {} },
+      codex: { accounts: [], portBusy: false, loginId: '', currentId: '', repairFail: false, repairDelayMs: 0, repairRows: 3, switchDelayMs: 0, switchCancel: false, sessionsFail: false, statsFail: false, sessions: [], trash: [], trashFail: false, recycled: [], recycledFail: false, openFail: false, usageFail: false, usageScanMillis: 0, deleteStepMs: 0, deleteFailEmails: [], deleteJobs: {}, wslAuth: { available: true, expired: false, error: '', syncFailures: [], targets: [] } },
       profiles: { activeId: 'default', list: [{ id: 'default', name: '默认', cloudNs: '', createdAt: now, lastUsedAt: now }] },
     }
     if (config.profiles) {
@@ -905,6 +924,24 @@ class MockBackend {
       state.codex.usageScanMillis = config.codex.usageScanMillis ?? 1681
       state.codex.deleteStepMs = config.codex.deleteStepMs ?? 0
       state.codex.deleteFailEmails = config.codex.deleteFailEmails ?? []
+      state.codex.wslAuth = {
+        available: config.codex.wslAuth?.available ?? true,
+        expired: config.codex.wslAuth?.expired ?? false,
+        error: config.codex.wslAuth?.error ?? '',
+        syncFailures: config.codex.wslAuth?.syncFailures ?? [],
+        targets: (config.codex.wslAuth?.targets ?? []).map((target) => {
+          const expired = target.expired ?? false
+          return {
+            distro: target.distro,
+            user: target.user,
+            homePath: `\\\\wsl.localhost\\${target.distro}\\${target.user === 'root' ? 'root' : `home\\${target.user}`}\\.codex`,
+            state: target.state,
+            email: target.email ?? null,
+            accessExpiresAt: target.expiresAt ?? Math.floor(now / 1000) + (expired ? -3600 : 3600),
+            expired,
+          }
+        }),
+      }
       state.codex.sessions = (config.codex.sessions ?? []).map((s, i, arr) => ({
         sessionId: s.sessionId,
         title: s.title ?? '',
@@ -1041,8 +1078,8 @@ class MockBackend {
         category: enc ? null : (n.category ?? null),
         pinned: n.pinned ?? false,
         starred: n.starred ?? false,
-        created_at: ts,
-        updated_at: ts,
+        created_at: n.created_at ?? ts,
+        updated_at: n.updated_at ?? n.created_at ?? ts,
         encrypted: enc,
         cipher: enc ? n.content_html : '',
         archived: !!n.archived,
@@ -2373,7 +2410,7 @@ class MockBackend {
 
     set_setting: ({ key, value }) => {
       // 此目录配置由原生端存入 Codex 本地 config.json，mock 共用内存设置表。
-      if (!['codex_usage_extra_dirs', 'codex_usage_auto_wsl'].includes(key) && !SETTINGS_ALLOWED_KEYS.includes(key)) throw ERR_DB
+      if (!['codex_usage_extra_dirs', 'codex_usage_auto_wsl', 'codex_wsl_auth_auto_sync'].includes(key) && !SETTINGS_ALLOWED_KEYS.includes(key)) throw ERR_DB
       this.state.settings[key] = value
     },
 
@@ -3757,6 +3794,59 @@ class MockBackend {
       configPath: 'C:\\e2e\\.codex\\config.toml',
       authPath: 'C:\\e2e\\.codex\\auth.json',
     }),
+
+    get_codex_wsl_auth_status: () => {
+      const wsl = this.state.codex.wslAuth
+      const current = this.state.codex.accounts.find((account) => account.id === this.state.codex.currentId)
+      const nowSec = Math.floor(Date.now() / 1000)
+      return {
+        autoSync: this.state.settings.codex_wsl_auth_auto_sync === 'true',
+        source: {
+          available: wsl.available,
+          path: 'C:\\e2e\\.codex\\auth.json',
+          authMode: 'chatgpt',
+          email: wsl.available ? (current?.email ?? 'wsl@e2e.dev') : null,
+          plan: wsl.available ? (current?.plan_type ?? 'pro') : null,
+          accessExpiresAt: wsl.available ? nowSec + (wsl.expired ? -3600 : 3600) : null,
+          expired: wsl.expired,
+          error: wsl.available ? null : (wsl.error || '未找到 Windows 侧 Codex 登录凭据'),
+        },
+        targets: wsl.targets.map((target) => ({ ...target })),
+        targetError: null,
+      }
+    },
+
+    sync_codex_auth_to_wsl: () => {
+      const wsl = this.state.codex.wslAuth
+      if (!wsl.available) throw wsl.error || 'Windows 侧 Codex 登录凭据不可用'
+      if (wsl.expired) throw 'Windows 侧 Codex 登录凭据已过期，请先在 Codex 中刷新或重新登录'
+      const current = this.state.codex.accounts.find((account) => account.id === this.state.codex.currentId)
+      const nowSec = Math.floor(Date.now() / 1000)
+      return wsl.targets.map((target) => {
+        if (wsl.syncFailures.includes(target.user)) {
+          return { distro: target.distro, user: target.user, status: 'failed', message: 'E2E 同步失败' }
+        }
+        if (target.state === 'same' || target.state === 'newer') {
+          return {
+            distro: target.distro,
+            user: target.user,
+            status: 'skipped',
+            message: target.state === 'same' ? '已是最新' : 'WSL 侧凭据更新，已跳过',
+          }
+        }
+        const wasUnreadable = target.state === 'unreadable'
+        target.state = 'same'
+        target.email = current?.email ?? target.email
+        target.accessExpiresAt = nowSec + 3600
+        target.expired = false
+        return {
+          distro: target.distro,
+          user: target.user,
+          status: 'synced',
+          message: wasUnreadable ? '原文件不可读，已替换' : null,
+        }
+      })
+    },
 
     open_codex_config_toml: () => undefined,
 

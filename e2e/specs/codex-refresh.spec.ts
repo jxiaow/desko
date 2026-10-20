@@ -9,7 +9,7 @@ const config = {
   codex: { sessions: [{ sessionId: 'first', title: '第一条会话', cwd: 'C:\\demo', input: 1000, output: 100, daysAgo: 0 }] },
 }
 
-test('会话默认收起，自动刷新列表与用量并保留展开态，离开后停止', async ({ page }) => {
+test('会话首次收起，自动刷新不展开，手动展开的详情随刷新保留', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-13T04:00:00Z') })
   await bootUnlocked(page, config, '/codex')
   await page.getByRole('button', { name: '会话', exact: true }).click()

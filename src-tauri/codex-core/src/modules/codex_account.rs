@@ -13,6 +13,7 @@ include!("codex_account_index.rs");
 include!("codex_account_lifecycle.rs");
 include!("codex_account_recycle_bin.rs");
 include!("codex_account_authority_sync.rs");
+include!("codex_wsl_auth_sync.rs");
 include!("codex_account_windows_auth_store.rs");
 include!("codex_account_projection.rs");
 include!("codex_account_runtime_switch.rs");

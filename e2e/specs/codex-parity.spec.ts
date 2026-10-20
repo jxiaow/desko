@@ -70,20 +70,53 @@ test('会话正文搜索接入本地正文查询，切换搜索范围保留关�
   expect(calls.at(-1).args).toEqual({ titleQuery: null, contentQuery: '变更记录' })
 })
 
+for (const theme of ['paper', 'ink']) {
+  for (const width of [800, 1280]) {
+    test(`${theme} ${width}px 会话搜索范围保持分段样式与选中态`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 760 })
+      await page.emulateMedia({ reducedMotion: 'reduce' })
+      await bootUnlocked(page, { settings: { codex_enabled: 'true', theme } }, '/codex')
+      await page.getByRole('button', { name: '会话', exact: true }).click()
+      const group = page.getByRole('group', { name: '会话搜索范围' })
+      const title = group.getByRole('button', { name: '标题', exact: true })
+      const content = group.getByRole('button', { name: '正文', exact: true })
+      const font = await page.locator('body').evaluate(element => getComputedStyle(element).fontFamily)
+      for (const button of [title, content]) {
+        await expect(button).toHaveCSS('height', '30px')
+        await expect(button).toHaveCSS('border-top-width', '0px')
+        await expect(button).toHaveCSS('font-family', font)
+        expect(await button.evaluate(element => parseFloat(getComputedStyle(element).borderRadius))).toBeGreaterThanOrEqual(4)
+      }
+      await expect(title).toHaveAttribute('aria-pressed', 'true')
+      await expect(title).toHaveCSS('font-weight', '600')
+      const selected = await title.evaluate(element => getComputedStyle(element).backgroundColor)
+      expect(selected).not.toBe('rgba(0, 0, 0, 0)')
+      await expect(content).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await content.click()
+      await expect(content).toHaveAttribute('aria-pressed', 'true')
+      await expect(content).toHaveCSS('background-color', selected)
+      await expect(content).toHaveCSS('font-weight', '600')
+      await expect(title).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await expect(page.getByRole('textbox', { name: '搜索会话正文' })).toBeVisible()
+      await page.screenshot({ path: `.tmp/codex-search-style/${theme}-${width}.png`, animations: 'disabled' })
+    })
+  }
+}
+
 for (const mode of ['access', 'tokens'] as const) {
   test(`已有 Token 可以从导入面导入：${mode}`, async ({ page }) => {
     await boot(page)
     await page.locator('.add-btn').click()
-    const dialog = page.locator('.auth-dialog')
-    await dialog.getByRole('tab', { name: '导入', exact: true }).click()
-    await dialog.locator('.token-import summary').click()
-    if (mode === 'access') await dialog.getByLabel('账号名称', { exact: true }).fill('导入的 Token 账号')
+    await page.getByRole('button', { name: '导入已有凭据', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '导入 Codex 账号', exact: true })
+    await dialog.getByRole('tab', { name: 'Token', exact: true }).click()
+    if (mode === 'access') await dialog.getByLabel(/^账号名称/).fill('导入的 Token 账号')
     else {
       await dialog.getByRole('button', { name: 'Token 组合', exact: true }).click()
-      await dialog.getByLabel('ID Token', { exact: true }).fill('synthetic-id-token')
+      await dialog.getByLabel(/^ID Token/).fill('synthetic-id-token')
       await dialog.getByLabel('Refresh Token（可选）', { exact: true }).fill('synthetic-refresh-token')
     }
-    await dialog.getByLabel('Access Token', { exact: true }).fill('at-synthetic-token')
+    await dialog.getByLabel(/^Access Token/).fill('at-synthetic-token')
     await dialog.getByRole('button', { name: '导入 Token', exact: true }).click()
     await expect(dialog).toHaveCount(0)
     await expect(page.locator('.acc-row')).toHaveCount(4)

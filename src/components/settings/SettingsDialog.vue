@@ -283,7 +283,7 @@ onMounted(() => {
           <!-- 外观 -->
           <section v-show="tab === 'appearance'" class="settings-pane">
             <div class="settings-section-label">底色</div>
-            <div class="theme-row">
+            <div class="theme-row" :class="{ 'workspace-theme-row': workspaceLayout }">
               <button
                 v-for="t in themes"
                 :key="t.id"
@@ -297,8 +297,8 @@ onMounted(() => {
                   :class="{ 'workspace-theme-prev': workspaceLayout }"
                   :data-theme="t.id"
                   :data-base="polarityOf(t.id)"
-                  :data-accent="appearance.accent"
-                  :data-atmosphere="appearance.backgroundAtmosphere ? 'on' : 'off'"
+                  data-accent="graphite"
+                  data-atmosphere="off"
                 >
                   <span class="tp-rail">
                     <span class="tp-rail-dot" />
@@ -346,7 +346,7 @@ onMounted(() => {
               <div class="setting-item">
                 <div class="setting-info">
                   <span class="setting-name">背景氛围</span>
-                  <span id="background-atmosphere-desc" class="setting-desc">{{ workspaceLayout ? '为外框、内容留白和辅助面板增加柔和光照' : '在任意底色上叠加随强调色变化的柔光' }}</span>
+                  <span id="background-atmosphere-desc" class="setting-desc">{{ workspaceLayout ? '在背景留白叠加柔光，卡片与输入保持实底' : '在任意底色上叠加随强调色变化的柔光' }}</span>
                 </div>
                 <label class="switch">
                   <input
@@ -592,12 +592,13 @@ onMounted(() => {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: scroll;
   scrollbar-gutter: stable;
   padding: var(--space-4) var(--space-6) var(--space-6);
   display: flex;
   flex-direction: column;
 }
+.settings-pane::-webkit-scrollbar-thumb { background-color: var(--scrollbar-hover); }
 
 /* 面板是 flex column 滚动容器：直接子项会被压扁再溢出，「模块」页 8 行的末两行
    就是这么消失的。子项一律保持自然高度，超出交给面板滚。 */
@@ -615,9 +616,10 @@ onMounted(() => {
    边框固定 2px 占位，选中只换颜色，切换时不跳布局。 */
 .theme-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-3);
 }
+.workspace-theme-row { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 364px; }
 
 /* accent 色丸：一颗色点 + 名字，选中加 ring，尺寸落 28px action-btn 档 */
 .accent-row {
@@ -754,7 +756,7 @@ onMounted(() => {
   border-radius: var(--radius-pill);
 }
 .tp-row:nth-child(2) { background: var(--bg-surface-hover); }
-.workspace-theme-prev { background: var(--bg-workspace-frame); }
+.workspace-theme-prev { width: 100%; height: auto; aspect-ratio: 16 / 10; background: var(--bg-workspace-frame); }
 .workspace-theme-prev .tp-rail { width: 12%; background: transparent; border: 0; }
 .workspace-theme-prev .tp-rail-dot { left: 3px; top: 12px; width: 4px; height: 5px; }
 .workspace-theme-prev .tp-rail-line { left: 3px; top: 26px; width: 4px; }

@@ -268,7 +268,13 @@ describe('wordCount', () => {
 
 describe('formatAbsTime', () => {
   it('should render month, day and padded time', () => {
-    expect(formatAbsTime(new Date(2026, 2, 5, 9, 7).getTime())).toBe('3月5日 09:07')
+    expect(formatAbsTime(new Date(new Date().getFullYear(), 2, 5, 9, 7).getTime())).toBe('3月5日 09:07')
+  })
+  it('includes the year for past and future calendar years', () => {
+    const current = new Date().getFullYear()
+    for (const year of [current - 1, current + 1]) {
+      expect(formatAbsTime(new Date(year, 11, 31, 23, 5).getTime())).toBe(`${year}年12月31日 23:05`)
+    }
   })
 })
 

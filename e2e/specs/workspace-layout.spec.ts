@@ -30,7 +30,7 @@ const navigate = (page: Page, label: string) => page.getByRole('navigation', { n
 test('桌面默认启用新布局，旧主题归并后恢复目录和新外观设置', async ({ page, context }) => {
   await boot(page, { ...seed, settings: { ...seed.settings, theme: 'midnight', accent: 'forest', background_atmosphere: 'true' } })
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'ink')
-  await expect(page.locator('html')).toHaveAttribute('data-accent', 'celadon')
+  await expect(page.locator('html')).toHaveAttribute('data-accent', 'olive')
   await expect(page.locator('.workspace-directory')).toBeHidden()
   await page.getByRole('button', { name: '展开目录', exact: true }).click()
   await page.getByRole('button', { name: '固定目录', exact: true }).click()
@@ -38,14 +38,14 @@ test('桌面默认启用新布局，旧主题归并后恢复目录和新外观�
   await expect(page.locator('.workspace-directory')).toBeHidden()
   await expect.poll(async () => (await e2e.snapshot(page)).settings.workspace_directory_open).toBe('{"notes":true}')
   await tipButton(page, '设置').click()
-  await page.getByRole('radio', { name: '薰衣草', exact: true }).click()
+  await page.getByRole('radio', { name: '靛', exact: true }).click()
   await page.locator('.setting-item', { hasText: '背景氛围' }).locator('label.switch').click()
   await expect.poll(async () => (await e2e.snapshot(page)).settings.background_atmosphere).toBe('false')
   const saved = (await e2e.snapshot(page)).settings
   const restarted = await context.newPage()
   await boot(restarted, { ...seed, settings: saved })
   await expect(restarted.locator('html')).toHaveAttribute('data-theme', 'ink')
-  await expect(restarted.locator('html')).toHaveAttribute('data-accent', 'lavender')
+  await expect(restarted.locator('html')).toHaveAttribute('data-accent', 'indigo')
   await expect(restarted.locator('html')).toHaveAttribute('data-atmosphere', 'off')
   await expect(restarted.locator('.workspace-directory')).toBeVisible()
   await navigate(restarted, '网址收藏')
@@ -180,14 +180,17 @@ test('800px 目录与正文并排停靠，收起后恢复两列收藏且模块�
   await page.getByRole('button', { name: '展开目录', exact: true }).click()
   await expect(page.locator('.directory-docked .workspace-directory')).toBeVisible()
   const panel = (await page.locator('.workspace-directory').boundingBox())!
+  const surface = (await page.locator('.workspace-surface').boundingBox())!
   const main = (await page.locator('.workspace-main').boundingBox())!
   const content = (await page.locator('.workspace-body > .main-content').boundingBox())!
   const toolbar = (await page.locator('#workspace-page-toolbar').boundingBox())!
   expect(panel.x).toBe(content.x + content.width)
-  expect(panel.x + panel.width).toBe(main.x + main.width)
-  expect(panel.y).toBe(toolbar.y + toolbar.height)
+  expect(panel.x).toBe(main.x + main.width)
+  expect(panel.x + panel.width).toBe(surface.x + surface.width)
+  expect(panel.y).toBe(toolbar.y)
+  expect(panel.height).toBe(surface.height)
   expect(content.width).toBeLessThan(mainWidth)
-  expect((await page.locator('.workspace-main').boundingBox())!.width).toBe(mainWidth)
+  expect(main.width).toBe(mainWidth - panel.width)
   await page.getByRole('button', { name: '收起目录', exact: true }).click()
   await expect(page.locator('.workspace-directory')).toBeHidden()
   await page.getByRole('button', { name: '展开目录', exact: true }).click()
@@ -219,21 +222,24 @@ test('800px 目录与正文并排停靠，收起后恢复两列收藏且模块�
   expect((await page.locator('.workspace-main').boundingBox())!.width).toBe(mainWidth)
 })
 
-test('宽窗面板在工具栏下方、内容区右侧展开，缩放和切换保留手动偏好', async ({ page }) => {
+test('宽窗目录贴合内容面顶部与底部，缩放和切换保留手动偏好', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 })
   await boot(page)
   await expect(page.locator('.workspace-directory')).toBeHidden()
   await page.getByRole('button', { name: '展开目录', exact: true }).click()
   await page.getByRole('button', { name: '固定目录', exact: true }).click()
   const panel = (await page.locator('.workspace-directory').boundingBox())!
+  const surface = (await page.locator('.workspace-surface').boundingBox())!
   const main = (await page.locator('.workspace-main').boundingBox())!
   const content = (await page.locator('.workspace-body > .main-content').boundingBox())!
   const toolbar = (await page.locator('#workspace-page-toolbar').boundingBox())!
   expect(panel.x).toBe(content.x + content.width)
-  expect(panel.x + panel.width).toBe(main.x + main.width)
-  expect(panel.y).toBeGreaterThanOrEqual(toolbar.y + toolbar.height)
-  expect(panel.y + panel.height).toBe(main.y + main.height)
-  await expect(page.locator('.workspace-main #workspace-directory')).toBeVisible()
+  expect(panel.x).toBe(main.x + main.width)
+  expect(panel.x + panel.width).toBe(surface.x + surface.width)
+  expect(panel.y).toBe(toolbar.y)
+  expect(panel.height).toBe(surface.height)
+  expect((await page.locator('.workspace-directory-heading').boundingBox())!.height).toBe(64)
+  await expect(page.locator('.workspace-surface > #workspace-directory')).toBeVisible()
   await page.setViewportSize({ width: 800, height: 600 })
   await expect(page.locator('.directory-docked .workspace-directory')).toBeVisible()
   await page.setViewportSize({ width: 1440, height: 900 })
@@ -265,9 +271,8 @@ for (const theme of ['paper', 'ink']) {
     await page.getByRole('button', { name: '展开目录', exact: true }).click()
     await page.getByRole('button', { name: '固定目录', exact: true }).click()
     const panel = await background('.workspace-directory')
-    const frame = await background('.app-root')
     const card = await background('.memo:not(.editing) >> nth=0')
-    expect(panel.image).toContain('radial-gradient')
+    expect(panel.image).toContain('gradient')
     expect(panel.color).not.toMatch(/rgba|transparent|\//)
     expect(await background('#workspace-page-toolbar .page-bar')).toEqual(workspace)
     expect(card.image).toBe('none')
@@ -277,13 +282,7 @@ for (const theme of ['paper', 'ink']) {
     await dialog.getByRole('radio', { name: '橙', exact: true }).click()
     await expect(page.locator('html')).toHaveAttribute('data-accent', 'clay')
     await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
-    if (theme === 'ink') {
-      expect(await background('.app-root')).toEqual(frame)
-      expect(await background('.workspace-main')).toEqual(workspace)
-    } else {
-      await expect.poll(() => background('.workspace-directory')).not.toEqual(panel)
-      expect((await background('.workspace-main')).image).not.toBe(workspace.image)
-    }
+    expect((await background('.workspace-main')).image).not.toBe(workspace.image)
     await expect.poll(() => background('.workspace-directory')).not.toEqual(panel)
     const recoloredPanel = await background('.workspace-directory')
     const control = dialog.locator('.setting-item', { hasText: '背景氛围' })
@@ -292,11 +291,11 @@ for (const theme of ['paper', 'ink']) {
     await expect(page.locator('.workspace-main')).toHaveCSS('background-image', 'none')
     await expect(page.locator('.workspace-directory')).toHaveCSS('background-image', 'none')
     expect((await background('.workspace-main')).color).toBe(workspace.color)
-    expect((await background('.workspace-directory')).color).toBe(recoloredPanel.color)
+    expect((await background('.workspace-directory')).color).toBe(theme === 'ink' ? 'rgb(27, 28, 31)' : 'rgb(247, 247, 246)')
     expect(await background('.memo:not(.editing) >> nth=0')).toEqual(card)
     await control.locator('label.switch').click()
     await expect(control.getByRole('switch')).toBeEnabled()
-    await expect(page.locator('.workspace-directory')).toHaveCSS('background-image', /radial-gradient/)
+    await expect(page.locator('.workspace-directory')).toHaveCSS('background-image', /gradient/)
     expect((await e2e.snapshot(page)).settings.background_atmosphere).toBe('true')
     await page.keyboard.press('Escape')
     await page.locator('.workspace-directory .rail-item').filter({ hasText: '置顶' }).click()
@@ -304,29 +303,25 @@ for (const theme of ['paper', 'ink']) {
   })
 }
 
-test('主题缩略图展示新布局的外框、内容面和辅助面板，并同步强调色与柔光', async ({ page }) => {
+test('主题缩略图展示纸/墨两套中性底色，独立于工作区强调色与氛围', async ({ page }) => {
   await boot(page, { ...seed, settings: { ...seed.settings, theme: 'paper', accent: 'celadon', background_atmosphere: 'true' } })
   await tipButton(page, '设置').click()
   const dialog = page.locator('.settings-dialog')
   await expect(dialog.locator('.workspace-theme-prev .tp-workspace-context')).toHaveCount(2)
-  await expect(dialog.getByRole('radio')).toHaveCount(11)
+  await expect(dialog.getByRole('radio')).toHaveCount(12)
   const preview = dialog.locator('.workspace-theme-prev[data-theme="paper"]')
-  await expect(preview).toHaveAttribute('data-accent', 'celadon')
-  const rendered = await preview.evaluate(el => ({ image: getComputedStyle(el).backgroundImage, color: getComputedStyle(el).backgroundColor }))
-  expect(rendered.image).toContain('radial-gradient')
-  expect(rendered.image).not.toMatch(/[\d.]+v[wh]\b/)
-  expect(rendered.color).toBe(await page.locator('.app-root').evaluate(el => getComputedStyle(el).backgroundColor))
-  await dialog.getByRole('radio', { name: '橙', exact: true }).click()
-  await expect(preview).toHaveAttribute('data-accent', 'clay')
-  for (const [name, id] of [['玫瑰', 'rose'], ['琥珀', 'amber'], ['鼠尾草', 'sage'], ['雾蓝', 'sky'], ['薰衣草', 'lavender'], ['蜜桃', 'peach']]) {
+  await expect(preview).toHaveAttribute('data-accent', 'graphite')
+  await expect(preview).toHaveAttribute('data-atmosphere', 'off')
+  const rendered = () => preview.evaluate(el => ({ image: getComputedStyle(el).backgroundImage, color: getComputedStyle(el).backgroundColor, accent: getComputedStyle(el).getPropertyValue('--accent') }))
+  const before = await rendered()
+  for (const [name, id] of [['橙', 'clay'], ['玫瑰', 'rose'], ['琥珀', 'amber'], ['靛', 'indigo'], ['砖红', 'brick'], ['橄榄', 'olive'], ['青', 'teal'], ['砂', 'sand']]) {
     await dialog.getByRole('radio', { name, exact: true }).click()
     await expect(dialog.getByRole('radio', { name, exact: true })).toHaveAttribute('aria-checked', 'true')
-    await expect(preview).toHaveAttribute('data-accent', id)
+    expect(await rendered()).toEqual(before)
     expect((await e2e.snapshot(page)).settings.accent).toBe(id)
   }
-  const control = dialog.locator('.setting-item', { hasText: '背景氛围' })
-  await control.locator('label.switch').click()
-  await expect(preview).toHaveCSS('background-image', 'none')
+  await dialog.locator('.setting-item', { hasText: '背景氛围' }).locator('label.switch').click()
+  expect(await rendered()).toEqual(before)
   await expect(dialog.locator('.tp-workspace-context').first()).toHaveCSS('background-image', 'none')
 })
 

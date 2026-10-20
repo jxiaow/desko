@@ -555,6 +555,20 @@ pub async fn get_codex_storage_paths() -> Result<CodexStoragePaths, String> {
 }
 
 #[tauri::command]
+pub async fn get_codex_wsl_auth_status() -> Result<codex_account::CodexWslAuthStatus, String> {
+    tauri::async_runtime::spawn_blocking(codex_account::get_codex_wsl_auth_status)
+        .await
+        .map_err(|error| format!("读取 WSL 登录态后台任务失败: {}", error))
+}
+
+#[tauri::command]
+pub async fn sync_codex_auth_to_wsl() -> Result<Vec<codex_account::CodexWslAuthSyncResult>, String> {
+    tauri::async_runtime::spawn_blocking(codex_account::sync_codex_auth_to_wsl)
+        .await
+        .map_err(|error| format!("同步 WSL 登录态后台任务失败: {}", error))?
+}
+
+#[tauri::command]
 pub fn open_codex_config_toml(app: AppHandle) -> Result<(), String> {
     let path = codex_account::get_codex_home().join("config.toml");
     if !path.exists() {

@@ -54,7 +54,9 @@ const showPwd = ref(false)
 const showPaths = ref(false)
 
 const showCategoryDropdown = ref(false)
-const dropdownPos = ref({ top: 0, left: 0, width: 0 })
+const dropdownRef = ref<HTMLElement | null>(null)
+const categoryOptionIndex = ref(-1)
+const dropdownPos = ref({ top: 0, left: 0, width: 0, maxHeight: 202 })
 
 const filteredCategories = computed(() => {
   const kw = form.value.category.trim().toLowerCase()
@@ -65,8 +67,36 @@ const filteredCategories = computed(() => {
 /** 键入无命中时列表只剩「创建」项；有命中时尾追一项，均可点选或回车落定 */
 const showCreateOption = computed(() => {
   const kw = form.value.category.trim()
-  return !!kw && !props.categories.some(c => c === kw)
+  return !!kw && !props.categories.some(c => c.toLowerCase() === kw.toLowerCase())
 })
+const categoryChoices = computed(() => [
+  ...filteredCategories.value,
+  ...(showCreateOption.value ? [form.value.category.trim()] : []),
+])
+
+async function moveCategory(direction: number) {
+  if (!showCategoryDropdown.value) onCategoryFocus()
+  const count = categoryChoices.value.length
+  if (!count) return
+  categoryOptionIndex.value = categoryOptionIndex.value < 0
+    ? (direction > 0 ? 0 : count - 1)
+    : (categoryOptionIndex.value + direction + count) % count
+  await nextTick()
+  dropdownRef.value?.querySelector<HTMLElement>(`[data-index="${categoryOptionIndex.value}"]`)?.scrollIntoView({ block: 'nearest' })
+}
+
+function chooseCategory() {
+  const choice = categoryChoices.value[categoryOptionIndex.value]
+  if (showCategoryDropdown.value && choice !== undefined && categoryOptionIndex.value < filteredCategories.value.length) selectCategory(choice)
+  else commitCategory()
+}
+
+function dismissCategory(event: KeyboardEvent) {
+  if (!showCategoryDropdown.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  showCategoryDropdown.value = false
+}
 
 const selectCategory = (cat: string) => {
   form.value.category = cat
@@ -90,11 +120,18 @@ const commitCategory = () => {
 const updateDropdownPos = () => {
   if (categoryRef.value) {
     const rect = categoryRef.value.getBoundingClientRect()
-    dropdownPos.value = { top: rect.bottom + 2, left: rect.left, width: rect.width }
+    const below = window.innerHeight - rect.bottom - 8
+    const above = rect.top - 8
+    const upwards = below < 202 && above > below
+    const rows = Math.max(1, Math.min(6, Math.floor(((upwards ? above : below) - 10) / 32)))
+    const maxHeight = rows * 32 + 10
+    const height = Math.min(maxHeight, Math.max(1, categoryChoices.value.length) * 32 + 10)
+    dropdownPos.value = { top: upwards ? rect.top - height - 2 : rect.bottom + 2, left: rect.left, width: rect.width, maxHeight }
   }
 }
 
 const onCategoryFocus = () => {
+  categoryOptionIndex.value = -1
   updateDropdownPos()
   showCategoryDropdown.value = true
 }
@@ -234,35 +271,58 @@ defineExpose({ save })
         <input ref="nameRef" v-model="form.name" placeholder="例如：OA系统" :class="{ 'field-invalid': invalid.name }" @input="clearInvalid('name')" />
       </div>
       <div class="form-group category-group">
-        <label>所属分类 <span class="req">*</span></label>
+        <label for="entry-category">所属分类 <span class="req">*</span></label>
         <div class="category-input-wrapper">
           <input
             ref="categoryRef"
+            id="entry-category"
             v-model="form.category"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="entry-category-options"
+            :aria-expanded="showCategoryDropdown"
+            :aria-activedescendant="showCategoryDropdown && categoryOptionIndex >= 0 ? `entry-category-${categoryOptionIndex}` : undefined"
             placeholder="选择或输入新分类"
             :class="{ 'field-invalid': invalid.category }"
             @focus="onCategoryFocus"
             @blur="onCategoryBlur"
-            @input="showCategoryDropdown = true; clearInvalid('category')"
-            @keydown.enter.prevent="commitCategory"
+            @input="showCategoryDropdown = true; categoryOptionIndex = -1; updateDropdownPos(); clearInvalid('category')"
+            @keydown.down.prevent="moveCategory(1)"
+            @keydown.up.prevent="moveCategory(-1)"
+            @keydown.enter.prevent="chooseCategory"
+            @keydown.esc="dismissCategory"
           />
           <AppIcon class="cat-chevron" name="chevDown" :size="12" />
           <Teleport to="body">
             <div
               v-if="showCategoryDropdown"
+              id="entry-category-options"
+              ref="dropdownRef"
+              role="listbox"
+              aria-label="所属分类"
               class="category-dropdown-teleported"
-              :style="{ top: dropdownPos.top + 'px', left: dropdownPos.left + 'px', width: dropdownPos.width + 'px' }"
+              :style="{ top: dropdownPos.top + 'px', left: dropdownPos.left + 'px', width: dropdownPos.width + 'px', maxHeight: dropdownPos.maxHeight + 'px' }"
             >
               <div
-                v-for="cat in filteredCategories"
+                v-for="(cat, index) in filteredCategories"
                 :key="cat"
+                :id="`entry-category-${index}`"
+                :data-index="index"
+                role="option"
+                :aria-selected="form.category === cat"
                 class="category-option"
-                :class="{ active: form.category === cat }"
+                :class="{ active: form.category === cat, highlighted: categoryOptionIndex === index }"
+                :title="cat"
                 @mousedown.prevent="selectCategory(cat)"
               >{{ cat }}</div>
               <div
                 v-if="showCreateOption"
+                :id="`entry-category-${filteredCategories.length}`"
+                :data-index="filteredCategories.length"
+                role="option"
+                :aria-selected="false"
                 class="category-option category-create"
+                :class="{ highlighted: categoryOptionIndex === filteredCategories.length }"
                 @mousedown.prevent="commitCategory()"
               >创建「{{ form.category.trim() }}」</div>
               <div v-if="!filteredCategories.length && !showCreateOption" class="category-empty">无匹配，键入后回车新建</div>

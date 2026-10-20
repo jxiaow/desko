@@ -226,23 +226,25 @@ usePageHeadStore().setHead('局域网传输')
           <span class="dot" aria-hidden="true"></span>
           {{ running ? '监听中' : '已停止' }}
         </span>
-        <button
-          class="btn-primary toggle-btn"
-          :class="{ 'ghost-danger': running }"
-          :disabled="fsBusy"
-          @click="toggle"
-        >
-          <AppIcon :name="running ? 'x' : 'upload'" :size="13" />
-          {{ running ? '停止服务' : '启动服务' }}
-        </button>
-        <button
-          class="ib manage-btn"
-          type="button"
-          aria-label="管理共享"
-          @click="requestOpenSettingsTab('fileshare')"
-        >
-          <AppIcon name="gear" :size="16" />
-        </button>
+        <div class="page-actions">
+          <button
+            class="btn-primary toggle-btn"
+            :class="{ 'ghost-danger': running }"
+            :disabled="fsBusy"
+            @click="toggle"
+          >
+            <AppIcon :name="running ? 'x' : 'upload'" :size="13" />
+            {{ running ? '停止服务' : '启动服务' }}
+          </button>
+          <button
+            class="ib manage-btn"
+            type="button"
+            aria-label="管理共享"
+            @click="requestOpenSettingsTab('fileshare')"
+          >
+            <AppIcon name="gear" :size="16" />
+          </button>
+        </div>
       </div>
 
       <!-- 分组一：状态行（谁能访问 + 访问地址）+ 本机地址行 + 警告行，一张卡说完地址这件事 -->
@@ -383,20 +385,19 @@ usePageHeadStore().setHead('局域网传输')
 .mono { font-family: var(--font-mono); }
 
 /* ── 顶栏：.page-bar 骨架在 global.css（磨砂吸顶），本页只留启停钮的皮；状态胶囊走 global .chip ── */
-.toggle-btn { margin-left: auto }
 /* 页条右侧的图标钮与 32px 主钮同高，别露出 24px 的小档 */
 .manage-btn { width: 32px; height: 32px }
 /* 它站在磨砂页栏上，hover 那层洗要吃 chrome 档，否则字被 --hover 洗淡 */
 .manage-btn:hover { background: var(--hover-chrome); color: var(--text) }
 
 /* 浅红幽灵态停止按钮：压在 .btn-primary 全局样式之上 */
-.toggle-btn.ghost-danger {
+.toggle-btn.ghost-danger:not(:disabled) {
   background: var(--danger-soft);
   color: var(--danger);
   border: 1px solid var(--danger-border);
   box-shadow: none;
 }
-.toggle-btn.ghost-danger:hover {
+.toggle-btn.ghost-danger:hover:not(:disabled) {
   background: var(--danger-soft);
   border-color: var(--danger);
   color: var(--danger-hover);
@@ -405,9 +406,9 @@ usePageHeadStore().setHead('局域网传输')
 /* ── 分组卡：与穿透页 .tn-card 同一档面板方言（mock .wcard），一层框 + 发丝分行 ── */
 .clean-group-card {
   background: var(--bg-surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: 12px;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
   margin-bottom: var(--space-3);
   overflow: hidden;
 }
@@ -418,7 +419,7 @@ usePageHeadStore().setHead('局域网传输')
   height: 44px;
   padding: 0 14px;
   font-size: var(--text-base);
-  font-weight: 600;
+  font-weight: var(--weight-card-title);
   color: var(--text);
   border-bottom: 1px solid var(--border);
 }

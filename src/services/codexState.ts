@@ -9,9 +9,12 @@ import {
   type CodexSessionRecord,
   type CodexSessionTokenStats,
   type CodexTrashedSessionRecord,
+  type CodexWslAuthStatus,
+  type CodexWslAuthSyncResult,
 } from './api/codex'
 import { errText } from './api/backup'
 import { settingsApi } from './api/settings'
+import { isWebRuntime } from './runtime'
 import { useToastStore } from '../stores/toast'
 import { codexQuotaRemaining } from '../utils/codexAccounts'
 import { usageWindowFrom, type UsageRange } from '../utils/codexUsage'
@@ -113,6 +116,14 @@ export function clearCodexSession(): void {
   switchingId.value = ''
   switchStep.value = ''
   storagePaths.value = null
+  wslAuthStatusEpoch++
+  wslAuthStatus.value = null
+  wslAuthStatusBusy.value = false
+  wslAuthStatusError.value = ''
+  wslAuthResults.value = null
+  wslAuthAutoAttemptAt = 0
+  wslAuthSyncAfterSwitchQueued = false
+  // 在途原生命令无法取消；保留 syncing，避免解锁后与它并发写入。
   recycledAccounts.value = []
   recycledLoaded.value = false
   batchDeleteDialogOpen.value = false
@@ -214,6 +225,8 @@ export async function switchTo(id: string): Promise<boolean> {
     await refreshAccounts()
     if (epoch !== accountEpoch) return false
     await finishSwitch(providerBefore, providerAfter, epoch)
+    if (epoch !== accountEpoch) return false
+    void autoSyncWslAuthAfterSwitch()
     return true
   } catch (e) {
     if (epoch !== accountEpoch) return false
@@ -404,11 +417,12 @@ export async function loadSessions({ background = false }: { background?: boolea
   sessionsError.value = ''
   const epoch = accountEpoch
   const sourcesVersion = sessionSourcesVersion
+  const query = sessionQuery.value.trim()
   let refreshed = false
   try {
     const list = await codexApi.listSessions(
-      sessionSearchMode.value === 'title' ? sessionQuery.value : undefined,
-      sessionSearchMode.value === 'content' ? sessionQuery.value : undefined,
+      sessionSearchMode.value === 'title' ? query : undefined,
+      sessionSearchMode.value === 'content' ? query : undefined,
     )
     if (epoch !== accountEpoch) return
     if (sourcesVersion !== sessionSourcesVersion) {
@@ -836,6 +850,120 @@ async function saveUsageSetting(key: string, value: string): Promise<void> {
   invalidateUsage()
   usageError.value = ''
   if (refresh) void loadUsage()
+}
+
+/**
+ * WSL 登录态同步：源是 Windows 官方 Codex 登录态，目标只认运行中的发行版。
+ * 开关默认关；自动触发只在切号后与进入 Codex 页时各跑一次，不挂后台定时器。
+ */
+export const wslAuthStatus = ref<CodexWslAuthStatus | null>(null)
+export const wslAuthStatusBusy = ref(false)
+export const wslAuthStatusError = ref('')
+export const wslAuthSyncing = ref(false)
+export const wslAuthResults = ref<CodexWslAuthSyncResult[] | null>(null)
+const KEY_WSL_AUTH_AUTO_SYNC = 'codex_wsl_auth_auto_sync'
+const WSL_AUTH_AUTO_SYNC_INTERVAL_MS = 10 * 60_000
+let wslAuthAutoAttemptAt = 0
+let wslAuthStatusEpoch = 0
+let wslAuthAutoSyncVersion = 0
+let wslAuthSyncAfterSwitchQueued = false
+
+export async function loadWslAuthStatus(): Promise<CodexWslAuthStatus | null> {
+  if (isWebRuntime()) return null
+  const sessionEpoch = accountEpoch
+  const epoch = ++wslAuthStatusEpoch
+  const autoSyncVersion = wslAuthAutoSyncVersion
+  wslAuthStatusBusy.value = true
+  wslAuthStatusError.value = ''
+  try {
+    let status = await codexApi.wslAuthStatus()
+    if (sessionEpoch !== accountEpoch) return null
+    if (autoSyncVersion !== wslAuthAutoSyncVersion && wslAuthStatus.value) {
+      status = { ...status, autoSync: wslAuthStatus.value.autoSync }
+    }
+    // 同会话的旧查询仍可服务其自动同步调用者，只让最新查询更新界面。
+    if (epoch === wslAuthStatusEpoch) wslAuthStatus.value = status
+    return status
+  } catch (e) {
+    if (epoch === wslAuthStatusEpoch) wslAuthStatusError.value = errText(e)
+    return null
+  } finally {
+    if (epoch === wslAuthStatusEpoch) wslAuthStatusBusy.value = false
+  }
+}
+
+export async function saveWslAuthAutoSync(enabled: boolean): Promise<void> {
+  const epoch = accountEpoch
+  await settingsApi.setSetting(KEY_WSL_AUTH_AUTO_SYNC, String(enabled))
+  if (epoch !== accountEpoch) return
+  wslAuthAutoSyncVersion++
+  if (wslAuthStatus.value) wslAuthStatus.value = { ...wslAuthStatus.value, autoSync: enabled }
+}
+
+export async function syncWslAuth(opts: { silent?: boolean } = {}): Promise<CodexWslAuthSyncResult[] | null> {
+  if (wslAuthSyncing.value || isWebRuntime()) return null
+  const epoch = accountEpoch
+  const toast = useToastStore()
+  wslAuthSyncing.value = true
+  wslAuthResults.value = null
+  wslAuthAutoAttemptAt = Date.now()
+  try {
+    const results = await codexApi.syncWslAuth()
+    if (epoch !== accountEpoch) return null
+    wslAuthResults.value = results
+    await loadWslAuthStatus()
+    if (epoch !== accountEpoch) return null
+    if (!opts.silent) {
+      const failed = results.filter((result) => result.status === 'failed').length
+      const synced = results.filter((result) => result.status === 'synced').length
+      if (failed) toast.showToast(`WSL 登录态同步完成，${failed} 个目标失败`, 'error')
+      else if (synced) toast.showToast(`已同步 ${synced} 个 WSL 目标`)
+      else toast.showToast('WSL 登录态已是最新', 'info')
+    }
+    return results
+  } catch (e) {
+    if (epoch !== accountEpoch) return null
+    if (opts.silent) wslAuthStatusError.value = errText(e)
+    else toast.showToast(errText(e), 'error')
+    return null
+  } finally {
+    wslAuthSyncing.value = false
+    if (wslAuthSyncAfterSwitchQueued) {
+      wslAuthSyncAfterSwitchQueued = false
+      void autoSyncWslAuthAfterSwitch()
+    }
+  }
+}
+
+/** 进 Codex 页的轻量触发：10 分钟节流只在内存里，不落盘。 */
+export async function autoSyncWslAuthOnEnter(): Promise<void> {
+  if (isWebRuntime()) return
+  if (wslAuthStatus.value && !wslAuthStatus.value.autoSync) return
+  if (Date.now() - wslAuthAutoAttemptAt < WSL_AUTH_AUTO_SYNC_INTERVAL_MS) return
+  wslAuthAutoAttemptAt = Date.now()
+  const epoch = accountEpoch
+  const status = await loadWslAuthStatus()
+  if (epoch !== accountEpoch) return
+  if (!status?.autoSync || !status.source.available || status.source.expired || !status.targets.length) return
+  await syncWslAuth({ silent: true })
+}
+
+/** 切号成功后的自动同步：账号变了，不受 10 分钟节流限制。 */
+export async function autoSyncWslAuthAfterSwitch(): Promise<void> {
+  if (isWebRuntime()) return
+  if (wslAuthSyncing.value) {
+    wslAuthSyncAfterSwitchQueued = true
+    return
+  }
+  const epoch = accountEpoch
+  const status = await loadWslAuthStatus()
+  if (epoch !== accountEpoch) return
+  if (!status?.autoSync || !status.source.available || status.source.expired || !status.targets.length) return
+  if (wslAuthSyncing.value) {
+    wslAuthSyncAfterSwitchQueued = true
+    return
+  }
+  await syncWslAuth({ silent: true })
 }
 
 export async function loadUsage(): Promise<void> {

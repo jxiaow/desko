@@ -113,7 +113,7 @@ test('大额用量换算万和亿，悬停仍能核对完整数字', async ({ pa
   await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveAttribute('aria-label', /合计 1,700,000,000 Token/)
 })
 
-for (const theme of ['paper', 'slate']) {
+for (const theme of ['paper', 'ink']) {
   test(`${theme} 下三类用量颜色明确，缓存另有纹理和对应图例`, async ({ page }) => {
     await boot(page, { ...seed, settings: { ...seed.settings, theme, accent: 'celadon' } })
     await page.getByRole('button', { name: '近 7 天', exact: true }).click()

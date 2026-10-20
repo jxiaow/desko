@@ -33,6 +33,11 @@
   /* 卡片操作独占一行，避免依赖 hover 或盖住标题与正文。 */
   .app-root.web-runtime .memo { padding: 12px; }
   .app-root.web-runtime .memo .memo-head { flex-wrap: wrap; gap: 6px; }
+  .app-root.web-runtime .memo.without-title .memo-head { position: relative; top: auto; right: auto; width: auto; margin: 0 0 3px; }
+  .app-root.web-runtime .memo.without-title .memo-body::before { display: none; }
+  .app-root.web-runtime .memo.without-title .memo-locked { padding-right: 0; }
+  .app-root.web-runtime .memo.without-title .memo-body > img:first-child,
+  .app-root.web-runtime .memo.without-title .memo-body > :first-child img { max-width: 100%; }
   .app-root.web-runtime .memo .memo-head .memo-acts {
     position: static;
     transform: none;

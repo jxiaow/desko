@@ -13,6 +13,9 @@ pub fn get_setting(state: State<AppState>, key: String) -> Result<String, AppErr
     if key == "codex_usage_auto_wsl" {
         return Ok(codex_core::modules::config::get_user_config().codex_usage_auto_wsl.to_string());
     }
+    if key == "codex_wsl_auth_auto_sync" {
+        return Ok(codex_core::modules::config::get_user_config().codex_wsl_auth_auto_sync.to_string());
+    }
     if key == "codex_usage_extra_dirs" {
         return serde_json::to_string(&codex_core::modules::config::get_user_config().codex_usage_extra_dirs)
             .map_err(|error| AppError::Setting(error.to_string()));
@@ -39,6 +42,14 @@ pub fn set_setting(state: State<AppState>, app: AppHandle, key: String, value: S
             .map_err(AppError::Setting)?;
         codex_core::modules::config::patch_user_config(move |config| {
             config.codex_usage_extra_dirs = dirs;
+            Ok(())
+        }).map_err(AppError::Setting)?;
+        return Ok(());
+    }
+    if key == "codex_wsl_auth_auto_sync" {
+        let enabled = value.parse::<bool>().map_err(|_| AppError::Setting("WSL 登录态自动同步开关无效".into()))?;
+        codex_core::modules::config::patch_user_config(move |config| {
+            config.codex_wsl_auth_auto_sync = enabled;
             Ok(())
         }).map_err(AppError::Setting)?;
         return Ok(());

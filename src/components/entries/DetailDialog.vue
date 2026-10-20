@@ -57,7 +57,7 @@ useEscapeClose(() => emit('close'))
               <div class="detail-meta">
                 <span>{{ entry.category || '未分类' }}</span>
                 <span aria-hidden="true">·</span>
-                <span>{{ formatAbsTime(entry.created_at) }}添加</span>
+                <span>添加于 {{ formatAbsTime(entry.created_at) }}</span>
               </div>
             </div>
           </div>
@@ -85,7 +85,7 @@ useEscapeClose(() => emit('close'))
               <AppIcon :name="revealed ? 'eyeOff' : 'eye'" :size="12" />{{ revealed ? '隐藏' : '显示' }}
             </button>
             <button class="mini" type="button" title="复制密码" @click="emit('copyPassword', entry.id)">
-              <AppIcon name="copy" :size="12" />
+              <AppIcon name="copy" :size="12" />复制
             </button>
           </div>
 

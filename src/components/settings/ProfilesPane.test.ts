@@ -55,6 +55,6 @@ describe('ProfilesPane switch', () => {
     await confirmSwitch()
     expect(noteState.flushNoteSave).not.toHaveBeenCalled()
     expect(profilesApi.switchTo).not.toHaveBeenCalled()
-    expect(useToastStore().toast.message).toContain('先发布或放弃')
+    expect(useToastStore().toast.message).toContain('先保存或放弃')
   })
 })

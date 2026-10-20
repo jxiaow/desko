@@ -22,6 +22,15 @@ describe('Confirm Store', () => {
   })
 
   describe('handleConfirm', () => {
+    it('删除动作显示明确文案，下一次普通确认恢复默认文案', () => {
+      const store = useConfirmStore()
+      store.showConfirm('删除验证码', 'synthetic', vi.fn(), '删除')
+      expect(store.confirmDialog.actionLabel).toBe('删除')
+      store.handleConfirm()
+      store.showConfirm('普通确认', 'synthetic', vi.fn())
+      expect(store.confirmDialog.actionLabel).toBe('确定')
+    })
+
     it('should call onConfirm callback and hide dialog', () => {
       const store = useConfirmStore()
       const onConfirm = vi.fn()

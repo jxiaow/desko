@@ -20,6 +20,7 @@ import {
 import { useConfirmStore } from '../../stores/confirm'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
+import CodexUsageNotes from './CodexUsageNotes.vue'
 import { formatTokenCount as compact, formatUsageCost } from '../../utils/codexUsage'
 import { isWebRuntime } from '../../services/runtime'
 import { invoke } from '../../services/transport'
@@ -221,18 +222,6 @@ const statsOf = (id: string) => sessionTokens.value[id]
 const netInput = (t: NonNullable<ReturnType<typeof statsOf>>) => Math.max(t.inputTokens - t.cachedInputTokens, 0)
 const num = (v: number) => v.toLocaleString()
 
-/** 行上不给 token 读数：整行的悬停账（完整标题或完整 ID + 五口径）住这里 */
-function rowTip(s: CodexSessionRecord): string {
-  return [titleTip(s), tokenTip(s.sessionId)].filter(Boolean).join('\n')
-}
-
-/** 行上只给两位，缓存与推理这些进悬停 */
-function tokenTip(id: string): string {
-  const t = statsOf(id)
-  if (!t) return ''
-  return `净输入 ${num(netInput(t))} · 缓存命中 ${num(t.cachedInputTokens)} · 输出 ${num(t.outputTokens)}（含推理 ${num(t.reasoningOutputTokens)}）· 官方累计 ${num(t.totalTokens)} · ${num(t.requestCount)} 次请求 · 估算金额 ${formatUsageCost(t.estimatedCostUsd)}`
-}
-
 /** 明细同样换算单位，完整计数放在数字提示里用于核对。 */
 function tokenFacts(id: string): Array<[string, number]> {
   const t = statsOf(id)
@@ -355,7 +344,7 @@ async function copySessionValue(value: string, label: string) {
         {{ sessionQuery.trim() ? (sessionSearchMode === 'content' ? '没有正文匹配的会话' : '没有标题匹配的会话') : '官方 Codex 还没有会话记录' }}
       </div>
       <div class="empty-desc">
-        {{ sessionQuery.trim() ? '换个关键词，或清空搜索框看全量' : '这一档列的是官方客户端留在本机的会话' }}
+        {{ sessionQuery.trim() ? '更换关键词或清空搜索。' : '使用 Codex 后会显示在这里。' }}
       </div>
     </div>
 
@@ -367,7 +356,7 @@ async function copySessionValue(value: string, label: string) {
             <span class="hero-num" :title="`${num(allSum.total)} Token`">{{ compact(allSum.total) }}</span>
             <span class="hero-unit">累计 Token</span>
           </template>
-          <span v-else class="hero-pending">Token 统计中 · 已获取 {{ allSum.known }} / {{ sessions.length }} 条</span>
+          <span v-else class="hero-pending">统计中 {{ allSum.known }} / {{ sessions.length }}</span>
         </div>
         <dl v-if="sumReady" class="sess-billing" aria-label="会话金额与请求数">
           <div><dt>估算金额（USD）</dt><dd>{{ formatUsageCost(allSum.cost) }}</dd></div>
@@ -406,10 +395,10 @@ async function copySessionValue(value: string, label: string) {
               type="button"
               :aria-expanded="sessionOpenId === s.sessionId"
               :data-sid="s.sessionId"
-              :title="rowTip(s)"
+              :aria-label="`${titleTip(s)}，${sessionOpenId === s.sessionId ? '收起详情' : '展开详情'}`"
               @click="sessionOpenId = sessionOpenId === s.sessionId ? '' : s.sessionId"
             >
-              <span class="sess-title" :class="{ mono: idAsTitle(s) }">{{ titleText(s) }}</span>
+              <span class="sess-title" :class="{ mono: idAsTitle(s) }" :title="titleTip(s)">{{ titleText(s) }}</span>
               <span v-if="s.sessionKind !== 'conversation'" class="badge off">{{ kindLabel(s.sessionKind) }}</span>
               <span v-if="whenText(s.updatedAt)" class="sess-time">{{ whenText(s.updatedAt) }}</span>
             </button>
@@ -471,13 +460,9 @@ async function copySessionValue(value: string, label: string) {
           </div>
         </div>
       </section>
-      <p class="page-note">金额按模型标准 API 单价估算，包含缓存折扣，不代表订阅实际扣费；含未知模型时显示“未定价”。请求数按有用量的 Token 记录去重统计。</p>
+      <CodexUsageNotes />
     </div>
 
-    <p v-if="!groups.length && !sessionsError && !sessionsBusy" class="page-note">
-      <AppIcon name="info" :size="13" />
-      这一档列的是官方 Codex 留在本机的会话；移到回收站会先留底进 desko，再从官方目录移除。
-    </p>
     <div v-if="sessionFile" class="dialog-overlay" @click.self="sessionFile = null">
       <section class="dialog session-file-dialog" role="dialog" aria-modal="true" aria-label="会话文件">
         <header class="dialog-header"><h3>{{ sessionFile.title }}</h3><button class="dialog-close" type="button" aria-label="关闭会话文件" @click="sessionFile = null"><AppIcon name="x" :size="16" /></button></header>
@@ -506,22 +491,19 @@ async function copySessionValue(value: string, label: string) {
 
 /* 总量作为列表摘要，收敛字号和字重，让会话标题保持清晰。 */
 .sess-hero {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: center;
+  align-items: baseline;
+  gap: 6px 24px;
   min-height: 84px;
-  padding: var(--space-4) var(--space-5);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow-card);
+  padding: 12px var(--space-5);
 }
 .hero-line {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  min-height: 32px;
+  min-height: 30px;
 }
 .hero-num {
   font-size: var(--text-2xl);
@@ -531,12 +513,13 @@ async function copySessionValue(value: string, label: string) {
   color: var(--text);
 }
 .hero-unit { font-size: var(--text-xs); color: var(--text-muted); }
-.sess-billing { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 6px 0 10px; }
+.sess-billing { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
 .sess-billing > div { display: flex; align-items: baseline; gap: 8px; }
 .sess-billing dt { font-size: var(--text-xs); color: var(--text-muted); }
 .sess-billing dd { margin: 0; font-size: var(--text-base); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text); }
 .hero-pending { font-size: var(--text-sm); color: var(--text-muted); }
 .hero-sub {
+  grid-column: 1 / -1;
   min-height: 18px;
   margin: 0;
   font-size: var(--text-xs);
@@ -692,5 +675,8 @@ async function copySessionValue(value: string, label: string) {
 }
 @media (max-width: 850px) {
   .sess-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .sess-hero { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

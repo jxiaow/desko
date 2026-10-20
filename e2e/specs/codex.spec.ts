@@ -178,11 +178,11 @@ test.describe('Codex 账号', () => {
     await expect(dialog.locator('.url')).toBeVisible()
 
     await dialog.locator('.cb-row input').fill('http://localhost:1455/callback?state=x')
-    await dialog.locator('.cb-row button', { hasText: '提交' }).click()
+    await dialog.getByRole('button', { name: '提交回调', exact: true }).click()
     await expectToast(page, /回调地址里没有授权码/)
 
     await dialog.locator('.cb-row input').fill('http://localhost:1455/callback?code=abc&state=x')
-    await dialog.locator('.cb-row button', { hasText: '提交' }).click()
+    await dialog.getByRole('button', { name: '提交回调', exact: true }).click()
     await expectToast(page, /已登录 browser@e2e.dev/)
     await expect(dialog).toHaveCount(0)
     await expect(accountRow(page, 'browser@e2e.dev')).toBeVisible()
@@ -260,17 +260,17 @@ test.describe('Codex 账号', () => {
     expect(await e2e.count(page, 'consume_codex_reset_credit')).toBe(1)
   })
 
-  test('导入 tab：展示本机凭据路径，导入本机与导出所选都打到命令面', async ({ page }) => {
+  test('独立导入窗：展示本机凭据路径，导入成功收窗，导出所选打到命令面', async ({ page }) => {
     await gotoCodex(page)
     await page.locator('.add-btn').click()
-    const dialog = page.locator('.auth-dialog')
-    await dialog.locator('.seg-btn', { hasText: '导入' }).click()
-    await expect(dialog.locator('.pathline .v')).toContainText(/\.codex\\auth\.json/)
-    await dialog.locator('button', { hasText: '导入本机账号' }).click()
+    await page.getByRole('button', { name: '导入已有凭据', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '导入 Codex 账号', exact: true })
+    await expect(dialog.locator('.pathline code')).toContainText(/\.codex\\auth\.json/)
+    await dialog.getByRole('button', { name: '导入当前本机 Codex', exact: true }).click()
     await expectToast(page, /已导入 local@e2e.dev/)
     expect(await e2e.count(page, 'import_codex_from_local')).toBe(1)
 
-    await dialog.locator('.dialog-close').click()
+    await expect(dialog).toHaveCount(0)
     await page.locator('.acc-row').first().locator('.acc-more').click()
     await page.locator('.popover .pop-item', { hasText: '导出这一条 JSON' }).click()
     await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
@@ -285,7 +285,10 @@ test.describe('Codex 账号', () => {
     const item = visiblePane(dialog).locator('.setting-item', { hasText: '官方凭据路径' })
     await expect(item.locator('.codex-path code')).toContainText(/\.codex\\auth\.json/)
     await expect(item.locator('.codex-path code')).toHaveCSS('font-family', /Consolas/)
-    await item.locator('.codex-path button', { hasText: '打开 config.toml' }).click()
+    await expect(item.locator('button')).toHaveCount(0)
+    const config = visiblePane(dialog).locator('.setting-item', { hasText: '配置文件' }).filter({ has: page.locator('.codex-path') })
+    await expect(config.locator('code')).toContainText(/\.codex\\config\.toml/)
+    await config.getByRole('button', { name: '打开 config.toml', exact: true }).click()
     expect(await e2e.count(page, 'open_codex_config_toml')).toBe(1)
   })
 
@@ -406,15 +409,16 @@ test.describe('Codex 账号', () => {
     await expect(page.locator('.acc-row .mail', { hasText: '换过密钥的' })).toBeVisible()
   })
 
-  test('导入 tab 能粘贴 JSON：整段导出与裸密钥都收', async ({ page }) => {
+  test('独立导入窗能粘贴 JSON：整段导出与裸密钥都收', async ({ page }) => {
     await gotoCodex(page)
     await page.locator('.add-btn').click()
-    const dialog = page.locator('.auth-dialog')
-    await dialog.locator('.seg-btn', { hasText: '导入' }).click()
-    await expect(dialog.locator('.paste-act button')).toBeDisabled()
+    await page.getByRole('button', { name: '导入已有凭据', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '导入 Codex 账号', exact: true })
+    await dialog.getByRole('tab', { name: '粘贴 JSON', exact: true }).click()
+    await expect(dialog.getByRole('button', { name: '导入这段 JSON', exact: true })).toBeDisabled()
 
     await dialog.locator('#cx-paste').fill('{"accounts":[{"email":"paste@e2e.dev"}]}')
-    await dialog.locator('.paste-act button').click()
+    await dialog.getByRole('button', { name: '导入这段 JSON', exact: true }).click()
     await expectToast(page, /已导入 1 条账号/)
     expect(await e2e.count(page, 'import_codex_from_json')).toBe(1)
     await expect(accountRow(page, 'paste@e2e.dev')).toBeVisible()
@@ -532,6 +536,87 @@ test.describe('Codex 账号', () => {
       .map((call: any) => call.args.value))
     expect(writes).toEqual(['false', 'true'])
   })
+
+  test('设置·Codex：WSL 登录态同步默认关闭，过期源只提示并禁用同步', async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 1000 })
+    await bootUnlocked(page, {
+      settings: { codex_enabled: 'true' },
+      codex: {
+        accounts: [{ email: 'main@e2e.dev', plan_type: 'pro', current: true }],
+        wslAuth: {
+          expired: true,
+          targets: [{ distro: 'Ubuntu', user: 'jxiaow', state: 'outdated', email: 'main@e2e.dev' }],
+        },
+      },
+    })
+    const dialog = await openSettings(page, 'codex')
+    const toggle = dialog.getByRole('switch', { name: '自动同步 WSL 登录态', exact: true })
+    await expect(toggle).toBeEnabled()
+    await expect(toggle).not.toBeChecked()
+
+    const target = dialog.locator('.wsl-auth-target')
+    await expect(target).toHaveCount(1)
+    await expect(target).toContainText('Ubuntu / jxiaow')
+    await expect(target.locator('.wsl-auth-target-state')).toHaveText('同账号 · 待同步')
+    await expect(dialog.locator('.wsl-auth-expired')).toContainText('已过期')
+    await expect(dialog.locator('.wsl-auth-warning')).toContainText('Windows 侧凭据已过期')
+    await expect(dialog.getByRole('button', { name: '立即同步', exact: true })).toBeDisabled()
+    expect(await visiblePane(dialog).evaluate(element => element.scrollWidth > element.clientWidth)).toBe(false)
+    await page.screenshot({ path: '.tmp/codex-wsl/settings-wsl-auth-expired.png' })
+
+    await toggle.locator('..').click()
+    await expectToast(page, '已开启 WSL 登录态自动同步')
+    await expect(toggle).toBeChecked()
+    const writes = await page.evaluate(() => (window as any).__E2E__.invocations
+      .filter((call: any) => call.cmd === 'set_setting' && call.args.key === 'codex_wsl_auth_auto_sync')
+      .map((call: any) => call.args.value))
+    expect(writes).toEqual(['true'])
+  })
+
+  test('设置·Codex：立即同步写入待同步目标并刷新状态', async ({ page }) => {
+    await bootUnlocked(page, {
+      settings: { codex_enabled: 'true' },
+      codex: {
+        accounts: [{ email: 'main@e2e.dev', plan_type: 'pro', current: true }],
+        wslAuth: {
+          targets: [{ distro: 'Ubuntu', user: 'jxiaow', state: 'outdated', email: 'main@e2e.dev' }],
+        },
+      },
+    })
+    const dialog = await openSettings(page, 'codex')
+    const target = dialog.locator('.wsl-auth-target')
+    await expect(target.locator('.wsl-auth-target-state')).toHaveText('同账号 · 待同步')
+
+    await dialog.getByRole('button', { name: '立即同步', exact: true }).click()
+    await expectToast(page, '已同步 1 个 WSL 目标')
+    await expect(target.locator('.wsl-auth-target-state')).toHaveText('同账号 · 已最新')
+    await expect(dialog.locator('.wsl-auth-result')).toHaveText('已同步 1 个')
+    await expect(dialog.getByRole('button', { name: '立即同步', exact: true })).toBeEnabled()
+
+    const calls = await page.evaluate(() => (window as any).__E2E__.invocations
+      .filter((call: any) => call.cmd === 'sync_codex_auth_to_wsl').length)
+    expect(calls).toBe(1)
+  })
+
+  test('Codex 页：开启自动同步后进页静默同步 WSL 登录态', async ({ page }) => {
+    await bootUnlocked(page, {
+      settings: { codex_enabled: 'true', codex_wsl_auth_auto_sync: 'true' },
+      codex: {
+        accounts: [{ email: 'main@e2e.dev', plan_type: 'pro', current: true }],
+        wslAuth: {
+          targets: [{ distro: 'Ubuntu', user: 'jxiaow', state: 'outdated', email: 'main@e2e.dev' }],
+        },
+      },
+    })
+    await page.locator('a.nav-item[href="/codex"]').click()
+    await expect.poll(() => page.evaluate(() => (window as any).__E2E__.invocations
+      .filter((call: any) => call.cmd === 'sync_codex_auth_to_wsl').length)).toBe(1)
+
+    const dialog = await openSettings(page, 'codex')
+    await expect(dialog.locator('.wsl-auth-target-state')).toHaveText('同账号 · 已最新')
+    const toggle = dialog.getByRole('switch', { name: '自动同步 WSL 登录态', exact: true })
+    await expect(toggle).toBeChecked()
+  })
 })
 
 
@@ -562,7 +647,7 @@ async function argOf(page: Page, cmd: string, key: string) {
   return calls[calls.length - 1]?.args[key]
 }
 
-/** 默认收起；需要读取会话行时显式展开目标项目。 */
+/** 项目默认收起；需要读取会话行时展开目标项目。 */
 async function expandGroup(page: Page, name: string) {
   const head = page.locator('.grp-head', { hasText: name })
   if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
@@ -596,10 +681,10 @@ test.describe('Codex 会话档', () => {
     expect(await e2e.count(page, LIST_CMD)).toBe(2)
   })
 
-  test('首屏所有项目默认收起，进档预取 token，展开不再补取', async ({ page }) => {
+  test('首屏所有项目收起，进档预取 token，展开不补取', async ({ page }) => {
     await gotoSessions(page)
     await expect(page.locator('.grp-head')).toHaveCount(2)
-    // 项目默认全部收起，合计仍可读，用户主动展开后才显示会话。
+    // 首次不自动展开，仍预取全部统计。
     const notes = page.locator('.grp-head', { hasText: 'demo-notes' })
     await expect(notes).toHaveAttribute('aria-expanded', 'false')
     await expect(page.locator('.grp-head', { hasText: 'demo-icons' })).toHaveAttribute('aria-expanded', 'false')
@@ -616,16 +701,32 @@ test.describe('Codex 会话档', () => {
     await notes.click()
     await expect(page.locator('.sess-row')).toHaveCount(3)
     expect(await e2e.count(page, STATS_CMD)).toBe(1)
-    // 净输入：官方累计的 12.3K 输入里 11K 是缓存重发；行上不摆数，整行悬停给五口径
-    await expect(page.locator('.sess-row').first()).toHaveAttribute(
-      'title',
-      '修全屏小记的排版\n净输入 1,300 · 缓存命中 11,000 · 输出 1,400（含推理 400）· 官方累计 13,700 · 1 次请求 · 估算金额 $0.017',
-    )
-    // 无标题那条：完整 ID 上屏，悬停保留用量明细。
+    // 完整用量留在展开区，整行不再弹出多行统计遮住相邻会话。
+    await expect(page.locator('.sess-row').first()).not.toHaveAttribute('title')
+    await expect(page.locator('.sess-row').first()).toHaveAttribute('aria-label', '修全屏小记的排版，展开详情')
+    // 无标题那条：完整 ID 上屏，标题悬停只保留完整 ID。
     const idRow = page.locator('.sess-row').last()
     await expect(idRow.locator('.sess-title')).toHaveText('sess-p6q7r8s9t0')
-    await expect(idRow).toHaveAttribute('title', /^sess-p6q7r8s9t0\n净输入 1,700/)
+    await expect(idRow.locator('.sess-title')).toHaveAttribute('title', 'sess-p6q7r8s9t0')
     await expect(idRow.locator('.badge')).toHaveText('子代理')
+  })
+
+  test('会话和用量的统计说明默认折叠，键盘可查看完整口径', async ({ page }) => {
+    await gotoSessions(page)
+    for (const tab of ['会话', '用量']) {
+      await page.getByRole('button', { name: tab, exact: true }).click()
+      const notes = page.locator('.usage-notes')
+      await expect(notes).toBeVisible()
+      await expect(notes).not.toHaveAttribute('open')
+      await expect(notes.locator('.notes-body')).toBeHidden()
+      await notes.locator('summary').focus()
+      await page.keyboard.press('Enter')
+      await expect(notes.locator('.notes-body')).toBeVisible()
+      await expect(notes).toContainText('不代表订阅扣费')
+      await expect(notes).toContainText('请求按有用量的 Token 记录去重')
+      await page.keyboard.press('Enter')
+      await expect(notes.locator('.notes-body')).toBeHidden()
+    }
   })
 
   test('搜索命中即展开：折叠的组不把结果藏在水下，清空回到用户态', async ({ page }) => {
@@ -1218,7 +1319,7 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('[data-metric="fresh"] dd')).toHaveText('8,800')
     await expect(page.locator('[data-metric="cached"] dd')).toHaveText('5.13万')
     await expect(page.locator('[data-metric="output"] dd')).toHaveText('5,020')
-    await expect(page.locator('.usg-facts')).toContainText('输出中含推理 1,300')
+    await expect(page.locator('.usg-facts')).toContainText('其中推理 1,300')
     await expect(page.locator('.usg-count')).toHaveText('5 次请求 · 4 条会话')
     await expect(page.locator('.titlebar-count')).toHaveText('5 次请求')
 
@@ -1241,7 +1342,7 @@ test.describe('Codex 用量图', () => {
     expect(parseFloat((await seg(0)).cached)).toBeCloseTo(300 / 54000 * 100, 4)
     await expect(page.locator('.usg-day-row')).toHaveCount(4)
     await expect(page.locator('.usg-day-total').first()).toHaveText('1.37万')
-    await expect(page.locator('.usg-scan')).toHaveText('扫了 4 个文件 · 1.7 s')
+    await expect(page.locator('.usg-scan')).toHaveText('4 个文件 · 1.7 s')
 
     await expect(page.locator('.usg-model-row')).toHaveCount(2)
     await expect(page.locator('.usg-model-row').first().locator('.usg-model-name')).toHaveText('gpt-5.1-codex')
@@ -1257,20 +1358,20 @@ test.describe('Codex 用量图', () => {
     expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(localMidnightSec() - 29 * 86_400)
     expect(Math.abs(await argOf(page, USAGE_CMD, 'toTimestamp') - Math.floor(Date.now() / 1000))).toBeLessThanOrEqual(1)
 
-    await page.locator('.cx-tab', { hasText: '近 7 天' }).click()
+    await page.getByRole('navigation', { name: '统计窗口' }).getByRole('button', { name: '近 7 天', exact: true }).click()
     await expect(page.locator('.usg-num')).toHaveText('6.28万')
     expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(localMidnightSec() - 6 * 86_400)
     await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(3)
     // 文件还在那儿：筛掉的是窗口，不是扫过的目录
-    await expect(page.locator('.usg-scan')).toHaveText('扫了 4 个文件 · 1.7 s')
+    await expect(page.locator('.usg-scan')).toHaveText('4 个文件 · 1.7 s')
 
-    await page.locator('.cx-tab', { hasText: '全部' }).click()
+    await page.getByRole('navigation', { name: '统计窗口' }).getByRole('button', { name: '全部', exact: true }).click()
     expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(null)
     await expect(page.locator('.usg-num')).toHaveText('6.51万')
 
     // 同档再点一次：账没变就不该重扫
     const before = await e2e.count(page, USAGE_CMD)
-    await page.locator('.cx-tab', { hasText: '全部' }).click()
+    await page.getByRole('navigation', { name: '统计窗口' }).getByRole('button', { name: '全部', exact: true }).click()
     expect(await e2e.count(page, USAGE_CMD)).toBe(before)
   })
 
@@ -1299,7 +1400,7 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('.usg-num')).toHaveText('0')
     await expect(page.locator('.usg-chart')).toHaveCount(0)
 
-    await page.locator('.cx-tab', { hasText: '全部' }).click()
+    await page.getByRole('navigation', { name: '统计窗口' }).getByRole('button', { name: '全部', exact: true }).click()
     await expect(page.locator('.usg-num')).toHaveText('5,500')
     await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(1)
   })

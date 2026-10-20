@@ -9,12 +9,12 @@ for (const width of [800, 1280]) {
     const toggle = page.locator('#workspace-directory-toggle')
     await toggle.click()
     const bounds = (await panel.boundingBox())!
-    const body = (await page.locator('.workspace-body').boundingBox())!
+    const surface = (await page.locator('.workspace-surface').boundingBox())!
     const content = (await page.locator('.workspace-body > .main-content').boundingBox())!
     expect(bounds.x).toBe(content.x + content.width)
-    expect(bounds.x + bounds.width).toBe(body.x + body.width)
-    expect(bounds.y).toBe(body.y)
-    expect(bounds.y + bounds.height).toBe(body.y + body.height)
+    expect(bounds.x + bounds.width).toBe(surface.x + surface.width)
+    expect(bounds.y).toBe(surface.y)
+    expect(bounds.height).toBe(surface.height)
     await expect(page.locator('.workspace-directory-backdrop')).toHaveCount(0)
     await panel.getByRole('button', { name: '固定目录', exact: true }).click()
     await expect(panel.getByRole('button', { name: '取消固定目录', exact: true })).toHaveAttribute('aria-pressed', 'true')

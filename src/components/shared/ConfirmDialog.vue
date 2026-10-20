@@ -3,7 +3,7 @@ import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{
-  dialog: { show: boolean; title: string; message: string }
+  dialog: { show: boolean; title: string; message: string; actionLabel?: string }
 }>()
 
 const emit = defineEmits<{
@@ -31,7 +31,7 @@ useEscapeClose(() => emit('cancel'), () => props.dialog.show)
       </div>
       <div class="dialog-footer">
         <button class="btn-secondary" @click="emit('cancel')">取消</button>
-        <button class="btn-danger" @click="emit('confirm')">确定</button>
+        <button class="btn-danger" @click="emit('confirm')">{{ dialog.actionLabel || '确定' }}</button>
       </div>
     </div>
     </div>

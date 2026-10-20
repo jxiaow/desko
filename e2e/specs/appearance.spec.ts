@@ -2,12 +2,34 @@ import { test, expect } from '@playwright/test'
 import { bootUnlocked, e2e, openSettings, expectToast, waitForToastGone } from '../helpers'
 
 test.describe('统一外观状态', () => {
-  test('开启氛围时预览按卡片缩放，改变窗口大小不改变预览配方', async ({ page }) => {
+  test('纸墨预览保持屏幕比例，宽窗口不会把缩略图拉长', async ({ page }) => {
+    await bootUnlocked(page)
+    const dialog = await openSettings(page)
+    for (const width of [800, 1280, 1920]) {
+      await page.setViewportSize({ width, height: 760 })
+      const previews = dialog.locator('.workspace-theme-prev')
+      await expect(previews).toHaveCount(2)
+      const bounds = []
+      for (const preview of await previews.all()) {
+        const box = (await preview.boundingBox())!
+        expect(box.width / box.height, `${width}px 预览保持 16:10`).toBeCloseTo(1.6, 1)
+        expect(box.width, `${width}px 预览不过度放大`).toBeLessThanOrEqual(160)
+        expect(box.height, `${width}px 预览保留足够高度`).toBeGreaterThanOrEqual(80)
+        bounds.push(box)
+      }
+      expect(bounds[0].width).toBe(bounds[1].width)
+      expect(bounds[0].height).toBe(bounds[1].height)
+      await page.mouse.move(width - 2, 758)
+      await dialog.screenshot({ path: `.tmp/preview-light/appearance-${width}.png`, animations: 'disabled' })
+    }
+  })
+
+  test('中性预览按卡片缩放，改变窗口大小不改变预览配方', async ({ page }) => {
     await page.setViewportSize({ width: 800, height: 600 })
     await bootUnlocked(page, { settings: { theme: 'paper', accent: 'plum', background_atmosphere: 'true' } })
     await openSettings(page)
     // 固定卡片尺寸，单独验证绘制坐标不会随窗口变化；正常布局允许卡片自适应。
-    await page.addStyleTag({ content: '.theme-row { max-width: 480px; }' })
+    await page.addStyleTag({ content: '.theme-row { width: 430px; max-width: 100%; }' })
     const previews = () => page.locator('.theme-prev').evaluateAll((els) => els.map((el) => {
       const style = getComputedStyle(el)
       return { theme: el.getAttribute('data-theme'), image: style.backgroundImage, color: style.backgroundColor }
@@ -61,7 +83,7 @@ test.describe('统一外观状态', () => {
     expect(themeModuleUrl).not.toBe('')
     await page.evaluate(async (url) => {
       const theme = await import(/* @vite-ignore */ url)
-      await theme.chooseTheme('slate')
+      await theme.chooseTheme('ink')
       await theme.chooseAccent('rose')
       await theme.chooseBackgroundAtmosphere(false)
     }, themeModuleUrl)
@@ -113,7 +135,7 @@ test.describe('统一外观状态', () => {
   test('未选中的主题预览直接跟随 CSS 色值，且不影响当前主题', async ({ page }) => {
     await bootUnlocked(page, { settings: { theme: 'paper', accent: 'rose' } })
     const dialog = await openSettings(page)
-    await page.addStyleTag({ content: '.workspace-theme-prev[data-theme="ink"] { --panel-bg: rgb(13, 29, 47); } .workspace-theme-prev[data-base="dark"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="rose"] { --workspace-accent-source: rgb(121, 61, 97); }' })
+    await page.addStyleTag({ content: '.workspace-theme-prev[data-theme="ink"] { --panel-bg: rgb(13, 29, 47); } .workspace-theme-prev[data-base="dark"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="rose"] { --workspace-accent-source: rgb(121, 61, 97); }' })
 
     const preview = dialog.locator('.theme-prev[data-theme="ink"]')
     await expect(preview.locator('.tp-row').first()).toHaveCSS('background-color', 'rgb(13, 29, 47)')

@@ -18,13 +18,13 @@ it.each(['', 'unknown'])('未保存或无效的氛围值 %s 使用纯色默认�
 })
 
 it.each([
-  ['snow', 'teal', 'paper', 'celadon'],
+  ['snow', 'teal', 'paper', 'teal'],
   ['mist', 'amber', 'paper', 'amber'],
   ['linen', 'rose', 'paper', 'rose'],
-  ['slate', 'forest', 'ink', 'celadon'],
+  ['slate', 'forest', 'ink', 'olive'],
   ['midnight', 'rose', 'ink', 'rose'],
-  ['moss', 'coral', 'ink', 'clay'],
-])('新布局恢复 %s/%s 时落到可见选项 %s/%s，经典布局保留原选择', async (theme, accent, workspaceTheme, workspaceAccent) => {
+  ['moss', 'coral', 'ink', 'brick'],
+])('新布局恢复 %s/%s 时归并为 %s/%s，经典布局保留原选择', async (theme, accent, workspaceTheme, workspaceAccent) => {
   const saved: Record<string, string> = { theme, accent, background_atmosphere: 'true' }
   vi.mocked(settingsApi.getSetting).mockImplementation(async key => saved[key] ?? '')
 
@@ -43,9 +43,9 @@ it('新布局的旧选择入口也保存可见选项，经典布局仍可选择�
   await chooseTheme('midnight')
   await chooseAccent('teal')
   expect(appearance.theme).toBe('ink')
-  expect(appearance.accent).toBe('celadon')
+  expect(appearance.accent).toBe('teal')
   expect(settingsApi.setSetting).toHaveBeenCalledWith('theme', 'ink')
-  expect(settingsApi.setSetting).toHaveBeenCalledWith('accent', 'celadon')
+  expect(settingsApi.setSetting).toHaveBeenCalledWith('accent', 'teal')
 
   await initializeAppearance()
   await chooseTheme('midnight')
@@ -56,17 +56,29 @@ it('新布局的旧选择入口也保存可见选项，经典布局仍可选择�
 
 it.each([
   ['sage', 'celadon'], ['sky', 'ink'], ['lavender', 'plum'], ['peach', 'clay'],
-] as const)('清新强调色 %s 可以恢复和保存，经典布局使用相近的 %s', async (accent, classicAccent) => {
+] as const)('退役强调色 %s 读取为 %s，迁移不回写设置', async (accent, classicAccent) => {
   vi.mocked(settingsApi.getSetting).mockImplementation(async key => key === 'accent' ? accent : '')
   await initializeAppearance({ workspaceLayout: true })
-  expect(appearance.accent).toBe(accent)
-  await chooseAccent(accent)
-  expect(settingsApi.setSetting).toHaveBeenLastCalledWith('accent', accent)
+  expect(appearance.accent).toBe(classicAccent)
+  expect(settingsApi.setSetting).not.toHaveBeenCalled()
 
   await initializeAppearance()
   expect(appearance.accent).toBe(classicAccent)
+  expect(settingsApi.setSetting).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['indigo', 'plum'], ['brick', 'coral'], ['olive', 'forest'], ['sand', 'graphite'],
+] as const)('工作区新增强调色 %s 在经典布局映射为 %s', async (accent, classicAccent) => {
+  vi.mocked(settingsApi.getSetting).mockImplementation(async key => key === 'accent' ? accent : '')
+  await initializeAppearance({ workspaceLayout: true })
+  expect(appearance.accent).toBe(accent)
+  expect(settingsApi.setSetting).not.toHaveBeenCalled()
+  await initializeAppearance()
+  expect(appearance.accent).toBe(classicAccent)
+  expect(settingsApi.setSetting).not.toHaveBeenCalled()
   await chooseAccent(accent)
-  expect(settingsApi.setSetting).toHaveBeenLastCalledWith('accent', classicAccent)
+  expect(settingsApi.setSetting).toHaveBeenCalledWith('accent', classicAccent)
 })
 
 it.each([

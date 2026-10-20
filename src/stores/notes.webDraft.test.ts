@@ -55,7 +55,7 @@ describe('HTTP LAN unpublished drafts', () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error('service key changed'))
     await expect(store.recoverDrafts()).resolves.toBeUndefined()
     expect(store.noteDraftHtml).toBe('')
-    expect(useToastStore().toast.message).toContain('未发布草稿无法恢复')
+    expect(useToastStore().toast.message).toContain('未保存草稿无法恢复')
     expect(notesApi.recoverDrafts).toHaveBeenCalledTimes(1)
     vi.mocked(invoke).mockClear()
     await store.recoverDrafts()

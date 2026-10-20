@@ -114,7 +114,7 @@ const shot = async (page, name) => {
   console.log(`wrote ${name}`)
 }
 
-/** 进档会播种最近那一组：要点别的组，先确认它确实还关着 */
+/** 会话分组默认收起，需要读取会话行时展开目标项目。 */
 const openGroup = async (page, name) => {
   const head = page.locator('.grp-head', { hasText: name })
   if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
@@ -203,7 +203,7 @@ for (const theme of ['paper', 'ink']) {
     await shot(page, 'codex-import.png')
     await dialog.locator('.dialog-close').click()
 
-    // 10/11 会话档：首屏播种最近一组（hero 已上账）→ 手动翻另一组并点开一条（行上不摆数，悬停与详情才给）
+    // 10/11 会话档：首屏全部收起（摘要已上账）→ 手动翻组并点开一条（用量留在详情）
     const sessPage = await openApp('paper', config('paper', ACCOUNTS, SESS))
     await sessPage.locator('.cx-tab', { hasText: '会话' }).click()
     await sessPage.locator('.sess-hero').waitFor()
@@ -229,7 +229,7 @@ for (const theme of ['paper', 'ink']) {
     const trashPage = await openApp('paper', config('paper', ACCOUNTS, SESS, TRASH))
     await trashPage.locator('.cx-tab', { hasText: '会话' }).click()
     await trashPage.locator('.grp-head', { hasText: 'demo-icons' }).click()
-    await trashPage.locator('.sess-row').first().click()
+    await trashPage.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]').click()
     await trashPage.locator('.sess-card .trash-btn').click()
     await trashPage.locator('.confirm-dialog').waitFor()
     await shot(trashPage, 'codex-trash-confirm.png')

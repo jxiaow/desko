@@ -4,6 +4,7 @@ import type { CodexUsageBucket } from '../../services/api/codex'
 import { loadUsage, usageBusy, usageError, usageRange, usageReport, usageUpdatedAt } from '../../services/codexState'
 import { formatTokenCount as compact, formatUsageCost, localDayKey, usageWindowFrom } from '../../utils/codexUsage'
 import AppIcon from '../shared/AppIcon.vue'
+import CodexUsageNotes from './CodexUsageNotes.vue'
 import CodexDailyUsageChart from './CodexDailyUsageChart.vue'
 import CodexTodayUsageChart from './CodexTodayUsageChart.vue'
 import { usePageAutoRefresh } from '../../composables/usePageAutoRefresh'
@@ -98,7 +99,7 @@ function pct(part: number, whole: number): number {
         </div>
         <div class="usg-facts">
           <span class="usg-count">{{ num(totals.requestCount) }} 次请求 · {{ num(totals.sessionCount) }} 条会话</span>
-          <span>输出中含推理 <b class="mono-ish" :title="`${num(totals.reasoningOutputTokens)} Token`">{{ compact(totals.reasoningOutputTokens) }}</b></span>
+          <span>其中推理 <b class="mono-ish" :title="`${num(totals.reasoningOutputTokens)} Token`">{{ compact(totals.reasoningOutputTokens) }}</b></span>
           <span class="usg-updated">{{ usageBusy ? '更新中…' : `更新于 ${updatedTime}` }}</span>
         </div>
       </section>
@@ -106,7 +107,7 @@ function pct(part: number, whole: number): number {
       <div v-if="!days.length" class="rcard empty-state">
         <div class="empty-icon"><AppIcon name="clock" :size="24" /></div>
         <div class="empty-title">{{ usageRange === 'today' ? '今天还没有用量记录' : '这段时间没有用量记录' }}</div>
-        <div class="empty-desc">{{ usageRange === 'today' ? '在 Codex 中使用后会自动更新，也可点击“重新统计”或切换范围' : '切换统计范围查看其他日期的用量' }}</div>
+        <div class="empty-desc">{{ usageRange === 'today' ? '使用 Codex 后自动更新，或切换时间范围。' : '切换时间范围查看其他日期。' }}</div>
       </div>
 
       <CodexTodayUsageChart v-if="usageRange === 'today' && usageReport" :report="usageReport" :updated-at="usageUpdatedAt ?? Date.now()" />
@@ -115,7 +116,7 @@ function pct(part: number, whole: number): number {
         <CodexDailyUsageChart :buckets="usageReport!.byDay" :range="usageRange" :updated-at="usageUpdatedAt ?? Date.now()" />
 
         <section class="rcard usg-daily" aria-label="每日用量明细">
-          <div class="usg-heading"><h3>每日明细</h3><span class="usg-period">有记录的日期 · 最近在前</span></div>
+          <div class="usg-heading"><h3>每日明细</h3></div>
           <div class="usg-table-scroll">
             <table>
               <thead><tr><th scope="col">日期</th><th scope="col">总 Token</th><th scope="col">净输入</th><th scope="col">缓存命中</th><th scope="col">输出</th><th scope="col">请求数</th><th scope="col">估算金额（USD）</th></tr></thead>
@@ -132,7 +133,7 @@ function pct(part: number, whole: number): number {
       </template>
 
       <section v-if="models.length" class="rcard usg-models" aria-label="模型用量">
-        <div class="usg-heading"><h3>按模型</h3><span class="usg-period">{{ scope }}</span></div>
+        <div class="usg-heading"><h3>按模型</h3></div>
         <div v-for="m in models" :key="m.key" class="usg-model">
           <button type="button" class="usg-model-row" :data-model="m.key" :aria-expanded="openModel === m.key" :aria-controls="`model-sessions-${m.key}`" :title="`${m.label}：合计 ${num(m.totalTokens)} · 净输入 ${num(freshInput(m))} · 缓存 ${num(m.cachedInputTokens)} · 输出 ${num(m.outputTokens)}；展开查看会话明细`" @click="openModel = openModel === m.key ? '' : m.key">
             <span class="usg-model-name">{{ m.label }}</span>
@@ -144,7 +145,7 @@ function pct(part: number, whole: number): number {
             <AppIcon class="usg-model-caret" name="chevDown" :size="12" />
           </button>
           <div v-if="openModel === m.key" :id="`model-sessions-${m.key}`" class="usg-model-detail" role="region" :aria-label="`${m.label} 会话用量`">
-            <p class="usg-period">{{ scope }} · {{ modelSessions(m.key).length }} 条会话 · 仅统计此模型在所选时间内的用量</p>
+            <p class="usg-period">{{ modelSessions(m.key).length }} 条会话</p>
             <div class="usg-table-scroll">
               <table>
                 <thead><tr><th scope="col">会话</th><th scope="col">总 Token</th><th scope="col">净输入</th><th scope="col">缓存命中</th><th scope="col">输出</th><th scope="col">请求数</th><th scope="col">估算金额（USD）</th></tr></thead>
@@ -166,8 +167,8 @@ function pct(part: number, whole: number): number {
       </section>
 
       <div class="usg-foot">
-        <p class="page-note"><AppIcon name="info" :size="13" />统计包含默认 Codex 目录、开启自动统计时识别的 WSL 目录及「设置 → Codex」中手动补充的目录。输入包含缓存命中，推理已计入输出。金额按标准 API 单价估算（USD），含未知模型时显示“未定价”，不代表订阅实际扣费。请求按有用量的 Token 记录去重计数；回收站中的会话不计入。</p>
-        <span class="usg-scan">扫了 {{ num(totals.fileCount) }} 个文件 · {{ scanSeconds }} s</span>
+        <CodexUsageNotes />
+        <span class="usg-scan">{{ num(totals.fileCount) }} 个文件 · {{ scanSeconds }} s</span>
       </div>
     </template>
   </div>
@@ -228,7 +229,6 @@ function pct(part: number, whole: number): number {
 .usg-model-pct { flex-shrink: 0; min-width: 46px; text-align: right; color: var(--text-muted); }
 .usg-model-requests, .usg-model-cost { flex-shrink: 0; min-width: 76px; text-align: right; color: var(--text-secondary); }
 .usg-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 14px; }
-.usg-foot .page-note { margin: 0; }
 .usg-scan { font-size: var(--text-xs); color: var(--text-faint); }
 .mono-ish { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
 @media (max-width: 850px) {

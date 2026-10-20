@@ -78,7 +78,7 @@ const discard = () => {
       <NoteToolbar
         plain
         :note="null"
-        primary-label="发布"
+        primary-label="保存"
         :primary-disabled="props.empty"
         :cancel-label="props.empty ? '' : '放弃'"
         @add-image="emit('addImage')"
@@ -87,7 +87,7 @@ const discard = () => {
         @primary="emit('publish')"
       >
         <template #hint>
-          <span class="composer-hint"><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> 发布</span>
+          <span class="composer-hint"><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> 保存</span>
         </template>
       </NoteToolbar>
     </div>
@@ -95,10 +95,10 @@ const discard = () => {
 </template>
 
 <style scoped>
-/* 默认保留与搜索框相同的清晰边界；展开时使用卡片实底，聚焦时突出当前书写面。 */
+/* 默认与搜索框使用同档轻边界；展开时使用卡片实底，聚焦时突出当前书写面。 */
 .composer {
   background: var(--bg-canvas-input);
-  border: 1px solid var(--border-search);
+  border: 1px solid var(--border-composer);
   border-radius: var(--radius-lg);
   box-shadow: none;
   transition: background-color var(--transition), border-color var(--transition), box-shadow var(--transition);

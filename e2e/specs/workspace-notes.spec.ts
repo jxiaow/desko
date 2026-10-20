@@ -11,6 +11,7 @@ async function expectFullscreen(page: Page) {
   const dialog = page.locator('.fs')
   await expect(dialog).toBeVisible()
   await expect(page.locator('#workspace-page-toolbar .search-box')).toBeHidden()
+  await expect(page.locator('.workspace-directory')).toBeHidden()
   const surface = (await page.locator('.workspace-surface').boundingBox())!
   const full = (await dialog.boundingBox())!
   expect(full).toEqual(surface)

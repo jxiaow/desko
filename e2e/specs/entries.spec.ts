@@ -320,7 +320,7 @@ test.describe('Entries 网址收藏', () => {
       const cs = getComputedStyle(el)
       return { radius: cs.borderRadius, bg: cs.backgroundColor, size: cs.fontSize }
     })
-    expect(style).toEqual({ radius: '99px', bg: 'rgb(38, 36, 31)', size: '12px' })
+    expect(style).toEqual({ radius: '16px', bg: 'rgb(38, 36, 31)', size: '12px' })
   })
 
   test('详情一打开就有密码行：默认掩码，点显示才露明文', async ({ page }) => {

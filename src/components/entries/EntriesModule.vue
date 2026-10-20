@@ -254,18 +254,20 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
           </div>
         </div>
       </PopoverMenu>
-      <button
-        class="bar-btn"
-        :class="{ active: isBatchMode }"
-        type="button"
-        :title="isBatchMode ? '退出选择' : '选择条目'"
-        :aria-label="isBatchMode ? '退出选择' : '选择条目'"
-        @click="emit('togglePick')"
-      >
-        <AppIcon name="checkall" :size="16" />
-      </button>
-      <CreateAction label="新增条目" @click="emit('openAdd')" />
-      <WorkspaceDirectoryToggle v-if="workspaceLayout" />
+      <div class="page-actions">
+        <button
+          class="bar-btn"
+          :class="{ active: isBatchMode }"
+          type="button"
+          :title="isBatchMode ? '退出选择' : '选择条目'"
+          :aria-label="isBatchMode ? '退出选择' : '选择条目'"
+          @click="emit('togglePick')"
+        >
+          <AppIcon name="checkall" :size="16" />
+        </button>
+        <CreateAction label="新增条目" @click="emit('openAdd')" />
+        <WorkspaceDirectoryToggle v-if="workspaceLayout" />
+      </div>
     </div>
     </Teleport>
 
@@ -376,7 +378,7 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无条目' }}</div>
       <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击右上角 + 添加条目' }}</div>
       <div v-if="!searchKeyword" class="empty-motto" aria-hidden="true">
-        <span class="d"></span><span class="w">收一处 · 启一窗</span><span class="d mid"></span><span class="w">开一页</span><span class="d"></span>
+        <span class="w">收一处 · 启一窗 · 开一页</span>
       </div>
     </div>
 
@@ -476,12 +478,12 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
 .entry-card.selected .ec-name,
 .entry-card.selected .ec-cat { color: var(--text-brand); }
 
-/* 名字：14/600 单行截断，吃掉行宽；分类点靠右 */
+/* 名字：14px，字重跟随卡片角色；分类点靠右 */
 .ec-name {
   flex: 1 1 auto;
   min-width: 0;
   font-size: var(--text-base);
-  font-weight: 600;
+  font-weight: var(--weight-card-title);
   letter-spacing: -0.01em;
   color: var(--text);
   overflow: hidden;

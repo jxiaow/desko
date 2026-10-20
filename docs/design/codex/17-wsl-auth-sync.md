@@ -1,4 +1,4 @@
-# Codex 登录态同步到 WSL（2026-10-20，待拍板）
+# Codex 登录态同步到 WSL（2026-10-20，已实现）
 
 一句话方案：**设置 → Codex 新增「WSL 登录态同步」**——把 Windows 侧 Codex 当前登录凭据（`auth.json`）按需/自动推送到运行中的 WSL 发行版，只同步凭据、不碰 `config.toml`；自动同步默认关，手动「立即同步」永远可用。
 
@@ -63,7 +63,7 @@ WSL 里的 Codex 是 2026-10-12 手工从 `C:\Users\jxiaow\.codex\auth.json` 拷
 | 目标 `auth.json` 不存在但 `.codex` 存在 | 新建（相当于帮 WSL 登录一次） |
 | 目标不可读 / 非 JSON | 覆盖，但结果里标注「原文件不可读，已替换」 |
 
-- 源已过期时全部目标返回 `source_expired`，不写任何文件。
+- 源不可用（缺失 / 不可解析 / 非 OAuth / 已过期）时 `sync_codex_auth_to_wsl` 直接返回错误、不写任何文件；前端保留源状态行与过期提示，并禁用「立即同步」。
 - 结果按目标返回 `synced / skipped / failed`，前端汇总成「已同步 N 个目标，跳过 M 个」；失败目标在设置页内联展示原因。
 
 ### 3.4 触发
@@ -80,12 +80,14 @@ WSL 里的 Codex 是 2026-10-12 手工从 `C:\Users\jxiaow\.codex\auth.json` 拷
 
 ```
 WSL 登录态同步                       [开关]
-把 Windows 侧 Codex 的登录凭据同步到 WSL，WSL 里无需重新登录；只同步 auth.json，不动 config.toml。
+把 Windows 侧 Codex 的登录凭据同步到运行中的 WSL；只写 auth.json，不动 config.toml。
+打开开关后，切号成功或进入 Codex 页时自动同步（10 分钟内最多一次）。
 
-Windows 登录：263291365@qq.com · pro · 凭据 2026-10-20 10:30 已过期
-  Ubuntu-26.04 / jxiaow   同账号 · 2026-10-20 10:30 已过期   [待同步]
-  Ubuntu-26.04 / root     WSL 中未安装 Codex
-[立即同步]  提示：Windows 侧凭据已过期，请先在 Codex 中刷新或重新登录
+Windows 登录：263291365@qq.com · pro · 凭据 2026-10-20 10:30 · 已过期
+  Ubuntu-26.04 / jxiaow              同账号 · 待同步
+  263291365@qq.com · 凭据 2026-10-20 10:30 · 已过期
+[立即同步] [刷新状态]
+Windows 侧凭据已过期，请先在 Codex 中刷新或重新登录，再回来同步。
 ```
 
 - 源过期时按钮禁用，红色/警示档色内联说明；目标行只做状态展示，不单独给按钮（v1 一次同步全部目标）。
@@ -96,21 +98,22 @@ Windows 登录：263291365@qq.com · pro · 凭据 2026-10-20 10:30 已过期
 ```text
 get_codex_wsl_auth_status() -> {
   autoSync: bool,
-  source: null | {
+  source: {
     available: bool, path: string, authMode: string,
     email: string|null, plan: string|null,
-    accessExpiresAt: number|null, expired: bool, error?: string
-  },
+    accessExpiresAt: number|null, expired: bool, error: string|null
+  },                                   // 永远返回对象；不可用由 available=false + error 表达
   targets: [{
     distro: string, user: string, homePath: string,
-    state: 'empty'|'same'|'outdated'|'newer'|'different-account'|'unreadable',
+    state: 'empty'|'same'|'outdated'|'newer'|'different-account'|'unreadable'|'unknown',
     email: string|null, accessExpiresAt: number|null, expired: bool
-  }]
+  }],
+  targetError: string|null             // wsl.exe / 目录枚举失败；targets 为空并给出原因
 }
 
-sync_codex_auth_to_wsl() -> {
-  results: [{ distro, user, status: 'synced'|'skipped'|'failed', message?: string }]
-}
+sync_codex_auth_to_wsl() -> [          // 直接返回逐目标结果；源不可用/过期时整个命令 Err
+  { distro, user, status: 'synced'|'skipped'|'failed', message: string|null }
+]
 ```
 
 `autoSync` 开关走现有 `get_setting/set_setting`，新增 `codex_wsl_auth_auto_sync` 特判（照 `codex_usage_auto_wsl` 的写法），不新增设置类命令。
@@ -126,10 +129,10 @@ sync_codex_auth_to_wsl() -> {
 | `src-tauri/src/commands/settings.rs` | `codex_wsl_auth_auto_sync` 的 get/set 特判 |
 | `src/services/api/codex.ts` + `codexState.ts` | 状态/同步 API、自动同步节流、切号成功后触发 |
 | `src/modules/settings/CodexSettings.vue` | 新设置分组（状态行 + 目标列表 + 同步按钮 + 开关） |
-| `e2e/mocks/backend.ts`、`e2e/specs/settings.spec.ts`（或 codex.spec） | mock 两条命令；断言默认关、源过期禁用、目标列表渲染 |
+| `e2e/mocks/backend.ts`、`e2e/specs/codex.spec.ts` | mock 两条命令；三条用例：默认关 + 过期源禁用同步、手动同步成功并刷新状态、开启自动后进 Codex 页静默同步一次 |
 | `docs/design/codex/08-token-stats-and-entry-audit.md` | 命令面活账更新（如仍要求同步） |
 
-## 6. 决策记录（待拍板）
+## 6. 决策记录（已定）
 
 - **D1 源 = Windows 官方登录态**，不是 desko 账号库。理由：用户手工流程就是这个文件；Windows Codex 自己刷新后，同步立刻拿到最新；不依赖账号是否导入过 desko；也不触发 refresh_token 轮换。
 - **D2 只同步 `auth.json`**。10-12 已证实 `config.toml` 不可跨平台搬；WSL 未运行时不强行写入。
@@ -154,6 +157,14 @@ sync_codex_auth_to_wsl() -> {
 5. 真机手动验收：用户在设置页点一次「立即同步」，确认 WSL `~/.codex/auth.json` 的 mtime/账号/到期时间变化，`codex login status` 在 WSL 内为 `Logged in`。此步需要用户自己点（真实账号动作）。
 6. 提交与推送另行点头。
 
-## 9. 当前需要你拍板的一件事
+## 9. 定案：源过期只提示、不代刷
 
-源凭据过期时，按 D3 **只提示、不代刷**（推荐：不碰 refresh_token 链）——还是希望加一个「刷新 Token 并同步」按钮，由 desko 强制刷新后同时写回 Windows 官方凭据与 WSL？后者会轮换 refresh_token，需要额外处理正在运行的 Codex 客户端。
+用户已拍板按 D3 执行：源过期时只展示原因并禁用同步，不提供「刷新 Token 并同步」；refresh_token 轮换与运行中客户端的写穿问题都不在本功能范围内。
+
+## 10. 交付记录（2026-10-20）
+
+- 后端：4 条 Rust 单测通过（路径解析、状态矩阵、源过期拒绝写、原子替换不留明文 `.bak`）；`cargo check` / `cargo check -p codex-core --all-targets` 通过。
+- 前端：`npx vue-tsc --noEmit` 0 error；`npx vitest run` 52 文件 / 544 用例全绿。
+- e2e：`PW_CHANNEL=msedge npx playwright test e2e/specs/codex.spec.ts e2e/specs/settings.spec.ts --retries=0` 85 条全绿（含本功能 3 条）。
+- 视觉：800px 宽浅色/深色 + 无目标空态截图目检通过（`.tmp/codex-wsl/settings-wsl-auth-*.png`，本地不入库）。
+- 真机验收待用户执行：在设置页点「立即同步」，确认 WSL `~/.codex/auth.json` 的账号/到期时间变化与 `codex login status` 结果；真实账号动作不由代理代点。

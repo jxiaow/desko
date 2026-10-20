@@ -342,6 +342,58 @@ describe('codexState 会话档', () => {
     vi.clearAllMocks()
   })
 
+  it('首次加载全部收起，手动展开后刷新保留，锁屏后恢复全部收起', async () => {
+    const s = await loadState()
+    const list = [
+      { ...sessionRec('old-a'), cwd: 'C:\\a', updatedAt: 1 },
+      { ...sessionRec('recent-b'), cwd: 'C:\\b', updatedAt: 10 },
+      { ...sessionRec('recent-a'), cwd: 'C:\\a', updatedAt: 10 },
+    ]
+    mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? list : [])
+    await s.loadSessions()
+    expect(s.sessionOpenGroups.value.size).toBe(0)
+    s.sessionOpenGroups.value = new Set(['C:\\a'])
+    await s.loadSessions({ background: true })
+    expect([...s.sessionOpenGroups.value]).toEqual(['C:\\a'])
+    s.clearCodexSession()
+    await s.loadSessions()
+    expect(s.sessionOpenGroups.value.size).toBe(0)
+  })
+
+  it('空列表或读取失败后恢复目录，仍默认全部收起', async () => {
+    const s = await loadState()
+    mockInvoke.mockResolvedValueOnce([])
+    await s.loadSessions()
+    mockInvoke.mockRejectedValueOnce('目录暂不可读')
+    await s.loadSessions()
+    expect(s.sessionOpenGroups.value.size).toBe(0)
+    mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [
+      { ...sessionRec('older'), cwd: 'C:\\older', updatedAt: 1 },
+      { ...sessionRec('newer'), cwd: '  ', updatedAt: 2 },
+    ] : [])
+    await s.loadSessions()
+    expect(s.sessionOpenGroups.value.size).toBe(0)
+  })
+
+  it('搜索、迟到的搜索结果及清空后加载全量目录，都不写入默认展开态', async () => {
+    const s = await loadState()
+    s.sessionQuery.value = '命中'
+    let finish!: (value: unknown) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const request = s.loadSessions()
+    s.sessionQuery.value = ''
+    mockInvoke.mockResolvedValue([])
+    finish([{ ...sessionRec('matched'), cwd: 'C:\\matched' }])
+    await request
+    expect(s.sessionOpenGroups.value.size).toBe(0)
+    mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [
+      { ...sessionRec('recent'), cwd: 'C:\\recent', updatedAt: 2 },
+      { ...sessionRec('matched'), cwd: 'C:\\matched' },
+    ] : [])
+    await s.loadSessions()
+    expect(s.sessionOpenGroups.value.size).toBe(0)
+  })
+
   it('后台刷新保留旧读数直到新统计到手，目录暂不可读也不清空现有会话', async () => {
     const s = await loadState()
     s.sessions.value = [sessionRec('a')]

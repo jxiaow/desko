@@ -1,5 +1,65 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Locator } from '@playwright/test'
 import { bootUnlocked, startApp, e2e, E2E_PASSWORD, openSettings } from '../helpers'
+import { lab } from '../../scripts/lib/theme-tokens.mjs'
+
+async function dialogPaint(dialog: Locator) {
+  const png = await dialog.page().screenshot({ animations: 'disabled' })
+  return dialog.evaluate(async (element, base64) => {
+    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob())
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width; canvas.height = bitmap.height
+    const context = canvas.getContext('2d')!
+    context.drawImage(bitmap, 0, 0); bitmap.close()
+    const rect = element.getBoundingClientRect()
+    const pixels = [.12, .88].flatMap(x => [8, rect.height - 8].map(y =>
+      [...context.getImageData(Math.round(rect.x + rect.width * x), Math.round(rect.y + y), 1, 1).data].slice(0, 3),
+    ))
+    const inputs = [...element.querySelectorAll<HTMLInputElement>('input[type="text"],input[type="password"],textarea')]
+      .filter(input => input.checkVisibility()).map(input => {
+        const style = getComputedStyle(input)
+        return { image: style.backgroundImage, color: style.backgroundColor }
+      })
+    return { pixels, inputs }
+  }, png.toString('base64'))
+}
+
+for (const theme of ['paper', 'ink']) for (const width of [1040, 1920]) {
+  test(`${theme} ${width}px 的表单、设置和小弹窗均有局部柔光，输入区域保持实底`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 1040 ? 670 : 1080 })
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    let themeUrl = ''
+    page.on('request', request => { if (new URL(request.url()).pathname === '/src/services/theme.ts') themeUrl = request.url() })
+    await bootUnlocked(page, { settings: { theme, accent: 'ink', background_atmosphere: 'true' } }, '/entries')
+
+    async function check(dialog: Locator) {
+      await expect(dialog).toBeVisible()
+      const results = []
+      for (const on of [false, true]) {
+        await page.evaluate(async ([url, on]) => (await import(/* @vite-ignore */ url)).chooseBackgroundAtmosphere(on), [themeUrl, on] as const)
+        await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
+        if (!on) await expect(dialog).toHaveCSS('background-image', 'none')
+        results.push(await dialogPaint(dialog))
+      }
+      const change = (index: number) => {
+        const flat = lab(results[0].pixels[index]), glow = lab(results[1].pixels[index])
+        return Math.hypot(flat.L - glow.L, flat.a - glow.a, flat.b - glow.b)
+      }
+      expect(change(0), '弹窗左上主光实际可见').toBeGreaterThan(1.5)
+      expect(change(3), '弹窗右下辅光实际可见').toBeGreaterThan(1)
+      expect(results[1].inputs).toEqual(results[0].inputs)
+      for (const input of results[1].inputs) expect(input.image).toBe('none')
+    }
+
+    await page.getByRole('button', { name: '新增条目', exact: true }).click()
+    await check(page.locator('.entry-form-dialog'))
+    await page.locator('.entry-form-dialog .dialog-close').click()
+    const settings = await openSettings(page)
+    await check(settings)
+    await settings.locator('.nav-tab', { hasText: '安全' }).click()
+    await settings.locator('.setting-item', { hasText: '修改主密码' }).click()
+    await check(page.locator('.masterpw-dialog'))
+  })
+}
 
 test.describe('背景材质', () => {
   test('开关同时改变画布、导航和浮层，输入区域保持实底', async ({ page }) => {
@@ -14,6 +74,7 @@ test.describe('背景材质', () => {
     })
 
     await expect(toggle).toBeChecked()
+    // 主光与辅光分布在留白两端，卡片和输入区域继续保持实底。
     expect((await background('.app-root')).image).toContain('radial-gradient')
     const sidebar = (await background('.sidebar')).color
     expect(sidebar).toMatch(/rgba|\/\s*0\./)

@@ -954,7 +954,7 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 .note-editor :deep(.img-node img) { max-height: 34vh; object-fit: contain; }
 .note-editor.v-full :deep(.img-node img) { max-height: 60vh; }
 
-/* 卡片就地展开：与只读态同一套字号，避免展开时文字跳动；留出三行书写余量 */
+/* 就地书写比只读大半档，标题格式沿用编辑器样式；普通首段保持正文。 */
 .note-editor.v-card :deep(.ProseMirror) {
   padding: 0;
   font-size: var(--text-base);

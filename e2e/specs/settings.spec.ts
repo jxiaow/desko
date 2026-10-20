@@ -87,7 +87,7 @@ test.describe('Settings 设置', () => {
     await expect(backup).toHaveCSS('opacity', '1')
     // 补齐备份密码 → schedulable，这一档才现出品牌底
     await setBackupPwd(page, pane)
-    await expect(backup).toHaveCSS('background-color', 'rgb(83, 109, 133)')
+    await expect(backup).toHaveCSS('background-color', 'rgb(27, 118, 196)')
     await expect(backup).toHaveCSS('color', 'rgb(255, 255, 255)')
   })
 

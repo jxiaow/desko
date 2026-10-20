@@ -15,7 +15,7 @@ pub fn discover_usage_dirs() -> Vec<PathBuf> {
     Vec::new()
 }
 
-fn codex_homes_in_root(root: &Path) -> Vec<PathBuf> {
+pub(crate) fn codex_homes_in_root(root: &Path) -> Vec<PathBuf> {
     let mut homes = vec![root.join("root/.codex")];
     if let Ok(users) = fs::read_dir(root.join("home")) {
         homes.extend(users.flatten().map(|user| user.path().join(".codex")));
@@ -41,17 +41,26 @@ fn parse_distributions(bytes: &[u8]) -> Vec<String> {
 }
 
 #[cfg(windows)]
-fn running_distributions() -> Result<Vec<String>, String> {
-    use std::os::windows::process::CommandExt;
-    use std::process::{Command, Stdio};
-    use std::time::{Duration, Instant};
-
+pub(crate) fn wsl_executable() -> Result<PathBuf, String> {
     let executable = std::env::var_os("SystemRoot")
         .map(|root| PathBuf::from(root).join("System32/wsl.exe"))
         .ok_or("无法定位 wsl.exe")?;
     if !executable.is_file() {
-        return Ok(Vec::new());
+        return Err("未找到 wsl.exe".to_string());
     }
+    Ok(executable)
+}
+
+#[cfg(windows)]
+pub(crate) fn running_distributions() -> Result<Vec<String>, String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let executable = match wsl_executable() {
+        Ok(executable) => executable,
+        Err(_) => return Ok(Vec::new()),
+    };
     let mut child = Command::new(executable)
         .args(["--list", "--running", "--quiet"])
         .creation_flags(0x0800_0000)
@@ -80,6 +89,16 @@ fn running_distributions() -> Result<Vec<String>, String> {
             }
         }
     }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn wsl_executable() -> Result<PathBuf, String> {
+    Err("仅 Windows 支持 WSL".to_string())
+}
+
+#[cfg(not(windows))]
+pub(crate) fn running_distributions() -> Result<Vec<String>, String> {
+    Ok(Vec::new())
 }
 
 /// wsl$ 与 wsl.localhost 指向同一文件系统；保留 Linux 路径的大小写。

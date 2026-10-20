@@ -55,7 +55,7 @@ function hourTitle(hour: CodexUsageHour, format = num): string {
   <section class="rcard today-chart" aria-label="今日小时用量趋势">
     <div class="today-heading">
       <h3>每小时用量</h3>
-      <span>每小时 Token · 截至 {{ clock(asOf) }}</span>
+      <span>截至 {{ clock(asOf) }}</span>
     </div>
     <div class="today-peak">
       <template v-if="peak && peak.totalTokens > 0">高峰 <b>{{ peak.label }}</b> · <b :title="`${num(peak.totalTokens)} Token`">{{ compact(peak.totalTokens) }}</b> Token</template>
@@ -86,7 +86,7 @@ function hourTitle(hour: CodexUsageHour, format = num): string {
       <span :title="`净输入 ${num(Math.max(0, selected.inputTokens - selected.cachedInputTokens))} · 缓存 ${num(selected.cachedInputTokens)} · 输出 ${num(selected.outputTokens)}`">净输入 {{ compact(Math.max(0, selected.inputTokens - selected.cachedInputTokens)) }} · 缓存 {{ compact(selected.cachedInputTokens) }} · 输出 {{ compact(selected.outputTokens) }}</span>
     </div>
     <div class="composition">
-      <div class="today-heading"><h3>今日用量构成</h3><span>占今日总量</span></div>
+      <div class="today-heading"><h3>今日用量构成</h3></div>
       <div class="composition-track" role="img" :aria-label="parts.map(part => `${part.label} ${num(part.value)}，${share(part.value).toFixed(1)}%`).join('；')">
         <span v-for="part in parts" :key="part.key" :class="`part-${part.key}`" :data-part="part.key" :style="{ width: `${share(part.value)}%` }" :title="`${part.label} ${num(part.value)} · ${share(part.value).toFixed(1)}%`"></span>
       </div>

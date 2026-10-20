@@ -128,7 +128,7 @@ test.describe('Notes 小记', () => {
     await composer.fill('顶部  输入的内容')
     await tipButton(page.locator('.composer'), '全屏书写').click()
     const fs = page.locator('.fs')
-    await expect(fs.locator('.save-hint')).toHaveText('未发布')
+    await expect(fs.locator('.save-hint')).toHaveText('未保存')
     await fs.locator('.ProseMirror').press('End')
     await page.keyboard.insertText('，全屏里接着写')
     await page.locator('a.nav-item[href="/entries"]').click()
@@ -138,7 +138,7 @@ test.describe('Notes 小记', () => {
     expect(await e2e.count(page, 'create_note')).toBe(0)
     await tipButton(page.locator('.composer'), '全屏书写').click()
     await expect(fs.locator('.ProseMirror')).toHaveText('顶部  输入的内容，全屏里接着写')
-    await fs.locator('.fs-foot button.eb.primary', { hasText: '发布' }).click()
+    await fs.locator('.fs-foot button.eb.primary', { hasText: '保存' }).click()
     await expect(fs).toHaveCount(0)
     await expect(composer).toHaveText('')
     await expect(memo(page, '顶部  输入的内容')).toBeVisible()
@@ -151,7 +151,8 @@ test.describe('Notes 小记', () => {
     const html = '<p>标题，#工<strong>作</strong></p><p>正文#产品<br>下一行 #灵感 #生活 #研究 #计划 #更多</p><pre><code>#代码</code></pre><p><a href="https://example.com/#part">链接</a></p>'
     await bootUnlocked(page, { notes: [{ title: '标题 #工作', content_html: html }] })
     const card = page.locator('.memo')
-    await expect(card.locator('.memo-title')).toHaveText('标题，')
+    await expect(card.locator('.memo-title')).toHaveCount(0)
+    await expect(card.locator('.memo-body > p').first()).toHaveText('标题，')
     await expect(card.locator('.tag-pill')).toHaveText(['#工作', '#产品', '#灵感', '#生活', '#研究', '#计划', '#更多'])
     await expect(card.locator('.memo-body')).not.toContainText(/#工作|#产品|#灵感|#生活|#研究|#计划|#更多/)
     await expect(card.locator('.memo-body code')).toHaveText('#代码')
@@ -438,7 +439,7 @@ test.describe('Notes 小记', () => {
     await tipButton(page.locator('.composer'), '全屏书写').click()
     const fs = page.locator('.fs')
     const toolbar = fs.locator('.note-toolbar')
-    await expect(toolbar.getByRole('button', { name: '发布', exact: true })).toBeEnabled()
+    await expect(toolbar.getByRole('button', { name: '保存', exact: true })).toBeEnabled()
     await expect(toolbar.getByRole('button', { name: '退出编辑', exact: true })).toHaveCount(0)
     await toolbar.getByRole('button', { name: '放弃', exact: true }).click()
     await expect(fs).toHaveCount(0)
@@ -485,7 +486,9 @@ test.describe('Notes 小记', () => {
 
     // 光标放到开头再插图：图块应落在光标处而不是文末
     await editor.click()
-    await page.keyboard.press('Control+Home')
+    await expect(editor).toBeFocused()
+    await editor.press('Control+Home')
+    await expect.poll(() => editor.evaluate(el => (el as HTMLElement & { editor: Editor }).editor.state.selection.from)).toBe(1)
     await e2e.queueDialog(page, 'C:/pics/pic.png')
     await page.locator('.memo.editing button[aria-label="添加图片"]').click()
     await expect(editor.locator('.img-node')).toHaveCount(1)
@@ -641,7 +644,7 @@ test.describe('Notes 小记', () => {
     await expect(archivedRail.locator('.tab-count')).toHaveText('1')
     await archivedRail.click()
 
-    await expect(page.locator('.archive-bar .ab-lead')).toHaveText('归档中 1 条 · 不再出现在「全部」与搜索里')
+    await expect(page.locator('.archive-bar .ab-lead')).toHaveText('已归档 · 不出现在「全部」列表，可在本视图搜索')
     await expect(page.locator('.composer')).toHaveCount(0)
     const archived = memo(page, '已经收走')
     await archived.hover()
@@ -665,7 +668,7 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.memo')).toHaveCount(3)
     const target = memo(page, '在册乙')
     await (await noteMenu(page, target)).locator('.pop-item:text-is("归档")').click()
-    await expectToast(page, '已归档，可在侧栏「归档」里找回')
+    await expectToast(page, '已归档，可在「归档」视图找回')
     await expect(page.locator('.memo')).toHaveCount(2)
     const snap = (await e2e.snapshot(page)).notes.find((n: any) => n.title === '乙')
     expect(snap.archived).toBe(true)
@@ -751,9 +754,9 @@ test.describe('Notes 小记', () => {
   test('工具栏「选择」钮：开待选显形勾选框，Esc 整体退出', async ({ page }) => {
     await gotoNotes(page)
     await page.locator('.page-bar .bar-btn[aria-label="选择小记"]').click()
-    // 待选态：全部卡显形勾选框，但没选中就没有 dock
+    // 待选态：勾选框与 0 选 dock 一起出现，随时可以完成选择。
     await expect(page.locator('.memo.batchable')).toHaveCount(3)
-    await expect(page.locator('.batch-dock')).toHaveCount(0)
+    await expect(page.locator('.dock-count')).toHaveText('已选 0 条')
     await memo(page, '第一条小记').click()
     await expect(page.locator('.batch-dock')).toBeVisible()
     await page.keyboard.press('Escape')
@@ -771,7 +774,7 @@ test.describe('Notes 小记', () => {
 
     await fs.locator('.ProseMirror').click()
     await page.keyboard.type('全屏书写的内容')
-    await fs.locator('.fs-foot button.eb.primary', { hasText: '发布' }).click()
+    await fs.locator('.fs-foot button.eb.primary', { hasText: '保存' }).click()
     await expect(fs).toHaveCount(0)
     await expect(memo(page, '全屏书写的内容')).toBeVisible()
     await expect(page.locator('.memo')).toHaveCount(4)
@@ -813,7 +816,9 @@ test.describe('Notes 小记', () => {
     await tipButton(m, '全屏查看').click()
     const fs = page.locator('section.fs')
     await expect(fs).toBeVisible()
-    await expect(fs.locator('.fs-view')).toContainText('第一条小记：周会纪要与待办')
+    await expect(fs.locator('.fs-title')).toHaveCount(0)
+    await expect(fs.locator('.fs-view > p').first()).toBeVisible()
+    await expect(fs.locator('.fs-view > p').first()).toHaveText('第一条小记：周会纪要与待办')
     // 只读层没有编辑器，动作住在首栏右侧，底栏不再出现
     await expect(fs.locator('.ProseMirror')).toHaveCount(0)
     await expect(fs.locator('.save-hint')).toHaveText('只读浏览')
@@ -844,7 +849,7 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.memo-body')).not.toContainText('封存的正文')
     await expect(page.locator('.memo-locked')).toHaveCount(1)
     // 露标题上线前锁的那条：库里 title 是空的，本会话第一次解锁前只剩提示语
-    await expect(sealed.locator('.memo-locked')).toContainText('已加密 · 单击解锁')
+    await expect(sealed.locator('.memo-locked')).toContainText('已加密 · 点击解锁')
     // 锁着的条目可解锁或发起明文导出；加密动作仍在明文卡的 ⋯ 里
     await expect(sealed.locator('.memo-acts button')).toHaveCount(2)
     await expect(sealed.getByRole('button', { name: '导出', exact: true })).toHaveCount(1)
@@ -890,8 +895,8 @@ test.describe('Notes 小记', () => {
     await expect(plain.locator('.memo-body')).toContainText('要加密的正文')
 
     // 整库锁回 → 错口令拦在弹窗里 → 对的一次开全部
-    await page.locator('.page-bar button[aria-label="锁回全部加密小记"]').click()
-    await expectToast(page, '加密小记已全部锁回')
+    await page.locator('.page-bar button[aria-label="锁定全部加密小记"]').click()
+    await expectToast(page, '已锁定全部加密小记')
     await expect(page.locator('.memo-locked')).toHaveCount(2)
     // 解锁时回填的标题留了下来：老数据锁回去也认得出是哪条，还搜得着
     await expect(sealed.locator('.locked-title')).toHaveText('封存')
@@ -912,10 +917,10 @@ test.describe('Notes 小记', () => {
     await expect(memo(page, '要加密的正文')).toBeVisible()
 
     // 忘口令兜底：应用已解锁，零输入直接开
-    await page.locator('.page-bar button[aria-label="锁回全部加密小记"]').click()
+    await page.locator('.page-bar button[aria-label="锁定全部加密小记"]').click()
     await sealed.click()
     await dialog.locator('.link-btn').click()
-    await expectToast(page, '已用主密码解开小记')
+    await expectToast(page, '已用主密码解锁全部加密小记')
     await expect(dialog).toHaveCount(0)
     await expect(memo(page, '封存的正文')).toBeVisible()
     expect(await e2e.count(page, 'note_key_recover')).toBe(1)
@@ -943,7 +948,7 @@ test.describe('Notes 小记', () => {
     // 口令不在手：点进去先拦解锁，错口令留在弹窗里
     await row.click()
     const key = page.locator('.note-lock-dialog')
-    await expect(key).toHaveAttribute('aria-label', '解锁加密小记')
+    await expect(key).toHaveAttribute('aria-label', '解锁全部加密小记')
     await key.locator('input[type="password"]').fill('错位的口令')
     await key.locator('button.btn-primary').click()
     await expect(key.locator('.dialog-err')).toContainText('密码错误')
@@ -970,8 +975,8 @@ test.describe('Notes 小记', () => {
     const sealed = page.locator('.memo').first()
     await expect(sealed.locator('.memo-body')).toContainText('封存的正文')
     // 整库锁回后验轮换：旧口令被拒，新口令一次开全库
-    await page.locator('.page-bar button[aria-label="锁回全部加密小记"]').click()
-    await expectToast(page, '加密小记已全部锁回')
+    await page.locator('.page-bar button[aria-label="锁定全部加密小记"]').click()
+    await expectToast(page, '已锁定全部加密小记')
     await waitForToastGone(page)
     await sealed.click()
     await expect(key).toBeVisible()
@@ -1271,7 +1276,7 @@ test.describe('Notes 小记', () => {
     const pill = page.locator('.memo .tag-pill').first()
     await expect(pill).toHaveText('#产品')
     await expect(page.locator('.memo .tag-inline')).toHaveCount(0)
-    await expect(memo(page, '第二条小记').locator('.memo-title')).not.toContainText('#产品')
+    await expect(memo(page, '第二条小记').locator('.memo-title')).toHaveCount(0)
     await pill.click()
     await expect(page.locator('.titlebar-count')).toHaveText('1 / 3 条')
     await expect(pill).toHaveClass(/on/)

@@ -12,6 +12,7 @@ import NoteFullscreen from './NoteFullscreen.vue'
 import NoteLockDialog from './NoteLockDialog.vue'
 import NoteExportController from './NoteExportController.vue'
 import AppIcon from '../shared/AppIcon.vue'
+import PopoverMenu from '../shared/PopoverMenu.vue'
 import { htmlToLinkText, htmlToText } from '../../utils/format'
 import { isPageShortcutBlocked } from '../../utils/pageShortcuts'
 import { attachmentSrc, collectAttachmentNames, type SaveImage } from '../../services/attachmentSrc'
@@ -56,9 +57,15 @@ const pageEl = ref<HTMLElement | null>(null)
 const railEl = ref<HTMLElement | null>(null)
 const railToggleEl = ref<HTMLButtonElement | null>(null)
 const searchEl = ref<HTMLInputElement | null>(null)
+const kbdHint = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'
 const composerRef = ref<InstanceType<typeof NoteComposer> | null>(null)
 const fsRef = ref<InstanceType<typeof NoteFullscreen> | null>(null)
 const cardRefs = ref<InstanceType<typeof NoteCard>[]>([])
+const batchMoreAnchor = ref<HTMLButtonElement | null>(null)
+const batchMoreOpen = ref(false)
+watch([isBatchMode, hasNoteSelection], ([batch, selected]) => {
+  if (!batch || !selected) batchMoreOpen.value = false
+})
 
 /** 任何时刻只有一个书写面：草稿正文、就地展开的 note id、全屏层目标与其模式 */
 const editingId = ref<string | null>(null)
@@ -189,6 +196,18 @@ const closeCard = async () => {
   await flushNoteSave()
   editingId.value = null
 }
+// 页栏与卡片勾选共用保存边界；保存失败时保留编辑面，不进入批量操作。
+const toggleBatchMode = async () => {
+  if (isBatchMode.value) { exitNoteBatch(); return }
+  try { await closeCard() } catch { return }
+  toggleNotePick()
+}
+const selectNote = async (id: string) => {
+  if (editingId.value) {
+    try { await closeCard() } catch { return }
+  }
+  toggleSelectNote(id)
+}
 const openFullscreen = async (target: 'new' | string, mode: 'edit' | 'view' = 'edit') => {
   fullscreenReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
   await flushNoteSave()
@@ -207,6 +226,10 @@ const closeFullscreen = async () => {
   if (wasNew) composerRef.value?.focus()
   else if (fullscreenReturnFocus?.isConnected) fullscreenReturnFocus.focus({ preventScroll: true })
   fullscreenReturnFocus = null
+}
+const filterFullscreenTag = async (tag: string) => {
+  await closeFullscreen()
+  toggleTagFilter(tag)
 }
 /** 放弃只针对尚未发布的内容；已有小记的修改通过编辑器历史回退。 */
 const discardFullscreen = () => {
@@ -375,7 +398,10 @@ onBeforeUnmount(() => {
 })
 
 const pageHead = usePageHeadStore()
-watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filteredNotes.value.length} / ${headTotal.value}` : headTotal.value} 条`))
+watchEffect(() => {
+  const filtered = isArchivedView.value ? hasQueryFilter.value : hasActiveFilters.value
+  pageHead.setHead('小记', `${filtered ? `${filteredNotes.value.length} / ${headTotal.value}` : headTotal.value} 条`)
+})
 </script>
 
 <template>
@@ -393,6 +419,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
               :placeholder="isArchivedView ? '搜索归档小记…' : '搜索小记…'"
               :aria-label="isArchivedView ? '搜索归档小记' : '搜索小记'"
             />
+            <kbd v-if="!noteSearchKeyword" class="search-kbd">{{ kbdHint }}</kbd>
             <button
               v-if="noteSearchKeyword"
               class="search-clear"
@@ -405,51 +432,53 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
             </button>
           </div>
 
-          <button
-            class="bar-btn"
-            :class="{ active: isBatchMode }"
-            type="button"
-            :title="isBatchMode ? '退出选择' : '选择小记'"
-            :aria-label="isBatchMode ? '退出选择' : '选择小记'"
-            @click="toggleNotePick"
-          >
-            <AppIcon name="checkall" :size="16" />
-          </button>
-          <button v-if="!isWebRuntime()" class="bar-btn" type="button" :title="isArchivedView ? '导出全部归档' : '导出全部小记'" :aria-label="isArchivedView ? '导出全部归档' : '导出全部小记'" :disabled="!exportAllCount || !!exportRequest" @click="exportAll">
-            <AppIcon name="download" :size="16" />
-          </button>
-          <!-- 口令只管加密小记，没加密过就不出现在顶栏；归档视图不做批量加解密 -->
-          <template v-if="noteKey.is_set && !isArchivedView">
-            <div class="bar-div"></div>
+          <div class="page-actions">
             <button
               class="bar-btn"
-              :class="{ active: noteKey.is_open }"
+              :class="{ active: isBatchMode }"
               type="button"
-              :title="noteKey.is_open ? '锁回全部加密小记' : '解锁全部加密小记'"
-              :aria-label="noteKey.is_open ? '锁回全部加密小记' : '解锁全部加密小记'"
-              @click="toggleNoteDomain"
+              :title="isBatchMode ? '完成选择' : '选择小记'"
+              :aria-label="isBatchMode ? '完成选择' : '选择小记'"
+              @click="toggleBatchMode"
             >
-              <AppIcon :name="noteKey.is_open ? 'lock' : 'unlock'" :size="16" />
+              <AppIcon name="checkall" :size="16" />
             </button>
-          </template>
-          <button
-            v-if="!workspaceLayout"
-            ref="railToggleEl"
-            class="bar-btn"
-            :class="{ active: railVisible }"
-            type="button"
-            :title="railVisible ? '收起侧栏' : '展开侧栏'"
-            :aria-label="railVisible ? '收起侧栏' : '展开侧栏'"
-            @click="toggleRail"
-          >
-            <AppIcon name="panel" :size="16" />
-          </button>
-          <WorkspaceDirectoryToggle v-if="workspaceLayout" />
+            <button v-if="!isWebRuntime()" class="bar-btn" type="button" :title="isArchivedView ? '导出全部归档' : '导出全部小记'" :aria-label="isArchivedView ? '导出全部归档' : '导出全部小记'" :disabled="!exportAllCount || !!exportRequest" @click="exportAll">
+              <AppIcon name="download" :size="16" />
+            </button>
+            <!-- 口令只管加密小记，没加密过就不出现在顶栏；归档视图不做批量加解密 -->
+            <template v-if="noteKey.is_set && !isArchivedView">
+              <div class="bar-div"></div>
+              <button
+                class="bar-btn"
+                :class="{ active: noteKey.is_open }"
+                type="button"
+                :title="noteKey.is_open ? '锁定全部加密小记' : '解锁全部加密小记'"
+                :aria-label="noteKey.is_open ? '锁定全部加密小记' : '解锁全部加密小记'"
+                @click="toggleNoteDomain"
+              >
+                <AppIcon :name="noteKey.is_open ? 'lock' : 'unlock'" :size="16" />
+              </button>
+            </template>
+            <button
+              v-if="!workspaceLayout"
+              ref="railToggleEl"
+              class="bar-btn"
+              :class="{ active: railVisible }"
+              type="button"
+              :title="railVisible ? '收起侧栏' : '展开侧栏'"
+              :aria-label="railVisible ? '收起侧栏' : '展开侧栏'"
+              @click="toggleRail"
+            >
+              <AppIcon name="panel" :size="16" />
+            </button>
+            <WorkspaceDirectoryToggle v-if="workspaceLayout" />
+          </div>
         </div>
         </Teleport>
 
         <div v-if="isArchivedView" class="archive-bar">
-          <span class="ab-lead"><b>归档中 {{ viewCounts.archived }} 条</b> · 不再出现在「全部」与搜索里</span>
+          <span class="ab-lead"><b>已归档</b> · 不出现在「全部」列表，可在本视图搜索</span>
           <span v-if="archiveSummary" class="ab-sub">{{ archiveSummary }}</span>
           <span class="ab-sp"></span>
           <button class="ab-btn" type="button" :disabled="!viewCounts.archived" @click="unarchiveAllFiltered">
@@ -458,7 +487,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
         </div>
 
         <NoteComposer
-          v-if="!isArchivedView"
+          v-if="!isArchivedView && !isBatchMode"
           ref="composerRef"
           :html="draftHtml"
           :empty="draftEmpty"
@@ -516,7 +545,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
                 @export="exportNotes([note.id], '单条小记', $event)"
                 @copy="copyNote(note)"
                 @delete="doDeleteNote(note)"
-                @select="toggleSelectNote(note.id)"
+                @select="selectNote(note.id)"
                 @tag-click="toggleTagFilter($event)"
                 @remove-attachment="deleteAttachment(note.id, $event)"
               />
@@ -536,7 +565,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
               <AppIcon :name="emptyNoMatch ? 'searchEmpty' : isArchivedView ? 'archive' : 'navNotes'" :size="24" />
             </div>
             <div class="empty-title">{{ emptyNoMatch ? '未找到匹配的小记' : isArchivedView ? '还没有归档的小记' : '还没有小记' }}</div>
-            <div class="empty-desc">{{ emptyNoMatch ? '试试清空筛选或其他关键词' : isArchivedView ? '在小记卡上点「归档」就会收进这里' : '在上方写第一条' }}</div>
+            <div class="empty-desc">{{ emptyNoMatch ? '试试清空筛选或其他关键词' : isArchivedView ? '在任一小记的 ⋯ 菜单里选「归档」，就会收进这里' : '在上方写第一条' }}</div>
           </div>
         </template>
       </div>
@@ -595,8 +624,9 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
     </aside>
     </Teleport>
 
-    <div v-if="hasNoteSelection && !fsTarget" class="batch-dock">
+    <div v-if="isBatchMode && !fsTarget" class="batch-dock">
       <span class="dock-count">已选 {{ selectedNoteIds.size }} 条</span>
+      <span v-if="!hasNoteSelection" class="dock-hint">点小记选择</span>
       <button class="dock-btn" type="button" @click="selectAllNotes">
         <AppIcon name="checkall" :size="12" />全选
       </button>
@@ -607,26 +637,22 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       <button v-if="!isWebRuntime()" class="dock-btn" type="button" :disabled="!selectedNoteIds.size || !!exportRequest" @click="exportNotes([...selectedNoteIds], '已选小记')">
         <AppIcon name="download" :size="12" />导出
       </button>
-      <button v-if="isArchivedView" class="dock-btn" type="button" @click="batchSetArchived(false)">
+      <button v-if="isArchivedView" class="dock-btn" type="button" :disabled="!hasNoteSelection" @click="batchSetArchived(false)">
         <AppIcon name="unarchive" :size="12" />取消归档
       </button>
       <template v-else>
-      <button class="dock-btn" type="button" @click="batchSetPinned(true)">
-        <AppIcon name="pin" :size="12" />置顶
-      </button>
-      <button class="dock-btn" type="button" @click="batchSetPinned(false)">
-        <AppIcon name="unpin" :size="12" />取消置顶
-      </button>
-      <button class="dock-btn" type="button" @click="batchSetStarred(true)">
-        <AppIcon name="star" :size="12" />收藏
-      </button>
-      <button class="dock-btn" type="button" @click="batchSetStarred(false)">
-        <AppIcon name="star" :size="12" />取消收藏
-      </button>
-      <span class="dock-sep"></span>
-      <button class="dock-btn" type="button" @click="batchSetArchived(true)">
+      <button class="dock-btn" type="button" :disabled="!hasNoteSelection" @click="batchSetArchived(true)">
         <AppIcon name="archive" :size="12" />归档
       </button>
+      <button ref="batchMoreAnchor" class="dock-btn" type="button" :disabled="!hasNoteSelection" aria-haspopup="menu" :aria-expanded="batchMoreOpen" @click="batchMoreOpen = !batchMoreOpen">
+        更多<AppIcon name="chevDown" :size="12" />
+      </button>
+      <PopoverMenu v-if="batchMoreOpen" :anchor="batchMoreAnchor" :width="148" @close="batchMoreOpen = false">
+        <button class="pop-item" type="button" @click="batchMoreOpen = false; batchSetPinned(true)"><AppIcon name="pin" :size="14" />置顶</button>
+        <button class="pop-item" type="button" @click="batchMoreOpen = false; batchSetPinned(false)"><AppIcon name="unpin" :size="14" />取消置顶</button>
+        <button class="pop-item" type="button" @click="batchMoreOpen = false; batchSetStarred(true)"><AppIcon name="star" :size="14" />收藏</button>
+        <button class="pop-item" type="button" @click="batchMoreOpen = false; batchSetStarred(false)"><AppIcon name="star" :size="14" />取消收藏</button>
+      </PopoverMenu>
       </template>
       <span class="dock-sep"></span>
       <button class="dock-btn danger" type="button" :disabled="!selectedNoteIds.size" @click="batchDelete">
@@ -664,6 +690,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
       @remove-lock="fsNote && requestRemoveLock(fsNote.id)"
       @delete="fsNote && doDeleteNote(fsNote)"
       @remove-attachment="fsNote && deleteAttachment(fsNote.id, $event)"
+      @tag-click="filterFullscreenTag"
     />
     </Teleport>
 
@@ -712,8 +739,7 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
 /* ---------- 顶部工具条：吃 global.css 的 .page-bar 骨架（64px 吸顶画布），
    本页只有一处与全宽页不同：搜索框随流伸缩（上限 320）。
    栏内没有撑满剩余空间的左组，动作键得自己认领，否则全贴在搜索框右边、右端空一片 ---------- */
-.page-bar .search-box { flex: 1; min-width: 80px; max-width: 320px; }
-.page-bar .search-box + .bar-btn { margin-left: auto; }
+.page-bar .search-box { flex: 1; min-width: 80px; max-width: var(--page-search-max, 320px); }
 /* 右段动作键之间的分组线收成分居的短细线——通高的竖线在 54px 页栏里像表格线。
    margin 归零：.page-bar 本身已有 8px gap，global 那条又自带 4px，两侧各叠成 12px，
    分组线两侧净距 25px、邻钮之间只有 8px，读起来像断成了两截。 */
@@ -724,9 +750,11 @@ watchEffect(() => pageHead.setHead('小记', `${hasActiveFilters.value ? `${filt
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: 38px;
+  min-height: 38px;
+  flex-wrap: wrap;
+  row-gap: 4px;
   margin-bottom: var(--space-2);
-  padding: 0 var(--space-3);
+  padding: 6px var(--space-3);
   background: var(--sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);

@@ -215,10 +215,14 @@ export const useNotesStore = defineStore('notes', () => {
   const archiveSummary = computed(() => {
     const latest = archivedNotes.value.reduce((m, n) => Math.max(m, n.archived_at ?? 0), 0)
     if (!latest) return null
-    const days = Math.floor((Date.now() - latest) / 86400000)
-    if (days <= 0) return '最近归档在今天'
-    if (days === 1) return '最近归档在昨天'
-    return `最近归档 ${days} 天前`
+    const today = new Date()
+    const archivedDay = new Date(latest)
+    today.setHours(0, 0, 0, 0)
+    archivedDay.setHours(0, 0, 0, 0)
+    const days = Math.round((today.getTime() - archivedDay.getTime()) / 86400000)
+    if (days <= 0) return '最近一次归档：今天'
+    if (days === 1) return '最近一次归档：昨天'
+    return `最近一次归档：${days} 天前`
   })
 
   const hasActiveFilters = computed(
@@ -486,7 +490,7 @@ export const useNotesStore = defineStore('notes', () => {
       } catch {
         if (epoch !== noteEpoch) return
         fallbackComposer = null
-        toastStore.showToast('未发布草稿无法恢复，已丢弃无效草稿；其他小记不受影响', 'error')
+        toastStore.showToast('未保存草稿无法恢复，已丢弃无效草稿；其他小记不受影响', 'error')
       }
     }
     const localDrafts = await recoverLocalDrafts()
@@ -601,7 +605,7 @@ export const useNotesStore = defineStore('notes', () => {
           archived_at: archived ? Date.now() : null,
         }
       }
-      toastStore.showToast(archived ? '已归档，可在侧栏「归档」里找回' : '已取消归档，回到「全部」')
+      toastStore.showToast(archived ? '已归档，可在「归档」视图找回' : '已取消归档，回到「全部」')
     } catch (e: any) {
       toastStore.showToast('操作失败：' + e.message, 'error')
     }
@@ -700,7 +704,7 @@ export const useNotesStore = defineStore('notes', () => {
       noteKey.value = { ...noteKey.value, is_open: true }
       await recoverDrafts()
       if (epoch !== noteEpoch) return '应用已锁定'
-      toastStore.showToast('已用主密码解开小记')
+      toastStore.showToast('已用主密码解锁全部加密小记')
       return null
     } catch (e: any) {
       return String(e.message ?? e)
@@ -717,7 +721,7 @@ export const useNotesStore = defineStore('notes', () => {
     }
     noteKey.value = { ...noteKey.value, is_open: false }
     hideAllPlains()
-    toastStore.showToast('加密小记已全部锁回')
+    toastStore.showToast('已锁定全部加密小记')
   }
 
   const changeNoteKey = async (passphrase: string): Promise<string | null> => {

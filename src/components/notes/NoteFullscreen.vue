@@ -8,12 +8,13 @@ import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
 import NoteMoreMenu from './NoteMoreMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
-import { formatAbsTime, highlightTagsInHtml, htmlToText, wordCount } from '../../utils/format'
+import { formatAbsTime, stripTagsFromHtml, htmlToText, wordCount } from '../../utils/format'
+import { noteDisplay } from '../../utils/noteDisplay'
 import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { collectAttachmentNames, resolveAssetHtml, unreferencedAttachments, type SaveImage } from '../../services/attachmentSrc'
 import type { NoteExportFormat } from '../../utils/noteExport'
 import type { Note, Attachment } from '../../types'
-import type { NoteSaveState } from '../../stores/notes'
+import { noteMeta, type NoteSaveState } from '../../stores/notes'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 
 const props = withDefaults(defineProps<{
@@ -49,6 +50,7 @@ const emit = defineEmits<{
   relock: []
   removeLock: []
   removeAttachment: [attachmentId: string]
+  tagClick: [tag: string]
 }>()
 
 const html = ref(props.initialHtml)
@@ -58,7 +60,10 @@ const viewMode = computed(() => props.mode === 'view')
 /** 查看态直接跟库里的正文走，不走编辑草稿的本地快照 */
 const contentHtml = computed(() =>
   viewMode.value ? props.note?.content_html ?? '' : html.value)
-const displayHtml = computed(() => resolveAssetHtml(highlightTagsInHtml(sanitizeNoteHtml(contentHtml.value))))
+const displayHtml = computed(() => resolveAssetHtml(stripTagsFromHtml(sanitizeNoteHtml(contentHtml.value))))
+const display = computed(() => noteDisplay(displayHtml.value))
+const noteTags = computed(() => noteMeta(contentHtml.value).tags)
+const edited = computed(() => !!props.note && props.note.updated_at - props.note.created_at > 60_000)
 
 const text = computed(() => htmlToText(contentHtml.value))
 // 只有图的小记也算有内容：正文引用了附件就不空
@@ -123,7 +128,7 @@ function trapFocus(event: KeyboardEvent) {
         <span class="kbd">Esc</span>
       </button>
       <span class="save-hint" :class="props.saveState">
-        {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '未发布') }}
+        {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '未保存') }}
       </span>
 
       <!-- 阅读态的动作住在首栏右侧：粘性一行，滚到正文中段也够得着 -->
@@ -136,7 +141,7 @@ function trapFocus(event: KeyboardEvent) {
           :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
           @click="emit('togglePin')"
         >
-          <AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="13" />{{ props.note.pinned ? '已置顶' : '置顶' }}
+          <AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="13" />{{ props.note.pinned ? '取消置顶' : '置顶' }}
         </button>
         <button class="bar-btn primary" type="button" title="进入全屏编辑" aria-label="编辑" @click="emit('edit')">
           <AppIcon name="edit" :size="13" />编辑
@@ -158,13 +163,18 @@ function trapFocus(event: KeyboardEvent) {
 
     <div class="fs-scroll">
       <div class="fs-inner" :class="viewMode ? 'fs-doc' : 'fs-col'">
+        <h1 v-if="viewMode && display.title" class="fs-title">{{ display.title }}</h1>
         <div class="fs-meta">
-          <span>{{ props.note ? formatAbsTime(props.note.created_at) : '新小记' }}</span>
+          <span>{{ props.note ? `创建于 ${formatAbsTime(props.note.created_at)}` : '新小记' }}</span>
+          <template v-if="edited && props.note">
+            <span class="dotsep"></span>
+            <span :title="`更新于 ${formatAbsTime(props.note.updated_at)}`">已编辑</span>
+          </template>
           <span class="dotsep"></span>
           <span>{{ wordCount(text) }} 字</span>
         </div>
 
-        <div v-if="viewMode" class="fs-view" v-html="displayHtml" @click="openLinkFromClick" />
+        <div v-if="viewMode" class="fs-view" :class="{ promoted: display.hideFirstBlock }" v-html="displayHtml" @click="openLinkFromClick" />
         <NoteEditor
           v-else
           ref="editorRef"
@@ -177,6 +187,9 @@ function trapFocus(event: KeyboardEvent) {
           @escape="emit('close')"
         />
 
+        <div v-if="viewMode && noteTags.length" class="fs-tags">
+          <button v-for="tag in noteTags" :key="tag" class="tag-pill" type="button" :title="`按 #${tag} 筛选`" @click="emit('tagClick', tag)">#{{ tag }}</button>
+        </div>
         <div v-if="visibleAtts.length" class="fs-atts">
           <NoteAttachments :attachments="visibleAtts" @remove="emit('removeAttachment', $event)" />
         </div>
@@ -187,7 +200,7 @@ function trapFocus(event: KeyboardEvent) {
       <NoteToolbar
         :note="props.note"
         :save-state="props.saveState"
-        :primary-label="props.note ? '退出编辑' : '发布'"
+        :primary-label="props.note ? '退出编辑' : '保存'"
         :primary-disabled="!props.note && empty"
         :cancel-label="props.note ? '' : '放弃'"
         :show-fullscreen="false"
@@ -208,7 +221,7 @@ function trapFocus(event: KeyboardEvent) {
           <span
             class="fs-hint"
             :title="`完整快捷语法：# / ## / ### 空格 标题\n- 或 + 空格 无序列表 · 1. 空格 有序列表\n&gt; 空格 引用 · \`\`\` 空格 代码块\n[] 或 [x] 空格 任务 · --- 分割线\n**粗** *斜* ~~删~~ \`码\``"
-          ><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> {{ props.note ? '退出编辑' : '发布' }}</span>
+          ><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> {{ props.note ? '退出编辑' : '保存' }}</span>
         </template>
       </NoteToolbar>
     </footer>
@@ -264,6 +277,15 @@ function trapFocus(event: KeyboardEvent) {
 /* 状态字跟着退出钮走左组，原先孤悬右端像另一条栏 */
 .fs-head .save-hint { margin-right: auto; padding-left: var(--space-1); }
 
+.fs-title {
+  margin-bottom: 8px;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
 .fs-meta {
   display: flex;
   align-items: center;
@@ -280,11 +302,11 @@ function trapFocus(event: KeyboardEvent) {
 .fs-inner { padding-block: 12px 20px; }
 
 /* 只读浏览铺一张纸：书写态是「对着空桌子写」，阅读态是「拿起写好的一页」，
-   底色和投影把这层区分开，阅读宽度也收到 800px（比书写列窄一档）。
+   纸面随可用空间展开；小窗保留原尺度，宽窗与书写列共用行长上限。
    投影与 .grid-card / .memo 同档（--shadow-card）：这张纸与列表里的卡是同一层东西 */
 .fs-doc {
   width: 100%;
-  max-width: 800px;
+  max-width: clamp(800px, 80%, var(--fs-max));
   margin: var(--space-5) auto var(--space-8);
   padding: 20px 28px;
   background: var(--bg-surface);
@@ -294,19 +316,36 @@ function trapFocus(event: KeyboardEvent) {
 }
 
 .fs-atts { margin-top: var(--space-5); }
+.fs-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-4); }
+.tag-pill {
+  height: 20px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.tag-pill:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* 只读正文：排版语言与列表卡片同源，字号行距按全屏阅读放大 */
 .fs-view {
-  font-size: 13.5px;
-  line-height: 23px;
+  font-size: 14.5px;
+  line-height: 24px;
   color: var(--text);
   word-break: break-word;
 }
 .fs-view :deep(> * + *) { margin-top: 10px; }
+.fs-view.promoted :deep(> :first-child) { display: none; }
+.fs-view.promoted :deep(> :first-child + *) { margin-top: 0; }
 .fs-view :deep(* + h1), .fs-view :deep(* + h2), .fs-view :deep(* + h3) { margin-top: 14px; }
-.fs-view :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.022em; line-height: 26px; }
-.fs-view :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: -0.01em; line-height: 24px; margin-top: 12px; }
-.fs-view :deep(h3) { font-size: 15.5px; font-weight: 600; line-height: 22px; margin-top: 10px; }
+.fs-view :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.022em; line-height: 30px; }
+.fs-view :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: -0.01em; line-height: 26px; margin-top: 12px; }
+.fs-view :deep(h3) { font-size: 15.5px; font-weight: 600; line-height: 23px; margin-top: 10px; }
 .fs-view :deep(strong) { font-weight: 600; color: var(--text); }
 .fs-view :deep(ul), .fs-view :deep(ol) { padding-left: var(--space-5); }
 .fs-view :deep(li) { margin: 4px 0; }

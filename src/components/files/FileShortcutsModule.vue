@@ -348,7 +348,9 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
           <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <CreateAction v-if="!webRuntime" label="添加快捷方式" @click="showAddDialog = true" />
+      <div v-if="!webRuntime" class="page-actions">
+        <CreateAction label="添加快捷方式" @click="showAddDialog = true" />
+      </div>
     </div>
 
     <div v-if="loading" class="card-grid">
@@ -385,7 +387,6 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
           </span>
           <span v-else class="ft-ico toned grid-slot" :style="{ '--ftc': extVar(getFileExt(webRuntime ? shortcut.name : shortcut.path)) }">{{ getFileExt(webRuntime ? shortcut.name : shortcut.path) || 'FILE' }}</span>
           <span class="row-name" :title="shortcut.name">{{ shortcut.name }}</span>
-          <span v-if="shortcut.shortcut_type === 'folder'" class="sc-type">目录</span>
         </div>
 
         <!-- 二行副址：等宽路径缩进到名称起笔，尾部优先（保文件名） -->
@@ -531,7 +532,6 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
 }
 /* .content-inner / .page-bar / 搜索框 / 主按钮 / 骨架行形全部走 global.css 的页面骨架；
    本页没有分类标签，动作钮顶到右缘 */
-.page-bar .btn-primary { margin-left: auto; }
 .web-runtime .shortcut-row { min-height: 56px; justify-content: center; }
 
 /* 卡皮、双行壳（.row1/.row2）、24px 档、右下动作浮岛全在 global.css 的 .grid-card 一节；
@@ -557,9 +557,8 @@ watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.lengt
   background: color-mix(in srgb, var(--ftc) 13%, var(--bg-surface));
 }
 
-/* 名字：14/600 单行截断，吃掉行宽；类型标签靠右淡字 */
-.row-name { flex: 1 1 auto; min-width: 0; font-size: var(--text-base); font-weight: 600; letter-spacing: -0.01em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-type { margin-left: auto; flex: none; font-size: var(--text-xs); color: var(--text-muted); }
+/* 名字：14px，字重跟随卡片角色；类型由左侧图标表达。 */
+.row-name { flex: 1 1 auto; min-width: 0; font-size: var(--text-base); font-weight: var(--weight-card-title); letter-spacing: -0.01em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 路径：等宽 12px 灰字，缩进由 global .row2 给，尾部优先截断（保文件名，盘符与上层目录是噪音） */
 .path-chip {

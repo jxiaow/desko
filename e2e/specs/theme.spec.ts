@@ -2,21 +2,21 @@ import { test, expect } from '@playwright/test'
 import { bootUnlocked, e2e, expectToast, waitForToastGone, openSettings, settingsTab, visiblePane } from '../helpers'
 import { lab } from '../../scripts/lib/theme-tokens.mjs'
 
-// 正式桌面使用两套底色和十一种强调色；通过真实设置入口验证全部组合。
+// 正式桌面使用纸/墨两套底色和十二种强调色；通过真实设置入口验证全部组合。
 const BASES = {
   paper: { name: '纸', pol: 'light', bg: 'rgb(252, 252, 252)', text: 'rgb(36, 35, 33)' },
-  ink: { name: '墨', pol: 'dark', bg: 'rgb(30, 30, 29)', text: 'rgb(206, 205, 200)' },
+  ink: { name: '墨', pol: 'dark', bg: 'rgb(24, 25, 27)', text: 'rgb(223, 225, 229)' },
 } as const
 const ACCENT_HEX = {
-  light: { ink: '#536d85', celadon: '#52735b', clay: '#97644b', plum: '#7f6489', rose: '#9c5875', amber: '#87702e', graphite: '#646b70', sage: '#3e6d53', sky: '#3e6988', lavender: '#70548d', peach: '#915848' },
-  dark: { ink: '#94a9c0', celadon: '#97b59a', clay: '#bfa185', plum: '#b5a0c1', rose: '#c59aad', amber: '#c1ad78', graphite: '#abadad', sage: '#9ccbb1', sky: '#9ac5e4', lavender: '#c7b1e4', peach: '#d9b09e' },
+  light: { ink: '#1b76c4', celadon: '#38804b', clay: '#b05a00', plum: '#9456ae', rose: '#b74679', amber: '#916d00', graphite: '#6e747a', indigo: '#6966c6', brick: '#ba4b47', olive: '#747813', teal: '#00817c', sand: '#7b7263' },
+  dark: { ink: '#7eb1e6', celadon: '#84bc8f', clay: '#db9d72', plum: '#c39bd5', rose: '#e290b0', amber: '#c8a865', graphite: '#a7adb4', indigo: '#a3a5e7', brick: '#e2958e', olive: '#adb271', teal: '#6bbdb8', sand: '#b4ab9d' },
 } as const
 
 type BaseId = keyof typeof BASES
 type AccentId = keyof typeof ACCENT_HEX.light
 
 const ACCENT_NAMES: Record<AccentId, string> = {
-  ink: '蓝', celadon: '绿', clay: '橙', plum: '紫', rose: '玫瑰', amber: '琥珀', graphite: '灰', sage: '鼠尾草', sky: '雾蓝', lavender: '薰衣草', peach: '蜜桃',
+  ink: '蓝', celadon: '绿', clay: '橙', plum: '紫', rose: '玫瑰', amber: '琥珀', graphite: '灰', indigo: '靛', brick: '砖红', olive: '橄榄', teal: '青', sand: '砂',
 }
 
 /** 底色档的 accent 主色：查的是那一极的覆盖层 */
@@ -99,12 +99,12 @@ test.describe('主题', () => {
     expect(got.accentAttr).toBe('ink')
   })
 
-  test('两张底色卡 + 十一枚 accent 丸，点一张立刻换色并落盘', async ({ page }) => {
+  test('两张底色卡 + 十二枚 accent 丸，点一张立刻换色并落盘', async ({ page }) => {
     await bootUnlocked(page)
     const dialog = await openSettings(page)
     await expect(dialog.locator('.theme-chip')).toHaveCount(2)
     await expect(dialog.locator('.theme-chip-name')).toHaveText(['纸', '墨'])
-    await expect(dialog.locator('.accent-pill')).toHaveCount(11)
+    await expect(dialog.locator('.accent-pill')).toHaveCount(12)
     await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText('纸')
 
     await dialog.locator('.theme-chip', { hasText: '墨' }).click()
@@ -119,11 +119,11 @@ test.describe('主题', () => {
     await waitForToastGone(page)
   })
 
-  test('绢和更早的杏色设置归并到纸，保留强调色与柔光，不在读取时改写旧值', async ({ page }) => {
+  test('绢和更早的杏色归并为纸，保留柔光并迁移退役强调色，不在读取时改写旧值', async ({ page }) => {
     for (const theme of ['linen', 'apricot']) {
       await bootUnlocked(page, { settings: { theme, accent: 'sage', background_atmosphere: 'true' } })
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper')
-      await expect(page.locator('html')).toHaveAttribute('data-accent', 'sage')
+      await expect(page.locator('html')).toHaveAttribute('data-accent', 'celadon')
       await expect(page.locator('html')).toHaveAttribute('data-atmosphere', 'on')
       await expect(page.locator('body')).toHaveCSS('background-color', BASES.paper.bg)
       const dialog = await openSettings(page)
@@ -153,7 +153,7 @@ test.describe('主题', () => {
   })
 
   for (const base of Object.keys(BASES) as BaseId[]) {
-    test(`${BASES[base].name}主题：十一种强调色都能切换、保存并匹配预览`, async ({ page }) => {
+    test(`${BASES[base].name}主题：十二种强调色都能切换、保存，底色预览保持中性`, async ({ page }) => {
       await bootUnlocked(page, { settings: { theme: base } })
       const dialog = await openSettings(page)
       const seen = new Set<string>()
@@ -171,23 +171,15 @@ test.describe('主题', () => {
         expect(got.accent, `${label} 主色`).toBe(accentOf(base, accent))
         expect((await e2e.snapshot(page)).settings.accent ?? 'ink').toBe(accent)
         const preview = dialog.locator(`.theme-prev[data-theme="${base}"]`)
-        const surfaces = await page.evaluate((base) => {
-          const preview = document.querySelector(`.theme-prev[data-theme="${base}"]`)!
-          const app = getComputedStyle(document.querySelector('.app-root')!)
-          const nav = getComputedStyle(document.querySelector('.sidebar')!)
-          const miniature = getComputedStyle(preview)
-          const miniatureNav = getComputedStyle(preview.querySelector('.tp-rail')!)
-          return { app: app.backgroundImage, preview: miniature.backgroundImage, nav: nav.backgroundColor, previewNav: miniatureNav.backgroundColor, swatch: getComputedStyle(preview.querySelector('.tp-row-tag')!).backgroundColor }
-        }, base)
-        // 预览独立缩放、定位；光场各色标的颜色与强度须与工作区一致。
-        const fieldColors = (image: string) => image.match(/(?:color|rgba?)\([^)]*\)/g)
-        expect(fieldColors(surfaces.preview), `${label} 预览画布`).toEqual(fieldColors(surfaces.app))
-        expect(surfaces.previewNav, `${label} 预览导航`).toBe(surfaces.nav)
-        expect(await preview.evaluate((el) => getComputedStyle(el).getPropertyValue('--accent').trim()), `${label} 预览强调色`).toBe(got.accent)
-        swatches.push({ id: accent, color: surfaces.swatch.match(/[\d.]+/g)!.slice(0, 3).map(Number) as [number, number, number] })
+        await expect(preview).toHaveAttribute('data-accent', 'graphite')
+        await expect(preview).toHaveAttribute('data-atmosphere', 'off')
+        await expect(preview).toHaveCSS('background-image', 'none')
+        expect(await preview.evaluate(el => getComputedStyle(el).getPropertyValue('--accent').trim())).toBe(accentOf(base, 'graphite'))
+        const swatch = await dialog.locator(`.accent-pill[data-accent-id="${accent}"] .accent-dot`).evaluate(el => getComputedStyle(el).backgroundColor)
+        swatches.push({ id: accent, color: swatch.match(/[\d.]+/g)!.slice(0, 3).map(Number) as [number, number, number] })
         seen.add(`${got.bg}|${got.accent}`)
       }
-      expect(seen.size).toBe(11)
+      expect(seen.size).toBe(12)
       for (const [i, a] of swatches.entries()) for (const b of swatches.slice(i + 1)) {
         const x = lab(a.color), y = lab(b.color)
         expect(Math.hypot(x.L - y.L, x.a - y.a, x.b - y.b), `${base}: ${a.id}/${b.id} 实际强调色辨识`).toBeGreaterThan(2)
@@ -196,7 +188,7 @@ test.describe('主题', () => {
   }
 
   test('刷新后仍是选的那组', async ({ page }) => {
-    for (const [theme, accent] of [['ink', 'plum'], ['paper', 'amber'], ['paper', 'graphite'], ['ink', 'sky'], ['paper', 'sage']] as const) {
+    for (const [theme, accent] of [['ink', 'plum'], ['paper', 'amber'], ['paper', 'graphite'], ['ink', 'teal'], ['paper', 'olive'], ['ink', 'sand'], ['paper', 'indigo']] as const) {
       await bootUnlocked(page, { settings: { theme, accent } })
       const dialog = await openSettings(page)
       await expect(dialog.locator('.theme-chip.on .theme-chip-name')).toHaveText(BASES[theme].name)
@@ -225,11 +217,11 @@ test.describe('主题', () => {
       return style
     }
 
-    const EXPECT: Record<BaseId, { bg: string; color: string }> = {
-      ink: { bg: 'rgb(37, 37, 36)', color: 'rgb(154, 181, 165)' },
+    const EXPECT: Record<'paper' | 'ink', { bg: string; color: string }> = {
+      ink: { bg: 'rgb(35, 36, 39)', color: 'rgb(154, 181, 165)' },
       paper: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
     }
-    const order: BaseId[] = ['ink', 'paper']
+    const order: Array<'paper' | 'ink'> = ['ink', 'paper']
     for (const [i, base] of order.entries()) {
       await settingsTab(dialog, 'appearance')
       await dialog.locator('.theme-chip', { hasText: BASES[base].name }).click()

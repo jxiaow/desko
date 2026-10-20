@@ -110,7 +110,7 @@ test.describe('小记导出', () => {
       const dialog = await openAll(page)
       await e2e.queueDialog(page, 'C:\\exports\\mixed.zip')
       await dialog.getByRole('button', { name: '导出…', exact: true }).click()
-      const lock = page.getByRole('dialog', { name: '解锁加密小记', exact: true })
+      const lock = page.getByRole('dialog', { name: '解锁全部加密小记', exact: true })
       await expect(lock).toBeVisible()
       if (unlock) {
         await lock.locator('input[type=password]').fill('wrong')
@@ -146,7 +146,7 @@ test.describe('小记导出', () => {
     await card.hover()
     await tipButton(card, '导出').click()
     await page.getByRole('menuitem', { name: 'Markdown (.md)', exact: true }).click()
-    await page.getByRole('dialog', { name: '解锁加密小记' }).getByRole('button', { name: '取消', exact: true }).click()
+    await page.getByRole('dialog', { name: '解锁全部加密小记' }).getByRole('button', { name: '取消', exact: true }).click()
     await expectToast(page, '未导出：1 条小记未解锁或已不存在')
     expect(await saves(page)).toHaveLength(0)
     expect(await writes(page)).toHaveLength(0)

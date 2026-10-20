@@ -83,6 +83,12 @@ function onAbandon() {
         </div>
         <p class="lead">{{ stateLine }}</p>
 
+        <dl class="bd-summary" aria-label="删除任务汇总">
+          <div><dt>已移入回收站</dt><dd>{{ Math.max(0, job.completed - job.failed) }} 条</dd></div>
+          <div><dt>未能删除</dt><dd>{{ job.failed }} 条</dd></div>
+          <div><dt>待处理</dt><dd>{{ Math.max(0, job.total - job.completed) }} 条</dd></div>
+        </dl>
+
         <div class="bd-details">
           <div class="bd-details-title">失败明细</div>
           <div v-if="!errors.length" class="bd-empty">这一轮还没有失败</div>
@@ -134,6 +140,9 @@ function onAbandon() {
   color: var(--text-secondary);
 }
 .bd-fail { margin-left: 6px; color: var(--danger) }
+.bd-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); margin: var(--space-4) 0; }
+.bd-summary dt { color: var(--text-muted); font-size: var(--text-xs); }
+.bd-summary dd { margin: var(--space-2) 0 0; color: var(--text); font: 600 var(--text-md) var(--font-mono); }
 
 .bd-bar {
   margin-top: 10px;

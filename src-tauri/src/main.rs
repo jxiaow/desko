@@ -397,6 +397,8 @@ fn main() {
             codex_core::commands::codex::get_current_codex_account,
             codex_core::commands::codex::get_codex_config_toml_path,
             codex_core::commands::codex::get_codex_storage_paths,
+            codex_core::commands::codex::get_codex_wsl_auth_status,
+            codex_core::commands::codex::sync_codex_auth_to_wsl,
             codex_core::commands::codex::open_codex_config_toml,
             codex_core::commands::codex::get_codex_quick_config,
             codex_core::commands::codex::save_codex_context_management,
