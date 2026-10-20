@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
             '@tauri-apps/api/window': mock('tauri-window.ts'),
             '@tauri-apps/api/webview': mock('tauri-webview.ts'),
             '@tauri-apps/plugin-dialog': mock('tauri-dialog.ts'),
+            '@tauri-apps/plugin-fs': mock('tauri-fs.ts'),
             '@tauri-apps/plugin-shell': mock('tauri-shell.ts'),
           }
         : {},

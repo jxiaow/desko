@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '../../services/events'
 import { writeClipboardText } from '../../utils/clipboard'
@@ -34,6 +34,8 @@ import {
   usageBusy,
   usageRange,
   usageReport,
+  usageReportRange,
+  usageUpdatedAt,
   type UsageRange,
   type SwitchProgress,
   refreshAccounts,
@@ -74,6 +76,9 @@ import ResetCreditDialog from './ResetCreditDialog.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { usePageActive } from '../../composables/usePageActive'
 import { codexPlan } from '../../utils/codexPlan'
+import { usagePosterData, type UsagePosterData } from '../../utils/codexUsagePoster'
+
+const CodexUsageShareDialog = defineAsyncComponent(() => import('./CodexUsageShareDialog.vue'))
 
 const pageActive = usePageActive()
 const toastStore = useToastStore()
@@ -81,6 +86,13 @@ const confirmStore = useConfirmStore()
 
 /** 同一份官方数据的四档视图：账号（desko 的档案）、会话（官方目录）、回收站（desko 留底）、用量（现扫官方 rollout） */
 const view = ref<'accounts' | 'sessions' | 'usage' | 'trash'>('accounts')
+const poster = shallowRef<UsagePosterData | null>(null)
+const canShareUsage = computed(() => !!usageReport.value && usageUpdatedAt.value != null && usageReportRange.value === usageRange.value)
+function shareUsage() {
+  if (!canShareUsage.value) return
+  poster.value = usagePosterData(usageReport.value!, usageReportRange.value, usageUpdatedAt.value!)
+}
+watch(pageActive, active => { if (!active) poster.value = null })
 const locateSessionId = ref('')
 function openUsageSession(sessionId: string) {
   sessionQuery.value = ''
@@ -487,6 +499,9 @@ watchEffect(() => {
             </button>
           </nav>
           <div class="page-actions">
+            <button class="btn-secondary bar-btn" type="button" :disabled="!canShareUsage" @click="shareUsage">
+              <AppIcon name="image" :size="13" />分享
+            </button>
             <button class="btn-secondary bar-btn cx-refresh" type="button" title="当前页面每 30 秒自动刷新，点击立即统计" :disabled="usageBusy" @click="loadUsage()">
               <AppIcon name="refresh" :size="13" />
               重新统计
@@ -695,6 +710,7 @@ watchEffect(() => {
     </template>
 
     <CodexAuthDialog v-if="showAuth" :reauth-account-id="reauthAccountId" @close="showAuth = false; reauthAccountId = null" />
+    <CodexUsageShareDialog v-if="poster && pageActive && view === 'usage'" :data="poster" @close="poster = null" />
     <CodexEditDialog v-if="editAccount" :account="editAccount" @close="editAccount = null" />
     <ResetCreditDialog v-if="resetAccount" :account="resetAccount" @close="resetAccount = null" />
     <CodexBatchDeleteDialog v-if="batchDeleteDialogOpen && batchDeleteJob" />

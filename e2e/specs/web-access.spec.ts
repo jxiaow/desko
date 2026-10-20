@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 import { bootUnlocked, tipButton } from '../helpers'
 import type { E2EConfig } from '../mocks/backend'
 
@@ -579,6 +580,36 @@ for (const width of [320, 390, 768]) {
     expect(await page.locator('.content-inner').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
     await expect(chart).toHaveCSS('opacity', '1')
     await chart.screenshot({ path: `.tmp/codex-total-detail/web-month-${width}.png` })
+    expect(app.errors).toEqual([])
+  })
+}
+
+for (const width of [320, 768]) {
+  test(`Web ${width}px 用量图片可预览并下载真正的 PNG`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const app = await webApp(page, expandedWeb, '/codex')
+    await app.login('.acc-row[data-email="web@example.com"]')
+    await page.getByRole('button', { name: '用量', exact: true }).click()
+    await expect(page.locator('.usg-sum')).toBeVisible()
+    await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+    await page.getByRole('button', { name: '分享', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '分享', exact: true })
+    await expect(dialog.getByRole('button', { name: '保存图片', exact: true })).toBeEnabled()
+    await expect(dialog.locator('img')).toHaveAttribute('alt', /近 7 天用量/)
+    expect(await dialog.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
+    const footer = await dialog.locator('.dialog-footer').boundingBox()
+    expect(footer!.y + footer!.height).toBeLessThanOrEqual(900)
+    const downloaded = page.waitForEvent('download')
+    await dialog.getByRole('button', { name: '保存图片', exact: true }).click()
+    const file = await downloaded
+    expect(file.suggestedFilename()).toMatch(/^Codex-近7天用量-\d{4}-\d{2}-\d{2}\.png$/)
+    const bytes = await readFile((await file.path())!)
+    expect([...bytes.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
+    expect(bytes.readUInt32BE(16)).toBe(1080)
+    expect(bytes.readUInt32BE(20)).toBe(1440)
+    expect(app.invocations.filter(command => command === 'codex_query_session_usage')).toHaveLength(1)
+    expect(app.invocations).not.toContain('fs:writeFile')
+    await page.screenshot({ path: `.tmp/codex-poster/web-share-${width}.png` })
     expect(app.errors).toEqual([])
   })
 }
