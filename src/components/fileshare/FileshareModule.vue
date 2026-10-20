@@ -259,7 +259,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
       <section class="clean-group-card">
         <div class="fs-banner">
           <span class="banner-dot" :class="{ on: running }" aria-hidden="true"></span>
-          <span class="banner-title">{{ exposure }}</span>
+          <span class="banner-title" :title="running && !fsLocalOnly ? '同网段设备打不开时，先在 Windows 防火墙放行本应用的专用网络' : undefined">{{ exposure }}</span>
           <span
             v-if="running"
             class="banner-url mono"
@@ -272,7 +272,6 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
           <span v-if="running" class="banner-acts">
             <!-- 口令只在已设时出现：没设的那句由下面唯一的警告行说，一处只说一件事 -->
             <span v-if="fsHasPassword" class="badge ok">已设口令</span>
-            <button class="ib help" type="button" title="同网段设备打不开时，先在 Windows 防火墙放行本应用的专用网络">?</button>
           </span>
         </div>
         <div
@@ -493,8 +492,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
   cursor: pointer;
 }
 .banner-url:hover { color: var(--text-brand); }
-.ib.help { font-size: var(--text-sm); font-weight: 700 }
-/* 右端那一档：口令徽标 + 防火墙提示，与 mock .wh 的尾部 .chip 同位 */
+/* 防火墙提示挂在暴露范围那句话上（悬停即出），右端只留口令徽标 */
 .banner-acts { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0 }
 
 /* 访问地址行：整行可点复制 */

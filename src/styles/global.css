@@ -2069,7 +2069,8 @@ body {
 ::-webkit-scrollbar-corner { background: transparent; }
 
 /* 竖向滚动容器一律预留 9px 槽位：滚动条出现/消失不再让内容横跳 */
-.content-inner, .stream, .rail, .sidebar-nav, .dialog-body, .settings-pane, .remote-list, .fs-scroll {
+.content-inner, .stream, .rail, .sidebar-nav, .dialog-body, .settings-pane, .settings-nav-scroll, .remote-list, .fs-scroll,
+.bd-list, .web-drawer-nav, .note-editor .ProseMirror {
   scrollbar-gutter: stable;
 }
 
@@ -2859,7 +2860,9 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
 .popover.wide { min-width: 260px; padding: 0; }
 /* 定宽档：盖掉 148px 下限，给规格化的窄菜单（136px 动作单） */
 .popover.fixed { min-width: 0; }
-/* 弹窗遮罩是 1000：设置页里的下拉浮层必须压在它上面，和 .app-tip 同一档 */
+/* 全局带（>=1000）的叠层顺序登记在 scripts/check-zindex-stack.mjs 的 LAYERS 表里：
+   改这里任何一档都要同步那张表，脚本数 src 里每条 z-index，表外、漂移、气泡不最顶即红。
+   弹窗遮罩是 1000：设置页里的下拉浮层必须压在它上面，1500 这一档归它 */
 .popover.modal { z-index: 1500; }
 
 /* Teleport 到 body 的分类下拉：脱离组件作用域，样式只能挂全局。
@@ -2874,8 +2877,10 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
 /* 全局悬停提示：所有 title 属性自动换成深色气泡，共用挂在 body 上的这一个节点 */
 .app-tip {
   position: fixed;
-  /* 弹窗遮罩是 1000：气泡必须压在它上面，否则设置弹窗里的 hover 提示会被弹窗吃掉 */
-  z-index: 1500;
+  /* 气泡不吃事件，所以永远压在最上面：弹窗遮罩 1000 < 面板内浮层 1100/1200 <
+     拖入落点纱 9000 < teleport 的分类下拉与 hover 罩 10000 < 本层。
+     曾停在 1500：落点纱那层注释写着「tooltip 之下」，数字却是反的。 */
+  z-index: 10010;
   max-width: 268px;
   padding: 5px 9px;
   border-radius: var(--radius-sm);

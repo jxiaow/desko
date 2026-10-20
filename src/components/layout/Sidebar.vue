@@ -177,7 +177,7 @@ const onDragDblclick = (e: MouseEvent) => {
   color: var(--sidebar-text);
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
-  font-size: 13.5px;
+  font-size: var(--text-sm);
   font-weight: 500;
   gap: 9px;
   white-space: nowrap;
