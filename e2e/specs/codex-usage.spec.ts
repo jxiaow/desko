@@ -117,12 +117,12 @@ for (const theme of ['paper', 'ink']) {
   test(`${theme} 下三类用量颜色明确，缓存另有纹理和对应图例`, async ({ page }) => {
     await boot(page, { ...seed, settings: { ...seed.settings, theme, accent: 'celadon' } })
     await page.getByRole('button', { name: '近 7 天', exact: true }).click()
-    const colors = await page.locator('.usg-col[data-recorded="true"]').first().locator('.usg-stack > span').evaluateAll(elements => elements.map(element => getComputedStyle(element).backgroundColor))
+    const colors = await page.locator('.usg-col[data-recorded="true"]').first().locator('.usg-bar').evaluateAll(elements => elements.map(element => getComputedStyle(element).backgroundColor))
     expect(new Set(colors).size).toBe(3)
     expect(colors.every(color => color.startsWith('rgb('))).toBe(true)
     await expect(page.locator('.usg-cached').first()).not.toHaveCSS('background-image', 'none')
     const legend = await page.locator('.daily-legend i').evaluateAll(elements => elements.map(element => getComputedStyle(element).backgroundColor))
-    expect(legend).toEqual([...colors].reverse())
+    expect(legend).toEqual(colors)
     await page.screenshot({ path: `.tmp/web-stat-fixes/usage-${theme}.png` })
   })
 }
@@ -145,6 +145,96 @@ test('默认展示今天的总量、构成与模型，昨天不会计入当天',
   expect(widths[2]).toBeCloseTo(1400 / 13700 * 100, 2)
   await expect(page.locator('.usg-daily')).toHaveCount(0)
   expect(await e2e.count(page, COMMAND)).toBe(1)
+})
+
+test('四个范围来回切换无需再次查询，汇总和图表始终保留', async ({ page }) => {
+  await boot(page)
+  const snapshots = await page.evaluate(async () => {
+    const snapshots = []
+    for (const name of ['近 7 天', '近 30 天', '全部', '今天', '近 7 天', '今天']) {
+      const button = [...document.querySelectorAll<HTMLButtonElement>('.usage-ranges button')].find(button => button.textContent?.trim() === name)!
+      button.click()
+      await new Promise(requestAnimationFrame)
+      snapshots.push({
+        name,
+        total: document.querySelector('.usg-num')?.textContent,
+        waiting: !!document.querySelector('.usg-wait'),
+        chart: !!document.querySelector('.usage-chart-stage > section'),
+        selected: button.getAttribute('aria-pressed'),
+      })
+    }
+    return snapshots
+  })
+  expect(snapshots.map(snapshot => snapshot.total)).toEqual(['1.48万', '1.48万', '1.48万', '1.37万', '1.48万', '1.37万'])
+  expect(snapshots.every(snapshot => !snapshot.waiting && snapshot.chart && snapshot.selected === 'true')).toBe(true)
+  expect(await e2e.count(page, COMMAND)).toBe(1)
+})
+
+test('慢速手动刷新期间保留旧内容且可切换缓存，完成后四个范围一起更新', async ({ page }) => {
+  let backendUrl = ''
+  page.on('request', request => { if (/\/e2e\/mocks\/backend(?:\.ts)?$/.test(new URL(request.url()).pathname)) backendUrl = request.url() })
+  await page.clock.setFixedTime(new Date('2026-10-13T04:00:00Z'))
+  await boot(page)
+  expect(backendUrl).not.toBe('')
+  await page.evaluate(async url => {
+    const { getBackend } = await import(/* @vite-ignore */ url)
+    const backend = getBackend()
+    const invoke = backend.invoke.bind(backend)
+    backend.invoke = async (cmd: string, args: Record<string, unknown>) => {
+      if (cmd === 'codex_query_session_usage') {
+        await new Promise<void>(resolve => { (window as any).__finishUsageRefresh = resolve })
+      }
+      return invoke(cmd, args)
+    }
+  }, backendUrl)
+  await page.getByRole('button', { name: '重新统计', exact: true }).click()
+  await expect(page.locator('.usg-updated')).toHaveText('更新中…')
+  await expect(page.locator('.usg-num')).toHaveText('1.37万')
+  await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+  await expect(page.locator('.usg-num')).toHaveText('1.48万')
+  await expect(page.locator('.usg-wait')).toHaveCount(0)
+  await page.evaluate(config => {
+    window.__E2E__!.seed({ ...config, codex: { ...config.codex, sessions: [
+      { ...config.codex.sessions[0], input: 20000, cached: 11000, output: 2000 },
+      config.codex.sessions[1],
+    ] } })
+    ;(window as any).__finishUsageRefresh()
+  }, seed)
+  await expect(page.locator('.usg-num')).toHaveText('2.31万')
+  await expect(page.locator('.usg-updated')).not.toHaveText('更新中…')
+  await page.getByRole('button', { name: '今天', exact: true }).click()
+  await expect(page.locator('.usg-num')).toHaveText('2.2万')
+  expect(await e2e.count(page, COMMAND)).toBe(2)
+})
+
+for (const width of [800, 1235]) {
+  test(`${width}px 缓存达到十亿时净输入和输出仍清晰可见，完整数字保持真实`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
+      { sessionId: 'skewed', cwd: 'demo', daysAgo: 0, input: 1_000_001_300, cached: 1_000_000_000, output: 17 },
+    ] } })
+    await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+    const column = page.locator('.usg-col[data-recorded="true"]')
+    const heights = await page.locator('.usg-mini-col[data-recorded="true"] > .usg-bar').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height))
+    expect(heights).toHaveLength(2)
+    expect(heights.every(height => height >= 60)).toBe(true)
+    await expect(column.locator('.usg-stack')).toHaveAttribute('data-value', '1000001317')
+    await expect(column.locator('.usg-output')).toHaveAttribute('data-value', '17')
+    await expect(column.locator('.usg-fresh')).toHaveAttribute('data-value', '1300')
+    await expect(column).toHaveAttribute('aria-label', /合计 1,000,001,317 Token · 净输入 1,300 · 缓存 1,000,000,000 · 输出 17/)
+    await expect(page.locator('.usg-scale[data-metric="output"]')).toHaveAttribute('data-max', '20')
+    expect(await page.locator('.content-inner').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(false)
+    await expect(page.locator('.daily-chart')).toHaveCSS('opacity', '1')
+    await page.screenshot({ path: `.tmp/codex-total-detail/skewed-${width}.png` })
+  })
+}
+
+test('减少动态效果时范围滑块和柱图关闭动画', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await boot(page)
+  await page.getByRole('button', { name: '近 7 天', exact: true }).click()
+  const durations = await page.locator('.usage-range-thumb, .usg-bar, .usg-stack, .daily-column').evaluateAll(elements => elements.flatMap(element => getComputedStyle(element).transitionDuration.split(',').map(parseFloat)))
+  expect(durations.every(duration => duration <= 0.00001)).toBe(true)
 })
 
 test('同小时记录合并为真实用量，可聚焦查看小时数值，未来时段不画成零', async ({ page }) => {
@@ -239,7 +329,7 @@ test.describe('夏令时边界', () => {
     await boot(page)
     await page.getByRole('button', { name: '近 7 天', exact: true }).click()
     await expect(page.getByRole('region', { name: '近 7 天用量', exact: true })).toBeVisible()
-    expect((await args(page)).fromTimestamp).toBe(Date.parse('2026-10-28T04:00:00Z') / 1000)
+    expect((await args(page)).windows.week).toBe(Date.parse('2026-10-28T04:00:00Z') / 1000)
     await expect(page.locator('.usg-period').first()).toContainText('2026-10-28 至 2026-11-03')
   })
 
@@ -274,7 +364,7 @@ test.describe('零点跳时', () => {
     await expect(page.locator('.usg-period').first()).toContainText('本地时间 01:00 起')
     await page.getByRole('button', { name: '近 7 天', exact: true }).click()
     await expect(page.getByRole('region', { name: '近 7 天用量', exact: true })).toBeVisible()
-    expect((await args(page)).fromTimestamp).toBe(Date.parse('2018-10-29T03:00:00Z') / 1000)
+    expect((await args(page)).windows.week).toBe(Date.parse('2018-10-29T03:00:00Z') / 1000)
   })
 })
 
@@ -300,7 +390,7 @@ for (const width of [800, 1235]) {
   })
 }
 
-test('每日柱高按同一刻度比较，缓存占比与实际 Token 一致', async ({ page }) => {
+test('总量堆叠与真实构成一致，两个分项小图保留日期间的真实比例', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-13T04:00:00Z') })
   await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
     { sessionId: 'large', cwd: 'C:\\demo', daysAgo: 1, input: 9000, cached: 6000, output: 1000 },
@@ -309,15 +399,24 @@ test('每日柱高按同一刻度比较，缓存占比与实际 Token 一致', a
   await page.getByRole('button', { name: '近 7 天', exact: true }).click()
   await expect(page.locator('.usg-col')).toHaveCount(7)
   await expect(page.locator('.usg-col[data-recorded="false"]')).toHaveCount(5)
-  const bars = await page.locator('.usg-col[data-recorded="true"] .usg-stack').evaluateAll(elements => elements.map(element => {
-    const parts = [...element.children].map(child => child.getBoundingClientRect().height)
-    return { parts, total: parts.reduce((sum, value) => sum + value, 0), height: element.getBoundingClientRect().height }
-  }))
-  expect(bars[0].total).toBeGreaterThan(80)
-  expect(bars[1].total / bars[0].total).toBeCloseTo(0.1, 2)
-  expect(bars[0].parts[1] / bars[0].total).toBeCloseTo(0.6, 2)
-  expect(bars[0].total).toBeLessThanOrEqual(bars[0].height + 1)
-  await page.screenshot({ path: '.tmp/app-review/web-plain-chart/codex-usage-bars.png' })
+  const stacks = await page.locator('.usg-col[data-recorded="true"] .usg-stack').evaluateAll(elements => elements.map(element => ({
+    height: element.getBoundingClientRect().height,
+    segments: [...element.children].map(part => part.getBoundingClientRect().height),
+  })))
+  expect(stacks[0].height).toBeGreaterThan(100)
+  expect(stacks[1].height / stacks[0].height).toBeCloseTo(0.1, 2)
+  expect(stacks[0].segments[0] / stacks[0].height).toBeCloseTo(0.3, 2)
+  expect(stacks[0].segments[1] / stacks[0].height).toBeCloseTo(0.6, 2)
+  expect(stacks[0].segments[2] / stacks[0].height).toBeCloseTo(0.1, 2)
+  for (const name of ['净输入', '输出']) {
+    const plot = page.getByRole('group', { name, exact: true })
+    const bars = await plot.locator('[data-recorded="true"] > .usg-bar').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height))
+    expect(bars[0]).toBeGreaterThan(60)
+    expect(bars[1] / bars[0]).toBeCloseTo(0.1, 2)
+    await expect(plot.locator('.series-heading')).toContainText('独立刻度')
+  }
+  await expect(page.locator('.usg-scale')).toHaveCount(3)
+  await page.screenshot({ path: '.tmp/codex-total-detail/stack-and-details.png' })
 })
 
 
@@ -332,9 +431,10 @@ test('少量用量不因百分比舍入成为零柱，并可用键盘读取真�
   await column.focus()
   await expect(column).toBeFocused()
   await expect(column).toHaveAttribute('aria-label', /合计 12 Token/)
-  const heights = await column.locator('.usg-stack > span').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height))
-  expect(heights.every(height => height > 0)).toBe(true)
-  await expect(page.locator('.usg-scale')).toHaveText('1.2万6,0000')
+  const heights = await page.locator('.usg-mini-col.selected > .usg-bar').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height))
+  expect(heights).toHaveLength(2)
+  expect(heights.every(height => height >= 2)).toBe(true)
+  await expect(page.locator('.daily-legend')).toHaveText('净输入 4缓存 4输出 4')
 })
 
 
@@ -359,8 +459,71 @@ test('缺失日期保留间隔，键盘可查看零记录日期和完整明细',
   await expect(page.locator('.daily-readout')).toContainText('1.37万')
   const geometry = await columns.evaluateAll(elements => elements.map(el => ({
     x: el.getBoundingClientRect().x, width: el.getBoundingClientRect().width,
-    bar: el.querySelector('.usg-stack')!.getBoundingClientRect().width,
+    bar: el.querySelector('.usg-bar')!.getBoundingClientRect().width,
   })))
   expect(geometry.every(box => box.bar <= 28.1)).toBe(true)
   for (let n = 1; n < geometry.length; n++) expect(geometry[n].x - geometry[n-1].x).toBeCloseTo(geometry[0].width, 0)
 })
+
+for (const range of ['近 7 天', '近 30 天']) {
+  test(`${range}总量与两个小图的悬停、点击和键盘日期联动`, async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-10-13T04:00:00Z') })
+    await boot(page)
+    await page.getByRole('button', { name: range, exact: true }).click()
+    const total = page.getByRole('group', { name: '每日总量', exact: true })
+    const fresh = page.getByRole('group', { name: '净输入', exact: true })
+    const output = page.getByRole('group', { name: '输出', exact: true })
+    const expectDate = async (date: string) => {
+      for (const plot of [total, fresh, output]) {
+        await expect(plot.locator('.daily-column.selected')).toHaveAttribute('data-day', date)
+        await expect(plot.locator('button[aria-pressed="true"]')).toHaveCount(1)
+        await expect(plot.locator('button[tabindex="0"]')).toHaveAttribute('data-day', date)
+      }
+      await expect(page.locator('.daily-readout')).toContainText(date)
+    }
+    await total.locator('[data-day="2026-10-12"]').hover()
+    await expectDate('2026-10-12')
+    await expect(page.locator('.daily-readout')).toContainText('1,100')
+    await fresh.locator('[data-day="2026-10-13"]').click()
+    await expectDate('2026-10-13')
+    await expect(page.locator('.daily-readout')).toContainText('1.37万')
+    await output.locator('[data-day="2026-10-13"]').focus()
+    await page.keyboard.press('ArrowLeft')
+    await expect(output.locator('[data-day="2026-10-12"]')).toBeFocused()
+    await expectDate('2026-10-12')
+    await page.keyboard.press('Home')
+    await expect(page.locator('.daily-readout')).toContainText('无本地记录')
+    for (const plot of [total, fresh, output]) await expect(plot.locator('.daily-column.selected .has-value')).toHaveCount(0)
+    await page.keyboard.press('End')
+    await expectDate('2026-10-13')
+    await expect(output.locator('[data-day="2026-10-13"]')).toBeFocused()
+    expect(await e2e.count(page, COMMAND)).toBe(1)
+  })
+}
+
+for (const width of [800, 1235]) {
+  test(`${width}px 下总量在上、两个小图并排，30 天日期和刻度不溢出`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    await page.clock.install({ time: new Date('2026-10-20T04:00:00Z') })
+    await boot(page, { ...seed, codex: { ...seed.codex, sessions: Array.from({ length: 30 }, (_, index) => ({
+      sessionId: `day-${index}`, cwd: 'demo', daysAgo: index, turns: 3, model: 'gpt-5.4',
+      input: (index % 7 + 1) * 12000 + (index % 5 + 1) * 1300,
+      cached: (index % 7 + 1) * 12000,
+      output: (index % 6 + 1) * 170,
+    })) } })
+    await page.getByRole('button', { name: '近 30 天', exact: true }).click()
+    const chart = page.getByRole('region', { name: '每日用量趋势', exact: true })
+    await expect(chart.locator('.usage-series')).toHaveCount(3)
+    await expect(chart.locator('.usg-col')).toHaveCount(30)
+    const geometry = await chart.locator('.usage-series').evaluateAll(elements => elements.map(element => {
+      const box = element.getBoundingClientRect()
+      return { x: box.x, y: box.y, right: box.right, bottom: box.bottom }
+    }))
+    expect(geometry[0].bottom).toBeLessThanOrEqual(geometry[1].y)
+    expect(geometry[1].y).toBeCloseTo(geometry[2].y, 0)
+    expect(geometry[1].right).toBeLessThan(geometry[2].x)
+    expect(await page.locator('.content-inner').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(false)
+    await expect(chart).toHaveCSS('opacity', '1')
+    await chart.screenshot({ path: `.tmp/codex-total-detail/month-${width}.png` })
+  })
+}

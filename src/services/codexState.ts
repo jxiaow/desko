@@ -17,7 +17,7 @@ import { settingsApi } from './api/settings'
 import { isWebRuntime } from './runtime'
 import { useToastStore } from '../stores/toast'
 import { codexQuotaRemaining } from '../utils/codexAccounts'
-import { usageWindowFrom, type UsageRange } from '../utils/codexUsage'
+import { localDayKey, usageWindowFrom, type UsageRange } from '../utils/codexUsage'
 export type { UsageRange } from '../utils/codexUsage'
 
 /** Codex 官方凭据路径：模块页与设置页共用，设置弹窗打开时预热 */
@@ -145,6 +145,8 @@ export function clearCodexSession(): void {
   recycledBusy.value = false
   recycledError.value = ''
   usageReport.value = null
+  usageWindowCache.clear()
+  usageReportRange.value = usageRange.value
   usageUpdatedAt.value = null
   usageBusy.value = false
   usageError.value = ''
@@ -804,14 +806,29 @@ async function clearBatchDeleteJob(): Promise<void> {
 
 /**
  * 用量图。图的数据来自官方 rollout 里逐轮累计快照的差值，
- * 统计默认目录与配置的额外目录；后端按 (len, mtime) 缓存事件，切窗口只重算不重扫。
+ * 统计默认目录与配置的额外目录；一次查询缓存四个范围，切换无需重新统计。
  */
 export const usageRange = ref<UsageRange>('today')
 export const usageReport = ref<CodexSessionUsageReport | null>(null)
+export const usageReportRange = ref<UsageRange>('today')
 export const usageUpdatedAt = ref<number | null>(null)
 export const usageBusy = ref(false)
 export const usageError = ref('')
 let usageSourcesVersion = 0
+const USAGE_RANGES: UsageRange[] = ['today', 'week', 'month', 'all']
+const usageWindowCache = new Map<UsageRange, {
+  report: CodexSessionUsageReport; updatedAt: number; fromTimestamp: number | null
+}>()
+
+function showCachedUsage(range: UsageRange): boolean {
+  const cached = usageWindowCache.get(range)
+  if (!cached || localDayKey(new Date(cached.updatedAt)) !== localDayKey(new Date())
+    || cached.fromTimestamp !== usageWindowFrom(range)) return false
+  usageReport.value = cached.report
+  usageReportRange.value = range
+  usageUpdatedAt.value = cached.updatedAt
+  return true
+}
 
 const KEY_USAGE_EXTRA_DIRS = 'codex_usage_extra_dirs'
 const KEY_USAGE_AUTO_WSL = 'codex_usage_auto_wsl'
@@ -972,23 +989,32 @@ export async function loadUsage(): Promise<void> {
   usageError.value = ''
   const epoch = accountEpoch
   try {
-    // 扫描期间可继续选范围，串行补读最后选中的范围，旧结果不冒充新范围的数据。
+    // 一次扫描产出四个范围；扫描期间可继续切换，完成后只展示当前选择。
     while (epoch === accountEpoch) {
       const range = usageRange.value
       const sourcesVersion = usageSourcesVersion
-      const fromTimestamp = usageWindowFrom(range)
       const queryAt = Date.now()
+      const fromTimestamp = usageWindowFrom(range, new Date(queryAt))
       const toTimestamp = Math.floor(queryAt / 1000) + 1
+      const windows = Object.fromEntries(USAGE_RANGES.map(key => [key, usageWindowFrom(key, new Date(queryAt))]))
       try {
-        const report = await codexApi.querySessionUsage(fromTimestamp, toTimestamp)
+        const report = await codexApi.querySessionUsage(fromTimestamp, toTimestamp, windows)
         if (epoch !== accountEpoch) return
-        if (range !== usageRange.value || fromTimestamp !== usageWindowFrom(range) || sourcesVersion !== usageSourcesVersion) continue
-        usageReport.value = report
-        usageUpdatedAt.value = queryAt
-        return
+        if (localDayKey(new Date(queryAt)) !== localDayKey(new Date())
+          || USAGE_RANGES.some(key => windows[key] !== usageWindowFrom(key))
+          || sourcesVersion !== usageSourcesVersion) continue
+        for (const key of USAGE_RANGES) {
+          const snapshot = key === range ? report : report.windows?.[key]
+          if (!snapshot) continue
+          const cachedReport = { ...snapshot }
+          delete cachedReport.windows
+          usageWindowCache.set(key, { report: cachedReport, updatedAt: queryAt, fromTimestamp: windows[key] })
+        }
+        if (showCachedUsage(usageRange.value)) return
       } catch (e) {
         if (epoch !== accountEpoch) return
-        if (range !== usageRange.value || fromTimestamp !== usageWindowFrom(range) || sourcesVersion !== usageSourcesVersion) continue
+        if (range !== usageRange.value || localDayKey(new Date(queryAt)) !== localDayKey(new Date())
+          || fromTimestamp !== usageWindowFrom(range) || sourcesVersion !== usageSourcesVersion) continue
         usageError.value = errText(e)
         return
       }
@@ -998,19 +1024,19 @@ export async function loadUsage(): Promise<void> {
   }
 }
 
-/** 切窗口只换过滤条件：后端的事件缓存还在，不该重读那几百 MB */
+/** 四个窗口共享同一截止快照，切换直接显示；手动及定时刷新才重新统计。 */
 export async function setUsageRange(range: UsageRange): Promise<void> {
   if (usageRange.value === range) return
   usageRange.value = range
-  usageReport.value = null
-  usageUpdatedAt.value = null
   usageError.value = ''
+  if (showCachedUsage(range)) return
   await loadUsage()
 }
 
 /** 会话被移走或恢复，官方目录少了一份或多一份文件，图的账随之变；标脏后下次进档重扫 */
 export function invalidateUsage(): void {
   usageSourcesVersion++
+  usageWindowCache.clear()
   usageReport.value = null
   usageUpdatedAt.value = null
 }

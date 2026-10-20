@@ -542,6 +542,47 @@ test('Web 七个模块：Codex 账号切换、会话搜索、文件查看、用�
   expect(app.errors).toEqual([])
 })
 
+for (const width of [320, 390, 768]) {
+  test(`Web ${width}px 历史用量保留总量和分项，窄屏日期不拥挤`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    const app = await webApp(page, expandedWeb, '/codex')
+    await app.login('.acc-row[data-email="web@example.com"]')
+    await page.getByRole('button', { name: '用量', exact: true }).click()
+    await expect(page.locator('.usg-sum')).toBeVisible()
+    await page.getByRole('button', { name: '近 30 天', exact: true }).click()
+    const chart = page.getByRole('region', { name: '每日用量趋势', exact: true })
+    await expect(chart.locator('.usage-series')).toHaveCount(3)
+    const geometry = await chart.evaluate(element => {
+      const chart = element.getBoundingClientRect()
+      const styles = getComputedStyle(element)
+      const series = [...element.querySelectorAll('.usage-series')].map(series => {
+        const box = series.getBoundingClientRect()
+        const ticks = [...series.querySelectorAll('.usg-x')].filter(tick => getComputedStyle(tick).display !== 'none').map(tick => {
+          const rect = tick.getBoundingClientRect()
+          return { x: rect.x, right: rect.right }
+        })
+        return { y: box.y, bottom: box.bottom, ticks }
+      })
+      return { x: chart.x, right: chart.right, contentWidth: element.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight), series }
+    })
+    expect(geometry.series[0].bottom).toBeLessThanOrEqual(geometry.series[1].y)
+    if (geometry.contentWidth <= 520) expect(geometry.series[1].bottom).toBeLessThanOrEqual(geometry.series[2].y)
+    else expect(geometry.series[1].y).toBeCloseTo(geometry.series[2].y, 0)
+    for (const { ticks } of geometry.series) {
+      expect(ticks.length).toBeGreaterThanOrEqual(3)
+      for (const [index, tick] of ticks.entries()) {
+        expect(tick.x).toBeGreaterThanOrEqual(geometry.x)
+        expect(tick.right).toBeLessThanOrEqual(geometry.right)
+        if (index > 0) expect(tick.x).toBeGreaterThanOrEqual(ticks[index - 1].right)
+      }
+    }
+    expect(await page.locator('.content-inner').evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
+    await expect(chart).toHaveCSS('opacity', '1')
+    await chart.screenshot({ path: `.tmp/codex-total-detail/web-month-${width}.png` })
+    expect(app.errors).toEqual([])
+  })
+}
+
 test('Web 局域网传输上传、设置与隧道启停均可在浏览器完成', async ({ page }) => {
   const app = await webApp(page, expandedWeb)
   await app.login()

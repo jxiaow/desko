@@ -3276,102 +3276,111 @@ class MockBackend {
     },
 
     /** 用量图：按会话更新时间落进本地日，模型与轮次取种子值；移出官方目录的会话当天随之减账 */
-    codex_query_session_usage: ({ fromTimestamp, toTimestamp }) => {
-      if (this.state.codex.usageFail) throw 'token 用量统计失败（e2e）'
-      const from = Number(fromTimestamp ?? 0) || 0
-      const to = Number(toTimestamp ?? 0) || Math.floor(Date.now() / 1000)
-      const dayKey = (sec: number) => {
-        const d = new Date(sec * 1000)
-        const p = (n: number) => String(n).padStart(2, '0')
-        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    codex_query_session_usage: ({ fromTimestamp, toTimestamp, windows }) => {
+      const query = (fromTimestamp: number | null | undefined) => {
+        if (this.state.codex.usageFail) throw 'token 用量统计失败（e2e）'
+        const from = Number(fromTimestamp ?? 0) || 0
+        const to = Number(toTimestamp ?? 0) || Math.floor(Date.now() / 1000)
+        const dayKey = (sec: number) => {
+          const d = new Date(sec * 1000)
+          const p = (n: number) => String(n).padStart(2, '0')
+          return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+        }
+        type Bucket = {
+          key: string
+          label: string
+          inputTokens: number
+          cachedInputTokens: number
+          outputTokens: number
+          totalTokens: number
+          requestCount: number
+          estimatedCostUsd: number | null
+        }
+        const newBucket = (key: string): Bucket => ({
+          key,
+          label: key,
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          requestCount: 0,
+          estimatedCostUsd: 0,
+        })
+        const add = (b: Bucket, s: CodexSessionSeed) => {
+          b.inputTokens += s.inputTokens
+          b.cachedInputTokens += s.cachedInputTokens
+          b.outputTokens += s.outputTokens
+          b.totalTokens += s.inputTokens + s.outputTokens
+          b.requestCount += s.turns
+          const cost = sessionCostUsd(s)
+          b.estimatedCostUsd = b.estimatedCostUsd != null && cost != null ? b.estimatedCostUsd + cost : null
+        }
+        const byDay = new Map<string, Bucket>()
+        const byHour = new Map<number, Bucket>()
+        const byModel = new Map<string, Bucket>()
+        const modelSessions: Record<string, (Bucket & { cwd: string; lastUsedAt: number })[]> = {}
+        const inWindow = this.state.codex.sessions.filter((s) => s.updatedAt >= from && s.updatedAt < to)
+        for (const s of inWindow) {
+          const dk = dayKey(s.updatedAt)
+          const midnight = new Date(s.updatedAt * 1000)
+          midnight.setHours(0, 0, 0, 0)
+          const dayStart = Math.floor(midnight.getTime() / 1000)
+          const hourStart = dayStart + Math.floor((s.updatedAt - dayStart) / 3600) * 3600
+          const hour = byHour.get(hourStart) ?? newBucket(String(hourStart))
+          hour.label = new Date(hourStart * 1000).toTimeString().slice(0, 5)
+          const day = byDay.get(dk) ?? newBucket(dk)
+          const model = byModel.get(s.model) ?? newBucket(s.model)
+          add(day, s)
+          add(hour, s)
+          add(model, s)
+          byDay.set(dk, day)
+          byHour.set(hourStart, hour)
+          byModel.set(s.model, model)
+          const session = newBucket(s.sessionId)
+          session.label = s.title || s.sessionId
+          add(session, s)
+          ;(modelSessions[s.model] ??= []).push({ ...session, cwd: s.cwd, lastUsedAt: s.updatedAt })
+        }
+        const totals = {
+          ...inWindow.reduce(
+            (acc, s) => {
+              acc.inputTokens += s.inputTokens
+              acc.cachedInputTokens += s.cachedInputTokens
+              acc.outputTokens += s.outputTokens
+              acc.reasoningOutputTokens += s.reasoningOutputTokens
+              acc.totalTokens += s.inputTokens + s.outputTokens
+              acc.requestCount += s.turns
+              const cost = sessionCostUsd(s)
+              acc.estimatedCostUsd = acc.estimatedCostUsd != null && cost != null ? acc.estimatedCostUsd + cost : null
+              return acc
+            },
+            { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, requestCount: 0, estimatedCostUsd: 0 as number | null },
+          ),
+          sessionCount: inWindow.length,
+          fileCount: this.state.codex.sessions.length,
+        }
+        const days = [...byDay.values()].sort((a, b) => a.key.localeCompare(b.key))
+        const models = [...byModel.values()].sort(
+          (a, b) => b.totalTokens - a.totalTokens || a.key.localeCompare(b.key),
+        )
+        return {
+          totals,
+          byDay: days,
+          byHour: [...byHour.entries()].sort(([left], [right]) => left - right).map(([, bucket]) => bucket),
+          byModel: models,
+          modelSessions: Object.fromEntries(Object.entries(modelSessions).map(([model, sessions]) => [model, sessions.sort((a, b) => b.totalTokens - a.totalTokens || a.key.localeCompare(b.key))])),
+          fromTimestamp: fromTimestamp ?? null,
+          toTimestamp: toTimestamp ?? null,
+          scanMillis: this.state.codex.usageScanMillis,
+        }
       }
-      type Bucket = {
-        key: string
-        label: string
-        inputTokens: number
-        cachedInputTokens: number
-        outputTokens: number
-        totalTokens: number
-        requestCount: number
-        estimatedCostUsd: number | null
-      }
-      const newBucket = (key: string): Bucket => ({
-        key,
-        label: key,
-        inputTokens: 0,
-        cachedInputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        requestCount: 0,
-        estimatedCostUsd: 0,
-      })
-      const add = (b: Bucket, s: CodexSessionSeed) => {
-        b.inputTokens += s.inputTokens
-        b.cachedInputTokens += s.cachedInputTokens
-        b.outputTokens += s.outputTokens
-        b.totalTokens += s.inputTokens + s.outputTokens
-        b.requestCount += s.turns
-        const cost = sessionCostUsd(s)
-        b.estimatedCostUsd = b.estimatedCostUsd != null && cost != null ? b.estimatedCostUsd + cost : null
-      }
-      const byDay = new Map<string, Bucket>()
-      const byHour = new Map<number, Bucket>()
-      const byModel = new Map<string, Bucket>()
-      const modelSessions: Record<string, (Bucket & { cwd: string; lastUsedAt: number })[]> = {}
-      const inWindow = this.state.codex.sessions.filter((s) => s.updatedAt >= from && s.updatedAt < to)
-      for (const s of inWindow) {
-        const dk = dayKey(s.updatedAt)
-        const midnight = new Date(s.updatedAt * 1000)
-        midnight.setHours(0, 0, 0, 0)
-        const dayStart = Math.floor(midnight.getTime() / 1000)
-        const hourStart = dayStart + Math.floor((s.updatedAt - dayStart) / 3600) * 3600
-        const hour = byHour.get(hourStart) ?? newBucket(String(hourStart))
-        hour.label = new Date(hourStart * 1000).toTimeString().slice(0, 5)
-        const day = byDay.get(dk) ?? newBucket(dk)
-        const model = byModel.get(s.model) ?? newBucket(s.model)
-        add(day, s)
-        add(hour, s)
-        add(model, s)
-        byDay.set(dk, day)
-        byHour.set(hourStart, hour)
-        byModel.set(s.model, model)
-        const session = newBucket(s.sessionId)
-        session.label = s.title || s.sessionId
-        add(session, s)
-        ;(modelSessions[s.model] ??= []).push({ ...session, cwd: s.cwd, lastUsedAt: s.updatedAt })
-      }
-      const totals = {
-        ...inWindow.reduce(
-          (acc, s) => {
-            acc.inputTokens += s.inputTokens
-            acc.cachedInputTokens += s.cachedInputTokens
-            acc.outputTokens += s.outputTokens
-            acc.reasoningOutputTokens += s.reasoningOutputTokens
-            acc.totalTokens += s.inputTokens + s.outputTokens
-            acc.requestCount += s.turns
-            const cost = sessionCostUsd(s)
-            acc.estimatedCostUsd = acc.estimatedCostUsd != null && cost != null ? acc.estimatedCostUsd + cost : null
-            return acc
-          },
-          { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, requestCount: 0, estimatedCostUsd: 0 as number | null },
-        ),
-        sessionCount: inWindow.length,
-        fileCount: this.state.codex.sessions.length,
-      }
-      const days = [...byDay.values()].sort((a, b) => a.key.localeCompare(b.key))
-      const models = [...byModel.values()].sort(
-        (a, b) => b.totalTokens - a.totalTokens || a.key.localeCompare(b.key),
-      )
-      return {
-        totals,
-        byDay: days,
-        byHour: [...byHour.entries()].sort(([left], [right]) => left - right).map(([, bucket]) => bucket),
-        byModel: models,
-        modelSessions: Object.fromEntries(Object.entries(modelSessions).map(([model, sessions]) => [model, sessions.sort((a, b) => b.totalTokens - a.totalTokens || a.key.localeCompare(b.key))])),
-        fromTimestamp: fromTimestamp ?? null,
-        toTimestamp: toTimestamp ?? null,
-        scanMillis: this.state.codex.usageScanMillis,
-      }
+      const report = query(fromTimestamp)
+      if (!windows) return report
+      return { ...report, windows: Object.fromEntries(
+        Object.entries(windows as Record<string, number | null>)
+          .filter(([, from]) => from !== (fromTimestamp ?? null))
+          .map(([key, from]) => [key, query(from)]),
+      ) }
     },
 
     /** 回收站一族：官方列表与留底清单是同一份内存的两个数组，移动就是从这里挪到那里 */

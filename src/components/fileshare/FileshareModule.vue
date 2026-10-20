@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { fileshareApi } from '../../services/api/fileshare'
 import { errText } from '../../services/api/backup'
@@ -19,11 +19,13 @@ import {
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { usePageActive } from '../../composables/usePageActive'
 import { isWebRuntime } from '../../services/runtime'
 import { uploadSharedFile } from '../../services/transport'
 import { writeClipboardText } from '../../utils/clipboard'
 
 const toastStore = useToastStore()
+const pageActive = usePageActive()
 const webRuntime = isWebRuntime()
 const fileInput = ref<HTMLInputElement | null>(null)
 let active = true
@@ -187,11 +189,12 @@ function dropBrowserFiles(event: DragEvent) {
 onMounted(async () => {
   void fsRefresh()
   if (webRuntime) {
-    poll = setInterval(() => { if (!fsBusy.value && !dropping.value) void fsRefresh() }, 3000)
+    poll = setInterval(() => { if (pageActive.value && !fsBusy.value && !dropping.value) void fsRefresh() }, 3000)
     return
   }
   // 外部文件只能由原生层给路径：HTML5 的 dataTransfer 在这拿不到真实路径
   const unlisten = await getCurrentWebview().onDragDropEvent((event) => {
+    if (!pageActive.value) return
     const p = event.payload
     if (p.type === 'drop') {
       dragActive.value = false
@@ -206,7 +209,12 @@ onMounted(async () => {
 
 onUnmounted(() => { active = false; clearInterval(poll); unlistenDrag?.() })
 
-usePageHeadStore().setHead('局域网传输')
+watch(pageActive, visible => {
+  dragActive.value = false
+  if (visible) void fsRefresh()
+})
+const pageHead = usePageHeadStore()
+watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 </script>
 
 <template>
@@ -344,7 +352,7 @@ usePageHeadStore().setHead('局域网传输')
 
       <!-- 拖入中：整窗一圈虚线 + 极淡主色底。原生 onDragDropEvent 是窗口级的，
            松手在哪儿都落盘，提示就不该只画在那张卡上——只画卡上等于骗人说只有这块能丢 -->
-      <Teleport to="body">
+      <Teleport to="body" :disabled="!pageActive">
         <div v-if="dragActive && running" class="fs-drop-hint" aria-hidden="true">
           <b>松手即投进 {{ targetName }}</b>
         </div>

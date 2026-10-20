@@ -21,6 +21,7 @@ import BypassChipDialog from './BypassChipDialog.vue'
 import BypassTargetDetail from './BypassTargetDetail.vue'
 import BypassToolbar from './BypassToolbar.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { usePageActive } from '../../composables/usePageActive'
 import { useBypassProbe } from './useBypassProbe'
 import {
   clockOf,
@@ -35,6 +36,7 @@ import {
 } from './bypassView'
 
 const toastStore = useToastStore()
+const pageActive = usePageActive()
 const confirmStore = useConfirmStore()
 
 const input = ref('')
@@ -573,7 +575,9 @@ function deleteFromMenu() {
 }
 
 const pageHead = usePageHeadStore()
-watchEffect(() => pageHead.setHead('网络直连', targets.value.length ? `${targets.value.length} 项` : ''))
+watchEffect(() => {
+  if (pageActive.value) pageHead.setHead('网络直连', targets.value.length ? `${targets.value.length} 项` : '')
+})
 </script>
 
 <template>

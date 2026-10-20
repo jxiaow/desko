@@ -3,8 +3,10 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { Entry } from '../../types'
 import EntryFields from './EntryFields.vue'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { usePageActive } from '../../composables/usePageActive'
 import AppIcon from '../shared/AppIcon.vue'
 
+const pageActive = usePageActive()
 const props = defineProps<{ categories: string[]; entry: Entry | null }>()
 
 const emit = defineEmits<{
@@ -25,6 +27,7 @@ const save = () => fields.value?.save()
 
 /* ⌘/Ctrl+Enter 触发保存校验；徽标只是提示，不绑定额外行为 */
 const onKeydown = (e: KeyboardEvent) => {
+  if (!pageActive.value) return
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
     e.preventDefault()
     save()

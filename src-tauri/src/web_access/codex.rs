@@ -194,6 +194,7 @@ pub(super) fn invoke(app: &AppHandle, command: &str, args: &Value) -> Result<Val
             codex::codex_query_session_usage(
                 arg(args, "fromTimestamp")?,
                 arg(args, "toTimestamp")?,
+                arg(args, "windows")?,
             ),
         ))),
         "codex_move_sessions_to_trash_across_instances" => {

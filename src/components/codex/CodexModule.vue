@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { listen } from '../../services/events'
 import { writeClipboardText } from '../../utils/clipboard'
@@ -72,8 +72,10 @@ import CodexPlanBadge from './CodexPlanBadge.vue'
 import CodexQuotaPanel from './CodexQuotaPanel.vue'
 import ResetCreditDialog from './ResetCreditDialog.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { usePageActive } from '../../composables/usePageActive'
 import { codexPlan } from '../../utils/codexPlan'
 
+const pageActive = usePageActive()
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
 
@@ -356,20 +358,29 @@ function reloadTrashBin() {
 let unlisten: UnlistenFn[] = []
 let active = true
 
-onMounted(async () => {
+async function refreshOnEnter() {
   // 自动刷新的间隔与阈值先落进 state，定时器才能按上一次的选择起
   await loadQuotaSettings()
-  if (!active) return
+  if (!active || !pageActive.value) return
   void autoSyncWslAuthOnEnter()
   syncDeleteTicker()
   void refreshAccounts().then(() => {
-    if (!active) return
+    if (!active || !pageActive.value) return
     startQuotaTicker()
     void refreshQuotasOnEnter()
   })
+}
+
+onMounted(async () => {
+  await refreshOnEnter()
   const stop = await listen<SwitchProgress>('codex:switch-progress', (e) => applySwitchProgress(e.payload))
   if (active) unlisten.push(stop)
   else stop()
+})
+
+watch(pageActive, visible => {
+  if (visible) void refreshOnEnter()
+  else stopQuotaTicker()
 })
 
 onUnmounted(() => {
@@ -380,6 +391,7 @@ onUnmounted(() => {
 
 const pageHead = usePageHeadStore()
 watchEffect(() => {
+  if (!pageActive.value) return
   if (view.value === 'accounts') {
     pageHead.setHead('Codex', `${accounts.value.length} 个`)
   } else if (view.value === 'sessions') {
@@ -460,7 +472,8 @@ watchEffect(() => {
         </template>
 
         <template v-else-if="view === 'usage'">
-          <nav class="usage-ranges seg" aria-label="统计窗口">
+          <nav class="usage-ranges seg" aria-label="统计窗口" :style="{ '--range-index': USAGE_RANGES.findIndex(option => option.key === usageRange) }">
+            <span class="usage-range-thumb" aria-hidden="true" />
             <button
               v-for="option in USAGE_RANGES"
               :key="option.key"
@@ -697,7 +710,8 @@ watchEffect(() => {
 .filter-reset { margin-left: auto; border: none; background: transparent; color: var(--accent); cursor: pointer; font: inherit; }
 .account-filters :deep(.opt-trigger) { min-width: 100px; }
 .session-search-mode, .usage-ranges { display: flex; align-items: center; flex-shrink: 0; gap: 2px; }
-.usage-ranges { margin-left: 8px; }
+.usage-ranges { position:relative; display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin-left:8px; padding:2px; border-radius:var(--radius-sm); background:var(--fill); isolation:isolate; }
+.usage-range-thumb { position:absolute; z-index:-1; top:2px; bottom:2px; left:2px; width:calc((100% - 4px) / 4); border-radius:var(--radius-sm); background:var(--hover-chrome); transform:translateX(calc(var(--range-index) * 100%)); transition:transform 180ms cubic-bezier(.2,.7,.2,1); }
 /* 工具栏不在 .dialog 内，需显式使用与弹窗分段选择一致的样式。 */
 .session-search-mode > button, .usage-ranges > button {
   display: inline-flex;
@@ -716,8 +730,9 @@ watchEffect(() => {
 }
 .session-search-mode > button:hover:not(.on), .usage-ranges > button:hover:not(.on) { color: var(--text-secondary); }
 .session-search-mode > button.on, .usage-ranges > button.on { background: var(--hover-chrome); color: var(--text); font-weight: 600; }
-.usage-ranges > button { font-size: var(--text-xs); }
-.usage-ranges > button.on { font-weight: 500; }
+.usage-ranges > button { justify-content:center; min-width:60px; padding:0 8px; font-size:var(--text-xs); }
+.usage-ranges > button.on { background:transparent; font-weight:500; }
+@media (prefers-reduced-motion: reduce) { .usage-range-thumb { transition:none; } }
 /* 搜索框随工具栏伸缩，桌面使用共享上限，浏览器保留原有宽度。 */
 .page-bar .search-box { flex: 1; min-width: 140px; max-width: var(--page-search-max, 320px); }
 

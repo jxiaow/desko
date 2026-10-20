@@ -20,6 +20,7 @@ import type { SettingsTabId } from './modules/registry'
 import TitleBar from './components/layout/TitleBar.vue'
 import Sidebar from './components/layout/Sidebar.vue'
 import CodexWorkspace from './components/layout/CodexWorkspace.vue'
+import ModuleRouterView from './components/layout/ModuleRouterView.vue'
 import { hasWorkspaceDirectory, workspaceDirectoryMediaQuery } from './components/layout/workspaceLayout'
 import { useWorkspaceDirectoryPreferences } from './components/layout/useWorkspaceDirectoryPreferences'
 import WebModuleDrawer from './components/layout/WebModuleDrawer.vue'
@@ -267,7 +268,7 @@ function onGlobalKey(e: KeyboardEvent) {
       <TitleBar outer @open-settings="openSettingsAppearance" @lock="doLock" />
       <div class="app-layout">
         <Sidebar collapsed :show-toggle="false" />
-        <CodexWorkspace :directory-visible="directoryVisible" :directory-compact="directoryCompact" :directory-pinned="directoryPinned" @close-directory="closeDirectory" @toggle-directory="toggleDirectory" @toggle-directory-pin="toggleDirectoryPin"><router-view /></CodexWorkspace>
+        <CodexWorkspace :directory-visible="directoryVisible" :directory-compact="directoryCompact" :directory-pinned="directoryPinned" @close-directory="closeDirectory" @toggle-directory="toggleDirectory" @toggle-directory-pin="toggleDirectoryPin"><ModuleRouterView /></CodexWorkspace>
       </div>
     </template>
 
@@ -288,7 +289,7 @@ function onGlobalKey(e: KeyboardEvent) {
         />
 
         <div class="main-content">
-          <router-view />
+          <ModuleRouterView />
         </div>
       </div>
     </div>

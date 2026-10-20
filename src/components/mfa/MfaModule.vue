@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
 import jsQR from 'jsqr'
 import { mfaApi, type MfaCode } from '../../services/api/mfa'
@@ -8,6 +8,7 @@ import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { usePageActive } from '../../composables/usePageActive'
 import AppIcon from '../shared/AppIcon.vue'
 import CreateAction from '../shared/CreateAction.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
@@ -15,6 +16,7 @@ import { isWebRuntime } from '../../services/runtime'
 import { writeClipboardText } from '../../utils/clipboard'
 
 const toastStore = useToastStore()
+const pageActive = usePageActive()
 const confirmStore = useConfirmStore()
 const webRuntime = isWebRuntime()
 
@@ -61,6 +63,7 @@ async function refresh() {
 /* 本地每秒只减倒计时，减到 0 才向后端要一批新码：
    锁屏时视图整体卸载，定时器跟着清掉，不用管挂起唤醒的时钟漂移 */
 function tick() {
+  if (!pageActive.value) return
   let expired = false
   for (const c of codes.value) {
     c.remaining -= 1
@@ -73,6 +76,8 @@ onMounted(async () => {
   refresh()
   timer = window.setInterval(tick, 1000)
 })
+
+watch(pageActive, visible => { if (visible) void refresh() })
 
 onUnmounted(() => {
   if (timer !== undefined) window.clearInterval(timer)
@@ -260,7 +265,9 @@ const onPaste = async (e: ClipboardEvent) => {
 }
 
 const pageHead = usePageHeadStore()
-watchEffect(() => pageHead.setHead('验证码', codes.value.length ? `${codes.value.length} 个账号` : ''))
+watchEffect(() => {
+  if (pageActive.value) pageHead.setHead('验证码', codes.value.length ? `${codes.value.length} 个账号` : '')
+})
 </script>
 
 <template>

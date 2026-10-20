@@ -6,6 +6,7 @@ import { avatarLetter } from '../../utils/avatar'
 import { isPageShortcutBlocked } from '../../utils/pageShortcuts'
 import { faviconSrcFor } from '../../services/favicon'
 import { useGridKeys } from '../../composables/useGridKeys'
+import { usePageActive } from '../../composables/usePageActive'
 import AppIcon from '../shared/AppIcon.vue'
 import CreateAction from '../shared/CreateAction.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
@@ -17,6 +18,7 @@ import WorkspaceDirectoryToggle from '../layout/WorkspaceDirectoryToggle.vue'
 
 const webRuntime = isWebRuntime()
 const workspaceLayout = useWorkspaceLayout()
+const pageActive = usePageActive()
 
 const props = defineProps<{
   searchKeyword: string
@@ -54,12 +56,13 @@ const emit = defineEmits<{
   duplicateEntry: [entry: Entry]
 }>()
 
-/* ── Ctrl/Cmd+K 聚焦搜索：与小记页同一条快捷键，各自只在本页挂载期间监听 ── */
+/* ── Ctrl/Cmd+K 聚焦搜索：与小记页同一条快捷键，仅在本页可见时处理 ── */
 const searchRef = ref<HTMLInputElement | null>(null)
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 const kbdHint = computed(() => (isMac ? '⌘K' : 'Ctrl K'))
 
 const onGlobalKey = (e: KeyboardEvent) => {
+  if (!pageActive.value) return
   if (isPageShortcutBlocked(e)) return
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
@@ -123,6 +126,7 @@ const thumbStyle = computed(() =>
     ? { left: `${thumb.value.left}px`, width: `${thumb.value.width}px`, opacity: '1' }
     : { opacity: '0' })
 const syncThumb = () => {
+  if (!pageActive.value) return
   const nav = tabsRef.value
   const el = nav?.querySelector('.tab.active') as HTMLElement | null
   if (!nav || !el) { thumb.value = { ...thumb.value, show: false }; return }
@@ -132,6 +136,7 @@ watch(
   () => [props.activeTab, props.tabs, visibleTabs.value.length] as const,
   () => { nextTick(syncThumb) }
 )
+watch(pageActive, visible => { if (visible) void nextTick(syncThumb) })
 onMounted(() => {
   nextTick(syncThumb)
   window.addEventListener('resize', syncThumb)
@@ -189,13 +194,15 @@ onUnmounted(() => {
 })
 
 const pageHead = usePageHeadStore()
-watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length ? `${props.filteredEntries.length} 条` : ''))
+watchEffect(() => {
+  if (pageActive.value) pageHead.setHead('网址收藏', props.filteredEntries.length ? `${props.filteredEntries.length} 条` : '')
+})
 </script>
 
 <template>
   <div class="content-inner" :class="{ 'web-runtime': webRuntime }">
     <!-- 身份行 + 工具栏：搜索、分类、计数和两个动作；分类超出宽度改为横向滚动 -->
-    <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout" defer>
+    <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
     <div class="page-bar">
       <div class="search-box">
         <span class="search-icon">
@@ -207,7 +214,7 @@ watchEffect(() => pageHead.setHead('网址收藏', props.filteredEntries.length 
           <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <Teleport :to="workspaceDirectoryTarget" :disabled="!workspaceLayout" defer>
+      <Teleport :to="workspaceDirectoryTarget" :disabled="!workspaceLayout || !pageActive" defer>
       <nav ref="tabsRef" class="tabs" :class="{ 'directory-list': workspaceLayout }" aria-label="收藏分类">
         <span class="tab-thumb" :style="thumbStyle" aria-hidden="true"></span>
         <button

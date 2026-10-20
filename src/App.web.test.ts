@@ -30,7 +30,7 @@ it('expiration clears private state immediately while logout is stalled and neve
   const wrapper = mount(App, { global: { stubs: {
     TitleBar: true, Sidebar: true, SetupPage: true, UnlockPage: true, SettingsDialog: true,
     WebSettingsDialog: true, ChangePasswordDialog: true, NoteLockDialog: true,
-    ToastNotification: true, ConfirmDialog: true, RouterView: true,
+    ToastNotification: true, ConfirmDialog: true, ModuleRouterView: true,
   } } })
   await flushPromises()
   const auth = useAuthStore()

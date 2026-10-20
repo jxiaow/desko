@@ -739,6 +739,15 @@ const usageReportFixture = (totalTokens = 1000) => ({
   scanMillis: 1681,
 })
 
+function usageBatchFixture(rawArgs: unknown, multiplier = 1) {
+  const args = rawArgs as { fromTimestamp: number | null; toTimestamp: number; windows: Record<string, number | null> }
+  const amounts: Record<string, number> = { today: 1000, week: 7000, month: 30000, all: 50000 }
+  const windows = Object.fromEntries(Object.entries(args.windows).map(([key, fromTimestamp]) => [key, {
+    ...usageReportFixture(amounts[key] * multiplier), fromTimestamp, toTimestamp: args.toTimestamp,
+  }]))
+  return { ...Object.values(windows).find(report => report.fromTimestamp === args.fromTimestamp)!, windows }
+}
+
 describe('codexState 用量档', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -766,6 +775,125 @@ describe('codexState 用量档', () => {
     d.setHours(0, 0, 0, 0)
     return Math.floor(d.getTime() / 1000)
   }
+
+  it('一次取得四个范围的同一快照，来回切换直接读缓存', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args))
+    await s.loadUsage()
+    const updatedAt = s.usageUpdatedAt.value
+    for (const [range, amount] of [['month', 30000], ['week', 7000], ['all', 50000], ['today', 1000], ['week', 7000]] as const) {
+      await s.setUsageRange(range)
+      expect(s.usageReport.value?.totals.totalTokens).toBe(amount)
+      expect(s.usageReportRange.value).toBe(range)
+      expect(s.usageUpdatedAt.value).toBe(updatedAt)
+      expect(s.usageBusy.value).toBe(false)
+    }
+    expect(callsOf(USAGE_CMD)).toHaveLength(1)
+  })
+
+  it('刷新保留报告并允许即时切换，完成后所有范围一起更新', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementationOnce(async (_cmd, args) => usageBatchFixture(args))
+    await s.loadUsage()
+    let finish!: (result: unknown) => void
+    let refreshArgs: any
+    mockInvoke.mockImplementationOnce((_cmd, args) => {
+      refreshArgs = args
+      return new Promise(resolve => { finish = resolve })
+    })
+    const pending = s.loadUsage()
+    expect(s.usageReport.value?.totals.totalTokens).toBe(1000)
+    await s.setUsageRange('week')
+    expect(s.usageReport.value?.totals.totalTokens).toBe(7000)
+    await s.setUsageRange('month')
+    expect(s.usageReport.value?.totals.totalTokens).toBe(30000)
+    expect(s.usageBusy.value).toBe(true)
+    finish(usageBatchFixture(refreshArgs, 2))
+    await pending
+    expect(s.usageReport.value?.totals.totalTokens).toBe(60000)
+    await s.setUsageRange('all')
+    expect(s.usageReport.value?.totals.totalTokens).toBe(100000)
+    expect(callsOf(USAGE_CMD)).toHaveLength(2)
+  })
+
+  it('首轮扫描中切换范围，直接展示批量结果中的最终范围，无需补扫', async () => {
+    const s = await loadState()
+    let finish!: (result: unknown) => void
+    let queryArgs: any
+    mockInvoke.mockImplementationOnce((_cmd, args) => {
+      queryArgs = args
+      return new Promise(resolve => { finish = resolve })
+    })
+    const pending = s.loadUsage()
+    await s.setUsageRange('week')
+    await s.setUsageRange('month')
+    finish(usageBatchFixture(queryArgs))
+    await pending
+    expect(s.usageReport.value?.totals.totalTokens).toBe(30000)
+    await s.setUsageRange('today')
+    expect(s.usageReport.value?.totals.totalTokens).toBe(1000)
+    expect(callsOf(USAGE_CMD)).toHaveLength(1)
+  })
+
+  it('来源变化时旧批量结果不能写入任何范围的缓存', async () => {
+    const s = await loadState()
+    let finish!: (result: unknown) => void
+    let oldArgs: any
+    mockInvoke.mockImplementationOnce((_cmd, args) => {
+      oldArgs = args
+      return new Promise(resolve => { finish = resolve })
+    })
+    mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args, 2))
+    const pending = s.loadUsage()
+    s.invalidateUsage()
+    await s.setUsageRange('all')
+    finish(usageBatchFixture(oldArgs))
+    await pending
+    expect(s.usageReport.value?.totals.totalTokens).toBe(100000)
+    await s.setUsageRange('week')
+    expect(s.usageReport.value?.totals.totalTokens).toBe(14000)
+    expect(callsOf(USAGE_CMD)).toHaveLength(2)
+  })
+
+  it('锁定会清空所有缓存，锁定前的在途批量扫描也不能重新填入', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementationOnce(async (_cmd, args) => usageBatchFixture(args))
+    await s.loadUsage()
+    let finish!: (result: unknown) => void
+    let oldArgs: any
+    mockInvoke.mockImplementationOnce((_cmd, args) => {
+      oldArgs = args
+      return new Promise(resolve => { finish = resolve })
+    })
+    const pending = s.loadUsage()
+    s.clearCodexSession()
+    finish(usageBatchFixture(oldArgs))
+    await pending
+    expect(s.usageReport.value).toBeNull()
+    mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args, 2))
+    await s.setUsageRange('week')
+    expect(s.usageReport.value?.totals.totalTokens).toBe(14000)
+    expect(callsOf(USAGE_CMD)).toHaveLength(3)
+  })
+
+  it('跨天后全部范围也必须更新，不能复用起点未变的旧缓存', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(2026, 9, 13, 23, 59, 59))
+      const s = await loadState()
+      mockInvoke.mockImplementationOnce(async (_cmd, args) => usageBatchFixture(args))
+      await s.loadUsage()
+      vi.setSystemTime(new Date(2026, 9, 14, 0, 0, 2))
+      mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args, 2))
+      await s.setUsageRange('all')
+      expect(s.usageReport.value?.totals.totalTokens).toBe(100000)
+      await s.setUsageRange('week')
+      expect(s.usageReport.value?.totals.totalTokens).toBe(14000)
+      expect(callsOf(USAGE_CMD)).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 
   it('WSL 自动统计在旧配置中默认开启，关闭状态可读取，修改后刷新已有用量', async () => {
     const s = await loadState()

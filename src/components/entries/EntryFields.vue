@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { usePageActive } from '../../composables/usePageActive'
 import { entriesApi } from '../../services/api/entries'
 import { urlPathsApi } from '../../services/api/urlPaths'
 import { normalizeSubPath } from '../../utils/urlPath'
@@ -8,6 +9,7 @@ import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
 import PathsDialog from './PathsDialog.vue'
 
+const pageActive = usePageActive()
 const props = defineProps<{
   /** null 表示新建条目 */
   entry: Entry | null
@@ -293,7 +295,7 @@ defineExpose({ save })
             @keydown.esc="dismissCategory"
           />
           <AppIcon class="cat-chevron" name="chevDown" :size="12" />
-          <Teleport to="body">
+          <Teleport to="body" :disabled="!pageActive">
             <div
               v-if="showCategoryDropdown"
               id="entry-category-options"

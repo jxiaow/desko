@@ -34,9 +34,14 @@ pub async fn codex_get_session_token_stats_across_instances(
 pub async fn codex_query_session_usage(
     from_timestamp: Option<i64>,
     to_timestamp: Option<i64>,
+    windows: Option<std::collections::HashMap<String, Option<i64>>>,
 ) -> Result<codex_session_manager::CodexSessionUsageReport, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        codex_session_manager::query_session_usage(from_timestamp, to_timestamp)
+        codex_session_manager::query_session_usage_windows(
+            from_timestamp,
+            to_timestamp,
+            windows.unwrap_or_default(),
+        )
     })
     .await
     .map_err(|error| format!("统计 Codex 会话用量后台任务失败: {}", error))?

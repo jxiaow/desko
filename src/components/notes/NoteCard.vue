@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { usePageActive } from '../../composables/usePageActive'
 import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
@@ -15,6 +16,7 @@ import { isWebRuntime } from '../../services/runtime'
 import { openLinkFromClick } from '../../utils/openExternal'
 import type { NoteExportFormat } from '../../utils/noteExport'
 
+const pageActive = usePageActive()
 const props = withDefaults(defineProps<{
   note: Note
   editing?: boolean
@@ -81,7 +83,7 @@ const CLAMP_TOL = 8
 const applyClamp = async () => {
   await nextTick()
   const el = bodyEl.value
-  if (!el) return
+  if (!el || !pageActive.value) return
   // 内联上限一清就回到 CSS 预算，展开态也正是要全露，两种情况都只留这一句
   el.style.maxHeight = ''
   // 展开态量不出截断（内容全露），保留上一次结果，收起时再重算
@@ -120,6 +122,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 // 只读正文在编辑态会整个卸掉，回来时是一个新元素，组件本身不会重新挂载
 watch(bodyEl, applyClamp)
 watch(expanded, applyClamp)
+watch(pageActive, visible => { if (visible) void applyClamp() })
 
 // 就地编辑开始的那一刻才取快照：全屏层可能已把这行正文改过并落库
 watch(() => props.editing, (on) => {

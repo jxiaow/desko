@@ -1,4 +1,5 @@
 import { onUnmounted, watch } from 'vue'
+import { usePageActive } from './usePageActive'
 
 type EscapeEntry = { when: () => boolean; close: () => void; afterTarget: boolean }
 
@@ -38,15 +39,17 @@ const syncListener = () => {
  * @param options afterTarget 让编辑器优先关闭命令菜单，未消费的 Escape 才关闭外层
  */
 export function useEscapeClose(close: () => void, when: () => boolean = () => true, options: { afterTarget?: boolean } = {}): void {
-  const entry: EscapeEntry = { when, close, afterTarget: options.afterTarget === true }
-  let open = when()
+  const pageActive = usePageActive()
+  const visible = () => pageActive.value && when()
+  const entry: EscapeEntry = { when: visible, close, afterTarget: options.afterTarget === true }
+  let open = visible()
   if (open) {
     stack.push(entry)
     syncListener()
   }
 
   // sync：可见性一变就立刻登记/注销，不等下一帧，否则同一次按键可能赶上注册空档
-  const stop = watch(when, (v) => {
+  const stop = watch(visible, (v) => {
     if (v === open) return
     open = v
     if (v) stack.push(entry)

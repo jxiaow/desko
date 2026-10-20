@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { usePageActive } from '../../composables/usePageActive'
+
+const pageActive = usePageActive()
 
 const props = defineProps<{
   /** 锚定元素：浮层贴着它摆放，点它本身不触发「点击外部关闭」 */
@@ -19,6 +22,7 @@ const panel = ref<HTMLElement | null>(null)
 const pos = ref({ top: 0, left: 0 })
 
 const place = () => {
+  if (!pageActive.value) return
   const a = props.anchor
   const el = panel.value
   if (!a || !el) return
@@ -34,6 +38,7 @@ const place = () => {
 }
 
 const onPointerDown = (e: MouseEvent) => {
+  if (!pageActive.value) return
   const target = e.target as Node
   if (panel.value?.contains(target)) return
   if (props.anchor?.contains(target)) return
@@ -63,7 +68,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport to="body" :disabled="!pageActive">
     <div
       ref="panel"
       class="popover"

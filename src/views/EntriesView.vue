@@ -12,6 +12,10 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useToastStore } from '../stores/toast'
 import { useConfirmStore } from '../stores/confirm'
 import { openExternal } from '../utils/openExternal'
+import { usePageActive } from '../composables/usePageActive'
+
+defineOptions({ name: 'entries' })
+const pageActive = usePageActive()
 
 const entriesStore = useEntriesStore()
 const toastStore = useToastStore()
@@ -37,6 +41,7 @@ const detailEntry = computed(() => entries.value.find(e => e.id === detailId.val
 /* Escape 退批量：弹窗/确认框开着时不归批量管，让位给它们的 useEscapeClose */
 const confirmStore = useConfirmStore()
 const onEscape = (e: KeyboardEvent) => {
+  if (!pageActive.value) return
   if (e.key !== 'Escape' || e.defaultPrevented) return
   if (showForm.value || detailEntry.value || confirmStore.confirmDialog.show) return
   if (isBatchMode.value) exitBatch()

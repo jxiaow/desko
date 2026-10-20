@@ -11,11 +11,14 @@ import AppIcon from '../shared/AppIcon.vue'
 import CreateAction from '../shared/CreateAction.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { usePageActive } from '../../composables/usePageActive'
 import { isWebRuntime } from '../../services/runtime'
 import { writeClipboardText } from '../../utils/clipboard'
 import { isPageShortcutBlocked } from '../../utils/pageShortcuts'
 import { downloadWebFile } from './webFiles'
 import WebFilesDialog from './WebFilesDialog.vue'
+
+const pageActive = usePageActive()
 
 const props = defineProps<{
   searchKeyword: string
@@ -300,12 +303,13 @@ const pathTail = (path: string) => {
   return `…/${parts.slice(-2).join('/')}`
 }
 
-/* ── Ctrl/Cmd+K 聚焦搜索：与收藏/小记页同一条快捷键，只在本页挂载期间监听 ── */
+/* ── Ctrl/Cmd+K 聚焦搜索：与收藏/小记页同一条快捷键，仅在本页可见时处理 ── */
 const searchRef = ref<HTMLInputElement | null>(null)
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 const kbdHint = computed(() => (isMac ? '⌘K' : 'Ctrl K'))
 
 const onGlobalKey = (e: KeyboardEvent) => {
+  if (!pageActive.value) return
   if (e.defaultPrevented || e.isComposing) return
   /* Ctrl/Cmd+Enter：弹窗开着即为保存，优先于其它键位 */
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -334,7 +338,9 @@ onBeforeUnmount(() => {
 })
 
 const pageHead = usePageHeadStore()
-watchEffect(() => pageHead.setHead('文件快捷', props.filteredShortcuts.length ? `${props.filteredShortcuts.length} 项` : ''))
+watchEffect(() => {
+  if (pageActive.value) pageHead.setHead('文件快捷', props.filteredShortcuts.length ? `${props.filteredShortcuts.length} 项` : '')
+})
 </script>
 
 <template>

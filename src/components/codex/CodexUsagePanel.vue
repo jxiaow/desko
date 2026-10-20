@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { CodexUsageBucket } from '../../services/api/codex'
-import { loadUsage, usageBusy, usageError, usageRange, usageReport, usageUpdatedAt } from '../../services/codexState'
+import { loadUsage, usageBusy, usageError, usageRange, usageReportRange, usageReport, usageUpdatedAt } from '../../services/codexState'
 import { formatTokenCount as compact, formatUsageCost, localDayKey, usageWindowFrom } from '../../utils/codexUsage'
 import AppIcon from '../shared/AppIcon.vue'
 import CodexUsageNotes from './CodexUsageNotes.vue'
@@ -40,14 +40,15 @@ const openModel = ref('')
 const modelSessions = (model: string) => usageReport.value?.modelSessions?.[model] ?? []
 const sessionTime = (timestamp: number) => new Date(timestamp * 1000).toLocaleString('zh-CN', { hour12: false })
 const totals = computed(() => usageReport.value?.totals ?? null)
-const scope = computed(() => ({ today: '今日用量', week: '近 7 天用量', month: '近 30 天用量', all: '全部用量' })[usageRange.value])
+const ranges = { today: '今日用量', week: '近 7 天用量', month: '近 30 天用量', all: '全部用量' }
+const scope = computed(() => ranges[usageReportRange.value])
 const updatedDay = computed(() => localDayKey(new Date(usageUpdatedAt.value ?? Date.now())))
 const period = computed(() => {
   const from = usageReport.value?.fromTimestamp
-  if (usageRange.value === 'all') return '全部本地会话记录'
+  if (usageReportRange.value === 'all') return '全部本地会话记录'
   const start = from == null ? updatedDay.value : localDayKey(new Date(from * 1000))
   const startClock = from == null ? '00:00' : new Date(from * 1000).toTimeString().slice(0, 5)
-  return usageRange.value === 'today' ? `${start} · 本地时间 ${startClock} 起` : `${start} 至 ${updatedDay.value} · 本地时间`
+  return usageReportRange.value === 'today' ? `${start} · 本地时间 ${startClock} 起` : `${start} 至 ${updatedDay.value} · 本地时间`
 })
 const updatedTime = computed(() => {
   const date = new Date(usageUpdatedAt.value ?? Date.now())
@@ -79,6 +80,7 @@ function pct(part: number, whole: number): number {
     </div>
 
     <template v-else>
+      <p v-if="usageBusy && usageReportRange !== usageRange" class="page-note" role="status">正在读取{{ ranges[usageRange] }}，暂显示{{ scope }}。</p>
       <p v-if="usageError" class="page-note" role="status">刷新失败，显示上次统计：{{ usageError }}</p>
       <section class="rcard usg-sum" :aria-label="scope">
         <div class="usg-heading">
@@ -106,15 +108,18 @@ function pct(part: number, whole: number): number {
 
       <div v-if="!days.length" class="rcard empty-state">
         <div class="empty-icon"><AppIcon name="clock" :size="24" /></div>
-        <div class="empty-title">{{ usageRange === 'today' ? '今天还没有用量记录' : '这段时间没有用量记录' }}</div>
-        <div class="empty-desc">{{ usageRange === 'today' ? '使用 Codex 后自动更新，或切换时间范围。' : '切换时间范围查看其他日期。' }}</div>
+        <div class="empty-title">{{ usageReportRange === 'today' ? '今天还没有用量记录' : '这段时间没有用量记录' }}</div>
+        <div class="empty-desc">{{ usageReportRange === 'today' ? '使用 Codex 后自动更新，或切换时间范围。' : '切换时间范围查看其他日期。' }}</div>
       </div>
 
-      <CodexTodayUsageChart v-if="usageRange === 'today' && usageReport" :report="usageReport" :updated-at="usageUpdatedAt ?? Date.now()" />
+      <div v-if="usageReportRange === 'today' || days.length" class="usage-chart-stage">
+        <Transition name="usage-chart">
+          <CodexTodayUsageChart v-if="usageReportRange === 'today' && usageReport" key="today" :report="usageReport" :updated-at="usageUpdatedAt ?? Date.now()" />
+          <CodexDailyUsageChart v-else :key="usageReportRange" :buckets="usageReport!.byDay" :range="usageReportRange" :updated-at="usageUpdatedAt ?? Date.now()" />
+        </Transition>
+      </div>
 
-      <template v-else-if="days.length">
-        <CodexDailyUsageChart :buckets="usageReport!.byDay" :range="usageRange" :updated-at="usageUpdatedAt ?? Date.now()" />
-
+      <template v-if="usageReportRange !== 'today' && days.length">
         <section class="rcard usg-daily" aria-label="每日用量明细">
           <div class="usg-heading"><h3>每日明细</h3></div>
           <div class="usg-table-scroll">
@@ -176,6 +181,15 @@ function pct(part: number, whole: number): number {
 
 <style scoped>
 .page-note { font-size: var(--text-xs); }
+.usage-chart-stage { position:relative; min-height:340px; }
+.usage-chart-enter-active { transition:opacity 160ms ease-out, transform 160ms ease-out; }
+.usage-chart-leave-active { position:absolute; inset:0 0 auto; width:100%; pointer-events:none; transition:opacity 100ms ease-out; }
+.usage-chart-enter-from { opacity:0; transform:translateY(4px); }
+.usage-chart-leave-to { opacity:0; }
+@media (prefers-reduced-motion: reduce) {
+  .usage-chart-enter-active, .usage-chart-leave-active { transition:none; }
+  .usage-chart-enter-from { transform:none; }
+}
 .usg-session-open { display: block; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .usg-session-open:hover { color: var(--text-brand); text-decoration: underline; text-underline-offset: 3px; }
 .usg-view { --usage-fresh: #376cb3; --usage-cached: #32856f; --usage-output: #b96b25; display: flex; flex-direction: column; gap: var(--space-3); }

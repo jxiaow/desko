@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isWebRuntime } from '../../services/runtime'
 import { tunnelApi } from '../../services/api/tunnel'
@@ -26,8 +26,10 @@ import TunnelSetupCard from './TunnelSetupCard.vue'
 import TunnelServicesCard from './TunnelServicesCard.vue'
 import TunnelServiceDialog from './TunnelServiceDialog.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
+import { usePageActive } from '../../composables/usePageActive'
 
 const toastStore = useToastStore()
+const pageActive = usePageActive()
 
 const busy = ref(false)
 
@@ -108,7 +110,7 @@ async function refreshNow() {
 }
 
 function refreshOnFocus() {
-  if (!busy.value) void refreshNow()
+  if (pageActive.value && !busy.value) void refreshNow()
 }
 
 function refreshOnVisible() {
@@ -118,7 +120,7 @@ function refreshOnVisible() {
 onMounted(() => {
   void refreshNow()
   timer = window.setInterval(() => {
-    if (!busy.value) void refresh().catch(() => undefined)
+    if (pageActive.value && !busy.value) void refresh().catch(() => undefined)
   }, 3000)
   window.addEventListener('focus', refreshOnFocus)
   document.addEventListener('visibilitychange', refreshOnVisible)
@@ -145,7 +147,9 @@ onUnmounted(() => {
   unlistenFocus?.()
 })
 
-usePageHeadStore().setHead('内网穿透')
+watch(pageActive, visible => { if (visible) refreshOnFocus() })
+const pageHead = usePageHeadStore()
+watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
 </script>
 
 <template>

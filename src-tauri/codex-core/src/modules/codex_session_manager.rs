@@ -690,6 +690,8 @@ pub struct CodexSessionUsageReport {
     pub from_timestamp: Option<i64>,
     pub to_timestamp: Option<i64>,
     pub scan_millis: u64,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub windows: HashMap<String, CodexSessionUsageReport>,
 }
 
 /// 当前窗口内、单个模型在某条会话中的增量；key 为会话 ID，label 为会话标题。
@@ -1054,102 +1056,228 @@ pub fn query_session_usage(
     query_session_usage_with_config(from_timestamp, to_timestamp, &modules::config::get_user_config())
 }
 
+/// 四个时间范围共享目录遍历、文件解析和标题索引，窗口内部仍独立计数。
+pub fn query_session_usage_windows(
+    from_timestamp: Option<i64>,
+    to_timestamp: Option<i64>,
+    windows: HashMap<String, Option<i64>>,
+) -> Result<CodexSessionUsageReport, String> {
+    query_session_usage_windows_with_config(
+        from_timestamp,
+        to_timestamp,
+        windows,
+        &modules::config::get_user_config(),
+    )
+}
+
 fn query_session_usage_with_config(
     from_timestamp: Option<i64>,
     to_timestamp: Option<i64>,
     config: &modules::config::UserConfig,
 ) -> Result<CodexSessionUsageReport, String> {
+    query_session_usage_windows_with_config(from_timestamp, to_timestamp, HashMap::new(), config)
+}
+
+fn query_session_usage_windows_with_config(
+    from_timestamp: Option<i64>,
+    to_timestamp: Option<i64>,
+    windows: HashMap<String, Option<i64>>,
+    config: &modules::config::UserConfig,
+) -> Result<CodexSessionUsageReport, String> {
+    if windows.len() > 4
+        || windows
+            .keys()
+            .any(|key| !matches!(key.as_str(), "today" | "week" | "month" | "all"))
+    {
+        return Err("用量统计窗口无效".into());
+    }
     let started = Instant::now();
-    let mut by_day = HashMap::<String, CodexUsageBucket>::new();
-    let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
-    let mut by_model = HashMap::<String, CodexUsageBucket>::new();
-    let mut model_sessions = HashMap::<String, HashMap<String, CodexUsageSession>>::new();
     let mut display_contexts = HashMap::new();
-    let mut totals = CodexUsageTotals::default();
-    let mut active_sessions = HashSet::new();
+    let mut accumulators = windows
+        .into_iter()
+        .filter(|(_, from)| *from != from_timestamp)
+        .map(|(key, from)| (key, UsageWindowAccumulator::new(from)))
+        .collect::<HashMap<_, _>>();
+    accumulators.insert(String::new(), UsageWindowAccumulator::new(from_timestamp));
 
     for path in usage_rollout_files(config)? {
-        totals.file_count += 1;
         let entry = load_usage_events(&path)?;
-        let mut file_models = HashMap::new();
-        if accumulate_usage_entry(
-            &entry,
-            from_timestamp,
-            to_timestamp,
-            &mut by_day,
-            &mut by_hour,
-            &mut file_models,
-            &mut totals,
-        ) {
-            let session_id = entry.session_id.clone().unwrap_or_else(|| format!("file:{}", path.display()));
-            active_sessions.insert(session_id.clone());
-            // 按来源目录读取展示信息，额外目录及 WSL 会话也能找到自己的标题。
-            let data_dir = path.ancestors().find(|parent| {
-                parent.file_name().and_then(|name| name.to_str())
-                    .is_some_and(|name| SESSION_DIRS.contains(&name))
-            }).and_then(Path::parent).unwrap_or_else(|| Path::new(""));
-            let (display, index) = display_contexts.entry(data_dir.to_path_buf()).or_insert_with(|| (
-                modules::codex_session_display::SessionDisplayContext::load(data_dir),
-                read_session_index_map(data_dir).unwrap_or_default(),
-            ));
-            let index_title = index.get(&session_id).and_then(session_index_title);
-            let title = display.resolve_title(&session_id, index_title.as_deref()).unwrap_or_else(|| session_id.clone());
-            let mut latest_by_model = HashMap::<&str, i64>::new();
-            for event in entry.events.iter().filter(|event| {
-                !from_timestamp.is_some_and(|from| event.timestamp < from)
-                    && !to_timestamp.is_some_and(|to| event.timestamp >= to)
-            }) {
-                let model = entry.models.get(event.model_index).map(String::as_str).unwrap_or("unknown");
-                let latest = latest_by_model.entry(model).or_insert(event.timestamp);
-                *latest = (*latest).max(event.timestamp);
-            }
-            for (model, bucket) in file_models {
-                merge_usage_bucket(by_model.entry(model.clone())
-                    .or_insert_with(|| new_bucket(model.clone(), bucket.label.clone())), &bucket);
-                let last_used_at = latest_by_model.get(model.as_str()).copied().unwrap_or_default();
-                let session = model_sessions.entry(model).or_default().entry(session_id.clone())
-                    .or_insert_with(|| CodexUsageSession {
-                        usage: new_bucket(session_id.clone(), title.clone()),
-                        cwd: entry.cwd.clone(),
-                        last_used_at,
+        for accumulator in accumulators.values_mut() {
+            let UsageWindowAccumulator {
+                from_timestamp,
+                by_day,
+                by_hour,
+                by_model,
+                model_sessions,
+                totals,
+                active_sessions,
+            } = accumulator;
+            let from_timestamp = *from_timestamp;
+            totals.file_count += 1;
+            let mut file_models = HashMap::new();
+            if accumulate_usage_entry(
+                &entry,
+                from_timestamp,
+                to_timestamp,
+                by_day,
+                by_hour,
+                &mut file_models,
+                totals,
+            ) {
+                let session_id = entry
+                    .session_id
+                    .clone()
+                    .unwrap_or_else(|| format!("file:{}", path.display()));
+                active_sessions.insert(session_id.clone());
+                // 按来源目录读取展示信息，额外目录及 WSL 会话也能找到自己的标题。
+                let data_dir = path
+                    .ancestors()
+                    .find(|parent| {
+                        parent
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .is_some_and(|name| SESSION_DIRS.contains(&name))
+                    })
+                    .and_then(Path::parent)
+                    .unwrap_or_else(|| Path::new(""));
+                let (display, index) = display_contexts
+                    .entry(data_dir.to_path_buf())
+                    .or_insert_with(|| {
+                        (
+                            modules::codex_session_display::SessionDisplayContext::load(data_dir),
+                            read_session_index_map(data_dir).unwrap_or_default(),
+                        )
                     });
-                session.last_used_at = session.last_used_at.max(last_used_at);
-                merge_usage_bucket(&mut session.usage, &bucket);
+                let index_title = index.get(&session_id).and_then(session_index_title);
+                let title = display
+                    .resolve_title(&session_id, index_title.as_deref())
+                    .unwrap_or_else(|| session_id.clone());
+                let mut latest_by_model = HashMap::<&str, i64>::new();
+                for event in entry.events.iter().filter(|event| {
+                    !from_timestamp.is_some_and(|from| event.timestamp < from)
+                        && !to_timestamp.is_some_and(|to| event.timestamp >= to)
+                }) {
+                    let model = entry
+                        .models
+                        .get(event.model_index)
+                        .map(String::as_str)
+                        .unwrap_or("unknown");
+                    let latest = latest_by_model.entry(model).or_insert(event.timestamp);
+                    *latest = (*latest).max(event.timestamp);
+                }
+                for (model, bucket) in file_models {
+                    merge_usage_bucket(
+                        by_model
+                            .entry(model.clone())
+                            .or_insert_with(|| new_bucket(model.clone(), bucket.label.clone())),
+                        &bucket,
+                    );
+                    let last_used_at = latest_by_model
+                        .get(model.as_str())
+                        .copied()
+                        .unwrap_or_default();
+                    let session = model_sessions
+                        .entry(model)
+                        .or_default()
+                        .entry(session_id.clone())
+                        .or_insert_with(|| CodexUsageSession {
+                            usage: new_bucket(session_id.clone(), title.clone()),
+                            cwd: entry.cwd.clone(),
+                            last_used_at,
+                        });
+                    session.last_used_at = session.last_used_at.max(last_used_at);
+                    merge_usage_bucket(&mut session.usage, &bucket);
+                }
             }
         }
     }
 
-    totals.session_count = active_sessions.len() as u64;
-
-    let mut by_day = by_day.into_values().collect::<Vec<_>>();
-    by_day.sort_by(|left, right| left.key.cmp(&right.key));
-    let mut by_hour = by_hour.into_iter().collect::<Vec<_>>();
-    by_hour.sort_by_key(|(timestamp, _)| *timestamp);
-    let mut by_model = by_model.into_values().collect::<Vec<_>>();
-    by_model.sort_by(|left, right| {
-        right
-            .total_tokens
-            .cmp(&left.total_tokens)
-            .then_with(|| left.key.cmp(&right.key))
-    });
-
-    Ok(CodexSessionUsageReport {
-        totals,
-        by_day,
-        by_hour: by_hour.into_iter().map(|(_, bucket)| bucket).collect(),
-        by_model,
-        model_sessions: model_sessions.into_iter().map(|(model, sessions)| {
-            let mut sessions = sessions.into_values().collect::<Vec<_>>();
-            sessions.sort_by(|left, right| right.usage.total_tokens.cmp(&left.usage.total_tokens)
-                .then_with(|| left.usage.key.cmp(&right.usage.key)));
-            (model, sessions)
-        }).collect(),
-        from_timestamp,
-        to_timestamp,
-        scan_millis: started.elapsed().as_millis() as u64,
-    })
+    let scan_millis = started.elapsed().as_millis() as u64;
+    let mut reports = accumulators
+        .into_iter()
+        .map(|(key, accumulator)| (key, accumulator.finish(to_timestamp, scan_millis)))
+        .collect::<HashMap<_, _>>();
+    let mut report = reports
+        .remove("")
+        .expect("primary usage window is always present");
+    report.windows = reports;
+    Ok(report)
 }
 
+struct UsageWindowAccumulator {
+    from_timestamp: Option<i64>,
+    by_day: HashMap<String, CodexUsageBucket>,
+    by_hour: HashMap<i64, CodexUsageBucket>,
+    by_model: HashMap<String, CodexUsageBucket>,
+    model_sessions: HashMap<String, HashMap<String, CodexUsageSession>>,
+    totals: CodexUsageTotals,
+    active_sessions: HashSet<String>,
+}
+
+impl UsageWindowAccumulator {
+    fn new(from_timestamp: Option<i64>) -> Self {
+        Self {
+            from_timestamp,
+            by_day: HashMap::new(),
+            by_hour: HashMap::new(),
+            by_model: HashMap::new(),
+            model_sessions: HashMap::new(),
+            totals: CodexUsageTotals::default(),
+            active_sessions: HashSet::new(),
+        }
+    }
+
+    fn finish(self, to_timestamp: Option<i64>, scan_millis: u64) -> CodexSessionUsageReport {
+        let Self {
+            from_timestamp,
+            by_day,
+            by_hour,
+            by_model,
+            model_sessions,
+            mut totals,
+            active_sessions,
+        } = self;
+
+        totals.session_count = active_sessions.len() as u64;
+
+        let mut by_day = by_day.into_values().collect::<Vec<_>>();
+        by_day.sort_by(|left, right| left.key.cmp(&right.key));
+        let mut by_hour = by_hour.into_iter().collect::<Vec<_>>();
+        by_hour.sort_by_key(|(timestamp, _)| *timestamp);
+        let mut by_model = by_model.into_values().collect::<Vec<_>>();
+        by_model.sort_by(|left, right| {
+            right
+                .total_tokens
+                .cmp(&left.total_tokens)
+                .then_with(|| left.key.cmp(&right.key))
+        });
+
+        CodexSessionUsageReport {
+            totals,
+            by_day,
+            by_hour: by_hour.into_iter().map(|(_, bucket)| bucket).collect(),
+            by_model,
+            model_sessions: model_sessions
+                .into_iter()
+                .map(|(model, sessions)| {
+                    let mut sessions = sessions.into_values().collect::<Vec<_>>();
+                    sessions.sort_by(|left, right| {
+                        right
+                            .usage
+                            .total_tokens
+                            .cmp(&left.usage.total_tokens)
+                            .then_with(|| left.usage.key.cmp(&right.usage.key))
+                    });
+                    (model, sessions)
+                })
+                .collect(),
+            from_timestamp,
+            to_timestamp,
+            scan_millis,
+            windows: HashMap::new(),
+        }
+    }
+}
 
 /// 一份 rollout 的事件灌进桶里；返回这条会话在窗口内是否真的有过用量。
 /// 差分链在扫描阶段就已经算完，这里只按窗口挑事件——窗口从中间起，首桶拿到的仍是当天真实增量。
@@ -2888,6 +3016,30 @@ mod tests {
         assert!((filtered.totals.estimated_cost_usd.unwrap() - 0.33).abs() < 1e-10);
         assert!(!filtered.model_sessions.contains_key("gpt-5.4"));
         assert_eq!(filtered.model_sessions["gpt-5.4-mini"][0].usage.total_tokens, 550_000);
+
+        // 批量窗口与各自单独查询完全同账，包含会话数、模型、金额和截止边界。
+        let to = DateTime::parse_from_rfc3339("2026-10-11T03:30:00Z").unwrap().timestamp();
+        let windows = HashMap::from([
+            ("today".into(), Some(from)),
+            ("week".into(), Some(from - 6 * 86400)),
+            ("month".into(), Some(from - 29 * 86400)),
+            ("all".into(), None),
+        ]);
+        let batch = super::query_session_usage_windows_with_config(None, Some(to), windows.clone(), &config).unwrap();
+        assert_eq!(batch.windows.len(), 3);
+        for (key, start) in windows {
+            let actual = if key == "all" { &batch } else { &batch.windows[&key] };
+            let expected = query_session_usage_with_config(start, Some(to), &config).unwrap();
+            let mut actual = serde_json::to_value(actual).unwrap();
+            let mut expected = serde_json::to_value(expected).unwrap();
+            for value in [&mut actual, &mut expected] {
+                value.as_object_mut().unwrap().remove("scanMillis");
+                value.as_object_mut().unwrap().remove("windows");
+            }
+            assert_eq!(actual, expected, "window {key}");
+        }
+        assert!(super::query_session_usage_windows_with_config(None, None,
+            HashMap::from([("arbitrary-window".into(), None)]), &config).is_err());
 
         // 同一线程换分页文件后，会话页必须继续累加，不能只拿其中一个文件。
         let mut continued: JsonValue = serde_json::from_str(&usage_snapshot_line(

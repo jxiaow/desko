@@ -230,6 +230,8 @@ export interface CodexSessionUsageReport {
   fromTimestamp?: number | null
   toTimestamp?: number | null
   scanMillis: number
+  /** 同一次目录扫描、同一截止时间下的其他统计窗口。子报告不再嵌套。 */
+  windows?: Partial<Record<'today' | 'week' | 'month' | 'all', CodexSessionUsageReport>>
 }
 
 /** 移进回收站的结果；留底目录住在 desko 自己的数据目录，不在 ~/.codex 里 */
@@ -433,8 +435,9 @@ export const codexApi = {
   querySessionUsage: (
     fromTimestamp: number | null,
     toTimestamp: number | null,
+    windows?: Record<string, number | null>,
   ): Promise<CodexSessionUsageReport> =>
-    invoke('codex_query_session_usage', { fromTimestamp, toTimestamp }),
+    invoke('codex_query_session_usage', { fromTimestamp, toTimestamp, ...(windows ? { windows } : {}) }),
 
   /** 移进回收站：先留底进 desko 数据目录，再从官方会话目录删文件并重写索引 */
   moveToTrash: (sessionIds: string[]): Promise<CodexSessionTrashSummary> =>

@@ -1,7 +1,9 @@
 import { nextTick, onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
+import { usePageActive } from './usePageActive'
 
 /** 弹窗初始移焦、Tab 循环与关闭后归还焦点。 */
 export function useDialogFocus(dialog: Ref<HTMLElement | null>) {
+  const pageActive = usePageActive()
   let previousFocus: HTMLElement | null = null
   let active = true
   let observer: MutationObserver | null = null
@@ -25,11 +27,11 @@ export function useDialogFocus(dialog: Ref<HTMLElement | null>) {
     observer?.disconnect()
     if (!element) return
     await nextTick()
-    if (!active || dialog.value !== element) return
+    if (!active || !pageActive.value || dialog.value !== element) return
     ;(controls()[0] ?? element).focus()
     // 发起/等待/失败会替换或禁用聚焦按钮，避免焦点随旧节点移回背景。
     observer = new MutationObserver(() => {
-      if (!active || dialog.value !== element) return
+      if (!active || !pageActive.value || dialog.value !== element) return
       const focused = document.activeElement
       if (focused === document.body || (element.contains(focused) && focused?.matches(':disabled'))) {
         (controls()[0] ?? element).focus()

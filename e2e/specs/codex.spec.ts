@@ -1323,23 +1323,28 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('.usg-count')).toHaveText('5 次请求 · 4 条会话')
     await expect(page.locator('.titlebar-count')).toHaveText('5 次请求')
 
-    // 四条会话落在四个本地日上，最满那天按输入 + 输出 = 48.2K 标定。
+    // 主图按总量标定；净输入、输出两个小图使用各自的刻度。
     await expect(page.locator('.usg-col')).toHaveCount(30)
     await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(4)
     await expect(page.locator('.daily-plot')).toHaveAttribute('data-days', '30')
-    await expect(page.locator('.daily-plot')).toHaveAttribute('data-max', '54000')
+    await expect(page.locator('.usg-scale[data-metric="fresh"]')).toHaveAttribute('data-max', '5600')
+    await expect(page.locator('.usg-scale[data-metric="total"]')).toHaveAttribute('data-max', '54000')
     const seg = async (index: number) =>
       page
         .locator('.usg-col[data-recorded="true"]')
         .nth(index)
         .evaluate((el) => ({
-          fresh: (el.querySelector('.usg-fresh') as HTMLElement).style.height,
-          cached: (el.querySelector('.usg-cached') as HTMLElement).style.height,
+          height: parseFloat((el.querySelector('.usg-stack') as HTMLElement).style.height),
+          total: Number(el.querySelector('.usg-stack')!.getAttribute('data-value')),
+          fresh: parseFloat((el.querySelector('.usg-fresh') as HTMLElement).style.height),
+          cached: parseFloat((el.querySelector('.usg-cached') as HTMLElement).style.height),
         }))
-    expect(parseFloat((await seg(1)).fresh)).toBeCloseTo(5000 / 54000 * 100, 4)
-    expect(parseFloat((await seg(1)).cached)).toBeCloseTo(40000 / 54000 * 100, 4)
-    expect(parseFloat((await seg(0)).fresh)).toBeCloseTo(1700 / 54000 * 100, 4)
-    expect(parseFloat((await seg(0)).cached)).toBeCloseTo(300 / 54000 * 100, 4)
+    for (const [index, fresh, cached] of [[0, 1700, 300], [1, 5000, 40000]]) {
+      const bar = await seg(index)
+      expect(bar.height).toBeCloseTo(bar.total / 54000 * 100, 4)
+      expect(bar.fresh).toBeCloseTo(fresh / bar.total * 100, 4)
+      expect(bar.cached).toBeCloseTo(cached / bar.total * 100, 4)
+    }
     await expect(page.locator('.usg-day-row')).toHaveCount(4)
     await expect(page.locator('.usg-day-total').first()).toHaveText('1.37万')
     await expect(page.locator('.usg-scan')).toHaveText('4 个文件 · 1.7 s')
@@ -1353,22 +1358,23 @@ test.describe('Codex 用量图', () => {
     expect(fill).toBe('95.1%')
   })
 
-  test('切窗口只换起点：周档筛掉 9 天前那条，全部档不带起点', async ({ page }) => {
+  test('同一快照切窗口：周档筛掉 9 天前那条，全部档不带起点', async ({ page }) => {
     await gotoUsage(page)
-    expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(localMidnightSec() - 29 * 86_400)
+    expect((await argOf(page, USAGE_CMD, 'windows')).month).toBe(localMidnightSec() - 29 * 86_400)
     expect(Math.abs(await argOf(page, USAGE_CMD, 'toTimestamp') - Math.floor(Date.now() / 1000))).toBeLessThanOrEqual(1)
 
     await page.getByRole('navigation', { name: '统计窗口' }).getByRole('button', { name: '近 7 天', exact: true }).click()
     await expect(page.locator('.usg-num')).toHaveText('6.28万')
-    expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(localMidnightSec() - 6 * 86_400)
+    expect((await argOf(page, USAGE_CMD, 'windows')).week).toBe(localMidnightSec() - 6 * 86_400)
     await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(3)
     // 文件还在那儿：筛掉的是窗口，不是扫过的目录
     await expect(page.locator('.usg-scan')).toHaveText('4 个文件 · 1.7 s')
 
     await page.getByRole('navigation', { name: '统计窗口' }).getByRole('button', { name: '全部', exact: true }).click()
-    expect(await argOf(page, USAGE_CMD, 'fromTimestamp')).toBe(null)
+    expect((await argOf(page, USAGE_CMD, 'windows')).all).toBe(null)
     await expect(page.locator('.usg-num')).toHaveText('6.51万')
 
+    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
     // 同档再点一次：账没变就不该重扫
     const before = await e2e.count(page, USAGE_CMD)
     await page.getByRole('navigation', { name: '统计窗口' }).getByRole('button', { name: '全部', exact: true }).click()
@@ -1421,18 +1427,18 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(3)
     await expect(page.locator('.titlebar-count')).toHaveText('4 次请求')
     // 图是官方目录的镜子：只有这一次移动值得重扫，来回切档不再打第二次
-    expect(await e2e.count(page, USAGE_CMD)).toBe(3)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
   })
 
   test('只动留底的彻底删除与清空不碰图：回用量档不发网络', async ({ page }) => {
     await gotoUsage(page)
-    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
 
     await page.locator('.cx-tab', { hasText: '回收站' }).click()
     await expect(page.locator('.empty-title')).toHaveText('回收站是空的')
 
     await page.locator('.cx-tab', { hasText: '用量' }).click()
     await expect(page.locator('.usg-sum')).toBeVisible()
-    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
   })
 })

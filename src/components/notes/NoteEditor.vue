@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
+import { usePageActive } from '../../composables/usePageActive'
 import { normalizeAssetHtml, resolveAssetHtml } from '../../services/attachmentSrc'
 import { sanitizeNoteHtml, safeLink, safeImage } from '../../utils/sanitizeNoteHtml'
 import { useEditor, EditorContent, VueNodeViewRenderer } from '@tiptap/vue-3'
@@ -28,6 +29,7 @@ import AppIcon from '../shared/AppIcon.vue'
 import ImageNodeView from './ImageNodeView.vue'
 import type { IconName } from '../../utils/icons'
 
+const pageActive = usePageActive()
 const lowlight = createLowlight({
   typescript: ts, javascript: js, python, rust, css, html: xml, xml, json, bash, shell: bash, sql, java, go, cpp, c: cpp,
 })
@@ -36,15 +38,12 @@ const props = withDefaults(defineProps<{
   initialContent?: string
   variant?: 'composer' | 'card' | 'full'
   placeholder?: string
-  /** 胶囊输入展开后给三行书写地板 */
-  roomy?: boolean
   /** 剪贴板里的图片交外层落盘，换回正文用的 src。目标小记由包着它的那张面绑好，编辑器不问 */
   saveImage?: (source: File | string) => Promise<string | null>
 }>(), {
   initialContent: '',
   variant: 'card',
   placeholder: '输入 / 打开命令...',
-  roomy: false,
   saveImage: undefined,
 })
 
@@ -233,14 +232,6 @@ const isBlankContent = (html: string | undefined): boolean => {
   return text.length === 0
 }
 
-/**
- * 胶囊输入的高度不写 JS：书写面是普通块，内容自己往上顶，`min-height` 只当地板。
- * 静置一行（22px），`roomy` 给三行（94px = 3×24.65 行高 + 20 内衬）。
- * 曾按 scrollHeight 逐键回写 min-height，按下工具条按钮先触发 blur、伸缩当场把按钮抽走，
- * mousedown 与 mouseup 落点错位，发布/全屏全部点不动。
- * 卡片就地编辑和全屏面有自己的定高档，不参与。
- */
-
 /** 撤销/重做的可用性：每笔事务后重算，供底栏那两颗钮决定灰不灰 */
 const canUndo = ref(false)
 const canRedo = ref(false)
@@ -277,7 +268,7 @@ const editor = useEditor({
   // 库里存的是 attachments/<名>，编辑器里要看到真图；存回去时再洗回相对形态
   content: resolveAssetHtml(sanitizeNoteHtml(props.initialContent || '')),
   parseOptions: { preserveWhitespace: 'full' },
-  // 胶囊输入不抢焦点：它默认收成一行，抢了焦点就等于永远是展开的，折叠态白做。
+  // 顶部草稿输入不抢焦点，打开列表时保持阅读位置。
   // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
   autofocus: false,
   editorProps: {
@@ -363,9 +354,14 @@ const editor = useEditor({
     NoteImage,
   ],
   onCreate: ({ editor }) => {
-    // 挂载完成前用户可能已经开始输入，延迟自动聚焦不能覆盖用户刚设置的选区。
-    if (props.variant !== 'composer' && !editor.isFocused) {
-      editor.commands.focus(isBlankContent(props.initialContent) ? 'start' : 'end')
+    // 初次聚焦同步完成，避免延迟一帧后覆盖用户刚设置的选区。
+    if (props.variant !== 'composer' && pageActive.value && !editor.view.hasFocus()) {
+      const selection = isBlankContent(props.initialContent)
+        ? TextSelection.atStart(editor.state.doc)
+        : TextSelection.atEnd(editor.state.doc)
+      editor.view.dispatch(editor.state.tr.setSelection(selection))
+      editor.view.focus()
+      editor.commands.scrollIntoView()
     }
   },
   onUpdate: ({ editor }) => {
@@ -817,9 +813,9 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 </script>
 
 <template>
-  <div ref="editorWrapper" class="note-editor" :class="[`v-${variant}`, { roomy: props.roomy }]" @change="relocateCaret" @paste="onPaste">
+  <div ref="editorWrapper" class="note-editor" :class="`v-${variant}`" @change="relocateCaret" @paste="onPaste">
     <EditorContent :editor="editor" />
-    <Teleport to="body">
+    <Teleport to="body" :disabled="!pageActive">
       <div
         v-if="showSlashMenu"
         ref="slashMenuEl"
@@ -843,7 +839,7 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
         <div v-if="!filteredCommands.length" class="sm-empty">没有匹配的块</div>
       </div>
     </Teleport>
-    <Teleport to="body">
+    <Teleport to="body" :disabled="!pageActive">
       <div v-if="showFormatBar" ref="formatBarEl" class="fmt-bar" :style="formatBarStyle">
         <template v-if="!linkEditing">
           <button
@@ -892,7 +888,7 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
         </template>
       </div>
     </Teleport>
-    <Teleport to="body">
+    <Teleport to="body" :disabled="!pageActive">
       <div v-if="pastedLink" class="paste-link-prompt" :style="{ top: pastedLinkPos.top + 'px', left: pastedLinkPos.left + 'px' }" role="group" aria-label="链接粘贴选项">
         <span class="paste-link-title" :title="pastedLink.title">网页标题：{{ pastedLink.title }}</span>
         <button type="button" @mousedown.prevent @click="convertPastedLink">转换为标题</button>
@@ -935,21 +931,17 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   word-break: break-word;
 }
 
-/* 胶囊输入：高度由内容自己顶起来，min-height 只当地板，46vh 是滚动上限。
+/* 草稿输入：默认三行（3×24.65 行高 + 20 内衬），内容自然撑高，46vh 是滚动上限。
    min-height 不加过渡——伸缩要的是跟手，缓动会让高度慢半拍 */
 .note-editor.v-composer :deep(.ProseMirror) {
   padding: var(--space-3) var(--space-4) var(--space-2);
   font-size: 14.5px;
   line-height: 1.7;
-  min-height: 22px;
+  min-height: 94px;
   max-height: 46vh;
   scrollbar-gutter: stable;
   overflow-y: auto;
 }
-/* 展开态给三行地板（3×24.65 行高 + 20 内衬）：只有一行的书写面写两句就撞底。
-   地板跟着"展开"而不是"聚焦"走——按钮按下先触发 blur，地板若当场收回去，
-   按钮在 mousedown 与 mouseup 之间被抽走，发布就点不动了 */
-.note-editor.v-composer.roomy :deep(.ProseMirror) { min-height: 94px; }
 /* 竖长图只封顶宽会撑出半屏高；书写面里按视口高度收着放，全屏给更大的额度 */
 .note-editor :deep(.img-node img) { max-height: 34vh; object-fit: contain; }
 .note-editor.v-full :deep(.img-node img) { max-height: 60vh; }

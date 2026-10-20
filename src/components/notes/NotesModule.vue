@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { isWebRuntime } from '../../services/runtime'
 import { pickBrowserImage } from '../../services/browserImage'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onDeactivated, onMounted, ref, watch, watchEffect } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useNotesStore } from '../../stores/notes'
 import { useToastStore } from '../../stores/toast'
 import { useClipboard } from '../../composables/useClipboard'
+import { usePageActive } from '../../composables/usePageActive'
 import NoteCard from './NoteCard.vue'
 import NoteComposer from './NoteComposer.vue'
 import NoteFullscreen from './NoteFullscreen.vue'
@@ -26,6 +27,7 @@ import { useWorkspaceLayout, workspaceDirectoryTarget, workspaceToolbarTarget, w
 import WorkspaceDirectoryToggle from '../layout/WorkspaceDirectoryToggle.vue'
 
 const workspaceLayout = useWorkspaceLayout()
+const pageActive = usePageActive()
 
 const VIEWS: { key: NoteView; label: string; icon: IconName }[] = [
   { key: 'all', label: '全部', icon: 'all' },
@@ -138,6 +140,7 @@ const toggleRail = () => {
 /** 收侧栏会抽走一整列宽（--rail-w）：按下去就收，同一次点击的 mousedown/mouseup 会落到不同元素上，
     行尾那颗动作钮（以及它下面的卡头）就成了被吞掉的第一击。改在 click 之后收，钮自己先吃完这次点击 */
 const onRailOutsideClick = (event: MouseEvent) => {
+  if (!pageActive.value) return
   if (workspaceLayout || !railVisible.value || noteRailPinned.value || !(event.target instanceof Node)) return
   if (railEl.value?.contains(event.target) || railToggleEl.value?.contains(event.target)) return
   closeRail()
@@ -342,6 +345,7 @@ const copyNote = (note: Note) =>
   copyRichToClipboard(note.content_html, htmlToLinkText(note.content_html), '小记')
 
 const onKeyDown = (e: KeyboardEvent) => {
+  if (!pageActive.value) return
   if (isPageShortcutBlocked(e)) return
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     if (fsTarget.value) return
@@ -369,6 +373,7 @@ onMounted(() => {
     // 桌面侧拖进来的文件只有原生层知道路径，与局域网传输吃同一窗口级事件；
     // 落点坐标在这套事件里不可靠，所以只看"当前哪张书写面开着"
     void getCurrentWebview().onDragDropEvent((event) => {
+      if (!pageActive.value) return
       if (event.payload.type === 'drop') void dropImages(event.payload.paths)
     }).then((unlisten) => {
       if (active) unlistenDrag = unlisten
@@ -381,12 +386,14 @@ onMounted(() => {
     getComputedStyle(document.documentElement).getPropertyValue('--rail-min-room'))
     || RAIL_FALLBACK_ROOM
   observer = new ResizeObserver((entries) => {
+    if (!pageActive.value) return
     const next = entries[0].contentRect.width >= minRoom
     // 只在真正跨越阈值时改状态：回调里换实例会让 ResizeObserver 无限循环
     if (next !== railRoom.value) railRoom.value = next
   })
   observer.observe(root)
 })
+onDeactivated(() => { void flushNoteSave().catch(() => {}) })
 onBeforeUnmount(() => {
   active = false
   void flushNoteSave().catch(() => {})
@@ -399,6 +406,7 @@ onBeforeUnmount(() => {
 
 const pageHead = usePageHeadStore()
 watchEffect(() => {
+  if (!pageActive.value) return
   const filtered = isArchivedView.value ? hasQueryFilter.value : hasActiveFilters.value
   pageHead.setHead('小记', `${filtered ? `${filteredNotes.value.length} / ${headTotal.value}` : headTotal.value} 条`)
 })
@@ -408,7 +416,7 @@ watchEffect(() => {
   <div ref="pageEl" class="notes-page" :class="{ 'rail-over': railOverlay }" @dragover="onDomDragOver" @drop="onDomDrop">
     <div class="stream">
       <div class="stream-inner" @keydown="onStreamKeydown">
-        <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout" defer>
+        <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
         <div class="page-bar">
           <div class="search-box">
             <span class="search-icon"><AppIcon name="search" :size="16" /></span>
@@ -571,7 +579,7 @@ watchEffect(() => {
       </div>
     </div>
 
-    <Teleport :to="workspaceDirectoryTarget" :disabled="!workspaceLayout" defer>
+    <Teleport :to="workspaceDirectoryTarget" :disabled="!workspaceLayout || !pageActive" defer>
     <aside v-if="railVisible" ref="railEl" class="rail" :class="{ overlay: railOverlay, 'directory-notes': workspaceLayout }">
       <div v-if="!workspaceLayout" class="rail-title rail-heading">
         <span>视图</span>
@@ -663,7 +671,7 @@ watchEffect(() => {
       </button>
     </div>
 
-    <Teleport :to="workspaceSurfaceTarget" :disabled="!workspaceLayout" defer>
+    <Teleport :to="workspaceSurfaceTarget" :disabled="!workspaceLayout || !pageActive" defer>
     <NoteFullscreen
       v-if="fsTarget"
       :key="`${fsTarget}:${fsMode}`"

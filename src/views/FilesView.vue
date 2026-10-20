@@ -2,6 +2,7 @@
 import { storeToRefs } from 'pinia'
 import { useFileShortcutsStore } from '../stores/fileShortcuts'
 import FileShortcutsModule from '../components/files/FileShortcutsModule.vue'
+defineOptions({ name: 'files' })
 
 const fileShortcutsStore = useFileShortcutsStore()
 const {

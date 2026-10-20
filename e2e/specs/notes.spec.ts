@@ -134,9 +134,8 @@ test.describe('Notes 小记', () => {
     await page.locator('a.nav-item[href="/entries"]').click()
     await expect(page).toHaveURL(/\/entries$/)
     await page.locator('a.nav-item[href="/notes"]').click()
-    await expect(composer).toHaveText('顶部  输入的内容，全屏里接着写')
+    await expect(fs).toBeVisible()
     expect(await e2e.count(page, 'create_note')).toBe(0)
-    await tipButton(page.locator('.composer'), '全屏书写').click()
     await expect(fs.locator('.ProseMirror')).toHaveText('顶部  输入的内容，全屏里接着写')
     await fs.locator('.fs-foot button.eb.primary', { hasText: '保存' }).click()
     await expect(fs).toHaveCount(0)
@@ -281,7 +280,7 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.composer .ProseMirror')).toHaveText('')
   })
 
-  test('composer 伸缩：展开给三行地板，越过地板才逐键长', async ({ page }) => {
+  test('composer 默认三行，聚焦不跳高，超过三行后随内容增高', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')
     // scrollHeight 取整、行高 24.65，比对留 2px 余量
@@ -294,8 +293,9 @@ test.describe('Notes 小记', () => {
     const floor = await height()
     const lh = await line()
 
-    // 点进去就是三行：一行的书写面写两句就撞底，逐键伸缩跟不上思路
-    expect(floor - idle).toBeGreaterThanOrEqual(2 * lh - 2)
+    // 初始就预留三行，聚焦不改变输入区高度。
+    expect(idle).toBeGreaterThanOrEqual(3 * lh)
+    expect(Math.abs(floor - idle)).toBeLessThan(2)
 
     // 地板吃得下前两行，不再逐键跳动
     await page.keyboard.type('第一行')
@@ -318,7 +318,7 @@ test.describe('Notes 小记', () => {
     await page.waitForTimeout(300)
     expect(await over(floor)).toBeGreaterThan(2 * lh - 6)
 
-    // 删干净：地板还在（展开态不因失焦收回），按 Esc 才收成一行
+    // 删干净或按 Esc 都保留默认三行。
     await pm.click()
     await page.keyboard.press('Control+a')
     await page.keyboard.press('Backspace')
@@ -327,13 +327,13 @@ test.describe('Notes 小记', () => {
     await expect.poll(async () => await over(idle), { timeout: 3000 }).toBeLessThan(2)
   })
 
-  test('composer 工具条粘滞：失焦不收起，空内容按 Esc 才收起', async ({ page }) => {
+  test('composer 工具栏常显，聚焦、失焦和空内容按 Esc 都不收起', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')
     const bar = page.locator('.composer-bar')
     const visible = () => bar.evaluate((el) => getComputedStyle(el).visibility)
 
-    await expect(visible).resolves.toBe('hidden')
+    await expect(visible).resolves.toBe('visible')
     await pm.click()
     await expect.poll(visible, { timeout: 3000 }).toBe('visible')
 
@@ -343,7 +343,7 @@ test.describe('Notes 小记', () => {
 
     await pm.click()
     await page.keyboard.press('Escape')
-    await expect.poll(visible, { timeout: 3000 }).toBe('hidden')
+    await expect.poll(visible, { timeout: 3000 }).toBe('visible')
   })
 
   test('就地编辑：悬停按钮进入、自动保存、退出编辑', async ({ page }) => {
@@ -474,6 +474,29 @@ test.describe('Notes 小记', () => {
     const bound = snap.attachments.find((a: any) => a.file_path.includes('avatar.png'))
     expect(bound).toBeTruthy()
     expect(bound.note_id).toBeTruthy()
+  })
+
+  test('长小记进入编辑后，初始光标位于文末且保持可见', async ({ page }) => {
+    await bootUnlocked(page, {
+      notes: [{
+        title: '长小记',
+        content_html: Array.from({ length: 100 }, (_, i) => `<p>第 ${i} 段正文</p>`).join(''),
+      }],
+    })
+    await page.locator('.memo').hover()
+    await tipButton(page.locator('.memo'), '编辑').click()
+    const editor = page.locator('.memo.editing .ProseMirror')
+    await expect(editor).toBeFocused()
+    await expect.poll(() => editor.evaluate(el => {
+      const instance = (el as HTMLElement & { editor: Editor }).editor
+      const head = instance.state.selection.head
+      const caret = instance.view.coordsAtPos(head)
+      const bounds = el.getBoundingClientRect()
+      return {
+        atEnd: head === instance.state.doc.content.size - 1,
+        visible: caret.top >= bounds.top && caret.bottom <= bounds.bottom,
+      }
+    })).toEqual({ atEnd: true, visible: true })
   })
 
   test('已有小记配图：上传后图片块插进编辑正文', async ({ page }) => {

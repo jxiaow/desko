@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
 import type { SaveImage } from '../../services/attachmentSrc'
@@ -27,47 +27,18 @@ const insertImage = (src: string) => editorRef.value?.insertImage(src)
 
 defineExpose({ focus, insertImage })
 
-/**
- * 展开态是粘滞的：点开后失焦也不收回——失焦收起会把"只是点了别处"当成"不想写了"，
- * 书写面忽大忽小。收回只有一条路：内容为空时按 Esc，明确表达"我不写了"。
- * 有草稿时本来就必须展开（!empty），免得失焦把内容挤成一行。
- */
-const focused = ref(false)
-const expanded = ref(false)
-const open = computed(() => !props.empty || expanded.value)
-
-const onFocusIn = () => {
-  focused.value = true
-  expanded.value = true
-}
-const onFocusOut = () => {
-  focused.value = false
-}
-const onKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && props.empty && focused.value) {
-    expanded.value = false
-    ;(document.activeElement as HTMLElement | null)?.blur()
-  }
-}
-
-/** 收回一行：展开态是粘滞的，只有明确「不写了」才收。 */
-const collapse = () => {
-  expanded.value = false
-  ;(document.activeElement as HTMLElement | null)?.blur()
-}
-/** 放弃草稿：清空正文（父层 draftHtml 随之落空）并收回一行。本就没落库，无需回退。 */
+/** 放弃草稿：清空正文（父层 draftHtml 随之落空）。本就没落库，无需回退。 */
 const discard = () => {
   emit('update', '')
-  collapse()
+  ;(document.activeElement as HTMLElement | null)?.blur()
 }
 </script>
 
 <template>
-  <section class="composer" :class="{ open }" @focusin="onFocusIn" @focusout="onFocusOut" @keydown="onKeydown">
+  <section class="composer">
     <NoteEditor
       ref="editorRef"
       variant="composer"
-      :roomy="open"
       :initial-content="props.html"
       :save-image="saveImageToDraft"
       placeholder="此刻的想法… 用 #标签 归类"
@@ -95,42 +66,25 @@ const discard = () => {
 </template>
 
 <style scoped>
-/* 默认与搜索框使用同档轻边界；展开时使用卡片实底，聚焦时突出当前书写面。 */
+/* 三行书写面常驻，聚焦时突出当前输入区域。 */
 .composer {
-  background: var(--bg-canvas-input);
+  background: var(--bg-surface);
   border: 1px solid var(--border-composer);
   border-radius: var(--radius-lg);
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
   transition: background-color var(--transition), border-color var(--transition), box-shadow var(--transition);
   margin-bottom: var(--space-5);
-}
-.composer.open {
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-xs);
 }
 /* 焦点态：容器描边转主色 + 3px 光圈，指明当前唯一的书写面 */
 .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }
 
-/* 书写面高度逐键跟随内容，由 NoteEditor 自己落 min-height；这里只管展开/收起工具条 */
-
-/* 收起时工具条整条让位，只留一行输入；展开才滑出来。
-   visibility 不能省：max-height:0 只裁掉绘制，按钮仍可命中，会在输入框下面吃掉一截点击 */
+/* 工具栏固定占位，聚焦、失焦和清空内容时都保持可见。 */
 .composer-bar {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  max-height: 0;
-  overflow: hidden;
-  visibility: hidden;
-  padding: 0 var(--space-3);
-  border-top: 1px solid transparent;
-  transition: max-height var(--transition-slow), padding var(--transition-slow), border-color var(--transition), visibility var(--transition-slow);
-}
-.composer.open .composer-bar {
-  max-height: 48px;
-  visibility: visible;
   padding: var(--space-2) var(--space-3);
-  border-top-color: var(--border);
+  border-top: 1px solid var(--border);
 }
 .composer-hint { font-size: var(--text-xs); color: var(--text-muted); margin-left: var(--space-1); }
 </style>
