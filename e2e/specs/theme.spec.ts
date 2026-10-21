@@ -4,7 +4,7 @@ import { lab } from '../../scripts/lib/theme-tokens.mjs'
 
 // 正式桌面使用纸/墨两套底色和十二种强调色；通过真实设置入口验证全部组合。
 const BASES = {
-  paper: { name: '纸', pol: 'light', bg: 'rgb(252, 252, 252)', text: 'rgb(36, 35, 33)' },
+  paper: { name: '纸', pol: 'light', bg: 'rgb(246, 246, 244)', text: 'rgb(36, 35, 33)' },
   ink: { name: '墨', pol: 'dark', bg: 'rgb(24, 25, 27)', text: 'rgb(223, 225, 229)' },
 } as const
 const ACCENT_HEX = {
@@ -218,7 +218,7 @@ test.describe('主题', () => {
     }
 
     const EXPECT: Record<'paper' | 'ink', { bg: string; color: string }> = {
-      ink: { bg: 'rgb(35, 36, 39)', color: 'rgb(154, 181, 165)' },
+      ink: { bg: 'rgb(38, 40, 44)', color: 'rgb(154, 181, 165)' },
       paper: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
     }
     const order: Array<'paper' | 'ink'> = ['ink', 'paper']

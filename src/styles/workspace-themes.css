@@ -24,17 +24,17 @@
   --workspace-light: #ffffff;
 
   /* 普通卡片保持平整、轻边界；选中、编辑和焦点沿用各自的强调色反馈。 */
-  --border-card: color-mix(in srgb, var(--border) 70%, var(--panel-bg));
-  --border-card-hover: color-mix(in srgb, var(--border-hover) 70%, var(--panel-bg));
+  --border-card: var(--border);
+  --border-card-hover: var(--border-hover);
   --shadow-card-rest: none;
   --shadow-card-hover: none;
   --weight-card-title: 500;
 }
 
 :root[data-layout="workspace"][data-theme="paper"], .workspace-theme-prev[data-theme="paper"] {
-  --bg: #fcfcfc;
+  --bg: #f6f6f4;
   --panel-bg: #ffffff;
-  --sunken: #f3f3f2;
+  --sunken: #ececea;
   --fill: #eeeeed;
   --hover: #f3f3f2;
   --active: #e8e8e6;
@@ -42,6 +42,7 @@
   --border-strong: #cdcdca;
   --border-subtle: #efefed;
   --border-hover: #c1c1be;
+  --border-search: color-mix(in srgb, var(--border) 80%, var(--border-hover));
 }
 
 :root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
@@ -67,15 +68,15 @@
 :root[data-layout="workspace"][data-theme="ink"], .workspace-theme-prev[data-theme="ink"] {
   /* 外框后退、画布居中、卡片抬起；中性深底与独立字阶保留夜间层次。 */
   --bg: #18191b;
-  --panel-bg: #232427;
+  --panel-bg: #26282c;
   --sunken: #111214;
   --sidebar-bg: #121315;
-  --fill: #292b2f;
-  --hover: #2b2d32;
+  --fill: #2c2f33;
+  --hover: #303238;
   --active: #34373d;
   --border: #35383f;
   --border-strong: #4b505a;
-  --border-subtle: #2b2e34;
+  --border-subtle: #30333a;
   --border-hover: #5c626e;
   --shadow-xs: none;
   --shadow-card: none;
@@ -119,6 +120,13 @@
 :root[data-layout="workspace"][data-base="dark"][data-accent="teal"], .workspace-theme-prev[data-base="dark"][data-accent="teal"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="teal"] { --workspace-accent-source: #6bbdb8; }
 :root[data-layout="workspace"][data-base="dark"][data-accent="graphite"], .workspace-theme-prev[data-base="dark"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="graphite"] { --workspace-accent-source: #a7adb4; }
 :root[data-layout="workspace"][data-base="dark"][data-accent="sand"], .workspace-theme-prev[data-base="dark"][data-accent="sand"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="sand"] { --workspace-accent-source: #b4ab9d; }
+
+/* 工作区把分类字母块的色相收一档：归堆感保留，一屏不再先看到彩色格子。 */
+:root[data-layout="workspace"] .grid-card .grid-slot--hue,
+.workspace-theme-prev[data-base] .grid-card .grid-slot--hue {
+  background: color-mix(in srgb, var(--gc-hue) 9%, var(--bg-surface));
+  color: color-mix(in srgb, var(--gc-hue) 55%, var(--text));
+}
 
 :root[data-layout="workspace"] .accent-dot { --accent: var(--workspace-accent-source); --workspace-accent-swatch: var(--workspace-accent-source); background: var(--workspace-accent-swatch); }
 /* 布局主色只用于弹窗外的可用按钮；禁用态与弹窗动作档沿用全局规范。 */

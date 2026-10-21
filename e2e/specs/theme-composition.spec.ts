@@ -31,7 +31,7 @@ async function renderedSurfaces(page: Page) {
       edge: pixel(surface.x + surface.width * .6, surface.y),
       frame: pixel(28, main.y + 100),
       outer: [pixel(canvas.width * .66, 20), pixel(canvas.width - 3, main.y + 100), pixel(main.x + main.width * .4, canvas.height - 2)],
-      panel: pixel(panel.right - 12, panel.y + panel.height * .65),
+      panel: pixel(panel.right - 12, panel.y + panel.height * .9),
       card: pixel(card.right - 10, card.bottom - 10),
       composerBorder: pixel(composer.x, composer.y + composer.height / 2),
       composerBg: pixel(composer.x + 4, composer.y + composer.height / 2),

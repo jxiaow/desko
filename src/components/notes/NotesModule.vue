@@ -808,7 +808,8 @@ watchEffect(() => {
   background: var(--bg-app);
   background-attachment: fixed;
 }
-.day-head.pinned { color: var(--accent); }
+/* 纯强调色在加深后的纸画布上只有 4.37:1；向正文墨色收 20% 保住小字可读性 */
+.day-head.pinned { color: color-mix(in srgb, var(--accent) 80%, var(--text)); }
 .day-count { font-weight: 400; color: var(--text-canvas-meta); }
 .day-list {
   display: flex;

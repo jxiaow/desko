@@ -69,7 +69,7 @@ function onDirectoryClick(event: MouseEvent) {
 #workspace-directory .directory-link svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--text-muted); }
 #workspace-directory .directory-link.active { background: var(--bg-workspace-selected); color: var(--text); font-weight: 500; }
 #workspace-directory .directory-link.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; border-radius: 2px; background: var(--accent); }
-#workspace-directory .directory-link:hover:not(.active) { background: var(--bg-workspace-hover); }
+#workspace-directory .directory-link:hover:not(.active) { background: var(--bg-inspector-hover); }
 #workspace-directory .directory-link.danger { color: var(--danger); }
 #workspace-directory .directory-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #workspace-directory .tab-count, .workspace-directory .directory-count { margin-left: auto; color: var(--text-muted); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }

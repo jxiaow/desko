@@ -157,7 +157,7 @@
 /* 工作区柔光：主光与辅光落在留白两端，卡片、输入与书写面保持实底。
    经典布局与锁屏材质沿用上方配方。 */
 :root[data-layout="workspace"], .workspace-theme-prev[data-base] {
-  --material-inspector-base: #f7f7f6;
+  --material-inspector-base: #f1f1ef;
   --material-workspace-key: oklch(from var(--accent) 0.9 calc(c * 0.55) h);
   --material-workspace-fill: oklch(from var(--accent) 0.92 calc(c * 0.5) calc(h + 24));
   --material-workspace-key-strength: 22%;
@@ -188,6 +188,7 @@
   --bg-workspace-selected: color-mix(in oklab, var(--accent) 10%, var(--panel-bg));
   --bg-workspace-hover: color-mix(in oklab, var(--text) 5%, var(--panel-bg));
   --bg-workspace-search: color-mix(in oklab, var(--panel-bg) 72%, var(--workspace-frame));
+  --bg-inspector-hover: color-mix(in oklab, var(--text) 3.5%, var(--material-inspector-base));
   --bg-workspace-primary: var(--accent);
   --bg-workspace-primary-hover: var(--accent-hover);
   --bg-workspace-primary-active: var(--accent-active);

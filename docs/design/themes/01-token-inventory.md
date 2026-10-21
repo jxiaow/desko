@@ -27,14 +27,14 @@
 
 | 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `--accent` ⟨accent⟩ | #2856c7 | #2856c7 | #2856c7 | #2856c7 | #9bbfff | #9bbfff | #9bbfff | #9bbfff | 主强调色：主按钮底、链接、激活描边 | src/styles/global.css ×46, src/styles/materials.css ×22, src/styles/workspace-themes.css ×14 +39处 / 共 187 |
+| `--accent` ⟨accent⟩ | #2856c7 | #2856c7 | #2856c7 | #2856c7 | #9bbfff | #9bbfff | #9bbfff | #9bbfff | 主强调色：主按钮底、链接、激活描边 | src/styles/global.css ×46, src/styles/materials.css ×22, src/styles/workspace-themes.css ×14 +41处 / 共 196 |
 | `--accent-hover` ⟨accent⟩ | #234bad | #234bad | #234bad | #234bad | #a9c8ff | #a9c8ff | #a9c8ff | #a9c8ff | 主强调色悬停（比 accent 深一档） | src/styles/global.css ×5, src/components/auth/SetupPage.vue, src/components/auth/UnlockPage.vue +2处 / 共 9 |
-| `--accent-active` ⟨accent⟩ | #1e4093 | #1e4093 | #1e4093 | #1e4093 | #86a5dc | #86a5dc | #86a5dc | #86a5dc | 主强调色按下 | src/components/notes/NoteEditor.vue ×6, src/styles/global.css ×3, src/styles/workspace-themes.css ×2 +4处 / 共 15 |
-| `--accent-on` ⟨accent⟩ | #ffffff | #ffffff | #ffffff | #ffffff | #171b22 | #171b22 | #171b22 | #171b22 | accent 底上的文字，恒为最亮/最暗一点 | src/styles/global.css ×7, src/components/codex/CodexModule.vue ×2, src/components/notes/NoteFullscreen.vue ×2 +6处 / 共 17 |
-| `--accent-soft` ⟨accent⟩ | #dde4f6 | #dde4f6 | #dde4f6 | #dde4f6 | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | accent 的浅水洗底：选中行、浅色徽标 | src/styles/global.css ×17, src/components/notes/NoteCard.vue ×4, src/components/notes/NoteEditor.vue ×3 +12处 / 共 36 |
+| `--accent-active` ⟨accent⟩ | #1e4093 | #1e4093 | #1e4093 | #1e4093 | #86a5dc | #86a5dc | #86a5dc | #86a5dc | 主强调色按下 | src/components/notes/NoteEditor.vue ×6, src/styles/global.css ×3, src/styles/workspace-themes.css ×2 +5处 / 共 16 |
+| `--accent-on` ⟨accent⟩ | #ffffff | #ffffff | #ffffff | #ffffff | #171b22 | #171b22 | #171b22 | #171b22 | accent 底上的文字，恒为最亮/最暗一点 | src/styles/global.css ×7, src/components/codex/CodexModule.vue ×2, src/components/notes/NoteFullscreen.vue ×2 +7处 / 共 18 |
+| `--accent-soft` ⟨accent⟩ | #dde4f6 | #dde4f6 | #dde4f6 | #dde4f6 | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | accent 的浅水洗底：选中行、浅色徽标 | src/styles/global.css ×17, src/components/notes/NoteCard.vue ×4, src/components/notes/NoteEditor.vue ×3 +13处 / 共 37 |
 | `--accent-light` ⟨accent⟩ | #c3d0ef | #c3d0ef | #c3d0ef | #c3d0ef | rgba(155, 191, 255, 0.24) | rgba(155, 191, 255, 0.24) | rgba(155, 191, 255, 0.24) | rgba(155, 191, 255, 0.24) | 比 soft 再重一档的 accent 底 | src/components/notes/NoteCard.vue ×2, src/components/entries/EntriesModule.vue, src/components/fileshare/FileShareModule.vue +3处 / 共 7 |
-| `--accent-ring` ⟨accent⟩ | rgba(40, 86, 199, 0.2) | rgba(40, 86, 199, 0.2) | rgba(40, 86, 199, 0.2) | rgba(40, 86, 199, 0.2) | rgba(155, 191, 255, 0.36) | rgba(155, 191, 255, 0.36) | rgba(155, 191, 255, 0.36) | rgba(155, 191, 255, 0.36) | 焦点环 / 外发光 | src/styles/global.css ×5, src/components/mfa/MfaModule.vue ×2, src/components/notes/NoteCard.vue ×2 +9处 / 共 19 |
-| `--text-brand` ⟨accent⟩ | #234bad | #234bad | #234bad | #234bad | #adcbff | #adcbff | #adcbff | #adcbff | accent 族的文字档（链接、激活标签） | src/styles/global.css ×12, src/components/bypass/BypassModule.vue ×2, src/components/layout/Sidebar.vue ×2 +10处 / 共 27 |
+| `--accent-ring` ⟨accent⟩ | rgba(40, 86, 199, 0.2) | rgba(40, 86, 199, 0.2) | rgba(40, 86, 199, 0.2) | rgba(40, 86, 199, 0.2) | rgba(155, 191, 255, 0.36) | rgba(155, 191, 255, 0.36) | rgba(155, 191, 255, 0.36) | rgba(155, 191, 255, 0.36) | 焦点环 / 外发光 | src/styles/global.css ×5, src/components/mfa/MfaModule.vue ×2, src/components/notes/NoteCard.vue ×2 +8处 / 共 18 |
+| `--text-brand` ⟨accent⟩ | #234bad | #234bad | #234bad | #234bad | #adcbff | #adcbff | #adcbff | #adcbff | accent 族的文字档（链接、激活标签） | src/styles/global.css ×12, src/components/bypass/BypassModule.vue ×2, src/components/layout/Sidebar.vue ×2 +11处 / 共 28 |
 | `--badge-ver-bg` ⟨accent⟩ | #dde4f6 | #dde4f6 | #dde4f6 | #dde4f6 | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | rgba(155, 191, 255, 0.1) | 版本胶囊徽标底 | _无人引用_ |
 | `--badge-ver-text` ⟨accent⟩ | #234bad | #234bad | #234bad | #234bad | #adcbff | #adcbff | #adcbff | #adcbff | 版本胶囊徽标字 | _无人引用_ |
 | `--brand-g1` ⟨accent⟩ | #6485d7 | #6485d7 | #6485d7 | #6485d7 | #adcbff | #adcbff | #adcbff | #adcbff | 品牌标渐变上端 | src/components/shared/BrandLogo.vue ×2 / 共 2 |
@@ -49,12 +49,12 @@
 
 | 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `--bg` | #fdfcfb | #ffffff | #faf8f4 | #f7fafe | #1b1c1f | #252932 | #34373f | #282b25 | 窗体画布底（最外层面） | src/styles/materials.css ×12, src/styles/workspace-themes.css ×3, src/components/auth/SetupPage.vue ×2 +7处 / 共 24 |
-| `--panel-bg` | #ffffff | #ffffff | #fffefa | #ffffff | #242529 | #2b303a | #3b3f48 | #30332d | 卡片/面板/弹窗面（占窗面约七成，刻意非纯白） | src/styles/materials.css ×16, src/styles/workspace-themes.css ×3 / 共 19 |
+| `--bg` | #fdfcfb | #ffffff | #faf8f4 | #f7fafe | #1b1c1f | #252932 | #34373f | #282b25 | 窗体画布底（最外层面） | src/styles/materials.css ×12, src/styles/workspace-themes.css ×3, src/components/entries/EntryFields.vue +6处 / 共 22 |
+| `--panel-bg` | #ffffff | #ffffff | #fffefa | #ffffff | #242529 | #2b303a | #3b3f48 | #30332d | 卡片/面板/弹窗面（占窗面约七成，刻意非纯白） | src/styles/materials.css ×17, src/styles/workspace-themes.css ×3 / 共 20 |
 | `--chrome-bg` | rgba(253, 252, 251, 0.9) | rgba(255, 255, 255, 0.92) | rgba(250, 248, 244, 0.92) | rgba(247, 250, 254, 0.92) | rgba(27, 28, 31, 0.9) | rgba(37, 41, 50, 0.86) | rgba(52, 55, 63, 0.9) | rgba(40, 43, 37, 0.9) | 标题栏一类的半透明吸顶底 | _无人引用_ |
-| `--sunken` | #f8f7f5 | #fafbfc | #f4f1eb | #eff4fa | #141518 | #1f232b | #2e3139 | #22251f | 下陷面：输入槽、代码底、字母块、页栏铺底 | src/styles/materials.css ×7, src/styles/global.css ×4, src/components/bypass/BypassModule.vue +5处 / 共 17 |
-| `--fill` | #efede9 | #eff1f4 | #eae6dd | #e4ebf4 | #2d2f34 | #323844 | #444953 | #3b3f36 | 中性填充：进度槽、占位块、次级底 | src/styles/global.css ×9, src/components/codex/CodexPlanBadge.vue ×2, src/components/codex/CodexTodayUsageChart.vue ×2 +12处 / 共 26 |
-| `--hover` | #f5f3f0 | #f4f6f8 | #f4f0e8 | #edf3fa | #2c2e33 | #323844 | #444852 | #393d34 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） | src/styles/global.css ×15, src/components/notes/NoteEditor.vue ×2, src/components/notes/NotesModule.vue ×2 +12处 / 共 33 |
+| `--sunken` | #f8f7f5 | #fafbfc | #f4f1eb | #eff4fa | #141518 | #1f232b | #2e3139 | #22251f | 下陷面：输入槽、代码底、字母块、页栏铺底 | src/styles/materials.css ×7, src/styles/global.css ×4, src/components/codex/CodexUsageShareDialog.vue ×2 +7处 / 共 20 |
+| `--fill` | #efede9 | #eff1f4 | #eae6dd | #e4ebf4 | #2d2f34 | #323844 | #444953 | #3b3f36 | 中性填充：进度槽、占位块、次级底 | src/styles/global.css ×9, src/components/codex/CodexModule.vue ×2, src/components/codex/CodexPlanBadge.vue ×2 +13处 / 共 28 |
+| `--hover` | #f5f3f0 | #f4f6f8 | #f4f0e8 | #edf3fa | #2c2e33 | #323844 | #444852 | #393d34 | 行/卡片悬停底（必须与 --panel-bg 保持约 5 级差） | src/styles/global.css ×15, src/components/notes/NoteEditor.vue ×2, src/components/notes/NotesModule.vue ×2 +13处 / 共 34 |
 | `--active` | #eae7e2 | #e8edf3 | #e9e3d8 | #e0e9f4 | #363940 | #3b4351 | #4b505b | #41463b | 行/项按下选中底 | src/styles/materials.css / 共 1 |
 | `--overlay` | rgba(29, 28, 26, 0.42) | rgba(18, 19, 22, 0.42) | rgba(29, 28, 26, 0.42) | rgba(18, 19, 22, 0.42) | rgba(0, 0, 0, 0.62) | rgba(0, 0, 0, 0.65) | rgba(0, 0, 0, 0.65) | rgba(0, 0, 0, 0.62) | 遮罩层（弹窗背后的那层压暗） | src/components/entries/EntryFormDialog.vue, src/components/entries/PathsDialog.vue, src/components/files/FileShortcutsModule.vue +4处 / 共 7 |
 
@@ -62,20 +62,20 @@
 
 | 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `--text` | #242321 | #20242b | #302c25 | #263244 | #f1f2f4 | #edf0f6 | #d7dbe4 | #d8dacf | 正文一级字 | src/styles/global.css ×28, src/components/notes/NoteEditor.vue ×9, src/components/settings/SettingsDialog.vue ×8 +44处 / 共 152 |
-| `--text-secondary` | #53514d | #4c5664 | #575046 | #4c5b70 | #cbd0d8 | #d2d7e1 | #c6ccd6 | #c1c7b9 | 二级字（说明、次要字段） | src/styles/global.css ×24, src/components/codex/CodexUsagePanel.vue ×6, src/components/notes/NoteEditor.vue ×6 +40处 / 共 112 |
-| `--text-muted` | #6d6963 | #667181 | #70685c | #617188 | #adb5c1 | #bbc3d0 | #bbc2cf | #adb6a6 | 三级字（标签、时间戳） | src/styles/global.css ×35, src/components/codex/CodexSessionsPanel.vue ×11, src/components/codex/CodexUsagePanel.vue ×10 +50处 / 共 189 |
-| `--text-faint` | #77726c | #727c89 | #776d5f | #697990 | #969fac | #adb6c5 | #a6afbf | #98a18e | 四级字（占位、辅助）——深色下最低 5.8:1 底线 | src/components/codex/CodexTrashPanel.vue ×2, src/components/entries/EntriesModule.vue ×2, src/components/entries/EntryFields.vue ×2 +15处 / 共 25 |
+| `--text` | #242321 | #20242b | #302c25 | #263244 | #f1f2f4 | #edf0f6 | #d7dbe4 | #d8dacf | 正文一级字 | src/styles/global.css ×28, src/components/notes/NoteEditor.vue ×9, src/components/settings/SettingsDialog.vue ×8 +45处 / 共 160 |
+| `--text-secondary` | #53514d | #4c5664 | #575046 | #4c5b70 | #cbd0d8 | #d2d7e1 | #c6ccd6 | #c1c7b9 | 二级字（说明、次要字段） | src/styles/global.css ×24, src/components/codex/CodexUsagePanel.vue ×6, src/components/notes/NoteEditor.vue ×6 +42处 / 共 121 |
+| `--text-muted` | #6d6963 | #667181 | #70685c | #617188 | #adb5c1 | #bbc3d0 | #bbc2cf | #adb6a6 | 三级字（标签、时间戳） | src/styles/global.css ×36, src/components/codex/CodexSessionsPanel.vue ×11, src/components/codex/CodexUsagePanel.vue ×10 +52处 / 共 195 |
+| `--text-faint` | #77726c | #727c89 | #776d5f | #697990 | #969fac | #adb6c5 | #a6afbf | #98a18e | 四级字（占位、辅助）——深色下最低 5.8:1 底线 | src/components/codex/CodexTrashPanel.vue ×2, src/components/entries/EntriesModule.vue ×2, src/components/entries/EntryFields.vue ×2 +16处 / 共 26 |
 | `--text-url` | #53514d | #4c5664 | #575046 | #4c5b70 | #cbd0d8 | #d2d7e1 | #c6ccd6 | #c1c7b9 | 裸链接字色 | src/components/fileshare/FileShareModule.vue ×3, src/components/entries/EntriesModule.vue, src/components/files/FileShortcutsModule.vue +2处 / 共 7 |
 
 ### 描边
 
 | 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `--border` | #e8e5e0 | #e4e8ed | #e6e0d5 | #dce5ef | #35383f | #3e4654 | #505560 | #43493d | 发丝描边：卡片/输入/分隔，分层主力 | src/styles/global.css ×35, src/components/fileshare/FileShareModule.vue ×9, src/components/notes/NoteEditor.vue ×7 +42处 / 共 135 |
+| `--border` | #e8e5e0 | #e4e8ed | #e6e0d5 | #dce5ef | #35383f | #3e4654 | #505560 | #43493d | 发丝描边：卡片/输入/分隔，分层主力 | src/styles/global.css ×30, src/components/fileshare/FileShareModule.vue ×8, src/components/notes/NoteEditor.vue ×7 +43处 / 共 130 |
 | `--border-strong` | #d4cfc7 | #cbd2db | #d1c6b6 | #c2cfdf | #4c525d | #535f71 | #666d7b | #5e6755 | 重描边：需要压住的边界、--shadow 的 1px 环 | src/styles/global.css ×4, src/components/notes/NoteEditor.vue ×3, src/components/settings/SettingsDialog.vue ×2 +8处 / 共 17 |
 | `--border-subtle` | #f1efeb | #f0f2f5 | #efebe3 | #eaf0f7 | #2c2e34 | #303743 | #41454f | #353a30 | 极浅描边（比 --border 更退） | src/components/bypass/BypassProbeDialog.vue, src/components/settings/WebAccessPane.vue, src/styles/global.css / 共 3 |
-| `--border-hover` | #c9c3ba | #b9c3d0 | #c4b7a4 | #b2c3d9 | #4c525d | #535f71 | #666d7b | #5e6755 | 悬停描边 | src/styles/global.css ×3, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue +1处 / 共 7 |
+| `--border-hover` | #c9c3ba | #b9c3d0 | #c4b7a4 | #b2c3d9 | #4c525d | #535f71 | #666d7b | #5e6755 | 悬停描边 | src/components/bypass/BypassModule.vue ×2, src/styles/workspace-themes.css ×2, src/components/fileshare/FileShareModule.vue +1处 / 共 6 |
 
 ### 徽标
 
@@ -89,13 +89,13 @@
 
 | 槽位 | paper（纸） | snow（雪） | linen（绢） | mist（雾） | ink（墨） | slate（岩） | midnight（夜） | moss（苔） | 涂在哪里 | 消费点 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `--shadow-xs` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 最小投影 | src/styles/global.css ×3, src/components/auth/UnlockPage.vue, src/components/notes/NoteComposer.vue +1处 / 共 6 |
-| `--shadow-card` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 行卡投影（轻量化轮起只留一丝贴地感） | src/styles/global.css ×8, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue ×2 +6处 / 共 19 |
+| `--shadow-xs` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 最小投影 | src/styles/global.css ×3, src/components/auth/SetupPage.vue, src/components/auth/UnlockPage.vue +2处 / 共 7 |
+| `--shadow-card` | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | 0 1px 2px 0 rgba(29, 28, 26, 0.04) | 0 1px 2px 0 rgba(18, 19, 22, 0.04) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.05) | 行卡投影（轻量化轮起只留一丝贴地感） | src/components/bypass/BypassModule.vue ×2, src/styles/global.css ×2, src/components/fileshare/FileShareModule.vue +3处 / 共 8 |
 | `--shadow-sm` | 0 1px 3px 0 rgba(29, 28, 26, 0.05) | 0 1px 3px 0 rgba(18, 19, 22, 0.05) | 0 1px 3px 0 rgba(29, 28, 26, 0.05) | 0 1px 3px 0 rgba(18, 19, 22, 0.05) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | inset 0 1px 0 rgba(255, 255, 255, 0.07) | 小投影 | src/styles/global.css ×4, src/components/notes/NoteCard.vue ×2, src/components/fileshare/FileShareModule.vue +2处 / 共 9 |
 | `--shadow` | 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d4cfc7 | 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #cbd2db | 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d1c6b6 | 0 4px 12px -2px rgba(18, 19, 22, 0.06), 0 0 0 1px #c2cfdf | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #4c525d | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #535f71 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #535f71 | 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #434340 | 常规浮层投影（带 1px 描边环） | _无人引用_ |
-| `--shadow-md` | 0 6px 16px -6px rgba(29, 28, 26, 0.10) | 0 6px 16px -6px rgba(18, 19, 22, 0.10) | 0 6px 16px -6px rgba(29, 28, 26, 0.10) | 0 6px 16px -6px rgba(18, 19, 22, 0.10) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 中投影 | src/styles/global.css ×2, src/components/auth/SetupPage.vue, src/components/mfa/MfaModule.vue / 共 4 |
-| `--shadow-lg` | 0 12px 28px -8px rgba(29, 28, 26, 0.14) | 0 12px 28px -8px rgba(18, 19, 22, 0.14) | 0 12px 28px -8px rgba(29, 28, 26, 0.14) | 0 12px 28px -8px rgba(18, 19, 22, 0.14) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 大投影 | src/components/auth/SetupPage.vue / 共 1 |
-| `--shadow-pop` | 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 弹层/菜单投影（最高一档常规浮面） | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×4, src/components/layout/WebModuleDrawer.vue +4处 / 共 14 |
+| `--shadow-md` | 0 6px 16px -6px rgba(29, 28, 26, 0.10) | 0 6px 16px -6px rgba(18, 19, 22, 0.10) | 0 6px 16px -6px rgba(29, 28, 26, 0.10) | 0 6px 16px -6px rgba(18, 19, 22, 0.10) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 0 8px 24px -4px rgba(0, 0, 0, 0.65) | 中投影 | src/styles/global.css / 共 1 |
+| `--shadow-lg` | 0 12px 28px -8px rgba(29, 28, 26, 0.14) | 0 12px 28px -8px rgba(18, 19, 22, 0.14) | 0 12px 28px -8px rgba(29, 28, 26, 0.14) | 0 12px 28px -8px rgba(18, 19, 22, 0.14) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 0 16px 36px -8px rgba(0, 0, 0, 0.75) | 大投影 | _无人引用_ |
+| `--shadow-pop` | 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 16px 36px -8px rgba(18, 19, 22, 0.12), 0 4px 10px -2px rgba(18, 19, 22, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) | 弹层/菜单投影（最高一档常规浮面） | src/styles/global.css ×5, src/components/notes/NoteEditor.vue ×4, src/components/layout/WebModuleDrawer.vue +3处 / 共 13 |
 | `--shadow-dock` | 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14) | 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14) | 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14) | 0 26px 60px -18px rgba(18, 19, 22, 0.32), 0 6px 18px rgba(18, 19, 22, 0.14) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09) | 批量操作药丸投影（高于任何弹层） | src/styles/global.css / 共 1 |
 
 ### 状态色
@@ -107,7 +107,7 @@
 | `--danger-hover` | #8c362f | #992e26 | #8c362f | #992e26 | #ea9d97 | #e89e99 | #e89e99 | #ea9d97 | 危险悬停 | src/components/fileshare/FileShareModule.vue, src/components/tunnel/TunnelModule.vue, src/styles/global.css / 共 3 |
 | `--danger-soft` | #f7ece9 | #faecea | #f7ece9 | #faecea | #271a17 | #271a19 | #271a19 | #271a17 | 危险浅底 | src/styles/global.css ×8, src/components/fileshare/FileShareModule.vue ×3, src/components/tunnel/TunnelModule.vue ×2 +3处 / 共 16 |
 | `--danger-border` | #eacfc8 | #f0cfcb | #eacfc8 | #f0cfcb | #462924 | #472927 | #472927 | #462924 | 危险描边 | src/components/fileshare/FileShareModule.vue ×2, src/components/entries/DetailDialog.vue, src/components/tunnel/TunnelModule.vue +1处 / 共 5 |
-| `--success` | #3d7355 | #2e7a50 | #396c50 | #286b46 | #6fbf95 | #6cbd94 | #6cbd94 | #6fbf95 | 成功实色 | src/styles/global.css ×6, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue ×2 +9处 / 共 20 |
+| `--success` | #3d7355 | #2e7a50 | #396c50 | #286b46 | #6fbf95 | #6cbd94 | #6cbd94 | #6fbf95 | 成功实色 | src/styles/global.css ×6, src/components/bypass/BypassModule.vue ×2, src/components/fileshare/FileShareModule.vue ×2 +10处 / 共 22 |
 | `--success-soft` | #ecf3ee | #eaf4ee | #ecf3ee | #eaf4ee | #17211c | #16221d | #16221d | #17211c | 成功浅底 | src/styles/global.css ×4, src/components/codex/ResetCreditDialog.vue, src/components/layout/TitleBar.vue / 共 6 |
 | `--warning` | #96682a | #9c681e | #815924 | #815619 | #d9a95f | #d9aa63 | #d9aa63 | #d9a95f | 警告实色 | src/styles/global.css ×7, src/components/mfa/MfaModule.vue ×4, src/components/notes/NoteCard.vue ×3 +10处 / 共 31 |
 | `--warning-soft` | #f6efdf | #f9f0df | #f6efdf | #f9f0df | #241e13 | #251f15 | #251f15 | #241e13 | 警告浅底 | src/styles/global.css ×4, src/components/codex/CodexAuthDialog.vue, src/components/fileshare/FileShareModule.vue +1处 / 共 7 |
@@ -322,11 +322,14 @@
 | `--border-focus` | var(--accent) |
 | `--text-primary` | var(--text) |
 | `--border-line` | var(--border) |
+| `--border-card` | var(--border) |
 | `--border-card-hover` | var(--border-hover) |
 | `--border-input` | var(--border) |
 | `--border-divider` | var(--border-subtle) |
 | `--text-title` | var(--text) |
 | `--text-body` | var(--text-secondary) |
+| `--shadow-card-rest` | var(--shadow-card) |
+| `--shadow-card-hover` | var(--shadow-md) |
 | `--shadow-popover` | var(--shadow-pop) |
 | `--radius-card` | var(--radius-lg) |
 | `--radius-badge` | var(--radius) |
@@ -479,7 +482,7 @@
 | `:root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"]` | `--bg-app` | var(--sunken) |
 | `:root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"]` | `--bg-lock` | var(--bg) |
 | `:root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"]` | `--material-decoration-display` | none |
-| `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--material-inspector-base` | #f7f7f6 |
+| `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--material-inspector-base` | #f1f1ef |
 | `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--material-workspace-key` | oklch(from var(--accent) 0.9 calc(c * 0.55) h) |
 | `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--material-workspace-fill` | oklch(from var(--accent) 0.92 calc(c * 0.5) calc(h + 24)) |
 | `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--material-workspace-key-strength` | 22% |
@@ -499,6 +502,7 @@
 | `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--bg-workspace-selected` | color-mix(in oklab, var(--accent) 10%, var(--panel-bg)) |
 | `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--bg-workspace-hover` | color-mix(in oklab, var(--text) 5%, var(--panel-bg)) |
 | `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--bg-workspace-search` | color-mix(in oklab, var(--panel-bg) 72%, var(--workspace-frame)) |
+| `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--bg-inspector-hover` | color-mix(in oklab, var(--text) 3.5%, var(--material-inspector-base)) |
 | `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--bg-workspace-primary` | var(--accent) |
 | `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--bg-workspace-primary-hover` | var(--accent-hover) |
 | `:root[data-layout="workspace"], .workspace-theme-prev[data-base]` | `--bg-workspace-primary-active` | var(--accent-active) |

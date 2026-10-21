@@ -291,7 +291,7 @@ for (const theme of ['paper', 'ink']) {
     await expect(page.locator('.workspace-main')).toHaveCSS('background-image', 'none')
     await expect(page.locator('.workspace-directory')).toHaveCSS('background-image', 'none')
     expect((await background('.workspace-main')).color).toBe(workspace.color)
-    expect((await background('.workspace-directory')).color).toBe(theme === 'ink' ? 'rgb(27, 28, 31)' : 'rgb(247, 247, 246)')
+    expect((await background('.workspace-directory')).color).toBe(theme === 'ink' ? 'rgb(27, 28, 31)' : 'rgb(241, 241, 239)')
     expect(await background('.memo:not(.editing) >> nth=0')).toEqual(card)
     await control.locator('label.switch').click()
     await expect(control.getByRole('switch')).toBeEnabled()

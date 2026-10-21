@@ -11,8 +11,8 @@ const output = process.argv[2] || '.tmp/daylight-20261020'
 const source = readFileSync('src/services/theme.ts', 'utf8')
 const accents = [...source.match(/export const WORKSPACE_ACCENTS = \[([\s\S]*?)\]/)[1].matchAll(/id: '([^']+)'/g)].map(match => match[1])
 const bases = {
-  paper: ['#fcfcfc', '#ffffff', '#efefee', '#ffffff'],
-  ink: ['#18191b', '#232427', '#121315', '#393b40'],
+  paper: ['#f6f6f4', '#ffffff', '#efefee', '#ffffff'],
+  ink: ['#18191b', '#26282c', '#121315', '#393b40'],
 }
 const names = Object.keys(bases)
 const seed = {
