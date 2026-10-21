@@ -36,6 +36,7 @@ for (const width of [800, 1235]) {
       { sessionId: 'other', title: '其他模型的会话', cwd: 'C:\\demo', daysAgo: 0, input: 1000, output: 100, model: 'other-model', turns: 1 },
     ] } })
     const row = page.locator('.usg-model-row[data-model="gpt-5.4"]')
+    await expect(row).toHaveAttribute('title', /合计 165万 · 净输入 30万 · 缓存 120万 · 输出 15万/)
     await row.focus()
     await page.keyboard.press('Enter')
     const detail = page.getByRole('region', { name: 'gpt-5.4 会话用量', exact: true })
@@ -110,6 +111,7 @@ test('大额用量换算万和亿，悬停仍能核对完整数字', async ({ pa
   await expect(page.locator('.usg-metrics dd')).toHaveText(['3亿', '12亿', '2亿'])
   await page.getByRole('button', { name: '近 7 天', exact: true }).click()
   await expect(page.locator('.usg-day-total')).toHaveText('17亿')
+  await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveAttribute('title', /合计 17亿 Token · 净输入 3亿 · 缓存 12亿 · 输出 2亿/)
   await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveAttribute('aria-label', /合计 1,700,000,000 Token/)
 })
 
@@ -139,6 +141,7 @@ test('默认展示今天的总量、构成与模型，昨天不会计入当天',
   await expect(page.getByRole('region', { name: '今日小时用量趋势', exact: true })).toBeVisible()
   await expect(page.locator('.hourly-svg [data-hour]').last()).toHaveAttribute('data-tokens', '13700')
   await expect(page.locator('.composition-legend')).toContainText('80.3%')
+  await expect(page.locator('[data-part="cached"]')).toHaveAttribute('title', '缓存命中 1.1万 · 80.3%')
   const widths = await page.locator('.composition-track > span').evaluateAll(elements => elements.map(element => parseFloat((element as HTMLElement).style.width)))
   expect(widths[0]).toBeCloseTo(1300 / 13700 * 100, 2)
   expect(widths[1]).toBeCloseTo(11000 / 13700 * 100, 2)
@@ -251,6 +254,8 @@ test('同小时记录合并为真实用量，可聚焦查看小时数值，未�
   const pointTotal = await page.locator('.hourly-svg [data-hour]').evaluateAll(points => points.reduce((sum, point) => sum + Number(point.getAttribute('data-tokens')), 0))
   expect(pointTotal).toBe(15350)
   await expect(page.locator('.today-peak')).toContainText('1.48万')
+  await expect(page.locator(`[data-hour="${peakClock}"] title`)).toHaveText(/· 1\.48万 Token ·/)
+  await expect(page.locator(`[data-hour="${peakClock}"] .hour-target`)).toHaveAttribute('aria-label', /· 14,800 Token ·/)
   await page.locator('.hour-target').last().focus()
   await expect(page.locator('.hour-detail')).toContainText('550 Token')
   await expect(page.locator('.hour-detail')).toContainText('本小时累计')

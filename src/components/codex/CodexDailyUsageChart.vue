@@ -35,8 +35,9 @@ const plots = computed(() => ([
 }))
 const height = (amount: number, maximum: number) => `${maximum ? amount / maximum * 100 : 0}%`
 const label = (index: number) => days.value.length <= 8 || index === 0 || index === days.value.length - 1 || index % 5 === 0
-const title = (day: CodexUsageBucket & { recorded: boolean }) => day.recorded
-  ? `${day.key} · 合计 ${num(day.totalTokens)} Token · 净输入 ${num(fresh(day))} · 缓存 ${num(day.cachedInputTokens)} · 输出 ${num(day.outputTokens)} · ${num(day.requestCount)} 次请求 · 估算 ${formatUsageCost(day.estimatedCostUsd)}`
+/** 悬停那句读中文单位，可访问名称留完整计数用于核对——与 .usg-num 的 title 同一分工 */
+const title = (day: CodexUsageBucket & { recorded: boolean }, format: (value: number) => string) => day.recorded
+  ? `${day.key} · 合计 ${format(day.totalTokens)} Token · 净输入 ${format(fresh(day))} · 缓存 ${format(day.cachedInputTokens)} · 输出 ${format(day.outputTokens)} · ${num(day.requestCount)} 次请求 · 估算 ${formatUsageCost(day.estimatedCostUsd)}`
   : `${day.key} · 无本地用量记录`
 function move(event: KeyboardEvent) {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
@@ -65,7 +66,7 @@ function move(event: KeyboardEvent) {
           <div class="daily-grid">
             <div class="metric-grid" aria-hidden="true"><i class="grid-line top" /><i class="grid-line middle" /><i class="grid-line base" /></div>
             <div class="daily-columns" :style="{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }" @keydown="move">
-              <button v-for="(day, index) in days" :key="day.key" class="daily-column" type="button" :class="[{ selected: selected?.key === day.key }, plot.key === 'total' ? 'usg-col' : 'usg-mini-col']" :data-day="day.key" :data-recorded="day.recorded" :aria-label="title(day)" :title="title(day)" :aria-pressed="selected?.key === day.key" :tabindex="selected?.key === day.key ? 0 : -1" @mouseenter="activeKey = day.key" @focus="activeKey = day.key" @click="activeKey = day.key">
+              <button v-for="(day, index) in days" :key="day.key" class="daily-column" type="button" :class="[{ selected: selected?.key === day.key }, plot.key === 'total' ? 'usg-col' : 'usg-mini-col']" :data-day="day.key" :data-recorded="day.recorded" :aria-label="title(day, num)" :title="title(day, compact)" :aria-pressed="selected?.key === day.key" :tabindex="selected?.key === day.key ? 0 : -1" @mouseenter="activeKey = day.key" @focus="activeKey = day.key" @click="activeKey = day.key">
                 <span v-if="plot.key === 'total'" class="usg-stack" :class="{ 'has-value': day.totalTokens > 0 }" :data-value="day.totalTokens" :style="{ height: height(day.totalTokens, plot.maximum) }" aria-hidden="true">
                   <span v-for="metric in metrics" :key="metric.key" class="usg-bar usg-segment" :class="`usg-${metric.key}`" :data-metric="metric.key" :data-value="value(day, metric.key)" :style="{ height: height(value(day, metric.key), day.totalTokens) }" />
                 </span>

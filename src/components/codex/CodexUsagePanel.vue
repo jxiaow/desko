@@ -140,7 +140,7 @@ function pct(part: number, whole: number): number {
       <section v-if="models.length" class="rcard usg-models" aria-label="模型用量">
         <div class="usg-heading"><h3>按模型</h3></div>
         <div v-for="m in models" :key="m.key" class="usg-model">
-          <button type="button" class="usg-model-row" :data-model="m.key" :aria-expanded="openModel === m.key" :aria-controls="`model-sessions-${m.key}`" :title="`${m.label}：合计 ${num(m.totalTokens)} · 净输入 ${num(freshInput(m))} · 缓存 ${num(m.cachedInputTokens)} · 输出 ${num(m.outputTokens)}；展开查看会话明细`" @click="openModel = openModel === m.key ? '' : m.key">
+          <button type="button" class="usg-model-row" :data-model="m.key" :aria-expanded="openModel === m.key" :aria-controls="`model-sessions-${m.key}`" :title="`${m.label}：合计 ${compact(m.totalTokens)} · 净输入 ${compact(freshInput(m))} · 缓存 ${compact(m.cachedInputTokens)} · 输出 ${compact(m.outputTokens)}；展开查看会话明细`" @click="openModel = openModel === m.key ? '' : m.key">
             <span class="usg-model-name">{{ m.label }}</span>
             <span class="usg-track"><span class="usg-fill" :style="{ width: `${pct(m.totalTokens, totals.totalTokens)}%` }"></span></span>
             <span class="usg-model-num mono-ish" :title="`${num(m.totalTokens)} Token`">{{ compact(m.totalTokens) }}</span>

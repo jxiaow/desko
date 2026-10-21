@@ -45,7 +45,8 @@ const parts = computed(() => {
 const partsTotal = computed(() => parts.value.reduce((sum, part) => sum + part.value, 0))
 const share = (value: number) => partsTotal.value > 0 ? value / partsTotal.value * 100 : 0
 
-function hourTitle(hour: CodexUsageHour, format = num): string {
+/** 每个调用点自己说清要哪种数：悬停句子里用换算单位，可访问名称和核对 title 留完整计数 */
+function hourTitle(hour: CodexUsageHour, format: (value: number) => string): string {
   const until = hour.endTimestamp === end.value ? '24:00' : hours.value.find(next => next.timestamp === hour.endTimestamp)?.label ?? clock(hour.endTimestamp)
   return `${hour.label}–${until} · ${format(hour.totalTokens)} Token · ${num(hour.requestCount)} 次请求 · 估算 ${formatUsageCost(hour.estimatedCostUsd)}${hour.endTimestamp > asOf.value ? ' · 本小时累计' : ''}`
 }
@@ -75,20 +76,20 @@ function hourTitle(hour: CodexUsageHour, format = num): string {
       <line v-if="selected" class="hour-guide" :x1="x(selected.timestamp)" :x2="x(selected.timestamp)" :y1="plot.top" :y2="plot.bottom" />
       <g v-for="hour in observed" :key="hour.key" :data-hour="hour.label" :data-tokens="hour.totalTokens">
         <circle class="hour-dot" :cx="x(hour.timestamp)" :cy="y(hour.totalTokens)" :r="hour.key === selected?.key ? 4 : 2" />
-        <circle class="hour-target" :cx="x(hour.timestamp)" :cy="y(hour.totalTokens)" r="10" role="button" tabindex="0" :aria-label="hourTitle(hour)" @mouseenter="activeKey = hour.key" @focus="activeKey = hour.key" @click="activeKey = hour.key" @keydown.enter="activeKey = hour.key" @keydown.space.prevent="activeKey = hour.key">
-          <title>{{ hourTitle(hour) }}</title>
+        <circle class="hour-target" :cx="x(hour.timestamp)" :cy="y(hour.totalTokens)" r="10" role="button" tabindex="0" :aria-label="hourTitle(hour, num)" @mouseenter="activeKey = hour.key" @focus="activeKey = hour.key" @click="activeKey = hour.key" @keydown.enter="activeKey = hour.key" @keydown.space.prevent="activeKey = hour.key">
+          <title>{{ hourTitle(hour, compact) }}</title>
         </circle>
       </g>
       <text v-for="tick in xTicks" :key="tick.key" class="hour-x" :x="x(tick.timestamp)" y="204" text-anchor="middle">{{ tick.label }}</text>
     </svg>
     <div v-if="selected" class="hour-detail" aria-live="polite">
-      <b :title="hourTitle(selected)">{{ hourTitle(selected, compact) }}</b>
+      <b :title="hourTitle(selected, num)">{{ hourTitle(selected, compact) }}</b>
       <span :title="`净输入 ${num(Math.max(0, selected.inputTokens - selected.cachedInputTokens))} · 缓存 ${num(selected.cachedInputTokens)} · 输出 ${num(selected.outputTokens)}`">净输入 {{ compact(Math.max(0, selected.inputTokens - selected.cachedInputTokens)) }} · 缓存 {{ compact(selected.cachedInputTokens) }} · 输出 {{ compact(selected.outputTokens) }}</span>
     </div>
     <div class="composition">
       <div class="today-heading"><h3>今日用量构成</h3></div>
       <div class="composition-track" role="img" :aria-label="parts.map(part => `${part.label} ${num(part.value)}，${share(part.value).toFixed(1)}%`).join('；')">
-        <span v-for="part in parts" :key="part.key" :class="`part-${part.key}`" :data-part="part.key" :style="{ width: `${share(part.value)}%` }" :title="`${part.label} ${num(part.value)} · ${share(part.value).toFixed(1)}%`"></span>
+        <span v-for="part in parts" :key="part.key" :class="`part-${part.key}`" :data-part="part.key" :style="{ width: `${share(part.value)}%` }" :title="`${part.label} ${compact(part.value)} · ${share(part.value).toFixed(1)}%`"></span>
       </div>
       <div class="composition-legend">
         <div v-for="part in parts" :key="part.key" class="composition-item">
