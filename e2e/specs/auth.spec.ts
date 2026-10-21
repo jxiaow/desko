@@ -7,6 +7,8 @@ test.describe('认证流程', () => {
     await startApp(page, { config: { initialized: false } })
     const auth = new AuthPage(page)
     await auth.expectSetupPage()
+    await expect(page.locator('.titlebar-locked')).toBeVisible()
+    await expect(page.locator('.setup-error-slot')).toBeAttached()
 
     await auth.completeSetup('123', '123')
     await expect(auth.setupError).toHaveText('主密码至少需要 6 位')

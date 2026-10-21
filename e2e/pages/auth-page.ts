@@ -18,13 +18,13 @@ export class AuthPage {
   }
 
   // ---- SetupPage ----
-  get setupCard() { return this.page.locator('.auth-card') }
-  get setupInputs() { return this.page.locator('.auth-input') }
-  get setupButton() { return this.page.locator('.auth-btn') }
-  get setupError() { return this.page.locator('.auth-error') }
+  get setupPage() { return this.page.locator('.setup-page') }
+  get setupInputs() { return this.page.locator('.setup-input') }
+  get setupButton() { return this.page.locator('.setup-submit') }
+  get setupError() { return this.page.locator('.setup-error') }
 
   async expectSetupPage() {
-    await expect(this.setupCard).toBeVisible()
+    await expect(this.setupPage).toBeVisible()
   }
 
   async completeSetup(password: string, confirm: string) {

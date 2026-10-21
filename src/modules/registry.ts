@@ -41,6 +41,8 @@ export interface ModuleDef {
   title: string
   /** 设置「模块」页签里那句功能差异说明 */
   desc: string
+  /** 首个模块选择页卡面上的单行说明 */
+  brief: string
   icon: IconName
   view: () => Promise<Component>
   /** 侧栏计数位；不声明就没有计数 */
@@ -75,6 +77,7 @@ export const MODULES: ModuleDef[] = [
     settingKey: 'notes_enabled',
     title: '小记',
     desc: '随手记文本与图片，可给单条上口令',
+    brief: '文本与图片，可单独上口令',
     icon: 'navNotes',
     count: () => useNotesStore().notes.length,
     boot: () => useNotesStore().fetchNotes(),
@@ -93,6 +96,7 @@ export const MODULES: ModuleDef[] = [
     settingKey: 'entries_enabled',
     title: '网址收藏',
     desc: '网址与随行的账号口令，按标签分组',
+    brief: '网址与账号口令，按标签分组',
     icon: 'navEntries',
     count: () => useEntriesStore().entries.length,
     boot: () =>
@@ -109,6 +113,7 @@ export const MODULES: ModuleDef[] = [
     settingKey: 'files_enabled',
     title: '文件快捷',
     desc: '本机文件与目录的快捷入口，一键打开或进终端',
+    brief: '文件与目录，一键打开或进终端',
     icon: 'navFiles',
     count: () => useFileShortcutsStore().shortcuts.length,
     boot: () => useFileShortcutsStore().fetchShortcuts(),
@@ -124,6 +129,7 @@ export const MODULES: ModuleDef[] = [
     settingKey: 'mfa_enabled',
     title: '验证码',
     desc: '管理 TOTP 动态码',
+    brief: '管理 TOTP 动态码',
     icon: 'navMfa',
     view: async () => (await import('../views/MfaView.vue')).default,
   },
@@ -133,6 +139,7 @@ export const MODULES: ModuleDef[] = [
     settingKey: 'fileshare_enabled',
     title: '局域网传输',
     desc: '同网段设备用浏览器互传文件',
+    brief: '同网段设备用浏览器互传',
     icon: 'navLan',
     live: () => fsRunning.value,
     // 标识要反映"端口现在开着吗"，浏览器那侧起的服也得算进来，所以解锁就先读一次状态
@@ -152,6 +159,7 @@ export const MODULES: ModuleDef[] = [
     settingKey: 'tunnel_enabled',
     title: '内网穿透',
     desc: '把本机服务经 Cloudflare 隧道暴露到公网',
+    brief: '本机服务经隧道暴露到公网',
     icon: 'navTunnel',
     onDisable: () => tunnelApi.stop(),
     view: async () => (await import('../views/TunnelView.vue')).default,
@@ -161,6 +169,7 @@ export const MODULES: ModuleDef[] = [
     settingKey: 'bypass_enabled',
     title: '网络直连',
     desc: '探测域名、IPv4 地址和网段，配置本机 hosts 与直连路由',
+    brief: '探测域名与网段，配置直连',
     icon: 'navBypass',
     view: async () => (await import('../views/BypassView.vue')).default,
   },
@@ -170,6 +179,7 @@ export const MODULES: ModuleDef[] = [
     settingKey: 'codex_enabled',
     title: 'Codex',
     desc: '管理多个 Codex 账号并切换官方凭据',
+    brief: '管理多个账号并切换官方凭据',
     icon: 'navCodex',
     view: async () => (await import('../views/CodexView.vue')).default,
     settings: {

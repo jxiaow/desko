@@ -9,7 +9,14 @@ import { useAuthStore } from '../stores/auth'
 let stopSync: (() => void) | null = null
 let syncGeneration = 0
 let initialWebPath: string | null = isWebRuntime() ? window.location.pathname : null
+let landingHeld = false
 export function stopModuleSync(): void { syncGeneration++; stopSync?.(); stopSync = null }
+
+/** 首个模块选择页打开期间，启用模块不得把页面自动带走 */
+export function holdModuleLanding(hold: boolean): void { landingHeld = hold }
+
+const shouldAutoLand = (enabled: boolean, currentPath: string) =>
+  enabled && currentPath === EMPTY_PATH && !landingHeld
 export async function startModuleSync(): Promise<void> {
   if (stopSync) return
   const generation = ++syncGeneration
@@ -20,7 +27,7 @@ export async function startModuleSync(): Promise<void> {
     moduleFlags[payload.id] = payload.enabled
     syncModuleRoutes()
     const currentPath = router.currentRoute.value.path
-    if ((!payload.enabled && currentPath === modulePath(payload.id)) || (payload.enabled && currentPath === EMPTY_PATH)) await router.replace(landingPath() ?? EMPTY_PATH)
+    if ((!payload.enabled && currentPath === modulePath(payload.id)) || shouldAutoLand(payload.enabled, currentPath)) await router.replace(landingPath() ?? EMPTY_PATH)
     const pinia = getActivePinia()
     if (payload.enabled && !wasEnabled && pinia && useAuthStore(pinia).appState === 'unlocked') await MODULES.find(module => module.id === payload.id)?.boot?.()
   })
@@ -59,7 +66,7 @@ export async function toggleModule(id: ModuleId, on: boolean): Promise<void> {
   await setModuleEnabled(id, on)
   syncModuleRoutes()
   const currentPath = router.currentRoute.value.path
-  if ((!on && currentPath === modulePath(id)) || (on && currentPath === EMPTY_PATH)) {
+  if ((!on && currentPath === modulePath(id)) || shouldAutoLand(on, currentPath)) {
     await router.replace(landingPath() ?? EMPTY_PATH)
   }
   if (on && !wasEnabled) await module.boot?.()

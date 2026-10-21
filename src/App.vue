@@ -256,7 +256,7 @@ function onGlobalKey(e: KeyboardEvent) {
     <!-- 锁定/初始化态：顶栏浮在页面上；解锁态：顶栏进右列，侧栏全高贯通 -->
     <TitleBar
       v-if="appState !== 'unlocked'"
-      :is-locked="appState === 'locked'"
+      is-locked
       @open-settings="openSettingsAppearance"
       @lock="doLock"
     />

@@ -77,10 +77,8 @@ const clickTab = async (page, label) => {
   await page.waitForTimeout(300)
 }
 
-// 0 满配：8 个模块全开，侧栏展开档
+// 0 满配：8 个模块全开。工作区布局的侧栏恒为 rail，没有展开钮，直接拍侧栏
 let page = await open(seedFor(theme, accent))
-await page.locator('.sidebar-toggle').click()
-await page.waitForTimeout(400)
 await shoot(page, '0-sidebar-full', page.locator('.sidebar'))
 
 // 1 设置「模块」页签：8 行 + 提示语
@@ -102,7 +100,7 @@ await clickTab(page, '文件快捷')
 await shoot(page, '1e-settings-files', page.locator('.settings-dialog'))
 await clickTab(page, '局域网传输')
 await shoot(page, '1f-settings-fileshare', page.locator('.settings-dialog'))
-await clickTab(page, 'Codex 账号')
+await clickTab(page, 'Codex')
 await shoot(page, '1g-settings-codex', page.locator('.settings-dialog'))
 await clickTab(page, '外观')
 await shoot(page, '1h-settings-appearance', page.locator('.settings-dialog'))
@@ -116,15 +114,15 @@ await page.close()
 
 // 2 关掉一个核心页：小记不在，落地页顺位下移到网址收藏
 page = await open(seedFor(theme, accent, { notes_enabled: 'false' }))
-await page.locator('.sidebar-toggle').click()
-await page.waitForTimeout(400)
 await shoot(page, '2-sidebar-core-off', page.locator('.sidebar'))
 await page.close()
 
-// 3 零模块态：唯一落脚点是空态页
+// 3 零模块态：唯一落脚点是模块选择器（0 选中）
 const off = {}
 for (const k of Object.keys(ALL_ON)) off[k] = 'false'
 page = await open(seedFor(theme, accent, off))
+await page.waitForSelector('.onb-page')
+await page.waitForTimeout(200)
 await shoot(page, '3-empty-modules')
 await page.close()
 
