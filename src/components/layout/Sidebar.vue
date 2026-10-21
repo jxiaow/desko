@@ -3,7 +3,7 @@ import { useRoute } from 'vue-router'
 import { isWebRuntime } from '../../services/runtime'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { enabledModules } from '../../modules/state'
-import { modulePath } from '../../modules/registry'
+import { modulePath, type ModuleDef } from '../../modules/registry'
 import AppIcon from '../shared/AppIcon.vue'
 
 withDefaults(defineProps<{
@@ -17,6 +17,9 @@ defineEmits<{
 
 const route = useRoute()
 const webRuntime = isWebRuntime()
+
+/** 跑着常驻服务的模块把状态写进行名：图标上那颗点要有人替它解释，读屏也听得到 */
+const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中` : m.title)
 
 const startDrag = (e: MouseEvent) => {
   if (isWebRuntime()) return
@@ -50,11 +53,12 @@ const onDragDblclick = (e: MouseEvent) => {
         :to="modulePath(m.id)"
         class="nav-item"
         :class="{ active: route.path === modulePath(m.id) }"
-        :aria-label="m.title"
-        :data-tip="collapsed ? m.title : undefined"
+        :aria-label="navLabel(m)"
+        :data-tip="collapsed ? navLabel(m) : undefined"
       >
         <div class="nav-icon">
           <AppIcon :name="m.icon" :size="collapsed ? 22 : 18" />
+          <span v-if="m.live?.()" class="nav-live" aria-hidden="true"></span>
         </div>
         <Transition name="nav-text">
           <span v-if="!collapsed || webRuntime" class="nav-text">{{ m.title }}</span>
@@ -205,6 +209,7 @@ const onDragDblclick = (e: MouseEvent) => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
 }
 
 .nav-icon svg {
@@ -249,5 +254,18 @@ const onDragDblclick = (e: MouseEvent) => {
 
 .nav-item.active .nav-count {
   color: var(--text-brand);
+}
+
+/* 常驻服务的运行点：贴在图标右上角，折叠成图标轨后仍然在，是那行唯一的线索。
+   光环与模块页状态点同配方（color-mix 掺 success），侧栏透明底（codex 布局）也不会顶出一圈异色 */
+.nav-live {
+  position: absolute;
+  top: -1px;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 22%, transparent);
 }
 </style>

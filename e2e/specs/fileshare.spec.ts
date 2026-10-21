@@ -36,6 +36,19 @@ test.describe('局域网文件传输', () => {
     expect(await e2e.count(page, 'fileshare_status')).toBe(0)
   })
 
+  test('侧栏标识：入口开着但服务没起，图标上不点', async ({ page }) => {
+    await bootUnlocked(page, { settings: { fileshare_enabled: 'true' } }, '/notes')
+    await expect(page.locator('a.nav-item[href="/fileshare"] .nav-live')).toHaveCount(0)
+    await expect(page.locator('a.nav-item[href="/fileshare"]')).toHaveAccessibleName('局域网传输')
+  })
+
+  test('侧栏标识：服务在跑就在图标右上角点一下，不必先进模块页', async ({ page }) => {
+    await bootUnlocked(page, ON, '/notes')
+    const item = page.locator('a.nav-item[href="/fileshare"]')
+    await expect(item.locator('.nav-live')).toBeVisible()
+    await expect(item).toHaveAccessibleName('局域网传输 · 服务运行中')
+  })
+
   test('开关只开入口不自动起服务，模块页手动启动才监听', async ({ page }) => {
     await bootUnlocked(page)
     await expect(page.locator('a.nav-item[href="/fileshare"]')).toHaveCount(0)
@@ -51,9 +64,11 @@ test.describe('局域网文件传输', () => {
     await page.locator('a.nav-item[href="/fileshare"]').click()
     await expect(page.locator('.page-bar .chip')).toContainText('已停止')
     await expect(page.locator('.banner-title')).toHaveText('服务未启动')
+    await expect(page.locator('a.nav-item[href="/fileshare"] .nav-live')).toHaveCount(0)
     await page.locator('.page-bar .btn-primary').click()
     await expectToast(page, '服务已启动')
     await expect(page.locator('.page-bar .chip')).toContainText('监听中')
+    await expect(page.locator('a.nav-item[href="/fileshare"] .nav-live')).toBeVisible()
   })
 
   test('启动失败（端口全被占）：提示原因、保持已停止', async ({ page }) => {
@@ -177,6 +192,7 @@ test.describe('局域网文件传输', () => {
     await page.locator('.page-bar .btn-primary').click()
     await expectToast(page, '已停止监听')
     await expect(page.locator('.page-bar .chip')).toContainText('已停止')
+    await expect(page.locator('a.nav-item[href="/fileshare"] .nav-live')).toHaveCount(0)
   })
 
   test('拖入落盘：页内追加提取链接行', async ({ page }) => {

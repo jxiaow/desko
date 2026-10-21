@@ -24,7 +24,8 @@ export const fsPortDrifted = computed(
 export const fsHasPassword = computed(() => fsConfig.value?.hasPassword ?? false)
 export const fsLocalOnly = computed(() => fsConfig.value?.localOnly ?? false)
 
-export async function fsRefresh(): Promise<void> {
+/** quiet：解锁预热那一类后台取数，读不到不该在页面上喊一声 */
+export async function fsRefresh(quiet = false): Promise<void> {
   const epoch = generation
   const toastStore = useToastStore()
   try {
@@ -33,7 +34,7 @@ export async function fsRefresh(): Promise<void> {
     fsStatus.value = st
     fsConfig.value = cfg
   } catch (e) {
-    if (epoch === generation) toastStore.showToast(errText(e), 'error')
+    if (epoch === generation && !quiet) toastStore.showToast(errText(e), 'error')
   } finally {
     if (epoch === generation) fsLoaded.value = true
   }

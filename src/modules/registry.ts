@@ -6,7 +6,7 @@ import { useNotesStore } from '../stores/notes'
 import { useToastStore } from '../stores/toast'
 import { fileshareApi } from '../services/api/fileshare'
 import { tunnelApi } from '../services/api/tunnel'
-import { clearFileshareSession, fsRefresh } from '../services/fileshareSettings'
+import { clearFileshareSession, fsRefresh, fsRunning } from '../services/fileshareSettings'
 import { clearTunnelSession } from '../services/tunnelState'
 import { isWebRuntime } from '../services/runtime'
 import { loadStoragePaths, clearCodexSession } from '../services/codexState'
@@ -45,6 +45,8 @@ export interface ModuleDef {
   view: () => Promise<Component>
   /** 侧栏计数位；不声明就没有计数 */
   count?: () => number
+  /** 侧栏图标上的"常驻服务在跑"标识；不声明就没有 */
+  live?: () => boolean
   /** 解锁后要让计数和页面就位所需的那一次取数 */
   boot?: () => Promise<void>
   /** 收回密钥前必须完成的写入 */
@@ -132,6 +134,9 @@ export const MODULES: ModuleDef[] = [
     title: '局域网传输',
     desc: '同网段设备用浏览器互传文件',
     icon: 'navLan',
+    live: () => fsRunning.value,
+    // 标识要反映"端口现在开着吗"，浏览器那侧起的服也得算进来，所以解锁就先读一次状态
+    boot: () => fsRefresh(true),
     onDisable: () => fileshareApi.stop(),
     view: async () => (await import('../views/FileshareView.vue')).default,
     settings: {
