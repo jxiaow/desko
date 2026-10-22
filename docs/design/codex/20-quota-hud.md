@@ -2,7 +2,7 @@
 
 一句话方案：把「当前账号额度 + 今日用量」压成一枚 **136×74 的透明桌面小组件**，默认只露角色；鼠标停在角色上向下展开 136×144 的数据面板（点角色可钉住），三款皮肤（兔子 / 企鹅 / 蜗牛）在 Codex 设置里切换，默认关；额度取当前账号，今日用量取本机全部账号的本地扫描汇总。
 
-状态：**已交付**（2026-10-22，第九轮改隐藏入口为托盘开关后复核）。视觉三款全保留、兔子默认（样张 `.tmp/codex-hud-20261021/S5-cute.png`，源文件 `cute.src.html`）；设置页、快照映射、HUD 窗口与生命周期均已落地，单测 / e2e / 构建 / 原生 CDP 复验通过。
+状态：**已交付**（2026-10-22，第十一轮按皮肤分动作后复核）。视觉三款全保留、兔子默认（样张 `.tmp/codex-hud-20261021/S5-cute.png`，源文件 `cute.src.html`）；设置页、快照映射、HUD 窗口与生命周期均已落地，单测 / e2e / 构建 / 原生 CDP 复验通过。
 
 > 2026-10-22 视觉结论：兔子（双耳 = 两档额度）、企鹅（肚皮 = 主额度）、蜗牛（螺壳 = 主额度）三款都保留，设置里可选；不做页内常驻挂件，桌面小窗是唯一生产入口；设置页用 1× 实际大小预览。
 >
@@ -14,6 +14,8 @@
 > 2026-10-22 第七轮：面板文案与排版重排。第二行去掉 `今日` 标签（第二、三行本来就只放当日汇总，这两个字是重复信息，只留在可访问名称里）；额度标签统一成拉丁短标（`周` → `w`、`天` → `d`，和 `5h` / `2w` 同族，读屏侧由 `hudWindowAria` 展开成「周额度」「5 小时额度」）；字号整体降一档（主额度 18 → 16、token 15 → 13、金额 14 → 12、标签 12 → 11）；排列改成两栏——数值靠左、`tok` 与 `↗` 贴右缘成一条辅助列，行高 18 / 15 / 13、行距 6 / 4，面板随之 128×79 → 128×74、展开窗口 136×149 → 136×144。单位 `tok` 常显，未扫描时仍是 `— tok`。
 > 2026-10-22 第八轮：第七轮那套「数值靠左、单位靠右」的真两栏被**真机数据**推翻——用户账号只有周窗口（第一行只剩 `w 20%`）、今日才 `9.76亿`，`margin-left:auto` 把 `tok` / `↗` 甩到右缘后，三行中间各留 40px 以上空洞，看着像没排完。改成**居中读数栈**：三行都以面板中线为轴，`tok` 紧贴数字（3px）、`↗` 回到第三行行内（4px），两档额度之间留 4px 组距。几何一毫米没动（面板 128×74 / 窗口 136×144），纯 CSS。顺带补一个真空洞：`state.today` 为 null 时第三行原本只剩一颗 `↗` 飘在中间，现在写 `未定价`。
 > 2026-10-22 第九轮：**取消挂件上的右键隐藏**，改在**系统托盘菜单加一颗「桌面额度挂件」勾选项**（`CheckMenuItem`，位置在「锁定」与「退出」之间）。托盘只发 `tray-hud-toggle` 意图，翻转与落盘仍走主窗口的 `saveHudEnabled()`——开关的真相只有一个；勾选态由前端用新命令 `desko_hud_set_tray` 回写，写的是 `codex_hud_enabled` 而不是窗口可见性，所以锁屏隐藏不会把勾吃掉。`desko_hud_request_close` 命令与 HUD 侧 `@contextmenu` 一并删除；Alt+F4 / 系统关闭请求保留（走窗口 `CloseRequested`，不经那颗命令）。两处补丁记账：tauri 2.12.2 **没有** `menu_item_by_id` 之类的按 ID 查项，所以句柄必须自己留在 managed state（`HudTrayItem`）里；勾选项首帧就得是真值——挂件桥要解锁后才激活，等它回写会让整个锁屏期间显示成「关」，因此建菜单时直接读 `meta("codex_hud_enabled")`（`get_meta` 是明文表，锁着也能读；读不到回落 `false`）。
+> 2026-10-22 第十轮：**走动改成相位锁定**。第六轮那套「一拍整窗跳一个 `stride`、角色始终居中」被指「走动这个效果目前很差」——窗口每拍瞬移，角色从没走过路。换成 **跨步 → 跟位 → 落地停** 三段一拍：角色先在窗口内用 `glide` 毫秒滑出 `stride`（`.walk` 一条 translate3d），滑到位那一帧在同一个 JS 任务里 `setPosition` 把窗口挪走同样的量、同时把 lane 以 `ms:0` 归零，屏幕坐标因此连续（接手前后 `x + lane` 恒等）；随后 `hold` 停一拍。步态重定：单步 5/3/2 → **6/4/3px**，一拍 1400/2100/3100ms → **glide 340/420/620 + hold 210/260/340**；绳长 ±48px、认领令牌、偏移不落盘、有人在就不走全部照旧。走到绳头不再硬挤，先压扁（`scaleX(.84)`，`turnMs` 240/240/160）转身。另加一拍「张望」，每隔 4 步不跟位。
+> 2026-10-22 第十一轮：**「张望」和三只共用的那套步态全删，换成按皮肤的专属动作**。用户反馈「我觉得效果不好，我们可以针对这几种类型，做不同的效果，比如说兔子鞠躬，卷耳朵；企鹅摆动翅膀等等」，拍板范围三条：走动保留（相位锁定不动）、每只 3 个动作按 9 个进码、事件三条里先只做见底那一条。落地为 **常驻步子 3 条 + 招牌动作 6 条**：兔子蹲跳降档（身子压 −1.5px / +1px、scaleY .98 / .96）、企鹅摇摆步（±3.6° 绕底边中点）、蜗牛伸脖子（`.mv-body` 前移 2px / 回缩 −.5px，壳不动），每拍都挂，由 `gait-a`/`gait-b` 一对 **transition** 承担而不是无限循环 keyframes——同奇偶的 class 同时驱动落脚与身子，天生同相；招牌动作 **鞠躬 / 卷耳朵 / 摆翅膀 / 伸脖子 / 触角打结 / 缩壳** 是一次性 keyframes，由根节点 `mv-*` class 触发，插在节拍间隙每 3–5 拍抽一个（`MOVE_GAPS=[3,4,5]`，按计数器轮转，不掷骰子）。时长同源：JS 收尾用 `HUD_MOVE_MS[id]`、CSS 用 `--mv-dur`，两处读同一张表，不会动画还没放完就被摘 class。见底/失败那一下只在**状态跳变**且**窗已亮着**时放，按皮肤映射（兔 → 卷耳朵、企鹅 → 摆翅膀、蜗牛 → 缩壳），首次快照与解锁重亮相只对齐基线不重放。`prefers-reduced-motion` 分两道闸门：招牌动作在 JS 里根本不放，常驻步子走的是 transition、`animation: none` 管不到它，得在 CSS 里单独把 `.mv-fig` / `.mv-body` 的 transition 与 transform 收掉。
 
 ## 1. 现状实测
 
@@ -31,7 +33,7 @@
 ## 2. 产品形态
 
 - **桌面 only**：不往已经拥挤的 Codex 页塞第二枚 hero；生产入口只有桌面小窗。设置页只放 1× 展开态预览和开关。
-- **收起只露角色**：常驻时只占 136×74，动物本身就是额度表；不弹通知、不抢焦点，动作只有低频微动（呼吸/摆耳/眨眼）和绕锚点的小范围巡游（§3.8）。
+- **收起只露角色**：常驻时只占 136×74，动物本身就是额度表；不弹通知、不抢焦点，动作只有低频微动（呼吸/摆耳/眨眼）、绕锚点的小范围巡游（§3.8）和它自己走路时的步子与招牌动作（§3.9）。
 - **停一下才看数**：鼠标停在角色上即向下展开数据面板（主次额度 / 今日 token / 金额），移开就收起；想常驻读数点一下角色钉住。面板里的数据不常驻视线。
 - **三款皮肤同一个面板**：身体换轮廓和填充位置，面板版式固定为三行；读者不会因为换皮肤而重新学一遍数据。
 - **默认关**：新模块进设置总开关，默认 `false`；打开后常驻右下角，可拖走。
@@ -133,7 +135,7 @@
 
 - 低额度：主载体填充 `#e08079`、描边 `#b85a52`；第一行前面多出 `!`（danger），光标同色。次额度不变。
 - 空态：只留虚线轮廓，不画半透明假数据；展开面板的第一行写占位文案，第二行用量照常显示。
-- 无入场、无面板滑入/淡入；展开/收起只改窗口高度。角色有常驻微动与触发小动作（见 §3.7），跳的是角色不是面板；面板自己永远不滑入、不淡入、不位移。
+- 无入场、无面板滑入/淡入；展开/收起只改窗口高度。角色有常驻微动、触发小动作与走路时的步子 / 招牌动作（见 §3.7、§3.9），跳的是角色不是面板；面板自己永远不滑入、不淡入、不位移。
 - 几何以拍板样张为准；实现时拆成 `bunny` / `penguin` / `snail` 三组 path，共用 `.tag`。不改 112×66 的头身框；面板字号是 HUD 专属档，不回灌主界面。
 
 ### 3.5 状态矩阵
@@ -180,7 +182,15 @@
 
 ### 3.7 动作：常驻微动 + 触发动作
 
-角色不能是死的，但常驻小件不能抢注意力。全部是纯 CSS transform，不碰数据、不碰面板的出现方式。分层是硬约束：**同一元素挂两条 transform 动画只会互相覆盖**，所以一层一个 `<g>`，从外到内 `.figure` → `.act` → `.ear-l` / `.ear-r`（蜗牛 `.antennae`）→ `.ear-flick` → `.eyes`。
+角色不能是死的，但常驻小件不能抢注意力。全部是纯 CSS transform，不碰数据、不碰面板的出现方式。分层是硬约束：**同一元素挂两条 transform 动画只会互相覆盖**，所以一层一个 `<g>`。从外到内三皮肤共用 `.figure` → `.act`，再往下各自分叉（`.mv-*` 是第十一轮为走路新开的动作槽，见 §3.9；谁也不占谁的 transform）：
+
+| 皮肤 | 从 `.act` 往内的链 |
+|---|---|
+| 兔 | `.mv-fig` →（`.mv-head` →（`.ear-l` → `.mv-ear-l` → `.ear-flick`）、（`.ear-r` → `.mv-ear-r` → `.ear-flick`）、`.head`、`.mug` → `.eyes`）+ `.paw-a` `.paw-b` |
+| 企鹅 | `.mv-fig` →（`.flip-l` `.flip-r`、`.foot-a` `.foot-b`、身体 / 肚皮、`.eyes`） |
+| 蜗牛 | `translate(0,10)` →（`.mv-body` →（`.antennae` → `.stalk-l` / `.stalk-r`，柄尖各带一组 `.eyes`）、`.mv-shell`） |
+
+蜗牛的眼睛长在两根触角上，所以 `.eyes` 在蜗牛是 2 个节点、另两款各 1 个；鞠躬要「头沉」，兔的耳 + 头 + 五官必须先在 `.mv-head` 里成一组，耳朵自己再各留一层给卷耳朵。
 
 | 层 | 动作 | 周期 | 幅度 | 闸门 |
 |---|---|---|---|---|
@@ -193,20 +203,34 @@
 
 - **两道闸门各自独立**：`idle` 管常驻微动，桌面窗口和设置页预览都传；`react` 管交互触发，只有桌面窗口传——预览不可交互，不该伪装成可点，也不该在预览里替用户跳一下。`poke` 由 `CodexHudApp.vue` 在点角色后拉高 520ms 再落。
 - **触发不改面板的出现方式**：面板仍然不滑入、不淡入（无入场动画的约束照旧），跳的是角色这一层 `.act`，不是 `.tag`。
-- **`prefers-reduced-motion: reduce` 一律 `animation: none`**：七层全关，系统级降低动效偏好优先于我们的审美选择。
+- **`prefers-reduced-motion: reduce`**：`.figure` / `.eyes` / `.ear-l` / `.ear-r` / `.ear-flick` / `.antennae` / `.act` 一律 `animation: none`；招牌动作在 JS 里就被挡掉，连 `mv-*` 的 class 都不挂；常驻步子走的是 transition，`animation: none` 管不到它，CSS 里另收一道（`.mv-fig` / `.mv-body` 的 `transition: none` + gait class 下 `transform: none`）。系统级降低动效偏好优先于我们的审美选择。落脚（`.paw-*` / `.foot-*`）和 lane 不在这条里——它们属于「桌面走动」那颗用户开关，关掉偏好不该把走动也停了。
 - **额度填充跟着耳朵一起转**：`clipPath` 坐标在被引用元素的用户空间里解析，所以耳组旋转时内耳裁剪同步走，不会出现填充溢出耳廓或边缘脱离描边。
-- 周期都 ≥ 2.9s，常驻层幅度 ≤ 2.8°，确保「不主动看就注意不到」；触发层是单次、小于 0.65s 的反馈，只在用户自己引发的手势上出现。
+- 微动层周期都 ≥ 2.9s、幅度 ≤ 2.8°，确保「不主动看就注意不到」；触发层是单次、小于 0.65s 的反馈，只在用户自己引发的手势上出现。走路那两层（步子与招牌动作）幅度更大，但它只在「桌面走动」开着且在走时出现，站定就归零（§3.9）。
 
 ### 3.8 巡游（绕锚点走动）
 
 用户要「真走动」，但「你把它放在哪，它就在哪」这条硬约束不能松。解法是系绳：走的是**围绕锚点的临时偏移**，不是位置本身。
 
+第十轮把「一拍瞬移」改成**相位锁定的一拍三段**——角色在窗口里滑，滑到位那一帧窗口才接手，屏幕坐标全程连续：
+
+| 段 | 谁在动 | 怎么做 |
+|---|---|---|
+| 跨步 `glide` | 角色 | `.walk` 一条 `translate3d(lane,…)`，配 `cubic-bezier(.22,.61,.36,1)` 滑出 `stride`；同时挂 `lift-a`/`lift-b` 抬对应那只脚、`gait-a`/`gait-b` 压身子（§3.9） |
+| 跟位 | 窗口 | `endStride()` 在**同一个 JS 任务**里 `setPosition(锚点 + 偏移 + lane×scale)`、挂 `expectedMove` 令牌，并把 lane 以 `ms:0` 瞬时归零。接手前后 `x + lane` 恒等，角色不会被「闪」过去 |
+| 落地停 `hold` | 两者 | 窗口停在新位、角色回到窗口中心，落脚与步子 class 清成中性；这一拍末尾由 `afterHold()` 决定下一手（继续迈步 / 抽招牌动作） |
+
 | 步态 | 兔子 | 企鹅 | 蜗牛 |
 |---|---|---|---|
-| 每拍间隔 | 1400ms | 2100ms | 3100ms |
-| 单步 | 5px | 3px | 2px |
+| 单步 `stride` | 6px | 4px | 3px |
+| 跨步 `glide` | 340ms | 420ms | 620ms |
+| 落地停 `hold` | 210ms | 260ms | 340ms |
+| 一拍合计 | 550ms | 680ms | 960ms |
+| 转身 `turnMs` | 240ms（先压 108ms） | 240ms | 160ms |
+| 常驻步子 | 蹲跳降档 | 摇摆步 | 伸脖子 |
 
 - **锚点 = 用户放的那一点**：挂载与每次 reveal 后 `reanchor()` 读 `outerPosition()`，之后每拍都是 `anchor + offset`；只有真拖动才更新锚点。
+- **撞绳头先压扁再转身**：`|offset + dir×stride| > 绳长` 时不走这一步，改 `beginTurn()`——`scaleX(.84)` + 抬起 0.5px（占 `turnMs` 的 45%），下一半时间翻面回正。兔和企鹅左右几乎对称，光翻面看不出掉了头，挤压那一下才是「掉头」的记号。
+- **被挡住就原地收车道**：`settleWalk()` 用 180ms 把 lane/bob/face 收回中性，窗口停在它当前所在的那一点，不强行送回锚点；`scheduleWalk()` 按一拍长度空转重试，指针一走自然接上。
 - **绳长 ±48 逻辑像素**（按 `scaleFactor()` 换算成物理像素），撞到绳头自动掉头。撞到屏幕边被 Rust 夹回时，`claimWalkMove` 按实际落点重算偏移并立即掉头，不会继续往墙里挤。
 - **巡游的 `Moved` 不是拖动**：每次 `setPosition` 前挂一个 `expectedMove` 认领令牌，250ms 内有效。命中 → 不 `markDragging`、不写 `codex_hud_save_position`、不动锚点；没命中 → 视为用户意图，重新锚点。指针按下时直接清空令牌：手已经搭上来了，之后的任何移动都算用户拖。
   - 认领窗口从 800ms 收到 250ms 是有意的：太长会把紧随其后的真拖动 `Moved` 也吞掉，用户会觉得自己没拖动成功。
@@ -215,6 +239,40 @@
 - **关掉走动会送回锚点**：`walk: false` 的快照一到，若当前偏移非 0，就把它 `setPosition` 回锚点再停——不丢在巡游半路上。锚点来源标志 `anchored` 未置真（`outerPosition()` 没读到）时不动窗，避免把挂件甩到 (0,0)。
 - **开关**：设置 → Codex → 桌面挂件组里的「桌面走动」，默认开，键 `codex_hud_walk`；关掉后仍保留皮肤选择与总开关语义。
 - 需要 Rust 侧放行：`core:window:allow-set-position` 不在 `core:default` 里，缺它时 `setPosition` 被 capability 拒绝，而走动是静默 catch 的——现象就是「代码全对、单测全绿、窗口一动不动」。
+
+### 3.9 按皮肤的专属动作（9 条）
+
+第十一轮的拍板：走动保留，每只 3 个动作，事件三条先接一条。三只不许共用同一套肢体语言——企鹅靠摇摆步、兔子靠压身子、蜗牛靠脖子，走路的样子本身就是皮肤识别点。
+
+**常驻步子（3 条，每拍都挂）**：一对 class `gait-a` / `gait-b` + `--gait-ms`，走的是 **transition**，不是无限循环 keyframes。
+
+| 皮肤 | 动的层 | a 档 | b 档 | 时长 | 为什么这么动 |
+|---|---|---|---|---|---|
+| 兔 | `.mv-fig` | `translateY(-1.5px) scaleY(.98)` | `translateY(1px) scaleY(.96)` | 跟该拍的 glide / hold | 蹲跳降档：窗内只有 12px 横向余量，跳不起来，就压身子 |
+| 企鹅 | `.mv-fig` | `rotate(3.6deg)` | `rotate(-3.6deg)` | 同上 | 摇摆步：轴在底边中点，企鹅的识别点就是左右倒 |
+| 蜗牛 | `.mv-body` | `translateX(2px)` | `translateX(-.5px)` | 同上 | 身体在刚体壳下面蠕动，`.mv-shell` 恒不动 |
+
+**招牌动作（6 条，一次性 keyframes）**：根节点挂 `mv-<id>`，时长由 `--mv-dur` 给。
+
+| 动作 | 皮肤 | 时长 | 动的层 | 关键幅度 | 用在哪 |
+|---|---|---|---|---|---|
+| 鞠躬 `bow` | 兔 | 1150ms | `.mv-fig` `.mv-head` `.mug` `.mv-ear-l` `.mv-ear-r` | 头沉 1px、五官在头里再下滑 3.4px、双耳 ±14° | 节拍间隙 |
+| 卷耳朵 `fold` | 兔 | 1350ms | `.mv-fig` `.mv-ear-l` `.mv-ear-r` | 右耳绕耳根 `rotate(56deg) scaleY(.88)` 整组折过去（额度条跟着折），身子 −1.6° 配平 | 节拍间隙 + 见底告警 |
+| 摆翅膀 `flap` | 企鹅 | 900ms | `.mv-fig` `.flip-l` `.flip-r` | 两鳍反相 ±30° / ±28°，鳍尖甩出身体轮廓之外；身子 ±2.4° 做配平 | 节拍间隙 + 见底告警 |
+| 伸脖子 `stretch` | 蜗牛 | 1600ms | `.mv-body` `.stalk-l` `.stalk-r` | 身体绕尾根右移 5px + `scaleX(1.02)`，触角 ±9° 超前一点 | 节拍间隙 |
+| 触角打结 `tangle` | 蜗牛 | 1400ms | `.mv-body` `.stalk-l` `.stalk-r` | 两触角对倒 ±30° 在中间交叠，身子退 1px | 节拍间隙 |
+| 缩壳 `tuck` | 蜗牛 | 1900ms | `.mv-body` `.mv-shell` `.stalk-l` `.stalk-r` | 头退回 −4.5px + `scaleX(.98)`、触角压平 −46° / +42°、壳 `scaleY(.98)` 紧一下，缩住停在 42%–72% 再探出来 | 见底告警 |
+
+- **正视图的「低头」只有这一种画法**：鞠躬时头的轮廓自己不能动（动了人就散），沉的是 `.mv-head`（1px）+ 五官所在的 `.mug`（再 3.4px），耳朵被 `.mv-head` 一起带走。卷耳朵折的是耳朵整组，所以耳根之上的额度填充条跟着一起折，不会出现「耳皮动了、水位没动」。
+- **调度只有一个落点**：`afterHold()`（落地停那一拍）。优先级是 事件 > 节拍间隙招牌 > 每拍步子；放动作的那一拍不迈步，`after(HUD_MOVE_MS[pick], beginBeat)` 接着走。
+- **间隔与顺序都不掷骰子**：`MOVE_GAPS = [3, 4, 5]` 配 `HUD_IDLE_MOVES`（兔 `bow`→`fold`、企鹅 `flap`、蜗牛 `stretch`→`tangle`），由 `moveTurn` 计数器轮转，第几拍放哪一手能数出来，单测才断言得动。企鹅池子只有那一手是刻意的：它的鳍已经在摇摆步里用了，再来一手会打架。
+- **同一个动作连放两次不会重启动画**：`playMove()` 先摘 class、`await nextTick()`，再挂回去。
+- **时长同源**：JS 收尾用 `HUD_MOVE_MS[id]`、CSS 用 `--mv-dur`，两处读 `src/utils/codexHud.ts` 同一张表；写两遍必然漂，漂了就是动画还没放完被摘 class。`--gait-ms` 同理，直接喂当拍的 glide / hold。
+- **步子用 transition 而不是 keyframes**：JS 的计时器是节拍的主人，keyframes 自己走时间轴迟早漂拍，漂了就变成「腿在动、身子不动」。a/b 两个目标由同一个 `walkStrides % 2` 驱动，落脚（`lift-*`）与步子（`gait-*`）天生同相。
+- **招牌动作只在「没人管它」时抽**：`canMove()` = 非 reduce 且未展开、未钉住、未在拖、指针不在窗内、没有按下未起的 `armed`。人在看的时候不许表演。
+- **见底那一下挂在 `applyPayload` 的状态边界，不是 watch**：`alert = severe || stale || placeholderAlert`，只在 `alert && !wasAlert`、且 `revealed`（窗已经亮着）、且非 reduce 时放；`wasAlert` 每次快照都重新对齐，所以首次快照、解锁后重亮相、重开挂件都只同步基线，不补演一遍缩壳。动作按 `HUD_ALERT_MOVES` 分皮肤（兔 `fold` / 企鹅 `flap` / 蜗牛 `tuck`）——缩壳那两层（`.mv-shell` + 触角）只长在蜗牛身上，拿去当三款共用的告警动作等于给企鹅兔子演一个没有零件的动作。
+- **另两条事件按拍板先不进码**：蹲跳（展开面板）、展鳍（刷新成功）的 keyframes 没写，`.act` 上已有的展开小跳 `hud-hop` 保留不动。
+- **reduce 下分两道闸门**：招牌动作由 JS 挡（连 class 都不挂）；常驻步子走 transition，`animation: none` 管不到它，CSS 里单独把 `.mv-fig` / `.mv-body` 收成 `transition: none` + `transform: none`。lane 与落脚仍跟着节拍走——那是「桌面走动」那颗用户开关的事。
 
 ## 4. 设置
 
@@ -424,9 +482,10 @@ interface CodexHudState {
 | 文件 | 改动 |
 |---|---|
 | `src/services/codexHud.ts` | 新增：设置读写、快照映射、bridge、定时器/位置/窗口命令；`hudWalk` ref + `saveHudWalk()`，payload 带 `walk` |
-| `src/components/codex/hud/CodexHudSprite.vue` | 新增：三皮肤 sprite（112×66 角色框 + 可展开的三行面板 128×74）；角色按 transform 分层（`.figure` / `.act` / `.ear-*` / `.ear-flick` / `.antennae` / `.eyes`），`idle` 常驻微动 + `react` / `poke` 触发动作 |
-| `src/components/codex/hud/CodexHudApp.vue` | 新增：HUD 根组件、事件监听、悬停展开/移开收起/点击钉住、拖动/点击（第九轮删掉右键隐藏）；绕锚点系绳巡游（步态表 + `expectedMove` 认领 + 冷却 + 关掉送回锚点）与点击眨眼 `poke` |
-| `src/components/codex/hud/CodexHudApp.test.ts` | 新增：手势状态机单测（掠过不弹、停留展开、移开收起、钉住/解钉、点面板开 Codex、拖动抑制与补展开）+ 巡游单测（步长离锚、系绳掉头、钉住/冷却/走动感停、巡游 Moved 不落盘、真拖动重锚、关掉送回锚点） |
+| `src/utils/codexHud.ts` | 第十一轮新增动作表：`CodexHudMove`、`HUD_MOVE_MS`（6 条时长，唯一真相源，CSS `--mv-dur` 与 JS 收尾都读它）、`HUD_IDLE_MOVES`（兔 bow/fold、企鹅 flap、蜗牛 stretch/tangle）、`HUD_ALERT_MOVES`（兔 fold、企鹅 flap、蜗牛 tuck） |
+| `src/components/codex/hud/CodexHudSprite.vue` | 新增：三皮肤 sprite（112×66 角色框 + 可展开的三行面板 128×74）；角色按 transform 分层（`.figure` / `.act` / `.ear-*` / `.ear-flick` / `.antennae` / `.eyes`），`idle` 常驻微动 + `react` / `poke` 触发动作。第十一轮再加动作槽一层（`.mv-fig` `.mv-head` `.mug` `.mv-ear-l/r` `.mv-body` `.mv-shell` `.stalk-l/r` `.flip-l/r`）+ props `gait` / `gait-ms` / `move`（替掉原 `looking` 张望）：3 条 gait transition、6 组招牌 keyframes（21 条触发规则 + 21 条 keyframes），reduce 下另收 `.mv-fig` / `.mv-body` 的 transition |
+| `src/components/codex/hud/CodexHudApp.vue` | 新增：HUD 根组件、事件监听、悬停展开/移开收起/点击钉住、拖动/点击（第九轮删掉右键隐藏）；绕锚点系绳巡游（步态表 + `expectedMove` 认领 + 冷却 + 关掉送回锚点）与点击眨眼 `poke`。第十轮把巡游改成相位锁定一拍三段（`beginBeat` → `endStride` 同任务里 `setPosition` + lane 归零 → `afterHold`，`WALK_GAIT` 6/4/3px、glide 340/420/620、hold 210/260/340、转身压扁 `WALK_TURN_SQUASH`）；第十一轮加调度（`MOVE_GAPS=[3,4,5]` + `moveTurn` 轮转、`canMove()` 闸门、`playMove`/`cancelMove` 摘挂 class）与 `applyPayload` 状态边界的告警动作（`wasAlert` 只记基线）；`reducedMotion` 在 setup 读一次 `matchMedia` |
+| `src/components/codex/hud/CodexHudApp.test.ts` | 新增：手势状态机单测（掠过不弹、停留展开、移开收起、钉住/解钉、点面板开 Codex、拖动抑制与补展开）+ 巡游单测（步长离锚、系绳掉头、钉住/冷却/走动感停、巡游 Moved 不落盘、真拖动重锚、关掉送回锚点）。第十轮：滑到位那一帧才跟位、接手前后屏幕位置连续（`x + lane` 恒等）、跟位不落盘；第十一轮：招牌动作落在节拍间隙且那一下不跟位、按池子轮转出 `['mv-bow','mv-fold']`、步子与落脚同奇偶（`gait-a`/`--gait-ms:340ms` → 中性/`210ms` → `gait-b` + `lift-b`）、刚见底那一下只缩一次同一状态不重放、窗还没亮不放告警、reduce 不放招牌动作但走动照旧、换皮肤换一手（企鹅只有 `mv-flap`） |
 | `src/hud.ts` / `hud.html` / `vite.config.ts` | 新增 HUD 入口；Vite 多页 input |
 | `src/modules/settings/CodexSettings.vue` | 新增「桌面挂件」组：总开关、走动开关、三张 1× 展开态皮肤卡（预览传 `idle`）、0 刷新 warning |
 | `src/services/codexState.ts` | 配额 ticker 引用计数；`usageToday` / `loadTodayUsage` |
@@ -440,7 +499,7 @@ interface CodexHudState {
 | `e2e/specs/codex-hud-settings.spec.ts` | 新增设置页冒烟：默认关、三卡、选皮肤持久化、走动开关持久化与读回、0 刷新 warning；皮肤框 144、sprite 136 |
 | `src/utils/codexHud.test.ts` | 新增快照/标签/紧凑金额/隐私字段反查 |
 | `src/services/codexHud.test.ts` | 新增：读回不得盖掉用户刚写的开关 |
-| `src/components/codex/hud/CodexHudSprite.test.ts` | 三皮肤、空态、低额度、无次额度、112×66 几何与 transform 分层（每层各一 `<g>`、`.act` 嵌在 `.figure` 内、蜗牛触角组）、`idle` / `react` 两道闸门互不越权；面板文案第二行逐字 `194.2万tok`（不含 `今日`）、未扫描 `— tok` |
+| `src/components/codex/hud/CodexHudSprite.test.ts` | 三皮肤、空态、低额度、无次额度、112×66 几何与 transform 分层（每层各一 `<g>`、`.act` 嵌在 `.figure` 内、蜗牛触角组）、`idle` / `react` 两道闸门互不越权；面板文案第二行逐字 `194.2万tok`（不含 `今日`）、未扫描 `— tok`。第十一轮：`.mv-fig` / `.mv-body` 每款各 1 且 `.mv-shell` 与 `.mv-body` 分家、`.ear-l` → `.mv-ear-l` → `.ear-flick` 三层、`.mv-head` 含 `.mug`、企鹅两鳍、蜗牛两组 `.eyes`；`gait-a` + `--gait-ms` 交得出落脚与步子同层、6 个招牌动作只交出一个 `mv-*` class 且 `--mv-dur` 逐条等于 `HUD_MOVE_MS[id]`、未挂动作时不留任何 `mv-*` |
 | `src/services/__tests__/codexState.test.ts` | 适配引用计数 ticker；今日缓存单测 |
 | `src/stores/auth.ts` / `src/components/auth/SetupPage.vue` | 首启链路修复：`setupMasterPassword` 收 `onSetup` 回调，在 `appState` 翻转前触发；原先 `emit('setupComplete')` 落在卸载之后，`bootModules()` 从不执行，挂件 bridge 首次启动后一直不激活 |
 
@@ -449,7 +508,7 @@ interface CodexHudState {
 ## 6. 测试与验收
 
 1. `vue-tsc --noEmit` 0 error；`vitest run` 全绿。
-2. 单测覆盖：快照优先级（无 5h → 周；额外 → 兜底；Credits → 兜底；pending/apikey/empty/error）、标签压缩、金额紧凑、低额度阈值、无次额度、隐私字段反查（`email|account_name|cwd|session|path`）、ticker 引用计数（两个 owner 释放一个仍跑、全释放即停、0 分钟不起）、今日缓存 10 分钟与并发保护；sprite 几何（`CodexHudSprite.test.ts`）覆盖 112×66 viewBox、三皮肤各一组 `.eyes`、兔子两组耳 + 耳抽动层 + 主耳填充位置、蜗牛触角组，以及 `idle` / `react` 两道闸门各自独立；手势（`CodexHudApp.test.ts`）覆盖掠过不弹 / 160ms 展开 / 移开收起 / 点角色钉住与解钉 / 点面板开 Codex 并解钉 / 拖动中不展开且拖完补展开 / 右键不再有任何请求（第九轮删掉右键隐藏单测），并断言每次展开/收起落到 `desko_hud_set_expanded` 的 true/false 序列；巡游覆盖首步离开锚点且偏移不落盘、12 步不出 ±48px 绳、钉住即停、1.5s 冷却、巡游 `Moved` 被认领不改锚点、真拖动重锚后绕新锚走、`walk:false` 停在原地、走到半路关掉送回锚点。
+2. 单测覆盖：快照优先级（无 5h → 周；额外 → 兜底；Credits → 兜底；pending/apikey/empty/error）、标签压缩、金额紧凑、低额度阈值、无次额度、隐私字段反查（`email|account_name|cwd|session|path`）、ticker 引用计数（两个 owner 释放一个仍跑、全释放即停、0 分钟不起）、今日缓存 10 分钟与并发保护；sprite 几何（`CodexHudSprite.test.ts`）覆盖 112×66 viewBox、眼睛层按款计数（兔 / 企鹅各 1 组、蜗牛 2 组挂两根触角尖）、兔子两组耳 + 耳抽动层 + 主耳填充位置、蜗牛触角组与 `.mv-body` / `.mv-shell` 分家，以及 `idle` / `react` 两道闸门各自独立；手势（`CodexHudApp.test.ts`）覆盖掠过不弹 / 160ms 展开 / 移开收起 / 点角色钉住与解钉 / 点面板开 Codex 并解钉 / 拖动中不展开且拖完补展开 / 右键不再有任何请求（第九轮删掉右键隐藏单测），并断言每次展开/收起落到 `desko_hud_set_expanded` 的 true/false 序列；巡游覆盖首步离开锚点且偏移不落盘、连续采样始终夹在锚点 ±48px 且撞绳那一下压扁掉头（`scaleX(.84)`）、钉住即停、1.5s 冷却、指针进窗那半拍收回来、巡游 `Moved` 被认领不改锚点、真拖动重锚后绕新锚走、`walk:false` 停在原地、走到半路关掉送回锚点；第十一轮的动作调度（节拍间隙抽招牌且那一下不跟位、池子轮转出 `['mv-bow','mv-fold']`、步子与落脚同奇偶、告警只在刚跌进告警那一次、窗未亮不放、reduce 不放招牌但走动照旧、换皮肤换一手＝企鹅只有 `mv-flap`）与 sprite 分层契约（每个动作交出的 `mv-*` 层集合、`--mv-dur` 逐条等于 `HUD_MOVE_MS[id]`、未挂动作时不留任何 `mv-*`）。HUD 两套 17 + 21 用例，全量 61 文件 / 702 用例绿。
 3. `PW_CHANNEL=msedge npx playwright test e2e/specs/codex-hud-settings.spec.ts`：默认关；三张皮肤卡；兔子默认；选企鹅后重载仍是企鹅；开关持久化；`quotaRefreshMinutes=0` 出现 warning；设置页截图确认三张 136×144 展开态预览不裁切、不溢出。
 4. 原生窗口无法用 Playwright 断言，必须真机 `npm run tauri dev` 验收：
    - 透明无白闪；不在任务栏；始终置顶；数据刷新不抢焦点。
@@ -461,8 +520,11 @@ interface CodexHudState {
    - 默认右下角：角色距底边 24px + 70px 面板预留，即窗口顶边距底边 168px；往下拖会在预留位停住（invisible floor，角色不会跑到面板放不下的高度）；拖到副屏、重启、拔屏后位置仍在 work area 内；100%/125%/150% 缩放。
    - 锁定立即消失，解锁恢复（收起态）；Codex 模块关闭销毁，重开恢复；退出无残留窗口。
    - 主题/强调色切换立即生效；低额度 9% 珊瑚色 + `!`；无账号/待授权/API Key/无额度/刷新失败五种占位都能画。
-   - 动作（原生 `getComputedStyle` / `getAnimations` 取证）：桌面窗口收起态 `.figure` = 呼吸（企鹅 waddle、蜗牛 4.6s）、`.eyes` = 眨眼、`.ear-l/.ear-r` = 耳摆、`.ear-flick` = 抽动、`.act` = none；hover 展开瞬间 `.act` 出现 `hud-hop`，点角色出现 `poke` 且 `.eyes` 从 `hud-blink` 换成 `hud-wink`；设置页三张预览 `idle=true / react=false`，`.figure` 与 `.eyes` 都有动画名，`.act` 恒为 none。9s 采样至少各命中一次：眨眼时眼睛高度压到 0.11px 级、`.ear-flick` 转角到 6.9°（探头要读 `.ear-flick`，读 `.ear-l` 只会量到 ≤2.8° 的耳摆，会把抽动误判成「没动」）；系统开启「减少动画效果」后桌面窗口归零。
+   - 动作（原生 `getComputedStyle` / `getAnimations` 取证）：桌面窗口收起态 `.figure` = 呼吸（企鹅 waddle、蜗牛 4.6s）、`.eyes` = 眨眼、`.ear-l/.ear-r` = 耳摆、`.ear-flick` = 抽动、`.act` = none；hover 展开瞬间 `.act` 出现 `hud-hop`，点角色出现 `poke` 且 `.eyes` 从 `hud-blink` 换成 `hud-wink`；设置页三张预览 `idle=true / react=false`，`.figure` 与 `.eyes` 都有动画名，`.act` 恒为 none。9s 采样至少各命中一次：眨眼时眼睛高度压到 0.11px 级、`.ear-flick` 转角到 6.9°（探头要读 `.ear-flick`，读 `.ear-l` 只会量到 ≤2.8° 的耳摆，会把抽动误判成「没动」）；系统开启「减少动画效果」后常驻微动、触发动作与招牌动作全部归零（JS 根本不放 `mv-*` class，CSS 另收 `.mv-fig` / `.mv-body` 的 transition），但巡游的 lane 与落脚照旧——那颗是「桌面走动」用户开关，不在这个偏好里。
    - 巡游（原生 14s 采样 + 开关走真设置页）：窗口 `outer_position` 的 x 在锚点 ±48px 内逐拍移动、y 与尺寸恒为 136×74；整段期间 `codex_hud_position` 一字不变；指针停在角色上（展开）时 6 次采样同一个 x；在设置页点「桌面走动」关掉 → 窗口被送回锚点并停住（采样同一个 x 且等于落盘 x），再打开 → 恢复走动。缺 `core:window:allow-set-position` 时这套会「单测全绿、窗口一动不动」，capability 改动必须重编才生效。
+   - 相位锁定与专属动作（第十一轮原生 CDP 取证，隔离档案 `com.desko.hudtest`，`.tmp/codex-hud-20261021/native-drive.mjs moves`）：三款各采 9s，`getComputedStyle` 的步子目标按拍交替（兔 `translateY(-1.5px) scaleY(.98)` ↔ `translateY(1px) scaleY(.96)`、企鹅 ±3.6° 旋转、蜗牛纯 `translateX`），`transitionDuration` 兔 0.18s/0.34s/0.21s、企鹅 0.42s/0.26s、蜗牛 0.62s/0.34s；**三款都满足 `liftTicks === gaitTicks`**（落脚次数与步子次数逐一相等 = 同拍的直接证据，也是这一轮唯一能证明「没有漂腿」的原生指标）。6 条招牌动作各冻到 50% 拍帧，命中的层与设计逐条对上（`bow` 5 层含 `.mug`、`fold` 3、`flap` 3、`stretch` 3、`tangle` 3、`tuck` 4 含 `.mv-shell`）；告警三款分别 `mv-fold` / `mv-flap` / `mv-tuck`。样张 `.tmp/codex-hud-20261021/R11-native-moves.png`（11 帧 5×）。
+   - **一条待拍板的实测（不要当成已通过）**：停在默认右下角时（取证机 `x=1784`，1784 + 136 = 1920 正好贴住右缘），±48px 的绳长整段伸出屏外，几乎每拍都被 Rust 夹回、走的是 `beginTurn()` 那条路；而 `beginTurn()` 完成后直接回 `beginBeat()`，**不经过 `afterHold()`**——`afterHold()` 是唯一递减 `beatsToMove` 的地方。结果 45s 采样里一次招牌动作都没放，把锚点搬到屏中（900×520）后立刻恢复。要么让转身也过一次 `afterHold()`，要么绳长按 work area 收缩，二选一待拍板。
+   - 冻帧采样踩坑：真机的服务快照会随时把 mock 推掉的空态盖回来，取证循环必须每 3s 重推一次 mock；出过一张「两只兔子空壳」的假帧，实为 stale frame（同一轮日志里 `cls=sprite idle react mv-bow ph=` 根本不是空态），重跑即正常——判据要看 class，不能只看 PNG。
 5. 隐私：HUD 的 DOM、事件 payload、aria-label 均不出现账号邮箱、名称、会话标题、cwd、路径；原始 `quota_error.message` 不上 HUD。
 6. 对比度：面板上标签文字在 `--panel-bg` 上 ≥4.5:1；低额度百分比不依赖颜色单独传达（第一行的 `!`）。
 7. 视觉对拍：设置页三张 1× 展开态预览与原生展开小窗逐像素同尺寸；原生另拍收起/展开两张桌面截图，确认 136×74 角色与 136×144 面板的实际观感、字号与底边钳制。截图踩坑：Playwright 元素截图走 captureBeyondViewport，会重启动画时间轴，`animation-delay` 的胶片条在 PNG 里全落在 0%——要拍动作序列必须 `animation:none` + 内联 transform 冻住，或 `document.getAnimations()` 逐个 `currentTime` + `pause()`。
@@ -495,10 +557,17 @@ interface CodexHudState {
 | 主窗口隐藏 | **HUD 继续显示** | 桌面常驻是需求本身 |
 | 刷新为 0 | **尊重设置，不偷偷联网**，设置页 warning | 用户关自动刷新就应该真的关 |
 | 今日刷新 | **10 分钟本地扫描缓存** | 与配额网络解耦；不并发扫 |
-| 动画 | **面板无入场/无滑入；角色分两层闸门**：`idle` 常驻（呼吸/摇摆 + 耳摆 + 抽动 + 眨眼，周期 2.9–7.3s），`react` 触发（展开小跳 0.62s、点角色眨眼 0.48s，只有桌面窗口传）；`prefers-reduced-motion` 全关 | 用户反馈「还是静态的」「可以让它动起来吗」，四档全要。常驻层把幅度压到 ≤2.8°、亚像素级，主动看才注意得到；触发层只在用户自己引发的手势上给回应，面板本身照旧不滑入不淡入 |
+| 动画 | **面板无入场/无滑入；角色分两层闸门**：`idle` 常驻（呼吸/摇摆 + 耳摆 + 抽动 + 眨眼，周期 2.9–7.3s），`react` 触发（展开小跳 0.62s、点角色眨眼 0.48s，只有桌面窗口传）；走路那几层见 §3.8/§3.9；`prefers-reduced-motion` 下微动与触发 `animation: none`、招牌动作 JS 侧直接不放、步子 CSS 侧收掉 transition | 用户反馈「还是静态的」「可以让它动起来吗」，四档全要。常驻层把幅度压到 ≤2.8°、亚像素级，主动看才注意得到；触发层只在用户自己引发的手势上给回应，面板本身照旧不滑入不淡入 |
 | 设置页预览 | **传 `idle` 不传 `react`**，三款皮肤一起呼吸眨眼 | 用户要「预览也同步动」；但不传 `react`——预览不可交互，跳一下会把「可点」的假象带到设置里 |
 | 巡游 | **绕锚点系绳 ±48px，默认开，可关**；有人在（展开/钉住/拖动/靠近/刚碰过）一律不走 | 「真走动」和「位置不动」正面冲突，解法不是二选一而是把两个概念拆开：用户放的是锚点，走的是临时偏移。关掉会送回锚点，不留在中途 |
+| 走动节奏 | **相位锁定一拍三段**（角色窗内滑出 → 到位那一帧窗口接手同样的量 → 停一拍），步态 6/4/3px、glide 340/420/620ms、hold 210/260/340ms；撞绳头先 `scaleX(.84)` 压扁再转身 | 第六轮「一拍整窗跳 `stride`」被指「效果很差」：窗口每拍瞬移，角色从没走过路。跟位与 lane 归零放在同一个 JS 任务里，屏幕坐标才接得上（`x + lane` 恒等）；兔/企鹅左右几乎对称，光翻面看不出掉头，挤压那一下才是记号 |
+| 动作按皮肤专属 | **9 条**：每只 1 条常驻步子（兔压身 / 企鹅摇摆 / 蜗牛伸脖子，用 transition 不用循环 keyframes）+ 每只 2~3 手招牌动作（兔鞠躬·卷耳朵、企鹅摆翅膀、蜗牛伸脖子·触角打结·缩壳）；第十轮的「张望」删除 | 用户点名「我觉得效果不好，我们可以针对这几种类型，做不同的效果，比如说兔子鞠躬，卷耳朵；企鹅摆动翅膀」。步子用 class 交替的目标值，与落脚同一个 `walkStrides % 2` 驱动，天生同相，不会出现「腿在动、身子不动」 |
+| 动作调度 | **事件 > 节拍间隙招牌 > 每拍步子**，唯一调度点是 `afterHold()`；招牌动作每 3–5 拍抽一手、按计数器轮转，放动作那一拍不迈步；`canMove()` 闸门（有人在看不演） | 掷骰子没法断言，计数器能数出第几拍放哪一手；不迈步是因为窗口一动，动作的 50% 就被切走 |
+| 见底告警动作 | **分皮肤** `HUD_ALERT_MOVES`（兔 `fold` / 企鹅 `flap` / 蜗牛 `tuck`），只在状态跳变且窗已亮着时放一次，挂在 `applyPayload` 而不是 watch | 缩壳的两层（`.mv-shell` + 触角）只长在蜗牛身上，拿它当三款共用动作等于给企鹅兔子演一个没有零件的动作；用 watch 会让首次快照、解锁重亮相、重开挂件都补演一遍 |
+| 动作时长 | **`HUD_MOVE_MS` 单点定义**，CSS 读 `--mv-dur`、JS 收尾定时器读同一张表 | 写两遍必然漂，漂了就是动画没放完被摘 class |
+| 事件三条 | 本轮只接**见底 / 失败**；蹲跳（展开面板）、展鳍（刷新成功）按拍板不进码，keyframes 未写 | 用户拍板「另两条等走动那条定了再叠」；展开那一下已有 `.act` 的 `hud-hop`，不重复加 |
+| 屏缘绳长 | **待拍板**：默认右下角整段绳伸出屏外，几乎每拍走 `beginTurn()` 而不经过 `afterHold()`，招牌动作实测 45s 一次都没放（搬到屏中立刻恢复） | 要么转身也过一次 `afterHold()`，要么绳长按 work area 收缩；现状不改，先记账 |
 | 设置预览 | **1× 展开态真实 sprite + 示例数据** | 三款可比较，也能直接看清面板字号；真实小窗用实时数据 |
 | 额外 WebView 成本 | **接受**，关闭即 destroy | 换独立置顶/透明/不抢焦点；默认关，没开的人不付 |
 
-样张：`.tmp/codex-hud-20261021/S5-cute.png`（三款 2× 细节 + 底部 1× 实际大小）；第五轮去扁与待机对拍 `.tmp/codex-hud-20261021/prod-v2-strip.png`（纸/墨收起 + 眨眼/抽动冻结序列）、`prod-v2-settings.png`（设置页三张 1× 预览）、`native-motion-{rest,blink,twitch,expanded}.png`（原生真实窗口冻帧）；第六轮动作分层与巡游取证 `native-react-{hop,wink}.png`（展开小跳 / 点击眨眼瞬间）、`native-preview-motion.png`（设置页三张一起呼吸，`react=false`）、`native-walk-{patrol,parked}.png`（巡游中与关掉送回锚点）、`settings-preview.png`（「桌面走动」开关入位，e2e 落帧）；第七轮面板去标签对拍 `native-expanded-bunny.png`（真实窗口 1×）、`native-collapsed-bunny.png`（收起 1× 只露角色）、`native-hover-{expanded,collapsed}.png`（hover 展开 / pointerleave 收起，`posSame=true` 证明角色不动）；第八轮居中排版对拍 `ty-{real-single,real-dual,widest,low,empty}.png`（同一 CSS 的 3×，`real-single` 就是用户真机形态：只有周窗口 + `9.76亿`，行序 `w20%` / `9.76亿tok` / `≈$418.41↗`）、`native-realdata.png`（真机 1× 同数据）、`native-expanded-full.png`（真机 1× 极值 `5h100%w100%` / `9,876.5万tok` / `≈$999.99↗`，`clip=[]`）；设计源在 `.tmp/codex-hud-20261021/cute.src.html`，未入版本库。实现已按本文落地，改动清单见 §5.6；提交与推送另行确认。
+样张：`.tmp/codex-hud-20261021/S5-cute.png`（三款 2× 细节 + 底部 1× 实际大小）；第五轮去扁与待机对拍 `.tmp/codex-hud-20261021/prod-v2-strip.png`（纸/墨收起 + 眨眼/抽动冻结序列）、`prod-v2-settings.png`（设置页三张 1× 预览）、`native-motion-{rest,blink,twitch,expanded}.png`（原生真实窗口冻帧）；第六轮动作分层与巡游取证 `native-react-{hop,wink}.png`（展开小跳 / 点击眨眼瞬间）、`native-preview-motion.png`（设置页三张一起呼吸，`react=false`）、`native-walk-{patrol,parked}.png`（巡游中与关掉送回锚点）、`settings-preview.png`（「桌面走动」开关入位，e2e 落帧）；第七轮面板去标签对拍 `native-expanded-bunny.png`（真实窗口 1×）、`native-collapsed-bunny.png`（收起 1× 只露角色）、`native-hover-{expanded,collapsed}.png`（hover 展开 / pointerleave 收起，`posSame=true` 证明角色不动）；第八轮居中排版对拍 `ty-{real-single,real-dual,widest,low,empty}.png`（同一 CSS 的 3×，`real-single` 就是用户真机形态：只有周窗口 + `9.76亿`，行序 `w20%` / `9.76亿tok` / `≈$418.41↗`）、`native-realdata.png`（真机 1× 同数据）、`native-expanded-full.png`（真机 1× 极值 `5h100%w100%` / `9,876.5万tok` / `≈$999.99↗`，`clip=[]`）；设计源在 `.tmp/codex-hud-20261021/cute.src.html`，未入版本库；第十轮节奏 mock 与真 token 对拍在 `.tmp/codex-hud-20261021/`（`R11-native-moves.png` = 第十一轮 11 帧原生冻帧合片：三款静置 + 6 条招牌动作 50% + 三款见底告警，取证脚本 `native-drive.mjs moves`，同样未入库）。实现已按本文落地，改动清单见 §5.6；提交与推送另行确认。

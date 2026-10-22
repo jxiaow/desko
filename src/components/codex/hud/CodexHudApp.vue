@@ -5,7 +5,16 @@ import { invoke } from '@tauri-apps/api/core'
 import { PhysicalPosition } from '@tauri-apps/api/dpi'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import CodexHudSprite from './CodexHudSprite.vue'
-import { hudAriaLabel, type CodexHudEventPayload, type CodexHudState } from '../../../utils/codexHud'
+import {
+  HUD_ALERT_MOVES,
+  HUD_IDLE_MOVES,
+  HUD_MOVE_MS,
+  hudAriaLabel,
+  type CodexHudEventPayload,
+  type CodexHudMove,
+  type CodexHudSkin,
+  type CodexHudState,
+} from '../../../utils/codexHud'
 
 const state = ref<CodexHudState | null>(null)
 const expanded = ref(false)
@@ -34,23 +43,21 @@ const WALK_SETTLE_MS = 180
 const WALK_GLIDE_EASE = 'cubic-bezier(.22, .61, .36, 1)'
 const WALK_TURN_SQUASH = 0.84
 
+/** 招牌动作插在节拍间隙，取代原来的「张望」：每隔 3~5 拍抽一个，按顺序轮转不重样。 */
+const MOVE_GAPS = [3, 4, 5]
+
 type HudGait = {
   /** 一步的屏幕位移，CSS px */
   stride: number
   glide: number
   hold: number
-  /** 每走几步张一次望；0 = 从不 */
-  lookEvery: number
-  lookMs: number
   turnMs: number
-  /** 跨步期身体起伏，负数=抬起 */
-  bob: number
 }
 
-const WALK_GAIT: Record<CodexHudState['skin'], HudGait> = {
-  bunny: { stride: 6, glide: 340, hold: 210, lookEvery: 4, lookMs: 820, turnMs: 240, bob: -0.8 },
-  penguin: { stride: 4, glide: 420, hold: 260, lookEvery: 3, lookMs: 900, turnMs: 240, bob: -0.5 },
-  snail: { stride: 3, glide: 620, hold: 340, lookEvery: 2, lookMs: 1200, turnMs: 160, bob: 0 },
+const WALK_GAIT: Record<CodexHudSkin, HudGait> = {
+  bunny: { stride: 6, glide: 340, hold: 210, turnMs: 240 },
+  penguin: { stride: 4, glide: 420, hold: 260, turnMs: 240 },
+  snail: { stride: 3, glide: 620, hold: 340, turnMs: 160 },
 }
 
 let unlisten: UnlistenFn[] = []
@@ -61,6 +68,7 @@ let dwellTimer: ReturnType<typeof setTimeout> | undefined
 let dragSettleTimer: ReturnType<typeof setTimeout> | undefined
 let pokeTimer: ReturnType<typeof setTimeout> | undefined
 let walkTimer: ReturnType<typeof setTimeout> | undefined
+let moveTimer: ReturnType<typeof setTimeout> | undefined
 let armed = false
 let dragging = false
 let hovered = false
@@ -78,11 +86,22 @@ let anchored = false
 /** 巡游自己触发的 Moved：既不能当成拖动，也不能写进持久化位置。 */
 let expectedMove: { x: number; y: number; at: number } | null = null
 let walkStrides = 0
+/** 距离下一个招牌动作还剩几拍，以及轮到第几个动作 */
+let beatsToMove = MOVE_GAPS[0]
+let moveTurn = 0
+/** 系统级降低动效：招牌动作干脆不放，别让它无声地卡住节拍 */
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** 角色在窗口内的姿态。一条 transform 由一个持有者写完，所以跨步/起伏/转身共用一个对象。 */
 const walkPose = ref({ lane: 0, bob: 0, face: 1, ms: 0, ease: 'ease-out' })
 const walkLift = ref<'' | 'a' | 'b'>('')
-const walkLook = ref(false)
+/** 常驻步子那一下：角色自己那一层，与 `walkLift` 同奇偶 */
+const walkGait = ref<'' | 'a' | 'b'>('')
+const walkGaitMs = ref(0)
+/** 时长不进 prop：sprite 按动作名从同一张表里取，JS 收尾与 CSS 同源 */
+const moveId = ref<CodexHudMove | ''>('')
+/** 上一次推过来的快照是否已经在告警：缩壳只给「刚变成告警」那一次 */
+let wasAlert = false
 
 const walkStyle = computed(() => ({
   transform: `translate3d(${walkPose.value.lane}px, ${walkPose.value.bob}px, 0) scaleX(${walkPose.value.face})`,
@@ -123,6 +142,11 @@ async function revealAfterPaint(): Promise<void> {
 }
 
 async function applyPayload(payload: CodexHudEventPayload): Promise<void> {
+  const alert = Boolean(
+    payload.state.severe || payload.state.stale || payload.state.placeholderAlert,
+  )
+  const alertRisen = alert && !wasAlert
+  wasAlert = alert
   state.value = payload.state
   applyTheme(payload.state)
   walkEnabled = payload.walk !== false
@@ -136,10 +160,18 @@ async function applyPayload(payload: CodexHudEventPayload): Promise<void> {
     walkOffset = 0
     walkDir = 1
     walkStrides = 0
+    beatsToMove = MOVE_GAPS[0]
+    moveTurn = 0
+    cancelMove()
+    walkLift.value = ''
+    walkGait.value = ''
+    walkGaitMs.value = 0
     setPose({ ms: 0, ease: 'ease-out', lane: 0, bob: 0, face: 1 })
   } else {
     void parkAtAnchor()
   }
+  // 告警那一下只在「变化」与「窗已经亮着」时放：首次快照窗还没 show，解锁重亮相也不该再缩一次。
+  if (alertRisen && revealed && !reducedMotion) void playMove(HUD_ALERT_MOVES[payload.state.skin])
   await nextTick()
   if (payload.reveal) void revealAfterPaint()
 }
@@ -187,6 +219,11 @@ function canWalk(): boolean {
     && Date.now() - lastPointerAt > WALK_COOLDOWN_MS
 }
 
+/** 招牌动作只在「没人管它」时抽；减少动效则干脆不放，别让它无声地卡住节拍。 */
+function canMove(): boolean {
+  return !reducedMotion && !expanded.value && !pinned.value && !dragging && !armed && !hovered
+}
+
 function gait(): HudGait {
   return WALK_GAIT[state.value?.skin ?? 'bunny']
 }
@@ -198,6 +235,23 @@ function setPose(next: Partial<typeof walkPose.value>): void {
 function after(ms: number, run: () => void): void {
   clearTimeout(walkTimer)
   walkTimer = setTimeout(run, ms)
+}
+
+/** 同一个动作连放两次不会重启动画：先把 class 摘掉、等一帧渲染，再挂回去。 */
+async function playMove(id: CodexHudMove): Promise<void> {
+  clearTimeout(moveTimer)
+  if (moveId.value === id) {
+    moveId.value = ''
+    await nextTick()
+  }
+  moveId.value = id
+  moveTimer = setTimeout(() => { moveId.value = '' }, HUD_MOVE_MS[id])
+}
+
+function cancelMove(): void {
+  clearTimeout(moveTimer)
+  moveTimer = undefined
+  moveId.value = ''
 }
 
 /** 空转也要留表：被挡住时按节拍重试，指针一走自然接上。 */
@@ -223,8 +277,11 @@ function beginBeat(): void {
     return
   }
   walkStrides += 1
-  setPose({ ms: g.glide, ease: WALK_GLIDE_EASE, lane: walkDir * g.stride, bob: g.bob })
-  walkLift.value = walkStrides % 2 === 1 ? 'a' : 'b'
+  const odd = walkStrides % 2 === 1
+  setPose({ ms: g.glide, ease: WALK_GLIDE_EASE, lane: walkDir * g.stride })
+  walkLift.value = odd ? 'a' : 'b'
+  walkGait.value = odd ? 'a' : 'b'
+  walkGaitMs.value = g.glide
   after(g.glide, endStride)
 }
 
@@ -243,24 +300,36 @@ function endStride(): void {
   }
   setPose({ ms: 0, ease: 'ease-out', lane: 0, bob: 0 })
   walkLift.value = ''
+  walkGait.value = ''
+  walkGaitMs.value = g.hold
   after(g.hold, afterHold)
 }
 
+/** 落地停那一拍：数到点的拍间隙抽一个招牌动作，没数到就继续迈步。 */
 function afterHold(): void {
-  const g = gait()
   if (!canWalk()) {
     settleWalk()
     return
   }
-  if (g.lookEvery > 0 && walkStrides % g.lookEvery === 0) {
-    walkLook.value = true
-    after(g.lookMs, () => {
-      walkLook.value = false
-      beginBeat()
-    })
+  const pick = takeIdleMove()
+  if (!pick) {
+    beginBeat()
     return
   }
-  beginBeat()
+  void playMove(pick)
+  after(HUD_MOVE_MS[pick], beginBeat)
+}
+
+/** 不掷骰子：按计数器轮转，第几拍放哪一手能数出来，单测才断言得动。 */
+function takeIdleMove(): CodexHudMove | '' {
+  if (!canMove()) return ''
+  beatsToMove -= 1
+  if (beatsToMove > 0) return ''
+  const pool = HUD_IDLE_MOVES[state.value?.skin ?? 'bunny']
+  const pick = pool[moveTurn % pool.length]
+  moveTurn += 1
+  beatsToMove = MOVE_GAPS[moveTurn % MOVE_GAPS.length]
+  return pick
 }
 
 /** 兔子/企鹅左右几乎对称，翻面等于没翻——靠挤压那一下让「掉头」看得见。 */
@@ -279,8 +348,10 @@ function beginTurn(g: HudGait): void {
 function settleWalk(): void {
   clearTimeout(walkTimer)
   walkTimer = undefined
-  walkLook.value = false
+  cancelMove()
   walkLift.value = ''
+  walkGait.value = ''
+  walkGaitMs.value = WALK_SETTLE_MS
   const p = walkPose.value
   // 拖动每帧都会进来一次，姿态已经归位就别再写一遍
   if (p.lane !== 0 || p.bob !== 0 || p.face !== walkDir) {
@@ -308,8 +379,10 @@ async function parkAtAnchor(): Promise<void> {
   if (walkEnabled || !anchored) return
   clearTimeout(walkTimer)
   walkTimer = undefined
-  walkLook.value = false
+  cancelMove()
   walkLift.value = ''
+  walkGait.value = ''
+  walkGaitMs.value = WALK_SETTLE_MS
   setPose({ ms: WALK_SETTLE_MS, ease: 'ease-out', lane: 0, bob: 0, face: 1 })
   if (walkOffset === 0) return
   const target = { x: anchorX, y: anchorY, at: Date.now() }
@@ -447,6 +520,7 @@ onUnmounted(() => {
   clearTimeout(dragSettleTimer)
   clearTimeout(pokeTimer)
   clearTimeout(walkTimer)
+  clearTimeout(moveTimer)
   clearDwell()
   unlisten.forEach((stop) => stop())
   unlisten = []
@@ -471,7 +545,9 @@ onUnmounted(() => {
         :expanded="expanded"
         :poke="poke"
         :lift="walkLift"
-        :looking="walkLook"
+        :gait="walkGait"
+        :gait-ms="walkGaitMs"
+        :move="moveId"
         idle
         react
         @pointerenter="onSpritePointerEnter"

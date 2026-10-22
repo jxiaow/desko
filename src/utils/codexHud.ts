@@ -41,6 +41,33 @@ export function isHudSkin(value: string): value is CodexHudSkin {
   return HUD_SKINS.some((skin) => skin.id === value)
 }
 
+/** 招牌动作：sprite 里每个动作一组 keyframes，触发方只认这些 id。 */
+export type CodexHudMove = 'bow' | 'fold' | 'flap' | 'stretch' | 'tangle' | 'tuck'
+
+/** 时长只在这一处定义：CSS 的 `--mv-dur` 和收尾定时器同源，不会漂拍。 */
+export const HUD_MOVE_MS: Record<CodexHudMove, number> = {
+  bow: 1150,
+  fold: 1350,
+  flap: 900,
+  stretch: 1600,
+  tangle: 1400,
+  tuck: 1900,
+}
+
+/** 巡游节拍间隙抽一个放，取代原来的「张望」；企鹅只有摆翅膀那一手。 */
+export const HUD_IDLE_MOVES: Record<CodexHudSkin, CodexHudMove[]> = {
+  bunny: ['bow', 'fold'],
+  penguin: ['flap'],
+  snail: ['stretch', 'tangle'],
+}
+
+/** 见底 / 刷新失败那一下：蜗牛缩壳，另两只没有壳可缩，用各自「收一下」的那条形。 */
+export const HUD_ALERT_MOVES: Record<CodexHudSkin, CodexHudMove> = {
+  bunny: 'fold',
+  penguin: 'flap',
+  snail: 'tuck',
+}
+
 function hudMinutesLabel(minutes: number | null | undefined): string {
   if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return '5h'
   if (minutes % 10080 === 0) {

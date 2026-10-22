@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import CodexHudSprite from './CodexHudSprite.vue'
-import type { CodexHudSkin, CodexHudState } from '../../../utils/codexHud'
+import { HUD_MOVE_MS, type CodexHudMove, type CodexHudSkin, type CodexHudState } from '../../../utils/codexHud'
 
 const state = (patch: Partial<CodexHudState> = {}): CodexHudState => ({
   skin: 'bunny',
@@ -64,33 +64,57 @@ describe('挂件三皮肤', () => {
     expect(zero.get('.shell-fill').attributes('d')).toContain('M 28,46.40')
   })
 
-  it('角色画在 112×66 上，分层给出呼吸 / 触发 / 眼睛三层 transform', () => {
+  it('角色画在 112×66 上，分层给出呼吸 / 触发 / 动作 / 眼睛几层 transform', () => {
     for (const skin of ['bunny', 'penguin', 'snail'] as CodexHudSkin[]) {
       const wrapper = mountSkin(skin)
       expect(wrapper.get('.char').html()).toContain('viewBox="0 0 112 66"')
-      expect(wrapper.findAll('.eyes')).toHaveLength(1)
       // 同一元素挂两条 transform 动画会互相覆盖，所以一层一个 <g>
       expect(wrapper.findAll('.figure')).toHaveLength(1)
       expect(wrapper.findAll('.act')).toHaveLength(1)
       expect(wrapper.get('.figure').find('.act').exists()).toBe(true)
+      // 步子与六个招牌动作都只挂在 .mv-* 这些空档上，不碰常驻层
+      expect(wrapper.findAll('.mv-fig, .mv-body')).toHaveLength(1)
     }
+    expect(mountSkin('bunny').findAll('.eyes')).toHaveLength(1)
+    expect(mountSkin('penguin').findAll('.eyes')).toHaveLength(1)
+    // 蜗牛两只眼睛分住两根触角，反相摆动时不能共一个缩放框
+    expect(mountSkin('snail').findAll('.eyes')).toHaveLength(2)
     const bunny = mountSkin('bunny')
     expect(bunny.findAll('.ear-l, .ear-r')).toHaveLength(2)
     expect(bunny.findAll('.ear-flick')).toHaveLength(2)
+    expect(bunny.get('.ear-l').find('.mv-ear-l').find('.ear-flick').exists()).toBe(true)
+    expect(bunny.findAll('.mv-head')).toHaveLength(1)
+    expect(bunny.get('.mv-head').find('.mug').exists()).toBe(true)
     expect(bunny.get('.ear-fill.primary').attributes('y')).toBe('12.32')
-    expect(mountSkin('snail').findAll('.antennae')).toHaveLength(1)
+    const snail = mountSkin('snail')
+    expect(snail.findAll('.antennae')).toHaveLength(1)
+    expect(snail.findAll('.stalk-l, .stalk-r')).toHaveLength(2)
+    expect(snail.get('.mv-body').find('.antennae').exists()).toBe(true)
+    // 壳是刚体：缩壳时身体在壳下面退，壳自己只压一点
+    expect(snail.get('.figure').find('.mv-shell').exists()).toBe(true)
+    expect(mountSkin('penguin').findAll('.flip-l, .flip-r')).toHaveLength(2)
   })
 
-  it('巡游的落脚与张望各有自己一层，抬爪不把趾线留在原地', () => {
-    const bunny = mount(CodexHudSprite, { props: { state: state(), idle: true, lift: 'a', looking: true } })
+  it('巡游的落脚与步子各有自己一层，抬爪不把趾线留在原地', () => {
+    const bunny = mount(CodexHudSprite, { props: { state: state(), idle: true, lift: 'a', gait: 'a', gaitMs: 340 } })
     expect(bunny.findAll('.paw-a, .paw-b')).toHaveLength(2)
-    // 张望必须独立于摆耳那一层，否则两条 transform 互相覆盖
-    expect(bunny.findAll('.ear-look')).toHaveLength(2)
-    expect(bunny.get('.ear-l').find('.ear-look').exists()).toBe(true)
-    expect(bunny.get('.sprite').classes()).toEqual(expect.arrayContaining(['lift-a', 'look']))
-    const penguin = mount(CodexHudSprite, { props: { state: state({ skin: 'penguin' }), lift: 'b' } })
+    expect(bunny.get('.sprite').classes()).toEqual(expect.arrayContaining(['lift-a', 'gait-a']))
+    expect(bunny.get('.sprite').attributes('style')).toContain('--gait-ms: 340ms')
+    const penguin = mount(CodexHudSprite, { props: { state: state({ skin: 'penguin' }), lift: 'b', gait: 'b' } })
     expect(penguin.get('.foot-b').findAll('.foot, .toe')).toHaveLength(2)
     expect(penguin.get('.sprite').classes()).toContain('lift-b')
+    expect(penguin.get('.sprite').classes()).toContain('gait-b')
+  })
+
+  it('招牌动作只交出一个 class，时长由动作名从同一张表里取', () => {
+    for (const mv of ['bow', 'fold', 'flap', 'stretch', 'tangle', 'tuck'] as CodexHudMove[]) {
+      const wrapper = mount(CodexHudSprite, { props: { state: state(), idle: true, move: mv } })
+      expect(wrapper.get('.sprite').classes()).toContain(`mv-${mv}`)
+      expect(wrapper.get('.sprite').attributes('style')).toContain(`--mv-dur: ${HUD_MOVE_MS[mv]}ms`)
+    }
+    const still = mount(CodexHudSprite, { props: { state: state(), idle: true } })
+    expect(still.get('.sprite').attributes('style')).toContain('--mv-dur: 0ms')
+    expect(still.get('.sprite').classes().some((c) => c.startsWith('mv-'))).toBe(false)
   })
 
   it('待机微动看 idle，交互触发看 react，两个闸门各自独立', () => {

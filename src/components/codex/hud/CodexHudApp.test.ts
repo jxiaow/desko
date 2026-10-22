@@ -3,9 +3,9 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import CodexHudApp from './CodexHudApp.vue'
-import type { CodexHudEventPayload, CodexHudState } from '../../../utils/codexHud'
+import { HUD_MOVE_MS, type CodexHudEventPayload, type CodexHudState } from '../../../utils/codexHud'
 
-const { onMoved, startDragging, setPosition, outerPosition, scaleFactor, invokeMock, movedHandler } =
+const { onMoved, startDragging, setPosition, outerPosition, scaleFactor, invokeMock, movedHandler, reduce } =
   vi.hoisted(() => ({
     onMoved: vi.fn(),
     startDragging: vi.fn(),
@@ -14,11 +14,21 @@ const { onMoved, startDragging, setPosition, outerPosition, scaleFactor, invokeM
     scaleFactor: vi.fn(),
     invokeMock: vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>(),
     movedHandler: { current: undefined as ((arg: { payload: { x: number; y: number } }) => void) | undefined },
+    reduce: { on: false },
   }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(), emitTo: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({ onMoved, startDragging, setPosition, outerPosition, scaleFactor }),
+}))
+// jsdom 没有 matchMedia，而挂件开机第一件事就是读降低动效那一档
+vi.stubGlobal('matchMedia', (query: string) => ({
+  matches: query.includes('reduced-motion') && reduce.on,
+  media: query,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
 }))
 
 const state: CodexHudState = {
@@ -79,6 +89,7 @@ async function mountApp(): Promise<VueWrapper> {
 beforeEach(() => {
   vi.useFakeTimers()
   vi.resetAllMocks()
+  reduce.on = false
   invokeMock.mockResolvedValue(undefined)
   startDragging.mockResolvedValue(undefined)
   setPosition.mockResolvedValue(undefined)
@@ -196,6 +207,34 @@ function movedXs(): number[] {
   return setPosition.mock.calls.map(([pos]) => (pos as { x: number }).x)
 }
 
+function spriteClasses(): string[] {
+  return wrapper?.get('.sprite').classes() ?? []
+}
+
+/** 招牌动作在 DOM 上只留一个 class：mv-bow / mv-fold / mv-flap… */
+function moveClass(): string {
+  return spriteClasses().find((c) => c.startsWith('mv-')) ?? ''
+}
+
+function gaitClass(): string {
+  return spriteClasses().find((c) => c.startsWith('gait-')) ?? ''
+}
+
+function cssVar(name: string): string {
+  const style = String(wrapper?.get('.sprite').attributes('style') ?? '')
+  return style.match(new RegExp(`${name}: ([^;]+);`))?.[1] ?? ''
+}
+
+/** 亮相过的窗口：告警那一下只给「窗已经亮着」时的变化。 */
+async function mountRevealed(): Promise<VueWrapper> {
+  const next = mount(CodexHudApp)
+  await flushPromises()
+  push({ state, reveal: true })
+  await vi.advanceTimersByTimeAsync(700)
+  await flushPromises()
+  return next
+}
+
 describe('挂件绕锚点走动', () => {
   it('滑到位那一帧才跟位：窗口挪的量正好等于角色已经滑出的量', async () => {
     wrapper = await mountApp()
@@ -214,28 +253,116 @@ describe('挂件绕锚点走动', () => {
     expect(savedPositions()).toEqual([])
   })
 
-  it('每四步插一拍张望，那一拍不跟位', async () => {
+  it('数到点的节拍间隙抽一个招牌动作，那一下不跟位', async () => {
     wrapper = await mountApp()
-    vi.advanceTimersByTime(GLIDE_MS + HOLD_MS)
-    const moves: number[] = []
-    const looks: boolean[] = []
-    for (let i = 0; i < 6; i++) {
-      vi.advanceTimersByTime(GLIDE_MS)
+    // 兔子一拍 = 滑出 340 + 落地停 210；三拍之后才轮到动作
+    vi.advanceTimersByTime(2100)
+    await flushPromises()
+    expect(setPosition).toHaveBeenCalledTimes(3)
+    expect(moveClass()).toBe('')
+    vi.advanceTimersByTime(200)
+    await flushPromises()
+    expect(moveClass()).toBe('mv-bow')
+    expect(cssVar('--mv-dur')).toBe(`${HUD_MOVE_MS.bow}ms`)
+    expect(setPosition).toHaveBeenCalledTimes(3)
+    // 动作放完才接下一拍，收尾与 --mv-dur 同源
+    vi.advanceTimersByTime(HUD_MOVE_MS.bow)
+    await flushPromises()
+    expect(moveClass()).toBe('')
+    expect(lanePx()).toBe(STRIDE_PX)
+    vi.advanceTimersByTime(GLIDE_MS)
+    await flushPromises()
+    expect(setPosition).toHaveBeenCalledTimes(4)
+  })
+
+  it('动作按池子轮转，下一拍间隙换成另一手', async () => {
+    wrapper = await mountApp()
+    const seen: string[] = []
+    for (let i = 0; i < 80; i++) {
+      vi.advanceTimersByTime(100)
       await flushPromises()
-      moves.push(setPosition.mock.calls.length)
-      vi.advanceTimersByTime(HOLD_MS)
-      await flushPromises()
-      looks.push(wrapper.get('.sprite').classes().includes('look'))
+      const now = moveClass()
+      if (now && now !== seen[seen.length - 1]) seen.push(now)
     }
-    expect(moves).toEqual([1, 2, 3, 4, 4, 4])
-    expect(looks).toEqual([false, false, false, true, true, false])
+    // 兔子池子里只有鞠躬与卷耳朵，轮到第二个必须是另一手
+    expect(seen).toEqual(['mv-bow', 'mv-fold'])
+  })
+
+  it('换皮肤就换一手：企鹅只有摆翅膀，步子换成左右摇', async () => {
+    wrapper = await mountApp()
+    push({ state: { ...state, skin: 'penguin' }, reveal: false })
+    await flushPromises()
+    const moves = new Set<string>()
+    const gaits = new Set<string>()
+    for (let i = 0; i < 90; i++) {
+      vi.advanceTimersByTime(100)
+      await flushPromises()
+      if (moveClass()) moves.add(moveClass())
+      if (gaitClass()) gaits.add(gaitClass())
+    }
+    expect([...moves]).toEqual(['mv-flap'])
+    expect([...gaits].sort()).toEqual(['gait-a', 'gait-b'])
+  })
+
+  it('步子跟着跨步走：滑出那半拍压身，落地停那半拍松开', async () => {
+    wrapper = await mountApp()
+    vi.advanceTimersByTime(GLIDE_MS + HOLD_MS + 50)
+    await flushPromises()
+    expect(gaitClass()).toBe('gait-a')
+    expect(cssVar('--gait-ms')).toBe(`${GLIDE_MS}ms`)
+    vi.advanceTimersByTime(GLIDE_MS)
+    await flushPromises()
+    expect(gaitClass()).toBe('')
+    expect(cssVar('--gait-ms')).toBe(`${HOLD_MS}ms`)
+    vi.advanceTimersByTime(HOLD_MS + 10)
+    await flushPromises()
+    expect(gaitClass()).toBe('gait-b')
+    // 抬爪与步子同奇偶：腿和身子不会一个动一个不动
+    expect(spriteClasses()).toEqual(expect.arrayContaining(['lift-b', 'gait-b']))
+  })
+
+  it('刚见底那一下缩一次，同一状态不重放', async () => {
+    wrapper = await mountRevealed()
+    const low = { ...state, severe: true, primary: { label: '5h', percentage: 9 } }
+    push({ state: low, reveal: false })
+    await flushPromises()
+    // 兔子没壳可缩，用它自己那条「收一下」的形
+    expect(moveClass()).toBe('mv-fold')
+    expect(cssVar('--mv-dur')).toBe(`${HUD_MOVE_MS.fold}ms`)
+    vi.advanceTimersByTime(HUD_MOVE_MS.fold + 10)
+    await flushPromises()
+    expect(moveClass()).toBe('')
+    push({ state: low, reveal: false, walk: true })
+    await flushPromises()
+    expect(moveClass()).toBe('')
+  })
+
+  it('窗还没亮就不放告警：首帧快照只对齐状态', async () => {
+    wrapper = await mountApp()
+    push({ state: { ...state, severe: true, primary: { label: '5h', percentage: 4 } }, reveal: false })
+    await flushPromises()
+    expect(moveClass()).toBe('')
+  })
+
+  it('系统要求减少动效时不放招牌动作，走动照旧', async () => {
+    reduce.on = true
+    wrapper = await mountApp()
+    const seen = new Set<string>()
+    for (let i = 0; i < 60; i++) {
+      vi.advanceTimersByTime(100)
+      await flushPromises()
+      if (moveClass()) seen.add(moveClass())
+    }
+    expect(seen.size).toBe(0)
+    expect(setPosition.mock.calls.length).toBeGreaterThan(0)
   })
 
   it('走到系绳尽头挤压掉头，锚点仍是放它的那一点', async () => {
     wrapper = await mountApp()
     const faces = new Set<string>()
-    for (let i = 0; i < 90; i++) {
-      vi.advanceTimersByTime(120)
+    // 挤压那一下只有 108ms，120ms 采样会整拍错过
+    for (let i = 0; i < 200; i++) {
+      vi.advanceTimersByTime(60)
       await flushPromises()
       faces.add(faceX())
     }
