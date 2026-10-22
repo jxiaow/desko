@@ -1,0 +1,18 @@
+/* 画布必须全透明；global.css 的正文底色会把它变成一块实心板。
+   Windows 最小跟踪宽度会把 120 的客户区撑到 136，所以按 100% 铺满、由内容自居中。 */
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  overflow: hidden;
+}
+
+body {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}

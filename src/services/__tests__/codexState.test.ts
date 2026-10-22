@@ -19,6 +19,7 @@ describe('Codex 锁屏与异步请求', () => {
     const s = await loadState()
     s.accounts.value = [account()]
     s.sessions.value = [sessionRec('a')]
+    s.sessionTotalCount.value = 1
     s.sessionTokens.value = { a: { sessionId: 'a', totalTokens: 1 } as any }
     s.sessionsLoaded.value = true
     s.trashLoaded.value = true
@@ -29,6 +30,7 @@ describe('Codex 锁屏与异步请求', () => {
     s.clearCodexSession()
     expect(s.accounts.value).toEqual([])
     expect(s.sessions.value).toEqual([])
+    expect(s.sessionTotalCount.value).toBe(0)
     expect(s.sessionTokens.value).toEqual({})
     expect(s.usageReport.value).toBeNull()
     expect(s.sessionsLoaded.value || s.trashLoaded.value || s.recycledLoaded.value).toBe(false)
@@ -280,7 +282,7 @@ describe('codexState 配额自动刷新', () => {
     expect(callsOf('refresh_codex_quotas_batch')).toHaveLength(0)
   })
 
-  it('定时器按间隔跑批量刷新，离开页面即停', async () => {
+  it('定时器按间隔跑批量刷新，最后一个持有者释放即停', async () => {
     vi.useFakeTimers()
     answerSettings({ codex_quota_auto_refresh_minutes: '5' })
     const s = await loadState()
@@ -289,34 +291,55 @@ describe('codexState 配额自动刷新', () => {
 
     const batchCalls = () =>
       mockInvoke.mock.calls.filter(([cmd]) => cmd === 'refresh_codex_quotas_batch').length
-    s.startQuotaTicker()
+    s.acquireQuotaTicker('codex-page')
     await vi.advanceTimersByTimeAsync(4 * 60_000)
     expect(batchCalls()).toBe(0)
     await vi.advanceTimersByTimeAsync(60_000)
     expect(batchCalls()).toBe(1)
 
-    s.stopQuotaTicker()
+    s.releaseQuotaTicker('codex-page')
     await vi.advanceTimersByTimeAsync(10 * 60_000)
     expect(batchCalls()).toBe(1)
   })
 
-  it('间隔为 0 不起定时器，设置页改动只影响在跑的定时器', async () => {
+  it('挂件还持有定时器时，Codex 页离开不停表', async () => {
+    vi.useFakeTimers()
+    answerSettings({ codex_quota_auto_refresh_minutes: '5' })
+    const s = await loadState()
+    await s.loadQuotaSettings()
+    s.accounts.value = [account()]
+
+    const batchCalls = () =>
+      mockInvoke.mock.calls.filter(([cmd]) => cmd === 'refresh_codex_quotas_batch').length
+    s.acquireQuotaTicker('codex-page')
+    s.acquireQuotaTicker('codex-hud')
+    s.releaseQuotaTicker('codex-page')
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(batchCalls()).toBe(1)
+
+    s.releaseQuotaTicker('codex-hud')
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(batchCalls()).toBe(1)
+  })
+
+  it('间隔为 0 不起定时器，有持有者时改成正数当场按新值重启', async () => {
     vi.useFakeTimers()
     answerSettings({ codex_quota_auto_refresh_minutes: '0' })
     const s = await loadState()
     await s.loadQuotaSettings()
     s.accounts.value = [account()]
 
+    const batchCalls = () =>
+      mockInvoke.mock.calls.filter(([cmd]) => cmd === 'refresh_codex_quotas_batch').length
     s.syncQuotaTicker()
-    s.startQuotaTicker()
+    s.acquireQuotaTicker('codex-page')
     await vi.advanceTimersByTimeAsync(60 * 60_000)
-    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === 'refresh_codex_quotas_batch')).toBe(false)
+    expect(batchCalls()).toBe(0)
 
-    // 关掉的状态下改了间隔：没有定时器可重启，等下次进页才起
     await s.saveQuotaSettings(5, 20)
     s.syncQuotaTicker()
     await vi.advanceTimersByTimeAsync(6 * 60_000)
-    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === 'refresh_codex_quotas_batch')).toBe(false)
+    expect(batchCalls()).toBe(1)
   })
 })
 
@@ -340,6 +363,39 @@ describe('codexState 会话档', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+  })
+
+  it('保留未搜索的会话总数，迟到的搜索结果不覆盖总数，清空搜索后重新更新', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [sessionRec('a'), sessionRec('b')] : [])
+    await s.loadSessions()
+    expect(s.sessionTotalCount.value).toBe(2)
+    s.sessionQuery.value = 'a'
+    mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [sessionRec('a')] : [])
+    await s.loadSessions()
+    expect(s.sessionTotalCount.value).toBe(2)
+    let finish!: (result: unknown) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const request = s.loadSessions()
+    s.sessionQuery.value = ''
+    finish([])
+    await request
+    expect(s.sessions.value).toEqual([])
+    expect(s.sessionTotalCount.value).toBe(2)
+    await s.loadSessions()
+    expect(s.sessionTotalCount.value).toBe(1)
+  })
+
+  it('删除搜索命中的会话时，总数同步减少，其他未命中的会话仍计入总数', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [sessionRec('a'), sessionRec('b')] : [])
+    await s.loadSessions()
+    s.sessionQuery.value = 'a'
+    mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [sessionRec('a')] : cmd === STATS_CMD ? [] : { message: '已删除' })
+    await s.loadSessions()
+    await s.moveSessionToTrash('a')
+    expect(s.sessions.value).toEqual([])
+    expect(s.sessionTotalCount.value).toBe(1)
   })
 
   it('首次加载全部收起，手动展开后刷新保留，锁屏后恢复全部收起', async () => {
@@ -752,6 +808,39 @@ describe('codexState 用量档', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+  })
+
+  it('今日用量直接借用用量页刚扫过的今日窗口，不再单独扫盘', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args))
+    await s.loadUsage()
+    expect(s.usageToday.value?.totalTokens).toBe(1000)
+
+    await s.loadTodayUsage()
+    expect(callsOf(USAGE_CMD)).toHaveLength(1)
+    expect(s.usageToday.value?.totalTokens).toBe(1000)
+  })
+
+  it('没有缓存时只查今日窗口，10 分钟内再要只读旧值', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementation(async (cmd) => cmd === USAGE_CMD ? usageReportFixture(1234) : undefined)
+    await s.loadTodayUsage()
+    expect(callsOf(USAGE_CMD)).toHaveLength(1)
+    expect(mockInvoke.mock.calls[0]![1]).toMatchObject({ windows: { today: expect.any(Number) } })
+    expect(s.usageToday.value).toEqual({ totalTokens: 1234, estimatedCostUsd: 0.01 })
+
+    await s.loadTodayUsage()
+    expect(callsOf(USAGE_CMD)).toHaveLength(1)
+  })
+
+  it('会话来源变化后今日汇总一起作废', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementation(async (cmd) => cmd === USAGE_CMD ? usageReportFixture(1234) : undefined)
+    await s.loadTodayUsage()
+    expect(s.usageToday.value?.totalTokens).toBe(1234)
+    s.invalidateUsage()
+    expect(s.usageToday.value).toBeNull()
+    expect(s.usageTodayUpdatedAt.value).toBeNull()
   })
 
   it('用量扫描期间删除会话，旧报告作废并补扫最新目录', async () => {

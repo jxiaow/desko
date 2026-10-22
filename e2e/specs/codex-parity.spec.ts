@@ -20,12 +20,90 @@ async function pick(page: Page, label: string, option: string) {
   await page.getByRole('menuitemradio', { name: option, exact: true }).click()
 }
 
+for (const count of [0, 1, 2]) {
+  test(`账号和会话有 ${count} 条数据时，仅超过一条才显示搜索与筛选`, async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 600 })
+    await bootUnlocked(page, {
+      settings: { codex_enabled: 'true' },
+      codex: {
+        accounts: seed.codex.accounts.slice(0, count),
+        sessions: Array.from({ length: count }, (_, i) => ({ sessionId: `session-${i}`, title: `会话 ${i}`, cwd: 'C:\\demo' })),
+      },
+    }, '/codex')
+    await expect(page.getByRole('button', { name: '添加账号', exact: true })).toBeVisible()
+    await expect(page.locator('.acc-row')).toHaveCount(count)
+    const accountSearch = page.getByRole('textbox', { name: '搜索 Codex 账号' })
+    const filters = page.locator('#codex-view-filters')
+    if (count > 1) {
+      await expect(accountSearch).toBeVisible()
+      await expect(page.getByRole('button', { name: '账号排序', exact: true })).toBeVisible()
+    } else {
+      await expect(accountSearch).toHaveCount(0)
+      await expect(filters).toBeHidden()
+      await expect(page.getByRole('button', { name: /^账号(类型|状态|标签|排序)$/ })).toHaveCount(0)
+      await expect(page.locator('.content-inner')).toHaveCSS('padding-top', '16px')
+    }
+    await page.getByRole('button', { name: '会话', exact: true }).click()
+    if (count) await expect(page.locator('.grp-head')).toHaveCount(1)
+    else await expect(page.locator('.empty-title')).toHaveText('官方 Codex 还没有会话记录')
+    const sessionSearch = page.getByRole('textbox', { name: '搜索会话标题' })
+    const mode = page.getByRole('group', { name: '会话搜索范围' })
+    if (count > 1) {
+      await expect(sessionSearch).toBeVisible()
+      await expect(mode).toBeVisible()
+    } else {
+      await expect(sessionSearch).toHaveCount(0)
+      await expect(mode).toHaveCount(0)
+      await expect(filters).toBeHidden()
+      await expect(page.locator('.content-inner')).toHaveCSS('padding-top', '16px')
+      await expect(page.locator('.sess-view')).toHaveCSS('margin-top', '0px')
+    }
+    await expect(page.locator('#workspace-page-toolbar').getByRole('button', { name: '刷新', exact: true })).toBeVisible()
+  })
+}
+
+test('删到只剩一条账号时收起筛选，并清除条件以显示剩余账号', async ({ page }) => {
+  await bootUnlocked(page, { ...seed, codex: { accounts: seed.codex.accounts.slice(0, 2) } }, '/codex')
+  await page.getByRole('textbox', { name: '搜索 Codex 账号' }).fill('main@')
+  await page.locator('.acc-row .acc-more').click()
+  await page.locator('.popover').getByRole('button', { name: '删除', exact: true }).click()
+  await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
+  await expect(page.locator('.acc-row')).toHaveCount(1)
+  await expect(page.locator('.acc-row')).toHaveAttribute('data-email', 'need@e2e.dev')
+  await expect(page.locator('#codex-view-filters')).toBeHidden()
+  await expect(page.locator('.filter-reset')).toHaveCount(0)
+})
+
+test('删到只剩一条会话时收起搜索，并显示未命中的剩余会话', async ({ page }) => {
+  await bootUnlocked(page, {
+    ...seed,
+    codex: { ...seed.codex, sessions: [
+      { sessionId: 'one', title: '需要删除', cwd: 'C:\\demo' },
+      { sessionId: 'two', title: '保留会话', cwd: 'C:\\demo' },
+    ] },
+  }, '/codex')
+  await page.getByRole('button', { name: '会话', exact: true }).click()
+  await page.getByRole('textbox', { name: '搜索会话标题' }).fill('需要删除')
+  await page.locator('.sess-row[data-sid="one"]').click()
+  await page.locator('.sess-card .trash-btn').click()
+  await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
+  await expect(page.locator('#codex-view-filters')).toBeHidden()
+  await expect(page.locator('.grp-meta')).toContainText('1 条')
+  await page.locator('.grp-head').click()
+  await expect(page.locator('.sess-title')).toHaveText('保留会话')
+})
+
 test('账号可以用邮箱搜索，并叠加类型、状态和标签筛选', async ({ page }) => {
   await boot(page)
   await page.getByRole('textbox', { name: '搜索 Codex 账号' }).fill(' MAIN@ ')
   await expect(page.locator('.acc-row')).toHaveCount(1)
   await expect(page.locator('.acc-row .mail')).toHaveText('主力')
   await expect(page.locator('.account-summary')).toContainText('1 / 3')
+  await expect(page.getByRole('button', { name: '账号类型', exact: true })).toBeVisible()
+  await page.getByRole('textbox', { name: '搜索 Codex 账号' }).fill('没有匹配的账号')
+  await expect(page.locator('.acc-row')).toHaveCount(0)
+  await expect(page.getByRole('textbox', { name: '搜索 Codex 账号' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '账号类型', exact: true })).toBeVisible()
   await page.getByRole('button', { name: '清除账号搜索' }).click()
   await pick(page, '账号类型', 'OAuth')
   await pick(page, '账号标签', '#工作')
@@ -68,6 +146,10 @@ test('会话正文搜索接入本地正文查询，切换搜索范围保留关�
   await expect(page.locator('.grp-head')).toHaveCount(1)
   const calls = await page.evaluate(() => (window as any).__E2E__.invocations.filter((c: any) => c.cmd === 'codex_list_sessions_across_instances'))
   expect(calls.at(-1).args).toEqual({ titleQuery: null, contentQuery: '变更记录' })
+  await page.locator('.search-clear').click()
+  await expect(page.locator('.grp-head')).toHaveCount(2)
+  await expect(page.getByRole('textbox', { name: '搜索会话正文' })).toBeVisible()
+  await expect(page.getByRole('group', { name: '会话搜索范围' })).toBeVisible()
 })
 
 for (const theme of ['paper', 'ink']) {
@@ -75,7 +157,13 @@ for (const theme of ['paper', 'ink']) {
     test(`${theme} ${width}px 会话搜索范围保持分段样式与选中态`, async ({ page }) => {
       await page.setViewportSize({ width, height: 760 })
       await page.emulateMedia({ reducedMotion: 'reduce' })
-      await bootUnlocked(page, { settings: { codex_enabled: 'true', theme } }, '/codex')
+      await bootUnlocked(page, {
+        settings: { codex_enabled: 'true', theme },
+        codex: { sessions: [
+          { sessionId: 'one', title: '会话一', cwd: 'C:\\demo' },
+          { sessionId: 'two', title: '会话二', cwd: 'C:\\demo' },
+        ] },
+      }, '/codex')
       await page.getByRole('button', { name: '会话', exact: true }).click()
       const group = page.getByRole('group', { name: '会话搜索范围' })
       const title = group.getByRole('button', { name: '标题', exact: true })

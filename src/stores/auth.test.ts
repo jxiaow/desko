@@ -65,6 +65,25 @@ describe('Auth Store', () => {
       expect(store.isInitialized).toBe(true)
       expect(store.appState).toBe('unlocked')
     })
+
+    it('首启回调必须在 appState 翻转前跑完：SetupPage 一卸载，事件就没人接', async () => {
+      const store = useAuthStore()
+      const onSetup = vi.fn()
+      let ready!: () => void
+      vi.mocked(authApi.setupMasterPassword).mockImplementation(
+        () => new Promise<void>((resolve) => { ready = resolve }),
+      )
+
+      const pending = store.setupMasterPassword('test-password', onSetup)
+      await flushPromises()
+      expect(onSetup).not.toHaveBeenCalled()
+      expect(store.appState).toBe('locked')
+
+      ready()
+      await pending
+      expect(onSetup).toHaveBeenCalledTimes(1)
+      expect(store.appState).toBe('unlocked')
+    })
   })
 
   describe('unlock', () => {

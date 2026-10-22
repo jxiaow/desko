@@ -1,7 +1,7 @@
 # Solar 图标集（应用内图标骨架）
 
-- 作品：**Solar**（Linear / Round / Bold 家族，共 8706 枚），本仓库取用其中 62 枚：
-  `src/utils/icons.ts` 里 61 枚 `*-linear` 描边件 + 1 枚 `*-bold` 实心件（已收藏状态位）。
+- 作品：**Solar**（Linear / Round / Bold 家族，共 8706 枚），本仓库取用其中 63 枚：
+  `src/utils/icons.ts` 里 62 枚 `*-linear` 描边件 + 1 枚 `*-bold` 实心件（已收藏状态位）。
 - 作者：**480 Design** — https://www.figma.com/community/file/1166831539721848736
 - 许可：**CC BY 4.0** — https://creativecommons.org/licenses/by/4.0/
 - 取数：`@iconify-json/solar` v1.2.13（https://icon-sets.iconify.design/solar/）的 `icons.json`，

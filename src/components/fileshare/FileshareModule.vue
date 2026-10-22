@@ -20,12 +20,14 @@ import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { usePageActive } from '../../composables/usePageActive'
+import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 import { isWebRuntime } from '../../services/runtime'
 import { uploadSharedFile } from '../../services/transport'
 import { writeClipboardText } from '../../utils/clipboard'
 
 const toastStore = useToastStore()
 const pageActive = usePageActive()
+const workspaceLayout = useWorkspaceLayout()
 const webRuntime = isWebRuntime()
 const fileInput = ref<HTMLInputElement | null>(null)
 let active = true
@@ -48,7 +50,6 @@ const targetName = computed(() => baseName(dirs.value[target.value] ?? ''))
 const linkBase = computed(() => status.value?.lanUrl ?? status.value?.localUrl ?? '')
 /** 横幅说的是"谁能访问"，页条胶囊说的是"在不在听"，两句不重复 */
 const exposure = computed(() => {
-  if (!running.value) return '服务未启动'
   return fsLocalOnly.value ? '仅本机可访问' : '同网段设备可访问'
 })
 /** 仅本机态下局域网地址等于本机地址，横幅那行直接显示本机地址 */
@@ -229,7 +230,8 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 
     <template v-else>
       <!-- 顶栏：状态胶囊 ｜ 启停大按钮（标题退役，五页统一无页标题） -->
-      <div class="page-bar">
+      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
+      <div class="page-bar service-page-bar">
         <span class="chip" :class="{ live: running }">
           <span class="dot" aria-hidden="true"></span>
           {{ running ? '监听中' : '已停止' }}
@@ -254,9 +256,24 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
           </button>
         </div>
       </div>
+      </Teleport>
 
-      <!-- 分组一：状态行（谁能访问 + 访问地址）+ 本机地址行 + 警告行，一张卡说完地址这件事 -->
-      <section class="clean-group-card">
+      <!-- 停止时只呈现说明与启动配置，目录仍可提前管理。 -->
+      <section v-if="!running" class="fs-idle" aria-labelledby="fs-idle-title">
+        <span class="fs-idle-icon"><AppIcon name="navLan" :size="24" /></span>
+        <div class="fs-idle-body">
+          <h2 id="fs-idle-title" class="fs-idle-title">服务未启动</h2>
+          <p class="fs-idle-desc">{{ fsLocalOnly ? '启动服务后，可在本机浏览器中上传和下载共享文件。' : '启动服务后，同网段设备可通过浏览器上传和下载文件。' }}</p>
+          <dl class="fs-idle-config" aria-label="启动配置">
+            <div><dt>访问范围</dt><dd>{{ fsLocalOnly ? '仅本机' : '同网段设备' }}</dd></div>
+            <div><dt>端口</dt><dd class="mono">{{ fsConfig?.port ?? '—' }}</dd></div>
+            <div><dt>访问口令</dt><dd>{{ fsHasPassword ? '已设置' : '未设置' }}</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <!-- 运行时才展示访问地址。 -->
+      <section v-else class="clean-group-card">
         <div class="fs-banner">
           <span class="banner-dot" :class="{ on: running }" aria-hidden="true"></span>
           <span class="banner-title" :title="running && !fsLocalOnly ? '同网段设备打不开时，先在 Windows 防火墙放行本应用的专用网络' : undefined">{{ exposure }}</span>
@@ -289,7 +306,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
             <AppIcon name="copy" :size="14" />
           </button>
         </div>
-        <!-- 停止态由横幅标题说话；这里只留全页唯一的警告位，一次说最要紧的一件事 -->
+        <!-- 这里只留全页唯一的警告位，一次说最要紧的一件事 -->
         <p v-if="running && openWarn" class="group-note chip-warn">
           <AppIcon name="lock" :size="12" />
           未设访问口令，同网段任何人都能浏览、上传这些目录。
@@ -300,18 +317,16 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
         </p>
       </section>
 
-      <!-- 分组二：拖拽直投。虚线皮是这张卡自己的边框，不再往白卡里塞第二层盒；
-           停止态收成一行提示，不为一个用不了的动作留半屏空白 -->
-      <section class="drop-card" :class="{ active: dragActive && running, off: !running }" @dragover="webRuntime && $event.preventDefault()" @drop="dropBrowserFiles">
+      <!-- 启动后才展示拖投入口；停止后仍保留本次已接收的提取链接。 -->
+      <section v-if="running || received.length" class="drop-card" :class="{ active: dragActive && running, off: !running }" @dragover="webRuntime && $event.preventDefault()" @drop="dropBrowserFiles">
         <input v-if="webRuntime" ref="fileInput" type="file" multiple hidden aria-label="上传到共享目录" @change="chooseBrowserFiles" />
-        <div class="well-body">
-          <AppIcon class="well-ico" :name="dropping ? 'clock' : 'upload'" :size="running ? 28 : 20" />
+        <div v-if="running" class="well-body">
+          <AppIcon class="well-ico" :name="dropping ? 'clock' : 'upload'" :size="28" />
           <div class="well-text">
-            <div class="well-title">{{ running ? (dropping ? '正在落盘…' : webRuntime ? '选择文件或拖入上传' : '把文件拖到这里') : webRuntime ? '上传文件' : '拖拽直投' }}</div>
-            <div class="well-sub" v-if="running">
+            <div class="well-title">{{ dropping ? '正在落盘…' : webRuntime ? '选择文件或拖入上传' : '把文件拖到这里' }}</div>
+            <div class="well-sub">
               落到 {{ targetName }} · 同名自动加 (1) · 单文件 4 GiB 内
             </div>
-            <div class="well-sub" v-else>{{ webRuntime ? '启动服务后，可从当前设备上传文件到共享目录' : '启动服务后，从资源管理器把文件拖进来即可生成提取链接' }}</div>
           </div>
           <button v-if="webRuntime && running" class="btn-secondary" type="button" :disabled="dropping" @click="fileInput?.click()">选择文件</button>
         </div>
@@ -409,6 +424,17 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
   border-color: var(--danger);
   color: var(--danger-hover);
 }
+
+/* 停止态以留白区分层级，与下面可编辑的共享目录分开。 */
+.fs-idle { display: flex; align-items: flex-start; gap: 16px; padding: 20px 14px 28px; }
+.fs-idle-icon { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; background: var(--fill); color: var(--text-secondary); }
+.fs-idle-body { min-width: 0; }
+.fs-idle-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-card-title); line-height: 24px; color: var(--text); }
+.fs-idle-desc { margin: 4px 0 14px; font-size: var(--text-sm); line-height: 1.7; color: var(--text-secondary); }
+.fs-idle-config { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; font-size: var(--text-xs); line-height: 20px; }
+.fs-idle-config > div { display: flex; gap: 8px; }
+.fs-idle-config dt { color: var(--text-muted); }
+.fs-idle-config dd { margin: 0; color: var(--text-secondary); }
 
 /* ── 分组卡：与穿透页 .tn-card 同一档面板方言（mock .wcard），一层框 + 发丝分行 ── */
 .clean-group-card {
@@ -514,8 +540,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 /* 已投文件行：链接本身就在等宽里，名字不必再单列 */
 .recv-list { border-top: 1px solid var(--border); }
 
-/* ── 拖拽直投卡：虚线是"可以丢东西进来"的唯一暗示，它自己就是那层卡皮，
-   不再嵌进白卡里当第二层；行式排版，停止态收成一行。非可滚动容器，不受 scrollbar-gutter 约束 ── */
+/* ── 拖拽直投卡：运行时展示投递入口，停止后只保留已有提取链接。 ── */
 .drop-card {
   border: 1.5px dashed var(--border-hover);
   border-radius: 12px;
@@ -531,8 +556,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
   min-height: 60px;
   padding: 8px 14px;
 }
-/* 能投的时候这块得像个井：居中三段（图标／题字／副字）、104px 高。
-   行式那 60px 太扁，看着只是张说明卡，不像能丢东西的地方。停止态不跟着长 */
+/* 运行时用居中的图标、题字和副字标识投递区域。 */
 .drop-card:not(.off) .well-body {
   flex-direction: column;
   justify-content: center;
@@ -555,8 +579,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .drop-card.active .well-ico,
 .drop-card.active .well-title { color: var(--accent); }
 .drop-card.off { background: var(--bg-surface); border-color: var(--border) }
-.drop-card.off .well-ico,
-.drop-card.off .well-title { color: var(--text-muted) }
+.drop-card.off .recv-list { border-top: 0; }
 
 /* 拖入中的整页落点提示：pointer-events 不吃事件，只是把「哪儿都能丢」说清楚。
    压在弹窗之上（原生拖拽期间弹窗还开着也得看得见），tooltip 之下 */

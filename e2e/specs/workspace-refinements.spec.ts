@@ -42,7 +42,11 @@ for (const width of [800, 1280]) {
 }
 
 test('固定状态按模块独立保存，重启恢复并能取消固定', async ({ page, context }) => {
-  await bootUnlocked(page)
+  const content = {
+    notes: [{ title: '目录检查', content_html: '<p>保留小记目录</p>' }],
+    entries: [{ name: '目录检查', url: 'https://example.invalid', category: '工作' }],
+  }
+  await bootUnlocked(page, content)
   await page.locator('#workspace-directory-toggle').click()
   await page.getByRole('button', { name: '固定目录', exact: true }).click()
   await page.getByRole('link', { name: '网址收藏', exact: true }).click()
@@ -53,7 +57,7 @@ test('固定状态按模块独立保存，重启恢复并能取消固定', async
   await expect.poll(async () => (await e2e.snapshot(page)).settings.workspace_directory_pinned).toBe('{"notes":true}')
   const saved = (await e2e.snapshot(page)).settings
   const restarted = await context.newPage()
-  await bootUnlocked(restarted, { settings: saved })
+  await bootUnlocked(restarted, { ...content, settings: saved })
   await expect(restarted.locator('.workspace-directory')).toBeVisible()
   await restarted.getByRole('button', { name: '取消固定目录', exact: true }).click()
   await expect.poll(async () => (await e2e.snapshot(restarted)).settings.workspace_directory_pinned).toBe('{"notes":false}')
@@ -65,7 +69,7 @@ test('左上角 Desko 菜单可进入档案和关于，Esc 只关闭菜单', asy
   const brand = page.getByRole('button', { name: 'Desko 菜单', exact: true })
   const box = (await brand.boundingBox())!
   expect(box.x + box.width).toBeLessThanOrEqual(56)
-  expect(box.y + box.height).toBeLessThanOrEqual(42)
+  expect(box.y + box.height).toBeLessThanOrEqual(48)
   await brand.click()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('menu')).toHaveCount(0)
@@ -83,15 +87,12 @@ for (const [path, label, dialog] of [
   ['/mfa', '新增验证码', '添加验证码'],
   ['/codex', '添加账号', '添加 Codex 账号'],
 ]) {
-  test(`${path} 创建按钮只有图标，仍能通过名称定位并使用键盘打开`, async ({ page }) => {
+  test(`${path} 创建按钮带文字标签，能通过名称定位并使用键盘打开`, async ({ page }) => {
     await bootUnlocked(page, { settings: { mfa_enabled: 'true', codex_enabled: 'true' } }, path)
     const button = page.getByRole('button', { name: label, exact: true }).first()
-    await expect(button).toHaveText('')
-    expect((await button.boundingBox())!.width).toBe(28)
-    const bounds = (await button.boundingBox())!
-    const icon = (await button.locator('svg').boundingBox())!
-    expect(Math.abs(icon.x + icon.width / 2 - bounds.x - bounds.width / 2), '加号水平居中').toBeLessThanOrEqual(.5)
-    expect(Math.abs(icon.y + icon.height / 2 - bounds.y - bounds.height / 2), '加号垂直居中').toBeLessThanOrEqual(.5)
+    await expect(button).toContainText(label)
+    await expect(button.locator('svg[data-icon="plus"]')).toBeVisible()
+    expect((await button.boundingBox())!.height).toBe(32)
     await button.focus()
     await page.keyboard.press('Enter')
     await expect(page.locator('.dialog:visible h3')).toContainText(dialog)

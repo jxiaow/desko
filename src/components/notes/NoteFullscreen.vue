@@ -16,6 +16,8 @@ import type { NoteExportFormat } from '../../utils/noteExport'
 import type { Note, Attachment } from '../../types'
 import { noteMeta, type NoteSaveState } from '../../stores/notes'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { usePageActive } from '../../composables/usePageActive'
+import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 
 const props = withDefaults(defineProps<{
   /** null 表示这是一条还没发布的小记（从胶囊输入进入全屏） */
@@ -55,6 +57,10 @@ const emit = defineEmits<{
 
 const html = ref(props.initialHtml)
 const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
+const pageActive = usePageActive()
+const workspaceLayout = useWorkspaceLayout()
+const headerInTitlebar = computed(() => workspaceLayout && pageActive.value)
+const headerRef = ref<HTMLElement | null>(null)
 
 const viewMode = computed(() => props.mode === 'view')
 /** 查看态直接跟库里的正文走，不走编辑草稿的本地快照 */
@@ -109,19 +115,25 @@ onMounted(() => {
 
 function trapFocus(event: KeyboardEvent) {
   if (event.defaultPrevented) return
-  const controls = Array.from(surfaceRef.value!.querySelectorAll<HTMLElement>(
+  // 标题栏中的操作与正文同属这个阅读面，Tab 顺序也要一起收拢。
+  const roots = headerInTitlebar.value ? [headerRef.value!, surfaceRef.value!] : [surfaceRef.value!]
+  const controls = roots.flatMap(root => Array.from(root.querySelectorAll<HTMLElement>(
     'button, a[href], input, textarea, select, [tabindex], [contenteditable="true"]',
-  )).filter(el => el.tabIndex >= 0 && !el.matches(':disabled') && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden')
+  ))).filter(el => el.tabIndex >= 0 && !el.matches(':disabled') && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden')
   const at = controls.indexOf(document.activeElement as HTMLElement)
-  if (!controls.length) { event.preventDefault(); surfaceRef.value?.focus() }
-  else if (event.shiftKey && at <= 0) { event.preventDefault(); controls[controls.length - 1].focus() }
-  else if (!event.shiftKey && (at < 0 || at === controls.length - 1)) { event.preventDefault(); controls[0].focus() }
+  event.preventDefault()
+  if (!controls.length) surfaceRef.value?.focus()
+  else {
+    const next = at < 0 ? (event.shiftKey ? controls.length - 1 : 0) : (at + (event.shiftKey ? -1 : 1) + controls.length) % controls.length
+    controls[next].focus()
+  }
 }
 </script>
 
 <template>
-  <section ref="surfaceRef" class="fs" role="dialog" aria-modal="true" tabindex="-1" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'" @keydown.tab="trapFocus">
-    <header class="fs-head" @mousedown="startDrag">
+  <section ref="surfaceRef" class="fs" role="dialog" aria-modal="true" tabindex="-1" :aria-owns="headerInTitlebar ? 'note-fullscreen-toolbar' : undefined" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'" @keydown.tab="trapFocus">
+    <Teleport :to="workspaceToolbarTarget" :disabled="!headerInTitlebar" defer>
+    <header id="note-fullscreen-toolbar" ref="headerRef" class="fs-head" :class="{ 'workspace-fs-head': headerInTitlebar, 'fs-reading-head': viewMode }" @mousedown="startDrag" @keydown.tab.stop="trapFocus">
       <button class="fs-exit" type="button" @click="emit('close')">
         <AppIcon name="min" :size="13" />
         退出全屏
@@ -160,6 +172,7 @@ function trapFocus(event: KeyboardEvent) {
         />
       </template>
     </header>
+    </Teleport>
 
     <div class="fs-scroll">
       <div class="fs-inner" :class="viewMode ? 'fs-doc' : 'fs-col'">
@@ -239,6 +252,7 @@ function trapFocus(event: KeyboardEvent) {
   background: var(--bg-editor);
   background-attachment: var(--editor-background-attachment);
 }
+.fs:has(.fs-doc) { background: var(--bg-workspace, var(--bg-editor)); background-attachment: fixed; }
 
 .fs-col {
   width: 100%;
@@ -246,18 +260,20 @@ function trapFocus(event: KeyboardEvent) {
   margin: 0 auto;
   padding-inline: var(--space-6);
 }
-/* 首尾栏铺满区域：按钮贴左右边缘，书写列在 --fs-max 内居中 */
+/* 桌面操作并入 48px 通栏顶栏；浏览器内保留同档的页内操作行。 */
 .fs-head {
-  height: 54px;
+  height: 48px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding-inline: var(--space-5);
 }
-/* 退出钮吃页栏控件方言：30px / --radius-ib / 平时无底，hover 才上 --hover-chrome 那层洗 */
+.workspace-fs-head { flex: 1; min-width: 0; padding: 0; }
+.workspace-fs-head :deep(button), .workspace-fs-head .save-hint { pointer-events: auto; }
+/* 退出与阅读动作使用当前顶栏的 32px 控件档。 */
 .fs-exit {
-  height: 30px;
+  height: 32px;
   padding: 0 var(--space-2);
   display: inline-flex;
   align-items: center;
@@ -297,22 +313,16 @@ function trapFocus(event: KeyboardEvent) {
 .fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.5; }
 
 .fs-scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable; min-height: 0; }
-/* 铺了纸就得给纸外留出桌沿，否则 800px 以下的窗口里纸边贴住滚动条 */
-.fs-scroll:has(.fs-doc) { padding-inline: var(--space-5); scrollbar-gutter: stable; }
+/* 阅读列保留水平留白，窄窗也不贴住滚动条。 */
+.fs-scroll:has(.fs-doc) { padding-inline: var(--workspace-gutter, var(--space-5)); scrollbar-gutter: stable; }
 .fs-inner { padding-block: 12px 20px; }
 
-/* 只读浏览铺一张纸：书写态是「对着空桌子写」，阅读态是「拿起写好的一页」，
-   纸面随可用空间展开；小窗保留原尺度，宽窗与书写列共用行长上限。
-   投影与 .grid-card / .memo 同档（--shadow-card）：这张纸与列表里的卡是同一层东西 */
+/* 阅读列直接落在工作区画布上，用行长和留白组织内容。 */
 .fs-doc {
   width: 100%;
   max-width: clamp(800px, 80%, var(--fs-max));
-  margin: var(--space-5) auto var(--space-8);
-  padding: 20px 28px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
+  margin: var(--space-8) auto var(--space-8);
+  padding: 0;
 }
 
 .fs-atts { margin-top: var(--space-5); }
@@ -376,10 +386,14 @@ function trapFocus(event: KeyboardEvent) {
   backdrop-filter: blur(10px);
 }
 
-/* ---------- 阅读态动作住在首栏右侧：与退出钮同一档 30px，主按钮只给「编辑」一颗 ---------- */
-.fs-head .bar-btn { height: 30px; }
-.fs-head .bar-btn.primary { background: var(--accent); color: var(--accent-on); font-weight: 600; padding: 0 14px; }
-.fs-head .bar-btn.primary:hover:not(:disabled) { background: var(--accent-hover); color: var(--accent-on); }
+/* 编辑沿用标题栏主操作的淡染，次级操作保持无底。 */
+.fs-head .bar-btn { height: 32px; }
+.fs-head .bar-btn.primary { background: var(--accent-soft); color: var(--text-brand); font-weight: 600; padding: 0 12px; }
+.fs-head .bar-btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text-brand); }
+@container workspace-toolbar (max-width: 460px) {
+  .workspace-fs-head.fs-reading-head .save-hint, .workspace-fs-head.fs-reading-head .fs-exit .kbd { display: none; }
+  .workspace-fs-head.fs-reading-head .fs-exit { margin-right: auto; }
+}
 
 .fs-hint {
   font-size: var(--text-2xs);

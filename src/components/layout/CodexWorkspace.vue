@@ -21,7 +21,6 @@ function onDirectoryClick(event: MouseEvent) {
 <template>
   <div id="workspace-surface" class="workspace-surface" :class="{ 'directory-docked': directoryVisible, 'workspace-notes': route.name === 'notes' }">
     <main class="main-area workspace-main">
-      <div id="workspace-page-toolbar" class="workspace-page-toolbar"></div>
       <div class="workspace-body">
         <div class="main-content"><slot /></div>
       </div>
@@ -40,50 +39,240 @@ function onDirectoryClick(event: MouseEvent) {
 </template>
 
 <style>
-.codex-layout { --workspace-directory-width: 200px; --workspace-frame-right: 6px; --workspace-toolbar-height: 64px; --page-search-max: 360px; }
-.app-root.codex-layout:not(.locked-bg) { background: var(--bg-workspace-frame); background-attachment: fixed; }
-.codex-layout .app-layout { padding: 0 var(--workspace-frame-right) 3px 0; }
-.codex-layout .sidebar { background: transparent; padding-top: 8px; }
-.codex-layout .sidebar .nav-item.active { background: var(--bg-workspace-selected); }
-.codex-layout .sidebar .nav-item:hover:not(.active) { background: var(--bg-workspace-hover); }
-.workspace-surface { --workspace-radius: 14px; --workspace-toolbar-max: var(--content-max); position: relative; display: flex; flex: 1; min-width: 0; overflow: hidden; border-radius: var(--workspace-radius); background: var(--bg-workspace); background-attachment: fixed; box-shadow: 0 2px 8px rgb(0 0 0 / 6%); }
-/* 只缩短滚动条轨道，保留列表与目录的完整高度，避免滑块进入首尾圆角。 */
-.workspace-surface :is(.content-inner, .stream, .fs-scroll, #workspace-directory-content)::-webkit-scrollbar-track { margin: var(--workspace-radius) 0; }
-/* 全屏接管整个内容面；原页保留滚动和目录状态，隐藏后也不会进入 Tab 焦点序列。 */
+.codex-layout {
+  --sidebar-rail-w: 56px;
+  --workspace-directory-width: clamp(200px, 19vw, 248px);
+  --workspace-directory-offset: 0px;
+  --workspace-toolbar-height: 48px;
+  --workspace-gutter: 32px;
+  --workspace-content-max: 1120px;
+  --workspace-main-width: calc(100vw - var(--sidebar-rail-w) - var(--workspace-directory-offset));
+  --workspace-content-padding: max(var(--workspace-gutter), calc((var(--workspace-main-width) - var(--scrollbar-track) - var(--workspace-content-max)) / 2));
+  --workspace-content-left: calc(var(--sidebar-rail-w) + var(--workspace-content-padding));
+  --workspace-content-right: calc(var(--workspace-directory-offset) + var(--workspace-content-padding) + var(--scrollbar-track));
+  --workspace-heading-width: 132px;
+  --workspace-heading-gap: 24px;
+  --page-search-max: 300px;
+}
+@media (max-width: 900px) {
+  .codex-layout { --workspace-heading-width: 112px; --workspace-heading-gap: 12px; }
+}
+.app-root.codex-layout:has(.workspace-surface.directory-docked) { --workspace-directory-offset: var(--workspace-directory-width); }
+.app-root.codex-layout:not(.locked-bg) { background: var(--bg-workspace); background-attachment: fixed; }
+.codex-layout .app-layout { padding: 0; }
+
+/* Logo 格与下方侧轨组成连续的 56px 导航轨，共用底色和同一束 fixed 光。
+   36px 方块左右各留 10px，图标仍是 22px 那一档（AppIcon 的 size 决定实笔反算，不动）。 */
+.app-root.codex-layout .sidebar.collapsed {
+  width: var(--sidebar-rail-w);
+  padding: 6px 0 10px;
+}
+.app-root.codex-layout :is(.titlebar-brandcell, .sidebar.collapsed) {
+  background: var(--bg-workspace-rail);
+  background-attachment: fixed;
+}
+.app-root.codex-layout .sidebar .sidebar-nav {
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  margin-inline: 0;
+  scrollbar-gutter: auto;
+}
+.app-root.codex-layout .sidebar .nav-item {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  border-radius: 10px;
+}
+.app-root.codex-layout .sidebar .nav-item:hover:not(.active) {
+  background: var(--hover-chrome);
+  color: var(--text);
+}
+.app-root.codex-layout .sidebar .nav-item:hover:not(.active) .nav-icon { color: var(--text-secondary); }
+/* 激活行不在此覆写：侧栏那一档的底色/字色/字重由 Sidebar.vue 统一出，
+   这里再写一遍只会让码轨和别的页各长一种"选中" */
+.app-root.codex-layout .sidebar .nav-icon,
+.app-root.codex-layout .sidebar .nav-icon svg { width: 22px; height: 22px; }
+.app-root.codex-layout .sidebar .nav-live { top: 5px; right: 5px; box-shadow: 0 0 0 2px var(--bg); }
+/* 轨底工具组走模块行同一档：36px 方块、同一条中线、hover 吃 chrome 填充 */
+.app-root.codex-layout .sidebar .sidebar-foot { align-items: center; gap: 4px; padding-top: 12px; }
+.app-root.codex-layout .sidebar .foot-item {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  border-radius: 10px;
+}
+.app-root.codex-layout .sidebar .foot-item:hover { background: var(--hover-chrome); color: var(--text); }
+.app-root.codex-layout .sidebar .foot-item:hover .foot-icon { color: var(--text-secondary); }
+.app-root.codex-layout .sidebar .foot-icon,
+.app-root.codex-layout .sidebar .foot-icon svg { width: 22px; height: 22px; }
+.workspace-surface { position: relative; display: flex; flex: 1; min-width: 0; overflow: hidden; background: var(--bg-workspace); background-attachment: fixed; }
+.workspace-surface :is(.content-inner, .stream, .fs-scroll, #workspace-directory-content)::-webkit-scrollbar-track { margin: 0; }
+/* 全屏接管整个内容面；原页保留滚动和目录状态，隐藏后也不会进入 Tab 焦点序列。
+   页级控件住在顶栏里，不在内容面内，同样要在全屏时让位。 */
 .workspace-surface:has(> .fs) > :is(.workspace-main, .workspace-directory) { visibility: hidden; }
-.workspace-surface.workspace-notes { --workspace-toolbar-max: var(--stream-max); }
-.workspace-page-toolbar { flex-shrink: 0; padding-left: max(var(--page-gutter), calc((100% - var(--workspace-toolbar-max)) / 2)); padding-right: var(--page-gutter); }
+.app-root.codex-layout:has(.workspace-surface > .fs) { --workspace-directory-offset: 0px; }
+.app-root.codex-layout:has(.workspace-surface > .fs) #workspace-page-toolbar > :not(.fs-head) { display: none; }
 .workspace-body { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; }
-.workspace-body > .main-content { min-width: 0; }
-.workspace-directory { display: flex; flex-direction: column; flex: 0 0 var(--workspace-directory-width); min-width: 0; overflow: hidden; border-left: 1px solid var(--border); background: var(--bg-inspector); }
-.workspace-directory-heading { height: var(--workspace-toolbar-height); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px 0 16px; }
-.workspace-directory-title { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
-.workspace-directory-actions { display: flex; gap: 2px; }
-.workspace-directory-actions .ib { width: 24px; height: 24px; }
-.workspace-directory-actions .on { color: var(--text-brand); }
-#workspace-directory-content { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 6px 8px 12px; }
-.workspace-main { min-width: 0; background: var(--bg-workspace); background-attachment: fixed; }
-#workspace-directory .directory-notes { display: block; width: 100%; min-height: 100%; height: auto; overflow: visible; scrollbar-gutter: auto; border: 0; background: transparent; padding: 0; }
+.workspace-body > .main-content { flex: 1; min-width: 0; }
+/* 悬停沿用主题中性色，轻微改变卡面明暗；强调色留给选中、编辑和焦点。 */
+.workspace-main { --bg-surface-hover: color-mix(in srgb, var(--text) 7.5%, var(--bg-surface)); min-width: 0; background: var(--bg-workspace); background-attachment: fixed; }
+:root[data-base="dark"] .workspace-main { --bg-surface-hover: color-mix(in srgb, var(--text) 4.5%, var(--bg-surface)); }
+/* 辅助目录融入同一画布，用留白和浅色选中块建立层次。 */
+.workspace-directory { display: flex; flex-direction: column; flex: 0 0 var(--workspace-directory-width); min-width: 0; overflow: hidden; background: var(--bg-inspector); background-attachment: fixed; }
+.workspace-directory-heading { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 48px; padding: 0 16px 0 22px; }
+.workspace-directory-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.workspace-directory-actions { display: flex; gap: 2px; color: var(--text-muted); }
+.workspace-directory-actions .ib { width: 28px; height: 28px; border-radius: 8px; }
+.workspace-directory-actions .on { color: var(--text-brand); background: var(--bg-inspector-active); }
+#workspace-directory-content { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 4px 12px 16px; }
+#workspace-directory .directory-notes { display: flex; flex-direction: column; width: 100%; min-height: 100%; height: auto; overflow: visible; scrollbar-gutter: auto; border: 0; background: transparent; padding: 0; }
 #workspace-directory .directory-list { display: flex; flex-direction: column; align-items: stretch; gap: 0; width: 100%; height: auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; }
-#workspace-directory .directory-link { position: relative; display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; height: 32px; min-height: 32px; padding: 0 10px; margin: 0 0 2px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); text-align: left; font: inherit; font-size: 13px; font-weight: 400; cursor: pointer; }
-#workspace-directory .directory-link svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--text-muted); }
-#workspace-directory .directory-link.active { background: var(--bg-workspace-selected); color: var(--text); font-weight: 500; }
-#workspace-directory .directory-link.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; border-radius: 2px; background: var(--accent); }
-#workspace-directory .directory-link:hover:not(.active) { background: var(--bg-inspector-hover); }
+#workspace-directory .directory-list > .directory-link:first-of-type:not(:last-child) { margin-bottom: 12px; }
+#workspace-directory .directory-link { position: relative; display: flex; flex-shrink: 0; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: 36px; min-height: 36px; padding: 0 10px; margin: 0 0 4px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary); text-align: left; font: inherit; font-size: 13px; font-weight: 400; cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); }
+#workspace-directory .directory-link svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--text-muted); }
+#workspace-directory .directory-link.active { background: var(--bg-inspector-active); color: var(--text-brand); font-weight: 600; }
+#workspace-directory .directory-link.active svg { color: inherit; }
+#workspace-directory .directory-link.active::before { display: none; }
+#workspace-directory .directory-link:hover:not(.active) { background: var(--bg-inspector-hover); color: var(--text); }
 #workspace-directory .directory-link.danger { color: var(--danger); }
 #workspace-directory .directory-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#workspace-directory .tab-count, .workspace-directory .directory-count { margin-left: auto; color: var(--text-muted); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
-#workspace-directory .directory-section-heading { display: flex; align-items: center; margin-top: 20px; padding: 0 10px 8px; color: var(--text-muted); font-size: 12px; font-weight: 500; letter-spacing: normal; }
-#workspace-directory .rail-empty { padding: 0 10px; color: var(--text-muted); font-size: 12px; }
-#workspace-directory .directory-reset { margin-top: 12px; }
-#workspace-directory .rail-foot { margin-top: 20px; padding: 0 10px; border: 0; color: var(--text-muted); font-size: 12px; }
+#workspace-directory .tab-count, .workspace-directory .directory-count { flex-shrink: 0; margin-left: auto; color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 400; font-variant-numeric: tabular-nums; }
+#workspace-directory .directory-link.active .tab-count { color: var(--text-brand); }
+#workspace-directory .directory-section-heading { display: flex; flex-shrink: 0; align-items: center; margin-top: 24px; padding: 0 10px 10px; color: var(--text-muted); font-size: 11.5px; font-weight: 500; }
+#workspace-directory .rail-empty { padding: 4px 10px; color: var(--text-muted); font-size: 12px; }
+#workspace-directory .directory-reset { margin-top: 16px; color: var(--text-muted); }
+#workspace-directory .rail-foot { margin-top: auto; padding: 24px 10px 0; border: 0; color: var(--text-muted); font-size: 11.5px; line-height: 1.6; }
 .workspace-directory .tab-thumb { display: none; }
-.codex-layout .workspace-main .page-bar, .codex-layout .workspace-main .day-head { background: var(--bg-workspace); background-attachment: fixed; }
-.codex-layout .workspace-main .day-head { top: 0; }
-.codex-layout .workspace-main .page-bar { flex-wrap: wrap; height: auto; min-height: var(--workspace-toolbar-height); }
-.codex-layout .workspace-main .search-box { flex: 1 1 150px; min-width: 120px; max-width: var(--page-search-max); }
-.codex-layout .workspace-main .page-bar .search-box { background: var(--bg-workspace-search); }
-.codex-layout .workspace-main .page-bar .btn-primary:not(:disabled):not(.ghost-danger) { background: var(--bg-workspace-primary); color: var(--text-workspace-primary); }
-.codex-layout .workspace-main .page-bar .btn-primary:hover:not(:disabled):not(.ghost-danger) { background: var(--bg-workspace-primary-hover); }
-.codex-layout .workspace-main .page-bar .btn-primary:active:not(:disabled):not(.ghost-danger) { background: var(--bg-workspace-primary-active); }
+.codex-layout .workspace-main .day-head { background: var(--bg-workspace); background-attachment: fixed; top: 0; }
+
+/* 保留通栏控制带和无边框卡面，正文只约束阅读宽度；目录开关不切换内距档位。 */
+.codex-layout .workspace-main .content-inner { padding: 16px var(--workspace-content-padding) 22px; }
+.codex-layout .workspace-main .content-inner:has(> .cx-tabs-row) { padding-top: 0; }
+.codex-layout .workspace-main .content-inner:has(> .cx-tabs-row:empty) { padding-top: 16px; }
+.codex-layout .workspace-main .stream-inner { padding: 14px var(--workspace-content-padding) var(--dock-clearance); }
+
+/* 通栏控制带里的页栏：脱掉吸顶与底色，控件直接坐在顶栏上。
+   空白处不吃指针，拖窗仍然落在下面的 .titlebar-drag。 */
+#workspace-page-toolbar > :is(.page-bar, .cx-band-controls) {
+  position: static;
+  flex: 1;
+  min-width: 0;
+  height: var(--workspace-toolbar-height);
+  min-height: var(--workspace-toolbar-height);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+#workspace-page-toolbar :is(.page-bar, .cx-band-controls) > * { pointer-events: auto; }
+/* 搜索框与动作钮都吃页栏那档（32px / --bg-canvas-input / 9px 圆角 / --text-xs），
+   宽度仍由各模块的 max-width: var(--page-search-max) 决定——带子里不再抄一遍令牌。 */
+#workspace-page-toolbar :is(.page-bar, .cx-band-controls) > :first-child:not(.page-actions) { margin-left: var(--workspace-heading-gap); }
+#workspace-page-toolbar .page-bar > .search-box:first-child { margin-left: var(--workspace-heading-gap); }
+#workspace-page-toolbar .search-box { flex: 1 1 120px; min-width: 120px; max-width: var(--page-search-max); margin-right: 0; container: workspace-search / inline-size; }
+#workspace-page-toolbar .page-actions { margin-left: auto; flex-shrink: 0; gap: 6px; }
+#workspace-page-toolbar :is(.btn-primary, .btn-secondary, .bar-btn) { white-space: nowrap; }
+#workspace-page-toolbar .btn-primary:where(:not(.ghost-danger)):not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--text-brand);
+  border: none;
+  border-radius: var(--radius-ib);
+  font-weight: 600;
+  box-shadow: none;
+}
+#workspace-page-toolbar .btn-primary:hover:not(:disabled):not(.ghost-danger) {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text-brand);
+  transform: none;
+  box-shadow: none;
+}
+#workspace-page-toolbar .btn-primary:active:not(:disabled):not(.ghost-danger) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text-brand);
+  transform: none;
+}
+/* 带子里的动作一律无描边：描边留给弹窗表单，这里只靠淡染和字色分层。 */
+#workspace-page-toolbar :is(.btn-secondary, .btn-primary.ghost-danger) { border-color: transparent; }
+#workspace-page-toolbar .btn-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-ib);
+  padding-inline: var(--toolbar-action-padding, 10px);
+}
+#workspace-page-toolbar .btn-secondary:hover:not(:disabled) { background: var(--hover-chrome); border-color: transparent; color: var(--text); }
+#workspace-page-toolbar .btn-secondary:active:not(:disabled) { transform: none; }
+#workspace-page-toolbar .btn-secondary.active { background: var(--accent-soft); border-color: transparent; color: var(--text-brand); }
+
+/* 按实际可用宽度收紧间距，兼顾目录、Web 状态与云同步同时出现。 */
+@container workspace-toolbar (max-width: 400px) {
+  #workspace-page-toolbar .page-actions { gap: 4px; }
+  #workspace-page-toolbar .btn-primary { padding-inline: 10px; gap: 6px; }
+  #workspace-page-toolbar .bar-div { margin-inline: 2px; }
+}
+/* 输入区变窄后优先保留搜索文字；快捷键仍然可用。 */
+@container workspace-search (max-width: 180px) {
+  #workspace-page-toolbar .search-kbd { display: none; }
+}
+
+/* 卡面回到色阶分层：无描边、无投影；只保留状态色（选中/编辑/焦点）。 */
+.app-root.codex-layout .workspace-main :is(.memo, .composer, .grid-card, .mfa-card, .rcard, .tn-card, .clean-group-card, .drop-card, .rowlist):where(:not(.editing):not(.selected):not(.is-sel):not(:focus-visible)) {
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 12px;
+}
+/* 空态不是卡：mock 里它直接坐在画布上，图标块换成淡染。 */
+.codex-layout .workspace-main .rcard.empty-state {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 72px 24px 64px;
+}
+.codex-layout .workspace-main .empty-icon { background: var(--fill); border-color: transparent; opacity: 1; color: var(--text-faint); }
+/* 身份列与额度列之间靠留白分开，mock 里不画这根竖线。 */
+.codex-layout .workspace-main .acc-quota { border-left: 0; padding-left: 28px; }
+
+/* 直连页的探测行按小记输入卡的方言画：整行是一块面，字段不再自带描边，段末不画规则线。 */
+.codex-layout .workspace-main .bp-probe { padding-bottom: 0; border-bottom: 0; }
+.codex-layout .workspace-main .bp-probe > .page-bar {
+  height: 52px;
+  padding: 0 6px 0 14px;
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+.codex-layout .workspace-main .bp-probe .probe-box { height: 100%; border: 0; background: transparent; }
+.codex-layout .workspace-main .bp-probe .btn-primary { height: 40px; }
+.codex-layout .workspace-main :is(.memo, .grid-card, .mfa-card, .rcard):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(:focus-visible)):not(.empty-state) {
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+/* 各模块的列表统一中性悬停，分组列表只反馈指针所在的行。 */
+.codex-layout .workspace-main :is(.acc-row, .grp-head, .sess-row, .thr-row, .usg-model-row, .rcard-row, .url-row, .dir-row, .svc-row, .tn-add) {
+  transition: background-color var(--transition-fast);
+}
+.app-root.codex-layout .workspace-main :is(.memo, .grid-card, .mfa-card, .acc-row, .grp-head, .sess-row, .thr-row, .usg-model-row, .rcard-row, .url-row, .dir-row, .svc-row, .tn-add):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(.skeleton):not(.acc-sk):not(:disabled):not([aria-disabled="true"])) {
+  background-color: var(--bg-surface-hover);
+}
+.codex-layout .workspace-main .grid-acts { background: inherit; box-shadow: none; }
+.codex-layout .workspace-main .memo.editing { background: var(--bg-surface); }
+.codex-layout .workspace-main .memo.pinned:where(:not(.editing):not(.is-sel):not(:focus-visible)) { border-color: transparent; }
+.codex-layout .workspace-main .grid-card.selected { border-color: var(--accent); }
+.codex-layout .workspace-main .memo.editing,
+.codex-layout .workspace-main :is(.memo, .grid-card, .mfa-card):focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); transform: none; }
+.codex-layout .workspace-main .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* 带子替掉了 42px 标题栏，toast 跟着下移一档。 */
+.codex-layout .toast { top: 66px; }
+
 </style>

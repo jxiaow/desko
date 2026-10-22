@@ -128,7 +128,7 @@ test.describe('Notes 小记', () => {
     await composer.fill('顶部  输入的内容')
     await tipButton(page.locator('.composer'), '全屏书写').click()
     const fs = page.locator('.fs')
-    await expect(fs.locator('.save-hint')).toHaveText('未保存')
+    await expect(page.locator('.fs-head .save-hint')).toHaveText('未保存')
     await fs.locator('.ProseMirror').press('End')
     await page.keyboard.insertText('，全屏里接着写')
     await page.locator('a.nav-item[href="/entries"]').click()
@@ -577,7 +577,7 @@ test.describe('Notes 小记', () => {
     const m = memo(page, '第一条小记')
     await m.hover()
     await tipButton(m, '全屏查看').click()
-    await page.locator('section.fs .fs-head .bar-btn.primary').click()
+    await page.locator('.fs-head .bar-btn.primary').click()
     const pm = page.locator('section.fs .ProseMirror')
     await expect(pm).toBeVisible()
     await expect
@@ -844,12 +844,12 @@ test.describe('Notes 小记', () => {
     await expect(fs.locator('.fs-view > p').first()).toHaveText('第一条小记：周会纪要与待办')
     // 只读层没有编辑器，动作住在首栏右侧，底栏不再出现
     await expect(fs.locator('.ProseMirror')).toHaveCount(0)
-    await expect(fs.locator('.save-hint')).toHaveText('只读浏览')
+    await expect(page.locator('.fs-head .save-hint')).toHaveText('只读浏览')
     await expect(fs.locator('.fs-hint')).toHaveCount(0)
     await expect(fs.locator('.fs-foot')).toHaveCount(0)
 
     // 查看转编辑：书写面接管同一条正文
-    await fs.locator('.fs-head .bar-btn.primary').click()
+    await page.locator('.fs-head .bar-btn.primary').click()
     await expect(fs.locator('.fs-view')).toHaveCount(0)
     await expect(fs.locator('.ProseMirror')).toContainText('第一条小记')
 
@@ -954,7 +954,7 @@ test.describe('Notes 小记', () => {
     const dialog = await openSettings(page, 'notes')
     const pane = visiblePane(dialog)
     await expect(pane.locator('.setting-name')).toHaveText('小记口令')
-    await expect(pane.locator('.setting-desc')).toContainText('还没有给任何小记设置口令')
+    await expect(pane.locator('.setting-desc')).toContainText('第一次把小记设为加密时立起来')
     await expect(pane.locator('.setting-item.clickable')).toHaveCount(0)
   })
 

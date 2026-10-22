@@ -279,7 +279,7 @@ test('今天无记录时明确显示 0，历史记录仍可从近 7 天查看', 
   await expect(page.locator('.usg-num')).toHaveText('0')
   await expect(page.locator('.usg-cost')).toHaveText('估算金额 $0.00')
   await expect(page.locator('.usg-count')).toHaveText('0 次请求 · 0 条会话')
-  await expect(page.locator('.empty-title')).toHaveText('今天还没有用量记录')
+  await expect(page.locator('.today-peak')).toHaveText('今天还没有用量记录')
   await expect(page.locator('.hourly-svg')).toBeVisible()
   await expect(page.locator('.hour-line')).toHaveCount(1)
   await expect(page.locator('.hourly-svg [data-hour][data-tokens="0"]')).toHaveCount(Number(await page.locator('.hourly-svg').getAttribute('data-observed')))

@@ -119,7 +119,7 @@ try {
         await page.getByRole('button', { name: '全屏查看', exact: true }).click()
         await page.locator('.fs').waitFor()
         await capture(join(specials, `${theme}-reading.png`))
-        await page.locator('.fs').getByRole('button', { name: '编辑', exact: true }).click()
+        await page.locator('.fs-head').getByRole('button', { name: '编辑', exact: true }).click()
         await capture(join(specials, `${theme}-writing.png`))
         await page.keyboard.press('Escape')
       }

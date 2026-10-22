@@ -9,7 +9,7 @@ for (const theme of ['paper', 'ink']) {
       let toastUrl = ''
       page.on('request', request => { if (new URL(request.url()).pathname === '/src/stores/toast.ts') toastUrl = request.url() })
       await bootUnlocked(page, { settings: { theme } }, '/notes')
-      await page.locator('#workspace-directory-toggle').click()
+      await page.keyboard.press('Control+b')
       await page.getByRole('button', { name: '固定目录', exact: true }).click()
       for (const [index, message] of [
         '请求失败：https://example.invalid/' + 'long-path-without-spaces-'.repeat(30),

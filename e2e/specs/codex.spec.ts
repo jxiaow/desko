@@ -136,7 +136,7 @@ test.describe('Codex 账号', () => {
 
   test('批量：勾一行才出dock，删除走的是作业面而不是整把命令', async ({ page }) => {
     await gotoCodex(page)
-    await page.locator('.page-bar .bar-btn', { hasText: '选择' }).click()
+    await page.locator('.cx-band-controls .bar-btn', { hasText: '选择' }).click()
     await expect(page.locator('.batch-dock')).toHaveCount(0)
     await page.locator('.acc-row').first().locator('.acc-main').click()
     await page.locator('.batch-dock button', { hasText: '全选' }).click()
@@ -436,7 +436,7 @@ test.describe('Codex 账号', () => {
 
     // toast 是单例：等进页那一轮彻底收口后再手动刷，只剩「配额已刷新」，说明预警没有再来一遍
     await waitForToastGone(page)
-    await page.locator('.page-bar .bar-btn', { hasText: '刷新配额' }).click()
+    await page.locator('.cx-band-controls .bar-btn', { hasText: '刷新配额' }).click()
     await expectToast(page, '配额已刷新')
     expect(await e2e.count(page, 'refresh_codex_quotas_batch')).toBe(2)
   })
@@ -458,7 +458,7 @@ test.describe('Codex 账号', () => {
     })
     expect(await e2e.count(page, 'refresh_codex_quotas_batch')).toBe(0)
 
-    await page.locator('.page-bar .bar-btn', { hasText: '刷新配额' }).click()
+    await page.locator('.cx-band-controls .bar-btn', { hasText: '刷新配额' }).click()
     await expectToast(page, '配额已刷新')
     expect(await e2e.count(page, 'refresh_codex_quotas_batch')).toBe(1)
   })
@@ -627,11 +627,11 @@ const SEED_SESSIONS = {
     accounts: [{ email: 'main@e2e.dev', plan_type: 'pro', current: true }],
     sessions: [
       // cached 是 input 里缓存命中的部分：官方把它整块算进 input，界面要拆开报
-      { sessionId: 'sess-a1b2c3d4e5', title: '修全屏小记的排版', cwd: 'C:\ws\demo-notes', projectName: 'demo-notes', daysAgo: 0, input: 12300, cached: 11000, output: 1400, reasoning: 400, sizeBytes: 1536 },
-      { sessionId: 'sess-f6g7h8i9j0', title: '查配额刷新链路', cwd: 'C:\ws\demo-notes', projectName: 'demo-notes', daysAgo: 2, input: 800, output: 120 },
-      { sessionId: 'sess-k1l2m3n4o5', title: 'desko 侧栏图标盘点', cwd: 'C:\ws\demo-icons', daysAgo: 5, input: 45000, cached: 40000, output: 3200, reasoning: 900 },
+      { sessionId: 'sess-a1b2c3d4e5', title: '修全屏小记的排版', cwd: 'C:\\ws\\demo-notes', projectName: 'demo-notes', daysAgo: 0, input: 12300, cached: 11000, output: 1400, reasoning: 400, sizeBytes: 1536 },
+      { sessionId: 'sess-f6g7h8i9j0', title: '查配额刷新链路', cwd: 'C:\\ws\\demo-notes', projectName: 'demo-notes', daysAgo: 2, input: 800, output: 120 },
+      { sessionId: 'sess-k1l2m3n4o5', title: 'desko 侧栏图标盘点', cwd: 'C:\\ws\\demo-icons', daysAgo: 5, input: 45000, cached: 40000, output: 3200, reasoning: 900 },
       // 没标题的一条 + 子代理：完整 ID 与徽标同时可见。
-      { sessionId: 'sess-p6q7r8s9t0', title: 'sess-p6q7r8s9t0', cwd: 'C:\ws\demo-notes', projectName: 'demo-notes', kind: 'subagent', daysAgo: 9, input: 2000, cached: 300, output: 300 },
+      { sessionId: 'sess-p6q7r8s9t0', title: 'sess-p6q7r8s9t0', cwd: 'C:\\ws\\demo-notes', projectName: 'demo-notes', kind: 'subagent', daysAgo: 9, input: 2000, cached: 300, output: 300 },
     ],
   },
 }
@@ -734,7 +734,7 @@ test.describe('Codex 会话档', () => {
     const icons = page.locator('.grp-head', { hasText: 'demo-icons' })
     await expect(icons).toHaveAttribute('aria-expanded', 'false')
 
-    await page.locator('.page-bar .search-box input').fill('图标')
+    await page.getByRole('textbox', { name: '搜索会话标题', exact: true }).fill('图标')
     await expect(icons).toHaveAttribute('aria-expanded', 'true')
     await expect(page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]')).toBeVisible()
 
@@ -779,7 +779,7 @@ test.describe('Codex 会话档', () => {
     await gotoSessions(page)
     await expect(page.locator('.grp-head')).toHaveCount(2)
 
-    await page.locator('.page-bar .search-box input').fill('  查配额  ')
+    await page.getByRole('textbox', { name: '搜索会话标题', exact: true }).fill('  查配额  ')
     await expect(page.locator('.grp-head')).toHaveCount(1)
     await expect(page.locator('.grp-head', { hasText: 'demo-notes' })).toBeVisible()
     expect(await e2e.count(page, LIST_CMD)).toBe(2)
@@ -1098,7 +1098,7 @@ test.describe('Codex 账号回收站', () => {
 
   test('批量删除也是逐条留底', async ({ page }) => {
     await gotoCodex(page, TWO)
-    await page.locator('.page-bar .bar-btn', { hasText: '选择' }).click()
+    await page.locator('.cx-band-controls .bar-btn', { hasText: '选择' }).click()
     await accountRow(page, 'main@e2e.dev').click()
     await accountRow(page, 'back@e2e.dev').click()
     await page.locator('.batch-dock .dock-btn', { hasText: '删除选中' }).click()
@@ -1126,7 +1126,7 @@ test.describe('Codex 账号回收站', () => {
     await gotoTrash(page)
     expect(await e2e.count(page, LIST_CMD)).toBe(0)
     expect(await e2e.count(page, RECYCLED_LIST_CMD)).toBe(1)
-    await page.locator('.page-bar .cx-refresh').click()
+    await page.locator('.cx-band-controls .cx-refresh').click()
     await expect(page.locator('.thr-row[data-rid]')).toHaveCount(2)
     expect(await e2e.count(page, RECYCLED_LIST_CMD)).toBe(2)
   })
@@ -1154,7 +1154,7 @@ const FOUR_EMAILS = ['d1@e2e.dev', 'd2@e2e.dev', 'd3@e2e.dev', 'd4@e2e.dev']
 /** 勾满四条 → 删除选中 → 确认，回来的是作业弹窗 */
 async function startDeleteJob(page: Page, config = FOUR()) {
   await gotoCodex(page, config)
-  await page.locator('.page-bar .bar-btn', { hasText: '选择' }).click()
+  await page.locator('.cx-band-controls .bar-btn', { hasText: '选择' }).click()
   for (const email of FOUR_EMAILS) await accountRow(page, email).click()
   await page.locator('.batch-dock .dock-btn', { hasText: '删除选中' }).click()
   await page.locator(CONFIRM_OK, { hasText: '确定' }).click()

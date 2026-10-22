@@ -125,9 +125,10 @@ const railRoom = ref(true)
 const railFloatingOpen = ref(false)
 
 /** 侧栏真正在流内可见 = 放得下 且 用户没收起 */
-const railOpen = computed(() => railRoom.value && !noteRailCollapsed.value)
-const railOverlay = computed(() => !workspaceLayout && !railRoom.value && railFloatingOpen.value)
-const railVisible = computed(() => workspaceLayout || railOpen.value || railOverlay.value)
+const showFilters = computed(() => notes.value.length > 0 || hasActiveFilters.value)
+const railOpen = computed(() => showFilters.value && railRoom.value && !noteRailCollapsed.value)
+const railOverlay = computed(() => showFilters.value && !workspaceLayout && !railRoom.value && railFloatingOpen.value)
+const railVisible = computed(() => showFilters.value && (workspaceLayout || railOpen.value || railOverlay.value))
 const closeRail = () => {
   noteRailCollapsed.value = true
   railFloatingOpen.value = false
@@ -418,7 +419,7 @@ watchEffect(() => {
       <div class="stream-inner" @keydown="onStreamKeydown">
         <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
         <div class="page-bar">
-          <div class="search-box">
+          <div v-if="showFilters" class="search-box">
             <span class="search-icon"><AppIcon name="search" :size="16" /></span>
             <input
               ref="searchEl"
@@ -469,7 +470,7 @@ watchEffect(() => {
               </button>
             </template>
             <button
-              v-if="!workspaceLayout"
+              v-if="!workspaceLayout && showFilters"
               ref="railToggleEl"
               class="bar-btn"
               :class="{ active: railVisible }"
@@ -480,7 +481,7 @@ watchEffect(() => {
             >
               <AppIcon name="panel" :size="16" />
             </button>
-            <WorkspaceDirectoryToggle v-if="workspaceLayout" />
+            <WorkspaceDirectoryToggle v-if="workspaceLayout && showFilters" />
           </div>
         </div>
         </Teleport>
@@ -615,7 +616,8 @@ watchEffect(() => {
         :aria-pressed="activeTags.has(tag)"
         @click="toggleTagFilter(tag)"
       >
-        <span class="nm">#{{ tag }}</span>
+        <AppIcon v-if="workspaceLayout" name="tag" :size="16" />
+        <span class="nm">{{ workspaceLayout ? tag : `#${tag}` }}</span>
         <span class="tab-count">{{ count }}</span>
       </button>
       <div v-if="!tagCounts.length" class="rail-empty">还没有标签</div>

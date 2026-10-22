@@ -17,7 +17,7 @@ use services::attachment_service;
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
     Emitter, Manager,
 };
@@ -200,8 +200,29 @@ fn main() {
             // Setup tray menu
             let show_item = MenuItem::with_id(app, "show", "显示", true, None::<&str>)?;
             let lock_item = MenuItem::with_id(app, "lock", "锁定", true, None::<&str>)?;
+            // 勾选态首帧就取设置真值：挂件桥要解锁后才激活，等它回写会让锁屏期间显示成关
+            let hud_wanted = {
+                let state = app.state::<AppState>();
+                state
+                    .db
+                    .lock()
+                    .ok()
+                    .and_then(|db| db.get_meta("codex_hud_enabled").ok().flatten())
+                    .map(|value| value == "true")
+                    .unwrap_or(false)
+            };
+            let hud_item = CheckMenuItem::with_id(
+                app,
+                "hud",
+                "桌面额度挂件",
+                true,
+                hud_wanted,
+                None::<&str>,
+            )?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &lock_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&show_item, &lock_item, &hud_item, &quit_item])?;
+            // 勾选态是设置里那颗开关的副本，由前端 `desko_hud_set_tray` 回写
+            app.manage(commands::hud::HudTrayItem(hud_item.clone()));
 
             let icon = app.default_window_icon().unwrap().clone();
 
@@ -212,6 +233,10 @@ fn main() {
                     match event.id.as_ref() {
                         "show" => show_main_window(app),
                         "lock" => commands::auth::request_lock(app),
+                        // 只发意图，翻转与落盘都交给主窗口的挂件桥：锁定态没人监听，点了不会偷偷显示
+                        "hud" => {
+                            let _ = app.emit_to("main", "tray-hud-toggle", ());
+                        }
                         "quit" => request_quit(app),
                         _ => {}
                     }
@@ -382,6 +407,15 @@ fn main() {
             commands::profiles::profiles_switch,
             commands::settings::get_setting,
             commands::settings::set_setting,
+            // ── 桌面额度挂件（窗口控制，不受 codex 授权闸门约束）──
+            commands::hud::desko_hud_show,
+            commands::hud::desko_hud_reveal,
+            commands::hud::desko_hud_hide,
+            commands::hud::desko_hud_destroy,
+            commands::hud::desko_hud_set_tray,
+            commands::hud::desko_hud_open_codex,
+            commands::hud::desko_hud_set_expanded,
+            commands::hud::desko_hud_save_position,
             commands::url_paths::list_url_paths,
             commands::url_paths::create_url_path,
             commands::url_paths::update_url_path,

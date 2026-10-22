@@ -38,7 +38,7 @@ for (const theme of ['paper', 'ink']) {
     await page.locator('a.nav-item[href="/codex"]').click()
     const add = page.getByRole('button', { name: '添加账号', exact: true })
     await page.mouse.move(0, 0)
-    await expectPalette(add, '--bg-workspace-primary', '--text-workspace-primary')
+    await expectPalette(add, '--accent-soft', '--text-brand')
     await add.click()
     const dialog = page.getByRole('dialog', { name: '添加 Codex 账号', exact: true })
     await page.mouse.move(0, 0)

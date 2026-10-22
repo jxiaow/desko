@@ -157,7 +157,7 @@
 /* 工作区柔光：主光与辅光落在留白两端，卡片、输入与书写面保持实底。
    经典布局与锁屏材质沿用上方配方。 */
 :root[data-layout="workspace"], .workspace-theme-prev[data-base] {
-  --material-inspector-base: #f1f1ef;
+  --material-inspector-base: var(--bg);
   --material-workspace-key: oklch(from var(--accent) 0.9 calc(c * 0.55) h);
   --material-workspace-fill: oklch(from var(--accent) 0.92 calc(c * 0.5) calc(h + 24));
   --material-workspace-key-strength: 22%;
@@ -178,17 +178,16 @@
     radial-gradient(ellipse 78% 72% at 0% 0%, color-mix(in srgb, var(--material-workspace-key) 18%, transparent), transparent 100%),
     radial-gradient(ellipse 78% 72% at 100% 100%, color-mix(in srgb, var(--material-workspace-fill) 14%, transparent), transparent 100%),
     var(--panel-bg);
-  --material-workspace-rim:
-    inset 0 1px 0 color-mix(in srgb, #fff 80%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 5%, transparent);
   --bg-workspace: var(--bg);
-  --bg-workspace-frame: var(--workspace-frame);
-  --bg-inspector: var(--material-inspector-base);
+  /* Logo 格与导航轨融入画布，共用底色和同一坐标的氛围光。 */
+  --bg-workspace-rail: var(--bg-workspace);
+  --bg-inspector: var(--bg-workspace);
   --bg-editor: var(--bg);
   --bg-workspace-selected: color-mix(in oklab, var(--accent) 10%, var(--panel-bg));
   --bg-workspace-hover: color-mix(in oklab, var(--text) 5%, var(--panel-bg));
   --bg-workspace-search: color-mix(in oklab, var(--panel-bg) 72%, var(--workspace-frame));
-  --bg-inspector-hover: color-mix(in oklab, var(--text) 3.5%, var(--material-inspector-base));
+  --bg-inspector-hover: color-mix(in srgb, var(--text) 4%, var(--material-inspector-base));
+  --bg-inspector-active: var(--bg-surface);
   --bg-workspace-primary: var(--accent);
   --bg-workspace-primary-hover: var(--accent-hover);
   --bg-workspace-primary-active: var(--accent-active);
@@ -196,14 +195,10 @@
 }
 
 :root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
-  --material-inspector-base: #1b1c1f;
   --material-workspace-key: oklch(from var(--accent) 0.48 calc(c * 0.85) h);
   --material-workspace-fill: oklch(from var(--accent) 0.46 calc(c * 0.7) calc(h + 24));
   --material-workspace-key-strength: 10%;
   --material-workspace-fill-strength: 10%;
-  --material-workspace-rim:
-    inset 0 1px 0 color-mix(in srgb, var(--accent) 20%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, #fff 3%, transparent);
   --bg-workspace-primary: color-mix(in oklab, var(--accent) 14%, var(--bg));
   --bg-workspace-primary-hover: color-mix(in oklab, var(--accent) 17%, var(--bg));
   --bg-workspace-primary-active: color-mix(in oklab, var(--accent) 20%, var(--bg));
@@ -213,8 +208,8 @@
 /* 中性色只改变光的明暗，避免把大面积留白再刷成灰色。 */
 :root[data-layout="workspace"]:is([data-accent="graphite"], [data-accent="sand"]),
 .workspace-theme-prev:is([data-accent="graphite"], [data-accent="sand"]) {
-  --material-workspace-key: oklch(from var(--accent) 0.96 0 none);
-  --material-workspace-fill: oklch(from var(--accent) 0.96 0 none);
+  --material-workspace-key: oklch(from var(--accent) 1 0 none);
+  --material-workspace-fill: oklch(from var(--accent) 1 0 none);
 }
 :root[data-layout="workspace"][data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]),
 .workspace-theme-prev[data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]) {
@@ -226,21 +221,4 @@
   --bg-dialog: var(--material-dialog-field);
   --dialog-background-attachment: scroll;
   --bg-workspace: var(--material-workspace-field), var(--bg);
-  --bg-workspace-frame:
-    radial-gradient(ellipse var(--material-workspace-key-size) at var(--material-workspace-key-position), color-mix(in srgb, var(--material-workspace-key) 32%, transparent), transparent 90%),
-    radial-gradient(ellipse var(--material-workspace-fill-size) at var(--material-workspace-fill-position), color-mix(in srgb, var(--material-workspace-fill) 28%, transparent), transparent 90%),
-    var(--workspace-frame);
-  --bg-inspector:
-    radial-gradient(ellipse 100% 75% at 100% 100%, color-mix(in srgb, var(--material-workspace-key) 12%, transparent), transparent 90%),
-    var(--material-inspector-base);
-}
-
-:root[data-layout="workspace"][data-atmosphere="on"] .workspace-surface::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 30;
-  pointer-events: none;
-  border-radius: inherit;
-  box-shadow: var(--material-workspace-rim);
 }

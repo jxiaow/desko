@@ -35,7 +35,7 @@ const tip = computed(() => {
     aria-label="云端同步"
     @click="store.syncNow()"
   >
-    <AppIcon class="bb-icon" name="refresh" :size="16" />
+    <AppIcon class="bb-icon" name="sync" :size="16" />
     <span v-if="pending && !syncing" class="bb-text">{{ pending }}</span>
   </button>
 </template>
@@ -56,14 +56,15 @@ const tip = computed(() => {
 
 .backup-badge.bb-sync .bb-icon {
   color: var(--accent);
-  animation: bb-spin 1.15s linear infinite;
+  animation: bb-pulse 1.15s ease-in-out infinite;
 }
 
 .backup-badge.bb-wait .bb-icon { color: var(--warning); }
 
 .backup-badge.bb-error .bb-icon { color: var(--danger); }
 
-@keyframes bb-spin {
-  to { transform: rotate(360deg); }
+@keyframes bb-pulse {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; }
 }
 </style>

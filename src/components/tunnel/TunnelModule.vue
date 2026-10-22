@@ -27,9 +27,11 @@ import TunnelServicesCard from './TunnelServicesCard.vue'
 import TunnelServiceDialog from './TunnelServiceDialog.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { usePageActive } from '../../composables/usePageActive'
+import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 
 const toastStore = useToastStore()
 const pageActive = usePageActive()
+const workspaceLayout = useWorkspaceLayout()
 
 const busy = ref(false)
 
@@ -162,14 +164,15 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
     </div>
 
     <template v-else>
-      <div class="page-bar">
+      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
+      <div class="page-bar service-page-bar">
         <span class="chip" :class="{ live: running }">
           <span class="dot" aria-hidden="true"></span>
           {{ state }}
         </span>
-        <span class="chip">
+        <span class="chip tunnel-services" :title="`${services.length} 项服务${unrouted ? ` · ${unrouted} 条未应用` : ''}`">
           <span class="dot" aria-hidden="true"></span>
-          {{ services.length }} 项服务<span v-if="unrouted" class="chip-warn-text"> · {{ unrouted }} 条未应用</span>
+          <span class="tunnel-services-label">{{ services.length }} 项服务<span v-if="unrouted" class="chip-warn-text"> · {{ unrouted }} 条未应用</span></span>
         </span>
         <div class="page-actions">
           <button
@@ -184,6 +187,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
           </button>
         </div>
       </div>
+      </Teleport>
 
       <!-- 准备流：缺东西时才摊开，齐了收成一行摘要 -->
       <TunnelSetupCard
@@ -274,6 +278,9 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
 </template>
 
 <style scoped>
+.tunnel-services { flex-shrink: 1; min-width: 0; }
+.tunnel-services-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* 本页等宽小字与局域网传输页同档：Consolas 优先。
    栈里必须留中文回退：mono 段里夹了中文（如「已校验的 cloudflared」），
    只写 monospace 结尾会让中文落到宋体 */

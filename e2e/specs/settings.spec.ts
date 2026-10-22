@@ -37,7 +37,7 @@ test.describe('Settings 设置', () => {
     // 数据存储已并入「数据与备份」页
     await expect(dialog.locator('.nav-tab', { hasText: '数据存储' })).toHaveCount(0)
     await settingsTab(dialog, 'backup')
-    await expect(dialog.locator('.setting-item', { hasText: '数据库路径' }).locator('.setting-desc')).toContainText('desko.db')
+    await expect(dialog.locator('.setting-item', { hasText: '数据库路径' }).locator('.setting-mono')).toContainText('desko.db')
     await settingsTab(dialog, 'security')
     await expect(visiblePane(dialog).locator('.number-input')).toHaveValue('10')
     await settingsTab(dialog, 'about')
@@ -345,6 +345,8 @@ test.describe('Settings 设置', () => {
 
     // 上传收尾的进度事件会顺手拉一次状态，徽标不必等 30 秒轮询
     await expect(badge).toBeVisible({ timeout: 10_000 })
+    await expect(badge.locator('svg[data-icon="sync"]')).toBeVisible()
+    await expect(badge.locator('svg[data-icon="refresh"]')).toHaveCount(0)
     await expect(badge).toHaveAttribute('title', /云端备份已开启 · 最近一轮/)
     await expect(badge.locator('.bb-text')).toHaveCount(0)
 
@@ -511,7 +513,7 @@ test.describe('Settings 设置', () => {
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
     const connRow = pane.locator('.setting-item', { hasText: '连接' })
-    await expect(connRow.locator('.setting-desc')).toContainText('未配置')
+    await expect(connRow.locator('.setting-status')).toContainText('未配置')
 
     await connRow.locator('button.action-btn', { hasText: '配置' }).click()
     const modal = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '连接坚果云' }) })
@@ -525,8 +527,8 @@ test.describe('Settings 设置', () => {
     await modal.locator('.dialog-footer button.btn-primary').click()
     await expectToast(page, '已连接坚果云')
     await waitForToastGone(page)
-    await expect(connRow.locator('.setting-desc')).toContainText('已连接 · dav.jianguoyun.com/dav（me@example.com）')
-    await expect(connRow.locator('.setting-desc')).toContainText('尚未上传')
+    await expect(connRow.locator('.setting-status')).toContainText('已连接 · dav.jianguoyun.com/dav（me@example.com）')
+    await expect(connRow.locator('.setting-status')).toContainText('尚未上传')
 
     await setBackupPwd(page, pane)
     // 云端还没有包时，列表是空态
@@ -538,7 +540,7 @@ test.describe('Settings 设置', () => {
     // 一轮打完即传，连接行跟着报上次上传的时刻
     await pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn').click()
     await expectToast(page, '已传云端')
-    await expect(connRow.locator('.setting-desc')).toContainText('上次上传')
+    await expect(connRow.locator('.setting-status')).toContainText('上次上传')
     expect((await e2e.snapshot(page)).cloud.packages).toHaveLength(1)
 
     // 断开 = 这一档整体收起，只留密码和连接

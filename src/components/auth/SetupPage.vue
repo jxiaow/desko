@@ -28,8 +28,7 @@ const doSetup = async () => {
   }
   setupBusy.value = true
   try {
-    await setupMasterPassword(setupPwd.value)
-    emit('setupComplete')
+    await setupMasterPassword(setupPwd.value, () => emit('setupComplete'))
   } catch (e: any) {
     setupErr.value = e.message || '设置失败'
   } finally {

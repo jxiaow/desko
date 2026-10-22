@@ -63,11 +63,15 @@ test.describe('局域网文件传输', () => {
     await expect(page.locator('a.nav-item[href="/fileshare"]')).toHaveCount(1)
     await page.locator('a.nav-item[href="/fileshare"]').click()
     await expect(page.locator('.page-bar .chip')).toContainText('已停止')
-    await expect(page.locator('.banner-title')).toHaveText('服务未启动')
+    await expect(page.locator('.fs-idle-title')).toHaveText('服务未启动')
+    await expect(page.locator('.fs-idle-config')).toContainText('同网段设备')
+    await expect(page.locator('.drop-card, .fs-banner')).toHaveCount(0)
     await expect(page.locator('a.nav-item[href="/fileshare"] .nav-live')).toHaveCount(0)
     await page.locator('.page-bar .btn-primary').click()
     await expectToast(page, '服务已启动')
     await expect(page.locator('.page-bar .chip')).toContainText('监听中')
+    await expect(page.locator('.fs-idle')).toHaveCount(0)
+    await expect(page.locator('.drop-card .well-body')).toBeVisible()
     await expect(page.locator('a.nav-item[href="/fileshare"] .nav-live')).toBeVisible()
   })
 
@@ -82,6 +86,8 @@ test.describe('局域网文件传输', () => {
     await page.locator('.page-bar .btn-primary').click()
     await expectToast(page, '被占用')
     await expect(page.locator('.page-bar .chip')).toContainText('已停止')
+    await expect(page.locator('.fs-idle')).toBeVisible()
+    await expect(page.locator('.fs-banner, .drop-card')).toHaveCount(0)
   })
 
   test('管理页渲染运行状态与地址', async ({ page }) => {
@@ -118,12 +124,12 @@ test.describe('局域网文件传输', () => {
     await gotoFileshare(page)
     let dialog = await openSettings(page, 'fileshare')
     let pwItem = visiblePane(dialog).locator('.setting-item', { hasText: '访问口令' })
-    await expect(pwItem.locator('.fs-tag')).toHaveText('未启用')
+    await expect(pwItem.locator('.setting-desc')).toContainText('未启用')
     await pwItem.locator('button', { hasText: '设置口令' }).click()
     await pwItem.locator('.fs-pw-input').fill('sesame')
     await pwItem.locator('.fs-pw-row .action-btn.primary').click()
     await expectToast(page, '访问口令已更新')
-    await expect(pwItem.locator('.fs-tag')).toHaveText('已启用')
+    await expect(pwItem.locator('.setting-desc')).toContainText('已启用')
     await dialog.locator('.dialog-close').click()
     // 口令已设 → 模块页不再显示「去设置」警告
     await expect(page.locator('.group-note.chip-warn')).toHaveCount(0)
@@ -131,7 +137,7 @@ test.describe('局域网文件传输', () => {
     pwItem = visiblePane(dialog).locator('.setting-item', { hasText: '访问口令' })
     await pwItem.locator('button', { hasText: '清除口令' }).click()
     await expectToast(page, '已清除访问口令')
-    await expect(pwItem.locator('.fs-tag')).toHaveText('未启用')
+    await expect(pwItem.locator('.setting-desc')).toContainText('未启用')
     await dialog.locator('.dialog-close').click()
     await expect(page.locator('.group-note.chip-warn', { hasText: '未设访问口令' })).toBeVisible()
   })
@@ -193,6 +199,8 @@ test.describe('局域网文件传输', () => {
     await expectToast(page, '已停止监听')
     await expect(page.locator('.page-bar .chip')).toContainText('已停止')
     await expect(page.locator('a.nav-item[href="/fileshare"] .nav-live')).toHaveCount(0)
+    await expect(page.locator('.fs-idle')).toBeVisible()
+    await expect(page.locator('.fs-banner, .drop-card')).toHaveCount(0)
   })
 
   test('拖入落盘：页内追加提取链接行', async ({ page }) => {
@@ -204,6 +212,13 @@ test.describe('局域网文件传输', () => {
       'http://10.0.0.9:8000/download?share=0&name=%E6%8A%A5%E5%91%8A%20v1.pdf',
     )
     expect((await e2e.snapshot(page)).fileshare.imported).toEqual(['报告 v1.pdf', 'photo.jpg'])
+    await page.locator('.page-bar .btn-primary').click()
+    await expect(page.locator('.fs-idle')).toBeVisible()
+    await expect(page.locator('.well-body')).toHaveCount(0)
+    await expect(page.locator('.recv')).toHaveCount(2)
+    await page.locator('.page-bar .btn-primary').click()
+    await expect(page.locator('.well-body')).toBeVisible()
+    await expect(page.locator('.recv')).toHaveCount(2)
   })
 
   test('同名不覆盖：目录里已有 photo.jpg，拖入的落为 photo (1).jpg', async ({ page }) => {
@@ -222,7 +237,7 @@ test.describe('局域网文件传输', () => {
       settings: { fileshare_enabled: 'true' },
       fileshare: { shareDirs: ['C:\\desko-e2e\\shared'] },
     })
-    await expect(page.locator('.drop-card')).toHaveCount(1)
+    await expect(page.locator('.drop-card')).toHaveCount(0)
     await drop(page, ['D:\\tmp\\photo.jpg'])
     await expectToast(page, '先启动服务')
     expect(await e2e.count(page, 'fileshare_import_files')).toBe(0)
@@ -240,15 +255,21 @@ test.describe('局域网文件传输', () => {
     await expect(page.locator('.fs-drop-hint')).toHaveCount(0)
   })
 
-  test('拖投区：停止态收成一行，拖进来也不给整页落点提示', async ({ page }) => {
+  test('停止态展示启动配置并保留目录，隐藏拖投入口和落点提示', async ({ page }) => {
     await gotoFileshare(page, {
       settings: { fileshare_enabled: 'true' },
-      fileshare: { shareDirs: ['C:\\desko-e2e\\shared'] },
+      fileshare: { port: 8123, localOnly: true, hasPassword: true, shareDirs: ['C:\\desko-e2e\\shared'] },
     })
-    await expect(page.locator('.drop-card .well-body')).toHaveCSS('min-height', '60px')
+    await expect(page.locator('.fs-idle-title')).toHaveText('服务未启动')
+    await expect(page.locator('.fs-idle-desc')).toContainText('本机浏览器')
+    await expect(page.locator('.fs-idle-config dd')).toHaveText(['仅本机', '8123', '已设置'])
+    await expect(page.locator('.dir-row')).toHaveCount(1)
+    await expect(page.locator('.dir-add')).toBeVisible()
+    await expect(page.locator('.drop-card, .fs-banner')).toHaveCount(0)
     await dragPhase(page, 'enter')
-    await expect(page.locator('.drop-card')).not.toHaveClass(/active/)
+    await expect(page.locator('.drop-card')).toHaveCount(0)
     await expect(page.locator('.fs-drop-hint')).toHaveCount(0)
+    expect(await e2e.count(page, 'fileshare_start')).toBe(0)
   })
 
   test('文件夹与超限逐条给原因，成功的照常入库', async ({ page }) => {

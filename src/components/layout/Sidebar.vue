@@ -9,14 +9,18 @@ import AppIcon from '../shared/AppIcon.vue'
 withDefaults(defineProps<{
   collapsed: boolean
   showToggle?: boolean
-}>(), { showToggle: true })
+  showLock?: boolean
+}>(), { showToggle: true, showLock: true })
 
-defineEmits<{
+const emit = defineEmits<{
   'update:collapsed': [value: boolean]
+  openSettings: []
+  lock: []
 }>()
 
 const route = useRoute()
 const webRuntime = isWebRuntime()
+const lockLabel = webRuntime ? '退出浏览器访问' : '锁定'
 
 /** 跑着常驻服务的模块把状态写进行名：图标上那颗点要有人替它解释，读屏也听得到 */
 const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中` : m.title)
@@ -68,6 +72,22 @@ const onDragDblclick = (e: MouseEvent) => {
         </Transition>
       </router-link>
     </nav>
+
+    <!-- 设置住在轨底；桌面工作区的锁定入口由标题栏承担。 -->
+    <div class="sidebar-foot">
+      <button class="foot-item" type="button" title="设置" aria-label="设置" @click="emit('openSettings')">
+        <span class="foot-icon">
+          <AppIcon name="gear" :size="collapsed ? 22 : 18" />
+        </span>
+        <span v-if="!collapsed" class="foot-text">设置</span>
+      </button>
+      <button v-if="showLock" class="foot-item" type="button" :title="lockLabel" :aria-label="lockLabel" @click="emit('lock')">
+        <span class="foot-icon">
+          <AppIcon name="lock" :size="collapsed ? 22 : 18" />
+        </span>
+        <span v-if="!collapsed" class="foot-text">{{ webRuntime ? '退出' : lockLabel }}</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -194,9 +214,10 @@ const onDragDblclick = (e: MouseEvent) => {
   color: var(--text);
 }
 
-/* 激活=淡染行：accent-soft 底 + brand 字 + 600，图标转 accent */
+/* 激活=淡染行：侧栏专用淡染 + brand 字 + 600，图标转 accent。
+   不吃 --accent-soft：那档的浅洗按卡面（L*99）切，搬到侧栏底上只是亮一丝 */
 .nav-item.active {
-  background: var(--accent-soft);
+  background: var(--sidebar-active);
   color: var(--text-brand);
   font-weight: 600;
 }
@@ -267,5 +288,80 @@ const onDragDblclick = (e: MouseEvent) => {
   border-radius: 50%;
   background: var(--success);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 22%, transparent);
+}
+
+/* 轨底工具组：与模块行同档同轴，只靠一段留白分家（骨架不加线不加影） */
+.sidebar-foot {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
+}
+
+/* 跟着 .sidebar-nav 那道负 margin：列表行抵掉了滚动条空槽，工具行不抵就会左错一位 */
+.sidebar:not(.collapsed) .sidebar-foot {
+  margin-inline: calc(var(--scrollbar-track) * -1);
+}
+
+.foot-item {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--sidebar-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background var(--transition), color var(--transition);
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.foot-item:hover {
+  background: var(--sidebar-hover);
+  color: var(--text);
+}
+
+.foot-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.foot-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.foot-item:hover .foot-icon {
+  color: var(--text-secondary);
+}
+
+.sidebar.collapsed .foot-item {
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar.collapsed .foot-text {
+  display: none;
+}
+
+.sidebar.collapsed .foot-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.sidebar.collapsed .foot-icon svg {
+  width: 22px;
+  height: 22px;
 }
 </style>

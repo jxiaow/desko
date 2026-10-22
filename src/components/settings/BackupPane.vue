@@ -410,7 +410,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">数据库路径</span>
-          <span class="setting-desc db-path" :title="dbPath">{{ dbPath }}</span>
+          <span class="setting-mono db-path" :title="dbPath">{{ dbPath }}</span>
         </div>
         <div class="setting-actions">
           <button class="action-btn" :disabled="dbPath === '未知'" @click="copyToClipboard(dbPath, '路径')">复制路径</button>
@@ -427,7 +427,7 @@ const doRestoreFile = async () => {
       </div>
     </div>
 
-    <h4 class="settings-section-label">云端备份<span class="label-tag">坚果云 WebDAV</span></h4>
+    <h4 class="settings-section-label">云端备份</h4>
     <div class="group-content">
       <div class="setting-item">
         <div class="setting-info">
@@ -442,13 +442,14 @@ const doRestoreFile = async () => {
       </div>
       <div class="setting-item">
         <div class="setting-info">
-          <span class="setting-name conn-name">
+          <span class="setting-name">连接</span>
+          <span class="setting-status">
             <span class="live-dot" :class="{ idle: !st.cloud.configured }" :aria-label="st.cloud.configured ? '云端已连接' : '云端未连接'" />
-            连接
+            {{ connText }}
           </span>
-          <span class="setting-desc">{{ connText }}</span>
         </div>
         <div class="setting-actions">
+          <span class="setting-badge">坚果云 WebDAV</span>
           <button class="action-btn" @click="openCloud">配置</button>
           <button v-if="st.cloud.configured" class="action-btn danger" @click="doDisconnect">断开</button>
         </div>
@@ -682,18 +683,11 @@ const doRestoreFile = async () => {
   display: flex;
   flex-direction: column;
 }
+/* 组题后面只跟一句限定语，不做成小丸：丸是状态徽章的形状，徽章只待在行右轴 */
 .label-tag {
-  font-weight: 500;
+  font-weight: 400;
   font-size: var(--text-2xs);
-  padding: 0 6px;
-  border-radius: 8px;
-  background: var(--hover);
-  color: var(--text-muted);
 }
-
-/* 路径是给人抄的，不是给人猜的：等宽体让 \ 与 l、0 与 O 分得开 */
-.db-path { font-family: var(--font-mono); font-size: var(--text-xs); }
-.conn-name { display: inline-flex; align-items: center; gap: 7px; }
 
 /* 行内进度：替换所在行的说明行，不撑高、不挪布局 */
 .row-progress {

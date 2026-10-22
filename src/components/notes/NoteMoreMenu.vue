@@ -8,7 +8,7 @@ import type { Note } from '../../types'
 
 const props = withDefaults(defineProps<{
   note: Note
-  /** ib = 卡头 26px 图标钮，bar = 全屏首栏 30px 文字钮 */
+  /** ib = 卡头 26px 图标钮，bar = 全屏首栏 32px 图标钮 */
   variant?: 'ib' | 'bar'
   /** 本卡渲染在归档视图里：排上占了「取消归档」，置顶搬回菜单 */
   archivedView?: boolean
@@ -128,7 +128,7 @@ const exec = (action: () => void) => {
 <style scoped>
 /* 钮在别的组件里（本组件是多根，宿主 scoped 规则进不来），尺寸自己按宿主档位补齐 */
 .ib.more { width: 26px; height: 26px; border-radius: 6px; }
-.bar-btn.more { height: 30px; min-width: 30px; padding: 0 var(--space-2); }
+.bar-btn.more { height: 32px; min-width: 32px; padding: 0 var(--space-2); }
 .pop-caret { margin-left: auto; color: var(--text-faint); display: inline-flex; }
 .export-menu-title { padding: 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--text-muted); }
 .export-menu-extension { margin-left: auto; font-size: var(--text-xs); color: var(--text-faint); }

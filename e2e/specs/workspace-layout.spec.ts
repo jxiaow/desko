@@ -62,7 +62,8 @@ for (const width of [800, 1280]) {
     await boot(page)
     for (const [label, directory] of [['小记', true], ['网址收藏', true], ['文件快捷', false], ['验证码', false], ['局域网传输', false], ['内网穿透', false], ['网络直连', false], ['Codex', false]] as const) {
       await navigate(page, label)
-      await expect(page.locator('.titlebar-outer .titlebar-brand')).toContainText(label)
+      if (label === 'Codex') await expect(page.locator('.titlebar-outer .cx-header-tabs')).toBeVisible()
+      else await expect(page.locator('.titlebar-outer .titlebar-brand')).toContainText(label)
       const aside = page.locator('.workspace-directory')
       await expect(aside).toBeHidden()
       await expect(page.locator('#workspace-directory-toggle')).toHaveCount(directory ? 1 : 0)
@@ -72,21 +73,46 @@ for (const width of [800, 1280]) {
         expect(button.x).toBeGreaterThan(width / 2)
         expect(button.y).toBeGreaterThanOrEqual(toolbar.y)
         expect(button.y + button.height).toBeLessThanOrEqual(toolbar.y + toolbar.height)
-        await expect(page.locator('.titlebar #workspace-directory-toggle')).toHaveCount(0)
+        await expect(page.locator('.titlebar #workspace-directory-toggle')).toHaveCount(1)
       }
       const overflow = await page.locator('.workspace-main').evaluate(el => el.scrollWidth > el.clientWidth)
       expect(overflow, label).toBe(false)
       const surface = (await page.locator('.workspace-surface').boundingBox())!
-      expect(width - (surface.x + surface.width), `${label} 的白色内容面右侧留白`).toBe(6)
+      expect(width - (surface.x + surface.width), `${label} 的内容面通栏到右缘`).toBe(0)
     }
-    for (const button of [tipButton(page, '设置'), tipButton(page, '锁定'), tipButton(page, '最小化'), tipButton(page, '最大化'), tipButton(page, '关闭')]) {
+    for (const button of [tipButton(page, '锁定'), tipButton(page, '最小化'), tipButton(page, '最大化'), tipButton(page, '关闭')]) {
       const r = await button.boundingBox()
-      expect(r!.y + r!.height).toBeLessThanOrEqual(42)
+      expect(r!.y + r!.height).toBeLessThanOrEqual(48)
       expect(r!.x + r!.width).toBeLessThanOrEqual(width)
     }
+    // 设置留在图标轨底部，锁定与窗口按钮同组且只有一个入口。
+    await expect(page.locator('.titlebar-outer .tb-util')).toHaveCount(0)
+    await expect(page.locator('.sidebar-foot .foot-item')).toHaveCount(1)
+    await expect(page.locator('.sidebar-foot').getByRole('button', { name: '锁定', exact: true })).toHaveCount(0)
+    await expect(page.locator('.titlebar-buttons').getByRole('button', { name: '锁定', exact: true })).toHaveCount(1)
+    // 模块动作与窗口控制之间靠一根细线分群
+    const hair = await page.locator('.titlebar-outer .titlebar-buttons').evaluate((el) => {
+      const s = getComputedStyle(el, '::before')
+      return { width: s.width, height: s.height, background: s.backgroundColor }
+    })
+    expect(hair).toEqual({ width: '1px', height: '20px', background: expect.not.stringMatching(/transparent|rgba\(0, 0, 0, 0\)/) })
+    const settings = (await tipButton(page, '设置').boundingBox())!
+    expect(settings.y).toBeGreaterThanOrEqual(48)
+    expect(settings.y + settings.height).toBeLessThanOrEqual(720)
+    expect(settings.x + settings.width).toBeLessThanOrEqual(56)
+    // 轨顶那格与模块方块同档：两种尺寸的方框上下相挨会读作「缺一块」
+    const cells = await page.evaluate(() => {
+      const box = (el: Element) => {
+        const b = el.getBoundingClientRect()
+        return { w: Math.round(b.width), h: Math.round(b.height), r: getComputedStyle(el).borderRadius }
+      }
+      return { brand: box(document.querySelector('.titlebar-app')!), nav: box(document.querySelector('.sidebar-nav .nav-item')!) }
+    })
+    expect(cells.brand).toEqual(cells.nav)
+    expect(await page.locator('.sidebar-nav .nav-item').first().evaluate((el) => getComputedStyle(el).width)).toBe('36px')
     await expect(page.locator('.sidebar .sidebar-toggle')).toHaveCount(0)
     await expect(page.locator('.workspace-page-heading')).toHaveCount(0)
-    expect((await page.locator('.workspace-main').boundingBox())!.y).toBe(42)
+    expect((await page.locator('.workspace-main').boundingBox())!.y).toBe(48)
     expect(errors).toEqual([])
   })
 }
@@ -161,12 +187,12 @@ test('Codex 横向页签切换会话、用量、回收站，保留模型明细�
   await page.locator('.usg-model-row[data-model="gpt-5.4"]').click()
   await expect(page.getByRole('region', { name: 'gpt-5.4 会话用量', exact: true })).toContainText('布局验证')
   const before = await e2e.count(page, 'codex_query_session_usage')
-  await page.locator('.page-bar .cx-refresh').click()
+  await page.locator('.cx-band-controls .cx-refresh').click()
   await expect.poll(() => e2e.count(page, 'codex_query_session_usage')).toBeGreaterThan(before)
   await views.getByRole('button', { name: '回收站', exact: true }).click()
-  await expect(page.locator('.titlebar-outer .titlebar-brand')).toContainText('Codex 回收站')
+  await expect(views.getByRole('button', { name: '回收站', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await views.getByRole('button', { name: '账号', exact: true }).click()
-  await expect(page.locator('.titlebar-outer .titlebar-brand')).toContainText('Codex')
+  await expect(views.getByRole('button', { name: '账号', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('.workspace-directory')).toBeHidden()
   await expect(views).toBeVisible()
   expect((await views.boundingBox())!.width).toBeGreaterThan((await views.boundingBox())!.height)
@@ -183,11 +209,10 @@ test('800px 目录与正文并排停靠，收起后恢复两列收藏且模块�
   const surface = (await page.locator('.workspace-surface').boundingBox())!
   const main = (await page.locator('.workspace-main').boundingBox())!
   const content = (await page.locator('.workspace-body > .main-content').boundingBox())!
-  const toolbar = (await page.locator('#workspace-page-toolbar').boundingBox())!
   expect(panel.x).toBe(content.x + content.width)
   expect(panel.x).toBe(main.x + main.width)
   expect(panel.x + panel.width).toBe(surface.x + surface.width)
-  expect(panel.y).toBe(toolbar.y)
+  expect(panel.y).toBe(surface.y)
   expect(panel.height).toBe(surface.height)
   expect(content.width).toBeLessThan(mainWidth)
   expect(main.width).toBe(mainWidth - panel.width)
@@ -232,13 +257,12 @@ test('宽窗目录贴合内容面顶部与底部，缩放和切换保留手动�
   const surface = (await page.locator('.workspace-surface').boundingBox())!
   const main = (await page.locator('.workspace-main').boundingBox())!
   const content = (await page.locator('.workspace-body > .main-content').boundingBox())!
-  const toolbar = (await page.locator('#workspace-page-toolbar').boundingBox())!
   expect(panel.x).toBe(content.x + content.width)
   expect(panel.x).toBe(main.x + main.width)
   expect(panel.x + panel.width).toBe(surface.x + surface.width)
-  expect(panel.y).toBe(toolbar.y)
+  expect(panel.y).toBe(surface.y)
   expect(panel.height).toBe(surface.height)
-  expect((await page.locator('.workspace-directory-heading').boundingBox())!.height).toBe(64)
+  expect((await page.locator('.workspace-directory-heading').boundingBox())!.height).toBe(48)
   await expect(page.locator('.workspace-surface > #workspace-directory')).toBeVisible()
   await page.setViewportSize({ width: 800, height: 600 })
   await expect(page.locator('.directory-docked .workspace-directory')).toBeVisible()
@@ -274,7 +298,11 @@ for (const theme of ['paper', 'ink']) {
     const card = await background('.memo:not(.editing) >> nth=0')
     expect(panel.image).toContain('gradient')
     expect(panel.color).not.toMatch(/rgba|transparent|\//)
-    expect(await background('#workspace-page-toolbar .page-bar')).toEqual(workspace)
+    expect(panel).toEqual(workspace)
+    await expect(page.locator('.workspace-directory')).toHaveCSS('background-attachment', /^fixed(?:,\s*fixed)*$/)
+    const band = await background('#workspace-page-toolbar .page-bar')
+    expect(band.image).toBe('none')
+    expect(band.color).toBe('rgba(0, 0, 0, 0)')
     expect(card.image).toBe('none')
     if (theme === 'ink') expect(workspace.color).not.toBe(card.color)
     await tipButton(page, '设置').click()
@@ -291,7 +319,7 @@ for (const theme of ['paper', 'ink']) {
     await expect(page.locator('.workspace-main')).toHaveCSS('background-image', 'none')
     await expect(page.locator('.workspace-directory')).toHaveCSS('background-image', 'none')
     expect((await background('.workspace-main')).color).toBe(workspace.color)
-    expect((await background('.workspace-directory')).color).toBe(theme === 'ink' ? 'rgb(27, 28, 31)' : 'rgb(241, 241, 239)')
+    expect((await background('.workspace-directory')).color).toBe(workspace.color)
     expect(await background('.memo:not(.editing) >> nth=0')).toEqual(card)
     await control.locator('label.switch').click()
     await expect(control.getByRole('switch')).toBeEnabled()
@@ -344,8 +372,9 @@ test('外层设置、主题、窗口按钮和锁定恢复均可操作', async ({
   await expect.poll(() => e2e.count(page, 'window:close')).toBe(1)
   await e2e.emitEvent(page, 'window-focus', false)
   await e2e.emitEvent(page, 'window-focus', true)
-  await tipButton(page, '锁定').click()
+  await page.locator('.titlebar-buttons').getByRole('button', { name: '锁定', exact: true }).click()
   await expect(page.locator('.unlock-input')).toBeVisible()
+  await expect(page.getByRole('button', { name: '锁定', exact: true })).toHaveCount(0)
   await expect(page.locator('#workspace-directory-content')).toHaveCount(0)
   await page.locator('.unlock-input').fill(E2E_PASSWORD)
   await page.locator('.unlock-btn').click()

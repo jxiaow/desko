@@ -106,10 +106,11 @@ function pct(part: number, whole: number): number {
         </div>
       </section>
 
-      <div v-if="!days.length" class="rcard empty-state">
+      <!-- 今日的空态由下面那张图表自己说，不再叠一块同样的白板。 -->
+      <div v-if="!days.length && usageReportRange !== 'today'" class="rcard empty-state">
         <div class="empty-icon"><AppIcon name="clock" :size="24" /></div>
-        <div class="empty-title">{{ usageReportRange === 'today' ? '今天还没有用量记录' : '这段时间没有用量记录' }}</div>
-        <div class="empty-desc">{{ usageReportRange === 'today' ? '使用 Codex 后自动更新，或切换时间范围。' : '切换时间范围查看其他日期。' }}</div>
+        <div class="empty-title">这段时间没有用量记录</div>
+        <div class="empty-desc">切换时间范围查看其他日期。</div>
       </div>
 
       <div v-if="usageReportRange === 'today' || days.length" class="usage-chart-stage">

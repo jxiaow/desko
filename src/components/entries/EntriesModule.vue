@@ -35,6 +35,8 @@ const props = defineProps<{
   passwordCache: Record<string, { value: string; ts: number }>
 }>()
 
+const showFilters = computed(() => props.tabs.some(tab => tab.count > 0) || !!props.searchKeyword || props.activeTab !== 'all')
+
 const emit = defineEmits<{
   'update:searchKeyword': [value: string]
   'update:activeTab': [value: string]
@@ -204,7 +206,7 @@ watchEffect(() => {
     <!-- 身份行 + 工具栏：搜索、分类、计数和两个动作；分类超出宽度改为横向滚动 -->
     <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
     <div class="page-bar">
-      <div class="search-box">
+      <div v-if="showFilters" class="search-box">
         <span class="search-icon">
           <AppIcon name="search" :size="15" />
         </span>
@@ -214,7 +216,7 @@ watchEffect(() => {
           <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <Teleport :to="workspaceDirectoryTarget" :disabled="!workspaceLayout || !pageActive" defer>
+      <Teleport v-if="showFilters" :to="workspaceDirectoryTarget" :disabled="!workspaceLayout || !pageActive" defer>
       <nav ref="tabsRef" class="tabs" :class="{ 'directory-list': workspaceLayout }" aria-label="收藏分类">
         <span class="tab-thumb" :style="thumbStyle" aria-hidden="true"></span>
         <button
@@ -226,7 +228,7 @@ watchEffect(() => {
           :aria-pressed="activeTab === t.id"
           @click="pickTab(t.id)"
         >
-          <AppIcon v-if="workspaceLayout" :name="t.id === 'all' ? 'all' : 'tag'" :size="14" />
+          <AppIcon v-if="workspaceLayout" :name="t.id === 'all' ? 'all' : 'tag'" :size="16" />
           <span class="directory-label">{{ t.name }}</span>
           <span class="tab-count">{{ t.count }}</span>
         </button>
@@ -273,7 +275,7 @@ watchEffect(() => {
           <AppIcon name="checkall" :size="16" />
         </button>
         <CreateAction label="新增条目" @click="emit('openAdd')" />
-        <WorkspaceDirectoryToggle v-if="workspaceLayout" />
+        <WorkspaceDirectoryToggle v-if="workspaceLayout && showFilters" />
       </div>
     </div>
     </Teleport>
@@ -383,7 +385,7 @@ watchEffect(() => {
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navEntries'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无条目' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击右上角 + 添加条目' }}</div>
+      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击右上角「新增条目」添加' }}</div>
       <div v-if="!searchKeyword" class="empty-motto" aria-hidden="true">
         <span class="w">收一处 · 启一窗 · 开一页</span>
       </div>

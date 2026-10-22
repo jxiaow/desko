@@ -45,6 +45,12 @@ export default defineConfig(({ mode }) => {
       target: ['es2021', 'chrome100', 'safari13'],
       minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
       sourcemap: !!process.env.TAURI_DEBUG,
+      rollupOptions: {
+        input: {
+          main: fileURLToPath(new URL('./index.html', import.meta.url)),
+          hud: fileURLToPath(new URL('./hud.html', import.meta.url)),
+        },
+      },
     },
   }
 })

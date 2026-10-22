@@ -282,7 +282,7 @@ onMounted(() => {
 
           <!-- 外观 -->
           <section v-show="tab === 'appearance'" class="settings-pane">
-            <div class="settings-section-label">底色</div>
+            <h4 class="settings-section-label">底色</h4>
             <div class="theme-row" :class="{ 'workspace-theme-row': workspaceLayout }">
               <button
                 v-for="t in themes"
@@ -324,7 +324,7 @@ onMounted(() => {
                 <span class="theme-chip-name">{{ t.name }}</span>
               </button>
             </div>
-            <div class="settings-section-label">强调色</div>
+            <h4 class="settings-section-label">强调色</h4>
             <div class="accent-row" role="radiogroup" aria-label="强调色">
               <button
                 v-for="a in accents"
@@ -341,7 +341,7 @@ onMounted(() => {
                 <span class="accent-name">{{ a.name }}</span>
               </button>
             </div>
-            <div class="settings-section-label">效果</div>
+            <h4 class="settings-section-label">效果</h4>
             <div class="group-content">
               <div class="setting-item">
                 <div class="setting-info">
@@ -371,6 +371,7 @@ onMounted(() => {
 
           <!-- 安全 -->
           <section v-show="tab === 'security'" class="settings-pane">
+            <h4 class="settings-section-label">口令</h4>
             <div class="group-content">
               <div class="setting-item clickable" @click="emit('openChangePassword')">
                 <div class="setting-info">
@@ -378,6 +379,9 @@ onMounted(() => {
                 </div>
                 <AppIcon class="arrow-icon" name="chevRight" :size="16" />
               </div>
+            </div>
+            <h4 class="settings-section-label">锁定</h4>
+            <div class="group-content">
               <div class="setting-item">
                 <div class="setting-info">
                   <span class="setting-name">自动锁定</span>
@@ -424,11 +428,23 @@ onMounted(() => {
           <!-- 关于 -->
           <section v-show="tab === 'about'" class="settings-pane">
             <div class="settings-about">
-              <div class="about-logo">
-                <BrandLogo />
+              <div class="about-brand">
+                <div class="about-logo">
+                  <BrandLogo />
+                </div>
+                <div class="about-info">
+                  <div class="about-name">案头 Desko</div>
+                  <div class="about-tagline">本地个人工作台：收藏、小记、文件、验证码与传输各占一格</div>
+                </div>
               </div>
-              <div class="about-name">案头 Desko</div>
-              <div v-if="appVersion" class="about-version">v{{ appVersion }}</div>
+              <div v-if="appVersion" class="setting-item">
+                <div class="setting-info">
+                  <span class="setting-name">版本</span>
+                </div>
+                <div class="setting-control">
+                  <span class="about-version">v{{ appVersion }}</span>
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -549,15 +565,16 @@ onMounted(() => {
 }
 
 .nav-tab.on {
-  /* 与主窗口侧栏同一套激活语言：同材质白块 + 贴地影，重音给整条。
-     原先这里吃 --sidebar-active（accent 淡染），等于同一个 App 里两种"选中长这样" */
-  background: var(--bg-surface);
-  color: var(--accent);
+  /* 激活=淡染行，与主窗口侧栏共用同一颗令牌。
+     白块那版在侧栏底上是个洞：--bg-surface 比侧栏底亮 4.5 L*，hover 档却暗 3.8 L*，
+     未选→悬停→选中不单调；影只有 4% α，撑不起"抬起来"这层意思。 */
+  background: var(--sidebar-active);
+  color: var(--text-brand);
   font-weight: 600;
-  box-shadow: var(--shadow-card);
 }
 
 .nav-tab.on svg {
+  color: var(--accent);
   opacity: 1;
 }
 
@@ -574,7 +591,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  height: 56px;
+  height: 48px;
   padding: 0 var(--space-6);
 }
 
@@ -587,14 +604,15 @@ onMounted(() => {
 
 /* 面板用 v-show 而非 v-if：切页时 number-input 不卸载，@change 才不会被切页吞掉。
    弹窗定高，各页同高，切页不跳。
-   横向内距 24 是标题、预览与设置行共同的对齐基准。 */
+   横向内距 24 是标题、预览与设置行共同的对齐基准；顶部 12 让每个页签的首行
+   （说明句或分组标题）落在同一条起跑线上，头与内容之间不再各页悬空不同的一截。 */
 .settings-pane {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-y: scroll;
   scrollbar-gutter: stable;
-  padding: var(--space-4) var(--space-6) var(--space-6);
+  padding: var(--space-3) var(--space-6) var(--space-6);
   display: flex;
   flex-direction: column;
 }
@@ -756,33 +774,39 @@ onMounted(() => {
   border-radius: var(--radius-pill);
 }
 .tp-row:nth-child(2) { background: var(--bg-surface-hover); }
-.workspace-theme-prev { width: 100%; height: auto; aspect-ratio: 16 / 10; background: var(--bg-workspace-frame); }
+.workspace-theme-prev { width: 100%; height: auto; aspect-ratio: 16 / 10; background: var(--bg-workspace); }
 .workspace-theme-prev .tp-rail { width: 12%; background: transparent; border: 0; }
 .workspace-theme-prev .tp-rail-dot { left: 3px; top: 12px; width: 4px; height: 5px; }
 .workspace-theme-prev .tp-rail-line { left: 3px; top: 26px; width: 4px; }
 .workspace-theme-prev .tp-rail-line.short { top: 37px; width: 4px; }
-.workspace-theme-prev .tp-rows { left: 14%; right: 3px; top: 8px; bottom: 3px; padding: 5px 28% 5px 5px; gap: 4px; justify-content: center; border-radius: 5px; background: var(--bg-workspace); }
+.workspace-theme-prev .tp-rows { left: 14%; right: 3px; top: 8px; bottom: 3px; padding: 5px 28% 5px 5px; gap: 4px; justify-content: center; }
 .workspace-theme-prev .tp-row { height: 11px; flex-shrink: 0; padding: 0 3px; }
 .tp-workspace-context { position: absolute; top: 16px; right: 3px; bottom: 3px; width: 20%; border-left: 1px solid var(--border); border-radius: 0 0 5px 0; background: var(--bg-inspector); }
 .theme-chip-name { font-size: var(--text-sm); font-weight: 600; color: var(--text); line-height: 1.3; }
 
-/* 关于面板只有三行内容，居中排成一块，比顶格加一屏空白更像介绍页。 */
+/* 关于页不再是一座居中小岛：品牌就是页面上的第一块，左边缘与其他页签的正文对齐，
+   版本走同一条行语言。居中只会让这一页看起来像没做完的启动画面。 */
 .settings-about {
-  margin: auto;
   display: flex;
   flex-direction: column;
+}
+
+.about-brand {
+  display: flex;
   align-items: center;
-  gap: var(--space-3);
-  text-align: center;
+  gap: var(--space-4);
+  padding: var(--space-2) 0 var(--space-5);
 }
 
 /* 品牌标全站只有一种呈现：裸标 + 品牌渐变。
    这里原先额外套了一块紫色渐变底，等于第二套品牌渐变，切主题时它会跟不上标本身。 */
 .about-logo {
-  width: 72px;
-  height: 72px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
 }
+
+.about-info { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 
 .about-name {
   font-size: var(--text-lg);
@@ -790,9 +814,15 @@ onMounted(() => {
   color: var(--text);
 }
 
+.about-tagline {
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
 .about-version {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
 }
 
 /* Dialog transition */

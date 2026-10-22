@@ -18,9 +18,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const setupMasterPassword = async (password: string) => {
+  /** onSetup 必须早于 appState 翻转：SetupPage 一旦随状态卸载，它发出的事件就没人接了 */
+  const setupMasterPassword = async (password: string, onSetup?: () => void) => {
     await api.setupMasterPassword(password)
     isInitialized.value = true
+    if (onSetup) onSetup()
     appState.value = 'unlocked'
   }
 

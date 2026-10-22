@@ -518,6 +518,8 @@ async function copySessionValue(value: string, label: string) {
 .sess-billing dt { font-size: var(--text-xs); color: var(--text-muted); }
 .sess-billing dd { margin: 0; font-size: var(--text-base); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text); }
 .hero-pending { font-size: var(--text-sm); color: var(--text-muted); }
+/* 还没统计完时这里只有一行字，不必撑成一张空卡。 */
+.sess-hero:has(.hero-pending) { min-height: 56px; }
 .hero-sub {
   grid-column: 1 / -1;
   min-height: 18px;

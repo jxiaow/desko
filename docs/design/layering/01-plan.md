@@ -1,6 +1,7 @@
 # 层间阶梯与线描降噪
 
 日期：2026-10-21 ｜ 修订：2026-10-21（review 后：搜索框专用边框、外框决策、sunken 级联、锁屏条件） ｜ 状态：**已落地**
+后续：2026-10-22 工作区外壳改为整窗同场，外框→画布台阶与 1px 反光边退役，见[工作区配色与柔光 §13](../themes/05-workspace-palette-and-daylight.md)。
 前置：[工作区配色与柔光（第三轮）](../themes/05-workspace-palette-and-daylight.md)
 基线截图：`.tmp/visual-review-20261021/`（37 状态 × 纸/墨 = 74 帧，E2E mock，1040×670 @1.5x）
 

@@ -131,7 +131,9 @@ for (const THEME of RUN) {
   await page.keyboard.press('Escape'); await page.waitForTimeout(250)
   await page.locator('.page-bar button.btn-primary').click(); await page.waitForTimeout(350)
   await page.locator('.entry-form-dialog input[placeholder="选择或输入新分类"]').click(); await shot('13-entry-category')
-  await page.keyboard.press('Escape'); await page.waitForTimeout(250)
+  // 第一次 Escape 只收起分类下拉（编辑框自己 stopPropagation），第二次才关弹窗
+  await page.keyboard.press('Escape'); await page.waitForTimeout(120)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300)
   await page.locator('.entry-card', { hasText: 'GitHub' }).first().click()
   await page.locator('.detail-dialog').waitFor(); await shot('14-entry-detail-notes')
   await page.keyboard.press('Escape'); await page.waitForTimeout(250)

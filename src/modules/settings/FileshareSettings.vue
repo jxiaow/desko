@@ -109,19 +109,20 @@ const clearFsPassword = async () => {
         <span class="switch-slider"></span>
       </label>
     </div>
-    <div class="setting-item" :class="{ stacked: fsShowPwInput }">
-      <div class="setting-info">
-        <span class="setting-name">访问口令</span>
-        <span class="setting-desc">启用后网页端所有页面都要先输口令</span>
+    <div class="setting-item stacked-row">
+      <div class="row-head">
+        <div class="setting-info">
+          <span class="setting-name">访问口令</span>
+          <span class="setting-desc">{{ fsHasPassword ? '已启用 · ' : '未启用 · ' }}网页端每个页面都要先输口令</span>
+        </div>
+        <div class="setting-actions fs-pw-ctl">
+          <button v-if="!fsShowPwInput" class="action-btn" @click="fsShowPwInput = true">
+            {{ fsHasPassword ? '修改口令' : '设置口令' }}
+          </button>
+          <button v-if="fsHasPassword" class="action-btn" :disabled="fsBusy" @click="clearFsPassword">清除口令</button>
+        </div>
       </div>
-      <div class="fs-pw-ctl">
-        <span class="fs-tag" :class="{ on: fsHasPassword }">{{ fsHasPassword ? '已启用' : '未启用' }}</span>
-        <button v-if="!fsShowPwInput" class="action-btn" @click="fsShowPwInput = true">
-          {{ fsHasPassword ? '修改口令' : '设置口令' }}
-        </button>
-        <button v-if="fsHasPassword" class="action-btn" :disabled="fsBusy" @click="clearFsPassword">清除口令</button>
-      </div>
-      <div v-if="fsShowPwInput" class="fs-pw-row">
+      <div v-if="fsShowPwInput" class="row-detail fs-pw-row">
         <input
           v-model="fsPasswordInput"
           class="fs-pw-input"
@@ -130,27 +131,18 @@ const clearFsPassword = async () => {
           autocomplete="new-password"
           @keyup.enter="applyFsPassword"
         />
-        <button class="action-btn primary" :disabled="fsBusy || !fsPasswordInput" @click="applyFsPassword">设置</button>
-        <button class="action-btn" @click="fsShowPwInput = false; fsPasswordInput = ''">取消</button>
+        <div class="row-actions">
+          <button class="action-btn primary" :disabled="fsBusy || !fsPasswordInput" @click="applyFsPassword">设置</button>
+          <button class="action-btn" @click="fsShowPwInput = false; fsPasswordInput = ''">取消</button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.stacked { flex-wrap: wrap; }
 .fs-port-input { width: 84px; }
-.fs-pw-ctl { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
-.fs-tag {
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-.fs-tag.on { border-color: var(--success); color: var(--success); }
-.fs-pw-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding-bottom: var(--space-1); }
+.fs-pw-row { flex-direction: row; align-items: center; }
 .fs-pw-input {
   flex: 1;
   min-width: 140px;

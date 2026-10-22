@@ -12,6 +12,7 @@ import CreateAction from '../shared/CreateAction.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { usePageActive } from '../../composables/usePageActive'
+import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 import { isWebRuntime } from '../../services/runtime'
 import { writeClipboardText } from '../../utils/clipboard'
 import { isPageShortcutBlocked } from '../../utils/pageShortcuts'
@@ -19,6 +20,7 @@ import { downloadWebFile } from './webFiles'
 import WebFilesDialog from './WebFilesDialog.vue'
 
 const pageActive = usePageActive()
+const workspaceLayout = useWorkspaceLayout()
 
 const props = defineProps<{
   searchKeyword: string
@@ -345,8 +347,9 @@ watchEffect(() => {
 
 <template>
   <div class="content-inner" :class="{ 'web-runtime': webRuntime }">
+    <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
     <div class="page-bar">
-      <div class="search-box">
+      <div v-if="totalShortcuts > 0 || searchKeyword" class="search-box">
         <span class="search-icon"><AppIcon name="search" :size="15" /></span>
         <input ref="searchRef" :value="searchKeyword" placeholder="搜索快捷方式…" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" />
         <kbd v-if="!searchKeyword" class="search-kbd">{{ kbdHint }}</kbd>
@@ -358,6 +361,7 @@ watchEffect(() => {
         <CreateAction label="添加快捷方式" @click="showAddDialog = true" />
       </div>
     </div>
+    </Teleport>
 
     <div v-if="loading" class="card-grid">
       <div class="skeleton-card" v-for="n in 6" :key="n">
@@ -444,7 +448,7 @@ watchEffect(() => {
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navFiles'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无快捷方式' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : webRuntime ? '请在桌面端添加文件快捷方式' : '点击右上角 + 添加快捷方式' }}</div>
+      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : webRuntime ? '请在桌面端添加文件快捷方式' : '点击右上角「添加快捷方式」开始' }}</div>
     </div>
 
     <!-- Add/Edit Dialog：与收藏表单弹窗同一套骨架（居中悬浮 + 42px 头 + 32px 字段轴 + 46px 底栏带快捷键徽标） -->

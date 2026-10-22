@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import { useToastStore } from './stores/toast'
@@ -16,6 +16,13 @@ import { installHoverGuard } from './utils/hoverGuard'
 import { isPageShortcutBlocked } from './utils/pageShortcuts'
 import { bootEnabledModules, flushModulesBeforeLock, lockEnabledModules } from './modules/state'
 import { stopModuleSync } from './modules/runtime'
+import { requestCodexAccountsView } from './services/codexState'
+import {
+  activateCodexHudBridge,
+  deactivateCodexHudBridge,
+  hideStaleHud,
+  setCodexHudOpenHandler,
+} from './services/codexHud'
 import type { SettingsTabId } from './modules/registry'
 import TitleBar from './components/layout/TitleBar.vue'
 import Sidebar from './components/layout/Sidebar.vue'
@@ -38,10 +45,18 @@ import QuitDialog from './components/shared/QuitDialog.vue'
 
 const props = defineProps<{ workspaceLayout?: boolean }>()
 const route = props.workspaceLayout ? useRoute() : null
+const router = props.workspaceLayout ? useRouter() : null
 const directoryMedia = props.workspaceLayout ? window.matchMedia(workspaceDirectoryMediaQuery) : null
 const directoryWide = ref(directoryMedia?.matches ?? false)
 const directoryPreferences = useWorkspaceDirectoryPreferences()
-const directoryAvailable = computed(() => hasWorkspaceDirectory(String(route?.name)))
+const notesStore = useNotesStore()
+const entriesStore = useEntriesStore()
+const directoryAvailable = computed(() => {
+  if (!hasWorkspaceDirectory(String(route?.name))) return false
+  return route?.name === 'notes'
+    ? notesStore.notes.length > 0 || notesStore.hasActiveFilters
+    : entriesStore.entries.length > 0 || !!entriesStore.searchKeyword || entriesStore.activeTab !== 'all'
+})
 const directoryVisible = computed(() => directoryAvailable.value &&
   (directoryPreferences.open.value[String(route?.name)] ?? false))
 const directoryCompact = computed(() => !directoryWide.value)
@@ -97,9 +112,7 @@ const toastSide = computed(() => {
 })
 const toastRight = computed(() => {
   if (!props.workspaceLayout) return '0px'
-  return directoryVisible.value
-    ? 'calc(var(--workspace-frame-right) + var(--workspace-directory-width))'
-    : 'var(--workspace-frame-right)'
+  return directoryVisible.value ? 'var(--workspace-directory-width)' : '0px'
 })
 const showSettings = ref(false)
 const showWebModules = ref(false)
@@ -131,6 +144,8 @@ let lockGeneration = 0
 let lockIsForced = false
 let lockResetsDrafts = false
 const finishLock = async () => {
+  // 先撤挂件再清会话：桌面上不能留下最后一帧额度。
+  void deactivateCodexHudBridge()
   showWebModules.value = false
   showSettings.value = false
   showChangePassword.value = false
@@ -192,7 +207,17 @@ const doLock = (request: LockRequest = {}): Promise<void> => {
 
 useAutoLock(doLock, evictExpiredPasswords)
 
-const bootModules = () => bootEnabledModules()
+const openCodexFromHud = () => {
+  if (!props.workspaceLayout) return
+  void router?.push('/codex')
+  requestCodexAccountsView()
+}
+
+const bootModules = async () => {
+  await bootEnabledModules()
+  setCodexHudOpenHandler(openCodexFromHud)
+  await activateCodexHudBridge()
+}
 const onWebSessionExpired = () => {
   if (isWebRuntime()) void doLock({ forced: true, resetDrafts: true })
 }
@@ -211,8 +236,11 @@ onMounted(async () => {
     })
   }
   await checkInitialized()
+  setCodexHudOpenHandler(openCodexFromHud)
   if (appState.value === 'unlocked') {
-    await bootEnabledModules()
+    await bootModules()
+  } else {
+    await hideStaleHud()
   }
 
   // WebView 收不到窗口隐藏/最小化时的 mouseleave，:hover 与 tooltip 会残留到下次打开
@@ -223,6 +251,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  setCodexHudOpenHandler(null)
+  void deactivateCodexHudBridge()
   directoryMedia?.removeEventListener('change', onDirectoryMediaChange)
   document.removeEventListener('click', onDirectoryOutsideClick)
   unlistenKdfWarning?.()
@@ -267,7 +297,7 @@ function onGlobalKey(e: KeyboardEvent) {
     <template v-else-if="workspaceLayout">
       <TitleBar outer @open-settings="openSettingsAppearance" @lock="doLock" />
       <div class="app-layout">
-        <Sidebar collapsed :show-toggle="false" />
+        <Sidebar collapsed :show-toggle="false" :show-lock="false" @open-settings="openSettingsAppearance" />
         <CodexWorkspace :directory-visible="directoryVisible" :directory-compact="directoryCompact" :directory-pinned="directoryPinned" @close-directory="closeDirectory" @toggle-directory="toggleDirectory" @toggle-directory-pin="toggleDirectoryPin"><ModuleRouterView /></CodexWorkspace>
       </div>
     </template>
@@ -277,6 +307,8 @@ function onGlobalKey(e: KeyboardEvent) {
         v-if="sidebarMode !== 'hidden'"
         :collapsed="sidebarMode === 'rail'"
         @update:collapsed="sidebarMode = $event ? 'rail' : 'expanded'"
+        @open-settings="openSettingsAppearance"
+        @lock="doLock"
       />
 
       <div class="main-area">

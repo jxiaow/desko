@@ -11,7 +11,7 @@ import BackupBadge from './BackupBadge.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { webAccessApi, type WebAccessStatus } from '../../services/api/webAccess'
 
-defineProps<{
+const props = defineProps<{
   isLocked?: boolean
   /** 侧栏收到 0 宽时，恢复入口挪到这里 */
   sidebarHidden?: boolean
@@ -30,6 +30,9 @@ const appWindow = webRuntime ? null : getCurrentWindow()
 const isMaximized = ref(false)
 const appMenuOpen = ref(false)
 const appMenuAnchor = ref<HTMLButtonElement | null>(null)
+const titlebarElement = ref<HTMLElement | null>(null)
+const windowControls = ref<HTMLElement | null>(null)
+let controlsObserver: ResizeObserver | undefined
 function openAppPane(tab: 'profiles' | 'about') {
   appMenuOpen.value = false
   window.dispatchEvent(new CustomEvent('desko:open-settings-tab', { detail: tab }))
@@ -97,6 +100,15 @@ let unlisten: (() => void) | null = null
 let unlistenFocus: (() => void) | null = null
 
 onMounted(async () => {
+  if (props.outer && windowControls.value) {
+    const updateControlsSpace = () => {
+      const width = windowControls.value?.getBoundingClientRect().width ?? 0
+      titlebarElement.value?.style.setProperty('--workspace-window-space', `${Math.ceil(width) + 12}px`)
+    }
+    updateControlsSpace()
+    controlsObserver = new ResizeObserver(updateControlsSpace)
+    controlsObserver.observe(windowControls.value)
+  }
   if (!appWindow) return
   window.addEventListener('desko:web-access-status', onWebStatus)
   void refreshWebStatus()
@@ -115,6 +127,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  controlsObserver?.disconnect()
   active = false
   clearInterval(statusPoll)
   window.removeEventListener('desko:web-access-status', onWebStatus)
@@ -124,71 +137,76 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="titlebar" :class="{ 'titlebar-locked': isLocked, 'titlebar-outer': outer }">
+  <div ref="titlebarElement" class="titlebar" :class="{ 'titlebar-locked': isLocked, 'titlebar-outer': outer }">
     <div class="titlebar-drag" @mousedown="startDrag" @dblclick="toggleMaximize"></div>
 
-    <button v-if="outer && !isLocked" ref="appMenuAnchor" class="titlebar-app" type="button" aria-label="Desko 菜单" title="Desko" aria-haspopup="menu" :aria-expanded="appMenuOpen" @click="appMenuOpen = !appMenuOpen" @dblclick.stop><BrandLogo /></button>
-    <PopoverMenu v-if="appMenuOpen" :anchor="appMenuAnchor" align="start" :width="176" @close="appMenuOpen = false">
-      <div class="app-menu-title">Desko</div>
-      <button class="pop-item" type="button" role="menuitem" @click="openAppPane('profiles')"><AppIcon name="user" :size="15" />档案管理</button>
-      <button class="pop-item" type="button" role="menuitem" @click="openAppPane('about')"><AppIcon name="info" :size="15" />关于 Desko</button>
-    </PopoverMenu>
-
-    <div v-if="!isLocked" class="titlebar-left" @mousedown="startDrag" @dblclick="toggleMaximize">
-      <button
-        v-if="webRuntime"
-        class="titlebar-btn tb-util web-modules-toggle"
-        title="打开模块导航"
-        aria-label="打开模块导航"
-        aria-haspopup="dialog"
-        @click="emit('showModules')"
-      >
-        <AppIcon name="panel" :size="20" />
-      </button>
-      <button
-        v-if="sidebarHidden"
-        class="titlebar-btn tb-util sidebar-restore"
-        title="显示侧栏 (Ctrl+B)"
-        @click="emit('showSidebar')"
-      >
-        <AppIcon name="panel" :size="16" />
-      </button>
-      <div class="titlebar-brand">
-        <span class="titlebar-crumb">{{ crumb }}</span>
-        <span v-if="pageHead.count" class="titlebar-count">{{ pageHead.count }}</span>
-      </div>
+    <div v-if="outer && !isLocked" class="titlebar-brandcell">
+      <button ref="appMenuAnchor" class="titlebar-app" type="button" aria-label="Desko 菜单" title="Desko" aria-haspopup="menu" :aria-expanded="appMenuOpen" @click="appMenuOpen = !appMenuOpen" @dblclick.stop><BrandLogo /></button>
+      <PopoverMenu v-if="appMenuOpen" :anchor="appMenuAnchor" align="start" :width="176" @close="appMenuOpen = false">
+        <div class="app-menu-title">Desko</div>
+        <button class="pop-item" type="button" role="menuitem" @click="openAppPane('profiles')"><AppIcon name="user" :size="15" />档案管理</button>
+        <button class="pop-item" type="button" role="menuitem" @click="openAppPane('about')"><AppIcon name="info" :size="15" />关于 Desko</button>
+      </PopoverMenu>
     </div>
 
-    <div class="titlebar-buttons">
+    <div class="titlebar-page">
+      <div v-if="!isLocked" class="titlebar-left" @mousedown="startDrag" @dblclick="toggleMaximize">
+        <button
+          v-if="webRuntime"
+          class="titlebar-btn tb-util web-modules-toggle"
+          title="打开模块导航"
+          aria-label="打开模块导航"
+          aria-haspopup="dialog"
+          @click="emit('showModules')"
+        >
+          <AppIcon name="panel" :size="20" />
+        </button>
+        <button
+          v-if="sidebarHidden"
+          class="titlebar-btn tb-util sidebar-restore"
+          title="显示侧栏 (Ctrl+B)"
+          @click="emit('showSidebar')"
+        >
+          <AppIcon name="panel" :size="16" />
+        </button>
+        <div class="titlebar-brand" :title="[crumb, pageHead.count].filter(Boolean).join(' · ')">
+          <span class="titlebar-crumb">{{ crumb }}</span>
+          <span v-if="pageHead.count" class="titlebar-count">{{ pageHead.count }}</span>
+        </div>
+      </div>
+
+      <div v-if="outer" id="workspace-page-toolbar" class="workspace-page-toolbar"></div>
+    </div>
+
+    <div ref="windowControls" class="titlebar-buttons">
       <button v-if="!webRuntime && webStatus?.running" class="web-running" :title="webStatusTitle" :aria-label="webStatusTitle" :disabled="isLocked" @click="openWebSettings">
         <span class="web-running-dot" aria-hidden="true"></span>Web
       </button>
-      <template v-if="!isLocked">
-        <BackupBadge v-if="!webRuntime" />
-        <button  class="titlebar-btn tb-util" @click="emit('openSettings')" title="设置">
-          <AppIcon name="gear" :size="16" />
-        </button>
-        <button  class="titlebar-btn tb-util" @click="emit('lock')" :title="webRuntime ? '退出浏览器访问' : '锁定'">
-          <AppIcon name="lock" :size="16" />
-        </button>
-      </template>
+      <BackupBadge v-if="!isLocked && !webRuntime" />
+      <!-- 设置仅在侧栏收起时回到顶栏；桌面工作区的锁定与窗口按钮同组。 -->
+      <button v-if="!isLocked && sidebarHidden" class="titlebar-btn tb-util" @click="emit('openSettings')" title="设置">
+        <AppIcon name="gear" :size="16" />
+      </button>
+      <button v-if="!isLocked && (outer || sidebarHidden)" class="titlebar-btn titlebar-lock" type="button" @click="emit('lock')" :title="webRuntime ? '退出浏览器访问' : '锁定'" :aria-label="webRuntime ? '退出浏览器访问' : '锁定'">
+        <AppIcon name="lock" :size="14" />
+      </button>
       <button v-if="!webRuntime" class="titlebar-btn" @click="minimize" title="最小化">
-        <svg width="12" height="12" viewBox="0 0 12 12">
+        <svg width="14" height="14" viewBox="0 0 12 12">
           <rect x="2" y="5.5" width="8" height="1" fill="currentColor"/>
         </svg>
       </button>
       <button v-if="!webRuntime" class="titlebar-btn" @click="toggleMaximize" :title="isMaximized ? '还原' : '最大化'">
-        <svg v-if="!isMaximized" width="12" height="12" viewBox="0 0 12 12">
+        <svg v-if="!isMaximized" width="14" height="14" viewBox="0 0 12 12">
           <rect x="2" y="2" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
-        <svg v-else width="12" height="12" viewBox="0 0 12 12">
+        <svg v-else width="14" height="14" viewBox="0 0 12 12">
           <path d="M5.5 2.2H8.8a1.2 1.2 0 0 1 1.2 1.2v3.3" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
           <rect x="2" y="4.2" width="6" height="6" rx="1.2" fill="none" stroke="currentColor" stroke-width="1"/>
         </svg>
       </button>
       <button v-if="!webRuntime" class="titlebar-btn titlebar-btn-close" @click="close" title="关闭">
-        <!-- 三钮同一档：同 2–10 光学盒、同 1px 实笔（原先关闭是 1.2px 的 10×10，比另两颗又粗又大） -->
-        <svg width="12" height="12" viewBox="0 0 12 12">
+        <!-- 窗口图标共用 14px 画布与同一档笔画。 -->
+        <svg width="14" height="14" viewBox="0 0 12 12">
           <path d="M2 2 10 10M10 2 2 10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
         </svg>
       </button>
@@ -197,12 +215,37 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.titlebar-outer .titlebar-left { padding-left: 59px; }
-.titlebar-app { position: absolute; left: 12px; top: 5px; z-index: 2; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.titlebar.titlebar-outer { height: var(--workspace-toolbar-height, 48px); flex: 0 0 var(--workspace-toolbar-height, 48px); overflow: hidden; }
+.titlebar-brandcell { width: var(--sidebar-rail-w, 56px); flex: 0 0 var(--sidebar-rail-w, 56px); align-self: stretch; display: flex; align-items: center; justify-content: center; z-index: 2; }
+.titlebar-page { display: contents; }
+.titlebar-outer .titlebar-page { position: absolute; left: var(--workspace-content-left); right: max(var(--workspace-content-right), var(--workspace-window-space, 122px)); height: 100%; display: flex; align-items: center; z-index: 1; pointer-events: none; }
+.titlebar-outer .titlebar-left { flex: 0 0 var(--workspace-heading-width); width: var(--workspace-heading-width); min-width: 0; padding-left: 0; overflow: hidden; pointer-events: auto; }
+/* 服务状态紧随页名，按文字宽度成组，不占用搜索页的固定标题列。 */
+.titlebar-outer .titlebar-page:has(.service-page-bar) { --workspace-heading-width: auto; --workspace-heading-gap: 12px; }
+.titlebar-outer .titlebar-page:has(.cx-header-tabs, .workspace-fs-head) { --workspace-heading-gap: 0px; }
+.titlebar-outer .titlebar-page:has(.cx-header-tabs, .workspace-fs-head) .titlebar-left { display: none; }
+.titlebar-outer .titlebar-brand { min-width: 0; width: 100%; }
+.titlebar-outer .titlebar-crumb { display: block; flex-shrink: 0; max-width: 100%; font-size: 14px; font-weight: 650; letter-spacing: -0.012em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titlebar-outer .titlebar-count { font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.titlebar-outer .workspace-page-toolbar { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; container: workspace-toolbar / inline-size; pointer-events: none; }
+/* 品牌标占的是轨的第一格：盒子与下面的模块方块同档（36px / 10px 圆角 / 同一条中线），
+   里面那颗 22px 实标不变，改的是外框——不同尺寸的方框挨在一起才读作「空了一块」。 */
+.titlebar-app { width: 36px; height: 36px; padding: 7px; border: 0; border-radius: 10px; background: transparent; cursor: pointer; }
+.titlebar-app :deep(svg) { display: block; width: 100%; height: 100%; }
 .titlebar-app:hover, .titlebar-app[aria-expanded="true"] { background: var(--hover-chrome); }
 .app-menu-title { padding: 8px 12px 6px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
-.titlebar-outer .titlebar-btn:not(.tb-util) { width: 44px; height: 100%; border-radius: 0; }
-.titlebar-outer .titlebar-buttons { padding-right: 0; }
+/* 窗口按钮使用 34×30 圆角片，hover 时显示填充。 */
+/* 带子右端分两群：左边是模块动作，右边是应用/窗口控制。中间一根细线隔开，
+   留白左右大致等宽（线左 = 带子 padding + gap，线右 = margin + gap）。 */
+.titlebar-outer .titlebar-buttons::before {
+  content: '';
+  flex: 0 0 1px;
+  width: 1px;
+  height: 20px;
+  align-self: center;
+  margin-right: 8px;
+  background: var(--border);
+}
 .web-running { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; margin-right: 4px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--success); background: var(--success-soft); font: inherit; font-size: 11px; cursor: pointer; }
 .web-running:disabled { cursor: default; }
 .web-running-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
@@ -233,8 +276,9 @@ onUnmounted(() => {
   border-bottom: none;
 }
 
-/* 锁定页顶栏悬浮在光晕上，控制键按锁页规格放宽到 44px 命中区 */
-.titlebar-locked .titlebar-btn { width: 44px; }
+/* 锁屏页使用紧凑窗控，悬停背景与按钮一起收小。 */
+.titlebar-locked .titlebar-btn { width: 30px; height: 26px; border-radius: 6px; }
+.titlebar-locked .titlebar-btn > svg { width: 12px; height: 12px; }
 
 /* 整条都是拖拽区，右端那一排靠 z-index 压在它上面：
    这样同步钮在不在（要配齐备份密码 + 云端才现身）都不用回来改这里的魔法数 */
@@ -293,13 +337,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 2px;
   padding-right: 6px;
+  flex-shrink: 0;
   z-index: 1;
 }
 
-/* 顶栏所有钮同档：30×28 圆角方块，常态隐形，hover 才吃 chrome 填充 */
+/* 顶栏按钮统一为 34×30，48px 标题栏内上下各留 9px。 */
 .titlebar-btn {
-  width: 30px;
-  height: 28px;
+  width: 34px;
+  height: 30px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -310,12 +355,6 @@ onUnmounted(() => {
   border-radius: var(--radius-ib);
   transition: all var(--transition);
   flex-shrink: 0;
-}
-
-/* 设置/锁定与窗口三钮同档 */
-.titlebar-btn.tb-util {
-  width: 30px;
-  height: 28px;
 }
 
 .titlebar-btn:hover {

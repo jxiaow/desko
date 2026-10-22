@@ -62,7 +62,7 @@ for (const theme of ['paper', 'ink']) for (const width of [1040, 1920]) {
 }
 
 test.describe('背景材质', () => {
-  test('开关同时改变画布、导航和浮层，输入区域保持实底', async ({ page }) => {
+  test('开关同时改变画布、浮层与图标轨的光，轨道与输入区域保持实底', async ({ page }) => {
     await bootUnlocked(page, { settings: { background_atmosphere: 'true' } })
     const dialog = await openSettings(page)
     const control = dialog.locator('.setting-item', { hasText: '背景氛围' })
@@ -76,8 +76,12 @@ test.describe('背景材质', () => {
     await expect(toggle).toBeChecked()
     // 主光与辅光分布在留白两端，卡片和输入区域继续保持实底。
     expect((await background('.app-root')).image).toContain('radial-gradient')
-    const sidebar = (await background('.sidebar')).color
-    expect(sidebar).toMatch(/rgba|\/\s*0\./)
+    const sidebar = await background('.sidebar')
+    // 图标轨、Logo 格与画布共用底色和光场。
+    expect(sidebar.image).toContain('radial-gradient')
+    expect(sidebar.color).not.toMatch(/rgba|transparent|\//)
+    expect(sidebar).toEqual(await background('.app-root'))
+    expect(await background('.titlebar-brandcell')).toEqual(sidebar)
     expect((await background('.settings-dialog')).image).toContain('radial-gradient')
     expect((await background('.settings-nav')).color).toMatch(/rgba|\/\s*0\./)
 
@@ -86,8 +90,9 @@ test.describe('背景材质', () => {
     expect((await e2e.snapshot(page)).settings.background_atmosphere).toBe('false')
     expect((await background('.app-root')).image).toBe('none')
     expect((await background('.settings-dialog')).image).toBe('none')
-    // 图标轨透出外层画布；开关改变的是画布，轨道本身保持透明。
-    expect((await background('.sidebar')).color).toBe(sidebar)
+    // 关闭氛围后，导航轨和画布一起恢复纯色。
+    expect((await background('.sidebar')).image).toBe('none')
+    expect((await background('.sidebar')).color).toBe(sidebar.color)
 
     await control.locator('label.switch').click()
     await expect(toggle).toBeEnabled()

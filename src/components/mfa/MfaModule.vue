@@ -9,6 +9,7 @@ import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import { usePageActive } from '../../composables/usePageActive'
+import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 import AppIcon from '../shared/AppIcon.vue'
 import CreateAction from '../shared/CreateAction.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
@@ -17,6 +18,7 @@ import { writeClipboardText } from '../../utils/clipboard'
 
 const toastStore = useToastStore()
 const pageActive = usePageActive()
+const workspaceLayout = useWorkspaceLayout()
 const confirmStore = useConfirmStore()
 const webRuntime = isWebRuntime()
 
@@ -272,11 +274,13 @@ watchEffect(() => {
 
 <template>
   <div class="content-inner" @paste="onPaste">
+    <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
     <div class="page-bar">
       <div class="page-actions">
         <CreateAction label="新增验证码" @click="openAdd" />
       </div>
     </div>
+    </Teleport>
 
     <div v-if="loading" class="card-grid">
       <div class="mfa-card skeleton" v-for="n in 3" :key="n">
@@ -339,7 +343,7 @@ watchEffect(() => {
     <div v-else class="empty-state">
       <div class="empty-icon"><AppIcon name="navMfa" :size="24" /></div>
       <div class="empty-title">暂无验证码</div>
-      <div class="empty-desc">点击右上角 +，粘贴 otpauth 链接或识别二维码</div>
+      <div class="empty-desc">点击右上角「新增验证码」，粘贴 otpauth 链接或识别二维码</div>
     </div>
 
     <!-- Add Dialog -->

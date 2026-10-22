@@ -79,6 +79,12 @@ export const currentAccount = computed(
   () => accounts.value.find((a) => a.id === currentId.value) ?? null
 )
 
+/** 桌面挂件点击后请求 Codex 页切回账号档；页面没挂载时走默认视图，无需消费 */
+export const codexAccountsViewRequests = ref(0)
+export function requestCodexAccountsView(): void {
+  codexAccountsViewRequests.value++
+}
+
 let accountEpoch = 0
 
 export async function refreshAccounts(): Promise<void> {
@@ -104,6 +110,8 @@ export function clearCodexSession(): void {
   accountEpoch++
   stopQuotaTicker()
   stopDeleteTicker()
+  usageToday.value = null
+  usageTodayUpdatedAt.value = null
   deleteGeneration++
   batchDeleteErrorsBeforeRetry.value = []
   lastQuotaAt = 0
@@ -129,6 +137,7 @@ export function clearCodexSession(): void {
   batchDeleteDialogOpen.value = false
   batchDeleteEmails.clear()
   sessions.value = []
+  sessionTotalCount.value = 0
   sessionsLoaded.value = false
   sessionsBusy.value = false
   sessionsError.value = ''
@@ -354,26 +363,44 @@ export function checkQuotaAlert(): void {
 }
 
 let ticker: ReturnType<typeof setInterval> | null = null
+const tickerOwners = new Set<string>()
 
-/** 定时器和页同命：进 Codex 页起、离开即清；间隔为 0 或没有账号就不跑 */
-export function startQuotaTicker(): void {
-  stopQuotaTicker()
+/** 定时器按 owner 引用计数：Codex 页与桌面挂件各持一份，谁还需要谁就让它继续跑 */
+function startTickerLoop(): void {
+  if (ticker) clearInterval(ticker)
+  ticker = null
   const minutes = quotaRefreshMinutes.value
-  if (minutes <= 0) return
+  if (minutes <= 0 || !tickerOwners.size) return
   ticker = setInterval(() => {
     if (!accounts.value.length) return
     void refreshQuotas(accounts.value.map((a) => a.id), { silent: true })
   }, minutes * 60_000)
 }
 
+export function acquireQuotaTicker(owner: string): void {
+  const hadOwner = tickerOwners.size > 0
+  tickerOwners.add(owner)
+  if (!hadOwner) startTickerLoop()
+}
+
+export function releaseQuotaTicker(owner: string): void {
+  tickerOwners.delete(owner)
+  if (!tickerOwners.size && ticker) {
+    clearInterval(ticker)
+    ticker = null
+  }
+}
+
+/** 锁定/退出时硬清：owner 集合一起作废，解锁后由各入口重新 acquire */
 export function stopQuotaTicker(): void {
+  tickerOwners.clear()
   if (ticker) clearInterval(ticker)
   ticker = null
 }
 
-/** 设置页改了间隔：只在定时器本来就在跑的时候按新值重启，否则等下次进 Codex 页起 */
+/** 设置页改了间隔：有 owner 就按新值重启（含 0 → 正数），没有 owner 就等下次 acquire */
 export function syncQuotaTicker(): void {
-  if (ticker) startQuotaTicker()
+  if (tickerOwners.size) startTickerLoop()
 }
 
 /** 官方重置时间只到分钟，直接给人话「x 小时 y 分后重置」，不摆 ISO 串 */
@@ -393,6 +420,8 @@ export function resetsIn(ts: number | null | undefined): string {
 /** 会话视图的共享状态：官方目录的一次全扫是重 I/O，扫完留在内存——
  *  页头计数与会话面板读同一份，切档、离页再进都不重扫，只有「刷新」才重取 */
 export const sessions = ref<CodexSessionRecord[]>([])
+/** 未搜索时的总数，搜索结果变少不应收起搜索入口。 */
+export const sessionTotalCount = ref(0)
 export const sessionsLoaded = ref(false)
 export const sessionsBusy = ref(false)
 /** 非空表示整页读数失败：界面出错误块，不能让它读成「你没有会话」 */
@@ -431,6 +460,7 @@ export async function loadSessions({ background = false }: { background?: boolea
       rescanQueued = true
     } else {
       sessions.value = list
+      if (!query) sessionTotalCount.value = list.length
       sessionsLoaded.value = true
       refreshed = true
       // 刷新沿用旧数字直到新统计返回；旧请求不能覆盖这一轮的结果。
@@ -518,6 +548,9 @@ export async function moveSessionToTrash(sessionId: string): Promise<string> {
   if (epoch !== accountEpoch) return ''
   sessionSourcesVersion++
   sessionTokensVersion++
+  if (sessions.value.some(s => s.sessionId === sessionId)) {
+    sessionTotalCount.value = Math.max(0, sessionTotalCount.value - 1)
+  }
   sessions.value = sessions.value.filter((s) => s.sessionId !== sessionId)
   const next = { ...sessionTokens.value }
   delete next[sessionId]
@@ -814,7 +847,12 @@ export const usageReportRange = ref<UsageRange>('today')
 export const usageUpdatedAt = ref<number | null>(null)
 export const usageBusy = ref(false)
 export const usageError = ref('')
+/** 桌面挂件要的今日汇总；与用量页共用同一份扫描缓存，失败不打扰主界面 */
+export const usageToday = ref<{ totalTokens: number; estimatedCostUsd: number | null } | null>(null)
+export const usageTodayUpdatedAt = ref<number | null>(null)
 let usageSourcesVersion = 0
+const USAGE_TODAY_TTL = 10 * 60_000
+let usageTodayBusy = false
 const USAGE_RANGES: UsageRange[] = ['today', 'week', 'month', 'all']
 const usageWindowCache = new Map<UsageRange, {
   report: CodexSessionUsageReport; updatedAt: number; fromTimestamp: number | null
@@ -983,6 +1021,48 @@ export async function autoSyncWslAuthAfterSwitch(): Promise<void> {
   await syncWslAuth({ silent: true })
 }
 
+function publishToday(report: CodexSessionUsageReport, updatedAt: number): void {
+  usageToday.value = {
+    totalTokens: report.totals.totalTokens,
+    estimatedCostUsd: report.totals.estimatedCostUsd,
+  }
+  usageTodayUpdatedAt.value = updatedAt
+}
+
+/** 用量页刚全扫过就直接借它的今日窗口，挂件不再单独跑一遍磁盘 */
+function adoptCachedToday(): boolean {
+  const cached = usageWindowCache.get('today')
+  if (!cached) return false
+  if (localDayKey(new Date(cached.updatedAt)) !== localDayKey(new Date())) return false
+  if (cached.fromTimestamp !== usageWindowFrom('today')) return false
+  publishToday(cached.report, cached.updatedAt)
+  return true
+}
+
+/** 10 分钟缓存；用量页正在全扫时只认缓存，绝不并发起第二份扫描 */
+export async function loadTodayUsage(): Promise<void> {
+  adoptCachedToday()
+  if (usageToday.value && Date.now() - (usageTodayUpdatedAt.value ?? 0) < USAGE_TODAY_TTL) return
+  if (usageTodayBusy || usageBusy.value) return
+  const epoch = accountEpoch
+  const sourcesVersion = usageSourcesVersion
+  usageTodayBusy = true
+  const queryAt = Date.now()
+  const fromTimestamp = usageWindowFrom('today', new Date(queryAt))
+  const toTimestamp = Math.floor(queryAt / 1000) + 1
+  try {
+    const report = await codexApi.querySessionUsage(fromTimestamp, toTimestamp, { today: fromTimestamp })
+    if (epoch !== accountEpoch || sourcesVersion !== usageSourcesVersion) return
+    if (localDayKey(new Date(queryAt)) !== localDayKey(new Date())
+      || fromTimestamp !== usageWindowFrom('today')) return
+    publishToday(report, queryAt)
+  } catch {
+    // 今日用量只是挂件的第二行；失败保留旧值，不弹 toast
+  } finally {
+    usageTodayBusy = false
+  }
+}
+
 export async function loadUsage(): Promise<void> {
   if (usageBusy.value) return
   usageBusy.value = true
@@ -1010,6 +1090,7 @@ export async function loadUsage(): Promise<void> {
           delete cachedReport.windows
           usageWindowCache.set(key, { report: cachedReport, updatedAt: queryAt, fromTimestamp: windows[key] })
         }
+        adoptCachedToday()
         if (showCachedUsage(usageRange.value)) return
       } catch (e) {
         if (epoch !== accountEpoch) return
@@ -1039,5 +1120,7 @@ export function invalidateUsage(): void {
   usageWindowCache.clear()
   usageReport.value = null
   usageUpdatedAt.value = null
+  usageToday.value = null
+  usageTodayUpdatedAt.value = null
 }
 

@@ -31,7 +31,7 @@ test.describe('导航与布局', () => {
     /** 遮罩是整窗 fixed 的 .hover-blocker，压在最上层时命中的就是它，按钮收不到这一下 */
     const hit = () =>
       page.evaluate(() => {
-        const btn = document.querySelector('.titlebar-btn.tb-util')!
+        const btn = document.querySelector('.sidebar-foot .foot-item')!
         const r = btn.getBoundingClientRect()
         const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)!
         return el === btn || btn.contains(el) ? 'button' : (el.getAttribute('class') ?? el.tagName)

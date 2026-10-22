@@ -126,7 +126,7 @@ test('普通首段、引用和自动摘要保持正文，只有标题格式生�
   await expect(page.locator('.fs-title')).toHaveCount(0)
   await expect(page.locator('.fs-view > p').first()).toBeVisible()
   await expect(page.locator('.fs-view > p').first()).toHaveCSS('font-weight', '400')
-  await page.locator('.fs').getByRole('button', { name: '编辑', exact: true }).click()
+  await page.locator('.fs-head').getByRole('button', { name: '编辑', exact: true }).click()
   await expect(page.locator('.fs .ProseMirror > p').first()).toHaveCSS('font-weight', '400')
   await page.keyboard.press('Escape')
   await plain.hover()

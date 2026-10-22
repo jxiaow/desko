@@ -50,7 +50,9 @@ async function run(id: string, fn: () => Promise<string>) {
   }
 }
 
-const scanning = computed(() => (trashBusy.value || recycledBusy.value) && !rows.value)
+const scanning = computed(() => !rows.value && (
+  (trashBusy.value && !trashLoaded.value) || (recycledBusy.value && !recycledLoaded.value)
+))
 const rows = computed(() => trashSessions.value.length + recycledAccounts.value.length)
 /** 两次扫描各说各的失败，一行了断：有清单就不抢戏，全空才占位 */
 const errorText = computed(() => [recycledError.value, trashError.value].filter(Boolean).join('；'))
@@ -159,7 +161,7 @@ function projectName(s: CodexTrashedSessionRecord): string {
 </script>
 
 <template>
-  <div class="thr-view">
+  <div class="thr-view" :aria-busy="trashBusy || recycledBusy">
     <div v-if="scanning" class="rcard-list" aria-hidden="true">
       <div class="rcard thr-sk" v-for="n in 2" :key="n">
         <span class="skeleton-block"></span>
