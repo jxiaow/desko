@@ -187,7 +187,7 @@ describe('网络直连交互', () => {
     await flushPromises()
     const dialog = wrapper.get('.concl-dialog')
     expect(dialog.get('.concl-title').text()).toBe('当前连接仍经过代理')
-    expect(dialog.text()).toContain('连接成功不代表已绕过代理')
+    expect(dialog.text()).toContain('目标可连接，出口仍由')
     const configure = dialog.findAll('button').find(button => button.text() === '配置直连')
     expect(configure).toBeDefined()
     await configure!.trigger('click')
@@ -461,10 +461,10 @@ describe('网络直连交互', () => {
     expect(dialog.get('.plan-action').text()).toContain('10.20.0.1/32')
     expect(dialog.get('.plan-cdn-hint').text()).toContain('仍需通过直连出口检查')
     const help = dialog.get('[aria-label="直连出口处理指引"]').text()
-    for (const text of ['没有额外的“人工确认”操作', 'Win + R', 'ncpa.cpl', '内网 VPN', '代理客户端', 'DIRECT', '检查全部', '配置直连']) {
+    for (const text of ['未找到可用出口', 'Win + R', 'ncpa.cpl', '内网 VPN', '代理客户端', 'DIRECT', '检查全部', '配置直连']) {
       expect(help).toContain(text)
     }
-    expect(dialog.get('.footer-hints').text()).not.toContain('管理员授权')
+    expect(dialog.find('.footer-hints').exists()).toBe(false)
     expect(button('确认并配置').attributes('disabled')).toBeDefined()
     await button('确认并配置').trigger('click')
     expect(bypassApi.apply).not.toHaveBeenCalled()

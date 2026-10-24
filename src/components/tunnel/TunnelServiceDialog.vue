@@ -6,6 +6,8 @@ import type { TunnelDomain, TunnelServiceRow } from '../../services/api/tunnel'
 import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
+import { useDialogFocus } from '../../composables/useDialogFocus'
+import { useEscapeClose } from '../../composables/useEscapeClose'
 
 const props = defineProps<{
   /** null = 新增一条 */
@@ -29,6 +31,13 @@ const preset = ref('')
 const publicPassword = ref('')
 const publicReadOnly = ref(true)
 const acting = ref(false)
+const saveError = ref('')
+const dialog = ref<HTMLElement | null>(null)
+const { trapFocus } = useDialogFocus(dialog)
+function close() {
+  if (!acting.value) emit('close')
+}
+useEscapeClose(close)
 
 // v-if 重挂时首帧就得是终值，否则每次打开都从空白播一遍填充
 watch(
@@ -62,7 +71,11 @@ watch(() => props.domain?.name, (name) => {
 const prefixOk = computed(() => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(hostInput.value.trim()))
 const hostname = computed(() => manualHost.value ? hostInput.value.trim().toLowerCase()
   : props.domain && prefixOk.value ? `${hostInput.value.trim().toLowerCase()}.${props.domain.name}` : '')
-const hostOk = computed(() => manualHost.value ? Boolean(hostname.value)
+const fullHostOk = computed(() =>
+  hostname.value.length <= 253 && hostname.value.includes('.') &&
+  hostname.value.split('.').every(part => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(part)),
+)
+const hostOk = computed(() => manualHost.value ? fullHostOk.value
   : props.domain?.status === 'active' && prefixOk.value)
 
 function useManualHost() {
@@ -73,8 +86,8 @@ function useManualHost() {
 const isFileshare = computed(() => preset.value === 'fileshare')
 /** 只有改一条已登记的 fileshare 才谈得上公网策略：新建那条门还没上公网 */
 const showsPolicy = computed(() => Boolean(props.row) && isFileshare.value)
-const portNumber = computed(() => Number.parseInt(port.value, 10))
-const portOk = computed(() => Number.isInteger(portNumber.value) && portNumber.value >= 1 && portNumber.value <= 65535)
+const portNumber = computed(() => Number(port.value))
+const portOk = computed(() => /^\d+$/.test(port.value) && Number.isInteger(portNumber.value) && portNumber.value >= 1 && portNumber.value <= 65535)
 const canSave = computed(
   () => hostOk.value && portOk.value && !acting.value && !props.busy,
 )
@@ -99,6 +112,7 @@ async function readPort() {
 async function save() {
   if (!canSave.value) return
   acting.value = true
+  saveError.value = ''
   try {
     if (props.row) {
       await tunnelApi.updateService({
@@ -126,7 +140,8 @@ async function save() {
     emit('saved')
     emit('close')
   } catch (e) {
-    toastStore.showToast(errText(e), 'error')
+    saveError.value = errText(e)
+    toastStore.showToast(saveError.value, 'error')
   } finally {
     acting.value = false
   }
@@ -134,11 +149,11 @@ async function save() {
 </script>
 
 <template>
-  <div class="dialog-overlay form-overlay">
-    <div class="dialog tunnel-service-dialog" role="dialog" aria-modal="true" :aria-label="row ? '公网设置' : '添加本地服务'">
+  <div class="dialog-overlay form-overlay tunnel-dialog-overlay">
+    <form ref="dialog" class="dialog tunnel-service-dialog" role="dialog" aria-modal="true" :aria-label="row ? '公网设置' : '添加本地服务'" tabindex="-1" @submit.prevent="save" @keydown.tab="trapFocus">
       <div class="dialog-header">
         <h3>{{ row ? `${row.label} · 公网设置` : '添加本地服务' }}</h3>
-        <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
+        <button class="dialog-close" type="button" title="关闭" aria-label="关闭" :disabled="acting" @click="close">
           <AppIcon name="x" :size="16" />
         </button>
       </div>
@@ -146,25 +161,40 @@ async function save() {
       <div class="dialog-body">
         <div v-if="!row" class="form-group">
           <label>服务类型</label>
-          <div class="seg">
-            <button type="button" :class="{ on: preset === 'fileshare' }" @click="preset = 'fileshare'">局域网传输</button>
-            <button type="button" :class="{ on: preset === '' }" @click="preset = ''">其他服务</button>
+          <div class="seg" role="group" aria-label="服务类型">
+            <button type="button" :class="{ on: preset === 'fileshare' }" :aria-pressed="preset === 'fileshare'" @click="preset = 'fileshare'">局域网传输</button>
+            <button type="button" :class="{ on: preset === '' }" :aria-pressed="preset === ''" @click="preset = ''">其他服务</button>
           </div>
-          <p class="lead">
-            {{ isFileshare
-              ? '通过隧道发布 Desko 文件传输服务。'
-              : '通过隧道发布本机 HTTP 服务。' }}
-          </p>
         </div>
 
-        <div class="form-group">
-          <label for="tn-svc-name">服务名称</label>
-          <input id="tn-svc-name" v-model="label" type="text" maxlength="40" :placeholder="isFileshare ? '局域网传输' : '例如：Web 服务'" />
+        <div class="target-fields">
+          <div class="form-group">
+            <label for="tn-svc-name">服务名称</label>
+            <input id="tn-svc-name" v-model="label" type="text" maxlength="40" :placeholder="isFileshare ? '局域网传输' : '例如：Web 服务'" />
+          </div>
+          <div class="form-group">
+            <label for="tn-svc-port">本机端口</label>
+            <div class="port-line">
+              <input
+                id="tn-svc-port"
+                v-model="port"
+                type="text"
+                inputmode="numeric"
+                maxlength="5"
+                placeholder="8421"
+                :aria-invalid="Boolean(port) && !portOk"
+              />
+              <button class="btn-secondary port-btn" :class="{ 'port-btn-hidden': !isFileshare }"
+                :aria-hidden="!isFileshare" type="button" @click="readPort">获取端口</button>
+            </div>
+            <p class="lead">连接本机 127.0.0.1</p>
+            <p v-if="port && !portOk" class="dialog-err">端口须为 1–65535 之间的整数。</p>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>主域名</label>
-          <p v-if="domain" class="domain-name mono">{{ domain.name }}</p>
+        <div class="form-group domain-context">
+          <span class="field-label">已授权主域名</span>
+          <p v-if="domain" class="domain-name">{{ domain.name }}</p>
           <p v-else-if="domainLoading" class="lead">正在读取主域名…</p>
           <p v-else class="lead">{{ domainError || '完成 Cloudflare 授权后自动获取。' }}</p>
           <button v-if="domainError || (domain && domain.status !== 'active')" class="btn-secondary" type="button" :disabled="domainLoading" @click="emit('retryDomain')">重试读取主域名</button>
@@ -174,40 +204,20 @@ async function save() {
         <div class="form-group">
           <label for="tn-svc-host">{{ manualHost ? '完整域名' : '子域名前缀' }}</label>
           <div class="host-line">
-            <input id="tn-svc-host" v-model="hostInput" class="mono" type="text"
+            <input id="tn-svc-host" v-model="hostInput" type="text"
               :maxlength="manualHost ? 253 : 63" spellcheck="false"
-              :placeholder="manualHost ? 'files.example.com' : 'files'" />
-            <span v-if="!manualHost && domain" class="host-suffix mono">.{{ domain.name }}</span>
+              :aria-invalid="Boolean(hostInput.trim()) && !hostOk"
+              :placeholder="manualHost ? (domain ? `files.${domain.name}` : '填写完整域名') : 'files'" />
+            <span v-if="!manualHost && domain" class="host-suffix">.{{ domain.name }}</span>
           </div>
-          <p v-if="hostname" class="host-preview mono">公网地址：https://{{ hostname }}</p>
+          <p v-if="hostname" class="host-preview">公网地址：https://{{ hostname }}</p>
           <div class="host-help">
-            <p class="lead">{{ manualHost ? '填写完整域名，不含协议或路径。' : '仅填写前缀，例如 files。' }}</p>
+            <p v-if="manualHost" class="lead">不含协议、端口或路径</p>
             <button v-if="manualHost && domain" class="host-mode" type="button" @click="useAuthorizedDomain">使用主域名</button>
             <button v-else-if="!manualHost" class="host-mode" type="button" @click="useManualHost">手动填写完整域名</button>
           </div>
           <p v-if="!manualHost && hostInput.trim() && !prefixOk" class="dialog-err">前缀须为 1–63 位字母、数字或连字符，且首尾不能为连字符。</p>
-        </div>
-
-        <div class="form-group">
-          <label for="tn-svc-port">本机端口</label>
-          <div class="port-line">
-            <input
-              id="tn-svc-port"
-              v-model="port"
-              class="mono"
-              type="text"
-              inputmode="numeric"
-              maxlength="5"
-              placeholder="8421"
-            />
-            <button class="btn-secondary port-btn" :class="{ 'port-btn-hidden': !isFileshare }"
-              :aria-hidden="!isFileshare" type="button" @click="readPort">获取端口</button>
-          </div>
-          <p class="lead">
-            {{ isFileshare
-              ? '自动获取服务当前监听端口。'
-              : '连接至本机 127.0.0.1。' }}
-          </p>
+          <p v-if="manualHost && hostInput.trim() && !fullHostOk" class="dialog-err">请填写有效的完整域名，不含协议、端口或路径。</p>
         </div>
 
         <template v-if="showsPolicy">
@@ -223,50 +233,58 @@ async function save() {
               autocomplete="new-password"
               :placeholder="row?.hasPublicPassword ? '留空保留原口令' : '8–64 位字符'"
             />
-            <p class="lead">
-              {{ row?.hasPublicPassword
-                ? '填写新口令可更新访问凭据。'
-                : '未设置口令时，公网访问将被拒绝。' }}
-            </p>
+            <p v-if="!row?.hasPublicPassword" class="lead">设置口令后才能公网访问。</p>
           </div>
 
           <div class="form-group">
             <label>访问权限</label>
-            <div class="seg">
-              <button type="button" :class="{ on: publicReadOnly }" @click="publicReadOnly = true">只读</button>
-              <button type="button" :class="{ on: !publicReadOnly }" @click="publicReadOnly = false">允许上传</button>
+            <div class="seg" role="group" aria-label="访问权限">
+              <button type="button" :class="{ on: publicReadOnly }" :aria-pressed="publicReadOnly" @click="publicReadOnly = true">只读</button>
+              <button type="button" :class="{ on: !publicReadOnly }" :aria-pressed="!publicReadOnly" @click="publicReadOnly = false">允许上传</button>
             </div>
             <p class="lead">
-              只读模式允许浏览和下载，不影响局域网访问。
+              仅影响公网；只读模式可浏览和下载。
             </p>
           </div>
         </template>
 
         <p v-if="!showsPolicy" class="service-note">
-          {{ isFileshare ? '公网访问需设置口令，可在服务设置中配置。' : '访问权限由原服务管理。' }}
+          {{ isFileshare ? '保存后需在「公网设置」中设置口令。' : '访问权限由原服务管理。' }}
         </p>
+        <p v-if="saveError" class="dialog-err save-error" role="alert">{{ saveError }}</p>
       </div>
 
       <div class="dialog-footer">
         <span class="foot-note">{{ row ? '地址或端口变更需重新应用' : '保存后点击「应用」发布服务' }}</span>
-        <button class="btn-secondary" type="button" @click="emit('close')">取消</button>
-        <button class="btn-primary" type="button" :disabled="!canSave" @click="save">保存</button>
+        <button class="btn-secondary" type="button" :disabled="acting" @click="close">取消</button>
+        <button class="btn-primary" type="submit" :disabled="!canSave" :aria-busy="acting">{{ acting ? '保存中…' : '保存' }}</button>
       </div>
-    </div>
+    </form>
   </div>
 </template>
 
 <style scoped>
-/* --font-mono 由页面在 .content-inner 上覆盖，变量能穿过组件边界 */
-.mono { font-family: var(--font-mono); }
+.tunnel-dialog-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.tunnel-service-dialog { width: 520px; background: var(--bg-surface); border-radius: 8px; }
+.tunnel-service-dialog .dialog-header { height: auto; min-height: 64px; padding: 16px 24px; }
+.tunnel-service-dialog .dialog-header h3 { font-size: var(--text-xl); line-height: 26px; }
+.tunnel-service-dialog .dialog-body { padding: 4px 24px 12px; overflow-anchor: none; }
+.tunnel-service-dialog .form-group { margin-bottom: 16px; }
+.tunnel-service-dialog .domain-context { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.tunnel-service-dialog .domain-context .field-label { margin-bottom: 0; }
+.tunnel-service-dialog .form-group :is(label, .field-label) { display: block; margin-bottom: 8px; font-size: var(--text-sm); font-weight: 500; color: var(--text); }
+.tunnel-service-dialog .form-group input { height: 36px; font-size: var(--text-content); border-radius: 6px; }
+.tunnel-service-dialog .lead { margin: 8px 0 0; color: var(--text-secondary); line-height: 20px; }
+.tunnel-service-dialog .seg { padding: 3px; border: 0; background: var(--fill); }
+.tunnel-service-dialog .seg button { height: 30px; font-size: var(--text-sm); }
+.tunnel-service-dialog .seg button.on { background: var(--bg-surface); color: var(--text); box-shadow: none; }
+.tunnel-service-dialog .dialog-footer { padding: 14px 24px; gap: 8px; flex-wrap: wrap; }
+.tunnel-service-dialog .dialog-footer .btn-primary { background: var(--text); color: var(--bg-surface); box-shadow: none; border: 0; }
+.tunnel-service-dialog .dialog-footer .btn-primary:hover:not(:disabled) { background: var(--text-secondary); transform: none; }
+.tunnel-service-dialog button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.tunnel-service-dialog .save-error { white-space: pre-line; overflow-wrap: anywhere; }
 
-.tunnel-service-dialog { width: 520px }
-
-/* 全局字段档就是本页要的档，这里只补等宽那一处 */
-.form-group input.mono { font-family: var(--font-mono); }
-
-/* 分段控件走 global.css 的 .dialog .seg */
-
+.target-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 .port-line { display: flex; gap: 8px; align-items: center }
 .port-line input { flex: 1; min-width: 0 }
 .port-btn { width: 80px; flex-shrink: 0; align-self: flex-start }
@@ -292,10 +310,23 @@ async function save() {
 .service-note {
   margin: 2px 0 10px;
   min-height: 1.6em;
-  font-size: var(--text-xs);
+  font-size: var(--text-description);
   line-height: 1.6;
   color: var(--text-muted);
 }
 
 .foot-note { margin-right: auto; font-size: var(--text-xs); color: var(--text-muted) }
+@media (max-width: 480px) {
+  .target-fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+@media (max-width: 600px) {
+  .tunnel-service-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
+  .tunnel-service-dialog .dialog-header { padding: 16px; }
+  .tunnel-service-dialog .dialog-body { padding: 4px 16px 12px; }
+  .tunnel-service-dialog .dialog-footer { padding: 12px 16px; }
+  .foot-note { flex-basis: 100%; margin-bottom: 4px; }
+  .tunnel-service-dialog .dialog-footer .btn-secondary { margin-left: auto; }
+  .tunnel-service-dialog .dialog-footer button { min-height: 40px; }
+  .port-btn { width: 72px; height: 36px; padding-inline: 6px; }
+}
 </style>

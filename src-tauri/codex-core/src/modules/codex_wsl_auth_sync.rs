@@ -1,760 +1,702 @@
-// Windows 官方 Codex 登录凭据到运行中 WSL 发行版的单向同步。
-// 只写目标目录的 auth.json，不碰 config.toml，也不代用户刷新 Token。
-
+// Explicit WSL account assignment. Discovery and previews are read-only;
+// credentials enter the fixed WSL helper on stdin, never in argv or responses.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexWslTarget {
+    pub distro: String,
+    pub user: String,
+}
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexWslIdentity {
+    pub account_id: Option<String>,
+    pub email: String,
+}
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CodexWslAuthSource {
-    pub available: bool,
-    pub path: String,
-    pub auth_mode: Option<String>,
-    pub email: Option<String>,
-    pub plan: Option<String>,
-    pub access_expires_at: Option<i64>,
-    pub expired: bool,
+pub struct CodexWslCurrent {
+    pub id: Option<String>,
+    pub email: String,
+}
+#[derive(Debug, Clone, serde::Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexWslAssignment {
+    pub targets: Vec<CodexWslTarget>,
+    pub current: Option<CodexWslCurrent>,
+    pub consistent: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
-
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CodexWslAuthTarget {
+pub struct CodexWslAssignmentPreview {
+    pub targets: Vec<CodexWslTarget>,
+    pub current: Option<CodexWslCurrent>,
+    pub consistent: bool,
+    pub daemon_count: usize,
+    pub cli_count: usize,
+    pub already_assigned: bool,
+    pub can_apply: bool,
+}
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexWslFailure {
     pub distro: String,
     pub user: String,
-    pub home_path: String,
-    pub state: String,
-    pub email: Option<String>,
-    pub access_expires_at: Option<i64>,
-    pub expired: bool,
+    pub message: String,
 }
-
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CodexWslAuthStatus {
-    pub auto_sync: bool,
-    pub source: CodexWslAuthSource,
-    pub targets: Vec<CodexWslAuthTarget>,
-    pub target_error: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexWslAuthSyncResult {
-    pub distro: String,
-    pub user: String,
+pub struct CodexWslOutcome {
     pub status: String,
-    pub message: Option<String>,
+    pub targets: usize,
+    pub written: usize,
+    pub daemons_stopped: usize,
+    pub clis_stopped: usize,
+    pub failures: Vec<CodexWslFailure>,
 }
-
-#[derive(Debug, Clone)]
-struct WslAuthSourceMeta {
-    identity: Option<CodexOfficialOAuthIdentity>,
-    access_expires_at: Option<i64>,
-}
-
-#[derive(Debug, Clone)]
-struct WslAuthSourceRead {
-    source: CodexWslAuthSource,
-    meta: Option<WslAuthSourceMeta>,
-    payload: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct WslCodexHomeTarget {
-    distro: String,
-    user: String,
+    label: CodexWslTarget,
     linux_dir: String,
-    dir: std::path::PathBuf,
 }
-
-#[derive(Debug, Clone)]
-enum WslTargetAuthSnapshot {
-    Missing,
-    Unreadable,
-    NonOAuth,
-    OAuth {
-        identity: Option<CodexOfficialOAuthIdentity>,
-        access_expires_at: Option<i64>,
-        expired: bool,
-    },
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WslProbe {
+    identity: Option<CodexWslIdentity>,
+    #[serde(default)]
+    daemon_count: usize,
+    #[serde(default)]
+    cli_count: usize,
 }
-
-impl WslTargetAuthSnapshot {
-    fn email(&self) -> Option<String> {
-        match self {
-            Self::OAuth { identity, .. } => identity.as_ref().map(|identity| identity.email.clone()),
-            _ => None,
-        }
-    }
-
-    fn access_expires_at(&self) -> Option<i64> {
-        match self {
-            Self::OAuth {
-                access_expires_at, ..
-            } => *access_expires_at,
-            _ => None,
-        }
-    }
-
-    fn expired(&self) -> bool {
-        match self {
-            Self::OAuth { expired, .. } => *expired,
-            _ => false,
-        }
-    }
-}
-
-fn blank_source(path: String) -> CodexWslAuthSource {
-    CodexWslAuthSource {
-        available: false,
-        path,
-        auth_mode: None,
-        email: None,
-        plan: None,
-        access_expires_at: None,
-        expired: false,
-        error: None,
-    }
-}
-
-fn unavailable_source(
-    path: String,
-    auth_mode: Option<String>,
-    error: String,
-) -> WslAuthSourceRead {
-    let mut source = blank_source(path);
-    source.auth_mode = auth_mode;
-    source.error = Some(error);
-    WslAuthSourceRead {
-        source,
-        meta: None,
-        payload: None,
-    }
-}
-
-fn oauth_identity_from_tokens(tokens: &CodexAuthTokens) -> Option<CodexOfficialOAuthIdentity> {
-    // 与官方认证权威源复用同一套字段优先级，不能用邮箱代替工作区身份。
-    build_local_oauth_snapshot(tokens.clone())
-        .filter(|snapshot| !snapshot.email.trim().is_empty())
-        .map(|snapshot| CodexOfficialOAuthIdentity {
-            email: snapshot.email.trim().to_string(),
-            user_id: snapshot.user_id,
-            account_id: snapshot.account_id,
-            organization_id: snapshot.organization_id,
-        })
-}
-
-fn read_wsl_auth_source() -> WslAuthSourceRead {
-    let path = get_auth_json_path();
-    let path_text = path.to_string_lossy().to_string();
-    let value = match read_configured_codex_auth_value(&get_codex_home()) {
-        Ok(Some(value)) => value,
-        Ok(None) => {
-            return unavailable_source(
-                path_text,
-                None,
-                "未找到 Windows 侧 Codex 登录凭据，请先在 Codex 中登录".to_string(),
-            )
-        }
-        Err(error) => {
-            return unavailable_source(
-                path_text,
-                None,
-                format!("读取 Windows 侧 Codex 登录凭据失败: {}", error),
-            )
-        }
-    };
-
-    let auth_file = match serde_json::from_value::<crate::models::codex::CodexAuthFile>(value.clone())
-    {
-        Ok(auth_file) => auth_file,
-        Err(_) => {
-            return unavailable_source(
-                path_text,
-                None,
-                "Windows 侧登录凭据格式无法识别".to_string(),
-            )
-        }
-    };
-    let auth_mode = auth_file
-        .auth_mode
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-
-    if auth_mode
-        .as_deref()
-        .is_some_and(|mode| !mode.eq_ignore_ascii_case("chatgpt"))
-    {
-        return unavailable_source(
-            path_text,
-            auth_mode,
-            "当前 Windows 侧登录形态暂不支持同步".to_string(),
-        );
-    }
-    let Some(tokens) = auth_file.tokens else {
-        return unavailable_source(
-            path_text,
-            auth_mode,
-            "当前 Windows 侧登录形态暂不支持同步".to_string(),
-        );
-    };
-    if tokens.access_token.trim().is_empty() {
-        return unavailable_source(
-            path_text,
-            auth_mode,
-            "Windows 侧登录凭据缺少 access_token".to_string(),
-        );
-    }
-
-    let identity = oauth_identity_from_tokens(&tokens);
-    let email = identity.as_ref().map(|identity| identity.email.clone());
-    let plan = normalize_optional_value(
-        extract_user_info(&tokens.id_token)
-            .ok()
-            .and_then(|info| info.2)
-            .or_else(|| extract_access_token_identity(&tokens.access_token).2),
-    );
-    let access_expires_at = codex_oauth::jwt_token_expiration_timestamp(&tokens.access_token);
-    let expired = codex_oauth::is_token_expired(&tokens.access_token);
-    let meta = WslAuthSourceMeta {
-        identity,
-        access_expires_at,
-    };
-    WslAuthSourceRead {
-        source: CodexWslAuthSource {
-            available: true,
-            path: path_text,
-            auth_mode,
-            email,
-            plan,
-            access_expires_at,
-            expired,
-            error: None,
-        },
-        meta: Some(meta),
-        payload: Some(value),
-    }
-}
-
-fn build_target_from_home(
-    distro: &str,
-    root: &std::path::Path,
-    home: &std::path::Path,
-) -> Option<WslCodexHomeTarget> {
+fn build_target_from_home(distro: &str, root: &Path, home: &Path) -> Option<WslCodexHomeTarget> {
     let relative = home.strip_prefix(root).ok()?;
     let parts = relative
         .components()
-        .filter_map(|component| match component {
-            std::path::Component::Normal(value) => {
-                Some(value.to_string_lossy().into_owned())
-            }
-            _ => None,
-        })
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
         .collect::<Vec<_>>();
     let (user, linux_dir) = match parts.as_slice() {
-        [root_dir, codex_dir] if root_dir == "root" && codex_dir == ".codex" => {
-            ("root".to_string(), "/root/.codex".to_string())
+        [root, codex] if root == "root" && codex == ".codex" => {
+            ("root".into(), "/root/.codex".into())
         }
-        [home_dir, user, codex_dir] if home_dir == "home" && codex_dir == ".codex" => {
-            (user.clone(), format!("/home/{}/.codex", user))
+        [home, user, codex] if home == "home" && codex == ".codex" => {
+            (user.clone(), format!("/home/{user}/.codex"))
         }
         _ => return None,
     };
     Some(WslCodexHomeTarget {
-        distro: distro.to_string(),
-        user,
+        label: CodexWslTarget {
+            distro: distro.into(),
+            user,
+        },
         linux_dir,
-        dir: home.to_path_buf(),
     })
 }
-
 fn discover_wsl_codex_homes() -> Result<Vec<WslCodexHomeTarget>, String> {
     #[cfg(not(windows))]
     {
-        Ok(Vec::new())
+        Ok(vec![])
     }
-
     #[cfg(windows)]
     {
-        let distributions = crate::modules::codex_session_wsl::running_distributions()?;
-        let mut targets = Vec::new();
-        for distro in distributions {
-            let root = std::path::PathBuf::from(format!(r"\\wsl.localhost\{}", distro));
-            for home in crate::modules::codex_session_wsl::codex_homes_in_root(&root) {
-                if let Some(target) = build_target_from_home(&distro, &root, &home) {
-                    targets.push(target);
-                }
-            }
+        let mut targets = vec![];
+        for distro in crate::modules::codex_session_wsl::running_distributions()? {
+            let root = PathBuf::from(format!(r"\\wsl.localhost\{distro}"));
+            targets.extend(
+                crate::modules::codex_session_wsl::codex_homes_in_root(&root)
+                    .iter()
+                    .filter_map(|home| build_target_from_home(&distro, &root, home)),
+            );
         }
         Ok(targets)
     }
 }
-
-fn read_target_snapshot(dir: &std::path::Path) -> WslTargetAuthSnapshot {
-    let path = dir.join("auth.json");
-    let raw = match std::fs::read_to_string(&path) {
-        Ok(raw) => raw,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return WslTargetAuthSnapshot::Missing
-        }
-        Err(_) => return WslTargetAuthSnapshot::Unreadable,
-    };
-    let Ok(auth_file) = serde_json::from_str::<crate::models::codex::CodexAuthFile>(&raw) else {
-        return WslTargetAuthSnapshot::Unreadable;
-    };
-    let Some(tokens) = auth_file.tokens else {
-        return WslTargetAuthSnapshot::NonOAuth;
-    };
-    if tokens.access_token.trim().is_empty() {
-        return WslTargetAuthSnapshot::Unreadable;
-    }
-    WslTargetAuthSnapshot::OAuth {
-        identity: oauth_identity_from_tokens(&tokens),
-        access_expires_at: codex_oauth::jwt_token_expiration_timestamp(&tokens.access_token),
-        expired: codex_oauth::is_token_expired(&tokens.access_token),
-    }
-}
-
-fn classify_target(
-    source: Option<&WslAuthSourceMeta>,
-    snapshot: &WslTargetAuthSnapshot,
-) -> &'static str {
-    match snapshot {
-        WslTargetAuthSnapshot::Missing => "empty",
-        WslTargetAuthSnapshot::Unreadable => "unreadable",
-        WslTargetAuthSnapshot::NonOAuth => "different-account",
-        WslTargetAuthSnapshot::OAuth {
-            identity,
-            access_expires_at,
-            ..
-        } => {
-            let Some(source) = source else {
-                return "unknown";
-            };
-            let (Some(source_identity), Some(target_identity)) =
-                (source.identity.as_ref(), identity.as_ref())
-            else {
-                return "unknown";
-            };
-            match compare_official_oauth_identity(target_identity, source_identity) {
-                CodexOfficialOAuthIdentityMatch::Mismatched => return "different-account",
-                CodexOfficialOAuthIdentityMatch::Unknown => return "unknown",
-                CodexOfficialOAuthIdentityMatch::Matched => {}
-            }
-            match (source.access_expires_at, *access_expires_at) {
-                (Some(source_exp), Some(target_exp)) if target_exp > source_exp => "newer",
-                (Some(source_exp), Some(target_exp)) if target_exp == source_exp => "same",
-                (Some(_), Some(_)) => "outdated",
-                _ => "unknown",
-            }
-        }
-    }
-}
-
-fn status_for_target(
-    source: Option<&WslAuthSourceMeta>,
+#[cfg(windows)]
+fn run_wsl_assignment_action(
     target: &WslCodexHomeTarget,
-) -> CodexWslAuthTarget {
-    let snapshot = read_target_snapshot(&target.dir);
-    CodexWslAuthTarget {
-        distro: target.distro.clone(),
-        user: target.user.clone(),
-        home_path: target.dir.to_string_lossy().to_string(),
-        state: classify_target(source, &snapshot).to_string(),
-        email: snapshot.email(),
-        access_expires_at: snapshot.access_expires_at(),
-        expired: snapshot.expired(),
-    }
-}
-
-fn configured_auto_sync() -> bool {
-    crate::modules::config::get_user_config().codex_wsl_auth_auto_sync
-}
-
-pub fn get_codex_wsl_auth_status() -> CodexWslAuthStatus {
-    let source = read_wsl_auth_source();
-    let (targets, target_error) = match discover_wsl_codex_homes() {
-        Ok(targets) => (
-            targets
-                .iter()
-                .map(|target| status_for_target(source.meta.as_ref(), target))
-                .collect(),
-            None,
-        ),
-        Err(error) => (Vec::new(), Some(error)),
+    action: &str,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    use std::{
+        io::Write,
+        os::windows::process::CommandExt,
+        process::{Command, Stdio},
     };
-    CodexWslAuthStatus {
-        auto_sync: configured_auto_sync(),
-        source: source.source,
-        targets,
-        target_error,
+    if !matches!(action, "probe" | "stop" | "write-auth") {
+        return Err("WSL 操作无效".into());
+    }
+    // Recheck running distros before each launch; a disappearing target must not
+    // accidentally start a stopped distribution merely to copy credentials.
+    if !crate::modules::codex_session_wsl::running_distributions()?.contains(&target.label.distro) {
+        return Err("未检测到运行中的 WSL 目标".into());
+    }
+    let mut child = Command::new(crate::modules::codex_session_wsl::wsl_executable()?)
+        .args([
+            "-d",
+            &target.label.distro,
+            "-u",
+            &target.label.user,
+            "--exec",
+            "python3",
+            "-c",
+            include_str!("../../resources/codex_wsl_daemon.py"),
+            &target.linux_dir,
+            action,
+        ])
+        .creation_flags(0x0800_0000)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "无法启动 WSL Codex 操作，请确认已安装 Python 3")?;
+    let input = child.stdin.take();
+    let writer = std::thread::spawn(move || {
+        if let (Some(mut input), Some(payload)) = (input, payload) {
+            let _ = input.write_all(payload.to_string().as_bytes());
+        }
+    });
+    let deadline = Instant::now() + Duration::from_secs(12);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                let output = child
+                    .wait_with_output()
+                    .map_err(|_| "无法读取 WSL 操作结果")?;
+                let _ = writer.join();
+                if !output.status.success() {
+                    return Err("WSL 操作超时或失败，请手动退出 Codex 后重试".into());
+                }
+                let value: serde_json::Value =
+                    serde_json::from_slice(&output.stdout).map_err(|_| "WSL 操作响应无效")?;
+                if let Some(error) = value["error"].as_str() {
+                    return Err(error.to_string());
+                }
+                return Ok(value);
+            }
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = writer.join();
+                return Err("WSL 操作超时，请手动退出 Codex 后重试".into());
+            }
+        }
     }
 }
-
-fn validate_source_for_sync(source: &CodexWslAuthSource) -> Result<(), String> {
-    if !source.available {
-        return Err(source
-            .error
-            .clone()
-            .unwrap_or_else(|| "Windows 侧 Codex 登录凭据不可用".to_string()));
+#[cfg(not(windows))]
+fn run_wsl_assignment_action(
+    _: &WslCodexHomeTarget,
+    _: &str,
+    _: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    Err("仅 Windows 支持 WSL".into())
+}
+fn read_assignment_targets() -> Result<Vec<(WslCodexHomeTarget, WslProbe)>, String> {
+    let targets = discover_wsl_codex_homes()?;
+    let mut result = vec![];
+    for chunk in targets.chunks(4) {
+        let rows = std::thread::scope(|scope| {
+            chunk
+                .iter()
+                .map(|target| {
+                    scope.spawn(move || {
+                        let value = run_wsl_assignment_action(target, "probe", None)?;
+                        serde_json::from_value::<WslProbe>(value)
+                            .map(|probe| (target.clone(), probe))
+                            .map_err(|_| "WSL 预览响应无效".to_string())
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|thread| thread.join().map_err(|_| "WSL 预览失败".to_string())?)
+                .collect::<Result<Vec<_>, String>>()
+        })?;
+        result.extend(rows);
     }
-    if source.expired {
-        return Err(
-            "Windows 侧 Codex 登录凭据已过期，请先在 Codex 中刷新或重新登录".to_string(),
-        );
+    Ok(result)
+}
+fn wsl_identities_match(left: &CodexWslIdentity, right: &CodexWslIdentity) -> bool {
+    match (
+        left.account_id.as_deref().filter(|s| !s.is_empty()),
+        right.account_id.as_deref().filter(|s| !s.is_empty()),
+    ) {
+        (Some(a), Some(b)) => a == b,
+        _ => !left.email.trim().is_empty() && left.email.eq_ignore_ascii_case(&right.email),
+    }
+}
+fn account_wsl_identity(account: &CodexAccount) -> CodexWslIdentity {
+    CodexWslIdentity {
+        account_id: account.account_id.clone(),
+        email: account.email.clone(),
+    }
+}
+fn ordinary_oauth(account: &CodexAccount) -> bool {
+    !account.is_api_key_auth()
+        && !account.is_agent_identity_auth()
+        && !account.is_web_session_auth()
+}
+fn consistent_wsl_identity(rows: &[(WslCodexHomeTarget, WslProbe)]) -> Option<CodexWslIdentity> {
+    let identities = rows
+        .iter()
+        .map(|(_, probe)| probe.identity.as_ref())
+        .collect::<Option<Vec<_>>>()?;
+    let first = identities
+        .iter()
+        .find(|identity| {
+            identity
+                .account_id
+                .as_deref()
+                .is_some_and(|id| !id.is_empty())
+        })
+        .copied()
+        .or_else(|| identities.first().copied())?;
+    rows.iter()
+        .all(|(_, probe)| {
+            probe
+                .identity
+                .as_ref()
+                .is_some_and(|identity| wsl_identities_match(first, identity))
+        })
+        .then(|| first.clone())
+}
+fn wsl_assignment_from_rows(rows: &[(WslCodexHomeTarget, WslProbe)]) -> CodexWslAssignment {
+    let identity = consistent_wsl_identity(rows);
+    let current = identity.as_ref().map(|identity| {
+        let matched = list_accounts_checked().ok().and_then(|accounts| {
+            accounts.into_iter().find(|account| {
+                ordinary_oauth(account)
+                    && wsl_identities_match(identity, &account_wsl_identity(account))
+            })
+        });
+        CodexWslCurrent {
+            id: matched.as_ref().map(|account| account.id.clone()),
+            email: if identity.email.is_empty() {
+                matched.map(|account| account.email).unwrap_or_default()
+            } else {
+                identity.email.clone()
+            },
+        }
+    });
+    CodexWslAssignment {
+        targets: rows
+            .iter()
+            .map(|(target, _)| target.label.clone())
+            .collect(),
+        current,
+        consistent: identity.is_some(),
+        error: None,
+    }
+}
+pub fn get_codex_wsl_assignment() -> CodexWslAssignment {
+    match read_assignment_targets() {
+        Ok(rows) => wsl_assignment_from_rows(&rows),
+        Err(error) => CodexWslAssignment {
+            error: Some(error),
+            ..Default::default()
+        },
+    }
+}
+pub fn preview_codex_wsl_assignment(account_id: &str) -> Result<CodexWslAssignmentPreview, String> {
+    let account = load_account(account_id).ok_or("账号不存在")?;
+    let rows = read_assignment_targets()?;
+    let assignment = wsl_assignment_from_rows(&rows);
+    Ok(CodexWslAssignmentPreview {
+        targets: assignment.targets,
+        current: assignment.current,
+        consistent: assignment.consistent,
+        daemon_count: rows.iter().map(|(_, probe)| probe.daemon_count).sum(),
+        cli_count: rows.iter().map(|(_, probe)| probe.cli_count).sum(),
+        already_assigned: consistent_wsl_identity(&rows).is_some_and(|identity| {
+            wsl_identities_match(&identity, &account_wsl_identity(&account))
+        }),
+        can_apply: ordinary_oauth(&account),
+    })
+}
+fn write_wsl_targets_with(
+    targets: &[WslCodexHomeTarget],
+    payload: &serde_json::Value,
+    expected: &CodexWslIdentity,
+    mut action: impl FnMut(
+        &WslCodexHomeTarget,
+        &str,
+        Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, String>,
+) -> CodexWslOutcome {
+    let mut outcome = CodexWslOutcome {
+        status: if targets.is_empty() {
+            "skipped"
+        } else {
+            "done"
+        }
+        .into(),
+        targets: targets.len(),
+        written: 0,
+        daemons_stopped: 0,
+        clis_stopped: 0,
+        failures: vec![],
+    };
+    for target in targets {
+        match action(target, "stop", None) {
+            Ok(value) => {
+                outcome.daemons_stopped += value["daemonsStopped"].as_u64().unwrap_or(0) as usize;
+                outcome.clis_stopped += value["clisStopped"].as_u64().unwrap_or(0) as usize;
+            }
+            Err(message) => {
+                outcome.status = "aborted".into();
+                outcome.failures.push(CodexWslFailure {
+                    distro: target.label.distro.clone(),
+                    user: target.label.user.clone(),
+                    message,
+                });
+                return outcome;
+            }
+        }
+    }
+    for target in targets {
+        let result = action(target, "write-auth", Some(payload.clone())).and_then(|value| {
+            let actual: CodexWslIdentity = serde_json::from_value(value["identity"].clone())
+                .map_err(|_| "WSL 写入后未读到账号身份")?;
+            if !wsl_identities_match(expected, &actual) {
+                return Err("WSL 写入后账号身份不一致，请重新执行「在 WSL 中使用」".into());
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => outcome.written += 1,
+            Err(message) => outcome.failures.push(CodexWslFailure {
+                distro: target.label.distro.clone(),
+                user: target.label.user.clone(),
+                message,
+            }),
+        }
+    }
+    if !outcome.failures.is_empty() {
+        outcome.status = "partial".into();
+    }
+    outcome
+}
+fn apply_prepared_account_to_wsl(
+    account: &CodexAccount,
+    payload: serde_json::Value,
+) -> CodexWslOutcome {
+    let rows = match read_assignment_targets() {
+        Ok(rows) => rows,
+        Err(message) => {
+            return CodexWslOutcome {
+                status: "aborted".into(),
+                targets: 0,
+                written: 0,
+                daemons_stopped: 0,
+                clis_stopped: 0,
+                failures: vec![CodexWslFailure {
+                    distro: "WSL".into(),
+                    user: String::new(),
+                    message,
+                }],
+            }
+        }
+    };
+    let expected = account_wsl_identity(account);
+    if consistent_wsl_identity(&rows)
+        .is_some_and(|identity| wsl_identities_match(&identity, &expected))
+    {
+        return CodexWslOutcome {
+            status: "done".into(),
+            targets: rows.len(),
+            written: 0,
+            daemons_stopped: 0,
+            clis_stopped: 0,
+            failures: vec![],
+        };
+    }
+    let targets = rows
+        .into_iter()
+        .map(|(target, _)| target)
+        .collect::<Vec<_>>();
+    write_wsl_targets_with(&targets, &payload, &expected, run_wsl_assignment_action)
+}
+fn validate_wsl_auth_payload(
+    account: &CodexAccount,
+    payload: &serde_json::Value,
+) -> Result<(), String> {
+    let auth: CodexAuthFile =
+        serde_json::from_value(payload.clone()).map_err(|_| "OAuth 登录态无效")?;
+    let tokens = auth.tokens.ok_or("此账号没有可写入 WSL 的 OAuth 登录态")?;
+    if codex_oauth::is_token_expired(&tokens.access_token) {
+        return Err("登录态已过期，请先切回或刷新账号；不会为 WSL 单独刷新当前账号令牌".into());
+    }
+    let id_info = extract_user_info(&tokens.id_token).ok();
+    let (access_email, _, _, _, access_id, _) = extract_access_token_identity(&tokens.access_token);
+    let source = CodexWslIdentity {
+        account_id: normalize_optional_value(
+            tokens
+                .account_id
+                .or(access_id)
+                .or_else(|| id_info.as_ref().and_then(|info| info.4.clone())),
+        ),
+        email: id_info
+            .map(|info| info.0)
+            .or(access_email)
+            .unwrap_or_default(),
+    };
+    if !wsl_identities_match(&account_wsl_identity(account), &source) {
+        return Err("OAuth 登录态与所选账号不一致，请先切回该账号".into());
     }
     Ok(())
 }
-
-fn write_auth_payload_to_dir(
-    dir: &std::path::Path,
-    payload: &serde_json::Value,
-) -> Result<(), String> {
-    let content = serde_json::to_string_pretty(payload)
-        .map_err(|error| format!("序列化 Codex 登录凭据失败: {}", error))?;
-    crate::modules::atomic_write::write_secret_string_atomic(
-        &dir.join("auth.json"),
-        &format!("{}\n", content),
-    )
-}
-
-#[cfg(windows)]
-fn restrict_wsl_auth_permissions(distro: &str, linux_dir: &str) -> Result<(), String> {
-    use std::os::windows::process::CommandExt;
-    use std::process::{Command, Stdio};
-    use std::time::{Duration, Instant};
-
-    let executable = crate::modules::codex_session_wsl::wsl_executable()?;
-    let linux_path = format!("{}/auth.json", linux_dir);
-    let mut child = Command::new(executable)
-        .args(["-d", distro, "--", "chmod", "600", linux_path.as_str()])
-        .creation_flags(0x0800_0000)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("启动 wsl.exe 失败: {}", error))?;
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                if status.success() {
-                    return Ok(());
-                }
-                let output = child
-                    .wait_with_output()
-                    .map_err(|error| format!("读取 wsl.exe 输出失败: {}", error))?;
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(if stderr.trim().is_empty() {
-                    format!("wsl.exe 退出: {}", status)
-                } else {
-                    stderr.trim().to_string()
-                });
-            }
-            Ok(None) if Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            status => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(match status {
-                    Err(error) => error.to_string(),
-                    _ => "设置 WSL auth.json 权限超时".to_string(),
-                });
-            }
-        }
+pub async fn assign_codex_account_to_wsl(account_id: &str) -> Result<CodexWslOutcome, String> {
+    let _switch_guard = CODEX_ACCOUNT_SWITCH_LOCK
+        .try_lock()
+        .map_err(|_| "正在切换账号，请稍后重试")?;
+    let account = load_account(account_id).ok_or("账号不存在")?;
+    if !ordinary_oauth(&account) {
+        return Err("仅普通 OAuth 账号可用于 WSL".into());
     }
-}
-
-#[cfg(not(windows))]
-fn restrict_wsl_auth_permissions(_distro: &str, _linux_dir: &str) -> Result<(), String> {
-    Err("仅 Windows 支持 WSL".to_string())
-}
-
-fn sync_target(
-    target: &WslCodexHomeTarget,
-    meta: &WslAuthSourceMeta,
-    payload: &serde_json::Value,
-) -> CodexWslAuthSyncResult {
-    let snapshot = read_target_snapshot(&target.dir);
-    let state = classify_target(Some(meta), &snapshot);
-    if matches!(state, "same" | "newer") {
-        return CodexWslAuthSyncResult {
-            distro: target.distro.clone(),
-            user: target.user.clone(),
-            status: "skipped".to_string(),
-            message: Some(if state == "same" {
-                "已是最新".to_string()
-            } else {
-                "WSL 侧凭据更新，已跳过".to_string()
-            }),
+    let token_lock = codex_token_lock_for(account_id);
+    let _token_guard = token_lock.lock().await;
+    let _file_guard = acquire_codex_token_refresh_file_lock(account_id, "wsl-assignment").await?;
+    let (account, payload) =
+        if load_account_index().current_account_id.as_deref() == Some(account_id) {
+            let raw = fs::read_to_string(get_codex_home().join("auth.json"))
+                .map_err(|_| "当前 Windows 官方登录态不可读，请先切回或刷新账号")?;
+            let payload: serde_json::Value =
+                serde_json::from_str(&raw).map_err(|_| "当前 Windows 官方登录态无效")?;
+            validate_wsl_auth_payload(&account, &payload)?;
+            (account, payload)
+        } else {
+            let prepared = prepare_account_switch_locked(account_id, true).await?;
+            let PreparedCodexAccountSwitch::Account(account) = prepared else {
+                return Err("仅普通 OAuth 账号可用于 WSL".into());
+            };
+            let payload = build_auth_file_value(&account)?;
+            validate_wsl_auth_payload(&account, &payload)?;
+            (account, payload)
         };
+    let outcome =
+        tokio::task::spawn_blocking(move || apply_prepared_account_to_wsl(&account, payload))
+            .await
+            .map_err(|_| "WSL 账号设置失败")?;
+    if outcome.status == "skipped" {
+        return Err("未检测到运行中的 WSL 目标，不会创建 .codex 目录".into());
     }
-
-    match write_auth_payload_to_dir(&target.dir, payload) {
-        Ok(()) => {
-            let mut notes = Vec::new();
-            if state == "unreadable" {
-                notes.push("原文件不可读，已替换".to_string());
-            }
-            if let Err(error) = restrict_wsl_auth_permissions(&target.distro, &target.linux_dir) {
-                notes.push(format!("已写入，但 600 权限设置失败: {}", error));
-            }
-            crate::modules::logger::log_info(&format!(
-                "[Codex WSL] 已同步登录凭据: distro={}, user={}, state={}",
-                target.distro, target.user, state
-            ));
-            CodexWslAuthSyncResult {
-                distro: target.distro.clone(),
-                user: target.user.clone(),
-                status: "synced".to_string(),
-                message: if notes.is_empty() {
-                    None
-                } else {
-                    Some(notes.join("；"))
-                },
-            }
-        }
-        Err(error) => {
-            crate::modules::logger::log_warn(&format!(
-                "[Codex WSL] 同步登录凭据失败: distro={}, user={}, error={}",
-                target.distro, target.user, error
-            ));
-            CodexWslAuthSyncResult {
-                distro: target.distro.clone(),
-                user: target.user.clone(),
-                status: "failed".to_string(),
-                message: Some(error),
-            }
-        }
-    }
-}
-
-pub fn sync_codex_auth_to_wsl() -> Result<Vec<CodexWslAuthSyncResult>, String> {
-    let source = read_wsl_auth_source();
-    validate_source_for_sync(&source.source)?;
-    let (meta, payload) = match (source.meta.as_ref(), source.payload.as_ref()) {
-        (Some(meta), Some(payload)) => (meta, payload),
-        _ => return Err("Windows 侧 Codex 登录凭据不可用".to_string()),
-    };
-    let targets = discover_wsl_codex_homes()?;
-    Ok(targets
-        .iter()
-        .map(|target| sync_target(target, meta, payload))
-        .collect())
+    Ok(outcome)
 }
 
 #[cfg(test)]
-mod wsl_auth_sync_tests {
+mod explicit_wsl_tests {
     use super::*;
-
-    fn identity(email: &str) -> CodexOfficialOAuthIdentity {
-        CodexOfficialOAuthIdentity {
-            email: email.to_string(),
-            user_id: None,
-            account_id: None,
-            organization_id: None,
+    fn identity(id: Option<&str>, email: &str) -> CodexWslIdentity {
+        CodexWslIdentity {
+            account_id: id.map(str::to_string),
+            email: email.into(),
         }
     }
-
-    fn source_meta(email: &str, exp: i64) -> WslAuthSourceMeta {
-        WslAuthSourceMeta {
-            identity: Some(identity(email)),
-            access_expires_at: Some(exp),
+    fn target(user: &str) -> WslCodexHomeTarget {
+        WslCodexHomeTarget {
+            label: CodexWslTarget {
+                distro: "Fixture".into(),
+                user: user.into(),
+            },
+            linux_dir: format!("/home/{user}/.codex"),
         }
     }
-
-    fn oauth_snapshot(email: &str, exp: i64) -> WslTargetAuthSnapshot {
-        WslTargetAuthSnapshot::OAuth {
-            identity: Some(identity(email)),
-            access_expires_at: Some(exp),
-            expired: false,
-        }
-    }
-
     #[test]
-    fn target_home_parsing_covers_root_and_regular_users() {
-        let root = std::path::Path::new(r"\\wsl.localhost\Ubuntu-26.04");
-        let user = build_target_from_home(
-            "Ubuntu-26.04",
-            root,
-            &root.join("home").join("jxiaow").join(".codex"),
+    fn workspace_identity_wins_over_same_email() {
+        assert!(!wsl_identities_match(
+            &identity(Some("one"), "same@fake"),
+            &identity(Some("two"), "same@fake")
+        ));
+        assert!(wsl_identities_match(
+            &identity(None, "SAME@fake"),
+            &identity(Some("one"), "same@fake")
+        ));
+        assert!(!wsl_identities_match(
+            &identity(None, ""),
+            &identity(None, "")
+        ));
+    }
+    #[test]
+    fn all_targets_must_agree_even_when_first_has_no_strong_id() {
+        let rows = vec![
+            (
+                target("legacy"),
+                WslProbe {
+                    identity: Some(identity(None, "same@fake")),
+                    ..Default::default()
+                },
+            ),
+            (
+                target("one"),
+                WslProbe {
+                    identity: Some(identity(Some("one"), "same@fake")),
+                    ..Default::default()
+                },
+            ),
+            (
+                target("two"),
+                WslProbe {
+                    identity: Some(identity(Some("two"), "same@fake")),
+                    ..Default::default()
+                },
+            ),
+        ];
+        assert!(consistent_wsl_identity(&rows).is_none());
+        assert!(consistent_wsl_identity(&[]).is_none());
+        assert!(consistent_wsl_identity(&[(target("missing"), WslProbe::default())]).is_none());
+    }
+    #[test]
+    fn every_target_stops_before_any_write_and_payload_is_reused() {
+        let targets = [target("one"), target("two")];
+        let payload = serde_json::json!({"tokens":{"access_token":"synthetic", "refresh_token":"same-prepared"}});
+        let mut operations = vec![];
+        let result = write_wsl_targets_with(
+            &targets,
+            &payload,
+            &identity(Some("id"), "new@fake"),
+            |target, action, input| {
+                operations.push(format!("{action}:{}", target.label.user));
+                if action == "stop" {
+                    assert!(input.is_none());
+                    Ok(serde_json::json!({"daemonsStopped":1,"clisStopped":2}))
+                } else {
+                    assert_eq!(input, Some(payload.clone()));
+                    Ok(serde_json::json!({"identity":{"accountId":"id","email":"new@fake"}}))
+                }
+            },
+        );
+        assert_eq!(
+            operations,
+            ["stop:one", "stop:two", "write-auth:one", "write-auth:two"]
+        );
+        assert_eq!(
+            (result.written, result.daemons_stopped, result.clis_stopped),
+            (2, 2, 4)
+        );
+        assert_eq!(result.status, "done");
+    }
+    #[test]
+    fn any_stop_failure_aborts_all_writes() {
+        let mut operations = vec![];
+        let result = write_wsl_targets_with(
+            &[target("one"), target("two")],
+            &serde_json::json!({}),
+            &identity(Some("id"), "fake"),
+            |target, action, _| {
+                operations.push(action.to_string());
+                if target.label.user == "two" {
+                    Err("cannot stop".into())
+                } else {
+                    Ok(serde_json::json!({"clisStopped":1}))
+                }
+            },
+        );
+        assert_eq!(operations, ["stop", "stop"]);
+        assert_eq!(result.status, "aborted");
+        assert_eq!(result.written, 0);
+        assert_eq!(result.clis_stopped, 1);
+    }
+    #[test]
+    fn write_failure_keeps_success_and_readback_mismatch_fails_without_retry() {
+        let mut writes = 0;
+        let result = write_wsl_targets_with(
+            &[target("one"), target("bad"), target("mismatch")],
+            &serde_json::json!({}),
+            &identity(Some("id"), "same@fake"),
+            |target, action, _| {
+                if action == "stop" {
+                    return Ok(serde_json::json!({}));
+                }
+                writes += 1;
+                match target.label.user.as_str() {
+                    "bad" => Err("write failed".into()),
+                    "mismatch" => Ok(
+                        serde_json::json!({"identity":{"accountId":"other","email":"same@fake"}}),
+                    ),
+                    _ => Ok(serde_json::json!({"identity":{"accountId":"id","email":"same@fake"}})),
+                }
+            },
+        );
+        assert_eq!(writes, 3);
+        assert_eq!(result.status, "partial");
+        assert_eq!(result.written, 1);
+        assert_eq!(result.failures.len(), 2);
+    }
+    #[test]
+    fn no_targets_never_calls_helper() {
+        let result = write_wsl_targets_with(
+            &[],
+            &serde_json::json!({}),
+            &identity(None, "fake"),
+            |_, _, _| panic!("must not execute"),
+        );
+        assert_eq!(result.status, "skipped");
+    }
+    #[test]
+    fn discovery_accepts_only_default_existing_home_shapes() {
+        let root = Path::new("fixture");
+        assert_eq!(
+            build_target_from_home("Ubuntu", root, &root.join("home/user/.codex"))
+                .unwrap()
+                .linux_dir,
+            "/home/user/.codex"
+        );
+        assert_eq!(
+            build_target_from_home("Ubuntu", root, &root.join("root/.codex"))
+                .unwrap()
+                .label
+                .user,
+            "root"
+        );
+        assert!(build_target_from_home("Ubuntu", root, &root.join("custom/.codex")).is_none());
+        assert!(
+            build_target_from_home("Ubuntu", root, &root.join("home/user/other/.codex")).is_none()
+        );
+    }
+    #[test]
+    fn current_windows_payload_is_validated_locally_without_refresh_or_projection() {
+        use base64::Engine;
+        let jwt = |value: serde_json::Value| {
+            format!(
+                "e30.{}.fixture",
+                base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(value.to_string())
+            )
+        };
+        let mut account = CodexAccount::new(
+            "fixture".into(),
+            "fake@example.invalid".into(),
+            CodexTokens {
+                id_token: String::new(),
+                access_token: String::new(),
+                refresh_token: None,
+            },
+        );
+        account.account_id = Some("workspace".into());
+        let payload = |expires: i64, workspace: &str| {
+            serde_json::json!({"tokens":{
+            "id_token":jwt(serde_json::json!({"email":"fake@example.invalid"})),
+            "access_token":jwt(serde_json::json!({"exp":expires,"https://api.openai.com/auth":{"chatgpt_account_id":workspace}})),
+            "refresh_token":"never-rotate-this", "account_id":workspace }})
+        };
+        let fresh = payload(chrono::Utc::now().timestamp() + 3600, "workspace");
+        let before = fresh.clone();
+        assert!(validate_wsl_auth_payload(&account, &fresh).is_ok());
+        assert_eq!(fresh, before);
+        assert!(validate_wsl_auth_payload(&account,&serde_json::json!({"tokens":{"access_token":"at-fixture","id_token":"", "account_id":"workspace"}})).is_ok());
+        assert!(
+            validate_wsl_auth_payload(&account, &payload(1, "workspace"))
+                .unwrap_err()
+                .contains("过期")
+        );
+        assert!(validate_wsl_auth_payload(
+            &account,
+            &payload(chrono::Utc::now().timestamp() + 3600, "other")
         )
-        .expect("user target");
-        assert_eq!(user.user, "jxiaow");
-        assert_eq!(user.linux_dir, "/home/jxiaow/.codex");
-        let root_target =
-            build_target_from_home("Ubuntu-26.04", root, &root.join("root").join(".codex"))
-                .expect("root target");
-        assert_eq!(root_target.user, "root");
-        assert_eq!(root_target.linux_dir, "/root/.codex");
-        assert!(build_target_from_home("Ubuntu", root, &root.join("srv").join(".codex")).is_none());
-    }
-
-    #[test]
-    fn target_state_matrix_prefers_skip_unless_source_is_newer() {
-        let source = source_meta("a@example.invalid", 200);
-        assert_eq!(
-            classify_target(Some(&source), &WslTargetAuthSnapshot::Missing),
-            "empty"
-        );
-        assert_eq!(
-            classify_target(Some(&source), &WslTargetAuthSnapshot::Unreadable),
-            "unreadable"
-        );
-        assert_eq!(
-            classify_target(Some(&source), &WslTargetAuthSnapshot::NonOAuth),
-            "different-account"
-        );
-        assert_eq!(
-            classify_target(Some(&source), &oauth_snapshot("b@example.invalid", 100)),
-            "different-account"
-        );
-        assert_eq!(
-            classify_target(Some(&source), &oauth_snapshot("A@example.invalid", 200)),
-            "same"
-        );
-        assert_eq!(
-            classify_target(Some(&source), &oauth_snapshot("a@example.invalid", 300)),
-            "newer"
-        );
-        assert_eq!(
-            classify_target(Some(&source), &oauth_snapshot("a@example.invalid", 100)),
-            "outdated"
-        );
-        assert_eq!(
-            classify_target(None, &oauth_snapshot("a@example.invalid", 100)),
-            "unknown"
-        );
-    }
-
-    #[test]
-    fn newer_tokens_for_different_strong_identities_are_not_skipped() {
-        let mut source = source_meta("a@example.invalid", 200);
-        source.identity.as_mut().unwrap().account_id = Some("personal".into());
-        source.identity.as_mut().unwrap().user_id = Some("user".into());
-        source.identity.as_mut().unwrap().organization_id = Some("org".into());
-
-        for field in ["account_id", "user_id", "organization_id"] {
-            let mut target_identity = source.identity.clone().unwrap();
-            match field {
-                "account_id" => target_identity.account_id = Some("team".into()),
-                "user_id" => target_identity.user_id = Some("other-user".into()),
-                "organization_id" => target_identity.organization_id = Some("other-org".into()),
-                _ => unreachable!(),
-            }
-            let target = WslTargetAuthSnapshot::OAuth {
-                identity: Some(target_identity),
-                access_expires_at: Some(300),
-                expired: false,
-            };
-            assert_eq!(classify_target(Some(&source), &target), "different-account", "{field}");
-        }
-    }
-
-    #[test]
-    fn incomplete_identity_is_unknown_instead_of_already_latest() {
-        let mut source = source_meta("a@example.invalid", 200);
-        let anonymous = WslTargetAuthSnapshot::OAuth {
-            identity: None,
-            access_expires_at: Some(300),
-            expired: false,
-        };
-        assert_eq!(classify_target(Some(&source), &anonymous), "unknown");
-        source.identity.as_mut().unwrap().account_id = Some("personal".into());
-        assert_eq!(
-            classify_target(Some(&source), &oauth_snapshot("a@example.invalid", 300)),
-            "unknown"
-        );
-        source.identity = None;
-        assert_eq!(
-            classify_target(Some(&source), &oauth_snapshot("a@example.invalid", 300)),
-            "unknown"
-        );
-    }
-
-    #[test]
-    fn token_identity_uses_official_account_and_organization_precedence() {
-        let jwt = |payload: serde_json::Value| {
-            format!("e30.{}.synthetic", URL_SAFE_NO_PAD.encode(payload.to_string()))
-        };
-        let mut tokens = CodexAuthTokens {
-            id_token: jwt(serde_json::json!({
-                "email": "a@example.invalid",
-                "https://api.openai.com/auth": {
-                    "chatgpt_user_id": "user", "account_id": "id-account", "organization_id": "id-org"
-                }
-            })),
-            access_token: jwt(serde_json::json!({
-                "email": "a@example.invalid", "exp": 300,
-                "https://api.openai.com/auth": {
-                    "chatgpt_account_id": "access-account", "organization_id": "access-org"
-                }
-            })),
-            refresh_token: None,
-            account_id: Some("stored-account".into()),
-        };
-        let stored = oauth_identity_from_tokens(&tokens).unwrap();
-        assert_eq!(stored.account_id.as_deref(), Some("stored-account"));
-        assert_eq!(stored.organization_id.as_deref(), Some("access-org"));
-        assert_eq!(stored.user_id.as_deref(), Some("user"));
-        tokens.account_id = None;
-        assert_eq!(
-            oauth_identity_from_tokens(&tokens).unwrap().account_id.as_deref(),
-            Some("access-account")
-        );
-        tokens.access_token = jwt(serde_json::json!({"exp": 300}));
-        assert_eq!(
-            oauth_identity_from_tokens(&tokens).unwrap().account_id.as_deref(),
-            Some("id-account")
-        );
-        tokens.id_token = jwt(serde_json::json!({"email": "  "}));
-        assert!(oauth_identity_from_tokens(&tokens).is_none());
-    }
-
-    #[test]
-    fn matching_strong_identity_keeps_newer_wsl_credentials() {
-        let mut source = source_meta("a@example.invalid", 200);
-        source.identity.as_mut().unwrap().account_id = Some("account".into());
-        let target = WslTargetAuthSnapshot::OAuth {
-            identity: source.identity.clone(),
-            access_expires_at: Some(300),
-            expired: false,
-        };
-        assert_eq!(classify_target(Some(&source), &target), "newer");
-    }
-
-    #[test]
-    fn expired_source_is_rejected_before_any_write() {
-        let read = unavailable_source(
-            "C:\\fake\\auth.json".to_string(),
-            Some("chatgpt".to_string()),
-            "missing".to_string(),
-        );
-        assert!(validate_source_for_sync(&read.source).is_err());
-
-        let mut source = read.source;
-        source.available = true;
-        source.error = None;
-        source.expired = true;
-        let error = validate_source_for_sync(&source).expect_err("expired source must fail");
-        assert!(error.contains("已过期"));
-    }
-
-    #[test]
-    fn payload_write_replaces_auth_json_without_plaintext_backup() {
-        let dir =
-            std::env::temp_dir().join(format!("desko-wsl-auth-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("auth.json"), "{\"tokens\":\"old\"}").unwrap();
-        let payload = serde_json::json!({
-            "auth_mode": "chatgpt",
-            "tokens": {"id_token": "id", "access_token": "access", "refresh_token": "refresh"}
-        });
-        write_auth_payload_to_dir(&dir, &payload).expect("write payload");
-        let written = std::fs::read_to_string(dir.join("auth.json")).unwrap();
-        assert!(written.contains("\"access_token\": \"access\""));
-        assert!(!dir.join("auth.json.bak").exists());
-        std::fs::remove_dir_all(dir).unwrap();
+        .unwrap_err()
+        .contains("不一致"));
+        assert!(validate_wsl_auth_payload(
+            &account,
+            &serde_json::json!({"auth_mode":"apikey","OPENAI_API_KEY":"synthetic"})
+        )
+        .is_err());
     }
 }

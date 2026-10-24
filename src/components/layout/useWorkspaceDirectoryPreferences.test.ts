@@ -1,11 +1,16 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { settingsApi } from '../../services/api/settings'
+import { isCodexWebRuntime } from '../../services/runtime'
 import { useWorkspaceDirectoryPreferences } from './useWorkspaceDirectoryPreferences'
 
 vi.mock('../../services/api/settings', () => ({ settingsApi: { getSetting: vi.fn(), setSetting: vi.fn() } }))
+vi.mock('../../services/runtime', () => ({ isCodexWebRuntime: vi.fn(() => false) }))
 
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(isCodexWebRuntime).mockReturnValue(false)
+  const storage = new Map<string, string>()
+  vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) })
   vi.mocked(settingsApi.getSetting).mockResolvedValue('')
   vi.mocked(settingsApi.setSetting).mockResolvedValue(undefined)
 })
@@ -22,7 +27,7 @@ it('仅恢复有目录的模块与布尔值，不在读取时回写', async () =
   vi.mocked(settingsApi.getSetting).mockResolvedValue('{"notes":true,"entries":false,"codex":true,"unknown":true}')
   const preferences = useWorkspaceDirectoryPreferences()
   await preferences.restore()
-  expect(preferences.open.value).toEqual({ notes: true, entries: false })
+  expect(preferences.open.value).toEqual({ notes: true, entries: false, codex: true })
   vi.mocked(settingsApi.getSetting).mockResolvedValue('{"notes":"true","entries":null}')
   await preferences.restore()
   expect(preferences.open.value).toEqual({})
@@ -89,4 +94,20 @@ it('固定保存失败不阻断随后取消固定或打开目录', async () => {
   await preferences.setPinned('notes', false)
   expect(preferences.pinned.value.notes).toBe(false)
   expect(settingsApi.setSetting).toHaveBeenLastCalledWith('workspace_directory_pinned', '{"notes":false}')
+})
+
+it('独立 Codex Web 在浏览器恢复与保存目录偏好，不调用受限的原生设置接口', async () => {
+  vi.mocked(isCodexWebRuntime).mockReturnValue(true)
+  localStorage.setItem('desko.codex.web.workspace_directory_open', '{"codex":true}')
+  localStorage.setItem('desko.codex.web.workspace_directory_pinned', '{"codex":true}')
+  const preferences = useWorkspaceDirectoryPreferences()
+  await preferences.restore()
+  expect(preferences.open.value).toEqual({ codex: true })
+  expect(preferences.pinned.value).toEqual({ codex: true })
+  await preferences.setVisible('codex', false)
+  await preferences.setPinned('codex', false)
+  expect(localStorage.getItem('desko.codex.web.workspace_directory_open')).toBe('{"codex":false}')
+  expect(localStorage.getItem('desko.codex.web.workspace_directory_pinned')).toBe('{"codex":false}')
+  expect(settingsApi.getSetting).not.toHaveBeenCalled()
+  expect(settingsApi.setSetting).not.toHaveBeenCalled()
 })

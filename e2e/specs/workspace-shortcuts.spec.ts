@@ -26,7 +26,7 @@ test('添加文件的 Ctrl+Enter 仍可提交，搜索快捷键不把输入移�
   await name.fill('键盘创建')
   await page.keyboard.press('Control+k')
   await expect(name).toBeFocused()
-  await dialog.getByPlaceholder('粘贴文件/文件夹路径，或点击右侧浏览').fill('C:/demo/project')
+  await dialog.getByPlaceholder('文件或文件夹路径').fill('C:/demo/project')
   await page.keyboard.press('Control+Enter')
   await expect(dialog).toBeHidden()
   await expect(page.locator('.shortcut-row')).toContainText('键盘创建')

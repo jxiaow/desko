@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { MODULES, modulePath } from '../modules/registry'
-import { landingPath, moduleFlags } from '../modules/state'
+import { landingPath, isModuleEnabled } from '../modules/state'
 
 /** 零模块态的落脚点：它自己不是模块，没有开关 */
 export const EMPTY_PATH = '/start'
@@ -25,7 +25,7 @@ const router = createRouter({
 /** 路由表跟着开关走：没启用的模块不注册，它的 chunk 也就不会被下载 */
 export function syncModuleRoutes(): void {
   for (const m of MODULES) {
-    const on = moduleFlags[m.id]
+    const on = isModuleEnabled(m.id)
     if (on && !router.hasRoute(m.id)) {
       const route: RouteRecordRaw = {
         path: modulePath(m.id),

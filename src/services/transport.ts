@@ -1,7 +1,7 @@
 import { invoke as nativeInvoke } from '@tauri-apps/api/core'
 import { isWebRuntime } from './runtime'
 
-const WEB_PREFERENCES = new Set(['theme', 'accent', 'background_atmosphere', 'auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold'])
+const WEB_PREFERENCES = new Set(['theme', 'accent', 'background_atmosphere', 'auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'note_paste_cleanup', 'workspace_directory_open', 'workspace_directory_pinned', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold'])
 const WEB_MODULE_SETTINGS = new Set(['notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'codex_enabled', 'fileshare_enabled', 'tunnel_enabled'])
 const SESSION_EXPIRED = 'Web 会话已失效，请重新登录'
 let generation = 0
@@ -87,7 +87,7 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         localStorage.setItem(`desko.web.${key}`, String(parameters.value))
         return undefined as T
       }
-      const defaults: Record<string, string> = { auto_lock_timeout: '5', lock_on_close: 'false', lock_on_system_lock: 'false' }
+      const defaults: Record<string, string> = { auto_lock_timeout: '5', lock_on_close: 'false', lock_on_system_lock: 'false', note_paste_cleanup: 'true' }
       return (localStorage.getItem(`desko.web.${key}`) ?? defaults[key] ?? '') as T
     }
   }

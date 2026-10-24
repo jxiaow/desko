@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { createDraftCipherKey, sealDraft, openDraft, type DraftCipherKey, type SealedDraft } from '../services/draftCipher'
 import { notesApi as api } from '../services/api/notes'
+import { settingsApi } from '../services/api/settings'
+import { mergeNoteHtml } from '../utils/noteMerge'
 import { useToastStore } from './toast'
 import { useConfirmStore } from './confirm'
 import { extractTags, getDateGroupLabel, deriveTitleFromHtml, headingTitle, htmlToTagText, htmlToText } from '../utils/format'
@@ -45,6 +47,30 @@ export const useNotesStore = defineStore('notes', () => {
   const toastStore = useToastStore()
   const confirmStore = useConfirmStore()
 
+  const notePasteCleanup = ref(true)
+  let pasteSettingRevision = 0
+  const loadNotePasteCleanup = async () => {
+    const revision = pasteSettingRevision
+    try {
+      const value = await settingsApi.getSetting('note_paste_cleanup')
+      if (revision === pasteSettingRevision) notePasteCleanup.value = value !== 'false'
+    } catch { /* 缺键或暂时读不到设置时沿用现有粘贴行为 */ }
+  }
+  const setNotePasteCleanup = async (enabled: boolean): Promise<boolean> => {
+    pasteSettingRevision++
+    const previous = notePasteCleanup.value
+    notePasteCleanup.value = enabled
+    try {
+      await settingsApi.setSetting('note_paste_cleanup', String(enabled))
+      return true
+    } catch (e: any) {
+      notePasteCleanup.value = previous
+      toastStore.showToast('保存设置失败：' + (e.message ?? e), 'error')
+      return false
+    }
+  }
+  void loadNotePasteCleanup()
+
   const notes = ref<Note[]>([])
   const notesLoading = ref(false)
   /** 上一次 fetchNotes 的失败原因；视图据此把"加载失败"和"还没有小记"分开 */
@@ -67,6 +93,7 @@ export const useNotesStore = defineStore('notes', () => {
 
   // 批量操作状态：勾选即进、清空即收；工具栏「选择」钮另开一层待选态（显形全部勾选框）
   const selectedNoteIds = ref<Set<string>>(new Set())
+  const isMergingNotes = ref(false)
   const notePickMode = ref(false)
   const hasNoteSelection = computed(() => selectedNoteIds.value.size > 0)
   const isBatchMode = computed(() => notePickMode.value || hasNoteSelection.value)
@@ -913,6 +940,104 @@ export const useNotesStore = defineStore('notes', () => {
     })
   }
 
+  const mergeSelectedNotes = () => {
+    if (isMergingNotes.value || noteView.value === 'archived') return
+    const ids = [...selectedNoteIds.value]
+    const sourcesForMerge = (): Note[] | null => {
+      const rows = ids.map(findNote).filter((n): n is Note => n != null)
+      if (rows.length < 2 || rows.length !== ids.length || rows.some(n => n.archived)) return null
+      const encrypted = rows.filter(n => n.encrypted).length
+      if (encrypted && encrypted !== rows.length) {
+        toastStore.showToast('加密与未加密小记不能混合合并', 'error')
+        return null
+      }
+      const locked = rows.filter(n => n.encrypted && (!noteKey.value.is_open || !isUnlocked(n.id))).length
+      if (locked) {
+        toastStore.showToast(`未合并：${locked} 条小记未解锁`, 'error')
+        return null
+      }
+      return rows.sort((a, b) => a.created_at - b.created_at)
+    }
+    if (!sourcesForMerge()) return
+    const epoch = noteEpoch
+    confirmStore.showConfirm('合并小记', `${ids.length} 条小记将合成一条，原条目将被删除，此操作不可撤销。`, async () => {
+      if (isMergingNotes.value || epoch !== noteEpoch || !sourcesForMerge()) return
+      isMergingNotes.value = true
+      let merged: Note | null = null
+      let bound: Attachment[] = []
+      let step: 'create' | 'bind' | 'encrypt' | 'delete' = 'create'
+      const assertActive = () => {
+        if (epoch !== noteEpoch) throw new Error('应用已锁定')
+      }
+      const showMerged = () => {
+        if (!merged || epoch !== noteEpoch) return
+        notes.value = [merged, ...notes.value]
+        noteAttachments.value[merged.id] = bound
+        if (merged.encrypted) notePlains.value[merged.id] = merged.content_html
+      }
+      try {
+        await flushNoteSave()
+        assertActive()
+        const sources = sourcesForMerge()
+        if (!sources) return
+        const html = mergeNoteHtml(sources.map(n => n.encrypted ? notePlains.value[n.id] : n.content_html))
+        merged = await api.createNote({
+          title: deriveTitleFromHtml(html),
+          content_html: html,
+          category: noteMeta(html).tags[0],
+        })
+        assertActive()
+        step = 'bind'
+        const names = collectAttachmentNames(html)
+        if (names.length) {
+          bound = await api.bindAttachments(merged.id, names)
+          assertActive()
+          // bind 会跳过缺失文件；没有登记齐就不能删除任何源条目。
+          const claimed = new Set(bound.map(a => nameOf(a.file_path)))
+          if (names.some(name => !claimed.has(name))) throw new Error('部分图片未能登记')
+        }
+        if (sources[0].encrypted) {
+          step = 'encrypt'
+          // 直接用同一加密命令，避免临时明文条目先进入可见列表。
+          await api.lockNote(merged.id)
+          assertActive()
+          merged = { ...merged, encrypted: true, title: headingTitle(html) }
+        }
+        step = 'delete'
+        await api.batchDeleteNotes(ids)
+        assertActive()
+        showMerged()
+        notes.value = notes.value.filter(n => !ids.includes(n.id))
+        ids.forEach(id => {
+          delete notePlains.value[id]
+          delete noteAttachments.value[id]
+        })
+        exitNoteBatch()
+        toastStore.showToast(`已合并 ${ids.length} 条小记`)
+      } catch (e: any) {
+        const message = String(e.message ?? e)
+        if (step === 'delete') {
+          showMerged()
+          if (epoch === noteEpoch) toastStore.showToast('合并未完成：新条目已生成，原条目删除失败：' + message, 'error')
+          return
+        }
+        let cleanupError = ''
+        if (merged) {
+          try { await api.deleteNote(merged.id) } catch (cleanup: any) {
+            showMerged()
+            cleanupError = '；新条目撤销失败，请检查并删除：' + (cleanup.message ?? cleanup)
+          }
+        }
+        if (epoch !== noteEpoch) return
+        const prefix = step === 'bind' ? '合并中止：附件登记失败：'
+          : step === 'encrypt' ? '合并中止：新条目加密失败：' : '合并失败：'
+        toastStore.showToast(prefix + message + cleanupError, 'error')
+      } finally {
+        isMergingNotes.value = false
+      }
+    }, '合并')
+  }
+
   const batchSetPinned = async (pinned: boolean) => {
     const ids = Array.from(selectedNoteIds.value)
       .filter(id => findNote(id)?.pinned !== pinned)
@@ -985,6 +1110,7 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   return {
+    notePasteCleanup, loadNotePasteCleanup, setNotePasteCleanup, isMergingNotes,
     notes, notesLoading, notesLoadError, noteDraftHtml,
     noteSearchKeyword, noteView, activeTags, hasActiveFilters,
     noteRailCollapsed, noteRailPinned,
@@ -997,7 +1123,7 @@ export const useNotesStore = defineStore('notes', () => {
     setupNoteKey, unlockNoteDomain, recoverNoteDomain, relockNoteDomain, changeNoteKey, refreshNoteKey,
     lockNote, unlockNote, relockNote, removeNoteLock, clearUnlockedNotes, discardDraftsForRestore, dropUnsealedDrafts,
     toggleSelectNote, selectAllNotes, clearSelection, toggleNotePick, exitNoteBatch,
-    batchDelete, batchSetPinned, batchSetStarred,
+    batchDelete, mergeSelectedNotes, batchSetPinned, batchSetStarred,
     loadAttachments, uploadAttachment, deleteAttachment, stageImage,
   }
 })

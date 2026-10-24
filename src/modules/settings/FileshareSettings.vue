@@ -87,7 +87,7 @@ const clearFsPassword = async () => {
     <div class="setting-item">
       <div class="setting-info">
         <span class="setting-name">端口</span>
-        <span class="setting-desc">被占用时自动向后漂移，实际端口见传输页顶部</span>
+        <span class="setting-desc">端口被占用时自动换用，实际端口见传输页</span>
       </div>
       <input
         v-model.number="fsPortInput"
@@ -102,7 +102,7 @@ const clearFsPassword = async () => {
     <div class="setting-item">
       <div class="setting-info">
         <span class="setting-name">仅本机访问</span>
-        <span class="setting-desc">只监听 127.0.0.1，其他设备无法连接</span>
+        <span class="setting-desc">开启后其他设备无法访问</span>
       </div>
       <label class="switch">
         <input type="checkbox" v-model="fsLocalOnly" @change="applyFsLocalOnly" />
@@ -113,7 +113,7 @@ const clearFsPassword = async () => {
       <div class="row-head">
         <div class="setting-info">
           <span class="setting-name">访问口令</span>
-          <span class="setting-desc">{{ fsHasPassword ? '已启用 · ' : '未启用 · ' }}网页端每个页面都要先输口令</span>
+          <span class="setting-desc">{{ fsHasPassword ? '访问共享文件需验证口令' : '未设置，访问时无需验证' }}</span>
         </div>
         <div class="setting-actions fs-pw-ctl">
           <button v-if="!fsShowPwInput" class="action-btn" @click="fsShowPwInput = true">

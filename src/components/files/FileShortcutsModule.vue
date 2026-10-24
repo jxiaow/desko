@@ -294,6 +294,8 @@ const EXT_SLOT: Record<string, string> = {
   go: 'code', java: 'code', c: 'code', h: 'code', cpp: 'code', sh: 'code', json: 'code',
   md: 'mark', markdown: 'mark', txt: 'mark',
   png: 'img', jpg: 'img', jpeg: 'img', gif: 'img', svg: 'img', webp: 'img', ico: 'img',
+  mp4: 'vid', m4v: 'vid', mov: 'vid', avi: 'vid', mkv: 'vid', webm: 'vid', flv: 'vid', wmv: 'vid',
+  mp3: 'audio', wav: 'audio', flac: 'audio', aac: 'audio', ogg: 'audio', m4a: 'audio', opus: 'audio',
 }
 
 const extVar = (ext: string) => `var(--ft-${EXT_SLOT[ext] || 'unk'})`
@@ -448,7 +450,7 @@ watchEffect(() => {
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navFiles'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无快捷方式' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : webRuntime ? '请在桌面端添加文件快捷方式' : '点击右上角「添加快捷方式」开始' }}</div>
+      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : webRuntime ? '请在桌面端添加文件快捷方式' : '点击「添加快捷方式」开始' }}</div>
     </div>
 
     <!-- Add/Edit Dialog：与收藏表单弹窗同一套骨架（居中悬浮 + 42px 头 + 32px 字段轴 + 46px 底栏带快捷键徽标） -->
@@ -467,7 +469,7 @@ watchEffect(() => {
             <div class="form-group">
               <label>路径 <span class="req">*</span></label>
               <div class="path-input-row">
-                <input v-model="addForm.path" placeholder="粘贴文件/文件夹路径，或点击右侧浏览" @blur="onPathInput" />
+                <input v-model="addForm.path" placeholder="文件或文件夹路径" @blur="onPathInput" />
                 <span class="path-acts">
                   <button class="path-act" type="button" title="从剪贴板粘贴" @click="pastePath">
                     <AppIcon name="clipboard" :size="14" />
@@ -556,7 +558,7 @@ watchEffect(() => {
   min-width: 24px;
   padding: 0 3px;
   font-size: var(--text-2xs);
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: -0.02em;
 }
@@ -568,7 +570,7 @@ watchEffect(() => {
 }
 
 /* 名字：14px，字重跟随卡片角色；类型由左侧图标表达。 */
-.row-name { flex: 1 1 auto; min-width: 0; font-size: var(--text-base); font-weight: var(--weight-card-title); letter-spacing: -0.01em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-name { flex: 1 1 auto; min-width: 0; font-size: var(--text-base); font-weight: var(--weight-card-title); letter-spacing: normal; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 路径：等宽 12px 灰字，缩进由 global .row2 给，尾部优先截断（保文件名，盘符与上层目录是噪音） */
 .path-chip {
@@ -638,7 +640,7 @@ watchEffect(() => {
   padding: 0 10px;
   /* 路径框走 UI 字体（继承全局 .form-group input）：Windows 路径常混中文，
      Consolas 拉丁 + HarmonyOS 汉字混排时字重字面打架 */
-  font-size: var(--text-sm);
+  font-size: var(--text-content);
   color: var(--text);
   box-shadow: none; /* 高亮环归容器（:focus-within），别在输入框本体上再画一圈 */
 }

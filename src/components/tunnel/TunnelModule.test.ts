@@ -25,6 +25,7 @@ describe('授权后返回穿透页面', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.resetAllMocks()
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     tnProvision.value = null
     vi.useFakeTimers()
     vi.mocked(tnRefresh).mockImplementation(() => new Promise(() => {}))
@@ -35,6 +36,7 @@ describe('授权后返回穿透页面', () => {
     wrapper?.unmount()
     wrapper = undefined
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   it('首轮状态未返回时也监听窗口返回，聚焦立即补刷', async () => {

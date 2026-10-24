@@ -20,6 +20,13 @@ pub(super) struct WebEvents {
     queue: Mutex<(u64, VecDeque<Value>)>,
 }
 impl WebEvents {
+    pub(super) fn push(&self, name: &str, payload: Value) {
+        let mut queue = self.queue.lock().unwrap_or_else(|e| e.into_inner());
+        queue.0 += 1;
+        let id = queue.0;
+        queue.1.push_back(json!({"id":id,"event":name,"payload":payload}));
+        while queue.1.len() > 4096 { queue.1.pop_front(); }
+    }
     pub(super) fn new(app: AppHandle) -> Arc<Self> {
         let events = Arc::new(Self {
             app,
@@ -33,15 +40,7 @@ impl WebEvents {
                 let Ok(payload) = serde_json::from_str::<Value>(event.payload()) else {
                     return;
                 };
-                let mut queue = events.queue.lock().unwrap_or_else(|e| e.into_inner());
-                queue.0 += 1;
-                let id = queue.0;
-                queue
-                    .1
-                    .push_back(json!({"id":id,"event":name,"payload":payload}));
-                while queue.1.len() > 256 {
-                    queue.1.pop_front();
-                }
+                events.push(name, payload);
             });
             events.listeners.lock().unwrap().push(id);
         }
@@ -55,7 +54,8 @@ impl WebEvents {
             .filter(|event| after.is_some_and(|id| event["id"].as_u64().unwrap_or(0) > id))
             .cloned()
             .collect();
-        json!({"cursor":queue.0,"events":events})
+        let truncated = after.is_some_and(|after| queue.1.front().and_then(|e| e["id"].as_u64()).is_some_and(|first| after.saturating_add(1) < first));
+        json!({"cursor":queue.0,"events":events,"truncated":truncated})
     }
 }
 impl Drop for WebEvents {

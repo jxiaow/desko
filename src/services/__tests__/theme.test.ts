@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { fileshareApi } from '../api/fileshare'
 import { settingsApi } from '../api/settings'
 import { appearance, initializeAppearance, chooseTheme, chooseAccent } from '../theme'
 
 vi.mock('../api/settings', () => ({ settingsApi: { getSetting: vi.fn(), setSetting: vi.fn() } }))
+vi.mock('../api/fileshare', () => ({ fileshareApi: { setTheme: vi.fn().mockResolvedValue(undefined) } }))
 
-beforeEach(() => vi.clearAllMocks())
-afterEach(() => { document.documentElement.removeAttribute('data-theme') })
+/* 计时器全程走假的：主题戳与主题补间都是 setTimeout，真实计时器会跨用例生效，
+   把后一条用例的调用计数搅乱。 */
+beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks() })
+afterEach(() => { document.documentElement.removeAttribute('data-theme'); vi.useRealTimers() })
 
 it.each(['', 'unknown'])('未保存或无效的氛围值 %s 使用纯色默认外观', async raw => {
   vi.mocked(settingsApi.getSetting).mockImplementation(async key => key === 'background_atmosphere' ? raw : '')
@@ -98,4 +102,38 @@ it.each([
     expect(document.documentElement.dataset).toMatchObject({ theme, base: polarity, accent: 'plum', atmosphere: enabled ? 'on' : 'off' })
     expect(settingsApi.setSetting).not.toHaveBeenCalled()
   }
+})
+
+it('外观四值去抖抄给局域网传输网页端，同值不重复发', async () => {
+  vi.mocked(settingsApi.getSetting).mockResolvedValue('')
+
+  await initializeAppearance({ workspaceLayout: true })
+  await chooseAccent('teal')
+  expect(fileshareApi.setTheme).not.toHaveBeenCalled()
+
+  await vi.advanceTimersByTimeAsync(400)
+  expect(fileshareApi.setTheme).toHaveBeenCalledTimes(1)
+  expect(fileshareApi.setTheme).toHaveBeenCalledWith('paper', 'light', 'teal', 'off')
+
+  // 再点一次同一个强调色：值没变就不该再碰配置文件（每次写都让服务进程多轮询一次）
+  await chooseAccent('teal')
+  await vi.advanceTimersByTimeAsync(400)
+  expect(fileshareApi.setTheme).toHaveBeenCalledTimes(1)
+
+  await chooseTheme('ink')
+  await vi.advanceTimersByTimeAsync(400)
+  expect(fileshareApi.setTheme).toHaveBeenLastCalledWith('ink', 'dark', 'teal', 'off')
+})
+
+it('主题戳上报失败不打扰换主题', async () => {
+  vi.mocked(settingsApi.getSetting).mockResolvedValue('')
+  vi.mocked(fileshareApi.setTheme).mockRejectedValue(new Error('服务没起'))
+
+  await initializeAppearance({ workspaceLayout: true })
+  await vi.advanceTimersByTimeAsync(400)
+  await chooseTheme('ink')
+
+  expect(fileshareApi.setTheme).toHaveBeenCalled()
+  expect(appearance.theme).toBe('ink')
+  expect(document.documentElement.dataset.theme).toBe('ink')
 })

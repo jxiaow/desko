@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch, watchEffect } from 'vue'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
+import { open as dialogOpen } from '@tauri-apps/plugin-dialog'
+import qrcode from 'qrcode-generator'
 import { fileshareApi } from '../../services/api/fileshare'
 import { errText } from '../../services/api/backup'
 import {
@@ -34,10 +36,25 @@ let active = true
 let poll: ReturnType<typeof setInterval> | undefined
 
 const dirAdd = ref('')
+const showDirAdd = ref(false)
+const dirInput = ref<HTMLInputElement | null>(null)
+const receivedList = ref<HTMLElement | null>(null)
 const targetIdx = ref(0)
 const dragActive = ref(false)
 const dropping = ref(false)
+const serviceAction = ref<'start' | 'stop' | null>(null)
 const received = ref<{ name: string; url: string }[]>([])
+watch(() => received.value.length, async () => {
+  await nextTick()
+  const list = receivedList.value
+  if (list) list.scrollTop = list.scrollHeight
+})
+
+async function showDirectoryInput() {
+  showDirAdd.value = true
+  await nextTick()
+  dirInput.value?.focus()
+}
 
 const running = fsRunning
 const status = fsStatus
@@ -46,31 +63,53 @@ const dirs = computed(() => fsConfig.value?.shareDirs ?? [])
 const openWarn = computed(() => running.value && !fsLocalOnly.value && !fsHasPassword.value)
 /** 目录可能被别的入口删到少于当前选项，取不到就退回最后一个 */
 const target = computed(() => Math.min(targetIdx.value, Math.max(dirs.value.length - 1, 0)))
+watch(dirs, () => { targetIdx.value = target.value })
 const targetName = computed(() => baseName(dirs.value[target.value] ?? ''))
 const linkBase = computed(() => status.value?.lanUrl ?? status.value?.localUrl ?? '')
-/** 横幅说的是"谁能访问"，页条胶囊说的是"在不在听"，两句不重复 */
+/** 连接卡说明访问范围，页条只说明服务是否监听。 */
 const exposure = computed(() => {
   return fsLocalOnly.value ? '仅本机可访问' : '同网段设备可访问'
 })
-/** 仅本机态下局域网地址等于本机地址，横幅那行直接显示本机地址 */
+/** 仅本机模式使用本机地址，不生成其他设备无法访问的二维码。 */
 const bannerUrl = computed(() => {
   const s = status.value
   if (!s) return ''
   return fsLocalOnly.value ? s.localUrl : s.lanUrl
 })
+const qrImage = computed(() => {
+  if (!running.value || fsLocalOnly.value || !bannerUrl.value) return ''
+  const qr = qrcode(0, 'M')
+  qr.addData(bannerUrl.value)
+  qr.make()
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(qr.createSvgTag({ cellSize: 4, margin: 16, scalable: true }))}`
+})
+
+async function chooseFiles() {
+  if (!running.value || dropping.value || !dirs.value.length) return
+  if (webRuntime) { fileInput.value?.click(); return }
+  try {
+    const paths = await dialogOpen({ multiple: true, directory: false, title: '选择要传输的文件' })
+    if (paths) await importPaths(Array.isArray(paths) ? paths : [paths])
+  } catch (e) { toastStore.showToast(errText(e), 'error') }
+}
+
+async function chooseDirectory() {
+  try {
+    const path = await dialogOpen({ directory: true, multiple: false, title: '添加共享文件夹' })
+    if (typeof path !== 'string') return
+    dirAdd.value = path
+    await addDir()
+  } catch (e) { toastStore.showToast(errText(e), 'error') }
+}
 
 function baseName(p: string) {
   return p.split(/[\\/]/).filter(Boolean).pop() ?? p
 }
 
-/** 提取链接与网页端列表同一格式：/download?share=N&name=<编码名> */
-function extractUrl(name: string) {
-  return `${linkBase.value}/download?share=${target.value}&name=${encodeURIComponent(name)}`
-}
-
 async function toggle() {
   if (fsBusy.value) return
   fsBusy.value = true
+  serviceAction.value = running.value ? 'stop' : 'start'
   try {
     if (running.value) {
       await fileshareApi.stop()
@@ -84,6 +123,7 @@ async function toggle() {
     toastStore.showToast(errText(e), 'error')
   } finally {
     fsBusy.value = false
+    serviceAction.value = null
   }
 }
 
@@ -110,7 +150,7 @@ async function addDir() {
     toastStore.showToast('该目录已在列表里', 'error')
     return
   }
-  if (await saveDirs([...dirs.value, p], '共享目录已更新')) dirAdd.value = ''
+  if (await saveDirs([...dirs.value, p], '共享目录已更新')) { dirAdd.value = ''; showDirAdd.value = false }
 }
 
 async function removeDir(i: number) {
@@ -131,18 +171,21 @@ async function copyUrl(url: string) {
 }
 
 async function importPaths(paths: string[]) {
+  if (dropping.value) return
   if (!running.value) {
-    toastStore.showToast('先启动服务，拖入才会落到共享目录', 'error')
+    toastStore.showToast('请先启动服务再投递文件', 'error')
     return
   }
+  const index = target.value
+  const base = linkBase.value
   dropping.value = true
   try {
-    const r = await fileshareApi.importFiles(target.value, paths)
-    r.stored.forEach((f) => received.value.push({ name: f.name, url: extractUrl(f.name) }))
+    const r = await fileshareApi.importFiles(index, paths)
+    r.stored.forEach((f) => received.value.push({ name: f.name, url: `${base}/download?share=${index}&name=${encodeURIComponent(f.name)}` }))
     if (r.failed.length) {
       const why = r.failed[0]
       toastStore.showToast(
-        r.stored.length ? `已接收 ${r.stored.length} 个，${r.failed.length} 个未落盘：${why}` : why,
+        r.stored.length ? `已接收 ${r.stored.length} 个，${r.failed.length} 个保存失败：${why}` : why,
         'error'
       )
     } else {
@@ -160,6 +203,7 @@ let unlistenDrag: (() => void) | undefined
 async function importBrowserFiles(files: File[]) {
   if (!running.value || dropping.value) return
   const index = target.value
+  const base = linkBase.value
   dropping.value = true
   let count = 0
   try {
@@ -167,7 +211,7 @@ async function importBrowserFiles(files: File[]) {
       if (!active) break
       const stored = await uploadSharedFile(file, index)
       if (!active) return
-      received.value.push({ name: stored.name, url: `${linkBase.value}/download?share=${index}&name=${encodeURIComponent(stored.name)}` })
+      received.value.push({ name: stored.name, url: `${base}/download?share=${index}&name=${encodeURIComponent(stored.name)}` })
       count++
     }
     if (active) toastStore.showToast(`已接收 ${count} 个文件`)
@@ -219,451 +263,223 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 </script>
 
 <template>
-  <div class="content-inner">
-    <!-- 加载态与其余四页同一语言：骨架行走 global 的 .rowlist + .skeleton-row，不写"加载中…"句子 -->
-    <div v-if="!fsLoaded" class="rowlist" aria-hidden="true">
-      <div class="skeleton-row" v-for="n in 2" :key="n">
-        <span class="skeleton-block"></span>
-        <span class="skeleton-line w40"></span>
-      </div>
-    </div>
-
-    <template v-else>
-      <!-- 顶栏：状态胶囊 ｜ 启停大按钮（标题退役，五页统一无页标题） -->
-      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-      <div class="page-bar service-page-bar">
-        <span class="chip" :class="{ live: running }">
-          <span class="dot" aria-hidden="true"></span>
-          {{ running ? '监听中' : '已停止' }}
-        </span>
+  <div class="content-inner lan-page">
+    <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
+      <div class="page-bar service-page-bar" data-workspace-heading="inline">
+        <span class="chip" :class="{ live: running }"><span class="dot" aria-hidden="true"></span>{{ !fsLoaded ? '读取中' : running ? '监听中' : '已停止' }}</span>
         <div class="page-actions">
-          <button
-            class="btn-primary toggle-btn"
-            :class="{ 'ghost-danger': running }"
-            :disabled="fsBusy"
-            @click="toggle"
-          >
-            <AppIcon :name="running ? 'x' : 'upload'" :size="13" />
-            {{ running ? '停止服务' : '启动服务' }}
-          </button>
-          <button
-            class="ib manage-btn"
-            type="button"
-            aria-label="管理共享"
-            @click="requestOpenSettingsTab('fileshare')"
-          >
-            <AppIcon name="gear" :size="16" />
-          </button>
+          <button v-if="fsLoaded && fsConfig && status" class="bar-btn service-toggle" :class="running ? 'btn-secondary' : 'btn-primary'" type="button" :disabled="fsBusy || dropping" @click="toggle">{{ serviceAction === 'stop' ? '正在停止…' : serviceAction === 'start' ? '正在启动…' : running ? '停止服务' : '启动服务' }}</button>
+          <button class="btn-secondary bar-btn manage-btn" type="button" aria-label="管理共享" title="管理共享" @click="requestOpenSettingsTab('fileshare')"><AppIcon name="gear" :size="16" /></button>
         </div>
       </div>
-      </Teleport>
+    </Teleport>
 
-      <!-- 停止时只呈现说明与启动配置，目录仍可提前管理。 -->
-      <section v-if="!running" class="fs-idle" aria-labelledby="fs-idle-title">
-        <span class="fs-idle-icon"><AppIcon name="navLan" :size="24" /></span>
-        <div class="fs-idle-body">
-          <h2 id="fs-idle-title" class="fs-idle-title">服务未启动</h2>
-          <p class="fs-idle-desc">{{ fsLocalOnly ? '启动服务后，可在本机浏览器中上传和下载共享文件。' : '启动服务后，同网段设备可通过浏览器上传和下载文件。' }}</p>
-          <dl class="fs-idle-config" aria-label="启动配置">
-            <div><dt>访问范围</dt><dd>{{ fsLocalOnly ? '仅本机' : '同网段设备' }}</dd></div>
-            <div><dt>端口</dt><dd class="mono">{{ fsConfig?.port ?? '—' }}</dd></div>
-            <div><dt>访问口令</dt><dd>{{ fsHasPassword ? '已设置' : '未设置' }}</dd></div>
-          </dl>
-        </div>
-      </section>
+    <div v-if="!fsLoaded" class="lan-loading-state" role="status" aria-label="正在读取共享配置">
+      <div class="rcard loading-connection" aria-hidden="true"><div class="loading-line"></div><div class="loading-line"></div><div class="loading-line"></div></div>
+      <div class="loading-heading" aria-hidden="true"></div><div class="rcard loading-send" aria-hidden="true"><div class="loading-line"></div><div class="loading-well"></div></div>
+      <div class="loading-heading" aria-hidden="true"></div><div v-for="n in 2" :key="n" class="rcard loading-directory" aria-hidden="true"><div class="loading-line"></div></div>
+    </div>
+    <section v-else-if="!fsConfig || !status" class="lan-load-error" aria-labelledby="lan-error-title">
+      <AppIcon name="alert" :size="24" /><h2 id="lan-error-title">无法读取共享配置</h2><p>请重试以获取服务状态和共享文件夹。</p><button class="action-btn" type="button" @click="fsRefresh()">重新加载</button>
+    </section>
 
-      <!-- 运行时才展示访问地址。 -->
-      <section v-else class="clean-group-card">
-        <div class="fs-banner">
-          <span class="banner-dot" :class="{ on: running }" aria-hidden="true"></span>
-          <span class="banner-title" :title="running && !fsLocalOnly ? '同网段设备打不开时，先在 Windows 防火墙放行本应用的专用网络' : undefined">{{ exposure }}</span>
-          <span
-            v-if="running"
-            class="banner-url mono"
-            role="button"
-            tabindex="0"
-            title="点击复制访问地址"
-            @click="copyUrl(bannerUrl)"
-            @keyup.enter="copyUrl(bannerUrl)"
-          >{{ bannerUrl }}</span>
-          <span v-if="running" class="banner-acts">
-            <!-- 口令只在已设时出现：没设的那句由下面唯一的警告行说，一处只说一件事 -->
-            <span v-if="fsHasPassword" class="badge ok">已设口令</span>
-          </span>
-        </div>
-        <div
-          v-if="running && !fsLocalOnly"
-          class="group-row url-row local"
-          role="button"
-          tabindex="0"
-          title="点击复制本机地址"
-          @click="copyUrl(status!.localUrl)"
-          @keyup.enter="copyUrl(status!.localUrl)"
-        >
-          <span class="chip">本机</span>
-          <code>{{ status!.localUrl }}</code>
-          <button class="ib" type="button" title="复制本机地址" @click.stop="copyUrl(status!.localUrl)">
-            <AppIcon name="copy" :size="14" />
-          </button>
-        </div>
-        <!-- 这里只留全页唯一的警告位，一次说最要紧的一件事 -->
-        <p v-if="running && openWarn" class="group-note chip-warn">
-          <AppIcon name="lock" :size="12" />
-          未设访问口令，同网段任何人都能浏览、上传这些目录。
-          <button class="link-btn" type="button" @click="requestOpenSettingsTab('fileshare')">去设置</button>
-        </p>
-        <p v-else-if="running && fsPortDrifted" class="group-note chip-warn">
-          端口 {{ status!.boundPort }} · 配置 {{ status!.configuredPort }} 被占
-        </p>
-      </section>
-
-      <!-- 启动后才展示拖投入口；停止后仍保留本次已接收的提取链接。 -->
-      <section v-if="running || received.length" class="drop-card" :class="{ active: dragActive && running, off: !running }" @dragover="webRuntime && $event.preventDefault()" @drop="dropBrowserFiles">
-        <input v-if="webRuntime" ref="fileInput" type="file" multiple hidden aria-label="上传到共享目录" @change="chooseBrowserFiles" />
-        <div v-if="running" class="well-body">
-          <AppIcon class="well-ico" :name="dropping ? 'clock' : 'upload'" :size="28" />
-          <div class="well-text">
-            <div class="well-title">{{ dropping ? '正在落盘…' : webRuntime ? '选择文件或拖入上传' : '把文件拖到这里' }}</div>
-            <div class="well-sub">
-              落到 {{ targetName }} · 同名自动加 (1) · 单文件 4 GiB 内
+    <div v-else class="lan-content">
+      <section class="connection-panel rcard" aria-labelledby="lan-connect-title">
+        <div class="connection-body">
+          <AppIcon class="connection-icon" name="navLan" :size="20" />
+          <div class="connection-info">
+            <h2 id="lan-connect-title">连接设备</h2>
+            <div v-if="running" class="fs-banner">
+              <p class="banner-title">{{ exposure }}</p>
+              <div class="address-box"><span class="banner-url" :title="bannerUrl">{{ bannerUrl }}</span><button class="ib copy-address" type="button" aria-label="复制访问地址" title="复制访问地址" @click="copyUrl(bannerUrl)"><AppIcon name="copy" :size="14" /></button></div>
+              <div class="connection-meta">
+                <button v-if="!fsLocalOnly" class="local-address" type="button" :title="status.localUrl" @click="copyUrl(status.localUrl)"><span>本机</span><span>{{ status.localUrl }}</span><AppIcon name="copy" :size="12" /></button>
+                <p v-if="openWarn" class="connection-notice group-note chip-warn"><AppIcon name="lock" :size="12" /><span>未设访问口令，设备可读写。<button class="lan-text-button" type="button" @click="requestOpenSettingsTab('fileshare')">去设置</button></span></p>
+                <p v-else-if="fsPortDrifted" class="connection-notice group-note chip-warn">端口 {{ status.boundPort }} · 配置 {{ status.configuredPort }} 被占</p>
+                <p v-else class="connection-notice"><AppIcon name="lock" :size="12" /><span>{{ fsHasPassword ? '访问时需验证口令' : '仅本机可访问' }}</span></p>
+              </div>
+              <p v-if="fsLocalOnly" class="local-explanation">其他设备暂时无法连接。<button class="lan-text-button" type="button" @click="requestOpenSettingsTab('fileshare')">更改访问范围</button></p>
+            </div>
+            <div v-else class="fs-idle">
+              <h3 class="fs-idle-title">服务未启动</h3><p class="fs-idle-desc">{{ fsLocalOnly ? '通过本机浏览器上传和下载文件' : '同网段设备可通过浏览器上传和下载文件' }}</p>
+              <dl class="fs-idle-config"><div><dt>访问范围</dt><dd>{{ fsLocalOnly ? '仅本机' : '同网段设备' }}</dd></div><div><dt>端口</dt><dd>{{ fsConfig.port }}</dd></div><div><dt>访问口令</dt><dd>{{ fsHasPassword ? '已设置' : '未设置' }}</dd></div></dl>
             </div>
           </div>
-          <button v-if="webRuntime && running" class="btn-secondary" type="button" :disabled="dropping" @click="fileInput?.click()">选择文件</button>
-        </div>
-        <div v-if="running && dirs.length > 1" class="dz-dirs">
-          <span class="dz-dirs-label">投到</span>
-          <button
-            v-for="(d, i) in dirs"
-            :key="d"
-            class="chip"
-            :class="{ on: i === target }"
-            type="button"
-            :title="d"
-            @click="targetIdx = i"
-          >
-            {{ baseName(d) }}
-          </button>
-        </div>
-        <div v-if="received.length" class="recv-list">
-          <div
-            v-for="f in received"
-            :key="f.url"
-            class="group-row url-row recv"
-            role="button"
-            tabindex="0"
-            :title="`点击复制 ${f.name} 的提取链接`"
-            @click="copyUrl(f.url)"
-            @keyup.enter="copyUrl(f.url)"
-          >
-            <span class="chip">已投</span>
-            <code>{{ f.url }}</code>
-            <button class="ib" type="button" title="复制提取链接" @click.stop="copyUrl(f.url)">
-              <AppIcon name="copy" :size="14" />
-            </button>
-          </div>
+          <div v-if="running" class="connection-code"><template v-if="qrImage"><img class="connection-qr" :src="qrImage" :data-url="bannerUrl" alt="扫描二维码，在浏览器中打开共享文件" /><span>手机扫码打开</span></template><div v-else class="connection-local"><AppIcon name="lock" :size="24" /><span>仅本机</span></div></div>
         </div>
       </section>
 
-      <!-- 拖入中：整窗一圈虚线 + 极淡主色底。原生 onDragDropEvent 是窗口级的，
-           松手在哪儿都落盘，提示就不该只画在那张卡上——只画卡上等于骗人说只有这块能丢 -->
-      <Teleport to="body" :disabled="!pageActive">
-        <div v-if="dragActive && running" class="fs-drop-hint" aria-hidden="true">
-          <b>松手即投进 {{ targetName }}</b>
-        </div>
-      </Teleport>
-
-      <!-- 分组三：共享目录 -->
-      <section class="clean-group-card">
-        <div class="group-head">共享目录</div>
-        <div v-for="(d, i) in dirs" :key="d" class="group-row dir-row">
-          <AppIcon class="dir-ico" name="folder" :size="16" />
-          <span class="dir-path" :title="d">{{ d }}</span>
-          <button class="ib danger dir-del" type="button" title="移除该目录" @click="removeDir(i)">
-            <AppIcon name="trash" :size="14" />
-          </button>
-        </div>
-        <div class="group-row dir-add-row">
-          <input
-            v-model="dirAdd"
-            class="input dir-add"
-            placeholder="添加共享目录，如 D:\share\docs"
-            spellcheck="false"
-            @keyup.enter="addDir"
-          />
-          <button class="btn-secondary add-btn" :disabled="fsBusy || !dirAdd.trim()" @click="addDir">
-            <AppIcon name="plus" :size="13" />
-            添加
-          </button>
+      <section class="send-panel" aria-labelledby="lan-send-title">
+        <header class="panel-heading"><h2 id="lan-send-title">投递文件</h2></header>
+        <div class="rcard upload-card">
+          <div class="target-field"><label for="lan-target">投递到</label><select id="lan-target" v-model="targetIdx" class="select" :disabled="fsBusy || dropping || !dirs.length" :title="dirs[target]"><option v-if="!dirs.length" :value="0">请先添加共享文件夹</option><option v-for="(d, i) in dirs" :key="d" :value="i">{{ baseName(d) }}</option></select><span class="target-path" :title="dirs[target]">{{ dirs[target] }}</span><span class="file-limit">单文件 4 GiB 内</span></div>
+          <section v-if="running" class="drop-card" :class="{ active: dragActive, busy: dropping }" aria-label="投递文件区域" :aria-busy="dropping"
+            @dragover="webRuntime && $event.preventDefault()" @dragenter="webRuntime && (dragActive = true)" @dragleave="webRuntime && !($event.currentTarget as HTMLElement).contains($event.relatedTarget as Node) && (dragActive = false)" @drop="dropBrowserFiles">
+            <input v-if="webRuntime" ref="fileInput" type="file" multiple hidden aria-label="上传到共享目录" @change="chooseBrowserFiles" />
+            <div class="well-body"><AppIcon class="well-icon" :name="dropping ? 'clock' : 'upload'" :size="28" /><p class="well-title">{{ dropping ? '正在保存文件…' : webRuntime ? '选择文件或拖入上传' : '将文件拖放到这里' }}</p><p class="well-sub">{{ dropping ? '保存后可复制提取链接' : '支持同时投递多个文件，同名文件自动重命名' }}</p><button class="action-btn primary" type="button" :disabled="fsBusy || dropping || !dirs.length" @click="chooseFiles"><AppIcon name="plus" :size="14" />{{ dropping ? '正在投递…' : '选择文件' }}</button></div>
+          </section>
+          <div v-else class="send-paused"><AppIcon name="upload" :size="28" /><p>启动服务后，即可投递文件</p><span>文件将保存到所选共享文件夹。</span></div>
+          <section class="session-files" aria-label="本次投递"><header class="session-heading"><h3>本次投递</h3><span class="panel-meta" role="status">{{ received.length }} 个文件</span></header><div class="session-content"><div v-if="received.length" ref="receivedList" class="recv-list" aria-label="已投递文件"><button v-for="(f, i) in received" :key="`${f.url}-${i}`" class="recv" type="button" :aria-label="`复制 ${f.name} 的提取链接`" :title="`${f.name} · 点击复制提取链接`" @click="copyUrl(f.url)"><span class="received-name">{{ f.name }}</span></button></div><p v-else class="session-empty">暂无投递记录</p></div></section>
         </div>
       </section>
-    </template>
+
+      <section class="directories-panel" aria-labelledby="lan-dirs-title">
+        <header class="panel-heading"><div class="directory-heading"><h2 id="lan-dirs-title">共享文件夹</h2><span class="panel-meta">{{ dirs.length }} 个</span></div><button class="lan-text-button browse-directory" type="button" :disabled="fsBusy || dropping" :aria-label="webRuntime ? '添加共享目录' : '选择文件夹'" @click="webRuntime ? showDirectoryInput() : chooseDirectory()"><AppIcon name="plus" :size="14" />添加目录</button></header>
+        <div class="directory-list"><div v-for="(d, i) in dirs" :key="d" class="rcard"><div class="dir-row rcard-row"><AppIcon name="folder" :size="18" /><div class="dir-info"><span class="directory-name">{{ baseName(d) }}</span><span class="dir-path" :title="d">{{ d }}</span></div><span v-if="i === target" class="badge off directory-current"><AppIcon name="check" :size="11" />当前投递目标</span><button v-else class="lan-text-button directory-target" type="button" :disabled="fsBusy || dropping" :aria-label="`投递到 ${baseName(d)}`" @click="targetIdx = i">设为投递目标</button><button class="ib lan-icon-button dir-del" type="button" :disabled="fsBusy || dropping" :aria-label="`移除共享文件夹 ${baseName(d)}`" title="移除该目录" @click="removeDir(i)"><AppIcon name="trash" :size="16" /></button></div></div><p v-if="!dirs.length" class="directory-empty">暂无共享文件夹，添加后即可投递文件。</p></div>
+        <form v-if="showDirAdd" class="dir-add-row" @submit.prevent="addDir"><label class="path-label" for="lan-add-path">目录路径</label><input id="lan-add-path" ref="dirInput" v-model="dirAdd" class="text-input dir-add" placeholder="输入此电脑上的文件夹路径" autocomplete="off" spellcheck="false" :disabled="fsBusy || dropping" /><button class="action-btn add-btn" type="submit" :disabled="fsBusy || dropping || !dirAdd.trim()"><AppIcon name="plus" :size="14" />添加</button><button class="ib" type="button" aria-label="取消添加目录" :disabled="fsBusy || dropping" @click="showDirAdd = false"><AppIcon name="x" :size="14" /></button></form>
+        <footer class="directory-footer"><p class="directory-description">其他设备可浏览、下载和上传这些文件夹里的文件。</p><button class="lan-text-button manual-directory" type="button" :disabled="fsBusy || dropping" :aria-expanded="showDirAdd" aria-controls="lan-add-path" @click="showDirectoryInput">手动输入路径<AppIcon name="chevRight" :size="13" /></button></footer>
+      </section>
+    </div>
+    <Teleport to="body" :disabled="!pageActive"><div v-if="dragActive && running && !dropping" class="fs-drop-hint" aria-hidden="true"><b>松手即投进 {{ targetName }}</b></div></Teleport>
   </div>
 </template>
 
 <style scoped>
-/* Cascadia Code 的斜杠零和写意字形在 12px 小字下发斜扎眼，本页等宽一律 Consolas 优先 */
-.content-inner { --font-mono: Consolas, 'Cascadia Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace; }
-
-.mono { font-family: var(--font-mono); }
-
-/* ── 顶栏：.page-bar 骨架在 global.css（磨砂吸顶），本页只留启停钮的皮；状态胶囊走 global .chip ── */
-/* 页条右侧的图标钮与 32px 主钮同高，别露出 24px 的小档 */
-.manage-btn { width: 32px; height: 32px }
-/* 它站在磨砂页栏上，hover 那层洗要吃 chrome 档，否则字被 --hover 洗淡 */
-.manage-btn:hover { background: var(--hover-chrome); color: var(--text) }
-
-/* 浅红幽灵态停止按钮：压在 .btn-primary 全局样式之上 */
-.toggle-btn.ghost-danger:not(:disabled) {
-  background: var(--danger-soft);
-  color: var(--danger);
-  border: 1px solid var(--danger-border);
-  box-shadow: none;
-}
-.toggle-btn.ghost-danger:hover:not(:disabled) {
-  background: var(--danger-soft);
-  border-color: var(--danger);
-  color: var(--danger-hover);
-}
-
-/* 停止态以留白区分层级，与下面可编辑的共享目录分开。 */
-.fs-idle { display: flex; align-items: flex-start; gap: 16px; padding: 20px 14px 28px; }
-.fs-idle-icon { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px; background: var(--fill); color: var(--text-secondary); }
-.fs-idle-body { min-width: 0; }
-.fs-idle-title { margin: 0; font-size: var(--text-md); font-weight: var(--weight-card-title); line-height: 24px; color: var(--text); }
-.fs-idle-desc { margin: 4px 0 14px; font-size: var(--text-sm); line-height: 1.7; color: var(--text-secondary); }
-.fs-idle-config { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; font-size: var(--text-xs); line-height: 20px; }
+.lan-page { font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.lan-page :is(h2, h3, p) { margin: 0; }
+.lan-page h2 { font-size: var(--text-sm); font-weight: 500; line-height: 20px; }
+.lan-page h3 { font-size: var(--text-xs); font-weight: 400; line-height: 18px; }
+.lan-page .rcard { margin-bottom: 0; }
+.manage-btn { width: 32px; padding-inline: 0; }
+.service-toggle { min-width: 76px; }
+.lan-text-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 0; background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--text-xs); white-space: nowrap; }
+.lan-text-button:hover:not(:disabled) { color: var(--text); }
+.lan-page button:disabled { cursor: not-allowed; }
+.lan-icon-button { width: 32px; height: 32px; flex: none; color: var(--text-muted); }
+.lan-page .action-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; border-radius: var(--radius-ib); font-size: var(--text-xs); }
+.lan-content { display: flex; flex-direction: column; gap: 22px; }
+.connection-body { display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px; }
+.connection-icon { flex: none; margin-top: 1px; color: var(--text-muted); }
+.connection-info { flex: 1; min-width: 0; }
+.banner-title { margin-top: 4px !important; color: var(--text-muted); font-size: var(--text-xs); line-height: 20px; }
+.address-box { display: flex; align-items: center; gap: 7px; margin-top: 7px; min-width: 0; }
+.banner-url { min-width: 0; overflow-wrap: anywhere; font-size: var(--text-sm); line-height: 26px; color: var(--text); }
+.copy-address { width: 26px; height: 26px; flex: none; }
+.connection-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 20px; margin-top: 5px; color: var(--text-muted); font-size: var(--text-xs); line-height: 20px; }
+.local-address { display: inline-flex; align-items: center; gap: 6px; min-width: 0; min-height: 20px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.local-address span:last-of-type { overflow-wrap: anywhere; }
+.local-address > svg { flex: none; }
+.local-address:hover { color: var(--text); }
+.connection-notice { display: flex; align-items: center; gap: 6px; }
+.connection-notice > svg { flex: none; }
+.connection-notice.chip-warn { color: color-mix(in srgb, var(--warning) 72%, var(--text)); }
+.connection-notice .lan-text-button { display: inline; min-height: 0; margin-left: 4px; font-weight: 500; color: inherit; }
+.local-explanation { margin-top: 5px !important; color: var(--text-muted); font-size: var(--text-xs); line-height: 20px; }
+.local-explanation .lan-text-button { margin-left: 4px; }
+.connection-code { display: flex; flex: none; flex-direction: column; align-items: center; gap: 4px; color: var(--text-muted); font-size: 11px; line-height: 20px; }
+.connection-qr { display: block; width: 80px; height: 80px; border-radius: var(--radius-sm); background: #fff; }
+.connection-local { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; width: 80px; height: 80px; color: var(--text-muted); border-radius: var(--radius-sm); background: var(--bg-canvas-input); }
+.fs-idle { margin-top: 8px; }
+.fs-idle-title { font-weight: 500 !important; color: var(--text-secondary); }
+.fs-idle-desc { margin-top: 4px !important; color: var(--text-muted); font-size: var(--text-xs); line-height: 20px; }
+.fs-idle-config { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 10px 0 0; padding: 0; font-size: var(--text-xs); line-height: 20px; }
 .fs-idle-config > div { display: flex; gap: 8px; }
 .fs-idle-config dt { color: var(--text-muted); }
 .fs-idle-config dd { margin: 0; color: var(--text-secondary); }
-
-/* ── 分组卡：与穿透页 .tn-card 同一档面板方言（mock .wcard），一层框 + 发丝分行 ── */
-.clean-group-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-card);
-  border-radius: 12px;
-  box-shadow: var(--shadow-card-rest);
-  margin-bottom: var(--space-3);
-  overflow: hidden;
+.panel-heading { display: flex; align-items: center; gap: 8px; min-height: 32px; margin-bottom: 8px; }
+.panel-heading > .browse-directory { margin-left: auto; }
+.panel-meta { color: var(--text-muted); font-size: var(--text-xs); font-weight: 400; line-height: 18px; }
+.target-field { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 20px; border-bottom: 1px solid var(--border-subtle); }
+.target-field label { flex: none; color: var(--text-muted); font-size: var(--text-xs); }
+.target-field .select { flex: none; width: 196px; min-width: 0; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-ib); background: var(--bg-canvas-input); color: var(--text); font-size: var(--text-xs); }
+.target-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: var(--text-xs); }
+.file-limit { flex: none; margin-left: auto; color: var(--text-faint); font-size: 11px; white-space: nowrap; }
+.drop-card { border: 0; background: transparent; transition: background-color var(--transition-fast); }
+.upload-card:has(.drop-card.active) { outline: 2px solid var(--accent-ring); outline-offset: -2px; }
+.drop-card.active { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent-ring); }
+.well-body { display: flex; align-items: center; justify-content: center; flex-direction: column; min-height: 168px; padding: 12px 20px; text-align: center; }
+.well-icon { margin-bottom: 8px; color: var(--text-muted); }
+.well-title { font-size: var(--text-base); line-height: 22px; font-weight: 500; color: var(--text); }
+.well-sub { margin-top: 5px !important; color: var(--text-muted); font-size: var(--text-xs); line-height: 19px; }
+.well-body .action-btn { margin-top: 10px; padding-inline: 14px; font-size: var(--text-sm); }
+.send-paused { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; min-height: 168px; padding: 12px 20px; text-align: center; color: var(--text-muted); }
+.send-paused p { color: var(--text-secondary); font-size: var(--text-sm); }
+.send-paused span { font-size: var(--text-xs); }
+.session-files { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: start; gap: 16px; margin: 0 20px; padding: 14px 0 16px; border-top: 1px solid var(--border-subtle); }
+.session-heading { display: flex; align-items: flex-start; flex-direction: column; gap: 4px; padding-top: 2px; color: var(--text-secondary); }
+.session-heading .panel-meta { font-size: 11px; line-height: 16px; }
+.session-content { min-width: 0; padding-top: 1px; }
+.recv-list { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; max-height: 102px; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; }
+.recv { display: block; flex: 0 1 auto; max-width: min(100%, 280px); min-width: 0; height: 30px; padding: 0 9px; border: 0; border-radius: var(--radius-sm); background: var(--bg-canvas-input); color: var(--text-secondary); cursor: pointer; font: var(--text-xs)/30px var(--font-ui); text-align: left; transition: background-color var(--transition-fast), color var(--transition-fast); }
+.received-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recv:hover { background: var(--accent-soft); color: var(--text-brand); }
+.recv:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent-ring); color: var(--text-brand); }
+.session-empty { padding: 2px 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 30px; }
+.directory-heading { display: flex; align-items: center; gap: 8px; }
+.directory-list { margin-right: calc(-1 * var(--scrollbar-track)); display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow: auto; scrollbar-gutter: stable; }
+.directory-list > .rcard { flex: none; }
+.dir-row { gap: 12px; min-height: 64px; padding: 0 16px; }
+.dir-row > svg { flex: none; color: var(--text-muted); }
+.dir-info { flex: 1; min-width: 0; }
+.directory-name { display: block; font-size: var(--text-sm); line-height: 20px; color: var(--text); }
+.dir-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; font-size: var(--text-xs); line-height: 18px; color: var(--text-muted); }
+.directory-current { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 400; }
+.directory-target { flex: none; }
+.dir-del:hover:not(:disabled) { color: var(--danger); }
+.dir-add-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: var(--text-xs); color: var(--text-muted); }
+.path-label { flex: none; }
+.dir-add { flex: 1; min-width: 0; height: 34px; }
+.directory-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 8px; font-size: var(--text-xs); line-height: 20px; color: var(--text-muted); }
+.directory-description { min-width: 0; }
+.manual-directory { flex: none; color: var(--text-muted); }
+.directory-empty { padding: 16px; font-size: var(--text-xs); color: var(--text-muted); }
+.lan-load-error { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; padding: 48px 20px; color: var(--text-muted); }
+.lan-load-error h2 { color: var(--text); }
+.lan-load-error p { font-size: var(--text-xs); }
+.lan-load-error .action-btn { margin-top: 4px; }
+.loading-connection { min-height: 140px; padding: 22px 20px; }
+.loading-line, .loading-heading, .loading-well { border-radius: var(--radius-sm); background: var(--fill); }
+.loading-line { width: min(50%, 240px); height: 12px; margin-block: 6px 14px; }
+.loading-heading { width: 86px; height: 14px; margin-block: 24px 12px; }
+.loading-send { padding: 16px 20px; }
+.loading-well { height: 168px; margin-top: 20px; }
+.loading-directory { display: flex; align-items: center; min-height: 64px; padding-inline: 16px; margin-bottom: 6px !important; }
+.loading-directory .loading-line { margin: 0; }
+.fs-drop-hint { position: fixed; z-index: 800; inset: 8px; display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--bg-surface) 88%, transparent); pointer-events: none; }
+.fs-drop-hint b { padding: 16px 24px; border-radius: var(--radius-ib); background: var(--bg-surface); color: var(--text); font-size: var(--text-lg); font-weight: 500; }
+@media (max-width: 900px) {
+  .lan-content { gap: 18px; }
+  .connection-body { padding: 16px; }
+  .connection-meta { gap: 4px 12px; }
+  .target-field { padding-inline: 16px; }
+  .target-field .select { width: 170px; }
+  .file-limit { display: none; }
+  .well-body, .send-paused { min-height: 168px; padding-block: 12px; }
+  .session-files { gap: 12px; margin-inline: 16px; }
 }
-.group-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 14px;
-  font-size: var(--text-base);
-  font-weight: var(--weight-card-title);
-  color: var(--text);
-  border-bottom: 1px solid var(--border);
+@media (max-width: 600px) {
+  .connection-body { gap: 10px; padding: 14px; }
+  .connection-icon { display: none; }
+  .connection-code { font-size: 10px; }
+  .connection-qr, .connection-local { width: 64px; height: 64px; }
+  .connection-meta { font-size: 11px; }
+  .local-address { min-height: 36px; }
+  .target-field { flex-wrap: wrap; gap: 5px; padding: 12px 14px; }
+  .target-field label { font-size: 11px; }
+  .target-field .select { flex: 1; width: auto; min-height: 44px; font-size: var(--text-sm); }
+  .target-path { flex-basis: 100%; padding-left: 46px; font-size: 11px; }
+  .well-body, .send-paused { min-height: 176px; padding: 12px 14px; }
+  .well-title { font-size: var(--text-sm); }
+  .well-sub { font-size: 11px; max-width: 20em; }
+  .well-body .action-btn { min-height: 44px; margin-top: 12px; }
+  .session-files { display: block; margin-inline: 14px; padding-top: 12px; }
+  .session-heading { flex-direction: row; align-items: center; gap: 8px; padding: 0; margin-bottom: 8px; }
+  .recv-list { max-height: 144px; }
+  .recv { max-width: 100%; height: 44px; line-height: 44px; }
+  .panel-heading > .browse-directory { min-height: 44px; }
+  .directory-list { max-height: 320px; }
+  .dir-row { flex-wrap: wrap; gap: 4px 10px; padding: 10px 12px; }
+  .dir-info { flex-basis: calc(100% - 28px); }
+  .directory-current, .directory-target { margin-left: auto; }
+  .directory-target { min-height: 44px; }
+  .dir-del { width: 44px; height: 44px; }
+  .directory-footer { align-items: flex-start; }
+  .manual-directory { min-height: 44px; }
+  .directory-description { max-width: 20em; font-size: 11px; }
+  .dir-add-row { flex-wrap: wrap; }
+  .path-label { flex-basis: 100%; }
+  .dir-add { flex-basis: calc(100% - 100px); min-height: 44px; font-size: var(--text-sm); }
+  .dir-add-row .action-btn, .dir-add-row .ib { min-height: 44px; }
 }
-.group-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 14px;
-}
-.group-row + .group-row { border-top: 1px solid var(--border); }
-.group-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  padding: 8px 14px;
-  border-top: 1px solid var(--border);
-}
-.group-note svg { flex-shrink: 0; }
-.group-note.chip-warn { background: var(--warning-soft); color: var(--warning); border-top: none; }
-.link-btn {
-  border: none;
-  background: none;
-  padding: 0;
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: 600;
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-.link-btn:hover { text-decoration-thickness: 2px }
-
-/* ── 状态横幅：一行说完「谁能访问 + 访问地址」，与穿透页 .tn-head / mock .wh 同档 ── */
-.fs-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--border);
-}
-.banner-dot {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--text-muted);
-}
-.banner-dot.on { background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent) }
-.banner-title { flex-shrink: 0; font-size: var(--text-base); font-weight: 600; color: var(--text) }
-/* 访问地址读起来是"一条 URL"，落收藏页行内 URL 同档：等宽 12 / --text-url */
-.banner-url {
-  min-width: 0;
-  font-size: var(--text-xs);
-  color: var(--text-url);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.banner-url:hover { color: var(--text-brand); }
-/* 防火墙提示挂在暴露范围那句话上（悬停即出），右端只留口令徽标 */
-.banner-acts { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0 }
-
-/* 访问地址行：整行可点复制 */
-.url-row { cursor: pointer; }
-.url-row:hover { background: var(--fill); }
-.url-row code {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  background: none;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-url);
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-gutter: stable;
-}
-
-/* 已投文件行：链接本身就在等宽里，名字不必再单列 */
-.recv-list { border-top: 1px solid var(--border); }
-
-/* ── 拖拽直投卡：运行时展示投递入口，停止后只保留已有提取链接。 ── */
-.drop-card {
-  border: 1.5px dashed var(--border-hover);
-  border-radius: 12px;
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-card);
-  margin-bottom: var(--space-3);
-  transition: border-color var(--transition), background var(--transition);
-}
-.well-body {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 60px;
-  padding: 8px 14px;
-}
-/* 运行时用居中的图标、题字和副字标识投递区域。 */
-.drop-card:not(.off) .well-body {
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-  min-height: 104px;
-  padding: 18px 14px;
-  text-align: center;
-}
-.drop-card:not(.off) .well-title { font-size: var(--text-md); letter-spacing: -0.01em }
-.drop-card:not(.off) .well-sub { margin-top: 0 }
-.well-ico { color: var(--text-muted); flex-shrink: 0 }
-.well-text { min-width: 0 }
-.well-title { font-size: var(--text-sm); font-weight: 600; color: var(--text) }
-.well-sub { font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px }
-.drop-card:hover,
-.drop-card.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.drop-card.active .well-ico,
-.drop-card.active .well-title { color: var(--accent); }
-.drop-card.off { background: var(--bg-surface); border-color: var(--border) }
-.drop-card.off .recv-list { border-top: 0; }
-
-/* 拖入中的整页落点提示：pointer-events 不吃事件，只是把「哪儿都能丢」说清楚。
-   压在弹窗之上（原生拖拽期间弹窗还开着也得看得见），tooltip 之下 */
-.fs-drop-hint {
-  position: fixed;
-  inset: 8px;
-  z-index: 9000;
-  pointer-events: none;
-  border: 2px dashed var(--accent);
-  border-radius: var(--radius-card);
-  /* 只敢薄薄一层：这层纱压在整窗的字上，浅色主题曾用 --accent-soft 62%，
-     量下来页面正文对比被洗到 2.3:1；6% 主色既留着"整窗亮起"的感觉又不吃字 */
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-.fs-drop-hint b {
-  position: absolute;
-  left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%);
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--accent);
-  white-space: nowrap;
-  background: var(--bg-surface);
-  border: 1px solid var(--accent-light);
-  border-radius: var(--radius-pill);
-  padding: 6px 14px;
-  box-shadow: var(--shadow-sm);
-}
-
-/* 多目录才有得选；单目录时这行不出现，避免为一个选项做控件 */
-.dz-dirs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  min-height: 44px;
-  padding: 8px 14px;
-  border-top: 1px solid var(--border);
-}
-.dz-dirs-label { font-size: var(--text-xs); color: var(--text-muted); margin-right: 2px; }
-.dz-dirs .chip { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-
-/* 目录行：图标裸走 16px 描边档，路径读起来是一条地址 */
-.dir-ico { flex-shrink: 0; color: var(--text-muted) }
-.dir-path {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-url);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dir-del { opacity: 0; transition: opacity var(--transition); flex-shrink: 0; }
-.dir-row:hover .dir-del, .dir-row:focus-within .dir-del { opacity: 1; }
-html.hover-suppressed .dir-row:hover .dir-del { opacity: 0; }
-.dir-del.danger:hover {
-  background: var(--danger-soft);
-  color: var(--danger);
-  box-shadow: inset 0 0 0 1px var(--danger-border);
-}
-
-.dir-add-row { gap: var(--space-2); align-items: center; }
-/* 输入 + 按钮成一组，落全站字段档 32px / --radius-sm，与弹窗里的字段同一档 */
-.dir-add { flex: 1; min-width: 0; height: 32px; font-family: var(--font-mono); font-size: var(--text-sm); }
-.add-btn {
-  flex-shrink: 0;
-  height: 32px;
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-}
-
-.input {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  padding: 6px 10px;
-  font-size: var(--text-base);
-  font-family: inherit;
-  transition: border-color var(--transition), box-shadow var(--transition);
-}
-.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+@media (prefers-reduced-motion: reduce) { .lan-page :is(button, input, select, .drop-card) { transition: none; } }
 </style>

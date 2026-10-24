@@ -168,3 +168,18 @@ sync_codex_auth_to_wsl() -> [          // 直接返回逐目标结果；源不�
 - e2e：`PW_CHANNEL=msedge npx playwright test e2e/specs/codex.spec.ts e2e/specs/settings.spec.ts --retries=0` 85 条全绿（含本功能 3 条）。
 - 视觉：800px 宽浅色/深色 + 无目标空态截图目检通过（`.tmp/codex-wsl/settings-wsl-auth-*.png`，本地不入库）。
 - 真机验收待用户执行：在设置页点「立即同步」，确认 WSL `~/.codex/auth.json` 的账号/到期时间变化与 `codex login status` 结果；真实账号动作不由代理代点。
+
+## 11. WSL 共享后台账号核验与重启（2026-10-22）
+
+实测发现：Codex CLI 0.163 默认复用共享 app-server daemon。退出再打开前台不会退出该服务；`auth.json` 已同步且 `codex login status` 显示已登录时，daemon 的 `account/read` 仍可能返回旧账号。因此，以上文件验收只能证明凭据写入，不能证明运行中的后台已切号。
+
+- 每次查询目标状态、同步（包含文件已最新而跳过的目标）后，使用目标发行版和 Linux 用户连接该 Codex 目录的 Unix WebSocket，调用 `account/read(refreshToken=false)`。不刷新 Token、不创建 daemon、不写 `config.toml`。
+- 目标及逐目标同步结果新增 `daemon: {state, email, error}`。状态为 `not-running / matched / restart-required / unknown`；优先比较工作区 account ID，旧版没有工作区字段时回退到邮箱。核验失败显示“后台账号未核验”，不能当作账号已生效。
+- 文件与源一致而后台仍是旧账号时，显示“凭据已同步 · 后台待重启”及后台邮箱。手动同步结果与切号后的提示明确告知待重启；进入页面的自动同步继续静默。
+- 设置 → Codex → WSL 登录态同步提供“重启后台服务”。明确确认该 WSL 用户的共享会话会断开、正在执行的任务会中断后，才调用新增命令 `restart_codex_wsl_daemon(distro, user)`。自动同步仅核验，不自动重启。
+- 重启前重新枚举运行中的目标并验证其凭据仍对应当前 Windows 源，防止旧进程写回凭据后误重启。只允许重启目标用户拥有且 PID/startTicks 与记录一致的受管 Codex daemon；固定使用对应进程的 Codex 程序和目标 `CODEX_HOME`。重启后再次核验预期账号，未一致时返回错误。
+- WSL 内的探针使用 Python 3 标准库，无第三方包；缺少 Python 3、协议不支持或超时都显示核验错误。Python 脚本嵌入 Rust 二进制，不需要部署额外文件。新命令按现有规则受模块开关与解锁鉴权保护。
+
+验证：Python 使用假凭据与本地假 WebSocket 服务验证协议、身份比较和重启分支；前端覆盖待重启提示、锁屏迟到回包与重启期间切号排队；浏览器覆盖取消、成功核验与失败重试。真机仅只读核验，不代用户重启正在承载本次工作的 daemon。
+
+交付验证：前端针对性单测 103 条、Rust 同步单测 9 条、命令鉴权 3 条、Python 探针单测 10 条、浏览器 WSL 用例 7 条通过；TypeScript 检查与前端生产构建通过。Windows 原生 Rust → `wsl.exe -d … -u …` → Python → Unix WebSocket 的只读真机链路也通过，准确识别出文件已更新而后台仍持有旧账号。安装包输出到 `installer/Desko_1.0.0_x64-setup.exe`。

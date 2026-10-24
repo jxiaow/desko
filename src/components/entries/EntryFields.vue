@@ -385,13 +385,13 @@ defineExpose({ save })
 .entry-fields textarea {
   height: 32px;
   padding: 0 10px;
-  font-size: var(--text-sm);
+  font-size: var(--text-content);
 }
-/* 呼吸节奏：标签下距 6px、组距 12px（对齐已验收原型）；行高钉 14px 防全局 18px 撑高 */
-.entry-fields label { font-size: var(--text-xs); line-height: 14px; margin-bottom: 6px; }
+/* 标签与输入内容分一档，行距留足中文上下沿。 */
+.entry-fields label { font-size: var(--text-label); line-height: 20px; margin-bottom: 6px; }
 .entry-fields .form-group { margin-bottom: 12px; }
 .entry-fields .form-row { margin-bottom: 12px; gap: 12px; }
-.entry-fields textarea { height: 52px; padding: 6px 10px; resize: none; line-height: 17px; }
+.entry-fields textarea { height: 58px; padding: 6px 10px; resize: none; line-height: var(--leading-copy); }
 .entry-fields .cred-row { margin: 12px 0; }
 .entry-fields .notes-group { margin-bottom: 0; }
 .url-mono { font-family: var(--font-mono); }

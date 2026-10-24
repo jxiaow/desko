@@ -8,21 +8,25 @@ import NoteFullscreen from '../notes/NoteFullscreen.vue'
 
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: vi.fn(() => { throw new Error('no native window in browser') }) }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ meta: {}, path: '/notes' }) }))
-vi.mock('../../modules/state', () => ({ enabledModules: [] }))
+vi.mock('../../modules/state', () => ({ enabledModules: { value: [] }, webModuleGroups: { value: [] } }))
 
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   const meta = document.createElement('meta')
   meta.name = 'desko-runtime'
   meta.content = 'web'
   document.head.append(meta)
 })
-afterEach(() => document.querySelectorAll('meta[name="desko-runtime"]').forEach(meta => meta.remove()))
+afterEach(() => {
+  document.querySelectorAll('meta[name="desko-runtime"]').forEach(meta => meta.remove())
+  vi.unstubAllGlobals()
+})
 
 describe('浏览器窗口控件', () => {
-  it('标题栏隐藏原生窗口与备份控件，侧栏收起时退出入口才回到带子', async () => {
-    const wrapper = mount(TitleBar, { props: { sidebarHidden: true }, global: { stubs: { AppIcon: true, BackupBadge: true } } })
+  it('标题栏隐藏原生窗口与备份控件，退出入口位于带子', async () => {
+    const wrapper = mount(TitleBar, { global: { stubs: { AppIcon: true, BackupBadge: true } } })
     expect(wrapper.find('[title="最小化"]').exists()).toBe(false)
     expect(wrapper.find('[title="最大化"]').exists()).toBe(false)
     expect(wrapper.find('[title="关闭"]').exists()).toBe(false)
@@ -34,28 +38,25 @@ describe('浏览器窗口控件', () => {
     expect(getCurrentWindow).not.toHaveBeenCalled()
     wrapper.unmount()
   })
-  it('侧栏在位时带子不带设置与退出，两份入口不并存', async () => {
-    const wrapper = mount(TitleBar, { global: { stubs: { AppIcon: true, BackupBadge: true } } })
-    expect(wrapper.find('[title="设置"]').exists()).toBe(false)
+  it('锁定时隐藏页栏、菜单和退出入口', async () => {
+    const wrapper = mount(TitleBar, { props: { isLocked: true }, global: { stubs: { AppIcon: true, BackupBadge: true } } })
+    expect(wrapper.find('#workspace-page-toolbar').exists()).toBe(false)
+    expect(wrapper.find('.titlebar-brandcell').exists()).toBe(false)
     expect(wrapper.find('[title="退出浏览器访问"]').exists()).toBe(false)
     wrapper.unmount()
   })
-  it('轨底承担设置与退出', async () => {
-    const sidebar = mount(Sidebar, { props: { collapsed: true }, global: { stubs: { AppIcon: true, RouterLink: true } } })
+  it('侧栏的设置和退出各自发出对应事件', async () => {
+    const sidebar = mount(Sidebar, { global: { stubs: { AppIcon: true, RouterLink: true } } })
     await sidebar.get('.sidebar-foot button[title="设置"]').trigger('click')
-    await sidebar.get('.sidebar-foot button[title="退出浏览器访问"]').trigger('click')
     expect(sidebar.emitted('openSettings')).toHaveLength(1)
+    await sidebar.get('.sidebar-foot button[aria-label="退出浏览器访问"]').trigger('click')
     expect(sidebar.emitted('lock')).toHaveLength(1)
     sidebar.unmount()
   })
-  it('侧栏和小记全屏的标题拖动不调用原生窗口', async () => {
-    const sidebar = shallowMount(Sidebar, { props: { collapsed: false }, global: { stubs: { RouterLink: true } } })
-    await sidebar.get('.sidebar-top').trigger('mousedown')
-    await sidebar.get('.sidebar-top').trigger('dblclick')
+  it('小记全屏的标题拖动不调用原生窗口', async () => {
     const fullscreen = shallowMount(NoteFullscreen, { props: { note: null, initialHtml: '', mode: 'view' }, global: { stubs: { Teleport: false } } })
     await fullscreen.get('.fs-head').trigger('mousedown')
     expect(getCurrentWindow).not.toHaveBeenCalled()
-    sidebar.unmount()
     fullscreen.unmount()
   })
 })

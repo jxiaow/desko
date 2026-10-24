@@ -40,7 +40,7 @@ const formatNumber = (value: number) => value.toLocaleString('zh-CN', { maximumF
     </template>
     <div v-else class="quota-empty">
       <span class="quota-heading">额度状态</span>
-      <span class="q-when" :class="{ bad: error }" :title="error || undefined">{{ error ? '配额拉取失败' : pending ? '授权后获取额度' : account.auth_mode === 'apikey' ? '按供应商计费' : '暂无配额' }}</span>
+      <span class="q-when" :class="{ bad: error }" :title="error || undefined">{{ error ? '配额获取失败' : pending ? '授权后获取额度' : account.auth_mode === 'apikey' ? '按供应商计费' : '暂无配额' }}</span>
       <span v-if="!error && account.auth_mode === 'apikey'" class="quota-explanation">此服务未提供额度数据</span>
     </div>
   </div>
@@ -53,7 +53,7 @@ const formatNumber = (value: number) => value.toLocaleString('zh-CN', { maximumF
 .q { display: grid; grid-template-columns: 88px minmax(0, 1fr) 40px; align-items: center; gap: 4px 8px; min-width: 0; color: var(--text-secondary); font-size: var(--text-xs); }
 .q-top { display: contents; }
 .q-tag { grid-column: 1; grid-row: 1; min-width: 0; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.q-num { grid-column: 3; grid-row: 1; text-align: right; color: var(--text); font-size: 16px; font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.q-num { grid-column: 3; grid-row: 1; text-align: right; color: var(--text); font-size: var(--text-lg); font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .q-num small { margin-left: 2px; color: var(--text-muted); font-size: var(--text-xs); font-weight: 400; }
 .q-bar { grid-column: 2; grid-row: 1; display: block; height: 5px; border-radius: 3px; background: var(--fill); overflow: hidden; }
 .q-bar i { display: block; height: 100%; background: var(--success); border-radius: inherit; }

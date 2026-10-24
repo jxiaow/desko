@@ -9,8 +9,10 @@ import {
   type CodexSessionRecord,
   type CodexSessionTokenStats,
   type CodexTrashedSessionRecord,
-  type CodexWslAuthStatus,
-  type CodexWslAuthSyncResult,
+  type CodexWslAssignment,
+  type CodexSwitchPolicy,
+  type CodexSwitchOutcome,
+  type CodexWslOutcome,
 } from './api/codex'
 import { errText } from './api/backup'
 import { settingsApi } from './api/settings'
@@ -49,11 +51,14 @@ export const switchStep = ref('')
 
 /** 后端 emit_codex_switch_step 的步名，翻成人话再上界面 */
 const SWITCH_STEPS: Record<string, string> = {
-  credentials: '读取凭据',
-  accessToken: '校验访问令牌',
+  credentials: '读取账号信息',
+  accessToken: '验证登录状态',
   refreshTokens: '刷新令牌',
-  writeCredentials: '写入官方凭据',
+  writeCredentials: '更新登录信息',
   syncSettings: '同步配置',
+  closeWindows: '关闭 Windows Codex',
+  reopenWindows: '重新打开 Windows Codex',
+  applyWsl: '切换 WSL 账号',
 }
 
 /** 这个事件是三套形状混发的：步进带 step/stepStatus，收口带 type */
@@ -66,7 +71,7 @@ export interface SwitchProgress {
 
 export function applySwitchProgress(p: SwitchProgress): void {
   if (!switchingId.value || (p.accountId && p.accountId !== switchingId.value)) return
-  if (p.type === 'complete' || p.type === 'error' || p.type === 'cancelled') {
+  if (p.type === 'complete' || p.type === 'error') {
     switchStep.value = ''
     return
   }
@@ -124,14 +129,10 @@ export function clearCodexSession(): void {
   switchingId.value = ''
   switchStep.value = ''
   storagePaths.value = null
-  wslAuthStatusEpoch++
-  wslAuthStatus.value = null
-  wslAuthStatusBusy.value = false
-  wslAuthStatusError.value = ''
-  wslAuthResults.value = null
-  wslAuthAutoAttemptAt = 0
-  wslAuthSyncAfterSwitchQueued = false
-  // 在途原生命令无法取消；保留 syncing，避免解锁后与它并发写入。
+  wslAssignmentEpoch++
+  wslAssignment.value = null
+  switchRestartReady.value = false
+  switchRestartWindows.value = false
   recycledAccounts.value = []
   recycledLoaded.value = false
   batchDeleteDialogOpen.value = false
@@ -144,7 +145,11 @@ export function clearCodexSession(): void {
   sessionQuery.value = ''
   sessionSearchMode.value = 'title'
   sessionTokens.value = {}
+  sessionTokensLoaded.value = new Set()
+  sessionTokensPending.value = new Set()
+  sessionTokensError.value = ''
   sessionOpenGroups.value = new Set()
+  sessionGroupsInitialized = false
   sessionOpenId.value = ''
   rescanQueued = false
   trashSessions.value = []
@@ -201,75 +206,60 @@ async function readVisibilityProvider(): Promise<string> {
 /** 切号收尾：凭据形态变了（OAuth ↔ API Key）会改写 config.toml 的 model_provider，
  *  官方客户端侧栏按它过滤 threads，旧会话会集体消失。值变了就补一次 quick 修复把旧会话挂回来；
  *  修复带改前备份、不联网。文案要留够读完的时间，故走 info/error 档。 */
-async function finishSwitch(providerBefore: string, providerAfter: string, epoch: number): Promise<void> {
-  if (epoch !== accountEpoch) return
-  const toast = useToastStore()
-  if (!providerBefore || !providerAfter || providerBefore === providerAfter) {
-    toast.showToast('已切换账号')
-    return
-  }
-  toast.showToast('凭据形态已变，正在修复会话可见性…', 'info')
+async function finishSwitch(providerBefore: string, providerAfter: string, epoch: number): Promise<{ warning?: string; repaired?: number } | undefined> {
+  if (epoch !== accountEpoch || !providerBefore || !providerAfter || providerBefore === providerAfter) return
+  switchStep.value = '同步会话列表'
   try {
-    const s = await codexApi.repairSessionVisibility()
-    if (epoch !== accountEpoch) return
-    const n = s.updatedSqliteRowCount + s.changedRolloutFileCount
-    toast.showToast(n > 0 ? `已切换账号，并修复 ${n} 处会话可见性` : '已切换账号，会话可见性无需修复')
+    const result = await codexApi.repairSessionVisibility()
+    if (epoch === accountEpoch) return { repaired: result.updatedSqliteRowCount + result.changedRolloutFileCount }
   } catch (e) {
-    if (epoch !== accountEpoch) return
-    toast.showToast(`已切换账号，但会话可见性修复失败：${errText(e)}`, 'error')
+    if (epoch === accountEpoch) return { warning: `会话列表同步失败：${errText(e)}` }
   }
 }
 
-export async function switchTo(id: string): Promise<boolean> {
-  if (busyId.value) return false
+export function switchOutcomeText(outcome: CodexSwitchOutcome): string {
+  const parts = [`已切换到 ${outcome.account.email}`]
+  const windows = []
+  if (outcome.windows.reopenedApp) windows.push(`${outcome.windows.reopenedApp} 个应用`)
+  if (outcome.windows.reopenedCli) windows.push(`${outcome.windows.reopenedCli} 个 CLI`)
+  if (windows.length) parts.push(`Windows 重开 ${windows.join('、')}`)
+  if (outcome.windows.reopenFailures) parts.push(`${outcome.windows.reopenFailures} 个 Windows Codex 未能重开`)
+  const wsl = outcome.wsl
+  if (wsl?.status === 'skipped') parts.push('未检测到 WSL 目标')
+  else if (wsl?.status === 'aborted') parts.push('WSL 未跟随，请手动退出后重试')
+  else if (wsl?.failures.length) parts.push(`WSL ${wsl.written} 个目标成功、${wsl.failures.length} 个失败`)
+  else if (wsl?.written) parts.push(`WSL ${wsl.written} 个目标已切换`)
+  if (outcome.warnings?.length) parts.push(...outcome.warnings)
+  return parts.join('；')
+}
+export async function switchTo(id: string, policy: CodexSwitchPolicy): Promise<CodexSwitchOutcome | null> {
+  if (busyId.value) throw new Error('正在处理账号，请稍后重试')
   const epoch = accountEpoch
-  const toast = useToastStore()
-  busyId.value = id
-  switchingId.value = id
+  busyId.value = id; switchingId.value = id
   try {
     const providerBefore = await readVisibilityProvider()
-    if (epoch !== accountEpoch) return false
-    await codexApi.switch(id)
-    if (epoch !== accountEpoch) return false
+    if (epoch !== accountEpoch) return null
+    const result = await codexApi.switchCodexAccount(id, policy)
+    if (epoch !== accountEpoch) return null
     const providerAfter = await readVisibilityProvider()
-    if (epoch !== accountEpoch) return false
+    if (epoch !== accountEpoch) return null
     await refreshAccounts()
-    if (epoch !== accountEpoch) return false
-    await finishSwitch(providerBefore, providerAfter, epoch)
-    if (epoch !== accountEpoch) return false
-    void autoSyncWslAuthAfterSwitch()
-    return true
+    if (epoch !== accountEpoch) return null
+    const repair = await finishSwitch(providerBefore, providerAfter, epoch)
+    if (repair?.warning) result.warnings = [...result.warnings ?? [], repair.warning]
+    if (epoch !== accountEpoch) return null
+    void loadWslAssignment()
+    const partial = result.windows.reopenFailures > 0 || !!result.wsl?.failures.length || !!result.warnings?.length
+    const repairText = (repair?.repaired ?? 0) > 0 ? '；已同步会话列表' : ''
+    useToastStore().showToast(switchOutcomeText(result) + repairText, partial ? 'error' : 'success')
+    return result
   } catch (e) {
-    if (epoch !== accountEpoch) return false
-    const text = errText(e)
-    if (text.includes('CODEX_START_CANCELLED')) {
-      // 取消点有两处：写凭据前=没动过，写完之后=已经改完才报取消，所以只重读列表、不谎称未改动
-      await refreshAccounts()
-      if (epoch === accountEpoch) toast.showToast('已取消切换，以列表里的「当前」为准')
-    } else {
-      toast.showToast(text, 'error')
-    }
-    return false
+    if (epoch !== accountEpoch) return null
+    await refreshAccounts()
+    if (epoch !== accountEpoch) return null
+    throw e
   } finally {
-    if (epoch === accountEpoch) {
-      busyId.value = ''
-      switchingId.value = ''
-      // 收口事件偶尔抢跑或漏发都不该把进度字留在页面上
-      switchStep.value = ''
-    }
-  }
-}
-
-/** 切号中点「取消」：只发消歧信号，收口仍由 switchTo 的 catch 做，避免两处各报一次 */
-export async function cancelSwitch(id: string): Promise<void> {
-  const toast = useToastStore()
-  if (switchingId.value !== id) return
-  const epoch = accountEpoch
-  try {
-    await codexApi.cancelSwitch(id)
-    if (epoch === accountEpoch && switchingId.value === id) switchStep.value = '正在取消…'
-  } catch (e) {
-    if (epoch === accountEpoch) toast.showToast(errText(e), 'error')
+    if (epoch === accountEpoch) { busyId.value = ''; switchingId.value = ''; switchStep.value = '' }
   }
 }
 
@@ -430,6 +420,10 @@ export const sessionQuery = ref('')
 export const sessionSearchMode = ref<'title' | 'content'>('title')
 /** 会话 ID → 官方 token 累计；进这一档一次全量预取，展开只补缺 */
 export const sessionTokens = ref<Record<string, CodexSessionTokenStats>>({})
+/** 已读取但没有用量的会话也算完成；与读取失败严格区分。 */
+export const sessionTokensLoaded = ref<Set<string>>(new Set())
+export const sessionTokensPending = ref<Set<string>>(new Set())
+export const sessionTokensError = ref('')
 /** 组展开态住在这一档而不是面板里：组件被 v-if 卸挂不该把用户翻开的组一起带走 */
 export const sessionOpenGroups = ref<Set<string>>(new Set())
 export const sessionOpenId = ref('')
@@ -438,6 +432,7 @@ export const sessionOpenId = ref('')
 let rescanQueued = false
 let sessionTokensVersion = 0
 let sessionSourcesVersion = 0
+let sessionGroupsInitialized = false
 
 export async function loadSessions({ background = false }: { background?: boolean } = {}): Promise<void> {
   if (sessionsBusy.value) {
@@ -460,13 +455,21 @@ export async function loadSessions({ background = false }: { background?: boolea
       rescanQueued = true
     } else {
       sessions.value = list
+      if (!query && list.length && !sessionGroupsInitialized) {
+        const recent = list.reduce((latest, session) => (session.updatedAt ?? 0) > (latest.updatedAt ?? 0) ? session : latest)
+        if (!sessionOpenGroups.value.size) sessionOpenGroups.value = new Set([recent.cwd.trim() || '∅'])
+        sessionGroupsInitialized = true
+      }
       if (!query) sessionTotalCount.value = list.length
       sessionsLoaded.value = true
       refreshed = true
       // 刷新沿用旧数字直到新统计返回；旧请求不能覆盖这一轮的结果。
       sessionTokensVersion++
+      sessionTokensPending.value = new Set()
+      sessionTokensError.value = ''
       const ids = new Set(list.map(s => s.sessionId))
       sessionTokens.value = Object.fromEntries(Object.entries(sessionTokens.value).filter(([id]) => ids.has(id)))
+      sessionTokensLoaded.value = new Set([...sessionTokensLoaded.value].filter(id => ids.has(id)))
     }
   } catch (e) {
     if (epoch !== accountEpoch) return
@@ -483,8 +486,7 @@ export async function loadSessions({ background = false }: { background?: boolea
     if (epoch === accountEpoch) sessionsBusy.value = false
   }
   if (epoch !== accountEpoch) return
-  // 列表一出来就把全部会话的 token 一次带走：本机实测 67 个 rollout 尾扫 218 ms，
-  // 等展开才取等于把合计量永远藏在水下。不 await，别让数字拖慢首屏的目录名。
+  // 列表先呈现，统计独立加载；展开项目复用同一批在途请求。
   if (refreshed && !rescanQueued) void loadSessionTokens(sessions.value.map((s) => s.sessionId), true)
   if (rescanQueued) {
     rescanQueued = false
@@ -492,26 +494,34 @@ export async function loadSessions({ background = false }: { background?: boolea
   }
 }
 
-/** 顶栏「刷新」：丢掉 token 缓存再重扫，取数由 loadSessions 的全量预取接手 */
+/** 刷新期间保留已有读数，新统计返回后整体替换。 */
 export async function reloadSessions(): Promise<void> {
-  sessionTokens.value = {}
-  await loadSessions()
+  await loadSessions({ background: sessionsLoaded.value })
 }
 
-/** 按 id 批量取 token，只问缺的那几条。列表已经出来了，所以失败只留空与 console.warn，不播 toast */
+/** 缺数才补取，合并展开期间的重复请求；失败保留旧数并允许重试。 */
 export async function loadSessionTokens(ids: string[], force = false): Promise<void> {
-  const missing = ids.filter((id) => force || !sessionTokens.value[id])
+  const missing = [...new Set(ids)].filter(id => !sessionTokensPending.value.has(id)
+    && (force || (!sessionTokens.value[id] && !sessionTokensLoaded.value.has(id))))
   if (!missing.length) return
   const epoch = accountEpoch
   const version = sessionTokensVersion
+  sessionTokensPending.value = new Set([...sessionTokensPending.value, ...missing])
+  sessionTokensError.value = ''
   try {
     const records = await codexApi.sessionTokenStats(missing)
     if (epoch !== accountEpoch || version !== sessionTokensVersion) return
     const next = { ...sessionTokens.value }
+    for (const id of missing) delete next[id]
     for (const r of records) next[r.sessionId] = r
     sessionTokens.value = next
+    sessionTokensLoaded.value = new Set([...sessionTokensLoaded.value, ...missing])
   } catch (e) {
-    console.warn('会话 token 统计取数失败', e)
+    if (epoch === accountEpoch && version === sessionTokensVersion) sessionTokensError.value = errText(e)
+  } finally {
+    if (epoch === accountEpoch && version === sessionTokensVersion) {
+      sessionTokensPending.value = new Set([...sessionTokensPending.value].filter(id => !missing.includes(id)))
+    }
   }
 }
 
@@ -548,6 +558,8 @@ export async function moveSessionToTrash(sessionId: string): Promise<string> {
   if (epoch !== accountEpoch) return ''
   sessionSourcesVersion++
   sessionTokensVersion++
+  sessionTokensPending.value = new Set()
+  sessionTokensLoaded.value = new Set([...sessionTokensLoaded.value].filter(id => id !== sessionId))
   if (sessions.value.some(s => s.sessionId === sessionId)) {
     sessionTotalCount.value = Math.max(0, sessionTotalCount.value - 1)
   }
@@ -640,18 +652,18 @@ export async function deleteRecycledAccount(recycleId: string): Promise<string> 
   await codexApi.deleteRecycled(recycleId)
   if (epoch !== accountEpoch) return ''
   dropRecycledRow(recycleId)
-  return '已彻底删除这条留底'
+  return '账号已彻底删除'
 }
 
 /** 清空的范围等于刚看到的那份清单，别处新删的号不在里面 */
 export async function emptyRecycledAccounts(): Promise<string> {
   const epoch = accountEpoch
   const ids = recycledAccounts.value.map((r) => r.id)
-  if (!ids.length) return '账号留底已经是空的'
+  if (!ids.length) return '没有已删除的账号'
   await codexApi.emptyRecycled(ids)
   if (epoch !== accountEpoch) return ''
   recycledAccounts.value = []
-  return `已彻底删除 ${ids.length} 条留底`
+  return `已彻底删除 ${ids.length} 个账号`
 }
 
 function dropRecycledRow(recycleId: string): void {
@@ -819,7 +831,7 @@ export async function closeBatchDeleteDialog(): Promise<void> {
 /** 删除作业没有 cancel，暂停中的任务只能放弃；已删掉的那几条不会回来，它们在回收站里 */
 export async function abandonBatchDelete(): Promise<string> {
   await clearBatchDeleteJob()
-  return '已放弃这个删除任务，删掉的账号在回收站里可以还原'
+  return '任务已放弃，已删除账号可在回收站恢复'
 }
 
 async function clearBatchDeleteJob(): Promise<void> {
@@ -852,7 +864,7 @@ export const usageToday = ref<{ totalTokens: number; estimatedCostUsd: number | 
 export const usageTodayUpdatedAt = ref<number | null>(null)
 let usageSourcesVersion = 0
 const USAGE_TODAY_TTL = 10 * 60_000
-let usageTodayBusy = false
+let usageTodayRequest: Promise<void> | null = null
 const USAGE_RANGES: UsageRange[] = ['today', 'week', 'month', 'all']
 const usageWindowCache = new Map<UsageRange, {
   report: CodexSessionUsageReport; updatedAt: number; fromTimestamp: number | null
@@ -907,118 +919,56 @@ async function saveUsageSetting(key: string, value: string): Promise<void> {
   if (refresh) void loadUsage()
 }
 
-/**
- * WSL 登录态同步：源是 Windows 官方 Codex 登录态，目标只认运行中的发行版。
- * 开关默认关；自动触发只在切号后与进入 Codex 页时各跑一次，不挂后台定时器。
- */
-export const wslAuthStatus = ref<CodexWslAuthStatus | null>(null)
-export const wslAuthStatusBusy = ref(false)
-export const wslAuthStatusError = ref('')
-export const wslAuthSyncing = ref(false)
-export const wslAuthResults = ref<CodexWslAuthSyncResult[] | null>(null)
-const KEY_WSL_AUTH_AUTO_SYNC = 'codex_wsl_auth_auto_sync'
-const WSL_AUTH_AUTO_SYNC_INTERVAL_MS = 10 * 60_000
-let wslAuthAutoAttemptAt = 0
-let wslAuthStatusEpoch = 0
-let wslAuthAutoSyncVersion = 0
-let wslAuthSyncAfterSwitchQueued = false
-
-export async function loadWslAuthStatus(): Promise<CodexWslAuthStatus | null> {
-  if (isWebRuntime()) return null
-  const sessionEpoch = accountEpoch
-  const epoch = ++wslAuthStatusEpoch
-  const autoSyncVersion = wslAuthAutoSyncVersion
-  wslAuthStatusBusy.value = true
-  wslAuthStatusError.value = ''
-  try {
-    let status = await codexApi.wslAuthStatus()
-    if (sessionEpoch !== accountEpoch) return null
-    if (autoSyncVersion !== wslAuthAutoSyncVersion && wslAuthStatus.value) {
-      status = { ...status, autoSync: wslAuthStatus.value.autoSync }
-    }
-    // 同会话的旧查询仍可服务其自动同步调用者，只让最新查询更新界面。
-    if (epoch === wslAuthStatusEpoch) wslAuthStatus.value = status
-    return status
-  } catch (e) {
-    if (epoch === wslAuthStatusEpoch) wslAuthStatusError.value = errText(e)
-    return null
-  } finally {
-    if (epoch === wslAuthStatusEpoch) wslAuthStatusBusy.value = false
-  }
-}
-
-export async function saveWslAuthAutoSync(enabled: boolean): Promise<void> {
-  const epoch = accountEpoch
-  await settingsApi.setSetting(KEY_WSL_AUTH_AUTO_SYNC, String(enabled))
-  if (epoch !== accountEpoch) return
-  wslAuthAutoSyncVersion++
-  if (wslAuthStatus.value) wslAuthStatus.value = { ...wslAuthStatus.value, autoSync: enabled }
-}
-
-export async function syncWslAuth(opts: { silent?: boolean } = {}): Promise<CodexWslAuthSyncResult[] | null> {
-  if (wslAuthSyncing.value || isWebRuntime()) return null
-  const epoch = accountEpoch
-  const toast = useToastStore()
-  wslAuthSyncing.value = true
-  wslAuthResults.value = null
-  wslAuthAutoAttemptAt = Date.now()
-  try {
-    const results = await codexApi.syncWslAuth()
-    if (epoch !== accountEpoch) return null
-    wslAuthResults.value = results
-    await loadWslAuthStatus()
-    if (epoch !== accountEpoch) return null
-    if (!opts.silent) {
-      const failed = results.filter((result) => result.status === 'failed').length
-      const synced = results.filter((result) => result.status === 'synced').length
-      if (failed) toast.showToast(`WSL 登录态同步完成，${failed} 个目标失败`, 'error')
-      else if (synced) toast.showToast(`已同步 ${synced} 个 WSL 目标`)
-      else toast.showToast('WSL 登录态已是最新', 'info')
-    }
-    return results
-  } catch (e) {
-    if (epoch !== accountEpoch) return null
-    if (opts.silent) wslAuthStatusError.value = errText(e)
-    else toast.showToast(errText(e), 'error')
-    return null
-  } finally {
-    wslAuthSyncing.value = false
-    if (wslAuthSyncAfterSwitchQueued) {
-      wslAuthSyncAfterSwitchQueued = false
-      void autoSyncWslAuthAfterSwitch()
-    }
-  }
-}
-
-/** 进 Codex 页的轻量触发：10 分钟节流只在内存里，不落盘。 */
-export async function autoSyncWslAuthOnEnter(): Promise<void> {
+/** WSL 身份只读探测；进入账号页及显式写入后刷新，不挂定时同步。 */
+export const wslAssignment = ref<CodexWslAssignment | null>(null)
+let wslAssignmentEpoch = 0
+export async function loadWslAssignment(): Promise<void> {
   if (isWebRuntime()) return
-  if (wslAuthStatus.value && !wslAuthStatus.value.autoSync) return
-  if (Date.now() - wslAuthAutoAttemptAt < WSL_AUTH_AUTO_SYNC_INTERVAL_MS) return
-  wslAuthAutoAttemptAt = Date.now()
-  const epoch = accountEpoch
-  const status = await loadWslAuthStatus()
-  if (epoch !== accountEpoch) return
-  if (!status?.autoSync || !status.source.available || status.source.expired || !status.targets.length) return
-  await syncWslAuth({ silent: true })
+  const session = accountEpoch
+  const epoch = ++wslAssignmentEpoch
+  try {
+    const result = await codexApi.getCodexWslAssignment()
+    if (session === accountEpoch && epoch === wslAssignmentEpoch) wslAssignment.value = result.error ? null : result
+  } catch { if (session === accountEpoch && epoch === wslAssignmentEpoch) wslAssignment.value = null }
 }
-
-/** 切号成功后的自动同步：账号变了，不受 10 分钟节流限制。 */
-export async function autoSyncWslAuthAfterSwitch(): Promise<void> {
-  if (isWebRuntime()) return
-  if (wslAuthSyncing.value) {
-    wslAuthSyncAfterSwitchQueued = true
-    return
-  }
+export const switchRestartWindows = ref(false)
+export const switchRestartReady = ref(false)
+export const switchRestartSaving = ref(false)
+const KEY_SWITCH_RESTART = 'codex_switch_restart_codex'
+export async function loadSwitchRestart(): Promise<void> {
   const epoch = accountEpoch
-  const status = await loadWslAuthStatus()
-  if (epoch !== accountEpoch) return
-  if (!status?.autoSync || !status.source.available || status.source.expired || !status.targets.length) return
-  if (wslAuthSyncing.value) {
-    wslAuthSyncAfterSwitchQueued = true
-    return
-  }
-  await syncWslAuth({ silent: true })
+  const value = isWebRuntime() ? 'false' : await settingsApi.getSetting(KEY_SWITCH_RESTART)
+  if (epoch === accountEpoch) { switchRestartWindows.value = value === 'true'; switchRestartReady.value = true }
+}
+export async function saveSwitchRestart(value: boolean): Promise<void> {
+  if (switchingId.value || switchRestartSaving.value) throw new Error('正在切换账号，请稍后修改')
+  const epoch = accountEpoch
+  switchRestartSaving.value = true
+  try {
+    await settingsApi.setSetting(KEY_SWITCH_RESTART, String(value))
+    if (epoch === accountEpoch) switchRestartWindows.value = value
+  } finally { switchRestartSaving.value = false }
+}
+export function wslOutcomeText(email: string, result: CodexWslOutcome): string {
+  if (result.status === 'aborted') return 'WSL 未切换，请手动退出 Codex 后重试'
+  if (result.status === 'skipped') return '未检测到运行中的 WSL 目标'
+  if (result.failures.length) return `WSL ${result.written} 个目标成功、${result.failures.length} 个失败`
+  if (!result.written) return `${email} 已用于 WSL，无需重复写入`
+  const closed = result.daemonsStopped + result.clisStopped
+  return `${email} 已用于 WSL；${result.written} 个目标${closed ? `，${closed} 个 Codex 已关闭` : ''}`
+}
+export async function assignToWsl(account: CodexAccount): Promise<CodexWslOutcome | null> {
+  if (busyId.value) throw new Error('正在处理账号，请稍后重试')
+  const epoch = accountEpoch
+  busyId.value = account.id; switchingId.value = account.id; switchStep.value = '切换 WSL 账号'
+  try {
+    const result = await codexApi.assignCodexAccountToWsl(account.id)
+    if (epoch !== accountEpoch) return null
+    await loadWslAssignment()
+    if (epoch !== accountEpoch) return null
+    useToastStore().showToast(wslOutcomeText(account.email, result), result.failures.length ? 'error' : 'success')
+    return result
+  } finally { if (epoch === accountEpoch) { busyId.value = ''; switchingId.value = ''; switchStep.value = '' } }
 }
 
 function publishToday(report: CodexSessionUsageReport, updatedAt: number): void {
@@ -1042,24 +992,33 @@ function adoptCachedToday(): boolean {
 /** 10 分钟缓存；用量页正在全扫时只认缓存，绝不并发起第二份扫描 */
 export async function loadTodayUsage(): Promise<void> {
   adoptCachedToday()
+  const updatedAt = usageTodayUpdatedAt.value
+  if (updatedAt != null && localDayKey(new Date(updatedAt)) !== localDayKey(new Date())) {
+    usageToday.value = null
+    usageTodayUpdatedAt.value = null
+  }
   if (usageToday.value && Date.now() - (usageTodayUpdatedAt.value ?? 0) < USAGE_TODAY_TTL) return
-  if (usageTodayBusy || usageBusy.value) return
+  if (usageTodayRequest) return usageTodayRequest
+  if (usageBusy.value) return
   const epoch = accountEpoch
   const sourcesVersion = usageSourcesVersion
-  usageTodayBusy = true
   const queryAt = Date.now()
   const fromTimestamp = usageWindowFrom('today', new Date(queryAt))
   const toTimestamp = Math.floor(queryAt / 1000) + 1
-  try {
-    const report = await codexApi.querySessionUsage(fromTimestamp, toTimestamp, { today: fromTimestamp })
-    if (epoch !== accountEpoch || sourcesVersion !== usageSourcesVersion) return
-    if (localDayKey(new Date(queryAt)) !== localDayKey(new Date())
-      || fromTimestamp !== usageWindowFrom('today')) return
-    publishToday(report, queryAt)
-  } catch {
-    // 今日用量只是挂件的第二行；失败保留旧值，不弹 toast
-  } finally {
-    usageTodayBusy = false
+  const request = (async () => {
+    try {
+      const report = await codexApi.querySessionUsage(fromTimestamp, toTimestamp, { today: fromTimestamp })
+      if (epoch !== accountEpoch || sourcesVersion !== usageSourcesVersion) return
+      if (localDayKey(new Date(queryAt)) !== localDayKey(new Date())
+        || fromTimestamp !== usageWindowFrom('today')) return
+      publishToday(report, queryAt)
+    } catch {
+      // 今日用量只是挂件的第二行；失败保留同一天的旧值，不弹 toast。
+    }
+  })()
+  usageTodayRequest = request
+  try { await request } finally {
+    if (usageTodayRequest === request) usageTodayRequest = null
   }
 }
 
@@ -1069,6 +1028,8 @@ export async function loadUsage(): Promise<void> {
   usageError.value = ''
   const epoch = accountEpoch
   try {
+    // 挂件先发起的扫描也要等待，避免同时争抢磁盘与 WSL 通道。
+    if (usageTodayRequest) await usageTodayRequest
     // 一次扫描产出四个范围；扫描期间可继续切换，完成后只展示当前选择。
     while (epoch === accountEpoch) {
       const range = usageRange.value

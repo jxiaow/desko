@@ -14,12 +14,20 @@ const props = defineProps<{
   modal?: boolean
   /** 定宽面板：盖掉 .popover 的 148px 下限，给规格化的窄菜单（如 136px 动作单） */
   width?: number
+  /** 选项菜单与锚定输入框同宽，窗口缩放时一并更新。 */
+  matchWidth?: boolean
+  role?: 'menu' | 'dialog'
+  ariaLabel?: string
+  panelClass?: string
+  /** 项目设置可在浮层内展开另一个传送到 body 的选项菜单。 */
+  nestedMenus?: boolean
 }>()
 
 const emit = defineEmits<{ close: [] }>()
 
 const panel = ref<HTMLElement | null>(null)
-const pos = ref({ top: 0, left: 0 })
+const pos = ref<{ top: number; left: number; width?: number }>({ top: 0, left: 0, width: props.width })
+let anchorObserver: ResizeObserver | undefined
 
 const place = () => {
   if (!pageActive.value) return
@@ -27,9 +35,12 @@ const place = () => {
   const el = panel.value
   if (!a || !el) return
   const r = a.getBoundingClientRect()
+  const desiredWidth = props.matchWidth ? Math.min(r.width, window.innerWidth - 16) : props.width
+  el.style.width = desiredWidth ? `${desiredWidth}px` : ''
   const { width, height } = el.getBoundingClientRect()
   const wantLeft = props.align === 'start' ? r.left : r.right - width
   pos.value = {
+    width: desiredWidth,
     left: Math.max(8, Math.min(wantLeft, window.innerWidth - width - 8)),
     top: window.innerHeight - r.bottom > height + 16
       ? r.bottom + 6
@@ -42,6 +53,7 @@ const onPointerDown = (e: MouseEvent) => {
   const target = e.target as Node
   if (panel.value?.contains(target)) return
   if (props.anchor?.contains(target)) return
+  if (props.nestedMenus && (target as Element).closest?.('.popover.modal')) return
   emit('close')
 }
 
@@ -55,12 +67,18 @@ const onReflow = () => place()
 
 onMounted(() => {
   place()
+  anchorObserver = new ResizeObserver(place)
+  if (panel.value) anchorObserver.observe(panel.value)
+  if (props.matchWidth) {
+    for (let element = props.anchor; element; element = element.parentElement) anchorObserver.observe(element)
+  }
   document.addEventListener('mousedown', onPointerDown, true)
   window.addEventListener('resize', onReflow)
   window.addEventListener('scroll', onReflow, true)
 })
 
 onBeforeUnmount(() => {
+  anchorObserver?.disconnect()
   document.removeEventListener('mousedown', onPointerDown, true)
   window.removeEventListener('resize', onReflow)
   window.removeEventListener('scroll', onReflow, true)
@@ -72,9 +90,10 @@ onBeforeUnmount(() => {
     <div
       ref="panel"
       class="popover"
-      :class="{ wide: props.wide, modal: props.modal, fixed: !!props.width }"
-      role="menu"
-      :style="{ top: pos.top + 'px', left: pos.left + 'px', width: props.width ? props.width + 'px' : undefined }"
+      :class="[props.panelClass, { wide: props.wide, modal: props.modal, fixed: !!props.width || props.matchWidth }]"
+      :role="props.role || 'menu'"
+      :aria-label="props.ariaLabel"
+      :style="{ top: pos.top + 'px', left: pos.left + 'px', width: pos.width ? pos.width + 'px' : undefined }"
     >
       <slot />
     </div>

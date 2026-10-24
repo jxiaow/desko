@@ -109,5 +109,6 @@ pub fn profiles_switch(app: AppHandle, id: String) -> Result<(), AppError> {
     profile_service::switch(&root, &id).map_err(AppError::Profile)?;
     super::fileshare::stop_for_exit(&app);
     super::tunnel::stop_for_exit(&app);
+    crate::services::codex_bridge::stop(&app);
     app.restart()
 }

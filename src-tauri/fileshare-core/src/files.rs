@@ -125,19 +125,27 @@ pub fn format_size(size: u64) -> String {
     unreachable!()
 }
 
+/// 扩展名 → 文件类型档。分法与 `src/components/files/FileShortcutsModule.vue` 的 `EXT_SLOT`
+/// 逐条对齐：同一只文件在 App 与网页上必须落进同一档，否则两处色卡会互相矛盾。
+/// 返回值既当色档名（`--ft-*`），也被 `pages.rs` 拿去查图标。
 pub fn file_type_icon(name: &str) -> &'static str {
     let ext = name
         .rsplit_once('.')
         .map(|(_, e)| e.to_ascii_lowercase())
         .unwrap_or_default();
     match ext.as_str() {
-        "doc" | "docx" | "pdf" | "xls" | "xlsx" | "ppt" | "pptx" | "txt" | "md" | "rtf" => "doc",
-        "jpg" | "jpeg" | "png" | "gif" | "webp" | "svg" | "bmp" | "ico" => "img",
-        "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" => "zip",
-        "mp4" | "avi" | "mkv" | "mov" | "wmv" | "flv" | "webm" => "vid",
-        "py" | "js" | "ts" | "json" | "xml" | "yaml" | "yml" | "html" | "css" | "java" | "go"
-        | "rs" | "c" | "cpp" | "h" => "code",
-        _ => "default",
+        "pdf" => "pdf",
+        "doc" | "docx" | "rtf" | "pages" => "doc",
+        "xls" | "xlsx" | "csv" | "numbers" => "sheet",
+        "ppt" | "pptx" | "key" => "deck",
+        "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" => "arch",
+        "js" | "jsx" | "ts" | "tsx" | "py" | "rs" | "go" | "java" | "c" | "h" | "cpp" | "sh"
+        | "json" | "xml" | "yaml" | "yml" | "html" | "css" => "code",
+        "md" | "markdown" | "txt" => "mark",
+        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" | "bmp" => "img",
+        "mp4" | "m4v" | "mov" | "avi" | "mkv" | "webm" | "flv" | "wmv" => "vid",
+        "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a" | "opus" => "audio",
+        _ => "unk",
     }
 }
 
@@ -216,13 +224,18 @@ mod tests {
 
     #[test]
     fn icon_buckets() {
-        assert_eq!(file_type_icon("x.PDF"), "doc");
+        assert_eq!(file_type_icon("x.PDF"), "pdf");
+        assert_eq!(file_type_icon("x.docx"), "doc");
+        assert_eq!(file_type_icon("x.xlsx"), "sheet");
+        assert_eq!(file_type_icon("x.pptx"), "deck");
+        assert_eq!(file_type_icon("x.7z"), "arch");
         assert_eq!(file_type_icon("x.jpeg"), "img");
-        assert_eq!(file_type_icon("x.7z"), "zip");
         assert_eq!(file_type_icon("x.mkv"), "vid");
+        assert_eq!(file_type_icon("x.mp3"), "audio");
+        assert_eq!(file_type_icon("x.md"), "mark");
         assert_eq!(file_type_icon("x.rs"), "code");
-        assert_eq!(file_type_icon("x.bin"), "default");
-        assert_eq!(file_type_icon("noext"), "default");
+        assert_eq!(file_type_icon("x.bin"), "unk");
+        assert_eq!(file_type_icon("noext"), "unk");
     }
 
     fn tempfile_dir(tag: &str) -> PathBuf {

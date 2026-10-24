@@ -3,12 +3,19 @@ import type { CodexUsageBucket } from '../services/api/codex'
 export type UsageRange = 'today' | 'week' | 'month' | 'all'
 
 const usageNumber = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 })
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 })
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const usdSmall = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 4, maximumFractionDigits: 4 })
 
 export function formatUsageCost(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '未定价'
   if (value > 0 && value < 0.0001) return '<$0.0001'
-  return usd.format(value)
+  return (value > 0 && value < 1 ? usdSmall : usd).format(value)
+}
+
+/** 摘要统一精度，明细提示保留小额估算，避免四舍五入后看似免费。 */
+export function formatUsageCostDetail(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '估算金额（USD）：未定价'
+  return `估算金额（USD）：$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 10 })}`
 }
 
 /** 大数按中文阅读单位展示；完整计数保留给明细提示和可访问名称。 */

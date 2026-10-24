@@ -3,6 +3,8 @@ import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { usePageActive } from '../../composables/usePageActive'
 import { normalizeAssetHtml, resolveAssetHtml } from '../../services/attachmentSrc'
 import { sanitizeNoteHtml, safeLink, safeImage } from '../../utils/sanitizeNoteHtml'
+import { normalizeNotePaste } from '../../utils/notePaste'
+import { useNotesStore } from '../../stores/notes'
 import { useEditor, EditorContent, VueNodeViewRenderer } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -27,9 +29,11 @@ import go from 'highlight.js/lib/languages/go'
 import cpp from 'highlight.js/lib/languages/cpp'
 import AppIcon from '../shared/AppIcon.vue'
 import ImageNodeView from './ImageNodeView.vue'
+import NoteScrollTop from './NoteScrollTop.vue'
 import type { IconName } from '../../utils/icons'
 
 const pageActive = usePageActive()
+const notesStore = useNotesStore()
 const lowlight = createLowlight({
   typescript: ts, javascript: js, python, rust, css, html: xml, xml, json, bash, shell: bash, sql, java, go, cpp, c: cpp,
 })
@@ -272,7 +276,10 @@ const editor = useEditor({
   // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
   autofocus: false,
   editorProps: {
-    handlePaste: (view, event) => pasteLinkAsUrl(view, event),
+    handlePaste: (view, event) => notesStore.notePasteCleanup ? pasteLinkAsUrl(view, event) : false,
+    transformPasted: (slice, view) => notesStore.notePasteCleanup
+      ? normalizeNotePaste(slice, !!view.state.selection.$from.parent.type.spec.code)
+      : slice,
     handleDOMEvents: {
       compositionstart: (view) => {
         if (compositionRange) finishPunctuation(view, compositionRange)
@@ -581,6 +588,7 @@ const pastedLinkPos = ref({ top: 0, left: 0 })
 
 /** 浏览器复制链接常同时给出 URL 和「网页标题」HTML；先保留 URL，标题由用户决定是否采用。 */
 const pasteLinkAsUrl = (view: import('@tiptap/pm/view').EditorView, event: ClipboardEvent) => {
+  if (view.state.selection.$from.parent.type.spec.code) return false
   const url = event.clipboardData?.getData('text/plain').trim() ?? ''
   if (!/^https?:\/\/\S+$/i.test(url) || !safeLink(url)) return false
 
@@ -809,12 +817,15 @@ const onPaste = async (e: ClipboardEvent) => {
   }
 }
 
+const scrollTarget = computed(() => props.variant !== 'full' ? editor.value?.view.dom ?? null : null)
+
 defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo })
 </script>
 
 <template>
   <div ref="editorWrapper" class="note-editor" :class="`v-${variant}`" @change="relocateCaret" @paste="onPaste">
     <EditorContent :editor="editor" />
+    <NoteScrollTop v-if="variant !== 'full'" :target="scrollTarget" />
     <Teleport to="body" :disabled="!pageActive">
       <div
         v-if="showSlashMenu"
@@ -931,12 +942,12 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   word-break: break-word;
 }
 
-/* 草稿输入：默认三行（3×24.65 行高 + 20 内衬），内容自然撑高，46vh 是滚动上限。
+/* 草稿输入：默认三行，内容自然撑高，46vh 是滚动上限。
    min-height 不加过渡——伸缩要的是跟手，缓动会让高度慢半拍 */
 .note-editor.v-composer :deep(.ProseMirror) {
   padding: var(--space-3) var(--space-4) var(--space-2);
-  font-size: 14.5px;
-  line-height: 1.7;
+  font-size: var(--text-base);
+  line-height: 24px;
   min-height: 94px;
   max-height: 46vh;
   scrollbar-gutter: stable;
@@ -946,7 +957,7 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 .note-editor :deep(.img-node img) { max-height: 34vh; object-fit: contain; }
 .note-editor.v-full :deep(.img-node img) { max-height: 60vh; }
 
-/* 就地书写比只读大半档，标题格式沿用编辑器样式；普通首段保持正文。 */
+/* 就地书写沿用只读字号，切换编辑时保持文字层级。 */
 .note-editor.v-card :deep(.ProseMirror) {
   padding: 0;
   font-size: var(--text-base);
@@ -960,19 +971,19 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 /* 全屏书写：一张纸的排版尺度（密一档，一屏多放几行） */
 .note-editor.v-full :deep(.ProseMirror) {
   padding: 0;
-  font-size: 14.5px;
+  font-size: var(--text-base);
   line-height: 1.6;
-  letter-spacing: -0.012em;
+  letter-spacing: normal;
   min-height: 40vh;
   caret-color: var(--accent);
 }
 
 .note-editor.v-full :deep(.ProseMirror > * + *) { margin-top: 8px; }
-.note-editor.v-full :deep(h1) { font-size: 21px; font-weight: 650; line-height: 1.32; letter-spacing: -0.026em; margin-top: var(--space-4); }
-.note-editor.v-full :deep(h2) { font-size: var(--text-lg); font-weight: 620; line-height: 1.42; letter-spacing: -0.02em; margin-top: 12px; }
-.note-editor.v-full :deep(h3) { font-size: 16px; font-weight: 600; }
+.note-editor.v-full :deep(h1) { font-size: var(--text-xl); font-weight: 600; line-height: 1.32; letter-spacing: normal; margin-top: var(--space-4); }
+.note-editor.v-full :deep(h2) { font-size: var(--text-lg); font-weight: 600; line-height: 1.42; letter-spacing: normal; margin-top: 12px; }
+.note-editor.v-full :deep(h3) { font-size: var(--text-base); font-weight: 600; }
 .note-editor.v-full :deep(blockquote) { border-left-width: 3px; padding-left: var(--space-4); }
-.note-editor.v-full :deep(pre) { font-size: 13.5px; line-height: 1.75; padding: var(--space-4); background: var(--bg-surface); border: none; box-shadow: var(--shadow-xs); }
+.note-editor.v-full :deep(pre) { font-size: var(--text-base); line-height: 1.75; padding: var(--space-4); background: var(--bg-surface); border: none; box-shadow: var(--shadow-xs); }
 .note-editor.v-full :deep(hr) { border: none; height: 1px; background: linear-gradient(90deg, transparent, var(--border-strong), transparent); margin: var(--space-6) 0; }
 
 .note-editor :deep(.ProseMirror p.is-editor-empty:first-child::before) {
@@ -986,9 +997,9 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 /* 只给文档顶层块加间距：写成 * + * 会连任务项里 label 后面的正文 div 一起压下去 8px */
 .note-editor :deep(.ProseMirror > * + *) { margin-top: var(--space-2); }
 .note-editor :deep(* + h1), .note-editor :deep(* + h2), .note-editor :deep(* + h3) { margin-top: var(--space-4); }
-.note-editor :deep(h1) { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
-.note-editor :deep(h2) { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.5; }
-.note-editor :deep(h3) { font-size: 14.5px; font-weight: 600; line-height: 1.5; }
+.note-editor :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
+.note-editor :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: normal; line-height: 1.5; }
+.note-editor :deep(h3) { font-size: var(--text-base); font-weight: 600; line-height: 1.5; }
 .note-editor :deep(p) { margin: 0; }
 .note-editor :deep(ul), .note-editor :deep(ol) { padding-left: var(--space-5); margin: 0; }
 .note-editor :deep(li) { margin: 2px 0; }
@@ -996,7 +1007,7 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 .note-editor :deep(strong) { font-weight: 600; color: var(--text); }
 .note-editor :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
 .note-editor :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
-.note-editor :deep(pre) { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.note-editor :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .note-editor :deep(pre code) { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
 .note-editor :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-3) 0; }
 .note-editor :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--space-1); }
@@ -1044,7 +1055,7 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   flex-shrink: 0;
   text-align: center;
   font-size: var(--text-2xs);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.03em;
   color: var(--text-secondary);
 }

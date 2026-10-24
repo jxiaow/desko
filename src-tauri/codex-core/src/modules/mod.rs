@@ -73,3 +73,5 @@ pub mod codex_proxy_subscription_parser;
 pub(crate) mod apikey_fun_links;
 pub(crate) mod codex_session_wsl;
 pub(crate) mod codex_proxy_engine_preflight;
+
+pub mod codex_clients;

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { defineAsyncComponent, ref, watch } from 'vue'
-import { THEMES, ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
+import { WORKSPACE_THEMES as THEMES, WORKSPACE_ACCENTS as ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
 import { useToastStore } from '../../stores/toast'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
-import { useNotesStore } from '../../stores/notes'
+import { isCodexWebRuntime } from '../../services/runtime'
+import NotesSettings from '../../modules/settings/NotesSettings.vue'
 import { WEB_MODULE_IDS, moduleFlags } from '../../modules/state'
 import { moduleById, type SettingsTabId } from '../../modules/registry'
 import { toggleModule } from '../../modules/runtime'
@@ -15,9 +16,10 @@ const CodexSettings = defineAsyncComponent(() => import('../../modules/settings/
 const props = defineProps<{ initialTab?: SettingsTabId }>()
 const emit = defineEmits<{ close: []; lock: []; openChangeNoteKey: [mode: 'unlock' | 'change'] }>()
 const toast = useToastStore()
-const notes = useNotesStore()
-const tab = ref(props.initialTab ?? 'appearance')
-watch(() => props.initialTab, value => { tab.value = value ?? 'appearance' })
+const codexWeb = isCodexWebRuntime()
+const tabs = codexWeb ? [{ id: 'appearance', label: '外观' }] : [{id:'appearance',label:'外观'},{id:'notes',label:'小记'},{id:'modules',label:'模块'},{id:'fileshare',label:'局域网传输'},{id:'codex',label:'Codex'}]
+const tab = ref(codexWeb ? 'appearance' : props.initialTab ?? 'appearance')
+watch(() => props.initialTab, value => { tab.value = codexWeb ? 'appearance' : value ?? 'appearance' })
 watch(tab, value => { if (value === 'fileshare' && moduleFlags.fileshare) void fsRefresh() }, { immediate: true })
 const saving = ref(false)
 useEscapeClose(() => emit('close'))
@@ -50,11 +52,10 @@ async function changeModule(id: typeof WEB_MODULE_IDS[number], event: Event) {
       </header>
       <div class="dialog-body">
         <nav class="web-setting-tabs" aria-label="浏览器设置分类">
-          <button v-for="item in [{id:'appearance',label:'外观'},{id:'notes',label:'小记'},{id:'modules',label:'模块'},{id:'fileshare',label:'局域网传输'},{id:'codex',label:'Codex'}]" :key="item.id" class="btn-secondary" type="button" :aria-pressed="tab === item.id" @click="tab = item.id as SettingsTabId">{{ item.label }}</button>
+          <button v-for="item in tabs" :key="item.id" class="btn-secondary" type="button" :aria-pressed="tab === item.id" @click="tab = item.id as SettingsTabId">{{ item.label }}</button>
         </nav>
         <template v-if="tab === 'notes'">
-          <button v-if="notes.noteKey.is_set" class="btn-secondary" type="button" @click="emit('openChangeNoteKey', notes.noteKey.is_open ? 'change' : 'unlock')">修改小记口令</button>
-          <p v-else class="web-access-note">首次加密小记时设置口令。</p>
+          <NotesSettings @open-change-note-key="emit('openChangeNoteKey', $event)" />
         </template>
         <template v-else-if="tab === 'modules'">
           <label v-for="id in WEB_MODULE_IDS" :key="id" class="web-module-option"><span>{{ moduleById(id).title }}</span><input type="checkbox" role="switch" :aria-label="moduleById(id).title" :checked="moduleFlags[id]" :disabled="saving" @change="changeModule(id, $event)" /></label>
@@ -82,12 +83,12 @@ async function changeModule(id: typeof WEB_MODULE_IDS[number], event: Event) {
 </template>
 
 <style scoped>
-.web-setting-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.web-setting-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .web-setting-tabs [aria-pressed='true'] { color: var(--accent); border-color: var(--accent); }
 .web-module-option { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; font-size: var(--text-sm); }
-.web-settings { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+.web-settings { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
 .dialog-body { overflow: auto; }
-h4 { margin: 0 0 10px; color: var(--text-secondary); font-size: var(--text-sm); }
+h4 { margin: 0 0 10px; color: var(--text-secondary); font-size: var(--text-label); font-weight: 600; }
 h4:not(:first-child) { margin-top: 20px; }
 .web-choices { display: flex; flex-wrap: wrap; gap: 8px; }
 .web-theme { min-width: 44px; min-height: 36px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-app); color: var(--text); cursor: pointer; }
@@ -95,5 +96,14 @@ h4:not(:first-child) { margin-top: 20px; }
 .web-accent { display: inline-flex; align-items: center; gap: 6px; }
 .web-accent i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
 .web-atmosphere { display: flex; align-items: center; gap: 8px; margin-top: 20px; font-size: var(--text-sm); }
-.web-access-note { margin: 20px 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.6; }
+.web-access-note { margin: 20px 0 0; color: var(--text-muted); font-size: var(--text-description); line-height: 1.6; }
+@media (max-width: 760px) {
+  .web-settings { width: 100%; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+  .dialog-header { padding-top: max(16px, env(safe-area-inset-top)); }
+  .dialog-body { flex: 1; min-height: 0; padding: 16px; }
+  .dialog-footer { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .web-setting-tabs { flex-wrap: nowrap; overflow-x: auto; }
+  .web-setting-tabs button { flex-shrink: 0; min-height: 44px; }
+  .web-theme, .web-accent, .dialog-footer button, .dialog-close { min-height: 44px; }
+}
 </style>

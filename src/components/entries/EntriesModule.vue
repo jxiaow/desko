@@ -77,8 +77,8 @@ const onGlobalKey = (e: KeyboardEvent) => {
     （取字规则与详情弹窗共用 utils/avatar 的 avatarLetter） */
 const favOf = (item: Entry) => faviconSrcFor(item.url)
 
-/** 分类淡染：把 category 稳定哈希到六桶 hue（--cat-1..6），字母兜底档与分类点共用同一色，
-   同分类卡片一眼归堆。favicon 到货时档面改走中性亮底，此色只喂给分类点。 */
+/** 分类淡染：把 category 稳定哈希到六桶 hue（--cat-1..6），只用于字母兜底块。
+   favicon 到货时档面改走中性亮底，右侧分类始终只显示文字。 */
 const CAT_HUES = ['--cat-1', '--cat-2', '--cat-3', '--cat-4', '--cat-5', '--cat-6']
 const hasCat = (item: Entry) => !!(item.category || '').trim()
 const hueOf = (category?: string | null): string => {
@@ -280,6 +280,10 @@ watchEffect(() => {
     </div>
     </Teleport>
 
+    <nav v-if="webRuntime && showFilters" class="web-entry-categories" aria-label="快捷收藏分类">
+      <button v-for="tab in tabs" :key="tab.id" type="button" :aria-pressed="activeTab === tab.id" @click="pickTab(tab.id)">{{ tab.name }}</button>
+    </nav>
+
     <div v-if="loading" class="card-grid">
       <div class="skeleton-card" v-for="n in 6" :key="n">
         <div class="row1">
@@ -312,7 +316,7 @@ watchEffect(() => {
           <AppIcon v-if="selectedIds.has(item.id)" name="check" :size="12" />
         </span>
 
-        <!-- 一行身份：24px 档（favicon 到货 → 分类淡染字母 → 未分类中性字母）+ 名称 + 右对齐分类点 -->
+        <!-- 一行身份：24px 档（favicon 到货 → 分类淡染字母 → 未分类中性字母）+ 名称 + 右对齐分类文字 -->
         <div class="row1">
           <span
             class="grid-slot"
@@ -324,7 +328,7 @@ watchEffect(() => {
             <template v-else>{{ avatarLetter(item.category) }}</template>
           </span>
           <span class="ec-name">{{ item.name }}</span>
-          <span class="ec-cat"><i :style="{ background: hueOf(item.category) }"></i>{{ item.category || '未分类' }}</span>
+          <span class="ec-cat">{{ item.category || '未分类' }}</span>
         </div>
 
         <!-- 二行副址：等宽地址缩进到名称起笔；凭证锁标顶右，hover 让给动作浮岛 -->
@@ -385,7 +389,7 @@ watchEffect(() => {
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navEntries'" :size="24" />
       </div>
       <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无条目' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击右上角「新增条目」添加' }}</div>
+      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」开始' }}</div>
       <div v-if="!searchKeyword" class="empty-motto" aria-hidden="true">
         <span class="w">收一处 · 启一窗 · 开一页</span>
       </div>
@@ -412,6 +416,7 @@ watchEffect(() => {
 </template>
 
 <style scoped>
+.web-entry-categories { display: none; }
 @media (max-width: 600px) {
   .web-runtime .page-bar { flex-wrap: wrap; min-height: 0; }
   .web-runtime .page-bar .search-box { flex: 1 0 100%; width: 100%; margin-right: 0; }
@@ -493,32 +498,28 @@ watchEffect(() => {
   min-width: 0;
   font-size: var(--text-base);
   font-weight: var(--weight-card-title);
-  letter-spacing: -0.01em;
+  letter-spacing: normal;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color var(--transition);
 }
-/* 分类：右对齐 12px 淡字 + 7px hue 点（点色与字母兜底档同源） */
+/* 分类：右对齐 12px 中性淡字，颜色编码只留在左侧字母块。 */
 .ec-cat {
   margin-left: auto;
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   font-size: var(--text-xs);
   color: var(--text-muted);
   transition: color var(--transition);
 }
-.ec-cat i { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 
-/* 副址行：等宽 12px，缩进由 global .row2 给，尾部省略（整条地址留在 title 与详情弹窗） */
+/* 副址行：等宽 13px，缩进由 global .row2 给，尾部省略（整条地址留在 title 与详情弹窗） */
 .ec-domain {
   flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.35;
   color: var(--text-url);
   text-decoration: none;

@@ -4,6 +4,10 @@ export function isWebRuntime(): boolean {
     && document.querySelector('meta[name="desko-runtime"]')?.getAttribute('content') === 'web'
 }
 
+export function isCodexWebRuntime(): boolean {
+  return isWebRuntime() && document.querySelector('meta[name="desko-service"]')?.getAttribute('content') === 'codex'
+}
+
 /** E2E 的 Tauri mock 有 API 但没有原生桥；需要真窗口时用它把关 */
 export function isTauriRuntime(): boolean {
   return !isWebRuntime()

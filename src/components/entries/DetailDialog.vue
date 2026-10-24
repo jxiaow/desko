@@ -130,7 +130,7 @@ useEscapeClose(() => emit('close'))
 .detail-identity { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) 0 var(--space-4); border-bottom: 1px solid var(--border); }
 .detail-identity .grid-slot { margin-top: 1px; }
 .detail-identity-text { flex: 1; min-width: 0; }
-.detail-identity h4 { margin: 0; font-size: var(--text-md); font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; color: var(--text); overflow-wrap: anywhere; }
+.detail-identity h4 { margin: 0; font-size: var(--text-md); font-weight: 600; line-height: 1.4; letter-spacing: normal; color: var(--text); overflow-wrap: anywhere; }
 .detail-meta { display: flex; flex-wrap: wrap; column-gap: 6px; margin-top: 4px; font-size: var(--text-xs); line-height: 1.5; color: var(--text-muted); }
 
 /* 一层平铺 + 行间发丝线：原先四块 --sunken 内嵌盒是弹窗里的卡中卡，读值靠缩进而非靠底色。
@@ -145,14 +145,14 @@ useEscapeClose(() => emit('close'))
 .detail-row-top { align-items: flex-start; }
 .detail-row-top .detail-key { padding-top: 8px; }
 .detail-key { flex: none; width: 40px; font-size: var(--text-xs); color: var(--text-muted); }
-.detail-val { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text); word-break: break-all; line-height: 18px; }
+.detail-val { flex: 1; min-width: 0; font-size: var(--text-content); color: var(--text); word-break: break-all; line-height: var(--leading-ui); }
 .detail-mono { font-family: var(--font-mono); }
-/* 密码是"读一个值"的场景：常显等宽 + 抬一档到 15px，跟验证码的 30px 同一条排印思路 */
+/* 密码保持 14px 等宽，分隔字距帮助辨认字符。 */
 .detail-pwd { font-family: var(--font-mono); font-size: var(--text-md); letter-spacing: 0.06em; }
 .detail-empty { color: var(--text-muted); }
-.detail-link { color: var(--accent); cursor: pointer; text-decoration: none; font-family: var(--font-mono); font-size: var(--text-sm); }
+.detail-link { color: var(--accent); cursor: pointer; text-decoration: none; font-family: var(--font-mono); font-size: var(--text-content); }
 .detail-link:hover { text-decoration: underline; }
-.detail-notes { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text-secondary); line-height: 19px; white-space: pre-wrap; }
+.detail-notes { flex: 1; min-width: 0; font-size: var(--text-content); color: var(--text-secondary); line-height: var(--leading-copy); white-space: pre-wrap; }
 
 .detail-paths { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .detail-path {

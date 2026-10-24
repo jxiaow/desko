@@ -7,10 +7,12 @@ pub mod files;
 pub mod guard;
 pub mod handlers;
 pub mod http_util;
+pub mod icons;
 pub mod multipart;
 pub mod net;
 pub mod pages;
 pub mod server;
+mod theme_values;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};

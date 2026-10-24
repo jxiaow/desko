@@ -17,7 +17,7 @@ const saveTerminalPref = async (id: TerminalId) => {
   if (id === terminal.value) return
   terminal.value = id
   const saved = await saveTerminal(id)
-  toastStore.showToast(saved ? '已保存终端偏好' : '已设置，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
+  toastStore.showToast(saved ? '已保存终端偏好' : '保存失败，重启后将恢复原设置', saved ? 'success' : 'error')
 }
 
 onMounted(async () => {

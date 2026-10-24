@@ -72,7 +72,7 @@ const submitDlg = async () => {
 const doDelete = (p: Profile) => {
   confirmStore.showConfirm(
     '删除档案',
-    `将永久删除「${p.name}」在本机的全部数据（收藏、小记、文件与附件目录）。此操作不可撤销，云端已有的备份不受影响。`,
+    `永久删除「${p.name}」的全部本机数据，无法撤销。云端备份会保留。`,
     async () => {
       busy.value = true
       try {
@@ -92,7 +92,7 @@ const doDelete = (p: Profile) => {
 const doSwitch = (p: Profile) => {
   confirmStore.showConfirm(
     '切换档案',
-    `应用将重启并切到「${p.name}」。当前档案的数据不会丢失，回来时再切即可。`,
+    `重启应用并切换到「${p.name}」？当前档案的数据会保留。`,
     async () => {
       switching.value = p.name
       try {
@@ -114,7 +114,7 @@ const doSwitch = (p: Profile) => {
 
 <template>
   <div class="profiles-pane">
-    <p class="pane-hint">每个档案是一套独立的工作环境：收藏、小记、文件与云同步各自分开，互不混用。切换档案会重启应用。</p>
+    <p class="pane-hint">档案之间的数据与云同步相互独立，切换时会重启应用。</p>
 
     <div class="plist">
       <div v-for="p in profiles" :key="p.id" class="prow">
@@ -174,9 +174,9 @@ const doSwitch = (p: Profile) => {
               <input v-model="dlg.name" type="text" placeholder="如：工作" maxlength="32" @keyup.enter="submitDlg" />
             </div>
             <div v-if="dlg.mode === 'create'" class="form-group">
-              <label>云命名空间<span class="field-opt">选填</span></label>
+              <label>云端目录标识<span class="field-opt">选填</span></label>
               <input v-model="dlg.ns" type="text" placeholder="留空则自动生成" maxlength="32" @keyup.enter="submitDlg" />
-              <p class="lead">用于区分各档案在云端的同步目录，建档后不可修改。仅小写字母、数字、连字符。</p>
+              <p class="lead">创建后不可修改，仅限小写字母、数字和连字符。</p>
             </div>
             <p v-if="dlgErr" class="dialog-err">{{ dlgErr }}</p>
           </div>

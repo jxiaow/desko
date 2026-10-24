@@ -1,11 +1,11 @@
-import { isWebRuntime } from '../services/runtime'
+import { isWebRuntime, isCodexWebRuntime } from '../services/runtime'
 import { computed, reactive } from 'vue'
 import { settingsApi } from '../services/api/settings'
 import { MODULES, moduleById, type ModuleId } from './registry'
 
 export const WEB_MODULE_IDS = ['notes', 'entries', 'files', 'mfa', 'fileshare', 'tunnel', 'codex'] as const
 const WEB_MODULES = new Set<ModuleId>(WEB_MODULE_IDS)
-const availableInRuntime = (id: ModuleId) => !isWebRuntime() || WEB_MODULES.has(id)
+const availableInRuntime = (id: ModuleId) => isCodexWebRuntime() ? id === 'codex' : !isWebRuntime() || WEB_MODULES.has(id)
 
 /** 八块模块一律默认关：库里没写过这个键就没有侧栏入口，落地页交给 /start 空态。 */
 export const moduleFlags = reactive<Record<ModuleId, boolean>>(
@@ -48,6 +48,12 @@ export function isModuleEnabled(id: ModuleId): boolean {
 }
 
 export const enabledModules = computed(() => MODULES.filter((m) => isModuleEnabled(m.id)))
+
+/** 浏览器大小屏共用分组，启停模块后同时更新两处导航。 */
+export const webModuleGroups = computed(() => [
+  { label: '日常工具', modules: enabledModules.value.filter(m => ['notes', 'entries', 'files', 'mfa'].includes(m.id)) },
+  { label: '开发与连接', modules: enabledModules.value.filter(m => !['notes', 'entries', 'files', 'mfa'].includes(m.id)) },
+].filter(group => group.modules.length))
 
 /** 落地页：启用模块里排最前的那个；全关时没有页面可去，交给空态壳 */
 export function landingPath(): string | null {

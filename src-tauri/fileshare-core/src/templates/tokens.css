@@ -1,0 +1,809 @@
+/* 生成物，勿手改：node scripts/gen-fileshare-assets.mjs
+ * 由以下 App 样式逐字复制（不改选择器、不重命名槽位）：
+ *   src/styles/materials.css
+ *   src/styles/global.css
+ *   src/styles/workspace-themes.css
+ *
+ * 页面须在 <html> 上挂 data-layout="workspace" 以及 data-theme / data-base / data-accent /
+ * data-atmosphere，级联才会替网页算出 --accent-soft、--text-brand、--bg-workspace。
+ * 画布吃 var(--bg-workspace)，浮层吃 var(--bg-dialog)：氛围光随 data-atmosphere 自动跟上。
+ */
+
+/* 材质层：只消费主题颜色，负责不同表面的背景、定位和文字对比。
+   组件选择材质角色，不读取 data-atmosphere；新增表面应接入这里的角色。
+   默认使用纯色；开启氛围时只在留白叠加轻柔色光，不添加颗粒纹理。
+   --bg-surface / --bg-input 始终保持实底，浮层承接较轻的光场。 */
+:root, .theme-scope {
+  /* 浅底用柔和的高明度色光；深底在下方按强调色和底色明度重新配光。 */
+  --material-field-l: 0.94;
+  --material-field-k: 0.45;
+  --material-field-k-secondary: 0.35;
+  --material-field-companion: -48;
+  --material-color-primary: oklch(from var(--accent) var(--material-field-l) calc(c * var(--material-field-k)) h);
+  --material-color-secondary: oklch(from var(--accent) var(--material-field-l) calc(c * var(--material-field-k-secondary)) calc(h + var(--material-field-companion)));
+  --material-primary-strength: 16%;
+  --material-secondary-strength: 12%;
+  --material-lock-primary-strength: 20%;
+  --material-lock-secondary-strength: 16%;
+  --material-navigation-strength: 8%;
+  /* 主光与辅光各占一侧，保留中部的明暗过渡，避免整窗均匀染色。 */
+  --material-field-primary-size: clamp(520px, 56vw, 1100px) clamp(400px, 72vh, 820px);
+  --material-field-secondary-size: clamp(480px, 52vw, 1000px) clamp(360px, 64vh, 720px);
+  /* 宽窗把光斑收在阅读列边缘；窄窗保留左上、右下的方向。 */
+  --material-field-primary-position: max(18%, calc((100% - var(--content-max)) / 2 + 80px)) 8%;
+  --material-field-secondary-position: min(91%, calc((100% + var(--content-max)) / 2 - 40px)) 91%;
+  --material-field:
+    radial-gradient(ellipse 48% 64% at 50% 50%, color-mix(in srgb, var(--panel-bg) 14%, transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-field-primary-size) at var(--material-field-primary-position), color-mix(in srgb, var(--material-color-primary) var(--material-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at var(--material-field-secondary-position), color-mix(in srgb, var(--material-color-secondary) var(--material-secondary-strength), transparent), transparent 100%);
+  --material-lock-field:
+    radial-gradient(ellipse 48% 64% at 50% 50%, color-mix(in srgb, var(--panel-bg) 14%, transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-field-primary-size) at var(--material-field-primary-position), color-mix(in srgb, var(--material-color-primary) var(--material-lock-primary-strength), transparent), transparent 100%),
+    radial-gradient(ellipse var(--material-field-secondary-size) at var(--material-field-secondary-position), color-mix(in srgb, var(--material-color-secondary) var(--material-lock-secondary-strength), transparent), transparent 100%);
+  --material-floating-field:
+    linear-gradient(color-mix(in srgb, var(--panel-bg) 60%, transparent), color-mix(in srgb, var(--panel-bg) 60%, transparent)),
+    var(--material-field), var(--panel-bg);
+  --material-editor-field:
+    linear-gradient(color-mix(in srgb, var(--bg) 65%, transparent), color-mix(in srgb, var(--bg) 65%, transparent)),
+    var(--material-field), var(--bg);
+  --border-navigation: color-mix(in srgb, var(--text) 3%, transparent);
+  --border-search: var(--border);
+  --border-composer: var(--border);
+
+  --bg-app: var(--material-field), var(--sunken);
+  --bg-toolbar: var(--bg-app);
+  --bg-sidebar: var(--sidebar-bg);
+  --bg-nav-overlay: var(--sidebar-bg);
+  --bg-dialog: var(--panel-bg);
+  --bg-popover: color-mix(in srgb, var(--panel-bg) 96%, transparent);
+  --bg-menu: var(--panel-bg);
+  --bg-dock: var(--panel-bg);
+  --bg-editor: var(--bg);
+  --bg-input: var(--bg);
+  --bg-input-focus: var(--panel-bg);
+  --bg-canvas-input: var(--bg-input);
+  --bg-surface: var(--panel-bg);
+  --bg-surface-hover: var(--hover);
+  --bg-surface-active: var(--active);
+  --bg-tag-default: var(--badge-cat-bg);
+  --bg-mono-chip: var(--sunken);
+  --bg-statusbar: var(--panel-bg);
+  --hover-chrome: color-mix(in srgb, var(--text) 9%, transparent);
+
+  --floating-background-attachment: scroll;
+  --dialog-background-attachment: scroll;
+  --nav-overlay-background-attachment: scroll;
+  --editor-background-attachment: fixed;
+  --text-canvas-meta: var(--text-secondary);
+  --text-nav-label: var(--text-secondary);
+  --text-nav-section: var(--text-secondary);
+
+  --bg-lock: linear-gradient(135deg, var(--lock-wash-a) 0%, var(--lock-wash-b) 100%);
+  --material-decoration-display: block;
+}
+
+/* 辅光按强调色色相作相邻色旋转；石墨使用中性色光。 */
+:root[data-accent="ink"], .theme-scope[data-accent="ink"] {
+  --material-field-companion: -48;
+}
+
+:root[data-accent="celadon"], .theme-scope[data-accent="celadon"] {
+  --material-field-companion: -32;
+}
+
+:root[data-accent="clay"], .theme-scope[data-accent="clay"] {
+  --material-field-companion: 28;
+}
+
+:root[data-accent="plum"], .theme-scope[data-accent="plum"] {
+  --material-field-companion: 41;
+}
+
+:root[data-accent="rose"], .theme-scope[data-accent="rose"] {
+  --material-field-companion: 54;
+}
+
+:root[data-accent="teal"], .theme-scope[data-accent="teal"] {
+  --material-field-companion: 46;
+}
+
+:root[data-accent="forest"], .theme-scope[data-accent="forest"] {
+  --material-field-companion: -24;
+}
+
+:root[data-accent="amber"], .theme-scope[data-accent="amber"] {
+  --material-field-companion: -21;
+}
+
+:root[data-accent="coral"], .theme-scope[data-accent="coral"] {
+  --material-field-companion: 28;
+}
+
+:root[data-accent="graphite"], .theme-scope[data-accent="graphite"] {
+  --material-field-companion: 48;
+  --material-color-primary: color-mix(in oklch, var(--accent) 25%, var(--sunken));
+  --material-color-secondary: color-mix(in oklch, var(--accent) 18%, var(--sunken));
+}
+
+/* 中性强调色减少灰色覆盖，保留浅底的明亮感。 */
+:root[data-base="light"][data-accent="graphite"], .theme-scope[data-base="light"][data-accent="graphite"] {
+  --material-primary-strength: 12%;
+  --material-secondary-strength: 10%;
+}
+
+:root[data-base="dark"], .theme-scope[data-base="dark"] {
+  --material-primary-strength: 18%;
+  --material-secondary-strength: 14%;
+  --material-lock-primary-strength: 22%;
+  --material-lock-secondary-strength: 18%;
+}
+
+/* 彩色深底把光色与无彩度底色混合，让光的明度随主题变化，同时保留强调色色相。 */
+:root[data-base="dark"]:not([data-accent="graphite"]), .theme-scope[data-base="dark"]:not([data-accent="graphite"]) {
+  --material-color-primary: color-mix(in oklch, oklch(from var(--accent) l calc(c * 2) h) 30%, oklch(from var(--sunken) l 0 none));
+  --material-color-secondary: color-mix(in oklch, oklch(from var(--accent) l calc(c * 1.6) calc(h + var(--material-field-companion))) 24%, oklch(from var(--sunken) l 0 none));
+}
+
+/* 局部主题按自己的画布缩放，预览与主界面使用相同材质。 */
+.theme-scope {
+  --material-field-primary-size: 56% 72%;
+  --material-field-secondary-size: 52% 64%;
+  --material-field-primary-position: 24% 8%;
+  --material-field-secondary-position: 85% 91%;
+}
+
+:root[data-atmosphere="on"], .theme-scope[data-atmosphere="on"] {
+  /* 薄底色保留主题冷暖，主侧栏直接透出全窗光场，让分界两侧的颜色连续。 */
+  --bg-sidebar: color-mix(in srgb, var(--sidebar-bg) var(--material-navigation-strength), transparent);
+  /* 抽屉覆盖在正文上，需自带不透明底色，避免透出正文。 */
+  --bg-nav-overlay: var(--material-floating-field);
+  --bg-dialog: var(--material-floating-field);
+  --dialog-background-attachment: fixed;
+  --bg-popover: var(--material-floating-field);
+  --bg-menu: var(--material-floating-field);
+  --bg-dock: var(--material-floating-field);
+  --bg-editor: var(--material-editor-field);
+}
+
+:root[data-atmosphere="off"], .theme-scope[data-atmosphere="off"] {
+  --bg-app: var(--sunken);
+  --bg-lock: var(--bg);
+  --material-decoration-display: none;
+}
+
+/* 工作区柔光：主光与辅光落在留白两端，卡片、输入与书写面保持实底。
+   经典布局与锁屏材质沿用上方配方。 */
+:root[data-layout="workspace"], .workspace-theme-prev[data-base] {
+  --material-inspector-base: var(--bg);
+  --material-workspace-key: oklch(from var(--accent) 0.9 calc(c * 0.55) h);
+  --material-workspace-fill: oklch(from var(--accent) 0.92 calc(c * 0.5) calc(h + 24));
+  --material-workspace-key-strength: 22%;
+  --material-workspace-fill-strength: 22%;
+  /* 光源移入可见区域：左上主光、右下辅光；外框与画布使用相同发散点。 */
+  --material-workspace-key-position: 12% 16%;
+  --material-workspace-fill-position: 88% 84%;
+  --material-workspace-key-size: 68% 78%;
+  --material-workspace-fill-size: 72% 80%;
+  --material-workspace-field:
+    radial-gradient(ellipse var(--material-workspace-key-size) at var(--material-workspace-key-position), color-mix(in srgb, var(--material-workspace-key) var(--material-workspace-key-strength), transparent), transparent 90%),
+    radial-gradient(ellipse var(--material-workspace-fill-size) at var(--material-workspace-fill-position), color-mix(in srgb, var(--material-workspace-fill) var(--material-workspace-fill-strength), transparent), transparent 90%);
+  --material-floating-field:
+    radial-gradient(ellipse 80% 65% at var(--material-workspace-key-position), color-mix(in srgb, var(--material-workspace-key) 10%, transparent), transparent 90%),
+    var(--panel-bg);
+  /* 对话框在自己的边界内布光，大小和窗口位置变化时仍能看到两端柔光。 */
+  --material-dialog-field:
+    radial-gradient(ellipse 78% 72% at 0% 0%, color-mix(in srgb, var(--material-workspace-key) 18%, transparent), transparent 100%),
+    radial-gradient(ellipse 78% 72% at 100% 100%, color-mix(in srgb, var(--material-workspace-fill) 14%, transparent), transparent 100%),
+    var(--panel-bg);
+  --bg-workspace: var(--bg);
+  /* Logo 格与导航轨融入画布，共用底色和同一坐标的氛围光。 */
+  --bg-workspace-rail: var(--bg-workspace);
+  --bg-inspector: var(--bg-workspace);
+  --bg-editor: var(--bg);
+  --bg-workspace-selected: color-mix(in oklab, var(--accent) 10%, var(--panel-bg));
+  --bg-workspace-hover: color-mix(in oklab, var(--text) 5%, var(--panel-bg));
+  --bg-workspace-search: color-mix(in oklab, var(--panel-bg) 72%, var(--workspace-frame));
+  --bg-inspector-hover: color-mix(in srgb, var(--text) 4%, var(--material-inspector-base));
+  --bg-inspector-active: var(--bg-surface);
+  --bg-workspace-primary: var(--accent);
+  --bg-workspace-primary-hover: var(--accent-hover);
+  --bg-workspace-primary-active: var(--accent-active);
+  --text-workspace-primary: var(--accent-on);
+}
+
+:root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
+  --material-workspace-key: oklch(from var(--accent) 0.48 calc(c * 0.85) h);
+  --material-workspace-fill: oklch(from var(--accent) 0.46 calc(c * 0.7) calc(h + 24));
+  --material-workspace-key-strength: 10%;
+  --material-workspace-fill-strength: 10%;
+  --bg-workspace-primary: color-mix(in oklab, var(--accent) 14%, var(--bg));
+  --bg-workspace-primary-hover: color-mix(in oklab, var(--accent) 17%, var(--bg));
+  --bg-workspace-primary-active: color-mix(in oklab, var(--accent) 20%, var(--bg));
+  --text-workspace-primary: color-mix(in oklab, var(--accent) 50%, var(--text));
+}
+
+/* 中性色只改变光的明暗，避免把大面积留白再刷成灰色。 */
+:root[data-layout="workspace"]:is([data-accent="graphite"], [data-accent="sand"]),
+.workspace-theme-prev:is([data-accent="graphite"], [data-accent="sand"]) {
+  --material-workspace-key: oklch(from var(--accent) 1 0 none);
+  --material-workspace-fill: oklch(from var(--accent) 1 0 none);
+}
+
+:root[data-layout="workspace"][data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]),
+.workspace-theme-prev[data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]) {
+  --material-workspace-key: oklch(from var(--accent) 0.48 0 none);
+  --material-workspace-fill: oklch(from var(--accent) 0.48 0 none);
+}
+
+:root[data-layout="workspace"][data-atmosphere="on"], .workspace-theme-prev[data-atmosphere="on"] {
+  --bg-dialog: var(--material-dialog-field);
+  --dialog-background-attachment: scroll;
+  --bg-workspace: var(--material-workspace-field), var(--bg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   第 1 层 · 尺度 —— 主题之间恒定。
+   换主题只换颜色；圆角、间距、字号、动效一律不随主题变，
+   否则比较两套配色时会把"形状不一样"误读成"颜色不一样"。
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  /* 间距系统 - 4px 基础 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* 圆角系统 */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  /* 控件档：图标按钮与小型按钮专用。原先它们跟着 --radius-sm 吃 6px，28px 的钮只占短边 21%，
+     是全场最方的一档（卡片 10/56≈18% 但有 14px 弹窗与胶囊压着）。抬到 9px≈32%，落回同一轨。
+     只给按钮——输入字段/标签/气泡仍走 --radius-sm，圆角轴一分为二，别互相牵连。 */
+  --radius-ib: 9px;
+  --radius: 10px;
+  --radius-md: 12px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 99px;
+
+  /* 字号阶梯：所有 UI 文本走这条轴，不再用 10.5/11.5/12.5/13.5/14.5/17.5 这种半像素。
+     编辑器/列表/标题等组件用一档；需要略大或略小时优先调字重，不挤字号档。
+     body 的 15px 走 --text-md。大方化轮整体上抬一档（docs/design/spacious/01-plan.md）。
+     2xs/3xl 是本轮补的两端：
+       · 2xs 只给"嵌在固定小盒子里的辅助信息"（键帽、单位、分组小标、卡脚标签），
+         正文与说明文字不许降到这一档以下（lighten 轮已把 11px 的说明文字抬到 12）；
+       · 3xl 只给"读一个大数值"的读数面（验证码），其余文本停在 2xl。 */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+
+  /* AppIcon :size 走这几档，不再 10/11/12/13/14/15/16/18/24 全谱散布。
+     组件传 :size 时按数值用，CSS 写 width/height 时引用 px 形式。
+     tile 档 18：34px 身份档里的图形，16 显小、20 顶边，与档内 favicon 的 22px 图取同一重量 */
+  --icon-xs-px: 12px;
+  --icon-sm-px: 14px;
+  --icon-md-px: 16px;
+  --icon-tile-px: 18px;
+  --icon-lg-px: 20px;
+  --icon-xl-px: 26px;
+
+  /* 批量浮底栏占位高度：所有列表容器底部要让出这块空间，避免最后一行被遮 */
+  --dock-clearance: 96px;
+
+  /* 过渡 */
+  --transition-fast: 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* 布局尺度 */
+  /* 侧栏三态（V5.2 收编轮 P2）：展开 208 / 图标轨 56 / 收起 0，
+     第三态不占宽，恢复入口在标题栏面包屑左侧 */
+  --sidebar-w: 208px;
+  --sidebar-rail-w: 56px;
+  /* 内容区的最小水平留白；工具栏与卡片共用同一阅读列 */
+  --page-gutter: 24px;
+  /* 经典滚动条占位宽度，::-webkit-scrollbar 与侧栏的槽补偿都取它 */
+  --scrollbar-track: 9px;
+  /* 全屏书写栏宽度：大窗口适度放宽，保留居中留白与阅读行长 */
+  --fs-max: 1200px;
+  /* 小记流宽度：正常窗口铺满，最大化时收到这个上限 */
+  --stream-max: 1200px;
+  /* 列表页的阅读列上限：按视口给，侧栏展开/折叠不跟着抖。
+     1235 常态窗与 1440 都还吃在 900 下限上，只有最大化（≥1920）才涨到 1120。
+     上限之外的余量由左右两侧均分，阅读列在可用内容区内居中 */
+  --content-max: clamp(900px, calc(100vw - 800px), 1120px);
+  /* 小记卡片正文高度上限：短的小记按实际内容，长的由 JS 收在这里之上最近的整行边界 */
+  --memo-max-h: 144px;
+  --rail-w: 248px;
+  /* 小记顶栏的实际占位高度：粘性日期行和窄窗口下的浮层侧栏都要从它下面开始。
+     一行头方言（Things）后 .page-bar = padding-top 16 + 控件 32 + padding-bottom 16（border-box）= 64px 定高 */
+  --stream-bar-h: 64px;
+  /* 容器窄于此值时收起右栏，筛选降级为浮层 */
+  --rail-min-room: 900px;
+}
+
+/* ---------- 别名槽位：不填 hex，只指向别的槽，所以各套主题不必各写一遍。
+     放在主题块之后、同一条 :root 上，切换主题时自动跟着源头走。
+
+     背景材质角色统一定义在 materials.css；这里保留描边、文字和状态别名。 ---------- */
+:root {
+  --sidebar-border: var(--border-navigation);
+  --sidebar-active: var(--accent-soft);
+  --sidebar-text: var(--text-secondary);
+  --sidebar-text-active: var(--accent);
+  --ft-bg: var(--fill);
+  --code-bg: var(--sunken);
+  --code-bd: var(--border);
+
+  --border-focus: var(--accent);
+  --text-primary: var(--text);
+
+  --border-line: var(--border);
+  --border-card: var(--border);
+  --border-card-hover: var(--border-hover);
+  --border-input: var(--border);
+  --border-divider: var(--border-subtle);
+  --text-title: var(--text);
+  --text-body: var(--text-secondary);
+  /* 卡片的常态与悬停角色可独立减重，输入框和浮层继续使用原有主题阴影。 */
+  --shadow-card-rest: var(--shadow-card);
+  --shadow-card-hover: var(--shadow-md);
+  --weight-card-title: 600;
+  --shadow-popover: var(--shadow-pop);
+  --radius-card: var(--radius-lg);
+  --radius-badge: var(--radius);
+  --radius-menu: var(--radius-lg);
+  --radius-tag: var(--radius-sm);
+  --radius-btn: var(--radius);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   第 2 层 · 主题 —— 两轴结构：八种底色 × 十种强调色。
+
+   · [data-theme] 八块交出**完全相同**的 96 个槽位名。少填一个，切过去
+     那个位置就留着上一套的值，变成一块切换后不动的颜色。
+   · accent 族 17 槽由 [data-base=x][data-accent=y] 覆盖层填，
+     20 个组合必须齐全（缺省态 = 墨蓝，与底色块内的值保持一致）。
+   · 改槽位时跑 scripts/check-theme-coverage.mjs，它会比对键集。
+
+   槽位分两类：
+   · 语义角色（面 / 文字 / 描边 / 状态 / 浮层）—— 每套底色一套值
+   · 策略角色（--cat-* 头像、--ft-* 文件类型、--code-* 语法）——
+     用几个色相、什么决定它是全局定死的；主题只负责给它填 hex。
+     v2 起分类色只服务内容侧（头像/徽章/色相钉），界面层只吃灰阶+accent。
+
+   :where(:root) 提供 paper+墨蓝 的缺省值。
+   八套底色：纸 / 雪 / 绢 / 雾 / 墨 / 岩 / 夜 / 苔，背景氛围独立开关。
+   每套交出完全相同的 96 槽；accent 十档只按极性覆盖
+   accent 族 17 槽，所以新增底色不必再配一轮 accent。
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ---------- paper：明亮暖白。色温只留在画布与侧栏，白色内容面保持清晰。 ---------- */
+:where(:root), [data-theme="paper"] {
+  /* 品牌缺省：墨蓝（accent 覆盖层会按 data-accent 重填这一族） */
+  --accent: #2856c7;
+  --accent-hover: #234bad;
+  --accent-active: #1e4093;
+  --accent-on: #ffffff;
+  --accent-soft: #dde4f6;
+  --accent-light: #c3d0ef;
+  --accent-ring: rgba(40, 86, 199, 0.2);
+  --text-brand: #234bad;
+
+  /* 面：白色内容面、近白画布与浅暖侧栏，悬停保留清晰反馈。 */
+  --bg: #fdfcfb;
+  --panel-bg: #ffffff;
+  --chrome-bg: rgba(253, 252, 251, 0.9);
+  --sunken: #f8f7f5;
+  --fill: #efede9;
+  --hover: #f5f3f0;
+  --active: #eae7e2;
+  --overlay: rgba(29, 28, 26, 0.42);
+
+  /* 文字：四级近中性，深字浅底一眼可读 */
+  --text: #242321;
+  --text-secondary: #53514d;
+  --text-muted: #6d6963;
+  --text-faint: #77726c;
+
+  /* 描边：层级靠边框，不靠色块 */
+  --border: #e8e5e0;
+  --border-strong: #d4cfc7;
+  --border-subtle: #f1efeb;
+  --border-hover: #c9c3ba;
+
+  /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
+  --text-url: #53514d;
+  --badge-cat-bg: #f0ede6;
+  --badge-cat-border: #e4dfd7;
+  --badge-cat-text: #53514d;
+  --badge-ver-bg: #dde4f6;
+  --badge-ver-text: #234bad;
+
+  /* 投影带暖褐，纯灰投影在米底上会显脏 */
+  --shadow-xs: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  /* 轻量化轮：行卡不再靠宽大软影浮起，阴影只留一丝贴地感，分层交还发丝描边 */
+  --shadow-card: 0 1px 2px 0 rgba(29, 28, 26, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(29, 28, 26, 0.05);
+  --shadow: 0 4px 12px -2px rgba(29, 28, 26, 0.06), 0 0 0 1px #d4cfc7;
+  --shadow-md: 0 6px 16px -6px rgba(29, 28, 26, 0.10);
+  --shadow-lg: 0 12px 28px -8px rgba(29, 28, 26, 0.14);
+  --shadow-pop: 0 16px 36px -8px rgba(29, 28, 26, 0.12), 0 4px 10px -2px rgba(29, 28, 26, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  /* 批量药丸浮在列表之上，要比任何弹层都高：弥散更深、落点更远，只用当前主题的字色 */
+  --shadow-dock: 0 26px 60px -18px rgba(29, 28, 26, 0.32), 0 6px 18px rgba(29, 28, 26, 0.14);
+
+  /* 状态色：一个语义一档强度，浅色下全部 ≥4.5:1 可读写。
+     危险取砖红（与暖纸同色温），成功取青瓷苔绿，警告取土黄。 */
+  --danger: #a9443c;
+  --danger-on: #ffffff;
+  --danger-hover: #8c362f;
+  --danger-soft: #f7ece9;
+  --danger-border: #eacfc8;
+  --success: #3d7355;
+  --success-soft: #ecf3ee;
+  --warning: #96682a;
+  --warning-soft: #f6efdf;
+
+  /* 侧栏 —— 只有底色两档是每套主题各调的，其余见下方别名块 */
+  --sidebar-bg: #f4f2ee;
+  --sidebar-hover: #eae7e1;
+
+  /* 品牌标渐变 */
+  --brand-g1: #6485d7;
+  --brand-g2: #2856c7;
+  --brand-g3: #1e4093;
+  --brand-knob: #ffffff;
+
+  /* 锁屏 */
+  --lock-wash-a: #ffffff;
+  --lock-wash-b: #f4f2ee;
+  --lock-orb-1: rgba(40, 86, 199, 0.07);
+  --lock-orb-2: rgba(40, 86, 199, 0.045);
+
+  /* 毛玻璃底栏 */
+  --frost-bg: rgba(255, 255, 255, 0.92);
+  --frost-border: #e8e5e0;
+
+  /* 深色面：气泡与 toast */
+  --tip-bg: #26241f;
+  --tip-fg: #f2f0ea;
+  --toast-bg: #26241f;
+  --toast-ok: #9cc4ae;
+  --toast-err: #e09a92;
+  --toast-info: #91baff;
+
+  /* 滚动条与选区 */
+  --scrollbar: rgba(29, 28, 26, 0.16);
+  --scrollbar-hover: rgba(29, 28, 26, 0.28);
+  --selection: rgba(40, 86, 199, 0.22);
+
+  /* 头像：按分类取色，六档同明度同彩度（v2 起只服务内容侧） */
+  --cat-1: #5f62b8;
+  --cat-2: #7b5fb0;
+  --cat-3: #a85b7d;
+  --cat-4: #937042;
+  --cat-5: #46806b;
+  --cat-6: #457f8a;
+  --cat-text: #ffffff;
+
+  /* 文件类型：保留 pdf红/doc蓝/xls绿 的通用认知，只降饱和。
+     vid/audio 是补的两档媒体位，色相按"与最近邻留 ≥25° 缝"选：青 185° 落在 sheet 绿与
+     doc 蓝之间，紫 295° 落在 arch 蓝紫与 img 玫红之间。改任一枚都要重新量这两条缝。 */
+  --ft-pdf: #b8564f;
+  --ft-doc: #4a6d9c;
+  --ft-sheet: #3f7a5e;
+  --ft-deck: #a0603a;
+  --ft-arch: #6a5a99;
+  --ft-code: #8a7534;
+  --ft-mark: #5e6672;
+  --ft-img: #9a5a72;
+  --ft-vid: #0c838d;
+  --ft-audio: #a84fb0;
+  --ft-unk: #7a7f88;
+
+  /* 代码块：与界面同一只手的色温（配色收口轮：整族在 --sunken 上顶住 4.5，
+     注释/标点保持"最静"档但不再是看不见） */
+  --code-fg: #1a1b20;
+  --code-kw: #9d5275;
+  --code-str: #3a7256;
+  --code-num: #96593a;
+  --code-type: #7d6a2f;
+  --code-fn: #4a6d9c;
+  --code-var: #5e6672;
+  --code-com: #686a73;
+  --code-tag: #6a5a99;
+  --code-pun: #5e6168;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  /* Consolas 没有中文字形：不在它后面接 UI 中文族，等宽件里的中文（占位符、子路径、代码注释）
+     就会回落到宋体，和同一行的无衬线文字明显两种笔形 */
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+}
+
+/* ---------- ink：中性炭黑。去除棕黄灰染，以清晰字阶和轻描边区分内容面。 ---------- */
+[data-theme="ink"] {
+  --accent: #9bbfff;
+  --accent-hover: #a9c8ff;
+  --accent-active: #86a5dc;
+  --accent-on: #171b22;
+  --accent-soft: rgba(155, 191, 255, 0.1);
+  --accent-light: rgba(155, 191, 255, 0.24);
+  --accent-ring: rgba(155, 191, 255, 0.36);
+  --text-brand: #adcbff;
+
+  --bg: #1b1c1f;
+  --panel-bg: #242529;
+  --chrome-bg: rgba(27, 28, 31, 0.9);
+  --sunken: #141518;
+  --fill: #2d2f34;
+  --hover: #2c2e33;
+  --active: #363940;
+  --overlay: rgba(0, 0, 0, 0.62);
+
+  --text: #f1f2f4;
+  --text-secondary: #cbd0d8;
+  --text-muted: #adb5c1;
+  --text-faint: #969fac;
+
+  --border: #35383f;
+  --border-strong: #4c525d;
+  --border-subtle: #2c2e34;
+  --border-hover: #4c525d;
+
+  --text-url: #cbd0d8;
+  --badge-cat-bg: #2b2d33;
+  --badge-cat-border: #393d45;
+  --badge-cat-text: #cbd0d8;
+  --badge-ver-bg: rgba(155, 191, 255, 0.1);
+  --badge-ver-text: #adcbff;
+
+  /* 深色下投影靠顶部 1px 高光 + 深外影分级 */
+  --shadow-xs: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* 轻量化轮：墨色行卡去掉 18px 大投影与外圈环，只留顶部高光一丝 */
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px #4c525d;
+  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 16px 36px -8px rgba(0, 0, 0, 0.75);
+  --shadow-pop: 0 24px 54px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* 深色下纯黑弥散等于没有：药丸靠那圈高光边浮起来 */
+  --shadow-dock: 0 26px 60px -18px rgba(0, 0, 0, 0.9), 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.09);
+
+  --danger: #e08079;
+  --danger-on: #141518;
+  --danger-hover: #ea9d97;
+  --danger-soft: #271a17;
+  --danger-border: #462924;
+  --success: #6fbf95;
+  --success-soft: #17211c;
+  --warning: #d9a95f;
+  --warning-soft: #241e13;
+
+  --sidebar-bg: #191a1d;
+  --sidebar-hover: #292b30;
+
+  --brand-g1: #adcbff;
+  --brand-g2: #9bbfff;
+  --brand-g3: #86a5dc;
+  --brand-knob: #1b1c1f;
+
+  --lock-wash-a: #1b1c1f;
+  --lock-wash-b: #242529;
+  --lock-orb-1: rgba(155, 191, 255, 0.14);
+  --lock-orb-2: rgba(155, 191, 255, 0.07);
+
+  --frost-bg: rgba(36, 37, 41, 0.94);
+  --frost-border: #35383f;
+
+  /* 深色界面的浮层反过来：亮底暗字 */
+  --tip-bg: #f0f2f5;
+  --tip-fg: #1b1c1f;
+  --toast-bg: #f0f2f5;
+  --toast-ok: #2f7d52;
+  --toast-err: #b23c37;
+  --toast-info: #2856c7;
+
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --selection: rgba(155, 191, 255, 0.3);
+
+  /* 深色底上要提明度、降彩度，否则六块色在近黑上糊成一片 */
+  --cat-1: #8a8fd8;
+  --cat-2: #ab8de6;
+  --cat-3: #de8fb8;
+  --cat-4: #d8b078;
+  --cat-5: #6fc0a0;
+  --cat-6: #6fb8c8;
+  --cat-text: #171614;
+
+  --ft-pdf: #f0716b;
+  --ft-doc: #7aa2f7;
+  --ft-sheet: #3fb950;
+  --ft-deck: #e0a45c;
+  --ft-arch: #a98be8;
+  --ft-code: #e0c060;
+  --ft-mark: #8c94a6;
+  --ft-img: #e08bb8;
+  --ft-vid: #37b0c2;
+  --ft-audio: #cf6fd6;
+  --ft-unk: #6b7280;
+
+  --code-fg: #e9ecf1;
+  --code-kw: #de9ab8;
+  --code-str: #6fd0a8;
+  --code-num: #e0b072;
+  --code-type: #e0c060;
+  --code-fn: #8aa8e0;
+  --code-var: #b5bdc9;
+  --code-com: #9aa3b0;
+  --code-tag: #ab8de6;
+  --code-pun: #9aa3b0;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace;
+}
+
+/* 侧栏激活行不吃卡面洗底：--accent-soft 的浅洗是按卡面（L*99.0）切的，
+   侧栏底比卡面深 5~6 级，搬过去在侧栏上只是亮一丝，激活行分不出来。
+   亮极性改成按侧栏底现切（主色压 15%），激活行由"亮一档"翻成"暗一档"，
+   与 --sidebar-hover 拉开 ΔL* 5 级；暗极性沿用 α 洗，与侧栏底天然同族，不动。 */
+[data-base="light"] {
+  --sidebar-active: color-mix(in srgb, var(--accent) 15%, var(--sidebar-bg));
+}
+
+/* 新布局的底色、强调色与光照。经典布局继续消费原有配方。
+   背景以主题中性色为主；柔光进入画布留白，卡片与输入框保持实底。 */
+:root[data-layout="workspace"], .workspace-theme-prev[data-base] {
+  --workspace-accent-source: #1b76c4;
+  --accent: var(--workspace-accent-source);
+  --accent-hover: oklch(from var(--accent) calc(l - 0.045) c h);
+  --accent-active: oklch(from var(--accent) calc(l - 0.08) c h);
+  --accent-on: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-light: color-mix(in srgb, var(--accent) 20%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 24%, transparent);
+  --text-brand: var(--accent-active);
+  --badge-ver-bg: var(--accent-soft);
+  --badge-ver-text: var(--text-brand);
+  --brand-g1: oklch(from var(--accent) calc(l + 0.1) calc(c * 0.8) h);
+  --brand-g2: var(--accent);
+  --brand-g3: var(--accent-active);
+  --lock-orb-1: color-mix(in srgb, var(--accent) 10%, transparent);
+  --lock-orb-2: color-mix(in srgb, var(--accent) 5%, transparent);
+  --selection: color-mix(in srgb, var(--accent) 22%, transparent);
+  --toast-info: oklch(from var(--accent) 0.78 calc(c * 0.7) h);
+
+  --workspace-frame: #efefee;
+  --workspace-light: #ffffff;
+
+  /* 普通卡片保持平整、轻边界；选中、编辑和焦点沿用各自的强调色反馈。 */
+  --border-card: var(--border);
+  --border-card-hover: var(--border-hover);
+  --shadow-card-rest: none;
+  --shadow-card-hover: none;
+  --weight-card-title: 500;
+}
+
+:root[data-layout="workspace"][data-theme="paper"], .workspace-theme-prev[data-theme="paper"] {
+  --bg: #f6f6f4;
+  --panel-bg: #ffffff;
+  --sunken: #ececea;
+  --fill: #eeeeed;
+  --hover: #f3f3f2;
+  --active: #e8e8e6;
+  --border: #e5e5e3;
+  --border-strong: #cdcdca;
+  --border-subtle: #efefed;
+  --border-hover: #c1c1be;
+  --border-search: color-mix(in srgb, var(--border) 80%, var(--border-hover));
+}
+
+:root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
+  --sidebar-hover: var(--hover);
+  --chrome-bg: color-mix(in srgb, var(--bg) 90%, transparent);
+  --accent-hover: oklch(from var(--accent) calc(l + 0.035) c h);
+  --accent-active: oklch(from var(--accent) calc(l - 0.035) c h);
+  --accent-on: #20201e;
+  --text-brand: color-mix(in oklab, var(--accent) 80%, var(--text));
+  --tip-bg: var(--panel-bg);
+  --tip-fg: var(--text);
+  --toast-bg: var(--panel-bg);
+  --toast-ok: #9ab5a5;
+  --toast-err: #d4a1a0;
+  --toast-info: var(--text-brand);
+  --brand-knob: var(--bg);
+  --lock-wash-a: var(--sidebar-bg);
+  --lock-wash-b: var(--bg);
+  --frost-bg: color-mix(in srgb, var(--panel-bg) 94%, transparent);
+  --frost-border: var(--border);
+}
+
+:root[data-layout="workspace"][data-theme="ink"], .workspace-theme-prev[data-theme="ink"] {
+  /* 外框后退、画布居中、卡片抬起；中性深底与独立字阶保留夜间层次。 */
+  --bg: #18191b;
+  --panel-bg: #26282c;
+  --sunken: #111214;
+  --sidebar-bg: #121315;
+  --fill: #2c2f33;
+  --hover: #303238;
+  --active: #34373d;
+  --border: #35383f;
+  --border-strong: #4b505a;
+  --border-subtle: #30333a;
+  --border-hover: #5c626e;
+  --shadow-xs: none;
+  --shadow-card: none;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 18%);
+  --shadow: 0 4px 14px -2px rgb(0 0 0 / 35%);
+  --text: #dfe1e5;
+  --text-secondary: #b7bfca;
+  --text-muted: #a4adba;
+  --text-faint: #a1aab7;
+  --text-url: var(--text-secondary);
+  --code-fg: var(--text);
+  --badge-cat-bg: var(--fill);
+  --badge-cat-border: var(--border);
+  --badge-cat-text: var(--text-secondary);
+  --workspace-frame: #121315;
+  --workspace-light: #393b40;
+}
+
+:root[data-layout="workspace"][data-base="light"][data-accent="ink"], .workspace-theme-prev[data-base="light"][data-accent="ink"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="ink"] { --workspace-accent-source: #1b76c4; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="indigo"], .workspace-theme-prev[data-base="light"][data-accent="indigo"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="indigo"] { --workspace-accent-source: #6966c6; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="plum"], .workspace-theme-prev[data-base="light"][data-accent="plum"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="plum"] { --workspace-accent-source: #9456ae; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="rose"], .workspace-theme-prev[data-base="light"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="rose"] { --workspace-accent-source: #b74679; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="brick"], .workspace-theme-prev[data-base="light"][data-accent="brick"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="brick"] { --workspace-accent-source: #ba4b47; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="clay"], .workspace-theme-prev[data-base="light"][data-accent="clay"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="clay"] { --workspace-accent-source: #b05a00; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="amber"], .workspace-theme-prev[data-base="light"][data-accent="amber"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="amber"] { --workspace-accent-source: #916d00; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="olive"], .workspace-theme-prev[data-base="light"][data-accent="olive"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="olive"] { --workspace-accent-source: #747813; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="celadon"], .workspace-theme-prev[data-base="light"][data-accent="celadon"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="celadon"] { --workspace-accent-source: #38804b; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="teal"], .workspace-theme-prev[data-base="light"][data-accent="teal"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="teal"] { --workspace-accent-source: #00817c; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="graphite"], .workspace-theme-prev[data-base="light"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="graphite"] { --workspace-accent-source: #6e747a; }
+
+:root[data-layout="workspace"][data-base="light"][data-accent="sand"], .workspace-theme-prev[data-base="light"][data-accent="sand"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="sand"] { --workspace-accent-source: #7b7263; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="ink"], .workspace-theme-prev[data-base="dark"][data-accent="ink"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="ink"] { --workspace-accent-source: #7eb1e6; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="indigo"], .workspace-theme-prev[data-base="dark"][data-accent="indigo"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="indigo"] { --workspace-accent-source: #a3a5e7; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="plum"], .workspace-theme-prev[data-base="dark"][data-accent="plum"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="plum"] { --workspace-accent-source: #c39bd5; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="rose"], .workspace-theme-prev[data-base="dark"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="rose"] { --workspace-accent-source: #e290b0; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="brick"], .workspace-theme-prev[data-base="dark"][data-accent="brick"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="brick"] { --workspace-accent-source: #e2958e; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="clay"], .workspace-theme-prev[data-base="dark"][data-accent="clay"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="clay"] { --workspace-accent-source: #db9d72; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="amber"], .workspace-theme-prev[data-base="dark"][data-accent="amber"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="amber"] { --workspace-accent-source: #c8a865; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="olive"], .workspace-theme-prev[data-base="dark"][data-accent="olive"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="olive"] { --workspace-accent-source: #adb271; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="celadon"], .workspace-theme-prev[data-base="dark"][data-accent="celadon"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="celadon"] { --workspace-accent-source: #84bc8f; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="teal"], .workspace-theme-prev[data-base="dark"][data-accent="teal"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="teal"] { --workspace-accent-source: #6bbdb8; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="graphite"], .workspace-theme-prev[data-base="dark"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="graphite"] { --workspace-accent-source: #a7adb4; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="sand"], .workspace-theme-prev[data-base="dark"][data-accent="sand"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="sand"] { --workspace-accent-source: #b4ab9d; }

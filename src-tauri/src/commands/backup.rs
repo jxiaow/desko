@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::backup::{self, PackageInfo};
 use crate::error::AppError;
@@ -219,10 +219,10 @@ pub(crate) async fn restore_package_while_busy(
     .map_err(|e| AppError::Backup(format!("恢复任务失败: {}", e)))??;
 
     // End independent Web access before changing the vault and its attachments.
-    crate::web_access::web_access_stop(app.clone()).await.map_err(AppError::Backup)?;
+    crate::web_access::web_access_stop(app.clone(), None).await.map_err(AppError::Backup)?;
     // 阶段二（持锁）：关连接 → 换文件 → 重开
     emit_progress(&app, "restore", "替换数据库", 92);
-    {
+    app.state::<crate::services::codex_bridge::BridgeState>().stop_during(|| -> Result<(), AppError> {
         let _web_session = crate::web_access::SESSION_GATE.write().map_err(|_| AppError::Database("Web 会话状态无法读取".into()))?;
         let mut master = state.master_key.lock().map_err(|_| AppError::Database("lock error".into()))?;
         let mut db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
@@ -233,7 +233,8 @@ pub(crate) async fn restore_package_while_busy(
         *state.backup_key.lock().map_err(|_| AppError::Database("lock error".into()))? = None;
         crate::commands::note_lock::close_domain(&state);
         state.note_drafts.lock().map_err(|_| AppError::Database("lock error".into()))?.clear();
-    }
+        Ok(())
+    })?;
     // 库是备份当时的库：主密码若在那之后改过，内存里的主密钥就和库里封存的东西不再配对，
     // 备份密码校验位同理。清掉两把密钥强制重新解锁，别让半对半错的密钥留在内存里继续写数据。
     let _ = app.emit("tray-lock", serde_json::json!({"forced": true, "resetDrafts": true}));

@@ -60,7 +60,6 @@ useEscapeClose(close)
         </button>
       </div>
       <div class="dialog-body">
-        <p class="lead">修改会重加密整个库，期间窗口短暂无响应属正常。</p>
         <div class="form-group">
           <label>当前密码</label>
           <input v-model="form.oldPassword" type="password" placeholder="请输入当前密码" />

@@ -64,3 +64,21 @@ it('desktop listeners keep native events, while Web rejects events outside the p
   expect(await listen('codex:switch-progress', callback)).toBe(stop)
   expect(nativeListen).toHaveBeenCalledWith('codex:switch-progress', callback)
 })
+
+it('Codex Web polls promptly and signals a snapshot reset after queue truncation', async () => {
+  const { invoke } = await import('./transport')
+  vi.mocked(invoke).mockResolvedValueOnce({ cursor: 1, events: [] }).mockResolvedValueOnce({ cursor: 5000, truncated: true, events: [
+    { id: 5000, event: 'codex:dialog', payload: { type: 'event', runtimeId: 'r', seq: 5000 } },
+  ] })
+  const reset = vi.fn()
+  const callback = vi.fn()
+  window.addEventListener('desko:web-events-reset', reset)
+  const { listen } = await import('./events')
+  const stop = await listen('codex:dialog', callback)
+  try {
+    await vi.advanceTimersByTimeAsync(200)
+    expect(invoke).toHaveBeenLastCalledWith('web_poll_events', { after: 1 })
+    expect(reset).toHaveBeenCalledTimes(1)
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ payload: { type: 'event', runtimeId: 'r', seq: 5000 } }))
+  } finally { stop(); window.removeEventListener('desko:web-events-reset', reset) }
+})

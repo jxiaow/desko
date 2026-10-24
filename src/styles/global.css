@@ -30,22 +30,29 @@
   --radius-xl: 14px;
   --radius-pill: 99px;
 
-  /* 字号阶梯：所有 UI 文本走这条轴，不再用 10.5/11.5/12.5/13.5/14.5/17.5 这种半像素。
-     编辑器/列表/标题等组件用一档；需要略大或略小时优先调字重，不挤字号档。
-     body 的 15px 走 --text-md。大方化轮整体上抬一档（docs/design/spacious/01-plan.md）。
-     2xs/3xl 是本轮补的两端：
-       · 2xs 只给"嵌在固定小盒子里的辅助信息"（键帽、单位、分组小标、卡脚标签），
-         正文与说明文字不许降到这一档以下（lighten 轮已把 11px 的说明文字抬到 12）；
-       · 3xl 只给"读一个大数值"的读数面（验证码），其余文本停在 2xl。 */
-  --text-2xs: 11px;
+  /* UI 只用 12 / 13 / 14 / 16 / 18 五档；24 / 30 留给数据读数。
+     md 与 base 同档，避免对象名称因组件不同出现 14 / 15px 的无意义差异。 */
+  --text-2xs: 12px;
   --text-xs: 12px;
   --text-sm: 13px;
   --text-base: 14px;
-  --text-md: 15px;
-  --text-lg: 17px;
-  --text-xl: 20px;
+  --text-md: var(--text-base);
+  --text-lg: 16px;
+  --text-xl: 18px;
   --text-2xl: 24px;
   --text-3xl: 30px;
+
+  --text-caption: var(--text-xs);
+  --text-description: var(--text-sm);
+  --text-label: var(--text-sm);
+  --text-content: var(--text-base);
+  --text-section: var(--text-lg);
+  --text-dialog-title: var(--text-xl);
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --leading-ui: 1.5;
+  --leading-copy: 1.65;
 
   /* AppIcon :size 走这几档，不再 10/11/12/13/14/15/16/18/24 全谱散布。
      组件传 :size 时按数值用，CSS 写 width/height 时引用 px 形式。
@@ -69,7 +76,6 @@
   /* 布局尺度 */
   /* 侧栏三态（V5.2 收编轮 P2）：展开 208 / 图标轨 56 / 收起 0，
      第三态不占宽，恢复入口在标题栏面包屑左侧 */
-  --sidebar-w: 208px;
   --sidebar-rail-w: 56px;
   /* 内容区的最小水平留白；工具栏与卡片共用同一阅读列 */
   --page-gutter: 24px;
@@ -232,7 +238,9 @@
   --cat-6: #457f8a;
   --cat-text: #ffffff;
 
-  /* 文件类型：保留 pdf红/doc蓝/xls绿 的通用认知，只降饱和 */
+  /* 文件类型：保留 pdf红/doc蓝/xls绿 的通用认知，只降饱和。
+     vid/audio 是补的两档媒体位，色相按"与最近邻留 ≥25° 缝"选：青 185° 落在 sheet 绿与
+     doc 蓝之间，紫 295° 落在 arch 蓝紫与 img 玫红之间。改任一枚都要重新量这两条缝。 */
   --ft-pdf: #b8564f;
   --ft-doc: #4a6d9c;
   --ft-sheet: #3f7a5e;
@@ -241,6 +249,8 @@
   --ft-code: #8a7534;
   --ft-mark: #5e6672;
   --ft-img: #9a5a72;
+  --ft-vid: #0c838d;
+  --ft-audio: #a84fb0;
   --ft-unk: #7a7f88;
 
   /* 代码块：与界面同一只手的色温（配色收口轮：整族在 --sunken 上顶住 4.5，
@@ -366,6 +376,8 @@
   --ft-code: #e0c060;
   --ft-mark: #8c94a6;
   --ft-img: #e08bb8;
+  --ft-vid: #37b0c2;
+  --ft-audio: #cf6fd6;
   --ft-unk: #6b7280;
 
   --code-fg: #e9ecf1;
@@ -483,6 +495,8 @@
   --ft-code: #8c7324;
   --ft-mark: #586374;
   --ft-img: #9d5472;
+  --ft-vid: #0c838d;
+  --ft-audio: #a84fb0;
   --ft-unk: #6e7580;
 
   --code-fg: #191a1d;
@@ -601,6 +615,8 @@
   --ft-code: #dfc165;
   --ft-mark: #8f96a7;
   --ft-img: #df8cb8;
+  --ft-vid: #48b4c4;
+  --ft-audio: #d17ddb;
   --ft-unk: #8f96a7;
 
   --code-fg: #e2e5eb;
@@ -703,6 +719,8 @@
   --ft-code: #71602b;
   --ft-mark: #5a626d;
   --ft-img: #895065;
+  --ft-vid: #0a6e77;
+  --ft-audio: #904497;
   --ft-unk: #5e6269;
   --code-fg: #1a1b20;
   --code-kw: #904b6c;
@@ -803,6 +821,8 @@
   --ft-code: #715d1d;
   --ft-mark: #556071;
   --ft-img: #8c4b65;
+  --ft-vid: #0a6b74;
+  --ft-audio: #8d4294;
   --ft-unk: #5a6069;
   --code-fg: #191a1d;
   --code-kw: #95446d;
@@ -903,6 +923,8 @@
   --ft-code: #dfc165;
   --ft-mark: #a7acb9;
   --ft-img: #e194bd;
+  --ft-vid: #63c2ce;
+  --ft-audio: #dd8de2;
   --ft-unk: #a7acb9;
   --code-fg: #e2e5eb;
   --code-kw: #dd9cb8;
@@ -1003,6 +1025,8 @@
   --ft-code: #e0c060;
   --ft-mark: #949bac;
   --ft-img: #e08bb8;
+  --ft-vid: #4cb3c1;
+  --ft-audio: #d88cdd;
   --ft-unk: #979ca6;
   --code-fg: #e4e2dc;
   --code-kw: #de9ab8;
@@ -1385,9 +1409,9 @@ html, body { height: 100%; }
 
 body {
   font-family: var(--font-ui);
-  font-size: var(--text-md);
-  line-height: 1.5;
-  letter-spacing: -0.01em;
+  font-size: var(--text-content);
+  line-height: var(--leading-ui);
+  letter-spacing: normal;
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
@@ -1399,6 +1423,14 @@ body {
 
 #app { height: 100%; }
 
+/* 原生表单控件默认回退 Arial，统一继承后，中英文与正文保持同一字形。 */
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
 /* 画布以 sunken 托住内容面，静态柔光沿用锁屏的材质。
    背景固定到视口，与工具栏、日期行对齐；内容滚动时光场不跟着移动。 */
 .app-root { display: flex; flex-direction: column; height: 100%; overflow: hidden; position: relative; background: var(--bg-app); background-attachment: fixed; }
@@ -1406,14 +1438,6 @@ body {
 .app-layout { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 .main-area { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; background: transparent; height: 100%; }
 .main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: transparent; min-height: 0; }
-
-/* 侧栏折叠时文字淡出而不是消失。Sidebar.vue 用 <Transition name="nav-text"> 包 v-if。 */
-.nav-text-enter-active,
-.nav-text-leave-active {
-  transition: opacity var(--transition-fast);
-}
-.nav-text-enter-from,
-.nav-text-leave-to { opacity: 0; }
 
 /* 用户偏好减少动效时，所有动画/过渡/补间一律压到几乎为 0；
    保留 transform/opacity 的瞬时值，不动功能可见性。
@@ -1583,9 +1607,10 @@ body {
 .dialog-logo { width: 22px; height: 22px; flex-shrink: 0; }
 .dialog-logo svg { width: 100%; height: 100%; }
 .dialog-header h3 {
-  font-size: var(--text-base);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: var(--text-dialog-title);
+  font-weight: var(--weight-semibold);
+  line-height: 1.35;
+  letter-spacing: normal;
   color: var(--text);
   margin: 0;
 }
@@ -1610,16 +1635,14 @@ body {
 .dialog-close:hover { background: var(--hover); color: var(--text-secondary); }
 .dialog-close:active { transform: scale(0.9); }
 
-.dialog-body { padding: var(--space-4); overflow-y: auto; scrollbar-gutter: stable; flex: 1; }
-/* 正文里的说明句（页签下方、字段组上方）全站一种档：12px / --text-muted / 行距 1.6。
-   原先每个弹窗各留一份，12 与 13px、muted 与 secondary 在同屏里高低不一。
-   不用 --text-faint：那档留给装饰，说明句是要读的。 */
-.dialog-body .lead { display: block; margin: 0 0 var(--space-3); font-size: var(--text-xs); line-height: 1.6; color: var(--text-muted); }
+.dialog-body { font-size: var(--text-content); line-height: var(--leading-copy); padding: var(--space-4); overflow-y: auto; scrollbar-gutter: stable; flex: 1; }
+/* 说明句与输入正文分开：13px 次文字，保持舒适行距。 */
+.dialog-body .lead { display: block; margin: 0 0 var(--space-3); font-size: var(--text-description); line-height: var(--leading-copy); color: var(--text-secondary); }
 /* 贴在字段下方的说明只留上距——它属于上面那个输入框，不是正文里独立的一段。 */
 .dialog-body .form-group .lead { margin: 6px 0 0 }
 /* 校验/提交失败的红色行与成功行：原先 .lock-error / .modal-error 各抄一份完全相同的八行。 */
-.dialog-body .dialog-err { margin: var(--space-2) 0 0; font-size: var(--text-xs); line-height: 1.6; color: var(--danger); }
-.dialog-body .dialog-ok { margin: var(--space-2) 0 0; font-size: var(--text-xs); line-height: 1.6; color: var(--accent); }
+.dialog-body .dialog-err { margin: var(--space-2) 0 0; font-size: var(--text-description); line-height: 1.6; color: var(--danger); }
+.dialog-body .dialog-ok { margin: var(--space-2) 0 0; font-size: var(--text-description); line-height: 1.6; color: var(--accent); }
 /* 弹窗底栏：全站一套 —— 46px 透明条 + 一道顶线 + 28px 按钮档（mock .dlg-f）。
    底栏不再吃 --fill 灰底：壳本身就是白卡，灰条把 46px 变成第二个面，读起来像表格页脚。
    按钮三档：主=淡染（accent-soft + --text-brand，无描边无投影），次=裸文字（留透明描边防跳动），
@@ -1694,7 +1717,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg-surface);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--text-2xs);
   line-height: 13px;
   color: var(--text-muted);
@@ -1792,7 +1815,7 @@ body {
   flex-shrink: 0;
   margin-right: 2px;
   padding: 1px 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--text-xs);
   color: var(--text-muted);
   border: 1px solid var(--border);
@@ -1826,10 +1849,9 @@ body {
 
 /* 表单件：全站共用一套。原先这几条在 EntryFormDialog 和 FileShortcutsModule 里
    各抄了一份，ChangePasswordDialog 想要却没有，于是它三个输入框是浏览器默认样式。
-   字段档对齐收藏弹窗 r13 原型：32px 输入 / 13px 字号 / 12px 标签，
-   原先全局是 36px/14px，同一屏里两种弹窗字段高低不一。 */
+   字段保留 32px 控件高度，正文 14px、标签 13px，跨弹窗共用同一阅读层级。 */
 .form-group { margin-bottom: var(--space-3); }
-.form-group label { display: block; font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
+.form-group label { display: block; font-size: var(--text-label); line-height: var(--leading-ui); font-weight: var(--weight-medium); color: var(--text-secondary); margin-bottom: 6px; }
 .form-group input,
 .form-group select {
   width: 100%;
@@ -1837,7 +1859,7 @@ body {
   padding: 0 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
+  font-size: var(--text-content);
   outline: none;
   transition: all var(--transition);
   font-family: inherit;
@@ -1849,7 +1871,7 @@ body {
   padding: 6px 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
+  font-size: var(--text-content);
   outline: none;
   transition: all var(--transition);
   font-family: inherit;
@@ -1861,7 +1883,7 @@ body {
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--bg-input-focus); }
-.form-group textarea { resize: vertical; min-height: 56px; line-height: 17px; }
+.form-group textarea { resize: vertical; min-height: 56px; line-height: var(--leading-copy); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: var(--space-3); }
 .form-row .form-group { margin-bottom: 0; }
 
@@ -1872,9 +1894,9 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-xs);
+  font-size: var(--text-label);
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin: 26px 0 6px;
 }
 .settings-section-label:first-child { margin-top: 0; }
@@ -1915,9 +1937,9 @@ body {
 /* 页签首行的说明：纸面上的一句话，不占凹槽、不抢底色。 */
 .pane-hint {
   margin: 0 0 var(--space-3);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-  color: var(--text-muted);
+  font-size: var(--text-description);
+  line-height: var(--leading-copy);
+  color: var(--text-secondary);
   max-width: 46em;
 }
 /* 说明已经给过一次留白，紧接的组题不必再按组间档呼吸。 */
@@ -1926,11 +1948,10 @@ body {
 .setting-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .setting-name { font-size: var(--text-base); font-weight: 500; color: var(--text); }
 .setting-desc {
-  /* 轻量化轮：11px 是字号上抬前的残档，深色小字发虚；升 12px + secondary 一档。
-     两行封顶：整句读得完，又不许把行撑成一段落。 */
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  line-height: 1.55;
+  /* 名称 14px，说明 13px；两行封顶保持设置行的阅读节奏。 */
+  font-size: var(--text-description);
+  color: var(--text-muted);
+  line-height: var(--leading-copy);
   max-width: 40em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1940,7 +1961,7 @@ body {
 /* 路径与地址：等宽纯文字，不套灰底输入框样式 */
 .setting-mono {
   font-family: var(--font-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-caption);
   color: var(--text-secondary);
   line-height: 1.5;
   overflow: hidden;
@@ -2130,7 +2151,7 @@ body {
 /* 键盘按键标记 */
 .kbd {
   font-size: var(--text-2xs);
-  font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-ui);
   color: var(--text-muted);
   background: var(--sunken);
   border: 1px solid var(--border);

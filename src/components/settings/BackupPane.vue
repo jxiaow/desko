@@ -82,8 +82,8 @@ const fmtSize = (b: number) =>
 const orphanBytes = computed(() => orphans.value.reduce((s, f) => s + f.size, 0))
 const orphanText = computed(() =>
   orphans.value.length
-    ? `${orphans.value.length} 个文件 · ${fmtSize(orphanBytes.value)} 不被任何小记引用`
-    : '没有未被引用的附件',
+    ? `${orphans.value.length} 个未引用文件 · ${fmtSize(orphanBytes.value)}`
+    : '没有未引用附件',
 )
 
 const doCleanOrphans = () => {
@@ -91,7 +91,7 @@ const doCleanOrphans = () => {
   const more = orphans.value.length > 3 ? ` 等 ${orphans.value.length} 个` : ''
   confirmStore.showConfirm(
     '清理未引用附件',
-    `将永久删除 ${orphans.value.length} 个附件文件（${fmtSize(orphanBytes.value)}）：${list}${more}。它们既不在任何小记正文里，也没有附件登记。正在编辑的草稿图片不会被删。`,
+    `永久删除 ${orphans.value.length} 个未引用附件（${fmtSize(orphanBytes.value)}）：${list}${more}。无法恢复，草稿图片会保留。`,
     async () => {
       busy.value = { op: 'clean', text: '清理中…', pct: 60 }
       try {
@@ -121,7 +121,7 @@ const cloudReady = computed(() => cloud.value.configured)
 const schedulable = computed(() => cloudReady.value && st.value.hasPassword)
 
 const connText = computed(() => {
-  if (!cloud.value.configured) return '未配置 · 点右侧「配置」连接坚果云'
+  if (!cloud.value.configured) return '未连接坚果云'
   const base = `已连接 · ${hostOf(cloud.value.server)}（${cloud.value.account}）`
   return cloud.value.lastSyncAt ? `${base} · 上次上传 ${fmtTime(cloud.value.lastSyncAt)}` : `${base} · 尚未上传`
 })
@@ -168,14 +168,14 @@ const submitPwd = async () => {
   const had = st.value.hasPassword
   const skipped = await run('pwd', () => backupApi.setPassword(pwd.value.pw), had ? '备份密码已更新' : '备份密码已设置') as string[] | undefined
   if (skipped?.length) {
-    toastStore.showToast(`有 ${skipped.length} 个备份文件没能换成新密码，它们仍要用旧密码恢复：${skipped.join('、')}`, 'error')
+    toastStore.showToast(`${skipped.length} 个备份密码更新失败，恢复时仍需旧密码：${skipped.join('、')}`, 'error')
   }
   closePwd()
 }
 
 /* ---------- 备份节奏（都只在连上云端之后才有意义） ---------- */
 const INTERVAL_OPTIONS = [
-  { value: 0, label: '关闭 · 只留手动' },
+  { value: 0, label: '仅手动备份' },
   { value: 1, label: '每 1 分钟' },
   { value: 5, label: '每 5 分钟' },
   { value: 15, label: '每 15 分钟' },
@@ -185,7 +185,7 @@ const INTERVAL_OPTIONS = [
 
 const doBackup = () => run('backup', () => backupApi.run(), (res) => {
   const r = res as BackupRunResult
-  return r.uploaded ? '备份完成，已传云端' : `包已打好，传云端失败：${r.error ?? '未知原因'}`
+  return r.uploaded ? '备份完成，已传云端' : `备份已生成，上传失败：${r.error ?? '未知原因'}`
 })
 
 /** 改设置本身就算一次数据变更，下一轮判定会跟着补一次备份，这是对的 */
@@ -307,7 +307,7 @@ const saveCloud = async () => {
 }
 
 const doDisconnect = () => {
-  confirmStore.showConfirm('断开云端', '断开后不再打包上传，自动备份随之暂停；云端已有文件不受影响（可在坚果云网页端删除）。', async () => {
+  confirmStore.showConfirm('断开云端', '断开后暂停自动备份，云端已有文件会保留。', async () => {
     try {
       await cloudApi.disconnect()
       await refresh()
@@ -393,7 +393,7 @@ async function pickOpenPath(): Promise<string | null> {
 const doExport = async () => {
   const dest = await pickSavePath()
   if (!dest) return
-  await run('export', () => backupApi.exportPackage(dest), '迁移包已导出，拷这一个文件就能换机恢复')
+  await run('export', () => backupApi.exportPackage(dest), '迁移包已导出')
 }
 
 const doRestoreFile = async () => {
@@ -433,7 +433,7 @@ const doRestoreFile = async () => {
         <div class="setting-info">
           <span class="setting-name">备份密码</span>
           <span class="setting-desc">
-            {{ st.hasPassword ? '已设置 · 独立于主密码，丢失后备份无法解密' : '未设置 · 设置后才能生成备份' }}
+            {{ st.hasPassword ? '已设置 · 丢失后无法解密备份' : '未设置 · 设置后才能生成备份' }}
           </span>
         </div>
         <div class="setting-actions">
@@ -463,7 +463,7 @@ const doRestoreFile = async () => {
             <span class="rp-bar"><span class="rp-bar-in" :style="{ width: busy.pct + '%' }" /></span>
             <span class="rp-pct">{{ busy.pct }}%</span>
           </span>
-          <span v-else class="setting-desc">{{ cloudReady ? roundText : '未配置云端 · 请先配置上方' }}</span>
+          <span v-else class="setting-desc">{{ cloudReady ? roundText : '请先连接云端' }}</span>
         </div>
         <div class="setting-actions">
           <button class="action-btn primary" :disabled="!!busy || !schedulable" @click="doBackup">
@@ -475,7 +475,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">自动备份</span>
-          <span class="setting-desc">到点自动打包上传；数据无变化则跳过本轮</span>
+          <span class="setting-desc">定时备份并上传，无变化时跳过</span>
         </div>
         <div class="setting-control">
           <OptionSelect
@@ -489,7 +489,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">即时备份</span>
-          <span class="setting-desc">最后一次写入 8 秒后备跑一轮，不等定时周期</span>
+          <span class="setting-desc">数据变更 8 秒后自动备份</span>
         </div>
         <label class="switch" :class="{ off: !schedulable }">
           <input type="checkbox" :checked="st.realtime" :disabled="!schedulable" @change="saveRealtime(($event.target as HTMLInputElement).checked)" />
@@ -499,7 +499,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">云端保留份数</span>
-          <span class="setting-desc">只轮转库包；云端附件密文永不删除</span>
+          <span class="setting-desc">仅清理旧数据库备份，云端附件会保留</span>
         </div>
         <div class="setting-control">
           <input
@@ -512,7 +512,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">从云端恢复</span>
-          <span class="setting-desc">下载远端备份包，整机覆盖当前数据</span>
+          <span class="setting-desc">用云端备份覆盖当前数据与附件</span>
         </div>
         <div class="setting-actions">
           <button class="action-btn" :disabled="!cloudReady" @click="openRemote">云端列表</button>
@@ -525,7 +525,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">导出迁移包</span>
-          <span class="setting-desc">库 + 全部附件打包为单个 .dsbk，换机拷贝这一个文件即可恢复</span>
+          <span class="setting-desc">数据与附件打包为 .dsbk，用于换机恢复</span>
         </div>
         <div class="setting-actions">
           <button v-if="busy?.op === 'export'" class="action-btn" disabled>{{ busy.text }} {{ busy.pct }}%</button>
@@ -535,7 +535,7 @@ const doRestoreFile = async () => {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-name">从文件恢复</span>
-          <span class="setting-desc">选本机或网盘里的 .dsbk，整机覆盖当前数据</span>
+          <span class="setting-desc">用 .dsbk 文件覆盖当前数据与附件</span>
         </div>
         <div class="setting-actions">
           <button class="action-btn" :disabled="!!busy" @click="doRestoreFile">选文件</button>
@@ -544,10 +544,8 @@ const doRestoreFile = async () => {
     </div>
 
     <p class="pane-note">
-      云端备份：持续增量，日常灾备。<br />
-      迁移导出：一次性全量，换机即用。<br />
-      Codex 只备份账号与账号配置；会话、历史和用量仅在本机，不参与坚果云备份、迁移导出或恢复。<br />
-      备份中的数据在本机加密（AES-256-GCM）后才存出，云端只见密文。
+      Codex 备份与迁移仅含账号及配置，不含会话、历史和用量。<br />
+      备份在本机加密后保存。
     </p>
 
     <!-- 备份密码弹窗 -->
@@ -562,10 +560,10 @@ const doRestoreFile = async () => {
           </div>
           <div class="dialog-body">
             <p class="lead">备份密码独立于主密码，丢失后备份无法解密。</p>
-            <p v-if="st.hasPassword" class="lead">修改密码会更新本地和后续备份。已导出的文件、云端历史副本及已取得的数据密钥不会因此失效。</p>
+            <p v-if="st.hasPassword" class="lead">新密码用于本地和后续备份；已导出或上传的旧副本及其解密密钥仍有效。</p>
             <div class="form-group">
               <label>备份密码</label>
-              <input v-model="pwd.pw" type="password" placeholder="至少 8 位，可用一句短语" />
+              <input v-model="pwd.pw" type="password" placeholder="至少 8 位" />
             </div>
             <div class="form-group">
               <label>确认备份密码</label>
@@ -593,12 +591,12 @@ const doRestoreFile = async () => {
           </div>
           <div class="dialog-body">
             <p class="lead">
-              用 <b style="word-break: break-all">{{ restoreTarget?.name }}</b> 替换当前数据库与附件，并补回缺失的 Codex 账号。本机已有账号凭据和会话保持原样。
-              覆盖前自动留一份现状备份；完成后需用该备份当时的主密码解锁。
+              用 <b style="word-break: break-all">{{ restoreTarget?.name }}</b> 覆盖当前数据与附件，覆盖前自动备份。
             </p>
+            <p class="lead">Codex 仅补回缺失账号，保留已有账号与会话。恢复后需用备份时的主密码解锁。</p>
             <div class="form-group">
               <label>备份密码</label>
-              <input v-model="restorePw" type="password" placeholder="该备份加密时用的备份密码" @keyup.enter="submitRestore" />
+              <input v-model="restorePw" type="password" placeholder="此备份的密码" @keyup.enter="submitRestore" />
             </div>
             <p v-if="restoreErr" class="dialog-err">{{ restoreErr }}</p>
           </div>
@@ -624,7 +622,7 @@ const doRestoreFile = async () => {
             <div class="form-group">
               <label>服务器地址</label>
               <input v-model="cloudCfg.server" type="text" placeholder="https://dav.jianguoyun.com/dav/" />
-              <p class="lead">个人版保持默认即可；企业版改成自己的 WebDAV 域名，必须 https。</p>
+              <p class="lead">企业版请填写自己的 HTTPS WebDAV 地址。</p>
             </div>
             <div class="form-group">
               <label>账号</label>
@@ -634,7 +632,7 @@ const doRestoreFile = async () => {
               <label>应用密码</label>
               <input v-model="cloudCfg.appPassword" type="password" :placeholder="st.cloud.configured ? '留空保持不变' : '不是你的登录密码'" />
               <p class="lead">
-                用坚果云「账户信息 → 安全选项 → 添加应用」生成的应用密码，<b>不是登录密码</b>。
+                在「账户信息 → 安全选项 → 添加应用」生成，勿用登录密码。
                 <a class="help-link" href="#" @click.prevent="openHelp">看官方说明</a>
               </p>
             </div>
@@ -730,7 +728,7 @@ const doRestoreFile = async () => {
 }
 .file-row:last-child { border-bottom: none; }
 .file-name {
-  font-size: var(--text-xs);
+  font-size: var(--text-content);
   font-weight: 500;
   color: var(--text);
   flex: 1;
@@ -760,13 +758,13 @@ const doRestoreFile = async () => {
 
 .empty-line {
   padding: 14px var(--space-4);
-  font-size: var(--text-xs);
+  font-size: var(--text-description);
   color: var(--text-muted);
 }
 
 .pane-note {
   margin: 0 0 var(--space-2);
-  font-size: var(--text-xs);
+  font-size: var(--text-description);
   line-height: 1.6;
   color: var(--text-muted);
 }

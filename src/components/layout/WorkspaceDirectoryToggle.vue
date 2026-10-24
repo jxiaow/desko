@@ -8,7 +8,7 @@ const directory = inject(workspaceDirectoryKey)
 
 <template>
   <button v-if="directory" id="workspace-directory-toggle" class="bar-btn workspace-directory-toggle" type="button" :data-tip="directory.visible.value ? '收起目录 (Ctrl+B)' : '展开目录 (Ctrl+B)'" :aria-label="directory.visible.value ? '收起目录' : '展开目录'" :aria-expanded="directory.visible.value" aria-controls="workspace-directory" @click="directory.toggle">
-    <AppIcon name="panel" :size="16" />
+    <AppIcon name="directory" :size="16" />
   </button>
 </template>
 

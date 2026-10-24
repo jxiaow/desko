@@ -1,5 +1,7 @@
 # Codex 实时会话桥（2026-10-20，草案 · 待拍板）
 
+> 2026-10-22：用户已选择原生集成，实际实现与验证记录见 [21-codex-web-ui-integration.md](21-codex-web-ui-integration.md)。以下保留为历史草案，其只读范围与待拍板条目不再描述当前实现。
+
 一句话方案：**在 desko 内用 Rust 直连官方 `codex app-server` stdio，为 Codex 模块新增「对话」页签**——把 `C:\Code\Codespace\codex-web-ui`（907 行 React+Node）当协议规格书用，只搬它的 method 面与状态机，Node/ws/HTTP 静态服务/React 整层丢弃；v1 锁 `read-only` 沙箱、不做审批回环，写代码仍回 CLI/IDE。
 
 状态：**待拍板**。第 8 节 P1–P6 每条都要签字后才开工。参考实现目录无 `.git`，开工前先自行纳管一份。

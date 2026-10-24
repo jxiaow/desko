@@ -19,14 +19,11 @@ pub(super) fn invoke(app: &AppHandle, command: &str, args: &Value) -> Result<Val
             codex::switch_codex_account(
                 app.clone(),
                 arg(args, "accountId")?,
-                arg(args, "autoRepairMode")?,
                 arg(args, "reauthTokenGeneration")?,
-                Some(false),
+                Some(codex_core::modules::codex_account::CodexSwitchPolicy::default()),
             ),
         ))),
-        "codex_cancel_account_switch" => value(tauri::async_runtime::block_on(Box::pin(
-            codex::codex_cancel_account_switch(app.clone(), arg(args, "accountId")?),
-        ))),
+        "preview_codex_switch" => Ok(serde_json::json!({"windows":{"appCount":0,"cliCount":0},"wsl":null})),
         "refresh_codex_quota" => value(tauri::async_runtime::block_on(Box::pin(
             codex::refresh_codex_quota(app.clone(), arg(args, "accountId")?),
         ))),

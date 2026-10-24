@@ -118,7 +118,7 @@ onBeforeUnmount(() => { loadSeq++ })
 .web-file-row { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 42px; padding: 7px 2px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text-secondary); cursor: pointer; text-align: left; font: inherit; }
 .web-file-row:hover:not(:disabled), .web-file-row:focus-visible { background: var(--hover); }
 .web-file-row:disabled { cursor: wait; opacity: 0.7; }
-.web-file-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--text-sm); color: var(--text); }
+.web-file-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--text-content); color: var(--text); }
 .web-file-size { flex: none; font-size: var(--text-xs); color: var(--text-muted); }
 .web-files-state { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; min-height: 110px; font-size: var(--text-sm); color: var(--text-muted); text-align: center; }
 </style>

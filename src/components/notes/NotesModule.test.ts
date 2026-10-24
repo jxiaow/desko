@@ -495,6 +495,22 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
+  it('requires two selections for merging and omits merging in the archived view', async () => {
+    stageNotes([makeNote(), makeNote({ id: 'b', title: '乙', content_html: '<p>乙</p>' })])
+    const wrapper = await mountModule()
+    const store = useNotesStore()
+    await wrapper.find('.memo-check').trigger('click')
+    const merge = () => wrapper.findAll('.dock-btn').find(button => button.text() === '合并')!
+    expect(merge().attributes('disabled')).toBeDefined()
+    store.selectAllNotes()
+    await flushPromises()
+    expect(merge().attributes('disabled')).toBeUndefined()
+    store.noteView = 'archived'
+    await flushPromises()
+    expect(wrapper.findAll('.dock-btn').some(button => button.text() === '合并')).toBe(false)
+    wrapper.unmount()
+  })
+
   it('批量待选保留出口、隐藏书写面，键盘选择不会触发卡片编辑或标签筛选', async () => {
     stageNotes([makeNote(), makeNote({ id: 'b', title: '乙', content_html: '<p>乙 #生活</p>' })])
     const wrapper = await mountModule()

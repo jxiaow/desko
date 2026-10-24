@@ -16,3 +16,4 @@ pub mod bypass;
 pub mod tunnel;
 pub mod note_export;
 pub mod hud;
+pub mod codex_bridge;

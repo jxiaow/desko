@@ -5,6 +5,7 @@ let hudSpriteSeq = 0
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppIcon from '../../shared/AppIcon.vue'
 import { formatTokenCount } from '../../../utils/codexUsage'
 import {
   formatHudCost,
@@ -16,18 +17,13 @@ import {
 const props = defineProps<{
   state: CodexHudState
   expanded?: boolean
+  pinned?: boolean
+  locked?: boolean
   /** 常驻微动（呼吸 / 摆耳 / 眨眼）：桌面窗口和设置页预览都传 */
   idle?: boolean
-  /** 交互触发（展开小跳 / 点击眨眼）：只有桌面窗口传，预览不伪装成可交互 */
+  /** 交互触发（展开小跳）：只有桌面窗口传，预览不伪装成可交互 */
   react?: boolean
-  poke?: boolean
-  /** 巡游中该抬起的那只前爪；只有桌面窗口传 */
-  lift?: '' | 'a' | 'b'
-  /** 常驻步子那一下，与 `lift` 同节拍同奇偶；只有桌面窗口传 */
-  gait?: '' | 'a' | 'b'
-  /** 步子过渡时长，跟着跨步 / 落地停两档走 */
-  gaitMs?: number
-  /** 招牌动作：节拍间隙抽一个、状态变化放一个；只有桌面窗口传 */
+  /** 生活场景动作：导演按池轮转放，点角色推进一步；只有桌面窗口传 */
   move?: CodexHudMove | ''
 }>()
 
@@ -196,7 +192,6 @@ const charMarkup = computed(() => {
 const moveClass = computed(() => (props.move ? `mv-${props.move}` : ''))
 const motionVars = computed<Record<string, string>>(() => ({
   '--mv-dur': `${props.move ? HUD_MOVE_MS[props.move] : 0}ms`,
-  '--gait-ms': `${props.gaitMs ?? 0}ms`,
 }))
 
 const primaryValue = computed(() => {
@@ -217,6 +212,15 @@ const promptTone = computed(() => {
   return ''
 })
 
+const statusMessage = computed(() => {
+  if (props.state.stale) return '刷新失败 · 缓存'
+  if (props.state.placeholderAlert) return props.state.placeholder || '额度获取失败'
+  if (!props.state.severe) return ''
+  const remaining = props.state.primary?.percentage
+  if (remaining === 0) return '额度已用尽'
+  return remaining != null && remaining <= 9 ? '额度偏低' : '额度暂不可用'
+})
+
 const todayValue = computed(() =>
   props.state.today ? formatTokenCount(props.state.today.tokens) : '—'
 )
@@ -229,15 +233,17 @@ const costValue = computed(() =>
 <template>
   <div
     class="sprite"
-    :class="[{ empty, low, expanded, idle, react, poke, 'lift-a': lift === 'a', 'lift-b': lift === 'b', 'gait-a': gait === 'a', 'gait-b': gait === 'b' }, moveClass]"
+    :class="[{ empty, low, expanded, idle, react }, moveClass]"
     :style="motionVars"
     :data-theme="state.theme.base === 'dark' ? 'ink' : 'paper'"
     :data-kind="state.skin"
     aria-hidden="true"
   >
+    <span v-if="pinned" class="pin-mark" title="已固定展开，可在挂件设置中取消"><AppIcon name="pin" :size="12" /></span>
+    <span v-if="promptTone && !expanded" class="status-mark" :class="promptTone" :title="statusMessage">!</span>
     <div class="tag" v-if="expanded">
       <div class="hud-row1">
-        <span v-if="promptTone" class="prompt" :class="promptTone">!</span>
+        <span v-if="promptTone" class="prompt" :class="promptTone" :title="statusMessage">!</span>
         <template v-if="state.primary">
           <span class="k">{{ state.primary.label }}</span>
           <b class="v">{{ primaryValue }}</b>
@@ -254,7 +260,9 @@ const costValue = computed(() =>
         <span class="unit">tok</span>
       </div>
       <div class="hud-row3">
-        <span class="est">{{ costValue }}</span>
+        <span v-if="locked" class="est" title="显示最近一次额度，解锁后继续更新">解锁后更新</span>
+        <span v-else-if="statusMessage" class="status-text" :class="promptTone" :title="`${statusMessage}；${costValue}`">{{ statusMessage }}</span>
+        <span v-else class="est">{{ costValue }}</span>
         <span class="open" aria-hidden="true">↗</span>
       </div>
     </div>
@@ -265,6 +273,15 @@ const costValue = computed(() =>
 <style scoped>
 .sprite { position: relative; width: 128px; height: 66px; color: var(--text); }
 .sprite.expanded { height: 136px; }
+.pin-mark, .status-mark {
+  position: absolute; top: 4px; right: 2px; z-index: 4;
+  display: grid; place-items: center; width: 18px; height: 18px;
+  border-radius: 50%; background: var(--panel-bg); color: var(--text-brand);
+  border: 1px solid var(--border);
+}
+.status-mark { left: 2px; right: auto; font-size: 12px; font-weight: 700; }
+.status-mark.danger, .status-text.danger { color: var(--danger); }
+.status-mark.warn, .status-text.warn { color: var(--warning); }
 .char {
   position: absolute; left: 50%; top: 0; width: 112px; height: 66px; margin-left: -56px;
   z-index: 3; pointer-events: none;
@@ -367,7 +384,7 @@ const costValue = computed(() =>
   transform-box: fill-box; transform-origin: 50% 100%;
   animation: hud-breathe 3.4s ease-in-out infinite;
 }
-.sprite.idle[data-kind="penguin"] :deep(.figure) { animation-name: hud-waddle; animation-duration: 2.9s; }
+.sprite.idle[data-kind="penguin"] :deep(.figure) { animation-name: hud-idle-waddle; animation-duration: 2.9s; }
 .sprite.idle[data-kind="snail"] :deep(.figure) { animation-duration: 4.6s; }
 .sprite.idle :deep(.eyes) {
   transform-box: fill-box; transform-origin: center;
@@ -391,39 +408,11 @@ const costValue = computed(() =>
   transform-box: fill-box; transform-origin: 50% 100%;
   animation: hud-sway 3.8s ease-in-out infinite;
 }
-/* 巡游：落脚与步子。两者都挂自己那一层、用 transition 跟着节拍走——
-   做成 CSS 动画就得和 JS 的跨步对表，一旦漂拍就变成腿在动、身子不动。 */
-.sprite :deep(.paw-a),
-.sprite :deep(.paw-b),
-.sprite :deep(.foot-a),
-.sprite :deep(.foot-b) {
-  transform-box: fill-box; transform-origin: 50% 100%;
-  transition: transform 170ms ease-out;
-}
-.sprite.lift-a :deep(.paw-a),
-.sprite.lift-a :deep(.foot-a),
-.sprite.lift-b :deep(.paw-b),
-.sprite.lift-b :deep(.foot-b) { transform: translateY(-1.2px) rotate(3deg); }
-/* 常驻步子那一档：一拍一个交替目标（a 抬 / b 收），落地清成中性，
-   下一拍再往另一侧去——和跨步同一个奇偶，天然对表。 */
-.sprite :deep(.mv-fig),
-.sprite :deep(.mv-body) {
-  transition-property: transform;
-  transition-duration: var(--gait-ms, 240ms);
-  transition-timing-function: ease-out;
-}
-.sprite[data-kind="bunny"].gait-a :deep(.mv-fig) { transform: translateY(-1.5px) scaleY(.98); }
-.sprite[data-kind="bunny"].gait-b :deep(.mv-fig) { transform: translateY(1px) scaleY(.96); }
-.sprite[data-kind="penguin"].gait-a :deep(.mv-fig) { transform: rotate(3.6deg); }
-.sprite[data-kind="penguin"].gait-b :deep(.mv-fig) { transform: rotate(-3.6deg); }
-.sprite[data-kind="snail"].gait-a :deep(.mv-body) { transform: translateX(2px); }
-.sprite[data-kind="snail"].gait-b :deep(.mv-body) { transform: translateX(-.5px); }
-/* 触发式：展开那一下小跳、点角色那一下眨眼。面板本身仍不滑入、不淡入。 */
+/* 触发式：展开那一下小跳。面板本身仍不滑入、不淡入；点角色的回应是演下一手。 */
 .sprite.react.expanded :deep(.act) {
   transform-box: fill-box; transform-origin: 50% 100%;
   animation: hud-hop .62s ease-out;
 }
-.sprite.react.poke :deep(.eyes) { animation: hud-wink .48s ease-in-out; }
 
 /* ── 招牌动作的槽位 ───────────────────────────────────────────────
    每个可动分组只留一条 transform 的命：呼吸在 .figure、触发在 .act、摆耳在 .ear-l、
@@ -439,13 +428,21 @@ const costValue = computed(() =>
 .sprite :deep(.stalk-r),
 .sprite :deep(.mv-body),
 .sprite :deep(.flip-l),
-.sprite :deep(.flip-r) { transform-box: fill-box; }
+.sprite :deep(.flip-r),
+.sprite :deep(.paw-a),
+.sprite :deep(.paw-b),
+.sprite :deep(.foot-a),
+.sprite :deep(.foot-b) { transform-box: fill-box; }
 .sprite :deep(.mv-fig),
 .sprite :deep(.mv-head),
 .sprite :deep(.mug),
 .sprite :deep(.mv-shell),
 .sprite :deep(.stalk-l),
-.sprite :deep(.stalk-r) { transform-origin: 50% 100%; }
+.sprite :deep(.stalk-r),
+.sprite :deep(.paw-a),
+.sprite :deep(.paw-b),
+.sprite :deep(.foot-a),
+.sprite :deep(.foot-b) { transform-origin: 50% 100%; }
 .sprite :deep(.mv-ear-l) { transform-origin: 78% 100%; }
 .sprite :deep(.mv-ear-r) { transform-origin: 22% 100%; }
 /* 壳是刚体、身体绕尾根伸缩：轴钉在左下，脖子才不会被拉伸带走 */
@@ -475,11 +472,51 @@ const costValue = computed(() =>
 .sprite.mv-tuck :deep(.stalk-l) { animation: hud-tuck-l var(--mv-dur) ease-in-out; }
 .sprite.mv-tuck :deep(.stalk-r) { animation: hud-tuck-r var(--mv-dur) ease-in-out; }
 
+/* 新 4 条：hop / waddle / peek / doze */
+.sprite.mv-hop :deep(.mv-fig) { animation: hud-hop-fig var(--mv-dur) ease-in-out; }
+.sprite.mv-hop :deep(.mv-head) { animation: hud-hop-head var(--mv-dur) ease-in-out; }
+.sprite.mv-hop :deep(.mug) { animation: hud-hop-mug var(--mv-dur) ease-in-out; }
+.sprite.mv-hop :deep(.mv-ear-l) { animation: hud-hop-ear-l var(--mv-dur) ease-in-out; }
+.sprite.mv-hop :deep(.mv-ear-r) { animation: hud-hop-ear-r var(--mv-dur) ease-in-out; }
+.sprite.mv-hop :deep(.paw-a) { animation: hud-hop-paw-a var(--mv-dur) ease-out; }
+.sprite.mv-hop :deep(.paw-b) { animation: hud-hop-paw-b var(--mv-dur) ease-out; }
+
+.sprite.mv-waddle :deep(.mv-fig) { animation: hud-waddle-fig var(--mv-dur) ease-in-out; }
+.sprite.mv-waddle :deep(.foot-a) { animation: hud-waddle-foot-a var(--mv-dur) ease-in-out; }
+.sprite.mv-waddle :deep(.foot-b) { animation: hud-waddle-foot-b var(--mv-dur) ease-in-out; }
+.sprite.mv-waddle :deep(.flip-l) { animation: hud-waddle-flip-l var(--mv-dur) ease-in-out; }
+.sprite.mv-waddle :deep(.flip-r) { animation: hud-waddle-flip-r var(--mv-dur) ease-in-out; }
+
+.sprite.mv-peek :deep(.mv-fig) { animation: hud-peek-fig var(--mv-dur) ease-in-out; }
+.sprite.idle.mv-peek :deep(.eyes) { animation: hud-peek-eyes var(--mv-dur) ease-in-out; }
+.sprite.mv-peek :deep(.flip-r) { animation: hud-peek-flip var(--mv-dur) ease-in-out; }
+
+/* 打盹要压住呼吸、眨眼与耳摆 / 触角摆：眼睛闭上停住才是「睡着」，
+   留一道常驻微动就变成「闭眼但还在喘」。 */
+.sprite.idle.mv-doze :deep(.figure),
+.sprite.idle.mv-doze :deep(.ear-l),
+.sprite.idle.mv-doze :deep(.ear-r),
+.sprite.idle.mv-doze :deep(.ear-flick),
+.sprite.idle.mv-doze :deep(.antennae) { animation: none; }
+.sprite.idle.mv-doze :deep(.eyes) { animation: hud-doze-eyes var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="bunny"] :deep(.mv-fig) { animation: hud-doze-bunny-fig var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="bunny"] :deep(.mv-head) { animation: hud-doze-bunny-head var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="bunny"] :deep(.mug) { animation: hud-doze-bunny-mug var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="bunny"] :deep(.mv-ear-l) { animation: hud-doze-bunny-ear-l var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="bunny"] :deep(.mv-ear-r) { animation: hud-doze-bunny-ear-r var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="penguin"] :deep(.mv-fig) { animation: hud-doze-penguin-fig var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="penguin"] :deep(.flip-l) { animation: hud-doze-penguin-flip-l var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="penguin"] :deep(.flip-r) { animation: hud-doze-penguin-flip-r var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="snail"] :deep(.mv-body) { animation: hud-doze-snail-body var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="snail"] :deep(.stalk-l) { animation: hud-doze-snail-stalk-l var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="snail"] :deep(.stalk-r) { animation: hud-doze-snail-stalk-r var(--mv-dur) ease-in-out; }
+.sprite.mv-doze[data-kind="snail"] :deep(.mv-shell) { animation: hud-doze-snail-shell var(--mv-dur) ease-in-out; }
+
 @keyframes hud-breathe {
   0%, 100% { transform: translateY(0) scale(1); }
   50% { transform: translateY(-1.2px) scale(1.008); }
 }
-@keyframes hud-waddle {
+@keyframes hud-idle-waddle {
   0%, 100% { transform: rotate(-1.6deg); }
   50% { transform: rotate(1.6deg); }
 }
@@ -501,10 +538,6 @@ const costValue = computed(() =>
   26% { transform: translateY(-3.4px); }
   54% { transform: translateY(.7px); }
   76% { transform: translateY(-1.2px); }
-}
-@keyframes hud-wink {
-  0%, 100% { transform: scaleY(1); }
-  42% { transform: scaleY(.06); }
 }
 /* 鞠躬：头沉 1px 带走耳朵，五官在头里再下滑 3.4px——正视图的「低头」只有这一种画法，
    头的轮廓自己不动，人才不会散。 */
@@ -554,24 +587,31 @@ const costValue = computed(() =>
   48% { transform: rotate(56deg) scaleY(.88); }
   72% { transform: rotate(52deg) scaleY(.9); }
 }
-/* 摆翅膀：两鳍绕肩反相摆，鳍尖甩出身体轮廓之外才像手；身子倒过去做配平 */
+/* 摆翅膀：两鳍绕肩反相摆，鳍尖甩出身体轮廓之外才像手；身子倒过去做配平。
+   两拍、每拍约 350ms，落翅停一下再收——三拍连放就成了抖。 */
 @keyframes hud-flap-fig {
   0%, 100% { transform: rotate(0); }
-  25% { transform: rotate(2.4deg); }
-  50% { transform: rotate(-2.4deg); }
-  75% { transform: rotate(1.6deg); }
+  18% { transform: rotate(1.4deg); }
+  44% { transform: rotate(-1.2deg); }
+  60% { transform: rotate(.8deg); }
+  76% { transform: rotate(-.7deg); }
+  88% { transform: rotate(.3deg); }
 }
 @keyframes hud-flap-l {
   0%, 100% { transform: rotate(0); }
-  25% { transform: rotate(-30deg); }
-  50% { transform: rotate(24deg); }
-  75% { transform: rotate(-18deg); }
+  18% { transform: rotate(-30deg); }
+  44% { transform: rotate(24deg); }
+  60% { transform: rotate(-22deg); }
+  76% { transform: rotate(18deg); }
+  88% { transform: rotate(-6deg); }
 }
 @keyframes hud-flap-r {
   0%, 100% { transform: rotate(0); }
-  25% { transform: rotate(28deg); }
-  50% { transform: rotate(-26deg); }
-  75% { transform: rotate(16deg); }
+  18% { transform: rotate(28deg); }
+  44% { transform: rotate(-26deg); }
+  60% { transform: rotate(20deg); }
+  76% { transform: rotate(-16deg); }
+  88% { transform: rotate(5deg); }
 }
 /* 伸脖子：壳不动，身体绕尾根右移，触角尖超前一点 */
 @keyframes hud-stretch-body {
@@ -605,25 +645,205 @@ const costValue = computed(() =>
   52% { transform: rotate(-30deg); }
   74% { transform: rotate(-12deg); }
 }
-/* 缩壳：头退回壳沿、两触角压平，缩住停一会儿再探出来 */
+/* 缩壳：头颈连着触角整个退到壳后，壳向右下压合盖住脸，缩住停 0.9s 再探出来。
+   原来只把身体横移 4.5px、壳压扁 2%，在那个尺寸上等于没动。 */
 @keyframes hud-tuck-body {
-  0%, 100% { transform: translateX(0) scaleX(1); }
-  22% { transform: translateX(-3px) scaleX(1); }
-  42%, 72% { transform: translateX(-4.5px) scaleX(.98); }
+  0%, 100% { transform: translateX(0) scaleX(1) scaleY(1); }
+  12% { transform: translateX(-2px) scaleX(.97) scaleY(.98); }
+  26%, 74% { transform: translateX(-10px) scaleX(.84) scaleY(.88); }
+  86% { transform: translateX(-2px) scaleX(.97) scaleY(.985); }
 }
 @keyframes hud-tuck-shell {
-  0%, 100% { transform: scaleY(1); }
-  42%, 72% { transform: scaleY(.98); }
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  26%, 74% { transform: translate(4px, 2px) scale(1.03); }
+  86% { transform: translate(1px, .5px) scale(1.005); }
 }
 @keyframes hud-tuck-l {
   0%, 100% { transform: rotate(0); }
-  22% { transform: rotate(-30deg); }
-  42%, 72% { transform: rotate(-46deg); }
+  12% { transform: rotate(-22deg); }
+  26%, 74% { transform: rotate(-76deg); }
+  86% { transform: rotate(-14deg); }
 }
 @keyframes hud-tuck-r {
   0%, 100% { transform: rotate(0); }
-  22% { transform: rotate(26deg); }
-  42%, 72% { transform: rotate(42deg); }
+  12% { transform: rotate(18deg); }
+  26%, 74% { transform: rotate(66deg); }
+  86% { transform: rotate(12deg); }
+}
+
+/* 兔子原地蹦：窗内上下各留 4px，离地 3px 是硬顶；耳尖滞后下坠，别顶到窗沿。 */
+@keyframes hud-hop-fig {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  9% { transform: translateY(.6px) scaleY(.985); }
+  17%, 21% { transform: translateY(1.5px) scaleY(.93); }
+  30% { transform: translateY(-2.2px) scaleY(1.04); }
+  39%, 45% { transform: translateY(-3px) scaleY(1.015); }
+  56% { transform: translateY(.2px) scaleY(1); }
+  63% { transform: translateY(1.5px) scaleY(.95); }
+  74% { transform: translateY(-.7px) scaleY(1.012); }
+  84% { transform: translateY(.25px) scaleY(.997); }
+}
+@keyframes hud-hop-head {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  17%, 21% { transform: translateY(1px) rotate(1.2deg); }
+  30% { transform: translateY(-.8px) rotate(-1.6deg); }
+  39%, 45% { transform: translateY(-.5px) rotate(-1.2deg); }
+  56% { transform: translateY(.5px) rotate(.8deg); }
+  63% { transform: translateY(.8px) rotate(1deg); }
+  74% { transform: translateY(-.2px) rotate(0); }
+}
+@keyframes hud-hop-mug {
+  0%, 100% { transform: translateY(0); }
+  17%, 21% { transform: translateY(.8px); }
+  30% { transform: translateY(-.6px); }
+  39%, 45% { transform: translateY(-.4px); }
+  56% { transform: translateY(.4px); }
+  63% { transform: translateY(.5px); }
+  74% { transform: translateY(-.1px); }
+}
+@keyframes hud-hop-ear-l {
+  0%, 100% { transform: translateY(0) rotate(0) scaleY(1); }
+  17%, 21% { transform: translateY(-.4px) rotate(-3deg) scaleY(.97); }
+  30% { transform: translateY(3px) rotate(4.5deg) scaleY(1.02); }
+  39%, 45% { transform: translateY(3.4px) rotate(6deg) scaleY(1.01); }
+  56% { transform: translateY(.6px) rotate(-2deg) scaleY(1); }
+  63% { transform: translateY(.9px) rotate(2deg) scaleY(1); }
+  74% { transform: translateY(-.3px) rotate(-1deg) scaleY(1); }
+  84% { transform: translateY(.1px) rotate(0) scaleY(1); }
+}
+@keyframes hud-hop-ear-r {
+  0%, 100% { transform: translateY(0) rotate(0) scaleY(1); }
+  17%, 21% { transform: translateY(-.4px) rotate(3deg) scaleY(.97); }
+  30% { transform: translateY(3px) rotate(-4.5deg) scaleY(1.02); }
+  39%, 45% { transform: translateY(3.4px) rotate(-6deg) scaleY(1.01); }
+  56% { transform: translateY(.6px) rotate(2deg) scaleY(1); }
+  63% { transform: translateY(.9px) rotate(-2deg) scaleY(1); }
+  74% { transform: translateY(-.3px) rotate(1deg) scaleY(1); }
+  84% { transform: translateY(.1px) rotate(0) scaleY(1); }
+}
+@keyframes hud-hop-paw-a {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  21% { transform: translateY(0) rotate(0); }
+  30% { transform: translateY(-2.4px) rotate(-6deg); }
+  39%, 45% { transform: translateY(-2.6px) rotate(-7deg); }
+  54% { transform: translateY(-.4px) rotate(-2deg); }
+  60% { transform: translateY(.5px) rotate(0); }
+  72% { transform: translateY(0) rotate(0); }
+}
+@keyframes hud-hop-paw-b {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  23% { transform: translateY(0) rotate(0); }
+  32% { transform: translateY(-2px) rotate(5deg); }
+  39%, 47% { transform: translateY(-2.3px) rotate(6deg); }
+  56% { transform: translateY(-.3px) rotate(2deg); }
+  62% { transform: translateY(.4px) rotate(0); }
+  74% { transform: translateY(0) rotate(0); }
+}
+
+/* 企鹅原地摇摆步：重心左右倒，支撑脚不动、另一只脚离地，鳍反相配平 */
+@keyframes hud-waddle-fig {
+  0%, 100% { transform: rotate(0); }
+  10% { transform: rotate(-3.6deg); }
+  26% { transform: rotate(0); }
+  40% { transform: rotate(3.6deg); }
+  56% { transform: rotate(0); }
+  70% { transform: rotate(-3.2deg); }
+  86% { transform: rotate(2.4deg); }
+}
+@keyframes hud-waddle-foot-a {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  32%, 48% { transform: translateY(-1.8px) rotate(-5deg); }
+  60% { transform: translateY(0) rotate(0); }
+  84% { transform: translateY(-.8px) rotate(3deg); }
+}
+@keyframes hud-waddle-foot-b {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  6%, 22% { transform: translateY(-1.8px) rotate(5deg); }
+  34% { transform: translateY(0) rotate(0); }
+  66%, 80% { transform: translateY(-1.2px) rotate(-3deg); }
+  90% { transform: translateY(0) rotate(0); }
+}
+@keyframes hud-waddle-flip-l {
+  0%, 100% { transform: rotate(0); }
+  10% { transform: rotate(10deg); }
+  40% { transform: rotate(-8deg); }
+  70% { transform: rotate(8deg); }
+}
+@keyframes hud-waddle-flip-r {
+  0%, 100% { transform: rotate(0); }
+  10% { transform: rotate(-8deg); }
+  40% { transform: rotate(10deg); }
+  70% { transform: rotate(-7deg); }
+}
+
+/* 企鹅侧身探头：没有可分离的头，好奇只能靠整个身子加眼睛先走 */
+@keyframes hud-peek-fig {
+  0%, 100% { transform: rotate(0) translateX(0); }
+  16% { transform: rotate(-1.2deg) translateX(-.4px); }
+  38%, 64% { transform: rotate(6deg) translateX(1px); }
+  84% { transform: rotate(-1deg) translateX(-.2px); }
+}
+@keyframes hud-peek-eyes {
+  0%, 100% { transform: translateX(0); }
+  28%, 70% { transform: translateX(1.3px); }
+}
+@keyframes hud-peek-flip {
+  0%, 100% { transform: rotate(0); }
+  38%, 64% { transform: rotate(-14deg); }
+}
+
+/* 打盹：闭眼、头身下沉；兔耳垂、企鹅鳍落、蜗牛触角收，停 2.4s 后苏醒回弹 */
+@keyframes hud-doze-eyes {
+  0%, 6%, 94%, 100% { transform: scaleY(1); }
+  12%, 88% { transform: scaleY(.06); }
+}
+@keyframes hud-doze-bunny-fig {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  12%, 88% { transform: translateY(1.2px) scaleY(.985); }
+}
+@keyframes hud-doze-bunny-head {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  18%, 84% { transform: translateY(1.4px) rotate(-1deg); }
+}
+@keyframes hud-doze-bunny-mug {
+  0%, 100% { transform: translateY(0); }
+  18%, 84% { transform: translateY(.6px); }
+}
+@keyframes hud-doze-bunny-ear-l {
+  0%, 100% { transform: rotate(0) scaleY(1); }
+  22%, 82% { transform: rotate(-9deg) scaleY(.98); }
+}
+@keyframes hud-doze-bunny-ear-r {
+  0%, 100% { transform: rotate(0) scaleY(1); }
+  22%, 82% { transform: rotate(9deg) scaleY(.98); }
+}
+@keyframes hud-doze-penguin-fig {
+  0%, 100% { transform: translateY(0) scaleY(1) rotate(0); }
+  14%, 86% { transform: translateY(1.2px) scaleY(.985) rotate(-.6deg); }
+}
+@keyframes hud-doze-penguin-flip-l {
+  0%, 100% { transform: rotate(0); }
+  20%, 82% { transform: rotate(7deg); }
+}
+@keyframes hud-doze-penguin-flip-r {
+  0%, 100% { transform: rotate(0); }
+  20%, 82% { transform: rotate(-7deg); }
+}
+@keyframes hud-doze-snail-body {
+  0%, 100% { transform: translateX(0) scaleY(1); }
+  14%, 86% { transform: translateX(-1.2px) scaleY(.99); }
+}
+@keyframes hud-doze-snail-stalk-l {
+  0%, 100% { transform: rotate(0); }
+  20%, 82% { transform: rotate(-18deg); }
+}
+@keyframes hud-doze-snail-stalk-r {
+  0%, 100% { transform: rotate(0); }
+  20%, 82% { transform: rotate(18deg); }
+}
+@keyframes hud-doze-snail-shell {
+  0%, 100% { transform: scaleY(1); }
+  20%, 82% { transform: scaleY(.995); }
 }
 @media (prefers-reduced-motion: reduce) {
   .sprite.idle :deep(.figure),
@@ -634,14 +854,7 @@ const costValue = computed(() =>
   .sprite.idle :deep(.antennae),
   .sprite.react :deep(.act),
   .sprite.react :deep(.eyes) { animation: none; }
-  /* 常驻步子走的是 transition，`animation: none` 管不到它，得单独收口。
-     招牌动作不用管：JS 那道闸门在 reduce 下根本不会挂 mv-* 的 class。 */
-  .sprite :deep(.mv-fig),
-  .sprite :deep(.mv-body) { transition: none; }
-  .sprite.gait-a :deep(.mv-fig),
-  .sprite.gait-b :deep(.mv-fig),
-  .sprite.gait-a :deep(.mv-body),
-  .sprite.gait-b :deep(.mv-body) { transform: none; }
+  /* 招牌动作与打盹不用管：JS 那道闸门在 reduce 下根本不会挂 mv-* 的 class。 */
 }
 
 .tag {
@@ -698,5 +911,6 @@ const costValue = computed(() =>
   font-family: var(--font-mono); font-size: 12px; font-weight: 600;
   color: var(--text);
 }
+.status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
 .hud-row3 .open { font-size: 11px; line-height: 1; color: var(--accent); }
 </style>

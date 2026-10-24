@@ -343,7 +343,7 @@ watchEffect(() => {
     <div v-else class="empty-state">
       <div class="empty-icon"><AppIcon name="navMfa" :size="24" /></div>
       <div class="empty-title">暂无验证码</div>
-      <div class="empty-desc">点击右上角「新增验证码」，粘贴 otpauth 链接或识别二维码</div>
+      <div class="empty-desc">添加 otpauth 链接、密钥或二维码</div>
     </div>
 
     <!-- Add Dialog -->
@@ -376,13 +376,12 @@ watchEffect(() => {
                 ></textarea>
               </div>
               <div class="qr-row">
-                <span class="qr-hint">有二维码图片？</span>
                 <input v-if="webRuntime" ref="imageInput" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,image/png,image/jpeg,image/webp,image/bmp" class="qr-file-input" aria-label="选择二维码图片" @change="onWebImageSelected" />
                 <button class="btn-secondary" @click="scanFromImageFile">
                   <AppIcon name="image" :size="14" />
                   识别图片
                 </button>
-                <span class="qr-hint">或直接 Ctrl+V 粘贴截图</span>
+                <span class="qr-hint">或 Ctrl+V 粘贴图片</span>
               </div>
             </template>
 
@@ -453,7 +452,7 @@ watchEffect(() => {
 .card-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 档面收进 24px（与浮岛卡同一档），基座 .grid-slot 是 34px */
 .mfa-card .grid-slot { width: 24px; height: 24px; border-radius: 6px; font-size: var(--text-2xs) }
-.mfa-tile { font-weight: 700; letter-spacing: 0.02em; }
+.mfa-tile { font-weight: 600; letter-spacing: 0.02em; }
 .card-issuer {
   flex: 0 1 auto;
   min-width: 0;
@@ -468,7 +467,7 @@ watchEffect(() => {
   flex: 1 1 auto;
   min-width: 0;
   font-size: var(--text-xs);
-  color: var(--text-faint);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -482,7 +481,7 @@ html.hover-suppressed .mfa-card:hover .card-del { opacity: 0; }
 .card-code {
   font-family: var(--font-mono);
   font-size: var(--text-2xl);
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--text);
   border-radius: var(--radius-sm);

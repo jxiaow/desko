@@ -3,33 +3,41 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { emitTo, listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import CodexHudApp from './CodexHudApp.vue'
-import { HUD_MOVE_MS, type CodexHudEventPayload, type CodexHudState } from '../../../utils/codexHud'
+import {
+  HUD_DOZE_EVERY,
+  HUD_DOZE_GAP_MS,
+  HUD_FIRST_SCENE_MS,
+  HUD_MOVE_MS,
+  HUD_SCENE_GAPS_MS,
+  type CodexHudEventPayload,
+  type CodexHudMove,
+  type CodexHudState,
+} from '../../../utils/codexHud'
 
-const { onMoved, startDragging, setPosition, outerPosition, scaleFactor, invokeMock, movedHandler, reduce } =
-  vi.hoisted(() => ({
-    onMoved: vi.fn(),
-    startDragging: vi.fn(),
-    setPosition: vi.fn(),
-    outerPosition: vi.fn(),
-    scaleFactor: vi.fn(),
-    invokeMock: vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>(),
-    movedHandler: { current: undefined as ((arg: { payload: { x: number; y: number } }) => void) | undefined },
-    reduce: { on: false },
-  }))
+const { onMoved, startDragging, setPosition, invokeMock, movedHandler, reduce } = vi.hoisted(() => ({
+  onMoved: vi.fn(),
+  startDragging: vi.fn(),
+  setPosition: vi.fn(),
+  invokeMock: vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>(),
+  movedHandler: { current: undefined as ((arg: { payload: { x: number; y: number } }) => void) | undefined },
+  reduce: { on: false, handlers: new Set<(event: MediaQueryListEvent) => void>() },
+}))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(), emitTo: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ onMoved, startDragging, setPosition, outerPosition, scaleFactor }),
+  getCurrentWindow: () => ({ onMoved, startDragging, setPosition }),
 }))
 // jsdom 没有 matchMedia，而挂件开机第一件事就是读降低动效那一档
 vi.stubGlobal('matchMedia', (query: string) => ({
   matches: query.includes('reduced-motion') && reduce.on,
   media: query,
-  addEventListener: () => {},
-  removeEventListener: () => {},
+  addEventListener: (_: string, handler: (event: MediaQueryListEvent) => void) => reduce.handlers.add(handler),
+  removeEventListener: (_: string, handler: (event: MediaQueryListEvent) => void) => reduce.handlers.delete(handler),
   addListener: () => {},
   removeListener: () => {},
 }))
+// 亮相要等两帧，真跑掉几十毫秒会把导演那 3 秒的边界糊掉：帧改成即时，秒表从 0 起算
+const runFrameImmediately = (callback: FrameRequestCallback) => { callback(0); return 1 }
 
 const state: CodexHudState = {
   skin: 'bunny',
@@ -44,6 +52,19 @@ const state: CodexHudState = {
   updatedAt: 1_800_000_000,
 }
 
+/**
+ * 兔子的时间线：等待 = 上一场结束到这一场开始。
+ * 首档 3s，之后取间隔表轮转；打盹那档不走间隔表。
+ */
+const PLAN: Array<[number, CodexHudMove]> = [
+  [HUD_FIRST_SCENE_MS, 'bow'],
+  [HUD_SCENE_GAPS_MS[0], 'hop'],
+  [HUD_SCENE_GAPS_MS[1], 'fold'],
+  [HUD_SCENE_GAPS_MS[2], 'bow'],
+  [HUD_SCENE_GAPS_MS[3], 'doze'],
+  [HUD_DOZE_GAP_MS, 'hop'],
+]
+
 const off = vi.fn()
 let wrapper: VueWrapper | undefined
 
@@ -54,7 +75,9 @@ function expandedCalls(): boolean[] {
 }
 
 function push(payload: CodexHudEventPayload): void {
-  const handler = vi.mocked(listen).mock.calls[0][1] as (event: { payload: CodexHudEventPayload }) => void
+  // 一次测例里可能挂载两次（先未亮相、再亮相），旧实例的注册还在数组里
+  const calls = vi.mocked(listen).mock.calls
+  const handler = calls[calls.length - 1][1] as (event: { payload: CodexHudEventPayload }) => void
   handler({ payload })
 }
 
@@ -78,6 +101,22 @@ function release(wrapper: VueWrapper, selector: string, x = 20, y = 20): void {
   )
 }
 
+/** 走表：定时器与 Vue 更新都得跟上，否则读到的还是上一帧的 class。 */
+async function advance(ms: number): Promise<void> {
+  await vi.advanceTimersByTimeAsync(ms)
+  await flushPromises()
+}
+
+function revealCount(): number {
+  return invokeMock.mock.calls.filter(([cmd]) => cmd === 'desko_hud_reveal').length
+}
+
+/** 亮相整条链都在微任务里（字体与两帧已被桩压成即时）：排空队列，不消耗一毫秒。 */
+async function drainToReveal(times = 1): Promise<void> {
+  for (let i = 0; i < 8; i++) await advance(0)
+  expect(revealCount()).toBe(times)
+}
+
 async function mountApp(): Promise<VueWrapper> {
   const next = mount(CodexHudApp)
   await flushPromises()
@@ -86,15 +125,69 @@ async function mountApp(): Promise<VueWrapper> {
   return next
 }
 
+/** 窗已经亮着：导演在亮相那一刻排第一档，测例的秒表要从那一刻起算。 */
+async function mountRevealed(): Promise<VueWrapper> {
+  const next = mount(CodexHudApp)
+  await flushPromises()
+  push({ state, reveal: true })
+  await drainToReveal()
+  return next
+}
+
+async function clickCharacter(wrapper: VueWrapper): Promise<void> {
+  press(wrapper, '.sprite')
+  release(wrapper, '.sprite')
+  await advance(0)
+}
+
+/** 从亮相那一刻沿时间线走到第 index 场开始，并校验它演的是哪一手；秒表只够走一次。 */
+async function toSceneStart(index: number): Promise<void> {
+  for (let i = 0; i < index; i++) {
+    await advance(PLAN[i][0] + HUD_MOVE_MS[PLAN[i][1]])
+  }
+  await advance(PLAN[index][0])
+  expect(moveClass()).toBe(`mv-${PLAN[index][1]}`)
+}
+
+function savedPositions(): unknown[] {
+  return invokeMock.mock.calls
+    .filter(([cmd]) => cmd === 'desko_hud_save_position')
+    .map(([, args]) => ({ x: args?.x, y: args?.y }))
+}
+
+function spriteClasses(): string[] {
+  return wrapper?.get('.sprite').classes() ?? []
+}
+
+/** 招牌动作在 DOM 上只留一个 class：mv-bow / mv-hop / mv-doze… */
+function moveClass(): string {
+  return spriteClasses().find((c) => c.startsWith('mv-')) ?? ''
+}
+
+function cssVar(name: string): string {
+  const style = String(wrapper?.get('.sprite').attributes('style') ?? '')
+  return style.match(new RegExp(`${name}: ([^;]+);`))?.[1] ?? ''
+}
+
+function setReducedMotion(on: boolean): void {
+  for (const handler of reduce.handlers) handler({ matches: on } as MediaQueryListEvent)
+}
+
+function setVisibility(value: 'visible' | 'hidden'): void {
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(value)
+  document.dispatchEvent(new Event('visibilitychange'))
+}
+
 beforeEach(() => {
   vi.useFakeTimers()
+  // useFakeTimers 会接管 requestAnimationFrame，桩必须打在它之后
+  vi.stubGlobal('requestAnimationFrame', runFrameImmediately)
   vi.resetAllMocks()
   reduce.on = false
+  reduce.handlers.clear()
   invokeMock.mockResolvedValue(undefined)
   startDragging.mockResolvedValue(undefined)
   setPosition.mockResolvedValue(undefined)
-  outerPosition.mockResolvedValue({ x: 1000, y: 700 })
-  scaleFactor.mockResolvedValue(1)
   vi.mocked(listen).mockResolvedValue(off)
   vi.mocked(emitTo).mockResolvedValue()
   onMoved.mockImplementation((handler: (arg: { payload: { x: number; y: number } }) => void) => {
@@ -106,6 +199,7 @@ beforeEach(() => {
 afterEach(() => {
   wrapper?.unmount()
   wrapper = undefined
+  vi.restoreAllMocks()
   vi.useRealTimers()
 })
 
@@ -113,10 +207,10 @@ describe('挂件展开手势', () => {
   it('鼠标停在角色上 160ms 才展开，掠过不弹', async () => {
     wrapper = await mountApp()
     enterCharacter(wrapper)
-    vi.advanceTimersByTime(100)
+    await advance(100)
     expect(expandedCalls()).toEqual([])
     leaveWindow(wrapper)
-    vi.advanceTimersByTime(500)
+    await advance(500)
     expect(expandedCalls()).toEqual([])
     expect(wrapper.find('.tag').exists()).toBe(false)
   })
@@ -124,36 +218,58 @@ describe('挂件展开手势', () => {
   it('停留到位即展开，移开鼠标收起', async () => {
     wrapper = await mountApp()
     enterCharacter(wrapper)
-    vi.advanceTimersByTime(160)
-    await flushPromises()
+    await advance(160)
     expect(expandedCalls()).toEqual([true])
     expect(wrapper.find('.tag').exists()).toBe(true)
     leaveWindow(wrapper)
-    await flushPromises()
+    await advance(0)
     expect(expandedCalls()).toEqual([true, false])
     expect(wrapper.find('.tag').exists()).toBe(false)
   })
 
-  it('点角色钉住后移开不收起，再点取消并收起', async () => {
+  it('设置固定展开后移开不收起，取消固定后恢复悬停展开', async () => {
     wrapper = await mountApp()
-    enterCharacter(wrapper)
-    vi.advanceTimersByTime(160)
-    press(wrapper, '.sprite')
-    release(wrapper, '.sprite')
+    push({ state, reveal: false, pinned: true })
+    await advance(0)
+    expect(wrapper.get('.pin-mark').attributes('title')).toContain('挂件设置')
     expect(expandedCalls()).toEqual([true])
     leaveWindow(wrapper)
-    expect(expandedCalls()).toEqual([true])
-    press(wrapper, '.sprite')
-    release(wrapper, '.sprite')
+    await clickCharacter(wrapper)
+    expect(wrapper.find('.pin-mark').exists()).toBe(true)
+    expect(wrapper.find('.tag').exists()).toBe(true)
+    push({ state, reveal: false, pinned: false })
+    await advance(0)
+    expect(wrapper.find('.pin-mark').exists()).toBe(false)
     expect(expandedCalls()).toEqual([true, false])
-    expect(wrapper.attributes('aria-label')).toContain('悬停或点击角色展开')
+    expect(wrapper.attributes('aria-label')).toContain('悬停展开，点击角色看下一个动作')
   })
 
-  it('点面板打开 Codex 并收起、解钉', async () => {
+  it('重建窗口时恢复固定展开，打开 Codex 也不清除固定设置', async () => {
+    wrapper = await mountApp()
+    push({ state, reveal: true, pinned: true })
+    await drainToReveal()
+    expect(expandedCalls()).toEqual([true])
+    expect(wrapper.find('.tag').exists()).toBe(true)
+    press(wrapper, '.tag')
+    release(wrapper, '.tag')
+    expect(invoke).toHaveBeenCalledWith('desko_hud_open_codex')
+    expect(wrapper.find('.pin-mark').exists()).toBe(true)
+    expect(expandedCalls()).toEqual([true])
+  })
+
+  it('锁定后仍显示额度并标明解锁后更新', async () => {
+    wrapper = await mountRevealed()
+    push({ state, reveal: false, pinned: true, locked: true })
+    await advance(0)
+    expect(wrapper.get('.hud-row1').text()).toContain('68%')
+    expect(wrapper.get('.hud-row3').text()).toContain('解锁后更新')
+    expect(wrapper.attributes('aria-label')).toContain('应用已锁定')
+  })
+
+  it('点面板打开 Codex 并收起未固定的面板', async () => {
     wrapper = await mountApp()
     enterCharacter(wrapper)
-    vi.advanceTimersByTime(160)
-    await flushPromises()
+    await advance(160)
     press(wrapper, '.sprite')
     release(wrapper, '.sprite')
     press(wrapper, '.tag')
@@ -173,295 +289,240 @@ describe('挂件展开手势', () => {
     )
     expect(startDragging).toHaveBeenCalledTimes(1)
     movedHandler.current?.({ payload: { x: 800, y: 400 } })
-    vi.advanceTimersByTime(160)
+    await advance(160)
     expect(expandedCalls()).toEqual([])
-    vi.advanceTimersByTime(200)
+    await advance(200)
     expect(expandedCalls()).toEqual([true])
+  })
+
+  it('只有亮过窗的拖动才落盘', async () => {
+    wrapper = await mountApp()
+    movedHandler.current?.({ payload: { x: 900, y: 660 } })
+    await advance(400)
+    expect(savedPositions()).toEqual([])
+    wrapper.unmount()
+    wrapper = await mountRevealed()
+    movedHandler.current?.({ payload: { x: 900, y: 660 } })
+    await advance(320)
+    expect(savedPositions()).toEqual([{ x: 900, y: 660 }])
+  })
+
+  it('右键只请 Rust 弹挂件菜单，不展开也不钉住', async () => {
+    wrapper = await mountApp()
+    wrapper.get('.hud').element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+    await advance(0)
+    expect(invoke).toHaveBeenCalledWith('desko_hud_context_menu')
+    expect(wrapper.find('.tag').exists()).toBe(false)
+    expect(wrapper.find('.pin-mark').exists()).toBe(false)
   })
 })
 
-function savedPositions(): unknown[] {
-  return invokeMock.mock.calls
-    .filter(([cmd]) => cmd === 'desko_hud_save_position')
-    .map(([, args]) => ({ x: args?.x, y: args?.y }))
-}
+describe('挂件生活场景导演', () => {
+  it('亮相 3 秒才演第一手，之后按 7/11/8/14 轮档，第 5 场插打盹', async () => {
+    wrapper = await mountRevealed()
+    await advance(HUD_FIRST_SCENE_MS - 1)
+    expect(moveClass()).toBe('')
+    await advance(1)
+    expect(moveClass()).toBe('mv-bow')
+    expect(cssVar('--mv-dur')).toBe(`${HUD_MOVE_MS.bow}ms`)
+    await advance(HUD_MOVE_MS.bow + HUD_SCENE_GAPS_MS[0])
+    expect(moveClass()).toBe('mv-hop')
+    await advance(HUD_MOVE_MS.hop + HUD_SCENE_GAPS_MS[1])
+    expect(moveClass()).toBe('mv-fold')
+    await advance(HUD_MOVE_MS.fold + HUD_SCENE_GAPS_MS[2])
+    expect(moveClass()).toBe('mv-bow')
+    await advance(HUD_MOVE_MS.bow + HUD_SCENE_GAPS_MS[3])
+    expect(moveClass()).toBe('mv-doze')
+  })
 
-/** 兔子那一档：跨步 340ms 缓出 + 落地停 210ms，一步 6px。 */
-const GLIDE_MS = 340
-const HOLD_MS = 210
-const STRIDE_PX = 6
+  it('打盹醒来的档期走 18 秒，不吃间隔表', async () => {
+    wrapper = await mountRevealed()
+    await toSceneStart(HUD_DOZE_EVERY - 1)
+    expect(moveClass()).toBe('mv-doze')
+    await advance(HUD_MOVE_MS.doze + HUD_DOZE_GAP_MS - 1)
+    expect(moveClass()).toBe('')
+    await advance(1)
+    expect(moveClass()).toBe('mv-hop')
+  })
 
-function walkTransform(): string {
-  return String(wrapper?.get('.walk').attributes('style') ?? '')
-}
+  it('鼠标停在角色上就停排程，离开后按同一档重等', async () => {
+    wrapper = await mountRevealed()
+    await advance(HUD_FIRST_SCENE_MS - 1000)
+    enterCharacter(wrapper)
+    await advance(3000)
+    expect(moveClass()).toBe('')
+    leaveWindow(wrapper)
+    await advance(HUD_FIRST_SCENE_MS - 1)
+    expect(moveClass()).toBe('')
+    await advance(1)
+    expect(moveClass()).toBe('mv-bow')
+  })
 
-function lanePx(): number {
-  return Number(/translate3d\(([-\d.]+)px/.exec(walkTransform())?.[1] ?? NaN)
-}
+  it('正在演的那一场不被悬停掐断，收完才静下来', async () => {
+    wrapper = await mountRevealed()
+    await advance(HUD_FIRST_SCENE_MS)
+    expect(moveClass()).toBe('mv-bow')
+    enterCharacter(wrapper)
+    await advance(HUD_MOVE_MS.bow)
+    expect(moveClass()).toBe('')
+    await advance(HUD_SCENE_GAPS_MS[0] + HUD_FIRST_SCENE_MS)
+    expect(moveClass()).toBe('')
+    leaveWindow(wrapper)
+    await advance(HUD_SCENE_GAPS_MS[0])
+    expect(moveClass()).toBe('mv-hop')
+  })
 
-function faceX(): string {
-  return String(/scaleX\(([-\d.]+)\)/.exec(walkTransform())?.[1] ?? '')
-}
-
-function movedXs(): number[] {
-  return setPosition.mock.calls.map(([pos]) => (pos as { x: number }).x)
-}
-
-function spriteClasses(): string[] {
-  return wrapper?.get('.sprite').classes() ?? []
-}
-
-/** 招牌动作在 DOM 上只留一个 class：mv-bow / mv-fold / mv-flap… */
-function moveClass(): string {
-  return spriteClasses().find((c) => c.startsWith('mv-')) ?? ''
-}
-
-function gaitClass(): string {
-  return spriteClasses().find((c) => c.startsWith('gait-')) ?? ''
-}
-
-function cssVar(name: string): string {
-  const style = String(wrapper?.get('.sprite').attributes('style') ?? '')
-  return style.match(new RegExp(`${name}: ([^;]+);`))?.[1] ?? ''
-}
-
-/** 亮相过的窗口：告警那一下只给「窗已经亮着」时的变化。 */
-async function mountRevealed(): Promise<VueWrapper> {
-  const next = mount(CodexHudApp)
-  await flushPromises()
-  push({ state, reveal: true })
-  await vi.advanceTimersByTimeAsync(700)
-  await flushPromises()
-  return next
-}
-
-describe('挂件绕锚点走动', () => {
-  it('滑到位那一帧才跟位：窗口挪的量正好等于角色已经滑出的量', async () => {
-    wrapper = await mountApp()
-    vi.advanceTimersByTime(GLIDE_MS + HOLD_MS)
-    await flushPromises()
-    expect(lanePx()).toBe(STRIDE_PX)
+  it('设置固定展开后不再排场景', async () => {
+    wrapper = await mountRevealed()
+    push({ state, reveal: false, pinned: true })
+    await advance(HUD_MOVE_MS.bow + 60000)
+    expect(moveClass()).toBe('')
     expect(setPosition).not.toHaveBeenCalled()
-    const screenBefore = 1000 + lanePx()
-    vi.advanceTimersByTime(GLIDE_MS)
-    await flushPromises()
-    expect(setPosition).toHaveBeenCalledTimes(1)
-    expect(setPosition.mock.calls[0][0]).toEqual(expect.objectContaining({ x: 1006, y: 700 }))
-    expect(lanePx()).toBe(0)
-    // 屏幕位置连续：窗口接手了角色已经走完的那 6px
-    expect(1006 + lanePx()).toBe(screenBefore)
     expect(savedPositions()).toEqual([])
   })
 
-  it('数到点的节拍间隙抽一个招牌动作，那一下不跟位', async () => {
-    wrapper = await mountApp()
-    // 兔子一拍 = 滑出 340 + 落地停 210；三拍之后才轮到动作
-    vi.advanceTimersByTime(2100)
-    await flushPromises()
-    expect(setPosition).toHaveBeenCalledTimes(3)
-    expect(moveClass()).toBe('')
-    vi.advanceTimersByTime(200)
-    await flushPromises()
+  it('生活场景只演不动窗：全程不碰 setPosition，也不落盘', async () => {
+    wrapper = await mountRevealed()
+    await toSceneStart(4)
+    expect(moveClass()).toBe('mv-doze')
+    await advance(HUD_MOVE_MS.doze + HUD_DOZE_GAP_MS)
+    expect(moveClass()).toBe('mv-hop')
+    expect(setPosition).not.toHaveBeenCalled()
+    expect(savedPositions()).toEqual([])
+  })
+
+  it('点角色就演下一手，第二次点是另一手', async () => {
+    wrapper = await mountRevealed()
+    await clickCharacter(wrapper)
     expect(moveClass()).toBe('mv-bow')
-    expect(cssVar('--mv-dur')).toBe(`${HUD_MOVE_MS.bow}ms`)
-    expect(setPosition).toHaveBeenCalledTimes(3)
-    // 动作放完才接下一拍，收尾与 --mv-dur 同源
-    vi.advanceTimersByTime(HUD_MOVE_MS.bow)
-    await flushPromises()
-    expect(moveClass()).toBe('')
-    expect(lanePx()).toBe(STRIDE_PX)
-    vi.advanceTimersByTime(GLIDE_MS)
-    await flushPromises()
-    expect(setPosition).toHaveBeenCalledTimes(4)
+    expect(wrapper.find('.pin-mark').exists()).toBe(false)
+    await advance(HUD_MOVE_MS.bow)
+    await clickCharacter(wrapper)
+    expect(moveClass()).toBe('mv-hop')
+    expect(wrapper.find('.pin-mark').exists()).toBe(false)
   })
 
-  it('动作按池子轮转，下一拍间隙换成另一手', async () => {
-    wrapper = await mountApp()
-    const seen: string[] = []
-    for (let i = 0; i < 80; i++) {
-      vi.advanceTimersByTime(100)
-      await flushPromises()
-      const now = moveClass()
-      if (now && now !== seen[seen.length - 1]) seen.push(now)
-    }
-    // 兔子池子里只有鞠躬与卷耳朵，轮到第二个必须是另一手
-    expect(seen).toEqual(['mv-bow', 'mv-fold'])
+  it('打盹时点它会掐掉打盹，立刻演下一手', async () => {
+    wrapper = await mountRevealed()
+    await toSceneStart(HUD_DOZE_EVERY - 1)
+    expect(moveClass()).toBe('mv-doze')
+    await clickCharacter(wrapper)
+    expect(moveClass()).toBe('mv-hop')
   })
 
-  it('换皮肤就换一手：企鹅只有摆翅膀，步子换成左右摇', async () => {
-    wrapper = await mountApp()
-    push({ state: { ...state, skin: 'penguin' }, reveal: false })
-    await flushPromises()
-    const moves = new Set<string>()
-    const gaits = new Set<string>()
-    for (let i = 0; i < 90; i++) {
-      vi.advanceTimersByTime(100)
-      await flushPromises()
-      if (moveClass()) moves.add(moveClass())
-      if (gaitClass()) gaits.add(gaitClass())
-    }
-    expect([...moves]).toEqual(['mv-flap'])
-    expect([...gaits].sort()).toEqual(['gait-a', 'gait-b'])
-  })
-
-  it('步子跟着跨步走：滑出那半拍压身，落地停那半拍松开', async () => {
-    wrapper = await mountApp()
-    vi.advanceTimersByTime(GLIDE_MS + HOLD_MS + 50)
-    await flushPromises()
-    expect(gaitClass()).toBe('gait-a')
-    expect(cssVar('--gait-ms')).toBe(`${GLIDE_MS}ms`)
-    vi.advanceTimersByTime(GLIDE_MS)
-    await flushPromises()
-    expect(gaitClass()).toBe('')
-    expect(cssVar('--gait-ms')).toBe(`${HOLD_MS}ms`)
-    vi.advanceTimersByTime(HOLD_MS + 10)
-    await flushPromises()
-    expect(gaitClass()).toBe('gait-b')
-    // 抬爪与步子同奇偶：腿和身子不会一个动一个不动
-    expect(spriteClasses()).toEqual(expect.arrayContaining(['lift-b', 'gait-b']))
-  })
-
-  it('刚见底那一下缩一次，同一状态不重放', async () => {
+  it('告警撤掉在排的那一档自己上，且不占生活池名额', async () => {
     wrapper = await mountRevealed()
     const low = { ...state, severe: true, primary: { label: '5h', percentage: 9 } }
+    await advance(1000)
     push({ state: low, reveal: false })
-    await flushPromises()
+    await advance(0)
     // 兔子没壳可缩，用它自己那条「收一下」的形
     expect(moveClass()).toBe('mv-fold')
     expect(cssVar('--mv-dur')).toBe(`${HUD_MOVE_MS.fold}ms`)
-    vi.advanceTimersByTime(HUD_MOVE_MS.fold + 10)
-    await flushPromises()
+    await advance(HUD_MOVE_MS.fold)
     expect(moveClass()).toBe('')
-    push({ state: low, reveal: false, walk: true })
-    await flushPromises()
+    // 原本 3 秒那档已被撤走：跨过它也不会插进第二场
+    await advance(1500)
     expect(moveClass()).toBe('')
+    await advance(HUD_SCENE_GAPS_MS[0] - 1500)
+    expect(moveClass()).toBe('mv-bow')
+    // 告警不占池子名额：同一状态再推一次也不重放
+    push({ state: low, reveal: false })
+    await advance(0)
+    expect(moveClass()).toBe('mv-bow')
   })
 
   it('窗还没亮就不放告警：首帧快照只对齐状态', async () => {
     wrapper = await mountApp()
     push({ state: { ...state, severe: true, primary: { label: '5h', percentage: 4 } }, reveal: false })
-    await flushPromises()
+    await advance(0)
     expect(moveClass()).toBe('')
   })
 
-  it('系统要求减少动效时不放招牌动作，走动照旧', async () => {
+  it('换皮肤就换一手，并从新池子第一手重新开始', async () => {
+    wrapper = await mountRevealed()
+    await advance(HUD_FIRST_SCENE_MS)
+    expect(moveClass()).toBe('mv-bow')
+    await advance(HUD_MOVE_MS.bow)
+    push({ state: { ...state, skin: 'penguin' }, reveal: false })
+    await advance(HUD_FIRST_SCENE_MS)
+    expect(moveClass()).toBe('mv-waddle')
+  })
+
+  it('重新亮相把计数归零：第一手还是池子第一手', async () => {
+    wrapper = await mountRevealed()
+    await toSceneStart(1)
+    expect(moveClass()).toBe('mv-hop')
+    push({ state, reveal: true })
+    await drainToReveal(2)
+    expect(moveClass()).toBe('')
+    await advance(HUD_FIRST_SCENE_MS - 1)
+    expect(moveClass()).toBe('')
+    await advance(1)
+    expect(moveClass()).toBe('mv-bow')
+  })
+
+  it('设置关掉小动作后不排场景，点角色仍会演一手', async () => {
+    wrapper = await mountRevealed()
+    push({ state, reveal: false, ambient: false })
+    await advance(120000)
+    expect(moveClass()).toBe('')
+    await clickCharacter(wrapper)
+    expect(moveClass()).toBe('mv-bow')
+  })
+
+  it('窗口隐藏期间不空转计时器，恢复可见才接着排', async () => {
+    wrapper = await mountRevealed()
+    setVisibility('hidden')
+    await advance(120000)
+    expect(moveClass()).toBe('')
+    setVisibility('visible')
+    await advance(HUD_FIRST_SCENE_MS)
+    expect(moveClass()).toBe('mv-bow')
+  })
+})
+
+describe('挂件减少动效', () => {
+  it('系统要求减少动效时不排场景也不演动作，悬停仍能展开', async () => {
     reduce.on = true
-    wrapper = await mountApp()
-    const seen = new Set<string>()
-    for (let i = 0; i < 60; i++) {
-      vi.advanceTimersByTime(100)
-      await flushPromises()
-      if (moveClass()) seen.add(moveClass())
-    }
-    expect(seen.size).toBe(0)
-    expect(setPosition.mock.calls.length).toBeGreaterThan(0)
-  })
-
-  it('走到系绳尽头挤压掉头，锚点仍是放它的那一点', async () => {
-    wrapper = await mountApp()
-    const faces = new Set<string>()
-    // 挤压那一下只有 108ms，120ms 采样会整拍错过
-    for (let i = 0; i < 200; i++) {
-      vi.advanceTimersByTime(60)
-      await flushPromises()
-      faces.add(faceX())
-    }
-    const xs = movedXs()
-    expect(Math.max(...xs)).toBeLessThanOrEqual(1048)
-    expect(Math.min(...xs)).toBeGreaterThanOrEqual(952)
-    expect(xs).toContain(1048)
-    expect(faces.has('0.84')).toBe(true)
-    expect(faces.has('-1')).toBe(true)
-    expect(savedPositions()).toEqual([])
-  })
-
-  it('钉住后停在原地', async () => {
-    wrapper = await mountApp()
-    enterCharacter(wrapper)
-    vi.advanceTimersByTime(160)
-    await flushPromises()
-    press(wrapper, '.sprite')
-    release(wrapper, '.sprite')
-    leaveWindow(wrapper)
-    vi.advanceTimersByTime(20000)
-    await flushPromises()
+    wrapper = await mountRevealed()
+    await advance(120000)
+    expect(moveClass()).toBe('')
     expect(setPosition).not.toHaveBeenCalled()
-  })
-
-  it('刚碰过它的 1.5s 冷却期内不走，冷却过了才继续', async () => {
-    wrapper = await mountApp()
     enterCharacter(wrapper)
-    leaveWindow(wrapper)
-    vi.advanceTimersByTime(1500)
-    await flushPromises()
-    expect(setPosition).not.toHaveBeenCalled()
-    vi.advanceTimersByTime(600)
-    await flushPromises()
-    expect(setPosition).toHaveBeenCalledTimes(1)
+    await advance(160)
+    expect(wrapper.find('.tag').exists()).toBe(true)
   })
 
-  it('指针一落到角色上，滑出去的那半拍收回来', async () => {
-    wrapper = await mountApp()
-    vi.advanceTimersByTime(GLIDE_MS + HOLD_MS + 120)
-    await flushPromises()
-    expect(lanePx()).toBe(STRIDE_PX)
-    enterCharacter(wrapper)
-    await flushPromises()
-    expect(lanePx()).toBe(0)
-    expect(setPosition).not.toHaveBeenCalled()
+  it('运行中开启减少动效会掐掉当前动作，关闭后按整档重排', async () => {
+    wrapper = await mountRevealed()
+    await advance(HUD_FIRST_SCENE_MS)
+    expect(moveClass()).toBe('mv-bow')
+    setReducedMotion(true)
+    await advance(0)
+    expect(moveClass()).toBe('')
+    await advance(120000)
+    expect(moveClass()).toBe('')
+    setReducedMotion(false)
+    await advance(HUD_FIRST_SCENE_MS - 1)
+    expect(moveClass()).toBe('')
+    await advance(1)
+    // 掐掉的那一场已经计过数：下一场是池子第二手
+    expect(moveClass()).toBe('mv-hop')
   })
 
-  it('巡游自己触发的 Moved 既不当拖动也不改锚点', async () => {
-    wrapper = await mountApp()
-    vi.advanceTimersByTime(GLIDE_MS + HOLD_MS + GLIDE_MS)
-    await flushPromises()
-    expect(setPosition).toHaveBeenCalledTimes(1)
-    movedHandler.current?.({ payload: { x: 1006, y: 700 } })
-    vi.advanceTimersByTime(GLIDE_MS + HOLD_MS)
-    await flushPromises()
-    expect(savedPositions()).toEqual([])
-    // 锚点没被自己的 Moved 挪走：第二跟位仍是 1000 + 6 + 6
-    expect(setPosition.mock.calls[1][0]).toEqual(expect.objectContaining({ x: 1012, y: 700 }))
+  it('减少动效时点角色也不演', async () => {
+    reduce.on = true
+    wrapper = await mountRevealed()
+    await clickCharacter(wrapper)
+    expect(moveClass()).toBe('')
+    expect(wrapper.find('.pin-mark').exists()).toBe(false)
   })
 
-  it('用户真拖动改的是锚点，之后的走动绕新锚点', async () => {
-    wrapper = await mountApp()
-    vi.advanceTimersByTime(1400)
-    await flushPromises()
-    expect(setPosition).toHaveBeenCalledTimes(1)
-    enterCharacter(wrapper)
-    press(wrapper, '.sprite')
-    wrapper.get('.hud').element.dispatchEvent(
-      new MouseEvent('pointermove', { bubbles: true, clientX: 60, clientY: 60, button: 0 }),
-    )
-    movedHandler.current?.({ payload: { x: 900, y: 660 } })
-    leaveWindow(wrapper)
-    vi.advanceTimersByTime(4000)
-    await flushPromises()
-    expect(setPosition).toHaveBeenLastCalledWith(expect.objectContaining({ x: 906, y: 660 }))
-    expect(savedPositions()).toEqual([]) // 未 reveal 的窗口不落盘：这条闸门是既有行为
-  })
-
-  it('设置关掉走动后停在原地', async () => {
-    wrapper = await mountApp()
-    push({ state, reveal: false, walk: false })
-    await flushPromises()
-    vi.advanceTimersByTime(20000)
-    await flushPromises()
-    expect(setPosition).not.toHaveBeenCalled()
-  })
-
-  it('走到半路被关掉，会送回放置的那一点且仍不落盘', async () => {
-    wrapper = await mountApp()
-    vi.advanceTimersByTime(1400)
-    await flushPromises()
-    expect(setPosition).toHaveBeenLastCalledWith(expect.objectContaining({ x: 1006, y: 700 }))
-    push({ state, reveal: false, walk: false })
-    await flushPromises()
-    expect(setPosition).toHaveBeenLastCalledWith(expect.objectContaining({ x: 1000, y: 700 }))
-    vi.advanceTimersByTime(20000)
-    await flushPromises()
-    expect(setPosition).toHaveBeenCalledTimes(2)
-    expect(savedPositions()).toEqual([])
+  it('卸载时撤销偏好监听', async () => {
+    wrapper = await mountRevealed()
+    wrapper.unmount()
+    wrapper = undefined
+    expect(reduce.handlers.size).toBe(0)
   })
 })

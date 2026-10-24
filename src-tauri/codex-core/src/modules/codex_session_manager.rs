@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, Local, TimeZone, Utc};
@@ -15,6 +15,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 
 use crate::modules;
+
+#[path = "codex_usage_cache.rs"]
+mod usage_cache;
 
 const DEFAULT_INSTANCE_ID: &str = "__default__";
 
@@ -28,8 +31,6 @@ const SESSION_DIRS: [&str; 2] = ["sessions", "archived_sessions"];
 const SESSION_TRASH_ROOT_DIR: &str = "desko-codex-session-trash";
 
 const SESSION_INDEX_ACTIVITY_DRIFT_SECONDS: i64 = 3_600;
-
-const TOKEN_STATS_READ_CHUNK_BYTES: usize = 64 * 1024;
 
 const ROLLOUT_ACTIVITY_READ_CHUNK_BYTES: usize = 64 * 1024;
 
@@ -50,10 +51,7 @@ const UNKNOWN_MODEL_LABEL: &str = "未标注模型";
 
 static SESSION_TRASH_MUTATION_LOCK: Mutex<()> = Mutex::new(());
 
-static TOKEN_STATS_CACHE: LazyLock<Mutex<HashMap<PathBuf, TokenStatsCacheEntry>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-static USAGE_SCAN_CACHE: LazyLock<Mutex<HashMap<PathBuf, UsageFileEntry>>> =
+static USAGE_SCAN_CACHE: LazyLock<Mutex<HashMap<PathBuf, Arc<UsageFileEntry>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 static CONTENT_SEARCH_CACHE: LazyLock<Mutex<HashMap<ContentSearchCacheKey, bool>>> =
@@ -139,7 +137,7 @@ pub struct CodexSessionTokenStats {
 
 
 /// rollout 里 `event_msg/token_count` 的累计或本次用量六项。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct RolloutTokenUsage {
     pub input_tokens: u64,
     pub cached_input_tokens: u64,
@@ -180,98 +178,12 @@ struct ThreadSnapshot {
 }
 
 
-#[derive(Debug, Clone)]
-struct TokenStatsCacheEntry {
-    file_len: u64,
-    modified_at: Option<SystemTime>,
-    stats: Option<RolloutTokenUsage>,
-}
-
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ContentSearchCacheKey {
     rollout_path: PathBuf,
     query: String,
     file_len: u64,
     modified_at_nanos: Option<u128>,
-}
-
-
-/// 从 rollout JSONL 文件中读取 token 统计信息
-fn read_token_stats_from_rollout(rollout_path: &Path) -> Option<RolloutTokenUsage> {
-    let metadata = fs::metadata(rollout_path).ok()?;
-    let cache_key = rollout_path.to_path_buf();
-    let file_len = metadata.len();
-    let modified_at = metadata.modified().ok();
-
-    {
-        let cache = TOKEN_STATS_CACHE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(entry) = cache.get(&cache_key) {
-            if entry.file_len == file_len && entry.modified_at == modified_at {
-                return entry.stats;
-            }
-        }
-    }
-
-    let stats = read_token_stats_from_rollout_uncached(rollout_path, file_len);
-    let mut cache = TOKEN_STATS_CACHE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    cache.insert(
-        cache_key,
-        TokenStatsCacheEntry {
-            file_len,
-            modified_at,
-            stats,
-        },
-    );
-    stats
-}
-
-
-fn read_token_stats_from_rollout_uncached(
-    rollout_path: &Path,
-    file_len: u64,
-) -> Option<RolloutTokenUsage> {
-    let mut file = File::open(rollout_path).ok()?;
-    let mut offset = file_len;
-    let mut pending_prefix = Vec::new();
-
-    while offset > 0 {
-        let chunk_len = TOKEN_STATS_READ_CHUNK_BYTES.min(offset as usize);
-        offset -= chunk_len as u64;
-
-        file.seek(SeekFrom::Start(offset)).ok()?;
-        let mut chunk = vec![0u8; chunk_len];
-        file.read_exact(&mut chunk).ok()?;
-
-        let starts_on_line_boundary =
-            offset == 0 || byte_before_is_newline(&mut file, offset).ok()?;
-        chunk.extend_from_slice(&pending_prefix);
-
-        let parse_from_index = if starts_on_line_boundary {
-            pending_prefix.clear();
-            0
-        } else if let Some(newline_index) = chunk.iter().position(|byte| *byte == b'\n') {
-            pending_prefix = chunk[..newline_index].to_vec();
-            newline_index + 1
-        } else {
-            pending_prefix = chunk;
-            continue;
-        };
-
-        if let Some(stats) = parse_token_stats_lines(&chunk[parse_from_index..]) {
-            return Some(stats);
-        }
-    }
-
-    if pending_prefix.is_empty() {
-        None
-    } else {
-        parse_token_stats_lines(&pending_prefix)
-    }
 }
 
 
@@ -284,62 +196,6 @@ fn byte_before_is_newline(file: &mut File, offset: u64) -> std::io::Result<bool>
     let mut byte = [0u8; 1];
     file.read_exact(&mut byte)?;
     Ok(byte[0] == b'\n')
-}
-
-
-fn parse_token_stats_lines(content: &[u8]) -> Option<RolloutTokenUsage> {
-    for line in content.split(|byte| *byte == b'\n').rev() {
-        let raw = String::from_utf8_lossy(line);
-        let trimmed = raw.trim();
-        if trimmed.is_empty()
-            || !trimmed.contains("\"token_count\"")
-            || !trimmed.contains("\"total_token_usage\"")
-        {
-            continue;
-        }
-
-        let Ok(parsed) = serde_json::from_str::<JsonValue>(trimmed) else {
-            continue;
-        };
-        if parsed.get("type").and_then(|value| value.as_str()) != Some("event_msg") {
-            continue;
-        }
-        let Some(payload) = parsed.get("payload") else {
-            continue;
-        };
-        if payload.get("type").and_then(|value| value.as_str()) != Some("token_count") {
-            continue;
-        }
-        let Some(usage) = payload
-            .get("info")
-            .and_then(|info| info.get("total_token_usage"))
-        else {
-            continue;
-        };
-
-        let input = usage
-            .get("input_tokens")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(0);
-        let output = usage
-            .get("output_tokens")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(0);
-        let total = usage
-            .get("total_tokens")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(0);
-        return Some(RolloutTokenUsage {
-            input_tokens: input,
-            cached_input_tokens: u64_at(usage, "cached_input_tokens"),
-            cache_write_input_tokens: u64_at(usage, "cache_write_input_tokens"),
-            output_tokens: output,
-            reasoning_output_tokens: u64_at(usage, "reasoning_output_tokens"),
-            total_tokens: total,
-        });
-    }
-
-    None
 }
 
 
@@ -592,21 +448,24 @@ pub fn get_session_token_stats_across_instances(
 
     let instances = collect_instances()?;
     let mut stats_by_session_id = HashMap::<String, CodexSessionTokenStats>::new();
+    let mut seen_events = HashMap::new();
 
     for instance in &instances {
-        for snapshot in load_thread_snapshots(instance)? {
-            if !requested_ids.contains(&snapshot.id) {
-                continue;
-            }
-
-            let Some(_) = read_token_stats_from_rollout(&snapshot.rollout_path) else {
+        for path in usage_rollout_files_in_dirs(std::slice::from_ref(&instance.data_dir))? {
+            let Some(id) = read_rollout_session_meta(&path)?.as_ref().and_then(session_meta_id) else {
                 continue;
             };
-            let entry = load_usage_events(&snapshot.rollout_path)?;
+            if !requested_ids.contains(&id) {
+                continue;
+            }
+            let entry = unique_usage_events(load_usage_events(&path)?, &mut seen_events);
+            if entry.events.is_empty() {
+                continue;
+            }
             // 同一会话的分页文件全部累加，与用量页共享增量，排除续接历史。
-            let stats = stats_by_session_id.entry(snapshot.id.clone()).or_insert_with(|| {
+            let stats = stats_by_session_id.entry(id.clone()).or_insert_with(|| {
                 CodexSessionTokenStats {
-                    session_id: snapshot.id.clone(),
+                    session_id: id.clone(),
                     estimated_cost_usd: Some(0.0),
                     ..CodexSessionTokenStats::default()
                 }
@@ -705,8 +564,9 @@ pub struct CodexUsageSession {
 }
 
 /// 一条 `token_count` 快照差出来的本轮用量；模型存下标，免得每份缓存都复制一遍字符串
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 struct UsageEvent {
+    cumulative: RolloutTokenUsage,
     timestamp: i64,
     usage: RolloutTokenUsage,
     model_index: usize,
@@ -714,7 +574,7 @@ struct UsageEvent {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct UsageFileEntry {
     file_len: u64,
     modified_at: Option<SystemTime>,
@@ -724,6 +584,29 @@ struct UsageFileEntry {
     events: Vec<UsageEvent>,
 }
 
+
+/// 完整事件序列相同的复制文件只统计一次。不同分段仍保留，不能按时间戳
+/// 随意删掉差分不同的快照，否则来源路径排序会改变总量。
+fn unique_usage_events(
+    entry: Arc<UsageFileEntry>,
+    seen: &mut HashMap<String, Vec<Arc<UsageFileEntry>>>,
+) -> Arc<UsageFileEntry> {
+    let Some(id) = entry.session_id.as_ref() else { return entry; };
+    let files = seen.entry(id.clone()).or_default();
+    let duplicate = files.iter().any(|prior| {
+        prior.events.len() == entry.events.len() && prior.events.iter().zip(&entry.events).all(|(a, b)| {
+            a.timestamp == b.timestamp && a.cumulative == b.cumulative && a.usage == b.usage
+                && prior.models.get(a.model_index) == entry.models.get(b.model_index)
+        })
+    });
+    if duplicate {
+        let mut filtered = (*entry).clone();
+        filtered.events.clear();
+        return Arc::new(filtered);
+    }
+    files.push(Arc::clone(&entry));
+    entry
+}
 
 /// 额外目录只参与用量扫描，不改变账号凭据、会话管理与回收站的目录。
 pub fn normalize_usage_extra_dirs(dirs: Vec<String>) -> Result<Vec<String>, String> {
@@ -765,10 +648,7 @@ fn usage_rollout_files(config: &modules::config::UserConfig) -> Result<Vec<PathB
         }
     }
     let mut seen = HashSet::new();
-    files.retain(|path| {
-        let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
-        seen.insert(modules::codex_session_wsl::path_key(&canonical))
-    });
+    files.retain(|path| seen.insert(modules::codex_session_wsl::path_key(path)));
     files.sort();
     Ok(files)
 }
@@ -792,8 +672,8 @@ fn usage_rollout_files_in_dirs(data_dirs: &[PathBuf]) -> Result<Vec<PathBuf>, St
                 let canonical = fs::canonicalize(&path)
                     .map_err(|error| format!("无法访问会话文件 ({}): {}", path.display(), error))?;
                 if seen_files.insert(modules::codex_session_wsl::path_key(&canonical)) {
-                    // 保留首个来源的路径，让默认目录继续与会话页共用事件缓存。
-                    files.push(path);
+                    // 使用同一规范路径共享缓存，外层合并不再逐文件重复访问文件系统。
+                    files.push(canonical);
                 }
             }
         }
@@ -803,32 +683,29 @@ fn usage_rollout_files_in_dirs(data_dirs: &[PathBuf]) -> Result<Vec<PathBuf>, St
 }
 
 
-fn load_usage_events(rollout_path: &Path) -> Result<UsageFileEntry, String> {
+fn load_usage_events(rollout_path: &Path) -> Result<Arc<UsageFileEntry>, String> {
+    let mut cache = USAGE_SCAN_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let metadata = fs::metadata(rollout_path)
         .map_err(|error| format!("读取会话文件信息失败 ({}): {}", rollout_path.display(), error))?;
     let file_len = metadata.len();
     let modified_at = metadata.modified().ok();
-    let cache_key = rollout_path.to_path_buf();
-
-    {
-        let cache = USAGE_SCAN_CACHE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(entry) = cache.get(&cache_key) {
-            if entry.file_len == file_len && entry.modified_at == modified_at {
-                return Ok(entry.clone());
-            }
+    if let Some(entry) = cache.get(rollout_path) {
+        if entry.file_len == file_len && modified_at.is_some() && entry.modified_at == modified_at {
+            return Ok(Arc::clone(entry));
         }
     }
-
-    let entry = scan_usage_events(rollout_path, file_len, modified_at)?;
-    let mut cache = USAGE_SCAN_CACHE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    cache.insert(cache_key, entry.clone());
+    let entry = if let Some(entry) = usage_cache::read(rollout_path, file_len, modified_at) {
+        Arc::new(entry)
+    } else {
+        let entry = scan_usage_events(rollout_path, file_len, modified_at)?;
+        usage_cache::write(rollout_path, &entry);
+        Arc::new(entry)
+    };
+    cache.insert(rollout_path.to_path_buf(), Arc::clone(&entry));
     Ok(entry)
 }
-
 
 /// 顺序读满整份 rollout：模型跟着 `session_meta`/`turn_context` 走，
 /// 首条优先取本次用量以排除续接历史，其余累计快照与上一条相减。
@@ -839,7 +716,7 @@ fn scan_usage_events(
 ) -> Result<UsageFileEntry, String> {
     let file = File::open(rollout_path)
         .map_err(|error| format!("打开会话文件失败 ({}): {}", rollout_path.display(), error))?;
-    let reader = BufReader::with_capacity(USAGE_READ_CHUNK_BYTES, file);
+    let mut reader = BufReader::with_capacity(USAGE_READ_CHUNK_BYTES, file.take(file_len));
 
     let mut models: Vec<String> = Vec::new();
     let mut session_id = None;
@@ -849,15 +726,17 @@ fn scan_usage_events(
     let mut previous: Option<RolloutTokenUsage> = None;
     let mut events: Vec<UsageEvent> = Vec::new();
 
-    for (line_number, raw) in reader.lines().enumerate() {
-        let line = raw.map_err(|error| {
-            format!(
-                "读取会话文件失败 ({} 第 {} 行): {}",
-                rollout_path.display(),
-                line_number + 1,
-                error
-            )
-        })?;
+    // 复用大行缓冲：工具输出可能每行数 MB，避免每行重新分配。
+    let mut line = String::new();
+    let mut line_number = 0;
+    loop {
+        line.clear();
+        line_number += 1;
+        if reader.read_line(&mut line).map_err(|error| {
+            format!("读取会话文件失败 ({} 第 {} 行): {}", rollout_path.display(), line_number, error)
+        })? == 0 {
+            break;
+        }
         if line.is_empty() {
             continue;
         }
@@ -902,7 +781,8 @@ fn scan_usage_events(
                 else {
                     continue;
                 };
-                let Some(usage) = info.get("total_token_usage") else {
+                let Some(usage) = info.get("total_token_usage")
+                    .filter(|usage| usage.get("total_tokens").and_then(JsonValue::as_u64).is_some()) else {
                     continue;
                 };
                 if let Some(model) = info
@@ -919,13 +799,13 @@ fn scan_usage_events(
                     continue;
                 };
                 let cumulative = parse_rollout_usage(usage);
-                let delta = if previous.is_none() {
+                let delta = if previous.is_none() || previous.is_some_and(|p| cumulative.total_tokens < p.total_tokens) {
                     // IDE 续接的文件会沿用历史累计，首条累计不是这次请求的用量。
                     // 后续仍以累计做差，重复快照不会重复计费；旧格式缺 last 时兼容原口径。
                     info.get("last_token_usage")
                         .filter(|usage| usage.get("total_tokens").and_then(JsonValue::as_u64).is_some())
                         .map(parse_rollout_usage)
-                        .unwrap_or(cumulative)
+                        .unwrap_or_else(|| usage_delta(previous, cumulative))
                 } else {
                     usage_delta(previous, cumulative)
                 };
@@ -934,6 +814,7 @@ fn scan_usage_events(
                     continue;
                 }
                 events.push(UsageEvent {
+                    cumulative,
                     timestamp,
                     usage: delta,
                     model_index: current_model.unwrap_or(UNKNOWN_MODEL_INDEX),
@@ -1100,8 +981,9 @@ fn query_session_usage_windows_with_config(
         .collect::<HashMap<_, _>>();
     accumulators.insert(String::new(), UsageWindowAccumulator::new(from_timestamp));
 
+    let mut seen_events = HashMap::new();
     for path in usage_rollout_files(config)? {
-        let entry = load_usage_events(&path)?;
+        let entry = unique_usage_events(load_usage_events(&path)?, &mut seen_events);
         for accumulator in accumulators.values_mut() {
             let UsageWindowAccumulator {
                 from_timestamp,
@@ -2590,6 +2472,7 @@ fn sanitize_for_file_name(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     fn classify_session_kind_detects_subagent_and_external() {
@@ -2617,30 +2500,114 @@ mod tests {
         );
     }
 
-    #[test]
-    fn parse_token_stats_lines_reads_all_six_usage_fields() {
-        // 真机形状：一条会话净输入 8 万、缓存命中 176 万，少一位就把用量读成天文数字
-        let older = r#"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":80,"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":1,"total_tokens":105}}}}"#;
-        let noise = r#"{"type":"response_item","payload":{"type":"message"}}"#;
-        let newest = r#"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1843378,"cached_input_tokens":1761280,"cache_write_input_tokens":4096,"output_tokens":11784,"reasoning_output_tokens":1617,"total_tokens":1855162}}}}"#;
-        let text = format!("{}\n{}\n{}\n", older, noise, newest);
-        let usage = super::parse_token_stats_lines(text.as_bytes()).expect("尾扫要命中最后一条 token_count");
-        assert_eq!(usage.input_tokens, 1_843_378);
-        assert_eq!(usage.cached_input_tokens, 1_761_280);
-        assert_eq!(usage.cache_write_input_tokens, 4_096);
-        assert_eq!(usage.output_tokens, 11_784);
-        assert_eq!(usage.reasoning_output_tokens, 1_617);
-        assert_eq!(usage.total_tokens, 1_855_162);
 
-        // 早期 rollout 没写这几个位：按 0 记账，不能整条判成「没数」
-        let thin = r#"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}}}"#;
-        let legacy = super::parse_token_stats_lines(thin.as_bytes()).unwrap();
-        assert_eq!(legacy.cached_input_tokens, 0);
-        assert_eq!(legacy.reasoning_output_tokens, 0);
-        assert_eq!(legacy.output_tokens, 2);
+    #[test]
+    fn usage_invalid_snapshots_preserve_baseline_and_all_fields() {
+        let dir = make_temp_dir("usage-invalid-baseline");
+        let first = usage_snapshot_line("2026-10-11T02:00:00Z", 100, 80, 10);
+        for malformed in [JsonValue::Null, json!({}), json!({"total_tokens": "bad"})] {
+            let mut broken: JsonValue = serde_json::from_str(&first).unwrap();
+            broken["payload"]["info"]["total_token_usage"] = malformed;
+            let mut last: JsonValue = serde_json::from_str(&usage_snapshot_line(
+                "2026-10-11T03:00:00Z", 120, 90, 15,
+            )).unwrap();
+            last["payload"]["info"]["total_token_usage"]["cache_write_input_tokens"] = json!(4);
+            last["payload"]["info"]["total_token_usage"]["reasoning_output_tokens"] = json!(3);
+            let entry = scan_usage_lines(&dir, &[first.clone(), broken.to_string(), last.to_string()]);
+            assert_eq!(entry.events.len(), 2);
+            assert_eq!(entry.events.iter().map(|e| e.usage.total_tokens).sum::<u64>(), 135);
+            assert_eq!(entry.events[1].usage.input_tokens, 20);
+            assert_eq!(entry.events[1].usage.cached_input_tokens, 10);
+            assert_eq!(entry.events[1].usage.cache_write_input_tokens, 4);
+            assert_eq!(entry.events[1].usage.output_tokens, 5);
+            assert_eq!(entry.events[1].usage.reasoning_output_tokens, 3);
+        }
+        fs::remove_dir_all(dir).unwrap();
     }
-    use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn usage_identical_copies_are_counted_once_without_dropping_different_segments() {
+        let dir = make_temp_dir("usage-copies");
+        let header = json!({"type":"session_meta","payload":{"id":"same","model":"gpt-5.4"}}).to_string();
+        let first = usage_snapshot_line("2026-10-11T02:00:00Z", 100, 80, 10);
+        let next = usage_snapshot_line("2026-10-11T03:00:00Z", 120, 90, 15);
+        let entry = Arc::new(scan_usage_lines(&dir, &[header.clone(), first.clone()]));
+        let continued = Arc::new(scan_usage_lines(&dir, &[header, first, next]));
+        let mut seen = HashMap::new();
+        assert_eq!(unique_usage_events(Arc::clone(&entry), &mut seen).events.len(), 1);
+        assert!(unique_usage_events(entry, &mut seen).events.is_empty());
+        let remainder = unique_usage_events(continued, &mut seen);
+        // 部分重放不是完整复制；不能因遍历顺序选用不同的快照差分。
+        assert_eq!(remainder.events.len(), 2);
+        let mut reverse = HashMap::new();
+        let first = unique_usage_events(Arc::clone(&remainder), &mut reverse);
+        assert_eq!(first.events.len(), 2);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn usage_counter_reset_uses_valid_last_usage_without_charging_history() {
+        let dir = make_temp_dir("usage-reset-last");
+        let first = usage_snapshot_line("2026-10-11T02:00:00Z", 100, 80, 10);
+        let mut reset: JsonValue = serde_json::from_str(&usage_snapshot_line("2026-10-11T03:00:00Z", 40, 30, 5)).unwrap();
+        reset["payload"]["info"]["last_token_usage"] = json!({"input_tokens":20,"cached_input_tokens":10,"output_tokens":2,"total_tokens":22});
+        let entry = scan_usage_lines(&dir, &[first, reset.to_string()]);
+        assert_eq!(entry.events.iter().map(|e| e.usage.total_tokens).sum::<u64>(), 132);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn usage_cache_shares_unchanged_events_and_reloads_appended_or_truncated_files() {
+        let dir = make_temp_dir("usage-cache-refresh");
+        let path = dir.join("rollout-cache.jsonl");
+        fs::write(&path, usage_snapshot_line("2026-10-11T02:00:00Z", 100, 80, 10)).unwrap();
+        let first = load_usage_events(&path).unwrap();
+        assert!(Arc::ptr_eq(&first, &load_usage_events(&path).unwrap()));
+        let mut file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        writeln!(file, "\n{}", usage_snapshot_line("2026-10-11T03:00:00Z", 120, 90, 15)).unwrap();
+        drop(file);
+        let appended = load_usage_events(&path).unwrap();
+        assert!(!Arc::ptr_eq(&first, &appended));
+        assert_eq!(appended.events.iter().map(|e| e.usage.total_tokens).sum::<u64>(), 135);
+        fs::write(&path, "{}").unwrap();
+        assert!(load_usage_events(&path).unwrap().events.is_empty());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "只读本机日志，仅输出聚合数与耗时，不输出内容"]
+    fn live_usage_audit_and_timing() {
+        let config = modules::config::get_user_config();
+        let files = usage_rollout_files(&config).unwrap();
+        let bytes: u64 = files.iter().map(|path| fs::metadata(path).unwrap().len()).sum();
+        USAGE_SCAN_CACHE.lock().unwrap().clear();
+        let started = Instant::now();
+        let cold = query_session_usage_windows_with_config(None, None, HashMap::new(), &config).unwrap();
+        let cold_ms = started.elapsed().as_millis();
+        USAGE_SCAN_CACHE.lock().unwrap().clear();
+        let started = Instant::now();
+        let disk = query_session_usage_windows_with_config(None, None, HashMap::new(), &config).unwrap();
+        let disk_ms = started.elapsed().as_millis();
+        let started = Instant::now();
+        let warm = query_session_usage_windows_with_config(None, None, HashMap::new(), &config).unwrap();
+        let warm_ms = started.elapsed().as_millis();
+        for report in [&cold, &disk, &warm] {
+            for buckets in [&report.by_day, &report.by_hour, &report.by_model] {
+                assert_eq!(buckets.iter().map(|b| b.total_tokens).sum::<u64>(), report.totals.total_tokens);
+                assert_eq!(buckets.iter().map(|b| b.input_tokens).sum::<u64>(), report.totals.input_tokens);
+                assert_eq!(buckets.iter().map(|b| b.cached_input_tokens).sum::<u64>(), report.totals.cached_input_tokens);
+                assert_eq!(buckets.iter().map(|b| b.output_tokens).sum::<u64>(), report.totals.output_tokens);
+                assert_eq!(buckets.iter().map(|b| b.request_count).sum::<u64>(), report.totals.request_count);
+            }
+            for bucket in &report.by_model {
+                assert_eq!(report.model_sessions[&bucket.key].iter().map(|s| s.usage.total_tokens).sum::<u64>(), bucket.total_tokens);
+            }
+        }
+        // 正在进行的会话会在两次扫描之间写入，分别对账而不要求快照相等。
+        println!("usage audit: files={} MiB={} cold_ms={} disk_ms={} warm_ms={} tokens={} requests={} cost={:?}",
+            files.len(), bytes / 1024 / 1024, cold_ms, disk_ms, warm_ms, cold.totals.total_tokens,
+            cold.totals.request_count, cold.totals.estimated_cost_usd);
+    }
 
     fn make_temp_dir(prefix: &str) -> PathBuf {
         let unique = uuid::Uuid::new_v4();

@@ -1,367 +1,124 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { isWebRuntime } from '../../services/runtime'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { enabledModules } from '../../modules/state'
+import { enabledModules, webModuleGroups } from '../../modules/state'
 import { modulePath, type ModuleDef } from '../../modules/registry'
+import { isWebRuntime, isCodexWebRuntime } from '../../services/runtime'
 import AppIcon from '../shared/AppIcon.vue'
 
-withDefaults(defineProps<{
-  collapsed: boolean
-  showToggle?: boolean
-  showLock?: boolean
-}>(), { showToggle: true, showLock: true })
-
-const emit = defineEmits<{
-  'update:collapsed': [value: boolean]
-  openSettings: []
-  lock: []
-}>()
-
+const emit = defineEmits<{ openSettings: []; lock: [] }>()
 const route = useRoute()
-const webRuntime = isWebRuntime()
-const lockLabel = webRuntime ? '退出浏览器访问' : '锁定'
+const webWorkspace = isWebRuntime() && !isCodexWebRuntime()
+const groups = computed(() => webWorkspace ? webModuleGroups.value : [{ label: '', modules: enabledModules.value }])
 
-/** 跑着常驻服务的模块把状态写进行名：图标上那颗点要有人替它解释，读屏也听得到 */
+/** 常驻服务的运行状态同时提供给 tooltip 和读屏。 */
 const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中` : m.title)
-
-const startDrag = (e: MouseEvent) => {
-  if (isWebRuntime()) return
-  if ((e.target as HTMLElement).closest('button')) return
-  getCurrentWindow().startDragging()
-}
-
-const onDragDblclick = (e: MouseEvent) => {
-  if (isWebRuntime()) return
-  if ((e.target as HTMLElement).closest('button')) return
-  getCurrentWindow().toggleMaximize()
-}
 </script>
 
 <template>
-  <div class="sidebar" :class="{ collapsed }">
-    <!-- 顶部品牌行：全高骨架里侧栏自己承担窗口拖拽 -->
-    <div v-if="showToggle || !collapsed" class="sidebar-top" @mousedown="startDrag" @dblclick="onDragDblclick">
-      <span v-if="!collapsed" class="sidebar-name">Desko</span>
-      <button class="sidebar-toggle" :title="collapsed ? '展开侧栏' : '收起侧栏'" @click="$emit('update:collapsed', !collapsed)">
-        <AppIcon name="panel" :size="collapsed ? 20 : 18" />
-      </button>
-    </div>
-
-    <div v-if="!collapsed" class="sidebar-sec">模块</div>
-
+  <div class="sidebar" :class="{ 'web-workspace-sidebar': webWorkspace }">
     <nav class="sidebar-nav" aria-label="模块导航">
+      <div v-for="group in groups" :key="group.label" class="sidebar-group" role="group" :aria-label="group.label || undefined">
+      <span v-if="group.label" class="sidebar-group-title">{{ group.label }}</span>
       <router-link
-        v-for="m in enabledModules"
+        v-for="m in group.modules"
         :key="m.id"
         :to="modulePath(m.id)"
         class="nav-item"
         :class="{ active: route.path === modulePath(m.id) }"
         :aria-label="navLabel(m)"
-        :data-tip="collapsed ? navLabel(m) : undefined"
+        :data-tip="navLabel(m)"
       >
         <div class="nav-icon">
-          <AppIcon :name="m.icon" :size="collapsed ? 22 : 18" />
+          <AppIcon :name="m.icon" :size="20" />
           <span v-if="m.live?.()" class="nav-live" aria-hidden="true"></span>
         </div>
-        <Transition name="nav-text">
-          <span v-if="!collapsed || webRuntime" class="nav-text">{{ m.title }}</span>
-        </Transition>
-        <Transition name="nav-text">
-          <span v-if="!collapsed && m.count && m.count() > 0" class="nav-count">{{ m.count() }}</span>
-        </Transition>
+        <span v-if="webWorkspace" class="nav-text">{{ m.title }}</span>
       </router-link>
+      </div>
     </nav>
 
-    <!-- 设置住在轨底；桌面工作区的锁定入口由标题栏承担。 -->
     <div class="sidebar-foot">
       <button class="foot-item" type="button" title="设置" aria-label="设置" @click="emit('openSettings')">
-        <span class="foot-icon">
-          <AppIcon name="gear" :size="collapsed ? 22 : 18" />
-        </span>
-        <span v-if="!collapsed" class="foot-text">设置</span>
+        <span class="foot-icon"><AppIcon name="gear" :size="20" /></span>
+        <span v-if="webWorkspace" class="foot-text">设置</span>
       </button>
-      <button v-if="showLock" class="foot-item" type="button" :title="lockLabel" :aria-label="lockLabel" @click="emit('lock')">
-        <span class="foot-icon">
-          <AppIcon name="lock" :size="collapsed ? 22 : 18" />
-        </span>
-        <span v-if="!collapsed" class="foot-text">{{ webRuntime ? '退出' : lockLabel }}</span>
+      <button v-if="webWorkspace" class="foot-item web-sidebar-logout" type="button" aria-label="退出浏览器访问" @click="emit('lock')">
+        <span class="foot-icon"><AppIcon name="lock" :size="20" /></span><span class="foot-text">退出浏览器访问</span>
       </button>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* 56px 侧轨只放图标，名称交给悬停气泡与读屏标签。 */
 .sidebar {
-  width: var(--sidebar-w);
-  /* 暖灰目录列：用底色与留白区分导航和内容。 */
-  background: var(--bg-sidebar);
+  width: var(--sidebar-rail-w);
+  height: 100%;
+  padding: 6px 0 10px;
+  background: var(--bg-workspace-rail);
+  background-attachment: fixed;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   position: relative;
-  transition: width var(--transition-slow);
-  height: 100%;
-  padding: 0 12px;
 }
-
-.sidebar.collapsed {
-  width: var(--sidebar-rail-w);
-  padding: 0;
-}
-
-/* 顶部品牌行：比右列标题栏略高，给品牌名一点呼吸 */
-.sidebar-top {
-  height: 48px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 2px;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.sidebar.collapsed .sidebar-top {
-  justify-content: center;
-  padding: 0;
-}
-
-/* 双侧 auto 压过展开档的 margin-left:auto，让 toggle 回到中线 */
-.sidebar.collapsed .sidebar-toggle {
-  margin: 0 auto;
-}
-
-/* 折叠档两侧预留等宽的滚动条槽（见 .sidebar-nav），模块图标与顶部按钮共用中线。 */
-
-.sidebar-name {
-  flex: 1;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  padding-left: 10px;
-  min-width: 0;
-}
-
-.sidebar-toggle {
-  width: 24px;
-  height: 24px;
-  margin-left: auto;
-  flex-shrink: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-ib);
-  transition: all var(--transition);
-}
-
-.sidebar-toggle:hover {
-  background: var(--sidebar-hover);
-  color: var(--text);
-}
-
-/* 段标：模块分组的小字眉题 */
-.sidebar-sec {
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--text-nav-section);
-  letter-spacing: 0.06em;
-  padding: 0 10px 6px;
-}
-
 .sidebar-nav {
   flex: 1;
-  overflow-y: auto;
-  /* 两侧等宽留槽：滚动条出现或消失都不把行往一边推 */
-  scrollbar-gutter: stable both-edges;
-  padding: 0 0 var(--space-2);
   min-height: 0;
+  overflow-y: auto;
+  /* 窄轨不预留滚动条槽，让模块图标与 Logo、底部设置共用中心线。 */
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
 }
-
-/* 展开档把两侧那两道空槽抵掉：行的左右内缩回到 .sidebar 的 12px，图标与「Desko」
-   同轴，行右缘不再凭空比左缘多出一条滚动条宽 */
-.sidebar:not(.collapsed) .sidebar-nav {
-  margin-inline: calc(var(--scrollbar-track) * -1);
-}
-
-.nav-item {
+.sidebar-nav::-webkit-scrollbar { display: none; }
+.sidebar-group { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+.sidebar-group-title, .nav-text, .foot-text { display: none; }
+.nav-item, .foot-item {
   display: flex;
   align-items: center;
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 8px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  padding: 0;
+  border-radius: 10px;
   color: var(--sidebar-text);
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  gap: 9px;
-  white-space: nowrap;
-  text-decoration: none;
-  position: relative;
 }
-
-.nav-item:hover {
-  background: var(--sidebar-hover);
-  color: var(--text);
-}
-
-/* 激活=淡染行：侧栏专用淡染 + brand 字 + 600，图标转 accent。
-   不吃 --accent-soft：那档的浅洗按卡面（L*99）切，搬到侧栏底上只是亮一丝 */
-.nav-item.active {
-  background: var(--sidebar-active);
-  color: var(--text-brand);
-  font-weight: 600;
-}
-
-.nav-icon {
-  color: var(--text-faint);
-  width: 18px;
-  height: 18px;
+.nav-item { position: relative; text-decoration: none; }
+.nav-item:hover:not(.active), .foot-item:hover { background: var(--hover-chrome); color: var(--text); }
+.nav-item:hover:not(.active) .nav-icon, .foot-item:hover .foot-icon { color: var(--text-secondary); }
+.nav-item.active { background: var(--hover-chrome); color: var(--text); }
+.nav-item.active .nav-icon { color: var(--accent); }
+.nav-item:focus-visible, .foot-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
+.nav-icon, .foot-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  position: relative;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
 }
-
-.nav-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.nav-item:hover .nav-icon { color: var(--text-secondary); }
-.nav-item.active .nav-icon { color: var(--accent); }
-
-.sidebar.collapsed .nav-item {
-  justify-content: center;
-  padding: 0;
-}
-.sidebar.collapsed .nav-text { display: none; }
-
-/* 图标分两档：展开档文字打头，图标退到 18px 当锚点；图标轨档 22px，
-   那里图标是唯一线索，缩到 18 会显得空。AppIcon 的 size 决定实笔反算，
-   CSS 只负责盒子，两处必须同档 */
-.sidebar.collapsed .nav-icon {
-  width: 22px;
-  height: 22px;
-}
-
-.sidebar.collapsed .nav-icon svg {
-  width: 22px;
-  height: 22px;
-}
-
-.nav-text {
-  flex: 1;
-  overflow: hidden;
-}
-
-/* 计数：右对齐中性数字，不做胶囊——目录行保持安静 */
-.nav-count {
-  flex-shrink: 0;
-  font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--text-faint);
-}
-
-.nav-item.active .nav-count {
-  color: var(--text-brand);
-}
-
-/* 常驻服务的运行点：贴在图标右上角，折叠成图标轨后仍然在，是那行唯一的线索。
-   光环与模块页状态点同配方（color-mix 掺 success），侧栏透明底（codex 布局）也不会顶出一圈异色 */
+.nav-icon { position: relative; }
+.nav-icon svg, .foot-icon svg { width: 20px; height: 20px; }
 .nav-live {
   position: absolute;
-  top: -1px;
-  right: -3px;
+  top: 0;
+  right: -2px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--success);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 22%, transparent);
+  box-shadow: 0 0 0 2px var(--bg);
 }
-
-/* 轨底工具组：与模块行同档同轴，只靠一段留白分家（骨架不加线不加影） */
-.sidebar-foot {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 10px;
-}
-
-/* 跟着 .sidebar-nav 那道负 margin：列表行抵掉了滚动条空槽，工具行不抵就会左错一位 */
-.sidebar:not(.collapsed) .sidebar-foot {
-  margin-inline: calc(var(--scrollbar-track) * -1);
-}
-
-.foot-item {
-  display: flex;
-  align-items: center;
-  height: 34px;
-  padding: 0 10px;
-  border: none;
-  background: transparent;
-  color: var(--sidebar-text);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 8px;
-  transition: background var(--transition), color var(--transition);
-  gap: 9px;
-  white-space: nowrap;
-}
-
-.foot-item:hover {
-  background: var(--sidebar-hover);
-  color: var(--text);
-}
-
-.foot-icon {
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--text-faint);
-}
-
-.foot-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.foot-item:hover .foot-icon {
-  color: var(--text-secondary);
-}
-
-.sidebar.collapsed .foot-item {
-  justify-content: center;
-  padding: 0;
-}
-
-.sidebar.collapsed .foot-text {
-  display: none;
-}
-
-.sidebar.collapsed .foot-icon {
-  width: 22px;
-  height: 22px;
-}
-
-.sidebar.collapsed .foot-icon svg {
-  width: 22px;
-  height: 22px;
-}
+.sidebar-foot { display: flex; flex-direction: column; flex-shrink: 0; align-items: center; gap: 4px; padding-top: 12px; }
+.foot-item { border: none; background: transparent; }
+.web-sidebar-logout { display: none; }
 </style>

@@ -72,7 +72,7 @@ function labelOf(s: CodexTrashedSessionRecord): string {
 function askRestore(s: CodexTrashedSessionRecord) {
   confirmStore.showConfirm(
     '恢复会话',
-    `把「${labelOf(s)}」的会话文件写回官方 Codex 目录，并补回会话索引？Codex 若在运行，需重启后其侧栏才显示。`,
+    `恢复会话「${labelOf(s)}」？运行中的 Codex 需重启后显示。`,
     () => {
       void run(s.sessionId, () => restoreTrashedSession(s.sessionId))
     },
@@ -82,7 +82,7 @@ function askRestore(s: CodexTrashedSessionRecord) {
 function askDelete(s: CodexTrashedSessionRecord) {
   confirmStore.showConfirm(
     '彻底删除',
-    `删除「${labelOf(s)}」在 desko 里的留底？官方目录已经不含这条会话，这一步之后无法再恢复。`,
+    `永久删除会话「${labelOf(s)}」？删除后无法恢复。`,
     () => {
       void run(s.sessionId, () => deleteTrashedSession(s.sessionId))
     },
@@ -92,8 +92,8 @@ function askDelete(s: CodexTrashedSessionRecord) {
 function askEmptyTrash() {
   const n = trashSessions.value.length
   confirmStore.showConfirm(
-    '清空会话留底',
-    `彻底删除回收站里的 ${n} 条会话留底？官方目录这时候已经不含这些会话，这一步之后无法再恢复。`,
+    '清空已删除会话',
+    `永久删除回收站中的 ${n} 条会话？删除后无法恢复。`,
     () => {
       void run('sessions', emptySessionTrash)
     },
@@ -108,7 +108,7 @@ function accLabel(r: CodexRecycledAccount): string {
 function askRestoreAccount(r: CodexRecycledAccount) {
   confirmStore.showConfirm(
     '恢复账号',
-    `把「${accLabel(r)}」写回 Desko 的账号列表？官方凭据从头到尾没被动过，恢复只是让这条号重新可选。`,
+    `将「${accLabel(r)}」恢复到账号列表？当前 Codex 登录不受影响。`,
     () => {
       void run(r.id, () => restoreRecycledAccount(r.id))
     },
@@ -118,7 +118,7 @@ function askRestoreAccount(r: CodexRecycledAccount) {
 function askDeleteAccount(r: CodexRecycledAccount) {
   confirmStore.showConfirm(
     '彻底删除',
-    `删除「${accLabel(r)}」在 desko 里的加密留底？这一步之后无法再恢复。`,
+    `永久删除账号「${accLabel(r)}」？删除后无法恢复。`,
     () => {
       void run(r.id, () => deleteRecycledAccount(r.id))
     },
@@ -128,8 +128,8 @@ function askDeleteAccount(r: CodexRecycledAccount) {
 function askEmptyRecycled() {
   const n = recycledAccounts.value.length
   confirmStore.showConfirm(
-    '清空账号留底',
-    `彻底删除回收站里的 ${n} 条账号留底？这一步之后无法再恢复。`,
+    '清空已删除账号',
+    `永久删除回收站中的 ${n} 个账号？删除后无法恢复。`,
     () => {
       void run('accounts', emptyRecycledAccounts)
     },
@@ -179,13 +179,13 @@ function projectName(s: CodexTrashedSessionRecord): string {
     <div v-else-if="!rows" class="rcard empty-state">
       <div class="empty-icon"><AppIcon name="trash" :size="24" /></div>
       <div class="empty-title">回收站是空的</div>
-      <div class="empty-desc">删掉的 Codex 账号会自动留一份加密底；会话要在「会话」档展开一条，点「移到回收站」才留底</div>
+      <div class="empty-desc">已删除的账号和会话会显示在这里，可恢复或彻底删除。</div>
     </div>
 
     <template v-else>
       <section v-if="recycledAccounts.length" class="thr-sec">
         <div class="thr-sec-head">
-          <span class="thr-sec-title">账号留底</span>
+          <span class="thr-sec-title">账号</span>
           <span class="thr-sec-num mono-ish">{{ recycledAccounts.length }}</span>
           <button
             class="action-btn danger thr-sec-act"
@@ -231,7 +231,7 @@ function projectName(s: CodexTrashedSessionRecord): string {
 
       <section v-if="trashSessions.length" class="thr-sec">
         <div class="thr-sec-head">
-          <span class="thr-sec-title">会话留底</span>
+          <span class="thr-sec-title">会话</span>
           <span class="thr-sec-num mono-ish">{{ trashSessions.length }}</span>
           <button
             class="action-btn danger thr-sec-act"
@@ -274,17 +274,11 @@ function projectName(s: CodexTrashedSessionRecord): string {
         </div>
       </section>
 
-      <p class="page-note">
-        <AppIcon name="info" :size="13" />
-        两份留底都存放在 desko 的数据目录：账号留底是加密快照，会话留底是原文件副本。
-        恢复账号只把它写回 Desko 的列表，恢复会话才会往官方目录写文件。
-      </p>
     </template>
   </div>
 </template>
 
 <style scoped>
-.page-note { font-size: var(--text-xs); }
 .thr-sk {
   display: flex;
   align-items: center;

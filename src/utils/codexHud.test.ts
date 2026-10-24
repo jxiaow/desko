@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 import type { CodexAccount, CodexQuota } from '../services/api/codex'
 import {
   DEFAULT_HUD_SKIN,
+  HUD_ALERT_MOVES,
+  HUD_DOZE_EVERY,
+  HUD_DOZE_GAP_MS,
+  HUD_DOZE_MOVE,
+  HUD_FIRST_SCENE_MS,
+  HUD_LIFE_MOVES,
+  HUD_MOVE_MS,
+  HUD_SCENE_GAPS_MS,
   buildCodexHudSnapshot,
   formatHudCost,
   hudAriaLabel,
@@ -42,6 +50,49 @@ const snapshot = (accountValue: CodexAccount | null) =>
     theme,
     today: { tokens: 1_942_000, costUsd: 12.34 },
   })
+
+describe('挂件生活场景表', () => {
+  const skins: CodexHudSkin[] = ['bunny', 'penguin', 'snail']
+
+  it('每只皮肤三手不重样，且都不含打盹', () => {
+    for (const skin of skins) {
+      const pool = HUD_LIFE_MOVES[skin]
+      expect(pool).toHaveLength(3)
+      expect(new Set(pool).size).toBe(3)
+      expect(pool).not.toContain(HUD_DOZE_MOVE)
+    }
+  })
+
+  it('三只的手互不撞车', () => {
+    for (let i = 0; i < skins.length; i++) {
+      for (let j = i + 1; j < skins.length; j++) {
+        expect(HUD_LIFE_MOVES[skins[i]].some((mv) => HUD_LIFE_MOVES[skins[j]].includes(mv))).toBe(false)
+      }
+    }
+  })
+
+  it('告警那手是这只自己的招牌，且已经在它的生活池里', () => {
+    const alerts = skins.map((skin) => HUD_ALERT_MOVES[skin])
+    expect(new Set(alerts).size).toBe(skins.length)
+    skins.forEach((skin, index) => {
+      expect(HUD_LIFE_MOVES[skin]).toContain(alerts[index])
+    })
+  })
+
+  it('每手都有时长，打盹最长且醒完静得最久', () => {
+    for (const mv of [...skins.flatMap((skin) => HUD_LIFE_MOVES[skin]), HUD_DOZE_MOVE, ...skins.map((s) => HUD_ALERT_MOVES[s])]) {
+      expect(HUD_MOVE_MS[mv]).toBeGreaterThan(0)
+    }
+    const longest = Math.max(...Object.values(HUD_MOVE_MS).filter((ms) => ms !== HUD_MOVE_MS.doze))
+    expect(HUD_MOVE_MS.doze).toBeGreaterThan(longest)
+    expect(HUD_DOZE_GAP_MS).toBeGreaterThan(Math.max(...HUD_SCENE_GAPS_MS))
+  })
+
+  it('开机第一手比平时的档期更短', () => {
+    expect(HUD_FIRST_SCENE_MS).toBeLessThan(Math.min(...HUD_SCENE_GAPS_MS))
+    expect(HUD_DOZE_EVERY).toBeGreaterThan(1)
+  })
+})
 
 describe('挂件额度标签', () => {
   it.each([

@@ -1,5 +1,5 @@
 import { test, expect, type Locator } from '@playwright/test'
-import { bootUnlocked, tipButton } from '../helpers'
+import { bootUnlocked, e2e, tipButton } from '../helpers'
 import type { E2EConfig } from '../mocks/backend'
 
 const seed: E2EConfig = {
@@ -15,6 +15,27 @@ async function bounds(locator: Locator) {
   const box = await locator.boundingBox()
   expect(box).not.toBeNull()
   return box!
+}
+
+for (const width of [800, 1040, 1920]) {
+  for (const route of ['notes', 'entries']) {
+    test(`${width}px ${route} 目录开关不漂移，同一鼠标位置可连续展开和收起`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 720 })
+      await bootUnlocked(page, seed, `/${route}`)
+      const toggle = page.locator('#workspace-directory-toggle')
+      const before = await bounds(toggle)
+      const search = await bounds(page.locator('#workspace-page-toolbar .search-box'))
+      const point = { x: before.x + before.width / 2, y: before.y + before.height / 2 }
+      for (const open of [true, false, true, false]) {
+        await page.mouse.click(point.x, point.y)
+        await expect(toggle).toHaveAttribute('aria-expanded', String(open))
+        expect(await bounds(toggle)).toEqual(before)
+        expect(await bounds(page.locator('#workspace-page-toolbar .search-box'))).toEqual(search)
+        expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('button')?.id, point)).toBe('workspace-directory-toggle')
+      }
+      expect(await e2e.count(page, 'window:startDragging')).toBe(0)
+    })
+  }
 }
 
 for (const width of [800, 1040, 1920]) {
@@ -68,9 +89,9 @@ for (const width of [800, 1040, 1920]) {
         expect(directory.width).toBeGreaterThanOrEqual(200)
         expect(directory.width).toBeLessThanOrEqual(248)
         expect(directory.y).toBe(48)
-        expect(dockedActions.x + dockedActions.width).toBeLessThan(directory.x)
-        expect(Math.abs(dockedActions.x + dockedActions.width - dockedContent.x - dockedContent.width)).toBeLessThanOrEqual(1)
-        expect(Math.abs((await bounds(page.locator('.titlebar-left'))).x - dockedContent.x)).toBeLessThanOrEqual(1)
+        expect(dockedActions).toEqual(actions)
+        expect(await bounds(page.locator('.titlebar-left'))).toEqual(heading)
+        expect(dockedContent.x + dockedContent.width).toBeLessThanOrEqual(directory.x - 32)
         if (width <= 1040) expect((await bounds(toolbar.locator('.search-box'))).x).toBe(searchLeft)
         if (width <= 1040) expect(dockedContent.x).toBe(content.x)
         const selected = page.locator('.workspace-directory .directory-link.active').first()
@@ -137,7 +158,7 @@ for (const theme of ['paper', 'ink']) {
       expect(await card.evaluate(element => element.matches(':focus-visible'))).toBe(true)
     }
     await page.locator('a.nav-item[href="/fileshare"]').click()
-    await expect(page.locator('.drop-card')).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
+    await expect(page.locator('.send-panel')).toHaveCSS('box-shadow', 'none')
     await expect(page.locator('.drop-card')).toHaveCSS('box-shadow', 'none')
   })
 }

@@ -44,10 +44,9 @@ import {
   refreshQuotas,
   refreshQuotasOnEnter,
   runOn,
-  switchTo,
-  cancelSwitch,
   loadQuotaSettings,
-  autoSyncWslAuthOnEnter,
+  loadWslAssignment,
+  wslAssignment,
   acquireQuotaTicker,
   releaseQuotaTicker,
   codexAccountsViewRequests,
@@ -73,6 +72,10 @@ import CodexEditDialog from './CodexEditDialog.vue'
 import CodexSessionsPanel from './CodexSessionsPanel.vue'
 import CodexTrashPanel from './CodexTrashPanel.vue'
 import CodexUsagePanel from './CodexUsagePanel.vue'
+import { isWebRuntime, isCodexWebRuntime } from '../../services/runtime'
+import CodexSwitchDialog from './CodexSwitchDialog.vue'
+import CodexWslAssignDialog from './CodexWslAssignDialog.vue'
+import CodexWebEntry from './CodexWebEntry.vue'
 import CodexPlanBadge from './CodexPlanBadge.vue'
 import CodexQuotaPanel from './CodexQuotaPanel.vue'
 import ResetCreditDialog from './ResetCreditDialog.vue'
@@ -83,6 +86,7 @@ import { codexPlan } from '../../utils/codexPlan'
 import { usagePosterData, type UsagePosterData } from '../../utils/codexUsagePoster'
 
 const CodexUsageShareDialog = defineAsyncComponent(() => import('./CodexUsageShareDialog.vue'))
+const CodexDialogPanel = defineAsyncComponent(() => import('./CodexDialogPanel.vue'))
 
 const pageActive = usePageActive()
 const workspaceLayout = useWorkspaceLayout()
@@ -90,7 +94,8 @@ const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
 
 /** 同一份官方数据的四档视图：账号（desko 的档案）、会话（官方目录）、回收站（desko 留底）、用量（现扫官方 rollout） */
-const view = ref<'accounts' | 'sessions' | 'usage' | 'trash'>('accounts')
+const codexWeb = isCodexWebRuntime()
+const view = ref<'accounts' | 'sessions' | 'usage' | 'trash' | 'dialog'>(codexWeb ? 'dialog' : 'accounts')
 const poster = shallowRef<UsagePosterData | null>(null)
 const canShareUsage = computed(() => !!usageReport.value && usageUpdatedAt.value != null && usageReportRange.value === usageRange.value)
 function shareUsage() {
@@ -278,14 +283,16 @@ function onRowClick(a: CodexAccount) {
   if (isBatchMode.value) toggleSelect(a.id)
 }
 
-async function doSwitch(a: CodexAccount) {
-  if (busyId.value) return
-  // 切号会覆写 ~/.codex 官方凭据文件，属破坏性动作，与档案切换同级先过确认
-  confirmStore.showConfirm(
-    '切换账号',
-    `将把「${a.email}」写入官方凭据文件 ~/.codex。若 Codex 客户端还开着，请先退出它，否则运行中的会话可能继续用旧凭据。`,
-    () => switchTo(a.id),
-  )
+const switchAccount = shallowRef<CodexAccount | null>(null)
+const wslAccount = shallowRef<CodexAccount | null>(null)
+const hasWslTargets = computed(() => !!wslAssignment.value?.targets.length)
+const wslCurrentId = computed(() => wslAssignment.value?.consistent ? wslAssignment.value.current?.id : null)
+function doSwitch(account: CodexAccount) {
+  if (!busyId.value) switchAccount.value = account
+}
+function useInWsl(account: CodexAccount) {
+  if (!busyId.value) wslAccount.value = account
+  closeMenu()
 }
 
 async function copyEmail(a: CodexAccount) {
@@ -302,14 +309,14 @@ function exportJson(ids: string[]) {
   const selectedIds = [...ids]
   confirmStore.showConfirm(
     '导出账号凭据',
-    `将把 ${selectedIds.length} 条账号的完整 JSON 复制到剪贴板，其中可能包含登录令牌、API Key 和账号私密资料。能读取剪贴板的应用也可能获得这些凭据，请勿发送给他人。是否继续？`,
+    `将 ${selectedIds.length} 个账号的凭据复制到剪贴板，可能含令牌、API Key 和私密资料。其他应用可能读取，请勿分享。继续导出？`,
     async () => {
       if (!active) return
       try {
         const json = await codexApi.exportJson(selectedIds)
         if (!active) return
         await writeClipboardText(json)
-        if (active) toastStore.showToast(`已导出 ${selectedIds.length} 条账号的 JSON 到剪贴板`)
+        if (active) toastStore.showToast(`已复制 ${selectedIds.length} 个账号的 JSON`)
       } catch (e) {
         if (active) toastStore.showToast(errText(e), 'error')
       }
@@ -331,7 +338,7 @@ function askResetCredit(a: CodexAccount) {
 function askRefreshTokens(a: CodexAccount) {
   confirmStore.showConfirm(
     '强制刷新令牌',
-    `确定强制刷新「${a.email}」的登录令牌？这会向认证服务请求新令牌，并更新 Desko 中保存的凭据。`,
+    `为「${a.email}」获取新令牌并更新已保存的凭据？`,
     () => void runOn(a.id, () => codexApi.forceRefreshTokens(a.id), '令牌已刷新'),
   )
 }
@@ -339,7 +346,7 @@ function askRefreshTokens(a: CodexAccount) {
 function askDelete(a: CodexAccount) {
   confirmStore.showConfirm(
     '删除账号',
-    `删除 ${a.email}？官方凭据不受影响，Desko 里的这条记录会移进回收站、留一份加密底，之后可以原样恢复。`,
+    `将 ${a.email} 移入回收站？可恢复，当前 Codex 登录不受影响。`,
     async () => {
       await runOn(a.id, () => codexApi.remove(a.id), '已移进回收站')
       recycledLoaded.value = false
@@ -352,7 +359,7 @@ function askBatchDelete() {
   if (!ids.length) return
   confirmStore.showConfirm(
     '删除账号',
-    `删除选中的 ${ids.length} 条账号？官方凭据不受影响，它们在 Desko 里的记录会移进回收站留加密底。这批会作为一条删除任务逐条执行，中途可以暂停。`,
+    `将选中的 ${ids.length} 个账号移入回收站？可恢复，当前 Codex 登录不受影响。删除过程可暂停。`,
     async () => {
       // 单选与批量共用同一句话术，走的是同一套「先留底再移走」
       selected.value = new Set()
@@ -383,10 +390,11 @@ let unlisten: UnlistenFn[] = []
 let active = true
 
 async function refreshOnEnter() {
+  if (codexWeb) return
   // 自动刷新的间隔与阈值先落进 state，定时器才能按上一次的选择起
   await loadQuotaSettings()
   if (!active || !pageActive.value) return
-  void autoSyncWslAuthOnEnter()
+  if (view.value === 'accounts') void loadWslAssignment()
   syncDeleteTicker()
   void refreshAccounts().then(() => {
     if (!active || !pageActive.value) return
@@ -396,6 +404,7 @@ async function refreshOnEnter() {
 }
 
 onMounted(async () => {
+  if (codexWeb) return
   await refreshOnEnter()
   const stop = await listen<SwitchProgress>('codex:switch-progress', (e) => applySwitchProgress(e.payload))
   if (active) unlisten.push(stop)
@@ -407,7 +416,10 @@ watch(pageActive, visible => {
   else releaseQuotaTicker('codex-page')
 })
 
+watch(view, value => { if (value === 'accounts' && pageActive.value && !codexWeb) void loadWslAssignment() })
+
 watch(codexAccountsViewRequests, () => {
+  if (codexWeb) return
   view.value = 'accounts'
 })
 
@@ -423,9 +435,11 @@ watchEffect(() => {
   if (view.value === 'accounts') {
     pageHead.setHead('Codex', `${accounts.value.length} 个`)
   } else if (view.value === 'sessions') {
-    pageHead.setHead('Codex 会话', `${sessions.value.length} 条`)
+    pageHead.setHead('Codex 会话', `${sessions.value.length} 条`, '', true)
   } else if (view.value === 'usage') {
-    pageHead.setHead('Codex 用量', `${usageReport.value?.totals.requestCount ?? 0} 次请求`)
+    pageHead.setHead('Codex 用量', `${usageReport.value?.totals.requestCount ?? 0} 次请求`, '', true)
+  } else if (view.value === 'dialog') {
+    pageHead.setHead('Codex 对话', '', codexWeb || !isWebRuntime() ? '工作区改动' : '', true)
   } else {
     pageHead.setHead('Codex 回收站', `${recycledAccounts.value.length} 个账号 · ${trashSessions.value.length} 条会话`)
   }
@@ -433,8 +447,9 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div class="content-inner">
-    <div v-if="!loaded" class="rcard-list" aria-hidden="true">
+  <div class="content-inner" :class="{ 'codex-dialog-view': codexWeb || (loaded && view === 'dialog' && !isWebRuntime()) }">
+    <CodexDialogPanel v-if="codexWeb" />
+    <div v-else-if="!loaded" class="rcard-list" aria-hidden="true">
       <div class="rcard rcard-row acc-sk" v-for="n in 3" :key="n">
         <span class="skeleton-block"></span>
         <span class="skeleton-line w40"></span>
@@ -444,7 +459,7 @@ watchEffect(() => {
     <template v-else>
       <div :id="workspaceLayout ? 'codex-view-filters' : undefined" class="page-bar" :class="{ 'cx-tabs-row': workspaceLayout }">
         <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-        <nav class="cx-tabs" :class="{ 'cx-header-tabs': workspaceLayout }" aria-label="Codex 视图">
+        <nav class="cx-tabs" data-workspace-heading="replace" :class="{ 'cx-header-tabs': workspaceLayout }" aria-label="Codex 视图">
           <button class="cx-tab" :class="{ active: view === 'accounts' }" :aria-pressed="view === 'accounts'" type="button" @click="view = 'accounts'">
             账号
           </button>
@@ -457,6 +472,7 @@ watchEffect(() => {
           <button class="cx-tab" :class="{ active: view === 'trash' }" :aria-pressed="view === 'trash'" type="button" @click="view = 'trash'">
             回收站
           </button>
+          <button class="cx-tab" :class="{ active: view === 'dialog' }" :aria-pressed="view === 'dialog'" type="button" @click="view = 'dialog'">对话</button>
           <span v-if="workspaceLayout" class="cx-view-count" :title="pageHead.count">{{ pageHead.count }}</span>
         </nav>
         </Teleport>
@@ -477,7 +493,7 @@ watchEffect(() => {
         </div>
 
         <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-        <div class="cx-band-controls">
+        <div v-if="view !== 'dialog'" class="cx-band-controls">
         <template v-if="view === 'accounts'">
           <Teleport v-if="showAccountFilters" to="#codex-view-filters" :disabled="!workspaceLayout || !pageActive" defer>
           <div class="search-box">
@@ -516,7 +532,7 @@ watchEffect(() => {
           </div>
           </Teleport>
           <div class="page-actions">
-            <button class="btn-secondary bar-btn cx-refresh" type="button" aria-label="刷新" title="当前页面每 30 秒自动刷新，点击立即刷新" :disabled="sessionsBusy" @click="reloadSessions()">
+            <button class="btn-secondary bar-btn cx-refresh" type="button" aria-label="刷新" title="每 30 秒自动刷新" :disabled="sessionsBusy" @click="reloadSessions()">
               <AppIcon name="refresh" :size="13" />
               <span class="cx-action-label">刷新</span>
             </button>
@@ -544,7 +560,7 @@ watchEffect(() => {
             <button class="btn-secondary bar-btn" type="button" title="分享" aria-label="分享" :disabled="!canShareUsage" @click="shareUsage">
               <AppIcon name="image" :size="13" /><span class="cx-action-label">分享</span>
             </button>
-            <button class="btn-secondary bar-btn cx-refresh" type="button" aria-label="重新统计" title="当前页面每 30 秒自动刷新，点击立即统计" :disabled="usageBusy" @click="loadUsage()">
+            <button class="btn-secondary bar-btn cx-refresh" type="button" aria-label="重新统计" title="每 30 秒自动刷新" :disabled="usageBusy" @click="loadUsage()">
               <AppIcon name="refresh" :size="13" />
               <span class="cx-action-label">重新统计</span>
             </button>
@@ -566,6 +582,10 @@ watchEffect(() => {
       <CodexSessionsPanel v-if="view === 'sessions'" :locate-session-id="locateSessionId" @located="locateSessionId = ''" />
       <CodexUsagePanel v-else-if="view === 'usage'" @open-session="openUsageSession" />
       <CodexTrashPanel v-else-if="view === 'trash'" />
+      <template v-else-if="view === 'dialog'">
+        <CodexDialogPanel v-if="!isWebRuntime()" />
+        <CodexWebEntry v-else />
+      </template>
 
       <p v-if="view === 'accounts' && switchStep" class="switch-line">
         <AppIcon name="refresh" :size="12" />
@@ -597,7 +617,7 @@ watchEffect(() => {
       <div v-if="view === 'accounts' && !accounts.length" class="rcard empty-state">
         <div class="empty-icon"><AppIcon name="navCodex" :size="24" /></div>
         <div class="empty-title">{{ accountsError ? '无法加载 Codex 账号' : '还没有 Codex 账号' }}</div>
-        <div class="empty-desc">{{ accountsError || '「添加账号」走官方 OAuth；也可以把本机 ~/.codex 里的凭据导进来' }}</div>
+        <div class="empty-desc">{{ accountsError || '添加账号登录，或导入已有凭据' }}</div>
         <button v-if="accountsError" class="action-btn" type="button" @click="refreshAccounts">重试</button>
       </div>
 
@@ -626,6 +646,7 @@ watchEffect(() => {
               <span class="mail" :title="[a.account_name, a.email].filter(Boolean).join('\n')">{{ a.account_name || a.email }}</span>
               <span class="acc-badges">
                 <span v-if="a.id === currentId" class="badge own">当前</span>
+                <span v-if="a.id === wslCurrentId" class="badge wsl"><AppIcon name="terminal" :size="11" />WSL 使用中</span>
                 <span v-if="a.requires_reauth" class="badge warn" :title="a.reauth_reason || undefined">需重新登录</span>
                 <span v-else-if="pendingAuth(a)" class="badge warn" :title="`授权状态：${a.authorization_status}`">待授权</span>
                 <CodexPlanBadge :account="a" />
@@ -653,14 +674,7 @@ watchEffect(() => {
           </div>
 
           <span class="acc-acts">
-            <button
-              v-if="!isBatchMode && switchingId === a.id"
-              class="action-btn"
-              type="button"
-              @click.stop="cancelSwitch(a.id)"
-            >
-              取消
-            </button>
+            <span v-if="!isBatchMode && switchingId === a.id" class="switch-row-status">正在处理…</span>
             <button
               v-else-if="!isBatchMode && a.id !== currentId"
               class="action-btn primary"
@@ -678,20 +692,18 @@ watchEffect(() => {
         </div>
       </div>
 
-      <p v-if="view === 'accounts' && visibleAccounts.length" class="page-note">
-        <AppIcon name="info" :size="13" />
-        切号只改写官方凭据文件，Desko 不代你重启 Codex。
-      </p>
-
       <PopoverMenu v-if="view === 'accounts' && menuAccount" :anchor="menuAnchor" :width="176" @close="closeMenu">
         <button class="pop-item" type="button" @click="runOn(menuAccount!.id, () => codexApi.refreshQuota(menuAccount!.id), '配额已刷新'); closeMenu()">
-          <AppIcon name="refresh" :size="14" />刷新这一条配额
+          <AppIcon name="refresh" :size="14" />刷新配额
         </button>
         <button class="pop-item" type="button" @click="runOn(menuAccount!.id, () => refreshDetail(menuAccount!), '信息已刷新'); closeMenu()">
           <AppIcon name="user" :size="14" />{{ refreshDetailLabel(menuAccount!) }}
         </button>
         <button v-if="menuAccount.auth_mode !== 'apikey'" class="pop-item" type="button" @click="askRefreshTokens(menuAccount!); closeMenu()">
           <AppIcon name="shield" :size="14" />强制刷新令牌
+        </button>
+        <button v-if="hasWslTargets" class="pop-item" type="button" :disabled="!!busyId || menuAccount.auth_mode === 'apikey' || menuAccount.id === wslCurrentId" @click="useInWsl(menuAccount!)">
+          <AppIcon :name="menuAccount.id === wslCurrentId ? 'check' : 'terminal'" :size="14" />{{ menuAccount.id === wslCurrentId ? 'WSL 已使用此账号' : '在 WSL 中使用' }}
         </button>
         <button
           v-if="menuAccount.auth_mode !== 'apikey'"
@@ -717,12 +729,13 @@ watchEffect(() => {
           <AppIcon name="copy" :size="14" />复制邮箱
         </button>
         <button class="pop-item" type="button" @click="exportJson([menuAccount!.id]); closeMenu()">
-          <AppIcon name="download" :size="14" />导出这一条 JSON
+          <AppIcon name="download" :size="14" />导出 JSON
         </button>
         <span class="pop-sep"></span>
         <button class="pop-item danger" type="button" @click="askDelete(menuAccount!); closeMenu()">
           <AppIcon name="trash" :size="14" />删除
         </button>
+        <p v-if="hasWslTargets && menuAccount.auth_mode === 'apikey'" class="pop-note">API Key 账号不支持用于 WSL。</p>
       </PopoverMenu>
 
       <div v-if="view === 'accounts' && (selected.size || batchDeleteJob)" class="batch-dock">
@@ -756,6 +769,8 @@ watchEffect(() => {
     </template>
 
     <CodexAuthDialog v-if="showAuth" :reauth-account-id="reauthAccountId" @close="showAuth = false; reauthAccountId = null" />
+    <CodexSwitchDialog v-if="switchAccount" :account="switchAccount" @close="switchAccount = null" />
+    <CodexWslAssignDialog v-if="wslAccount" :account="wslAccount" @close="wslAccount = null" />
     <CodexUsageShareDialog v-if="poster && pageActive && view === 'usage'" :data="poster" @close="poster = null" />
     <CodexEditDialog v-if="editAccount" :account="editAccount" @close="editAccount = null" />
     <ResetCreditDialog v-if="resetAccount" :account="resetAccount" @close="resetAccount = null" />
@@ -764,13 +779,17 @@ watchEffect(() => {
 </template>
 
 <style scoped>
+.badge.wsl { display: inline-flex; align-items: center; gap: 3px; color: var(--text-secondary); border: 1px solid var(--border); background: transparent; }
+.switch-row-status { color: var(--text-muted); font-size: var(--text-xs); }
+.pop-note { padding: 8px; margin: 4px 0 0; border-top: 1px solid var(--border-subtle); color: var(--text-muted); font-size: var(--text-xs); line-height: 1.55; }
+.pop-item:disabled { opacity: 1; color: var(--text-muted); cursor: default; }
+
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
-.page-note { font-size: var(--text-xs); }
 
 .account-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
 .account-summary { flex-basis: 100%; display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-muted); }
 .filter-reset { margin-left: auto; border: none; background: transparent; color: var(--accent); cursor: pointer; font: inherit; }
-.account-filters :deep(.opt-trigger) { min-width: 100px; max-width: 160px; }
+.account-filters :deep(.opt-trigger) { min-width: 100px; max-width: 160px; background: var(--bg-canvas-input); border: none; border-radius: var(--radius-ib); }
 .account-filters :deep(.opt-value) { min-width: 0; white-space: nowrap; }
 .session-search-mode, .usage-ranges { display: flex; align-items: center; flex-shrink: 0; gap: 2px; }
 .usage-ranges { position:relative; display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin-left:8px; padding:2px; border-radius:var(--radius-sm); background:var(--fill); isolation:isolate; }
@@ -858,11 +877,11 @@ watchEffect(() => {
 
 /* 页签统一点击区域与字距，保留下划线选中态，与顶栏的 32px 控件同高。 */
 #workspace-page-toolbar > .cx-header-tabs { height: 100%; gap: 4px; padding: 0; margin: 0 16px 0 0; pointer-events: none; }
-.cx-header-tabs .cx-tab { height: 32px; padding: 0 12px; border-radius: var(--radius-ib); font-size: 13px; pointer-events: auto; }
+.cx-header-tabs .cx-tab { height: 32px; padding: 0 12px; border-radius: var(--radius-ib); font-size: var(--text-sm); pointer-events: auto; }
 .cx-header-tabs .cx-tab:hover:not(.active) { background: var(--hover-chrome); }
-.cx-header-tabs .cx-tab.active { font-weight: 650; }
+.cx-header-tabs .cx-tab.active { font-weight: 600; }
 .cx-header-tabs .cx-tab.active::after { left: 12px; right: 12px; }
-.cx-view-count { max-width: 100px; margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 12px; }
+.cx-view-count { max-width: 100px; margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: var(--text-xs); }
 #workspace-page-toolbar > .cx-band-controls { container: codex-controls / inline-size; }
 @container workspace-toolbar (max-width: 880px) {
   .cx-view-count { display: none; }

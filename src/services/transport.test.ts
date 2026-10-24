@@ -17,6 +17,20 @@ beforeEach(() => {
 afterEach(() => { meta.remove(); vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('Web transport session boundaries', () => {
+  it('stores the note paste preference in the browser and defaults to enabled', async () => {
+    const values = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    })
+    const { invoke } = await import('./transport')
+    expect(await invoke('get_setting', { key: 'note_paste_cleanup' })).toBe('true')
+    await invoke('set_setting', { key: 'note_paste_cleanup', value: 'false' })
+    expect(values.get('desko.web.note_paste_cleanup')).toBe('false')
+    expect(await invoke('get_setting', { key: 'note_paste_cleanup' })).toBe('false')
+    expect(http).not.toHaveBeenCalled()
+  })
+
   it('all seven module switches read the desktop settings instead of browser storage', async () => {
     const { invoke } = await import('./transport')
     await invoke('unlock', { password: 'synthetic' })

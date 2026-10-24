@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { fileshareApi, type FileShareConfig, type FileShareStatus } from './api/fileshare'
 import { errText } from './api/backup'
+import { syncThemeStamp } from './theme'
 import { useToastStore } from '../stores/toast'
 
 /** 局域网传输状态单例：模块页与设置弹窗共用，一处改动另一处即时可见 */
@@ -33,6 +34,9 @@ export async function fsRefresh(quiet = false): Promise<void> {
     if (epoch !== generation) return
     fsStatus.value = st
     fsConfig.value = cfg
+    // getConfig 可能刚刚才把 fileshare.json 创建出来，那份新件里四个戳键还空着——
+    // 补抄一次，网页不至于因为"服务刚配好"就一路纸·蓝
+    syncThemeStamp()
   } catch (e) {
     if (epoch === generation && !quiet) toastStore.showToast(errText(e), 'error')
   } finally {

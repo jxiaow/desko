@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { fileshareApi, type FileShareStatus } from './api/fileshare'
 import { clearFileshareSession, fsBusy, fsConfig, fsLoaded, fsRefresh, fsSaveConfig, fsStatus } from './fileshareSettings'
 
-vi.mock('./api/fileshare', () => ({ fileshareApi: { status: vi.fn(), getConfig: vi.fn(), saveConfig: vi.fn(), setPassword: vi.fn() } }))
+vi.mock('./api/fileshare', () => ({ fileshareApi: { status: vi.fn(), getConfig: vi.fn(), saveConfig: vi.fn(), setPassword: vi.fn(), setTheme: vi.fn(async () => {}) } }))
 const status: FileShareStatus = { running: true, configuredPort: 8000, boundPort: 8000, localUrl: 'http://127.0.0.1:8000', lanUrl: 'http://192.168.1.2:8000', shareCount: 1, localOnly: false }
 const config = { port: 8000, shareDirs: ['C:/fixture'], localOnly: false, hasPassword: true }
 beforeEach(() => { setActivePinia(createPinia()); vi.resetAllMocks(); clearFileshareSession() })

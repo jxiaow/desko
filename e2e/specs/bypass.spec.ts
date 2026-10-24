@@ -85,14 +85,14 @@ test.describe('网络直连', () => {
     expect(await e2e.count(page, 'bypass_save')).toBe(0)
 
     await expect(page.locator('.concl-title')).toHaveText('当前连接仍经过代理')
-    await expect(page.locator('.concl-summary')).toContainText('连接成功不代表已绕过代理')
+    await expect(page.locator('.concl-summary')).toContainText('目标可连接，出口仍由')
     await expect(page.locator('.concl-detail')).toContainText('需要添加持久路由，改用非代理接口')
     await expect(page.locator('.concl-target')).toHaveText('internal.example.com:443/admin')
     await expect(page.locator('.concl-facts div', { hasText: '出口路由' }).locator('dd')).toContainText(
       'vEthernet (TUN)（代理接口）',
     )
-    await expect(page.locator('.concl-next')).toContainText('加入其直连规则（DIRECT）')
-    await expect(page.locator('.concl-next')).toContainText('点击「加入清单」保存本次结果')
+    await expect(page.locator('.concl-next')).toContainText('将目标设为直连（DIRECT）')
+    await expect(page.locator('.concl-next')).toContainText('先加入清单')
     // 探测这一步没写库，清单还是空的
     await expect(rows(page)).toHaveCount(0)
 
@@ -152,8 +152,8 @@ test.describe('网络直连', () => {
     await cardBtn(page, ip, '重新探测')
     const dialog = page.getByRole('dialog', { name: '探测结论' })
     await expect(dialog.locator('.concl-title')).toHaveText('当前连接仍经过代理')
-    await expect(dialog.locator('.concl-summary')).toContainText('连接成功不代表已绕过代理')
-    await expect(dialog.locator('.concl-next')).toContainText(`${ip} 加入其直连规则（DIRECT）`)
+    await expect(dialog.locator('.concl-summary')).toContainText('目标可连接，出口仍由')
+    await expect(dialog.locator('.concl-next')).toContainText('将目标设为直连（DIRECT）')
     await expect(dialog.locator('.concl-facts')).toBeHidden()
     await dialog.screenshot({ path: '.tmp/bypass-next-step.png' })
     await dialog.locator('.concl-technical summary').click()
@@ -449,11 +449,11 @@ test.describe('网络直连', () => {
     await writeBtn(page).click()
     const dialog = page.locator('.dialog', { hasText: '确认直连配置' })
     await expect(dialog).toBeVisible()
-    await expect(dialog.locator('.lead')).toContainText('将配置 2 个目标')
+    await expect(dialog.locator('.lead')).toContainText('将为 2 个目标更新 hosts 或持久路由')
     await expect(dialog.locator('.plan-host')).toHaveText(['xtbg.example.com', '172.33.0.0/16'])
     await expect(dialog.locator('.plan-action').first()).toHaveText('hosts 固定 xtbg.example.com → 172.30.2.109')
     await expect(dialog.locator('.plan-action').nth(1)).toHaveText('持久路由 绑 26.0.48.1（接口 vEthernet (TUN)）')
-    await expect(dialog.locator('.footer-hints')).toContainText('Windows 将请求管理员授权')
+    await expect(dialog.locator('.footer-hints')).toContainText('Windows 管理员授权')
 
     await dialog.locator('.btn-primary').click()
     await expect(dialog).toHaveCount(0)
@@ -480,7 +480,7 @@ test.describe('网络直连', () => {
     await gotoPending(page, { blocked: ['172.33.0.0/16'] })
     await writeBtn(page).click()
     const dialog = page.locator('.dialog', { hasText: '确认直连配置' })
-    await expect(dialog.locator('.lead')).toContainText('将配置 1 个目标')
+    await expect(dialog.locator('.lead')).toContainText('将为 1 个目标更新 hosts 或持久路由')
     await expect(dialog.locator('.plan-blocked')).toHaveText('1 项暂不配置')
     await expect(dialog.locator('.plan-list li.blocked .plan-action')).toContainText(
       '未找到通往',
@@ -527,7 +527,7 @@ test.describe('网络直连', () => {
     // 回滚没成 = 写进去的还在系统里，这几行就得念「已配置」，批次也留着
     await expect(result.locator('.plan-action').first()).toHaveText('hosts 固定 · 已配置')
     await result.locator('.btn-secondary', { hasText: '撤销本次配置' }).click()
-    await expect(page.locator('.confirm-dialog')).toContainText('并移除该次新增的持久路由')
+    await expect(page.locator('.confirm-dialog')).toContainText('移除本次新增的持久路由')
     await page.locator('.confirm-dialog .dialog-footer button', { hasText: '确定' }).click()
     await expectToast(page, '已撤销上次配置')
     expect(await e2e.count(page, 'bypass_revert')).toBe(1)
@@ -638,13 +638,13 @@ test.describe('网络直连', () => {
 
     await writeBtn(page).click()
     const dialog = page.locator('.dialog', { hasText: '确认直连配置' })
-    await expect(dialog.locator('.lead')).toContainText('将配置 1 个目标')
+    await expect(dialog.locator('.lead')).toContainText('将为 1 个目标更新 hosts 或持久路由')
     await expect(dialog.locator('.plan-blocked')).toHaveText('1 项暂不配置')
     const cdnRow = dialog.locator('.plan-list li', { hasText: 'cdn.example.com' })
     await expect(cdnRow.locator('.plan-action')).toContainText('地址可能随 CDN 节点变化')
 
     await cdnRow.locator('.plan-cdn input').check()
-    await expect(dialog.locator('.lead')).toContainText('将配置 2 个目标')
+    await expect(dialog.locator('.lead')).toContainText('将为 2 个目标更新 hosts 或持久路由')
     await expect(dialog.locator('.plan-blocked')).toHaveCount(0)
     await expect(cdnRow.locator('.plan-action')).toHaveText('hosts 固定 cdn.example.com → 172.30.2.109')
     await dialog.locator('.btn-primary').click()
@@ -666,11 +666,11 @@ test.describe('网络直连', () => {
     await expect(dialog.locator('.plan-action')).toContainText('10.20.0.1/32')
     const help = dialog.getByRole('region', { name: '直连出口处理指引' })
     await expect(help).toBeVisible()
-    for (const text of ['没有额外的“人工确认”操作', 'Win + R', 'ncpa.cpl', '内网 VPN', '代理客户端', 'DIRECT', '检查全部', '配置直连']) {
+    for (const text of ['未找到可用出口', 'Win + R', 'ncpa.cpl', '内网 VPN', '代理客户端', 'DIRECT', '检查全部', '配置直连']) {
       await expect(help).toContainText(text)
     }
     await expect(consent).toBeChecked()
-    await expect(dialog.locator('.lead')).toContainText('尚未写入任何更改')
+    await expect(dialog.locator('.lead')).toContainText('暂无可配置的目标')
     await expect(dialog.getByRole('button', { name: '确认并配置' })).toBeDisabled()
     expect(await e2e.count(page, 'bypass_apply')).toBe(0)
     const state = await e2e.snapshot(page)
@@ -698,12 +698,12 @@ test.describe('网络直连', () => {
     await expect(dialog.getByRole('button', { name: '确认并配置' })).toBeDisabled()
     const consent = dialog.getByRole('checkbox', { name: '同意固定当前 IP（125.39.27.223）' })
     await consent.check()
-    await expect(dialog.locator('.lead')).toContainText('将配置 1 个目标')
+    await expect(dialog.locator('.lead')).toContainText('将为 1 个目标更新 hosts 或持久路由')
     await expect(dialog.locator('.plan-action').filter({ hasText: '持久路由 绑 172.33.122.254（接口 以太网）' })).toBeVisible()
     const privateTarget = dialog.locator('.plan-list li', { hasText: '10.0.0.243/32' })
     await expect(privateTarget.getByRole('combobox', { name: '直连出口' })).toBeVisible()
     await privateTarget.getByRole('combobox', { name: '直连出口' }).selectOption('16|26.0.48.1')
-    await expect(dialog.locator('.lead')).toContainText('将配置 2 个目标')
+    await expect(dialog.locator('.lead')).toContainText('将为 2 个目标更新 hosts 或持久路由')
     await expect(privateTarget.locator('.plan-action')).toHaveText('持久路由 绑 26.0.48.1（接口 本地连接）')
     await expect(consent).toBeChecked()
     await expect(dialog.locator('.plan-blocked')).toHaveCount(0)
@@ -747,7 +747,7 @@ test.describe('网络直连', () => {
     }))
     await writeBtn(page).click()
     const dialog = page.getByRole('dialog', { name: '配置确认' })
-    await expect(dialog.locator('.lead')).toContainText('将配置 1 个目标')
+    await expect(dialog.locator('.lead')).toContainText('将为 1 个目标更新 hosts 或持久路由')
     await expect(dialog.getByRole('region', { name: '直连出口处理指引' })).toBeVisible()
     await expect(dialog.locator('.plan-list li', { hasText: 'blocked.example.com' })).not.toContainText('hosts 固定')
     await dialog.getByRole('button', { name: '确认并配置' }).click()

@@ -1,9 +1,37 @@
 /* 浏览器专用适配；阅读列居中沿用桌面共用的页面骨架。 */
 .app-root.web-runtime .main-area { min-width: 0; }
 
-@media (max-width: 640px), (hover: none) and (max-width: 1024px) {
+/* 宽屏浏览器用有名称的导航；216px 侧栏 + 两侧 32px 留白 + 内容列。
+   内容列最多 1280px，工具栏沿用同一列的外边缘；中等窗口保留原图标轨。 */
+@media (min-width: 1100px) {
+  .app-root.web-runtime:not(.codex-web-runtime) {
+    --sidebar-rail-w: 216px;
+    --workspace-toolbar-height: 64px;
+    --workspace-content-max: 1280px;
+    --workspace-heading-width: 148px;
+    --page-search-max: 360px;
+  }
+  .app-root.web-runtime .web-workspace-sidebar { padding: 12px 12px 16px; }
+  .web-runtime .web-workspace-sidebar .sidebar-nav { align-items: stretch; gap: 28px; }
+  .web-runtime .web-workspace-sidebar .sidebar-group { align-items: stretch; gap: 4px; }
+  .web-runtime .web-workspace-sidebar .sidebar-group-title { display: block; padding: 0 14px 8px; color: var(--text-muted); font-size: var(--text-xs); line-height: 20px; }
+  .web-runtime .web-workspace-sidebar :is(.nav-item, .foot-item) { width: 100%; height: 40px; flex-basis: 40px; justify-content: flex-start; gap: 12px; padding-inline: 14px; font: inherit; }
+  .web-runtime .web-workspace-sidebar :is(.nav-text, .foot-text) { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-base); }
+  .web-runtime .web-workspace-sidebar .nav-item.active .nav-text { font-weight: 600; }
+  .web-runtime .web-workspace-sidebar .sidebar-foot { align-items: stretch; gap: 4px; padding-top: 16px; }
+  .web-runtime .web-workspace-sidebar .web-sidebar-logout { display: flex; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-app { display: flex; align-items: center; gap: 10px; width: calc(100% - 24px); height: 40px; padding: 0 14px; color: var(--text); text-align: left; font: inherit; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-app .brand-logo { width: 22px; height: 22px; flex-shrink: 0; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-wordmark { display: block; font-size: var(--text-lg); font-weight: 600; letter-spacing: -.025em; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-crumb { font-size: var(--text-lg); line-height: 28px; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-buttons { display: none; }
+  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar :is(.search-box, .bar-btn, .btn-primary, .btn-secondary) { height: 36px; }
+  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .bar-btn { min-width: 36px; }
+}
+
+@media (max-width: 760px), (hover: none) and (max-width: 1024px) {
   .app-root.web-runtime {
-    --page-gutter: 14px;
+    --page-gutter: 16px;
     --dock-clearance: calc(96px + env(safe-area-inset-bottom));
     --toast-side: 0px !important;
   }
@@ -11,7 +39,6 @@
   .app-root.web-runtime .main-area { height: auto; min-height: 0; }
   .app-root.web-runtime .app-layout > .sidebar { display: none; }
   .app-root.web-runtime .web-modules-toggle { display: flex; flex-shrink: 0; }
-  .app-root.web-runtime .sidebar-restore { display: none; }
   .app-root.web-runtime .titlebar { height: 52px; padding-top: env(safe-area-inset-top); box-sizing: content-box; }
   .app-root.web-runtime .titlebar-btn { min-width: 44px; min-height: 44px; }
   .app-root.web-runtime .titlebar-left { min-width: 0; padding-left: var(--page-gutter); }
@@ -28,12 +55,20 @@
   .app-root.web-runtime .search-kbd,
   .app-root.web-runtime .fs-hint { display: none; }
   .app-root.web-runtime .card-grid { grid-template-columns: minmax(0, 1fr); }
+  .app-root.web-runtime .composer-hint { display: none; }
+  .app-root.web-runtime .composer .act { min-height: 44px; }
+  .app-root.web-runtime .dialog-approval .action-btn { min-height: 44px; }
   .app-root.web-runtime .grid-card { min-width: 0; }
 
   /* 卡片操作独占一行，避免依赖 hover 或盖住标题与正文。 */
-  .app-root.web-runtime .memo { padding: 12px; }
-  .app-root.web-runtime .memo .memo-head { flex-wrap: wrap; gap: 6px; }
-  .app-root.web-runtime .memo.without-title .memo-head { position: relative; top: auto; right: auto; width: auto; margin: 0 0 3px; }
+  .app-root.web-runtime .memo:not(.editing) { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 14px 16px 6px; }
+  .app-root.web-runtime .memo .memo-head,
+  .app-root.web-runtime .memo.without-title .memo-head { display: contents; position: static; width: auto; margin: 0; }
+  .app-root.web-runtime .memo .memo-title { grid-column: 1; order: 0; margin-bottom: 8px; }
+  .app-root.web-runtime .memo .memo-state { grid-column: 2; order: 0; align-self: center; }
+  .app-root.web-runtime .memo .memo-state:empty { display: none; }
+  .app-root.web-runtime .memo :is(.memo-body, .memo-locked) { grid-column: 1 / -1; order: 1; }
+  .app-root.web-runtime .memo :is(.memo-foot, .memo-unfold) { grid-column: 1 / -1; order: 2; }
   .app-root.web-runtime .memo.without-title .memo-body::before { display: none; }
   .app-root.web-runtime .memo.without-title .memo-locked { padding-right: 0; }
   .app-root.web-runtime .memo.without-title .memo-body > img:first-child,
@@ -42,18 +77,21 @@
     position: static;
     transform: none;
     order: 3;
-    flex: 1 0 100%;
+    grid-column: 2;
+    align-self: center;
     justify-content: flex-end;
-    gap: 1px;
-    padding: 2px 0 0;
+    gap: 0;
+    padding: 0;
     background: transparent;
     opacity: 1;
     pointer-events: auto;
   }
-  .app-root.web-runtime .memo .memo-acts .ib { flex: 0 1 36px; min-width: 32px; width: 36px; height: 40px; }
-  .app-root.web-runtime .memo:not(.editing) .memo-time { opacity: 1; }
+  .app-root.web-runtime .memo .memo-acts .ib { flex: 0 0 44px; width: 44px; height: 44px; }
+  .app-root.web-runtime .memo .memo-acts .memo-desktop-action { display: none; }
+  .app-root.web-runtime .memo:not(.editing) .memo-time { grid-column: 1; order: 3; align-self: center; margin: 0; min-height: 44px; display: flex; align-items: center; opacity: 1; }
+  .app-root.web-runtime .memo:not(.editing) .memo-state { opacity: 1; }
   .app-root.web-runtime .memo-check { left: 8px; top: 12px; }
-  .app-root.web-runtime .memo.batchable { padding-left: 32px; }
+  .app-root.web-runtime .memo.batchable { padding-left: 36px; }
   .app-root.web-runtime .memo.batchable .memo-acts { display: none; }
   .app-root.web-runtime .grid-card .grid-acts {
     position: static;
@@ -64,7 +102,8 @@
     box-shadow: none;
     padding: 0;
   }
-  .app-root.web-runtime .grid-acts .ib { width: 38px; height: 40px; }
+  .app-root.web-runtime .grid-acts .ib { width: 44px; height: 44px; }
+  .app-root.web-runtime .entry-card .ec-cred { opacity: 1; }
   .app-root.web-runtime .mfa-card .card-del { opacity: 1; width: 36px; height: 40px; }
   .app-root.web-runtime .batch-dock {
     bottom: calc(12px + env(safe-area-inset-bottom));
@@ -91,4 +130,156 @@
   .app-root.web-runtime .fs-foot .eb { min-height: 40px; }
   .app-root.web-runtime .lock-stack { max-width: calc(100vw - 40px); }
   .app-root.web-runtime .unlock-error { white-space: normal; text-align: center; }
+}
+
+/* 工作区与桌面共用结构；窄屏把导航和页工具分成两行。 */
+.app-root.web-runtime .workspace-surface { min-height: 0; }
+@media (max-width: 760px), (hover: none) and (max-width: 1024px) {
+  .app-root.web-runtime.codex-layout {
+    --sidebar-rail-w: 0px;
+    --workspace-gutter: 16px;
+    --workspace-directory-offset: 0px !important;
+    --workspace-heading-gap: 0px;
+    --workspace-toolbar-height: 100px;
+    --workspace-window-space: 0px;
+  }
+  .app-root.web-runtime .titlebar-outer {
+    height: calc(100px + env(safe-area-inset-top));
+    flex-basis: calc(100px + env(safe-area-inset-top));
+    padding-top: 0;
+  }
+  .app-root.web-runtime .titlebar-brandcell { display: none; }
+  .app-root.web-runtime .titlebar-outer .titlebar-page {
+    inset: env(safe-area-inset-top) 14px 0;
+    height: 100px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .app-root.web-runtime .titlebar-outer .titlebar-left,
+  .app-root.web-runtime .titlebar-outer .titlebar-page:has([data-workspace-heading="replace"]) .titlebar-left {
+    display: flex;
+    width: calc(100% - 48px);
+    height: 48px;
+    flex: 0 0 48px;
+    padding: 0;
+    overflow: visible;
+  }
+  .app-root.web-runtime .titlebar-outer .titlebar-brand { width: auto; flex: 1; }
+  .app-root.web-runtime .titlebar-outer .titlebar-buttons {
+    position: absolute;
+    right: 8px;
+    top: env(safe-area-inset-top);
+    height: 48px;
+    padding: 0;
+  }
+  .app-root.web-runtime .titlebar-outer .titlebar-buttons::before { display: none; }
+  .app-root.web-runtime .titlebar-outer .workspace-page-toolbar {
+    flex: 0 0 52px;
+    height: 52px;
+    width: 100%;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .app-root.web-runtime #workspace-page-toolbar :is(.page-bar, .cx-band-controls) {
+    height: 52px;
+    min-height: 52px;
+    flex-wrap: nowrap;
+    padding: 0;
+    gap: 6px;
+  }
+  .app-root.web-runtime #workspace-page-toolbar :is(.page-bar, .cx-band-controls) > :first-child { margin-left: 0; }
+  .app-root.web-runtime #workspace-page-toolbar .search-box { flex: 1 1 80px; width: auto; min-width: 80px; max-width: none; height: 44px; }
+  .app-root.web-runtime #workspace-page-toolbar :is(.bar-btn, .btn-primary, .btn-secondary) { min-height: 44px; }
+  .app-root.web-runtime #workspace-page-toolbar .bar-btn { min-width: 40px; }
+  .app-root.web-runtime #workspace-page-toolbar .page-actions { gap: 4px; }
+  .app-root.web-runtime #workspace-page-toolbar > .cx-header-tabs { flex: 1 0 auto; height: 48px; margin: 0; }
+  .app-root.web-runtime #workspace-page-toolbar .cx-header-tabs .cx-tab { min-height: 44px; padding-inline: 10px; }
+  .app-root.web-runtime #workspace-page-toolbar:has(.cx-header-tabs) > .page-bar { flex: 0 0 auto; }
+  .app-root.web-runtime #workspace-page-toolbar:has(.cx-header-tabs) .search-box { width: 150px; }
+  .app-root.web-runtime .workspace-directory {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(304px, calc(100% - 36px));
+    z-index: 60;
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-pop);
+  }
+  .app-root.web-runtime .workspace-directory-actions .ib,
+  .app-root.web-runtime #workspace-directory .directory-link { min-height: 44px; }
+  .app-root.web-runtime .workspace-directory-actions .ib { width: 44px; }
+  .app-root.web-runtime #workspace-directory-content { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .app-root.web-runtime #workspace-page-toolbar .fs-head { min-width: 0; height: 52px; padding: 0; }
+  .app-root.web-runtime #workspace-page-toolbar .fs-head .fs-meta { display: none; }
+  .app-root.web-runtime .workspace-main .content-inner { padding-top: 12px; }
+  .app-root.web-runtime.codex-web-runtime { --workspace-toolbar-height: 48px; }
+  .app-root.web-runtime.codex-web-runtime .titlebar-outer { height: calc(48px + env(safe-area-inset-top)); flex-basis: calc(48px + env(safe-area-inset-top)); }
+  .app-root.web-runtime.codex-web-runtime .titlebar-outer .titlebar-page { height: 48px; right: 56px; flex-direction: row; align-items: center; gap: 4px; }
+  .app-root.web-runtime.codex-web-runtime .titlebar-outer .titlebar-left { flex: 1; width: auto; min-width: 70px; }
+  .app-root.web-runtime.codex-web-runtime .titlebar-outer .workspace-page-toolbar { display: flex; flex: 0 0 auto; width: max-content; height: 48px; overflow: visible; container-type: normal; }
+  .app-root.web-runtime.codex-web-runtime #workspace-page-toolbar .page-bar { height: 48px; min-height: 48px; }
+  .app-root.web-runtime.codex-web-runtime #workspace-page-toolbar .page-actions { gap: 2px; }
+  .app-root.web-runtime.codex-web-runtime #workspace-page-toolbar .create-action { padding-inline: 10px; gap: 6px; }
+  .app-root.web-runtime.codex-web-runtime #workspace-page-toolbar .btn-secondary { padding-inline: 0; min-width: 40px; }
+  .app-root.web-runtime.codex-web-runtime .dialog-reconnect { display: none; }
+  .app-root.web-runtime.codex-web-runtime .titlebar-crumb { font-size: 14px; }
+}
+
+/* 手机使用第二版设计的三行页头；普通 Web 与独立 Codex 对话使用各自的高度。 */
+@media (max-width: 760px), (hover: none) and (max-width: 1024px) {
+  .app-root.web-runtime:not(.codex-web-runtime) {
+    --workspace-toolbar-height: 160px;
+    --workspace-content-padding: max(16px, env(safe-area-inset-left), env(safe-area-inset-right));
+  }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer {
+    height: calc(160px + env(safe-area-inset-top));
+    flex-basis: calc(160px + env(safe-area-inset-top));
+    overflow: visible;
+  }
+  .app-root.web-runtime .web-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: absolute;
+    inset: 0 0 auto;
+    height: calc(56px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+    z-index: 2;
+  }
+  .web-runtime .web-mobile-brand { display: flex; align-items: center; gap: 5px; font-size: var(--text-lg); font-weight: 600; letter-spacing: -.025em; }
+  .web-runtime .web-mobile-brand .brand-logo { width: 28px; height: 28px; }
+  .web-runtime .web-mobile-modules { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--radius-ib); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+  .web-runtime .web-mobile-modules:hover, .web-runtime .web-mobile-modules[aria-expanded="true"] { background: var(--fill); }
+  .web-runtime .web-mobile-modules:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-page { inset: calc(56px + env(safe-area-inset-top)) var(--workspace-content-padding) 0; height: 104px; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-left { width: 100%; height: 48px; flex-basis: 48px; pointer-events: none; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-crumb { font-size: var(--text-xl); line-height: 28px; letter-spacing: -.02em; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-brand { width: auto; flex: 0 1 auto; max-width: 100%; gap: 8px; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer :is(.web-modules-toggle, .titlebar-buttons) { display: none; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .workspace-page-toolbar { height: 56px; flex: 0 0 56px; overflow: visible; container-type: normal; }
+  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar :is(.page-bar, .cx-band-controls) { height: 56px; min-height: 56px; }
+  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .page-actions { position: absolute; top: 0; right: 0; height: 48px; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-page:has(.page-actions) .titlebar-brand { max-width: calc(100% - 152px); }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-page:has(.create-action) .titlebar-brand { max-width: calc(100% - 210px); }
+  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .search-box { max-width: none; }
+  .app-root.web-runtime .workspace-main :is(.stream, .content-inner, .fs-scroll) { scrollbar-width: none; scrollbar-gutter: auto; }
+  .app-root.web-runtime .workspace-main :is(.stream, .content-inner, .fs-scroll)::-webkit-scrollbar { display: none; }
+  .app-root.web-runtime .workspace-main .stream-inner { padding-top: 12px; }
+  .app-root.web-runtime .workspace-main .content-inner { padding-top: 12px; }
+  .app-root.web-runtime .composer .note-editor.v-composer .ProseMirror { min-height: 96px; padding: 14px 16px; }
+  .app-root.web-runtime .composer-bar { min-height: 52px; padding: 0 10px; }
+  .app-root.web-runtime .composer-bar :is(.mini-btn, .go) { min-height: 44px; }
+  .app-root.web-runtime .web-entry-categories { display: flex; flex-shrink: 0; gap: 4px; padding: 0 0 12px; overflow-x: auto; scrollbar-width: none; }
+  .app-root.web-runtime .web-entry-categories button { position: relative; flex: none; min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+  .app-root.web-runtime .web-entry-categories button[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+  .app-root.web-runtime .web-entry-categories button[aria-pressed="true"]::after { content: ''; position: absolute; bottom: 5px; left: 12px; right: 12px; height: 2px; border-radius: 1px; background: var(--accent); }
+  .app-root.web-runtime .web-entry-categories button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  body:has(.app-root.web-runtime) .popover .pop-item { min-height: 44px; }
+}
+
+@media (max-width: 380px) {
+  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .create-action { width: 44px; padding-inline: 0; }
+  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .create-action span { display: none; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-page:has(.create-action) .titlebar-brand { max-width: calc(100% - 152px); }
 }

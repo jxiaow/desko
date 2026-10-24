@@ -71,7 +71,7 @@ function move(event: KeyboardEvent) {
                   <span v-for="metric in metrics" :key="metric.key" class="usg-bar usg-segment" :class="`usg-${metric.key}`" :data-metric="metric.key" :data-value="value(day, metric.key)" :style="{ height: height(value(day, metric.key), day.totalTokens) }" />
                 </span>
                 <span v-else class="usg-bar" :class="[`usg-${plot.key}`, { 'has-value': value(day, plot.key) > 0 }]" :data-metric="plot.key" :data-value="value(day, plot.key)" :style="{ height: height(value(day, plot.key), plot.maximum) }" aria-hidden="true" />
-                <span v-if="label(index)" class="usg-x">{{ day.key.slice(5) }}</span>
+                <span class="usg-x" :class="{ 'tick-regular': label(index), 'tick-compact': index === 0 || index === Math.floor((days.length - 1) / 2) || index === days.length - 1 }">{{ day.key.slice(5) }}</span>
               </button>
             </div>
           </div>
@@ -90,13 +90,13 @@ function move(event: KeyboardEvent) {
 <style scoped>
 .daily-chart { padding:16px 18px 0; container:daily-chart / inline-size; }
 .daily-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 14px; }
-.daily-heading h3 { margin:0; font-size:var(--text-sm); font-weight:600; color:var(--text); }
+.daily-heading h3 { margin:0; font-size:var(--text-base); font-weight:600; color:var(--text); }
 .daily-heading > span { font-size:var(--text-xs); color:var(--text-muted); font-variant-numeric:tabular-nums; }
 .daily-plots { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 24px; margin-top:14px; }
 .usage-series { --plot-height:76px; min-width:0; padding-top:12px; border-top:1px solid var(--border); container:usage-series / inline-size; }
 .total-series { --plot-height:128px; grid-column:1 / -1; padding-top:0; border-top:0; }
 .series-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.series-heading h4 { display:flex; align-items:center; gap:6px; margin:0; font-size:var(--text-xs); font-weight:500; color:var(--text-secondary); }
+.series-heading h4 { display:flex; align-items:center; gap:6px; margin:0; font-size:var(--text-sm); font-weight:500; color:var(--text-secondary); }
 .series-heading h4 i { width:8px; height:8px; border-radius:2px; }
 .series-heading > span { font-size:var(--text-xs); color:var(--text-muted); }
 .usage-plot { display:grid; grid-template-columns:46px minmax(0,1fr); gap:8px; height:var(--plot-height); margin:14px 0 30px; }
@@ -116,12 +116,15 @@ function move(event: KeyboardEvent) {
 .usg-bar, .usg-stack { pointer-events:none; }
 .usg-bar.has-value, .usg-stack.has-value { min-height:2px; }
 .usg-segment { flex-shrink:0; width:100%; max-width:none; border-radius:0; }
-.usg-output, .sw-output { background:var(--usage-output); }.usg-cached, .sw-cached { background:var(--usage-cached); background-image:repeating-linear-gradient(135deg,transparent 0 3px,#ffffff40 3px 4px); }.usg-fresh, .sw-fresh { background:var(--usage-fresh); }
+.usg-output, .sw-output { background:var(--usage-output); }.usg-cached, .sw-cached { background:var(--usage-cached); background-image:repeating-linear-gradient(135deg,transparent 0 3px,#ffffff40 3px 4px); }.usg-fresh, .sw-fresh { background:var(--usage-fresh); } /* taste-skill-ignore: 缓存数据纹理，与图例保持一致 */
 .usg-x { position:absolute; top:100%; left:50%; transform:translateX(-50%); padding-top:8px; white-space:nowrap; font-size:var(--text-xs); color:var(--text-muted); font-variant-numeric:tabular-nums; }
-.daily-readout { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px; min-height:46px; padding:10px 0; border-top:1px solid var(--border); font-size:var(--text-xs); color:var(--text-muted); }
+.usg-x:not(.tick-regular) { display:none; }
+.daily-column:first-child .usg-x { left:0; transform:none; }
+.daily-column:last-child .usg-x { left:auto; right:0; transform:none; }
+.daily-readout { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px; min-height:46px; padding:10px 0; border-top:1px solid var(--border); font-size:var(--text-sm); color:var(--text-muted); }
 .daily-readout b { margin-right:12px; font-weight:500; color:var(--text-secondary); }.daily-readout strong { margin-right:3px; font-weight:600; color:var(--text); font-variant-numeric:tabular-nums; }
 .no-record { margin-left:8px; }.daily-legend { display:flex; flex-wrap:wrap; gap:8px 14px; }.daily-legend span { display:flex; align-items:center; gap:5px; font-variant-numeric:tabular-nums; }.daily-legend i { width:10px; height:10px; border-radius:2px; }
 @container daily-chart (max-width:520px) { .usage-series { grid-column:1 / -1; } }
-@container usage-series (max-width:280px) { .daily-column:not(:nth-child(3n + 1)):not(:last-child) .usg-x { display:none; } }
+@container usage-series (max-width:340px) { .usg-x { display:none; } .usg-x.tick-compact { display:block; } }
 @media (prefers-reduced-motion: reduce) { .daily-column, .usg-bar, .usg-stack { transition:none; } }
 </style>

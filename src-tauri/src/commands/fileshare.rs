@@ -457,6 +457,35 @@ pub fn fileshare_set_password(app: AppHandle, password: String) -> Result<(), Ap
     Ok(())
 }
 
+/// 主题戳：desko 换外观时把四值抄给网页端。走 update_file 只动这四键，
+/// 端口/目录/口令/公网策略一概不吞（那两个字段各有自己的写方）。
+///
+/// 配置文件还没落地就跳过：换主题不该顺手创建一份局域网传输配置，
+/// 而 `shareDirs` 为空的配置会让服务进程拒绝启动（同 `write_public_policies` 的理由）。
+/// 值没变也跳过：戳是装饰性契约，不该为它多 bump 一次 mtime、多起一轮热加载。
+#[tauri::command]
+pub fn fileshare_set_theme(
+    app: AppHandle,
+    theme: String,
+    base: String,
+    accent: String,
+    atmosphere: String,
+) -> Result<(), AppError> {
+    let path = config_path(&app)?;
+    let Ok(Some(cfg)) = config::load_file(&path) else { return Ok(()) };
+    if cfg.theme == theme && cfg.base == base && cfg.accent == accent && cfg.atmosphere == atmosphere {
+        return Ok(());
+    }
+    config::update_file(&path, &cfg, |c| {
+        c.theme = theme;
+        c.base = base;
+        c.accent = accent;
+        c.atmosphere = atmosphere;
+    })
+    .map_err(AppError::FileShare)?;
+    Ok(())
+}
+
 fn to_dto(cfg: &ShareConfig) -> ConfigDto {
     ConfigDto {
         port: cfg.effective_port(),

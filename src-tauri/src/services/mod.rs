@@ -18,6 +18,7 @@ pub mod bypass_probe_job;
 pub mod netguard_service;
 pub mod tunnel_service;
 pub mod tunnel_domain_service;
+pub mod codex_bridge;
 
 use crate::error::AppError;
 use crate::AppState;

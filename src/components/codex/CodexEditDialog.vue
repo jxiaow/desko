@@ -68,7 +68,7 @@ function save() {
       if (!active) return
       await refreshAccounts()
       if (!active) return
-      toastStore.showToast(key ? '已保存，账号凭据与档案已按新密钥重建' : '账号信息已保存')
+      toastStore.showToast(key ? '账号凭据已更新' : '账号信息已保存')
       emit('close')
     } catch (e) {
       if (active) toastStore.showToast(errText(e), 'error')
@@ -80,7 +80,7 @@ function save() {
   if (key) {
     confirmStore.showConfirm(
       '更换 API Key',
-      `确定更换「${props.account.email}」的 API Key？这会重建账号档案；如果它是当前账号，还会改写官方凭据文件。请先退出正在使用该账号的 Codex 客户端。`,
+      `更换「${props.account.email}」的 API Key？将重建账号档案；若为当前账号，也会更新 Codex 凭据。请先退出使用此账号的 Codex。`,
       () => void apply(),
     )
   } else void apply()
@@ -115,9 +115,6 @@ function save() {
         </p>
 
         <div v-if="isApiKey" class="key-box">
-          <p class="key-hint">
-            换密钥会重建这条档案（ID 由密钥哈希得出），若它是当前账号，官方凭据文件一并重写。留空表示这次只改名称、标签与备注。
-          </p>
           <div class="form-group">
             <label for="cx-newkey">新 API Key</label>
             <input id="cx-newkey" v-model="newKey" class="mono" type="password" spellcheck="false" placeholder="sk-…，留空不改" />
@@ -148,11 +145,5 @@ function save() {
   margin-top: var(--space-4);
   padding-top: var(--space-3);
   border-top: 1px solid var(--border-strong, var(--border));
-}
-.key-hint {
-  margin: 0 0 10px;
-  font-size: var(--text-xs);
-  line-height: 1.6;
-  color: var(--text-secondary);
 }
 </style>

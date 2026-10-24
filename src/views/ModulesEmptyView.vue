@@ -51,7 +51,7 @@ onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
         <AppIcon name="gear" :size="24" />
       </div>
       <div class="empty-title">暂无已启用的模块</div>
-      <div class="empty-desc">在设置中启用模块后，即可开始使用。</div>
+      <div class="empty-desc">在设置中启用所需模块</div>
       <button class="action-btn primary" type="button" @click="openModules">管理模块</button>
     </div>
   </div>
@@ -59,9 +59,8 @@ onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
   <div v-else class="content-inner onb-page">
     <div class="onb-flow">
       <header class="onb-head">
-        <p class="onb-eyebrow">从这里开始</p>
         <h1 class="onb-title">选择要启用的模块</h1>
-        <p class="onb-lead">启用的模块会出现在侧栏；之后可随时在设置中调整。</p>
+        <p class="onb-lead">可随时在设置中调整</p>
       </header>
 
       <div class="onb-grid" role="group" aria-label="模块选择">
@@ -109,15 +108,8 @@ onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
   min-height: 100%;
 }
 
-.onb-eyebrow {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
 .onb-title {
-  font-size: 22px;
+  font-size: var(--text-2xl);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.35;
@@ -127,7 +119,7 @@ onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
 .onb-lead {
   margin-top: 8px;
   margin-bottom: 26px;
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   color: var(--text-secondary);
 }
@@ -212,13 +204,13 @@ onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
 }
 
 .tile-name {
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.4;
 }
 
 .tile-brief {
-  font-size: 12px;
+  font-size: var(--text-xs);
   line-height: 1.65;
   color: var(--text-muted);
   white-space: nowrap;
@@ -236,7 +228,7 @@ onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
 }
 
 .onb-count {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
 }
 

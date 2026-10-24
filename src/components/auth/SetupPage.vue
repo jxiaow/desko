@@ -188,9 +188,9 @@ const doSetup = async () => {
 .setup-tile svg { width: 38px; height: 38px; }
 
 .setup-title {
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: normal;
   color: var(--text);
   margin-bottom: 22px;
 }
@@ -324,7 +324,7 @@ const doSetup = async () => {
   width: 300px;
   margin-top: 10px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--text-xs);
   line-height: 1.6;
   color: var(--text-muted);
 }

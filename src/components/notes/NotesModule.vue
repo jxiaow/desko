@@ -44,7 +44,7 @@ const { copyRichToClipboard } = useClipboard()
 const {
   notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, hasActiveFilters,
   noteRailCollapsed, noteRailPinned, noteDraftHtml: draftHtml,
-  isBatchMode, hasNoteSelection, selectedNoteIds, noteAttachments, noteSaveState, notePlains, noteKey,
+  isBatchMode, hasNoteSelection, selectedNoteIds, isMergingNotes, noteAttachments, noteSaveState, notePlains, noteKey,
   tagCounts, viewCounts, filteredNotes, groupedNotes, archivedNotes, archiveSummary,
 } = storeToRefs(notesStore)
 const {
@@ -52,7 +52,7 @@ const {
   doDeleteNote, togglePin, toggleStar, setArchived, batchSetArchived, unarchiveAllFiltered,
   lockNote, unlockNote, relockNote, removeNoteLock, relockNoteDomain,
   toggleSelectNote, selectAllNotes, clearSelection, toggleNotePick, exitNoteBatch,
-  batchDelete, batchSetPinned, batchSetStarred,  loadAttachments, uploadAttachment, deleteAttachment, stageImage,
+  batchDelete, mergeSelectedNotes, batchSetPinned, batchSetStarred,  loadAttachments, uploadAttachment, deleteAttachment, stageImage,
 } = notesStore
 
 const pageEl = ref<HTMLElement | null>(null)
@@ -518,9 +518,9 @@ watchEffect(() => {
         <template v-else>
           <div v-for="group in groupedNotes" :key="group.label" class="day">
             <div class="day-head" :class="{ pinned: group.pinned }">
-              <AppIcon v-if="group.pinned" name="pin" :size="12" />
-              {{ group.label }}
-              <span class="day-count">· {{ group.notes.length }}</span>
+              <span>{{ group.label }}</span>
+              <span class="day-separator" aria-hidden="true">·</span>
+              <span class="day-count">{{ group.notes.length }}</span>
             </div>
             <div class="day-list">
               <NoteCard
@@ -574,7 +574,7 @@ watchEffect(() => {
               <AppIcon :name="emptyNoMatch ? 'searchEmpty' : isArchivedView ? 'archive' : 'navNotes'" :size="24" />
             </div>
             <div class="empty-title">{{ emptyNoMatch ? '未找到匹配的小记' : isArchivedView ? '还没有归档的小记' : '还没有小记' }}</div>
-            <div class="empty-desc">{{ emptyNoMatch ? '试试清空筛选或其他关键词' : isArchivedView ? '在任一小记的 ⋯ 菜单里选「归档」，就会收进这里' : '在上方写第一条' }}</div>
+            <div class="empty-desc">{{ emptyNoMatch ? '试试清空筛选或其他关键词' : isArchivedView ? '在小记菜单中选择「归档」' : '在上方写第一条' }}</div>
           </div>
         </template>
       </div>
@@ -663,6 +663,9 @@ watchEffect(() => {
         <button class="pop-item" type="button" @click="batchMoreOpen = false; batchSetStarred(true)"><AppIcon name="star" :size="14" />收藏</button>
         <button class="pop-item" type="button" @click="batchMoreOpen = false; batchSetStarred(false)"><AppIcon name="star" :size="14" />取消收藏</button>
       </PopoverMenu>
+      <button class="dock-btn" type="button" :disabled="selectedNoteIds.size < 2 || isMergingNotes" @click="mergeSelectedNotes">
+        合并
+      </button>
       </template>
       <span class="dock-sep"></span>
       <button class="dock-btn danger" type="button" :disabled="!selectedNoteIds.size" @click="batchDelete">
@@ -771,7 +774,7 @@ watchEffect(() => {
   font-size: var(--text-sm);
   color: var(--text-secondary);
 }
-.archive-bar .ab-lead b { font-weight: 650; color: var(--text); }
+.archive-bar .ab-lead b { font-weight: 600; color: var(--text); }
 .archive-bar .ab-sub { font-size: var(--text-xs); color: var(--text-muted); }
 .archive-bar .ab-sp { flex: 1; }
 .archive-bar .ab-btn {
@@ -799,9 +802,9 @@ watchEffect(() => {
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   font-size: var(--text-xs);
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-canvas-meta);
   letter-spacing: 0.02em;
   padding: var(--space-2) 0 var(--space-2) var(--space-1);
@@ -810,9 +813,7 @@ watchEffect(() => {
   background: var(--bg-app);
   background-attachment: fixed;
 }
-/* 纯强调色在加深后的纸画布上只有 4.37:1；向正文墨色收 20% 保住小字可读性 */
-.day-head.pinned { color: color-mix(in srgb, var(--accent) 80%, var(--text)); }
-.day-count { font-weight: 400; color: var(--text-canvas-meta); }
+.day-separator, .day-count { font-weight: 400; color: var(--text-canvas-meta); }
 .day-list {
   display: flex;
   flex-direction: column;

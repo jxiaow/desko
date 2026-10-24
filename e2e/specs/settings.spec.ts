@@ -265,7 +265,7 @@ test.describe('Settings 设置', () => {
     })
     // 选「关闭」写 0，不是空串 —— 这一档关掉就等于自动备份全关
     await trigger.click()
-    await page.locator('.popover.modal .opt-item', { hasText: '关闭 · 只留手动' }).click()
+    await page.locator('.popover.modal .opt-item', { hasText: '仅手动备份' }).click()
     expect((await e2e.snapshot(page))).toMatchObject({
       settings: { auto_backup_interval: '0' },
     })
@@ -313,7 +313,7 @@ test.describe('Settings 设置', () => {
     await setBackupPwd(page, pane)
     // 密码只是前置，没云端这个动作毫无意义
     await expect(row.locator('button.action-btn')).toBeDisabled()
-    await expect(row.locator('.setting-desc')).toContainText('请先配置上方')
+    await expect(row.locator('.setting-desc')).toContainText('请先连接云端')
 
     await connectCloud(page, pane)
     await expect(row.locator('button.action-btn')).toBeEnabled()
@@ -490,7 +490,7 @@ test.describe('Settings 设置', () => {
     const row = pane.locator('.setting-item', { hasText: '未引用附件' })
 
     // kept__b.png 被正文引用，只有 junk 算垃圾
-    await expect(row.locator('.setting-desc')).toHaveText('1 个文件 · 2 KB 不被任何小记引用')
+    await expect(row.locator('.setting-desc')).toHaveText('1 个未引用文件 · 2 KB')
     const btn = row.locator('button.action-btn')
     await expect(btn).toBeEnabled()
 
@@ -501,7 +501,7 @@ test.describe('Settings 设置', () => {
     await confirm.locator('.btn-danger').click()
 
     await expectToast(page, '已清理 1 个未引用附件')
-    await expect(row.locator('.setting-desc')).toHaveText('没有未被引用的附件')
+    await expect(row.locator('.setting-desc')).toHaveText('没有未引用附件')
     await expect(btn).toBeDisabled()
     const state = await e2e.snapshot(page)
     // 库里存的就是附件目录下的文件名，不带任何本机绝对路径
@@ -513,7 +513,7 @@ test.describe('Settings 设置', () => {
     const dialog = await openSettings(page, 'backup')
     const pane = dialog.locator('.backup-pane')
     const connRow = pane.locator('.setting-item', { hasText: '连接' })
-    await expect(connRow.locator('.setting-status')).toContainText('未配置')
+    await expect(connRow.locator('.setting-status')).toContainText('未连接坚果云')
 
     await connRow.locator('button.action-btn', { hasText: '配置' }).click()
     const modal = page.locator('.dialog').filter({ has: page.locator('h3', { hasText: '连接坚果云' }) })

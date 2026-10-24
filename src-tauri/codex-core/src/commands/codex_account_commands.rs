@@ -9,35 +9,6 @@ const CODEX_BATCH_DELETE_JOBS_DIR: &str = "codex_batch_delete_jobs";
 const CODEX_MAIL_PREVIEW_MAX_BYTES: usize = 512 * 1024;
 static CODEX_BATCH_DELETE_JOBS: LazyLock<Mutex<HashMap<String, CodexBatchDeleteJob>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
-static CODEX_SWITCH_CANCEL_REQUESTS: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-
-fn request_codex_switch_cancel(account_id: &str) {
-    CODEX_SWITCH_CANCEL_REQUESTS
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .insert(account_id.to_string());
-}
-
-fn clear_codex_switch_cancel(account_id: &str) {
-    CODEX_SWITCH_CANCEL_REQUESTS
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .remove(account_id);
-}
-
-fn ensure_codex_switch_not_cancelled(account_id: &str) -> Result<(), String> {
-    if CODEX_SWITCH_CANCEL_REQUESTS
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .contains(account_id)
-    {
-        Err("CODEX_START_CANCELLED".to_string())
-    } else {
-        Ok(())
-    }
-}
-
 struct CodexSwitchProgressGuard {
     app: AppHandle,
     account_id: String,
@@ -555,17 +526,26 @@ pub async fn get_codex_storage_paths() -> Result<CodexStoragePaths, String> {
 }
 
 #[tauri::command]
-pub async fn get_codex_wsl_auth_status() -> Result<codex_account::CodexWslAuthStatus, String> {
-    tauri::async_runtime::spawn_blocking(codex_account::get_codex_wsl_auth_status)
-        .await
-        .map_err(|error| format!("读取 WSL 登录态后台任务失败: {}", error))
+pub async fn get_codex_wsl_assignment() -> Result<codex_account::CodexWslAssignment, String> {
+    tauri::async_runtime::spawn_blocking(codex_account::get_codex_wsl_assignment).await.map_err(|_| "读取 WSL 账号失败".into())
 }
-
 #[tauri::command]
-pub async fn sync_codex_auth_to_wsl() -> Result<Vec<codex_account::CodexWslAuthSyncResult>, String> {
-    tauri::async_runtime::spawn_blocking(codex_account::sync_codex_auth_to_wsl)
-        .await
-        .map_err(|error| format!("同步 WSL 登录态后台任务失败: {}", error))?
+pub async fn preview_codex_wsl_assignment(account_id: String) -> Result<codex_account::CodexWslAssignmentPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || codex_account::preview_codex_wsl_assignment(&account_id)).await.map_err(|_| "WSL 预览失败")?
+}
+#[tauri::command]
+pub async fn assign_codex_account_to_wsl(account_id: String) -> Result<codex_account::CodexWslOutcome, String> {
+    let _lease = codex_account::try_acquire_profile_mutation_lease(&codex_account::get_codex_home(), "wsl-assignment")?;
+    codex_account::assign_codex_account_to_wsl(&account_id).await
+}
+#[tauri::command]
+pub async fn preview_codex_switch(account_id: String) -> Result<codex_account::CodexSwitchPreview, String> {
+    codex_account::preview_codex_switch(account_id).await
+}
+#[tauri::command]
+pub async fn relaunch_codex_clients(plan_id: String) -> Result<crate::modules::codex_clients::ClientOutcome, String> {
+    let _lease = codex_account::try_acquire_profile_mutation_lease(&codex_account::get_codex_home(), "codex-relaunch")?;
+    codex_account::relaunch_codex_clients(plan_id).await
 }
 
 #[tauri::command]
@@ -780,11 +760,9 @@ async fn disable_default_model_routing_for_non_oauth_switch() {
 pub async fn switch_codex_account(
     app: AppHandle,
     account_id: String,
-    auto_repair_mode: Option<codex_session_visibility::CodexSessionVisibilityAutoRepairMode>,
     reauth_token_generation: Option<u64>,
-    launch_after_switch: Option<bool>,
-) -> Result<CodexAccount, String> {
-    clear_codex_switch_cancel(&account_id);
+    client_policy: Option<codex_account::CodexSwitchPolicy>,
+) -> Result<codex_account::CodexSwitchOutcome, String> {
     let _profile_lease = codex_account::try_acquire_profile_mutation_lease(
         &codex_account::get_codex_home(),
         "oauth-account-switch",
@@ -809,7 +787,6 @@ pub async fn switch_codex_account(
     ));
     let initial_account = codex_account::load_account(&account_id)
         .ok_or_else(|| format!("账号不存在: {}", account_id))?;
-    ensure_codex_switch_not_cancelled(&account_id)?;
     let is_oauth_account = !initial_account.is_api_key_auth()
         && !initial_account.is_agent_identity_auth()
         && !initial_account.is_web_session_auth();
@@ -825,11 +802,8 @@ pub async fn switch_codex_account(
     let access_token_refresh_due =
         is_oauth_account && codex_oauth::is_token_expired(&initial_account.tokens.access_token);
     let is_reauth_handoff = reauth_token_generation.is_some();
-    let credentials_need_refresh =
-        !is_reauth_handoff && is_oauth_account && access_token_refresh_due;
-    let initial_token_generation = initial_account.token_generation;
     let user_config = config::get_user_config();
-    let launch_after_switch = launch_after_switch.unwrap_or(user_config.codex_launch_on_switch);
+    let client_policy = client_policy.unwrap_or(codex_account::CodexSwitchPolicy { restart_windows: user_config.codex_switch_restart_codex, apply_to_wsl: false });
     // client_auth_status 仅记录官方客户端运行后的观测结果，不参与切号或启动拦截。
     // 真实 Token Authority 失败仍由 prepare/switch 流程返回结构化授权错误。
 
@@ -870,99 +844,16 @@ pub async fn switch_codex_account(
         account_id,
         flow_started.elapsed().as_millis()
     ));
-    // 切换账号事务：先准备并验证目标凭据，通过后再按启动模式停止旧运行态并提交。
-    // 桌面模式关闭官方客户端；CLI 模式保留终端进程，仅停止受管 profile 服务。
+    // 切换账号事务：凭据准备通过后，按确认策略关闭客户端、提交并重开；
+    // WSL 仅在 Windows 提交成功且用户勾选后处理。
     let switch_started = Instant::now();
     let step_app = app.clone();
     let step_account_id = account_id.clone();
-    if credentials_need_refresh {
-        emit_codex_switch_step(
-            &app,
-            &account_id,
-            "refreshTokens",
-            "running",
-            26,
-            serde_json::json!({
-                "required": true,
-                "hasRefreshToken": refresh_token_present,
-            }),
-        );
-    } else {
-        emit_codex_switch_step(
-            &app,
-            &account_id,
-            "refreshTokens",
-            "skipped",
-            30,
-            serde_json::json!({ "required": false }),
-        );
-    }
-    let before_commit = move || {
-        let step_app = step_app.clone();
-        let step_account_id = step_account_id.clone();
-        async move {
-            if credentials_need_refresh {
-                let prepared_account = codex_account::load_account(&step_account_id);
-                emit_codex_switch_step(
-                    &step_app,
-                    &step_account_id,
-                    "refreshTokens",
-                    "completed",
-                    40,
-                    serde_json::json!({
-                        "required": true,
-                        "tokenGenerationChanged": prepared_account.as_ref().is_some_and(|account| {
-                            account.token_generation > initial_token_generation
-                        }),
-                    }),
-                );
-            }
-            emit_codex_switch_step(
-                &step_app,
-                &step_account_id,
-                "accessToken",
-                if is_oauth_account {
-                    "completed"
-                } else {
-                    "skipped"
-                },
-                42,
-                serde_json::json!({
-                    "present": access_token_present,
-                    "expiresAt": codex_account::load_account(&step_account_id).as_ref().and_then(|account| {
-                        codex_oauth::jwt_token_expiration_timestamp(&account.tokens.access_token)
-                    }),
-                    "refreshDue": false,
-                    "opaque": access_token_present && access_token_expires_at.is_none(),
-                }),
-            );
-            emit_codex_switch_step(
-                &step_app,
-                &step_account_id,
-                "writeCredentials",
-                "running",
-                58,
-                serde_json::json!({}),
-            );
-            Ok(())
-        }
-    };
-    let switch_result = if let Some(expected_generation) = reauth_token_generation {
-        codex_account::switch_account_managed_after_reauth_with_before_commit(
-            &account_id,
-            expected_generation,
-            before_commit,
-        )
-        .await
-    } else {
-        codex_account::switch_account_managed_with_before_commit_and_revalidation_options(
-            &account_id,
-            before_commit,
-        )
-        .await
-    };
-    ensure_codex_switch_not_cancelled(&account_id)?;
-    let account = match switch_result {
+    let switch_result = codex_account::switch_account_with_client_policy(
+        &account_id, client_policy, reauth_token_generation,
+        move |step| emit_codex_switch_step(&step_app, &step_account_id, step, "running", 50, serde_json::json!({})),
+    ).await;
+    let mut outcome = match switch_result {
         Ok(account) => account,
         Err(error) => {
             let formatted_error = codex_account::format_account_switch_error(&account_id, error);
@@ -980,6 +871,7 @@ pub async fn switch_codex_account(
             return Err(formatted_error);
         }
     };
+    let account = outcome.account.clone();
     if is_reauth_handoff {
         let quota_account_id = account.id.clone();
         tokio::spawn(async move {
@@ -1011,7 +903,7 @@ pub async fn switch_codex_account(
     );
     let account_speed = account.app_speed.clone();
     let speed_started = Instant::now();
-    codex_speed::write_official_app_speed(account_speed.clone())?;
+    if codex_speed::write_official_app_speed(account_speed.clone()).is_err() { outcome.warnings.push("账号已切换，客户端速度配置未能更新".into()); }
     logger::log_info(&format!(
         "[Codex Switch][Backend] write official app speed finished: account_id={}, elapsed_ms={}, total_ms={}",
         account_id,
@@ -1043,15 +935,8 @@ pub async fn switch_codex_account(
         } else {
             account.id.clone()
         };
-    if let Err(error) = crate::modules::codex_instance::bind_default_account_for_switch(
-        &default_bind_account_id,
-    ) {
-        let _ = app.emit("codex:switch-progress", serde_json::json!({
-            "accountId": account_id, "type": "error", "error": error,
-            "canRetry": true,
-        }));
-        progress_guard.completed = true;
-        return Err(error);
+    if crate::modules::codex_instance::bind_default_account_for_switch(&default_bind_account_id).is_err() {
+        outcome.warnings.push("账号已切换，默认实例绑定未能更新".into());
     }
     logger::log_info(&format!(
         "已同步更新 Codex 默认实例绑定账号: {}", default_bind_account_id
@@ -1112,24 +997,7 @@ pub async fn switch_codex_account(
         }),
     );
     progress_guard.completed = true;
-    clear_codex_switch_cancel(&account_id);
-    Ok(account)
-}
-
-/// 请求停止账号切换及其后续启动事务；不会修改账号凭据或授权状态。
-#[tauri::command]
-pub async fn codex_cancel_account_switch(app: AppHandle, account_id: String) -> Result<(), String> {
-    request_codex_switch_cancel(&account_id);
-    let _ = app.emit(
-        "codex:switch-progress",
-        serde_json::json!({
-            "accountId": account_id,
-            "type": "cancelled",
-            "error": "CODEX_START_CANCELLED",
-            "cancelled": true,
-        }),
-    );
-    Ok(())
+    Ok(outcome)
 }
 
 async fn run_codex_post_refresh_checks(app: &AppHandle) {
@@ -1148,15 +1016,14 @@ async fn run_codex_post_refresh_checks(app: &AppHandle) {
                 app.clone(),
                 target_id.clone(),
                 None,
-                None,
-                None,
+                Some(codex_account::CodexSwitchPolicy::default()),
             ))
             .await
             {
                 Ok(switched_account) => {
                     logger::log_info(&format!(
                         "[AutoSwitch][Codex] 自动切号完成: target_id={}, email={}",
-                        switched_account.id, switched_account.email
+                        switched_account.account.id, switched_account.account.email
                     ));
                     switched = true;
                 }

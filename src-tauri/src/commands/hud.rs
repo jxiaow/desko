@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use tauri::{
+    menu::{Menu, MenuItem},
     AppHandle, Emitter, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
 };
@@ -14,6 +15,7 @@ const HUD_HEIGHT: f64 = 74.0;
 const HUD_EXPANDED_HEIGHT: f64 = 144.0;
 const HUD_MARGIN: i32 = 24;
 const POSITION_KEY: &str = "codex_hud_position";
+const MENU_SETTINGS: &str = "hud-settings";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 struct HudPosition {
@@ -134,6 +136,31 @@ fn clamp_window_to_monitor(window: &WebviewWindow<impl Runtime>) -> Result<(), S
     window.set_position(clamped).map_err(|err| err.to_string())
 }
 
+/// 隐藏挂件的唯一收口：先藏窗口，再由主窗口把 `codex_hud_enabled` 落回 false 并销毁。
+/// Alt+F4 与设置里的显示开关保持一致。
+fn dismiss_hud<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window(HUD_LABEL) {
+        let _ = window.hide();
+    }
+    let _ = app.emit_to(MAIN_LABEL, "codex-hud:request-close", ());
+}
+
+/// 挂件只该有自己的右键菜单，WebView2 那份（刷新/另存为/检查）得关掉。
+#[cfg(windows)]
+fn suppress_default_context_menu<R: Runtime>(window: &WebviewWindow<R>) {
+    let _ = window.with_webview(|platform| unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+        use windows_webview::core::Interface;
+        if let Ok(core) = platform.controller().CoreWebView2() {
+            if let Ok(settings) = core.Settings() {
+                if let Ok(settings) = settings.cast::<ICoreWebView2Settings3>() {
+                    let _ = settings.SetAreDefaultContextMenusEnabled(false);
+                }
+            }
+        }
+    });
+}
+
 fn create_hud_window<R: Runtime>(
     app: &AppHandle<R>,
     saved: Option<PhysicalPosition<i32>>,
@@ -163,11 +190,23 @@ fn create_hud_window<R: Runtime>(
     window.on_window_event(move |event| match event {
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
-            let _ = window_for_close.hide();
-            let _ = app_for_close.emit_to(MAIN_LABEL, "codex-hud:request-close", ());
+            dismiss_hud(&app_for_close);
         }
         WindowEvent::Moved(_) => {
             let _ = clamp_window_to_monitor(&window_for_close);
+        }
+        _ => {}
+    });
+
+    let app_for_menu = app.clone();
+    window.on_menu_event(move |_window, event| match event.id().as_ref() {
+        MENU_SETTINGS => {
+            if let Some(main) = app_for_menu.get_webview_window(MAIN_LABEL) {
+                let _ = main.show();
+                let _ = main.unminimize();
+                let _ = main.set_focus();
+            }
+            let _ = app_for_menu.emit_to(MAIN_LABEL, "codex-hud:open-settings", ());
         }
         _ => {}
     });
@@ -204,19 +243,16 @@ pub async fn desko_hud_show(
 #[tauri::command]
 pub fn desko_hud_reveal(
     app: AppHandle,
-    state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    // 首帧回调可能在锁定后才落地：锁着就绝不把窗口再亮出来。
-    let locked = state.master_key.lock().map_err(|_| "应用已锁定")?.is_none();
-    if locked {
-        return Err("应用已锁定".into());
-    }
     let Some(window) = app.get_webview_window(HUD_LABEL) else {
         return Err("挂件窗口不存在".into());
     };
     window
         .set_size(tauri::LogicalSize::new(HUD_WIDTH, HUD_HEIGHT))
         .map_err(|err| err.to_string())?;
+    // 建窗那一刻 webview 还没就绪，亮相时才有 controller 可改
+    #[cfg(windows)]
+    suppress_default_context_menu(&window);
     window.show().map_err(|err| err.to_string())
 }
 
@@ -237,7 +273,7 @@ pub fn desko_hud_destroy(app: AppHandle) -> Result<(), String> {
 }
 
 /// 托盘菜单里那颗「桌面额度挂件」勾选项。勾选态只由前端回写：真正的开关是
-/// `codex_hud_enabled`，锁定隐藏不改它，所以不能拿窗口可见性当副本。
+/// `codex_hud_enabled` 与模块状态，所以不能拿窗口可见性当副本。
 #[derive(Clone)]
 pub struct HudTrayItem(pub tauri::menu::CheckMenuItem<tauri::Wry>);
 
@@ -290,4 +326,17 @@ pub fn desko_hud_save_position(
         .map_err(|err| err.to_string())?;
     let db = state.db.lock().map_err(|_| "读取挂件位置失败".to_string())?;
     db.set_meta(POSITION_KEY, &raw).map_err(|err| err.to_string())
+}
+
+/// 在光标处弹出挂件自己的右键菜单。
+/// 必须是 async：`Menu::new`/`popup_menu` 内部要回主线程并等回执，同步命令会自锁。
+#[tauri::command]
+pub async fn desko_hud_context_menu(app: AppHandle) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(HUD_LABEL) else {
+        return Err("挂件窗口不存在".into());
+    };
+    let settings = MenuItem::with_id(&window, MENU_SETTINGS, "挂件设置…", true, None::<&str>)
+        .map_err(|err| err.to_string())?;
+    let menu = Menu::with_items(&window, &[&settings]).map_err(|err| err.to_string())?;
+    window.popup_menu(&menu).map_err(|err| err.to_string())
 }

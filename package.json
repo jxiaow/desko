@@ -12,6 +12,7 @@
     "build:installer": "tauri build && node scripts/collect-installer.mjs",
     "test": "vitest",
     "test:run": "vitest run",
+    "check:codex-protocol": "node scripts/codex-protocol-check.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
@@ -27,9 +28,12 @@
     "@tiptap/starter-kit": "^3.31.3",
     "@tiptap/vue-3": "^3.31.3",
     "@types/turndown": "^5.0.6",
+    "dompurify": "^3.4.17",
     "jsqr": "^1.4.0",
     "lowlight": "^3.3.0",
+    "marked": "^18.1.1",
     "pinia": "^4.0.3",
+    "qrcode-generator": "^2.0.4",
     "turndown": "^7.2.4",
     "vue": "^3.4.21",
     "vue-router": "^4.6.4"

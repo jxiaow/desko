@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import { useToastStore } from './stores/toast'
@@ -11,7 +11,7 @@ import { useFileShortcutsStore } from './stores/fileShortcuts'
 import { useNotesStore } from './stores/notes'
 import { useAutoLock, type LockRequest } from './composables/useAutoLock'
 import { useClipboard } from './composables/useClipboard'
-import { useEscapeClose } from './composables/useEscapeClose'
+import { useWorkspaceDirectory } from './composables/useWorkspaceDirectory'
 import { installHoverGuard } from './utils/hoverGuard'
 import { isPageShortcutBlocked } from './utils/pageShortcuts'
 import { bootEnabledModules, flushModulesBeforeLock, lockEnabledModules } from './modules/state'
@@ -20,7 +20,7 @@ import { requestCodexAccountsView } from './services/codexState'
 import {
   activateCodexHudBridge,
   deactivateCodexHudBridge,
-  hideStaleHud,
+  suspendCodexHudData,
   setCodexHudOpenHandler,
 } from './services/codexHud'
 import type { SettingsTabId } from './modules/registry'
@@ -28,13 +28,11 @@ import TitleBar from './components/layout/TitleBar.vue'
 import Sidebar from './components/layout/Sidebar.vue'
 import CodexWorkspace from './components/layout/CodexWorkspace.vue'
 import ModuleRouterView from './components/layout/ModuleRouterView.vue'
-import { hasWorkspaceDirectory, workspaceDirectoryMediaQuery } from './components/layout/workspaceLayout'
-import { useWorkspaceDirectoryPreferences } from './components/layout/useWorkspaceDirectoryPreferences'
 import WebModuleDrawer from './components/layout/WebModuleDrawer.vue'
 import SetupPage from './components/auth/SetupPage.vue'
 import UnlockPage from './components/auth/UnlockPage.vue'
 import { authApi } from './services/api/auth'
-import { isWebRuntime } from './services/runtime'
+import { isWebRuntime, isCodexWebRuntime } from './services/runtime'
 import WebSettingsDialog from './components/settings/WebSettingsDialog.vue'
 import SettingsDialog from './components/settings/SettingsDialog.vue'
 import ChangePasswordDialog from './components/settings/ChangePasswordDialog.vue'
@@ -43,53 +41,14 @@ import ToastNotification from './components/shared/ToastNotification.vue'
 import ConfirmDialog from './components/shared/ConfirmDialog.vue'
 import QuitDialog from './components/shared/QuitDialog.vue'
 
-const props = defineProps<{ workspaceLayout?: boolean }>()
-const route = props.workspaceLayout ? useRoute() : null
-const router = props.workspaceLayout ? useRouter() : null
-const directoryMedia = props.workspaceLayout ? window.matchMedia(workspaceDirectoryMediaQuery) : null
-const directoryWide = ref(directoryMedia?.matches ?? false)
-const directoryPreferences = useWorkspaceDirectoryPreferences()
-const notesStore = useNotesStore()
-const entriesStore = useEntriesStore()
-const directoryAvailable = computed(() => {
-  if (!hasWorkspaceDirectory(String(route?.name))) return false
-  return route?.name === 'notes'
-    ? notesStore.notes.length > 0 || notesStore.hasActiveFilters
-    : entriesStore.entries.length > 0 || !!entriesStore.searchKeyword || entriesStore.activeTab !== 'all'
-})
-const directoryVisible = computed(() => directoryAvailable.value &&
-  (directoryPreferences.open.value[String(route?.name)] ?? false))
-const directoryCompact = computed(() => !directoryWide.value)
-const directoryPinned = computed(() => directoryPreferences.pinned.value[String(route?.name)] ?? false)
-const toggleDirectoryPin = () => {
-  if (!directoryAvailable.value) return
-  void directoryPreferences.setPinned(String(route?.name), !directoryPinned.value).catch(() => {
-    toastStore.showToast('固定状态未能保存，下次启动将使用原设置', 'error')
-  })
-}
-const setDirectoryVisible = (visible: boolean) => {
-  if (directoryAvailable.value) {
-    void directoryPreferences.setVisible(String(route?.name), visible).catch(() => {
-      toastStore.showToast('目录状态未能保存，下次启动将使用原设置', 'error')
-    })
-  }
-}
-const toggleDirectory = () => setDirectoryVisible(!directoryVisible.value)
-const closeDirectory = () => {
-  setDirectoryVisible(false)
-  document.getElementById('workspace-directory-toggle')?.focus()
-}
-const onDirectoryMediaChange = (event: MediaQueryListEvent) => { directoryWide.value = event.matches }
-function onDirectoryOutsideClick(event: MouseEvent) {
-  if (!directoryVisible.value || directoryPinned.value || !(event.target instanceof Element)) return
-  if (event.target.closest('#workspace-directory, #workspace-directory-toggle, [role="dialog"], .dialog-overlay')) return
-  // click 后收起，保留本次点击的编辑、搜索或导航动作及其焦点。
-  setDirectoryVisible(false)
-}
+const router = useRouter()
+const {
+  directoryAvailable, directoryVisible, directoryCompact, directoryPinned,
+  toggleDirectoryPin, toggleDirectory, closeDirectory, restoreDirectory,
+} = useWorkspaceDirectory()
 const authStore = useAuthStore()
 const { appState } = storeToRefs(authStore)
 const { checkInitialized, lock } = authStore
-useEscapeClose(closeDirectory, () => props.workspaceLayout === true && appState.value === 'unlocked' && directoryVisible.value && !directoryPinned.value)
 const toastStore = useToastStore()
 const { toast } = storeToRefs(toastStore)
 const confirmStore = useConfirmStore()
@@ -99,21 +58,7 @@ const passwordStore = usePasswordStore()
 const { evictExpiredPasswords, clearSensitiveState } = passwordStore
 const { clearClipboardTimer } = useClipboard()
 
-/** 侧栏三态（V5.2 收编轮 P2）：展开 208 / 图标轨 56 / 收起 0。
-    缺省仍是图标轨——和旧的两态时代一致，小窗开局不把内容挤窄。 */
-const sidebarMode = ref<'expanded' | 'rail' | 'hidden'>('rail')
-/* toast 居中的参考系：侧栏以右的内容区域。 */
-const toastSide = computed(() => {
-  if (props.workspaceLayout) {
-    return 'var(--sidebar-rail-w)'
-  }
-  if (sidebarMode.value === 'hidden') return '0px'
-  return sidebarMode.value === 'rail' ? 'var(--sidebar-rail-w)' : 'var(--sidebar-w)'
-})
-const toastRight = computed(() => {
-  if (!props.workspaceLayout) return '0px'
-  return directoryVisible.value ? 'var(--workspace-directory-width)' : '0px'
-})
+const toastRight = computed(() => directoryVisible.value ? 'var(--workspace-directory-width)' : '0px')
 const showSettings = ref(false)
 const showWebModules = ref(false)
 const settingsInitialTab = ref<SettingsTabId>('appearance')
@@ -144,8 +89,8 @@ let lockGeneration = 0
 let lockIsForced = false
 let lockResetsDrafts = false
 const finishLock = async () => {
-  // 先撤挂件再清会话：桌面上不能留下最后一帧额度。
-  void deactivateCodexHudBridge()
+  // 挂件保留最近一次额度；账号与会话仍随应用锁定清除。
+  suspendCodexHudData()
   showWebModules.value = false
   showSettings.value = false
   showChangePassword.value = false
@@ -208,8 +153,7 @@ const doLock = (request: LockRequest = {}): Promise<void> => {
 useAutoLock(doLock, evictExpiredPasswords)
 
 const openCodexFromHud = () => {
-  if (!props.workspaceLayout) return
-  void router?.push('/codex')
+  void router.push('/codex')
   requestCodexAccountsView()
 }
 
@@ -224,11 +168,7 @@ const onWebSessionExpired = () => {
 let unlistenKdfWarning: (() => void) | null = null
 
 onMounted(async () => {
-  directoryMedia?.addEventListener('change', onDirectoryMediaChange)
-  if (props.workspaceLayout) {
-    await directoryPreferences.restore()
-    document.addEventListener('click', onDirectoryOutsideClick)
-  }
+  await restoreDirectory()
   if (!isWebRuntime()) {
     const { listen } = await import('@tauri-apps/api/event')
     unlistenKdfWarning = await listen('auth-kdf-upgrade-warning', () => {
@@ -240,7 +180,7 @@ onMounted(async () => {
   if (appState.value === 'unlocked') {
     await bootModules()
   } else {
-    await hideStaleHud()
+    await activateCodexHudBridge(false)
   }
 
   // WebView 收不到窗口隐藏/最小化时的 mouseleave，:hover 与 tooltip 会残留到下次打开
@@ -253,88 +193,52 @@ onMounted(async () => {
 onUnmounted(() => {
   setCodexHudOpenHandler(null)
   void deactivateCodexHudBridge()
-  directoryMedia?.removeEventListener('change', onDirectoryMediaChange)
-  document.removeEventListener('click', onDirectoryOutsideClick)
   unlistenKdfWarning?.()
   window.removeEventListener('desko:open-settings-tab', onOpenSettingsTab)
   window.removeEventListener('keydown', onGlobalKey)
   window.removeEventListener('desko:web-session-expired', onWebSessionExpired)
 })
 
-/* Ctrl/Cmd+B 按 rail → expanded → hidden 的顺序循环：缺省是图标轨，
-   所以第一下必须先展开（旧两态时代就是这个手感），第三下才收干净 */
-const SIDEBAR_MODES = ['rail', 'expanded', 'hidden'] as const
+// Ctrl/Cmd+B 只切换当前模块的辅助目录。
 function onGlobalKey(e: KeyboardEvent) {
   if (isPageShortcutBlocked(e)) return
-  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'b') {
-    if (props.workspaceLayout) {
-      if (directoryAvailable.value) {
-        e.preventDefault()
-        toggleDirectory()
-      }
-      return
-    }
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'b' && directoryAvailable.value) {
     e.preventDefault()
-    const i = SIDEBAR_MODES.indexOf(sidebarMode.value)
-    sidebarMode.value = SIDEBAR_MODES[(i + 1) % SIDEBAR_MODES.length]
+    toggleDirectory()
   }
 }
 </script>
 
 <template>
-  <div class="app-root" :class="{ 'locked-bg': appState === 'locked', 'web-runtime': isWebRuntime(), 'codex-layout': workspaceLayout }" :style="{ '--toast-side': toastSide, '--toast-right': toastRight }">
-    <!-- 锁定/初始化态：顶栏浮在页面上；解锁态：顶栏进右列，侧栏全高贯通 -->
+  <div class="app-root codex-layout" :class="{ 'locked-bg': appState === 'locked', 'web-runtime': isWebRuntime(), 'codex-web-runtime': isCodexWebRuntime() }" :style="{ '--toast-side': 'var(--sidebar-rail-w)', '--toast-right': toastRight }">
+    <!-- 锁定/初始化态：顶栏浮在页面上；解锁态：顶栏横跨工作区。 -->
     <TitleBar
       v-if="appState !== 'unlocked'"
       is-locked
-      @open-settings="openSettingsAppearance"
       @lock="doLock"
     />
 
     <SetupPage v-if="appState === 'setup'" @setup-complete="bootModules" />
     <UnlockPage v-else-if="appState === 'locked'" @unlock-complete="bootModules" />
 
-    <template v-else-if="workspaceLayout">
-      <TitleBar outer @open-settings="openSettingsAppearance" @lock="doLock" />
+    <template v-else>
+      <TitleBar :modules-open="showWebModules" @lock="doLock" @show-modules="showWebModules = true" />
       <div class="app-layout">
-        <Sidebar collapsed :show-toggle="false" :show-lock="false" @open-settings="openSettingsAppearance" />
+        <Sidebar @open-settings="openSettingsAppearance" @lock="doLock" />
         <CodexWorkspace :directory-visible="directoryVisible" :directory-compact="directoryCompact" :directory-pinned="directoryPinned" @close-directory="closeDirectory" @toggle-directory="toggleDirectory" @toggle-directory-pin="toggleDirectoryPin"><ModuleRouterView /></CodexWorkspace>
       </div>
     </template>
 
-    <div v-else class="app-layout">
-      <Sidebar
-        v-if="sidebarMode !== 'hidden'"
-        :collapsed="sidebarMode === 'rail'"
-        @update:collapsed="sidebarMode = $event ? 'rail' : 'expanded'"
-        @open-settings="openSettingsAppearance"
-        @lock="doLock"
-      />
-
-      <div class="main-area">
-        <TitleBar
-          :sidebar-hidden="sidebarMode === 'hidden'"
-          @open-settings="openSettingsAppearance"
-          @lock="doLock"
-          @show-sidebar="sidebarMode = 'expanded'"
-          @show-modules="showWebModules = true"
-        />
-
-        <div class="main-content">
-          <ModuleRouterView />
-        </div>
-      </div>
-    </div>
-
     <WebModuleDrawer
       v-if="showWebModules && appState === 'unlocked' && isWebRuntime()"
       @close="showWebModules = false"
+      @open-settings="showWebModules = false; openSettingsAppearance()"
     />
 
     <SettingsDialog
       v-if="showSettings && appState === 'unlocked' && !isWebRuntime()"
       :initial-tab="settingsInitialTab"
-      :workspace-layout="workspaceLayout"
+      workspace-layout
       @close="showSettings = false"
       @open-change-password="showChangePassword = true"
       @open-change-note-key="noteKeyMode = $event"
@@ -369,4 +273,7 @@ function onGlobalKey(e: KeyboardEvent) {
 <style scoped>
 .app-root.web-runtime { height: 100dvh; }
 .web-runtime :deep(.dialog) { max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); }
+@media (max-width: 760px) {
+  .web-runtime :deep(.web-settings) { max-width: 100vw; max-height: 100dvh; }
+}
 </style>

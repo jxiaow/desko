@@ -5,6 +5,7 @@ mod events;
 mod network;
 mod drafts;
 mod vault;
+mod process;
 #[cfg(test)]
 mod tests;
 
@@ -46,13 +47,33 @@ const SESSION_IDLE: Duration = Duration::from_secs(30 * 60);
 const SESSION_MAX: Duration = Duration::from_secs(12 * 60 * 60);
 const COOKIE: &str = "desko_web";
 
+#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WebKind { #[default] App, Codex }
+impl WebKind {
+    fn cookie(self) -> &'static str { if self == Self::Codex { "desko_codex_web" } else { COOKIE } }
+}
+
+pub(super) struct ResourceStream {
+    reader: Box<dyn Read + Send>,
+    length: usize,
+}
+impl From<std::fs::File> for ResourceStream {
+    fn from(file: std::fs::File) -> Self {
+        let length = file.metadata().map(|m| m.len() as usize).unwrap_or(0);
+        Self { reader: Box::new(file), length }
+    }
+}
+
 pub(super) struct Resource {
     pub bytes: Vec<u8>,
     pub mime: String,
     pub download: bool,
-    pub file: Option<std::fs::File>,
+    pub file: Option<ResourceStream>,
 }
 pub(super) trait Backend: Send + Sync + 'static {
+    fn kind(&self) -> WebKind { WebKind::App }
+    fn stop(&self) {}
     fn public_hosts(&self, _: u16) -> Vec<String> { Vec::new() }
     fn epoch(&self) -> Option<u64>;
     fn verify_password(&self, password: &str) -> Result<(), String>;
@@ -65,21 +86,25 @@ pub(super) trait Backend: Send + Sync + 'static {
         Err("Web 端不支持上传共享文件".into())
     }
 }
-#[derive(Clone, Default, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebStatus {
     running: bool,
     lan: bool,
     port: u16,
     urls: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pid: Option<u32>,
 }
 #[derive(Deserialize)]
 pub struct StartInput {
     port: u16,
     lan: bool,
+    #[serde(default)]
+    kind: WebKind,
 }
 #[derive(Default)]
-pub struct WebAccessState(Mutex<Option<Running>>);
+pub struct WebAccessState(Mutex<HashMap<String, process::WebProcess>>);
 struct Session {
     epoch: u64,
     backend: Arc<dyn Backend>,
@@ -190,10 +215,10 @@ fn same_origin(req: &Request, context: &Context) -> bool {
     }
     !matches!(header(req, "Sec-Fetch-Site"), Some("cross-site"))
 }
-fn cookie_token(req: &Request) -> Option<String> {
+fn cookie_token(req: &Request, kind: WebKind) -> Option<String> {
     header(req, "Cookie")?.split(';').find_map(|part| {
         let (key, value) = part.trim().split_once('=')?;
-        (key == COOKIE && value.len() == 64).then(|| value.to_string())
+        (key == kind.cookie() && value.len() == 64).then(|| value.to_string())
     })
 }
 #[derive(Clone)]
@@ -226,7 +251,7 @@ fn authenticate(req: &Request, ctx: &Context) -> Option<Authorization> {
         return None;
     }
     let epoch = ctx.backend.epoch()?;
-    let key = cookie_token(req)?;
+    let key = cookie_token(req, ctx.backend.kind())?;
     let mut security = ctx.security.lock().ok()?;
     security.sessions.retain(|_, session| {
         session.epoch == epoch
@@ -287,8 +312,7 @@ fn respond_guarded(
     guard: Option<(Arc<Context>, Authorization)>,
 ) {
     let (reader, length): (Box<dyn Read + Send>, usize) = if let Some(file) = resource.file {
-        let length = file.metadata().map(|m| m.len() as usize).unwrap_or(0);
-        (Box::new(file), length)
+        (file.reader, file.length)
     } else {
         let length = resource.bytes.len();
         (Box::new(std::io::Cursor::new(resource.bytes)), length)
@@ -416,7 +440,7 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
             });
             // Refreshing this browser replaces its old credential only after
             // successful authentication; failed logins cannot evict a valid session.
-            if let Some(previous) = cookie_token(&req) {
+            if let Some(previous) = cookie_token(&req, ctx.backend.kind()) {
                 security.sessions.remove(&previous);
             }
             if security.sessions.len() >= 32 {
@@ -447,13 +471,13 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
                 file: None,
             },
             Some(format!(
-                "{COOKIE}={key}; Path=/api; HttpOnly; SameSite=Strict"
+                "{}={key}; Path=/api; HttpOnly; SameSite=Strict", ctx.backend.kind().cookie()
             )),
         );
     }
     if path.starts_with("/api/") {
         if path == "/api/logout" && method == Method::Post {
-            if let Some(key) = cookie_token(&req) {
+            if let Some(key) = cookie_token(&req, ctx.backend.kind()) {
                 ctx.security.lock().unwrap().sessions.remove(&key);
             }
             return respond(
@@ -466,7 +490,7 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
                     file: None,
                 },
                 Some(format!(
-                    "{COOKIE}=; Path=/api; Max-Age=0; HttpOnly; SameSite=Strict"
+                    "{}=; Path=/api; Max-Age=0; HttpOnly; SameSite=Strict", ctx.backend.kind().cookie()
                 )),
             );
         }
@@ -532,7 +556,7 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
         return error(req, 404, "页面不存在");
     }
     let asset_path = match pathname {
-        "/" | "/notes" | "/entries" | "/files" | "/mfa" => "index.html",
+        "/" | "/start" | "/notes" | "/entries" | "/files" | "/mfa" | "/codex" | "/fileshare" | "/tunnel" => "index.html",
         _ => pathname.trim_start_matches('/'),
     };
     match ctx.backend.asset(asset_path) {
@@ -540,7 +564,9 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
             if resource.mime.starts_with("text/html") {
                 let html = String::from_utf8_lossy(&resource.bytes).replace(
                     "<head>",
-                    "<head><meta name=\"desko-runtime\" content=\"web\">",
+                    if ctx.backend.kind() == WebKind::Codex {
+                        "<head><meta name=\"desko-runtime\" content=\"web\"><meta name=\"desko-service\" content=\"codex\">"
+                    } else { "<head><meta name=\"desko-runtime\" content=\"web\">" },
                 );
                 resource.bytes = html.into_bytes();
             }
@@ -643,14 +669,16 @@ fn start(
             lan,
             port,
             urls,
+            pid: None,
         },
     })
 }
 #[tauri::command]
-pub fn web_access_status(state: tauri::State<WebAccessState>) -> Result<WebStatus, String> {
+pub fn web_access_status(state: tauri::State<WebAccessState>, kind: Option<WebKind>) -> Result<WebStatus, String> {
     let mut running = state.0.lock().map_err(|_| "无法读取服务状态")?;
-    if running.as_ref().is_some_and(|service| service.context.backend.epoch().is_none()) { running.take(); }
-    Ok(running.as_ref().map(|service| service.status.clone()).unwrap_or_default())
+    let key = if kind.unwrap_or_default() == WebKind::Codex { "codex" } else { "app" };
+    if running.get_mut(key).is_some_and(|service| !service.alive()) { running.remove(key); }
+    Ok(running.get(key).map(|service| service.current_status()).unwrap_or_default())
 }
 #[tauri::command]
 pub async fn web_access_start(app: AppHandle, input: StartInput) -> Result<WebStatus, String> {
@@ -660,38 +688,48 @@ pub async fn web_access_start(app: AppHandle, input: StartInput) -> Result<WebSt
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<WebAccessState>();
         let mut running = state.0.lock().map_err(|_| "无法读取服务状态")?;
-        if running.is_some() {
+        let key = if input.kind == WebKind::Codex { "codex" } else { "app" };
+        if running.get_mut(key).is_some_and(|service| !service.alive()) { running.remove(key); }
+        if running.contains_key(key) {
             return Err("服务已启动，请先停止再修改配置".into());
         }
-        let service = start(
-            Arc::new(bridge::AppBackend::new(app.clone())?),
+        let service = process::WebProcess::launch(
+            Arc::new(bridge::AppBackend::new_kind(app.clone(), input.kind)?),
             input.port,
             input.lan,
         )?;
-        let status = service.status.clone();
-        *running = Some(service);
+        let status = service.current_status();
+        running.insert(key.to_string(), service);
         Ok(status)
     })
     .await
     .map_err(|_| "服务启动失败")?
 }
 #[tauri::command]
-pub async fn web_access_stop(app: AppHandle) -> Result<(), String> {
+pub async fn web_access_stop(app: AppHandle, kind: Option<WebKind>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<WebAccessState>();
         let mut running = state.0.lock().map_err(|_| "无法停止服务")?;
-        if let Some(service) = running.take() {
-            service.stop_and_wait();
-        }
+        if let Some(kind) = kind {
+            running.remove(if kind == WebKind::Codex { "codex" } else { "app" });
+        } else { running.clear(); }
         Ok(())
     })
     .await
     .map_err(|_| "停止服务失败")?
 }
+pub(crate) fn stop_codex(app: &AppHandle) {
+    if let Some(state) = app.try_state::<WebAccessState>() {
+        let service = state.0.lock().unwrap_or_else(|e| e.into_inner()).remove("codex");
+        drop(service);
+    }
+}
 pub fn revoke(app: &AppHandle) {
     if let Some(state) = app.try_state::<WebAccessState>() {
         if let Ok(mut service) = state.0.lock() {
-            service.take();
+            service.clear();
         }
     }
 }
+
+pub fn run_worker() -> bool { process::run_worker() }

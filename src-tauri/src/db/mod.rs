@@ -8,6 +8,7 @@ pub mod attachment_repo;
 pub mod mfa_repo;
 pub mod bypass_repo;
 pub mod tunnel_repo;
+pub mod codex_thread_repo;
 
 pub use models::*;
 

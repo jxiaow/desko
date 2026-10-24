@@ -136,3 +136,59 @@ pub fn open_terminal(state: State<AppState>, path: String) -> Result<(), AppErro
     spawn_cmd(&dir).map_err(|e| AppError::Io(format!("无法打开终端: {}", e)))?;
     Ok(())
 }
+
+/// Relaunch a captured Codex CLI without a shell interpreter. WT treats ';' as
+/// a command delimiter, so commands containing it use a new console directly.
+pub(crate) fn spawn_wt_command(dir: &std::path::Path, exe: &std::path::Path, args: &[std::ffi::OsString]) -> Result<(), String> {
+    let terminal_safe = !dir.to_string_lossy().contains(';') && !exe.to_string_lossy().contains(';')
+        && args.iter().all(|arg| !arg.to_string_lossy().contains(';'));
+    if terminal_safe {
+        for candidate in wt_candidates() {
+            if candidate != "wt.exe" && !std::path::Path::new(&candidate).is_file() { continue; }
+            let mut command = std::process::Command::new(&candidate);
+            command.args(["-w", "new", "-d"]).arg(dir).arg(exe).args(args);
+            match command.spawn() {
+                Ok(_) => return Ok(()),
+                Err(error) if error.raw_os_error() == Some(740) => {
+                    #[cfg(windows)] {
+                        use windows::{core::PCWSTR, Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL}};
+                        let parameters = [std::ffi::OsString::from("-w"), "new".into(), "-d".into(), dir.as_os_str().into(), exe.as_os_str().into()]
+                            .into_iter().chain(args.iter().cloned()).map(|arg| quote_windows_argument(&arg.to_string_lossy())).collect::<Vec<_>>().join(" ");
+                        let file = candidate.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+                        let parameters = parameters.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+                        let result = unsafe { ShellExecuteW(None, windows::core::w!("open"), PCWSTR(file.as_ptr()), PCWSTR(parameters.as_ptr()), None, SW_SHOWNORMAL) };
+                        if result.0 as isize > 32 { return Ok(()); }
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+    }
+    codex_core::modules::codex_clients::spawn_new_console(dir, exe, args)
+}
+#[cfg(windows)]
+fn quote_windows_argument(value: &str) -> String {
+    let mut quoted = String::from("\"");
+    let mut slashes = 0;
+    for c in value.chars() {
+        if c == '\\' { slashes += 1; continue; }
+        if c == '"' { quoted.extend(std::iter::repeat_n('\\', slashes * 2 + 1)); }
+        else { quoted.extend(std::iter::repeat_n('\\', slashes)); }
+        quoted.push(c); slashes = 0;
+    }
+    quoted.extend(std::iter::repeat_n('\\', slashes * 2));
+    quoted.push('"'); quoted
+}
+
+#[cfg(all(test,windows))]
+mod codex_terminal_tests {
+    use super::quote_windows_argument;
+    #[test]
+    fn captured_argv_quotes_empty_quotes_backslashes_and_shell_metacharacters() {
+        assert_eq!(quote_windows_argument(""), "\"\"");
+        assert_eq!(quote_windows_argument("hello world"), "\"hello world\"");
+        assert_eq!(quote_windows_argument("a\"b"), "\"a\\\"b\"");
+        assert_eq!(quote_windows_argument(r"C:\work dir\"), "\"C:\\work dir\\\\\"");
+        assert_eq!(quote_windows_argument("$(secret) & <input>"), "\"$(secret) & <input>\"");
+    }
+}

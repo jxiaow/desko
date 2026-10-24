@@ -28,7 +28,11 @@ for (const width of [1280, 800]) {
 
 test('固定小记目录独立于收藏目录，跨页面和重启恢复，缩放不改变偏好', async ({ page, context }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
-  await bootUnlocked(page, {}, '/notes')
+  const content = {
+    notes: [{ title: '目录检查', content_html: '<p>目录检查 #工作</p>' }],
+    entries: [{ name: '目录检查', url: 'https://example.invalid', category: '工作' }],
+  }
+  await bootUnlocked(page, content, '/notes')
   await page.locator('#workspace-directory-toggle').click()
   await page.getByRole('button', { name: '固定目录', exact: true }).click()
   await page.locator('a.nav-item[href="/entries"]').click()
@@ -42,7 +46,7 @@ test('固定小记目录独立于收藏目录，跨页面和重启恢复，缩�
   await expect.poll(async () => (await e2e.snapshot(page)).settings.workspace_directory_open).toBe('{"notes":true}')
   const saved = (await e2e.snapshot(page)).settings
   const restarted = await context.newPage()
-  await bootUnlocked(restarted, { settings: saved }, '/notes')
+  await bootUnlocked(restarted, { ...content, settings: saved }, '/notes')
   await expect(restarted.locator('.workspace-directory')).toBeVisible()
   await restarted.close()
 })

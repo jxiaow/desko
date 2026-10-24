@@ -460,7 +460,7 @@ const askRevert = () => {
   if (!batch || operationBusy.value) return
   confirmStore.showConfirm(
     '撤销上次配置',
-    '将恢复本功能管理的 hosts 记录，并移除该次新增的持久路由。需要管理员权限，系统将请求一次确认。',
+    '将恢复本功能管理的 hosts 记录，移除本次新增的持久路由。需管理员授权。',
     () => runRevert(batch),
   )
 }
@@ -725,7 +725,7 @@ watchEffect(() => {
       <div v-if="!targets.length" class="rcard empty-state">
         <div class="empty-icon"><AppIcon name="navBypass" :size="24" /></div>
         <div class="empty-title">清单为空</div>
-        <div class="empty-desc bypass-empty-desc">管理域名、IPv4 地址和网段的直连配置。先探测并加入清单，再确认配置；探测和加入清单不会修改系统。</div>
+        <div class="empty-desc bypass-empty-desc">先探测并加入清单，再配置直连。探测和加入清单不修改系统。</div>
       </div>
     </template>
 
@@ -818,8 +818,8 @@ watchEffect(() => {
 .hero-num { min-width: 0; }
 .big { display: flex; align-items: baseline; gap: 6px; }
 .big .n {
-  font-size: 34px;
-  font-weight: 700;
+  font-size: var(--text-3xl);
+  font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--success);

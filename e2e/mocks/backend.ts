@@ -1,8 +1,10 @@
+import { switchUxState, assignment, wslPreview, switchPreview, applyWsl, relaunch, type SwitchUxConfig, type SwitchUxState } from './codex-account-switch'
 // E2E 内存版 fake backend —— 镜像 src-tauri/src/commands/*.rs 的行为契约。
 // 仅通过 vite alias 在 E2E 模式下注入，不进入生产构建。
 import type { CodexQuota } from '../../src/services/api/codex'
 import codexSessionPrices from '../../src-tauri/codex-core/resources/codex_session_pricing.json'
 import type { PlannedRow, RouteOption, RouteOverride } from '../../src/services/api/bypass'
+import { CodexDialogMock, type DialogHistorySeed } from './codex-dialog'
 
 export interface E2EEntrySeed {
   name: string
@@ -49,6 +51,7 @@ export interface E2EMfaSeed {
 }
 
 export interface E2EConfig {
+  codexDialogHistories?: DialogHistorySeed[]
   /** true 时视为已初始化（设置过主密码），默认 true */
   initialized?: boolean
   masterPassword?: string
@@ -251,23 +254,7 @@ export interface E2EConfig {
     deleteStepMs?: number
     /** 这些邮箱第一轮删不动、重试才成功：演「失败明细 + 重试接着走」 */
     deleteFailEmails?: string[]
-    /** WSL 登录态同步：源与目标都是可摆的状态，默认源可用、无目标，不污染既有设置页用例 */
-    wslAuth?: {
-      available?: boolean
-      expired?: boolean
-      error?: string
-      targets?: {
-        distro: string
-        user: string
-        state: 'empty' | 'same' | 'outdated' | 'newer' | 'different-account' | 'unreadable' | 'unknown'
-        email?: string
-        /** unix 秒；不给按 expired 推 */
-        expiresAt?: number
-        expired?: boolean
-      }[]
-      /** 这些 WSL 用户名同步必失败，用来演失败明细 */
-      syncFailures?: string[]
-    }
+    switchUx?: SwitchUxConfig
   }
   /** 档案注册表：不给就用单个 default 档；activeId 缺省取列表首项 */
   profiles?: {
@@ -486,7 +473,7 @@ interface BackendState {
     pollFail: string | null
   }
   /** currentId 是显式指针，与后端 index.current_account_id 同构：导入/新增不动它，只有切号与登录落库才改 */
-  codex: { accounts: CodexAccountRecord[]; portBusy: boolean; loginId: string; currentId: string; repairFail: boolean; repairDelayMs: number; repairRows: number; switchDelayMs: number; switchCancel: boolean; sessionsFail: boolean; statsFail: boolean; sessions: CodexSessionSeed[]; trash: CodexTrashSeed[]; trashFail: boolean; recycled: CodexRecycledSeed[]; recycledFail: boolean; openFail: boolean; usageFail: boolean; usageScanMillis: number; deleteStepMs: number; deleteFailEmails: string[]; deleteJobs: Record<string, CodexDeleteJob>; wslAuth: { available: boolean; expired: boolean; error: string; syncFailures: string[]; targets: { distro: string; user: string; homePath: string; state: string; email: string | null; accessExpiresAt: number | null; expired: boolean }[] } }
+  codex: { accounts: CodexAccountRecord[]; portBusy: boolean; loginId: string; currentId: string; repairFail: boolean; repairDelayMs: number; repairRows: number; switchDelayMs: number; sessionsFail: boolean; statsFail: boolean; sessions: CodexSessionSeed[]; trash: CodexTrashSeed[]; trashFail: boolean; recycled: CodexRecycledSeed[]; recycledFail: boolean; openFail: boolean; usageFail: boolean; usageScanMillis: number; deleteStepMs: number; deleteFailEmails: string[]; deleteJobs: Record<string, CodexDeleteJob>; switchUx: SwitchUxState }
   bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probeDelay: number; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string; applyDelay: number; applyCancel: boolean; applyLost: string; applyBlocked: string[]; routeOptions: Record<string, RouteOption[]>; applyFailed: string[]; applySkipped: string[]; applyRollbackFail: boolean; recheckDelay: number; recheckVerdict: string; revertFail: string; rollbackBatch: string }
   profiles: { activeId: string; list: ProfileRecord[] }
 }
@@ -649,7 +636,7 @@ export interface E2EBridge {
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
 // 与 src-tauri/src/commands/settings.rs 的 ALLOWED_KEYS 保持一致
-const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'theme', 'accent', 'background_atmosphere', 'workspace_directory_open', 'workspace_directory_pinned', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'fileshare_enabled', 'tunnel_enabled', 'codex_enabled', 'bypass_enabled', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold', 'codex_hud_enabled', 'codex_hud_skin', 'codex_hud_walk']
+const SETTINGS_ALLOWED_KEYS = ['auto_lock_timeout', 'lock_on_close', 'lock_on_system_lock', 'theme', 'accent', 'background_atmosphere', 'note_paste_cleanup', 'workspace_directory_open', 'workspace_directory_pinned', 'auto_backup_interval', 'auto_backup_realtime', 'keep_remote', 'terminal', 'notes_enabled', 'entries_enabled', 'files_enabled', 'mfa_enabled', 'fileshare_enabled', 'tunnel_enabled', 'codex_enabled', 'bypass_enabled', 'codex_quota_auto_refresh_minutes', 'codex_quota_alert_threshold', 'codex_hud_enabled', 'codex_hud_skin', 'codex_hud_ambient', 'codex_hud_pinned']
 
 /** 与 Rust 端 backup::LOCAL_FLOOR 对齐：传上云的包本地只留这么几份兜底 */
 const LOCAL_FLOOR = 3
@@ -742,6 +729,7 @@ function headingTitle(html: string): string {
 }
 
 class MockBackend {
+  private codexDialog = new CodexDialogMock((event, payload) => this.emit(event, payload))
   private state: BackendState
   readonly invocations: Invocation[] = []
   private dialogQueue: unknown[] = []
@@ -753,12 +741,14 @@ class MockBackend {
   private noteOpen = false
   private noteDrafts = new Map<string, { title: string; content_html: string; category?: string | null }>()
   private webAccess = { running: false, lan: false, port: 8420, urls: [] as string[] }
+  private codexWebAccess = { running: false, lan: false, port: 8421, urls: [] as string[] }
   private notesUpdateFailCount = 0
   private bypassProbes = new Map<string, () => void>()
   private cancelledBypassProbes = new Set<string>()
   private bypassReports = new Map<string, { at: number; report: BypassReport }>()
 
   constructor(config: E2EConfig = {}) {
+    this.codexDialog.seed(config.codexDialogHistories || [])
     this.state = this.freshState(config)
     this.install()
   }
@@ -845,7 +835,7 @@ class MockBackend {
         revertFail: config.bypass?.revertFail ?? '',
         rollbackBatch: '',
       },
-      codex: { accounts: [], portBusy: false, loginId: '', currentId: '', repairFail: false, repairDelayMs: 0, repairRows: 3, switchDelayMs: 0, switchCancel: false, sessionsFail: false, statsFail: false, sessions: [], trash: [], trashFail: false, recycled: [], recycledFail: false, openFail: false, usageFail: false, usageScanMillis: 0, deleteStepMs: 0, deleteFailEmails: [], deleteJobs: {}, wslAuth: { available: true, expired: false, error: '', syncFailures: [], targets: [] } },
+      codex: { accounts: [], portBusy: false, loginId: '', currentId: '', repairFail: false, repairDelayMs: 0, repairRows: 3, switchDelayMs: 0, sessionsFail: false, statsFail: false, sessions: [], trash: [], trashFail: false, recycled: [], recycledFail: false, openFail: false, usageFail: false, usageScanMillis: 0, deleteStepMs: 0, deleteFailEmails: [], deleteJobs: {}, switchUx: switchUxState() },
       profiles: { activeId: 'default', list: [{ id: 'default', name: '默认', cloudNs: '', createdAt: now, lastUsedAt: now }] },
     }
     if (config.profiles) {
@@ -924,24 +914,7 @@ class MockBackend {
       state.codex.usageScanMillis = config.codex.usageScanMillis ?? 1681
       state.codex.deleteStepMs = config.codex.deleteStepMs ?? 0
       state.codex.deleteFailEmails = config.codex.deleteFailEmails ?? []
-      state.codex.wslAuth = {
-        available: config.codex.wslAuth?.available ?? true,
-        expired: config.codex.wslAuth?.expired ?? false,
-        error: config.codex.wslAuth?.error ?? '',
-        syncFailures: config.codex.wslAuth?.syncFailures ?? [],
-        targets: (config.codex.wslAuth?.targets ?? []).map((target) => {
-          const expired = target.expired ?? false
-          return {
-            distro: target.distro,
-            user: target.user,
-            homePath: `\\\\wsl.localhost\\${target.distro}\\${target.user === 'root' ? 'root' : `home\\${target.user}`}\\.codex`,
-            state: target.state,
-            email: target.email ?? null,
-            accessExpiresAt: target.expiresAt ?? Math.floor(now / 1000) + (expired ? -3600 : 3600),
-            expired,
-          }
-        }),
-      }
+      state.codex.switchUx = switchUxState(config.codex.switchUx)
       state.codex.sessions = (config.codex.sessions ?? []).map((s, i, arr) => ({
         sessionId: s.sessionId,
         title: s.title ?? '',
@@ -1901,16 +1874,23 @@ class MockBackend {
   // handler 的 args 键名与 src/services/api/*.ts 中 JS 侧发送的一致
   // （Tauri v2 的 camelCase → snake_case 转换发生在 IPC 层，本 mock 在其之上）
   private commands: Record<string, (args: Record<string, any>) => unknown> = {
+    codex_dialog_action: ({ action, params }) => this.codexDialog.dispatch(action, params),
     quit_app: () => {},
     // ===== auth.rs =====
-    web_access_status: () => ({ ...this.webAccess }),
+    web_access_status: ({ kind }) => ({ ...(kind === 'codex' ? this.codexWebAccess : this.webAccess) }),
+    web_codex_service_status: () => ({ ...this.codexWebAccess }),
     web_access_start: ({ input }) => {
       this.requireUnlocked()
-      if (this.webAccess.running) throw '服务已启动，请先停止再修改配置'
-      this.webAccess = { running: true, lan: input.lan, port: input.port, urls: [`http://127.0.0.1:${input.port}`, ...(input.lan ? [`http://192.168.1.2:${input.port}`] : [])] }
-      return { ...this.webAccess }
+      const key = input.kind === 'codex' ? 'codexWebAccess' : 'webAccess'
+      if (this[key].running) throw '服务已启动，请先停止再修改配置'
+      if ([this.webAccess, this.codexWebAccess].some(service => service.running && service.port === input.port)) throw '无法启动，请检查端口是否被占用'
+      this[key] = { running: true, lan: input.lan, port: input.port, urls: [`http://127.0.0.1:${input.port}`, ...(input.lan ? [`http://192.168.1.2:${input.port}`] : [])] }
+      return { ...this[key] }
     },
-    web_access_stop: () => { this.webAccess = { running: false, lan: false, port: 8420, urls: [] } },
+    web_access_stop: ({ kind }) => {
+      if (!kind || kind === 'app') this.webAccess = { running: false, lan: false, port: 8420, urls: [] }
+      if (!kind || kind === 'codex') this.codexWebAccess = { running: false, lan: false, port: 8421, urls: [] }
+    },
     is_initialized: () => this.state.initialized,
 
     setup_master_password: ({ password }) => {
@@ -2389,7 +2369,7 @@ class MockBackend {
       const bound: AttachmentRecord[] = []
       for (const raw of paths as string[]) {
         const name = nameOf(String(raw))
-        if (this.state.attachments.some((a) => nameOf(a.file_path) === name)) continue
+        if (this.state.attachments.some((a) => a.note_id === noteId && nameOf(a.file_path) === name)) continue
         const att: AttachmentRecord = {
           id: nextId(),
           note_id: noteId,
@@ -2410,7 +2390,7 @@ class MockBackend {
 
     set_setting: ({ key, value }) => {
       // 此目录配置由原生端存入 Codex 本地 config.json，mock 共用内存设置表。
-      if (!['codex_usage_extra_dirs', 'codex_usage_auto_wsl', 'codex_wsl_auth_auto_sync'].includes(key) && !SETTINGS_ALLOWED_KEYS.includes(key)) throw ERR_DB
+      if (!['codex_usage_extra_dirs', 'codex_usage_auto_wsl', 'codex_switch_restart_codex'].includes(key) && !SETTINGS_ALLOWED_KEYS.includes(key)) throw ERR_DB
       this.state.settings[key] = value
     },
 
@@ -3160,30 +3140,37 @@ class MockBackend {
       return cur ? { ...cur } : null
     },
 
-    /** 切号在途：逐步发 codex:switch-progress，取消标志一旦置起就以同一错误码收口，
-     *  与后端「写凭据前后各一个检查点」的界面契约同形（desko 前端只认错误码，不猜有没有写过） */
-    switch_codex_account: async ({ accountId }) => {
-      const a = this.codexFind(String(accountId))
-      const steps = ['credentials', 'accessToken', 'refreshTokens', 'writeCredentials', 'syncSettings']
-      for (const step of steps) {
-        this.emit('codex:switch-progress', { accountId: a.id, step, stepStatus: 'done' })
-        if (this.state.codex.switchDelayMs > 0) await sleep(this.state.codex.switchDelayMs / steps.length)
-        if (this.state.codex.switchCancel) {
-          this.state.codex.switchCancel = false
-          this.emit('codex:switch-progress', { accountId: a.id, type: 'error' })
-          throw 'CODEX_START_CANCELLED'
-        }
+    switch_codex_account: async ({ accountId, clientPolicy }) => {
+      const ctx = this.state.codex, a = this.codexFind(String(accountId))
+      const { config, operations } = ctx.switchUx
+      const policy = (clientPolicy ?? {}) as { restartWindows?: boolean; applyToWsl?: boolean }
+      const phase = async (step: string) => {
+        operations.push(step)
+        this.emit('codex:switch-progress', { accountId: a.id, step, stepStatus: 'running' })
+        if (ctx.switchDelayMs) await sleep(ctx.switchDelayMs / 4)
       }
-      this.state.codex.currentId = a.id
+      await phase('credentials')
+      if (config.credentialsError) throw config.credentialsError
+      const windows = { closedApp: 0, closedCli: 0, reopenedApp: 0, reopenedCli: 0, reopenFailures: 0, reopenPlanId: undefined as string | undefined }
+      if (policy.restartWindows) {
+        await phase('closeWindows')
+        if (config.windows?.closeError) { operations.push('rollbackWindows'); throw config.windows.closeError }
+        windows.closedApp = config.windows?.appCount ?? 0; windows.closedCli = config.windows?.cliCount ?? 0
+      }
+      await phase('writeCredentials')
+      ctx.currentId = a.id
       const nowSec = Math.floor(Date.now() / 1000)
-      this.state.codex.accounts.forEach((x) => (x.last_used = x.id === a.id ? nowSec : x.last_used - 1))
+      ctx.accounts.forEach(x => (x.last_used = x.id === a.id ? nowSec : x.last_used - 1))
+      if (policy.restartWindows) {
+        await phase('reopenWindows')
+        windows.reopenFailures = Math.min(config.windows?.reopenFailures ?? 0, windows.closedApp + windows.closedCli)
+        windows.reopenedApp = Math.max(0, windows.closedApp - windows.reopenFailures)
+        windows.reopenedCli = Math.max(0, windows.closedCli - Math.max(0, windows.reopenFailures - windows.closedApp))
+        if (windows.reopenFailures) { windows.reopenPlanId = 'synthetic-plan'; ctx.switchUx.plans[windows.reopenPlanId] = windows.reopenFailures }
+      }
+      const wsl = policy.applyToWsl ? applyWsl(ctx, a) : null
       this.emit('codex:switch-progress', { accountId: a.id, type: 'complete' })
-      return { ...a }
-    },
-
-    codex_cancel_account_switch: () => {
-      this.state.codex.switchCancel = true
-      return undefined
+      return { account: { ...a }, windows, wsl, warnings: [] }
     },
 
     refresh_codex_quota: ({ accountId }) => ({ ...(this.codexFind(String(accountId)).quota as CodexAccountRecord['quota']) }),
@@ -3804,58 +3791,16 @@ class MockBackend {
       authPath: 'C:\\e2e\\.codex\\auth.json',
     }),
 
-    get_codex_wsl_auth_status: () => {
-      const wsl = this.state.codex.wslAuth
-      const current = this.state.codex.accounts.find((account) => account.id === this.state.codex.currentId)
-      const nowSec = Math.floor(Date.now() / 1000)
-      return {
-        autoSync: this.state.settings.codex_wsl_auth_auto_sync === 'true',
-        source: {
-          available: wsl.available,
-          path: 'C:\\e2e\\.codex\\auth.json',
-          authMode: 'chatgpt',
-          email: wsl.available ? (current?.email ?? 'wsl@e2e.dev') : null,
-          plan: wsl.available ? (current?.plan_type ?? 'pro') : null,
-          accessExpiresAt: wsl.available ? nowSec + (wsl.expired ? -3600 : 3600) : null,
-          expired: wsl.expired,
-          error: wsl.available ? null : (wsl.error || '未找到 Windows 侧 Codex 登录凭据'),
-        },
-        targets: wsl.targets.map((target) => ({ ...target })),
-        targetError: null,
-      }
+    get_codex_wsl_assignment: () => assignment(this.state.codex),
+    preview_codex_switch: ({ accountId }) => switchPreview(this.state.codex, this.codexFind(String(accountId)), this.state.settings.codex_switch_restart_codex === 'true'),
+    preview_codex_wsl_assignment: ({ accountId }) => wslPreview(this.state.codex, this.codexFind(String(accountId))),
+    assign_codex_account_to_wsl: ({ accountId }) => {
+      const account = this.codexFind(String(accountId))
+      if (account.auth_mode === 'apikey') throw '仅普通 OAuth 账号可用于 WSL'
+      if (this.state.codex.switchUx.config.credentialsError) throw this.state.codex.switchUx.config.credentialsError
+      return applyWsl(this.state.codex, account)
     },
-
-    sync_codex_auth_to_wsl: () => {
-      const wsl = this.state.codex.wslAuth
-      if (!wsl.available) throw wsl.error || 'Windows 侧 Codex 登录凭据不可用'
-      if (wsl.expired) throw 'Windows 侧 Codex 登录凭据已过期，请先在 Codex 中刷新或重新登录'
-      const current = this.state.codex.accounts.find((account) => account.id === this.state.codex.currentId)
-      const nowSec = Math.floor(Date.now() / 1000)
-      return wsl.targets.map((target) => {
-        if (wsl.syncFailures.includes(target.user)) {
-          return { distro: target.distro, user: target.user, status: 'failed', message: 'E2E 同步失败' }
-        }
-        if (target.state === 'same' || target.state === 'newer') {
-          return {
-            distro: target.distro,
-            user: target.user,
-            status: 'skipped',
-            message: target.state === 'same' ? '已是最新' : 'WSL 侧凭据更新，已跳过',
-          }
-        }
-        const wasUnreadable = target.state === 'unreadable'
-        target.state = 'same'
-        target.email = current?.email ?? target.email
-        target.accessExpiresAt = nowSec + 3600
-        target.expired = false
-        return {
-          distro: target.distro,
-          user: target.user,
-          status: 'synced',
-          message: wasUnreadable ? '原文件不可读，已替换' : null,
-        }
-      })
-    },
+    relaunch_codex_clients: ({ planId }) => relaunch(this.state.codex, String(planId)),
 
     open_codex_config_toml: () => undefined,
 

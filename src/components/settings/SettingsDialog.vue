@@ -48,6 +48,10 @@ const isValidTab = (id?: SettingsTabId): id is SettingsTabId => {
 }
 
 const tab = ref<SettingsTabId>(isValidTab(props.initialTab) ? props.initialTab : 'appearance')
+// 弹窗已经开着时换页签不会重挂，得跟着 external 请求走
+watch(() => props.initialTab, (value) => {
+  if (isValidTab(value)) tab.value = value
+})
 // 存 0 表示不开自动锁定，useAutoLock 读到 0 直接跳过这一轮
 const autoLockEnabled = ref(false)
 const autoLockTimeout = ref(5)
@@ -137,20 +141,20 @@ const saveLockOnSystemLock = async () => {
 const pickTheme = async (id: ThemeId) => {
   if (id === appearance.theme) return
   const saved = await chooseTheme(id)
-  toastStore.showToast(saved ? '已切换主题' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
+  toastStore.showToast(saved ? '已切换主题' : '保存失败，重启后将恢复原设置', saved ? 'success' : 'error')
 }
 
 const pickAccent = async (id: AccentId) => {
   if (id === appearance.accent) return
   const saved = await chooseAccent(id)
-  toastStore.showToast(saved ? '已切换强调色' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
+  toastStore.showToast(saved ? '已切换强调色' : '保存失败，重启后将恢复原设置', saved ? 'success' : 'error')
 }
 
 const saveBackgroundAtmosphere = async (event: Event) => {
   savingAtmosphere.value = true
   const saved = await chooseBackgroundAtmosphere((event.target as HTMLInputElement).checked)
   savingAtmosphere.value = false
-  toastStore.showToast(saved ? '设置已保存' : '已切换，但没能保存，重启后会回到原样', saved ? 'success' : 'error')
+  toastStore.showToast(saved ? '设置已保存' : '保存失败，重启后将恢复原设置', saved ? 'success' : 'error')
 }
 
 /** 开关只有一条路径：落库成功才认，失败由状态层扳回；路由与页面跟着收 */
@@ -251,7 +255,7 @@ onMounted(() => {
 
           <!-- 模块 -->
           <section v-show="tab === 'modules'" class="settings-pane">
-            <p class="pane-hint">关闭模块后将隐藏入口，已保存的数据和口令会保留。</p>
+            <p class="pane-hint">关闭模块会隐藏入口，保留数据和口令。</p>
             <div class="group-content">
               <div v-for="m in MODULES" :key="m.id" class="setting-item">
                 <div class="setting-info">
@@ -346,7 +350,7 @@ onMounted(() => {
               <div class="setting-item">
                 <div class="setting-info">
                   <span class="setting-name">背景氛围</span>
-                  <span id="background-atmosphere-desc" class="setting-desc">{{ workspaceLayout ? '在背景留白叠加柔光，卡片与输入保持实底' : '在任意底色上叠加随强调色变化的柔光' }}</span>
+                  <span id="background-atmosphere-desc" class="setting-desc">随强调色显示背景柔光</span>
                 </div>
                 <label class="switch">
                   <input
@@ -415,7 +419,6 @@ onMounted(() => {
               <div class="setting-item">
                 <div class="setting-info">
                   <span class="setting-name">系统锁屏后锁定</span>
-                  <span class="setting-desc">Windows 锁屏（Win+L）时自动锁定应用</span>
                 </div>
                 <label class="switch">
                   <input type="checkbox" v-model="lockOnSystemLock" @change="saveLockOnSystemLock" />
@@ -434,7 +437,7 @@ onMounted(() => {
                 </div>
                 <div class="about-info">
                   <div class="about-name">案头 Desko</div>
-                  <div class="about-tagline">本地个人工作台：收藏、小记、文件、验证码与传输各占一格</div>
+                  <div class="about-tagline">本地个人工作台</div>
                 </div>
               </div>
               <div v-if="appVersion" class="setting-item">
@@ -528,8 +531,8 @@ onMounted(() => {
 .nav-group + .nav-group { margin-top: var(--space-3); }
 .nav-group-label {
   padding: 0 var(--space-2) var(--space-1);
-  font-size: var(--text-2xs);
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: 500;
   color: var(--text-nav-section);
 }
 
@@ -565,11 +568,8 @@ onMounted(() => {
 }
 
 .nav-tab.on {
-  /* 激活=淡染行，与主窗口侧栏共用同一颗令牌。
-     白块那版在侧栏底上是个洞：--bg-surface 比侧栏底亮 4.5 L*，hover 档却暗 3.8 L*，
-     未选→悬停→选中不单调；影只有 4% α，撑不起"抬起来"这层意思。 */
-  background: var(--sidebar-active);
-  color: var(--text-brand);
+  background: var(--hover-chrome);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -596,7 +596,7 @@ onMounted(() => {
 }
 
 .settings-head h3 {
-  font-size: var(--text-lg);
+  font-size: var(--text-dialog-title);
   font-weight: 600;
   color: var(--text);
   margin: 0;

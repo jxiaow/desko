@@ -76,12 +76,12 @@ useEscapeClose(() => emit('close'))
       </div>
       <div class="dialog-body" @keyup.enter="submit">
         <p v-if="props.mode === 'setup'" class="lead">
-          小记全库共用一把口令。加密和解锁都只输这一把，忘了可用主密码找回。
+          所有加密小记共用此口令，忘记后可用主密码恢复。
         </p>
         <p v-else-if="props.mode === 'change'" class="lead">
           改口令不影响已加密的小记，旧口令立即失效。
         </p>
-        <p v-else class="lead">小记共用一把口令，解锁本次会话内的全部加密小记。</p>
+        <p v-else class="lead">小记或应用锁定后需重新解锁。</p>
 
         <div class="form-group">
           <label>{{ props.mode === 'unlock' ? '小记口令' : '新口令' }}</label>
@@ -89,7 +89,7 @@ useEscapeClose(() => emit('close'))
             ref="pwEl"
             v-model="pw"
             type="password"
-            :placeholder="props.mode === 'unlock' ? '输入口令' : `至少 ${MIN_LEN} 位，可用一句短语`"
+            :placeholder="props.mode === 'unlock' ? '输入口令' : `至少 ${MIN_LEN} 位`"
             autocomplete="off"
           />
         </div>
@@ -100,7 +100,7 @@ useEscapeClose(() => emit('close'))
         <p v-if="needsConfirm && pw2 && pw !== pw2" class="dialog-err">两次口令不一致</p>
 
         <button v-if="props.mode === 'unlock'" class="link-btn" type="button" @click="recover">
-          忘了口令？用主密码直接恢复
+          用主密码恢复口令
         </button>
         <p v-if="err" class="dialog-err">{{ err }}</p>
       </div>

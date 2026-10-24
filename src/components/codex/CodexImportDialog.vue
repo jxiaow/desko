@@ -37,7 +37,7 @@ let active = true
 watch(source, () => { error.value = '' })
 
 const fileNames = computed(() => isWebRuntime() ? browserFiles.value.map(file => file.name) : filePaths.value)
-const actionLabel = computed(() => ({ local: '导入当前本机 Codex', file: '导入文件', json: '导入这段 JSON', token: '导入 Token' })[source.value])
+const actionLabel = computed(() => ({ local: '导入本机凭据', file: '导入文件', json: '导入 JSON', token: '导入 Token' })[source.value])
 const canImport = computed(() => {
   if (busy.value || choosing.value) return false
   if (source.value === 'file') return fileNames.value.length > 0
@@ -133,11 +133,11 @@ onUnmounted(() => { active = false })
       </div>
       <form id="codex-import-content" class="dialog-body import-content" role="tabpanel" :aria-labelledby="`codex-import-${source}`" @submit.prevent="importAccounts">
         <template v-if="source === 'local'">
-          <p class="lead">读取当前本机 Codex 的登录凭据，添加到 Desko 账号库。原凭据文件保持不变。</p>
+          <p class="lead">导入本机 Codex 登录凭据，保留原文件。</p>
           <div class="pathline"><span class="k">本机凭据</span><code>{{ paths?.authPath || '读取中…' }}</code></div>
         </template>
         <template v-else-if="source === 'file'">
-          <p class="lead">选择已有的 auth.json 文件，可一次导入多个文件。原文件保持不变。</p>
+          <p class="lead">支持批量导入 auth.json，保留原文件。</p>
           <input ref="fileInput" type="file" accept=".json,application/json" multiple hidden @change="selectBrowserFiles" />
           <button class="action-btn" type="button" :disabled="choosing || busy" @click="chooseFiles"><AppIcon name="folder" :size="13" />{{ choosing ? '正在选择…' : '选择 auth.json 文件…' }}</button>
           <ul v-if="fileNames.length" class="import-file-list"><li v-for="file in fileNames" :key="file">{{ file }}</li></ul>
@@ -153,7 +153,7 @@ onUnmounted(() => { active = false })
           </div>
           <div v-if="tokenMode === 'access'" class="form-group">
             <label for="cx-token-name">账号名称 <span class="req" aria-hidden="true">*</span></label>
-            <input id="cx-token-name" v-model="tokenName" type="text" :disabled="busy" placeholder="用于识别这条 Token 账号" />
+            <input id="cx-token-name" v-model="tokenName" type="text" :disabled="busy" placeholder="便于识别的名称" />
           </div>
           <div v-else class="form-group">
             <label for="cx-id-token">ID Token <span class="req" aria-hidden="true">*</span></label>
@@ -183,7 +183,7 @@ onUnmounted(() => { active = false })
 .import-sources { margin: 0 var(--space-4); flex-shrink: 0; }
 .import-content { min-height: 0; }
 .mono, .pathline code { font-family: var(--font-mono); }
-.paste-box { line-height: 1.6; font-size: var(--text-xs); resize: vertical; }
+.paste-box { line-height: 1.6; font-size: var(--text-sm); resize: vertical; }
 .pathline { display: flex; flex-direction: column; gap: var(--space-2); padding-block: var(--space-3); }
 .pathline .k { color: var(--text-muted); font-size: var(--text-xs); }
 .pathline code { color: var(--text-secondary); font-size: var(--text-xs); overflow-wrap: anywhere; }

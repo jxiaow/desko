@@ -71,8 +71,8 @@ function trapFocus(event: KeyboardEvent) {
           <button class="dialog-close" type="button" aria-label="关闭" :disabled="busy" @click="cancel"><AppIcon name="x" :size="16" /></button>
         </header>
         <div class="dialog-body">
-          <p id="quit-description" class="quit-description">退出后，以下服务将停止：<br>Web 访问、局域网文件传输和内网穿透。</p>
-          <p class="quit-hint">仅关闭窗口可继续在托盘运行。</p>
+          <p id="quit-description" class="quit-description">退出将停止 Web 访问、局域网传输和内网穿透。</p>
+          <p class="quit-hint">关闭窗口可在托盘继续运行。</p>
           <p v-if="error" class="dialog-err" role="alert">{{ error }}</p>
         </div>
         <footer class="dialog-footer">
@@ -88,5 +88,5 @@ function trapFocus(event: KeyboardEvent) {
 .quit-overlay { z-index: 1100; }
 .quit-dialog { max-width: calc(100vw - 32px); }
 .quit-description { margin: 0; color: var(--text-secondary); font-size: var(--text-base); line-height: 1.8; }
-.quit-hint { margin: var(--space-3) 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.6; }
+.quit-hint { margin: var(--space-3) 0 0; color: var(--text-muted); font-size: var(--text-description); line-height: 1.6; }
 </style>

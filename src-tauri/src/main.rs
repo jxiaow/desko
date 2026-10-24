@@ -106,6 +106,7 @@ fn codex_authorization<R: tauri::Runtime>(message: &tauri::ipc::InvokeMessage<R>
 }
 
 fn main() {
+    if web_access::run_worker() { return; }
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -143,6 +144,7 @@ fn main() {
                 "COCKPIT_TOOLS_DATA_DIR 没配上，codex 凭据会落进上游默认目录"
             );
             codex_core::set_app_handle(app.handle().clone());
+            codex_core::modules::codex_clients::set_terminal_spawner(commands::file_shortcuts::spawn_wt_command);
 
             let db_path = paths::data_db_path();
             let db_path_str = db_path.to_str().ok_or_else(|| {
@@ -155,6 +157,7 @@ fn main() {
             let db = Database::new(db_path_str).expect("failed to init database");
             
             app.manage(web_access::WebAccessState::default());
+            app.manage(services::codex_bridge::BridgeState::default());
             app.manage(AppState {
                 db: std::sync::Arc::new(Mutex::new(db)),
                 data_epoch: Default::default(),
@@ -200,15 +203,17 @@ fn main() {
             // Setup tray menu
             let show_item = MenuItem::with_id(app, "show", "显示", true, None::<&str>)?;
             let lock_item = MenuItem::with_id(app, "lock", "锁定", true, None::<&str>)?;
-            // 勾选态首帧就取设置真值：挂件桥要解锁后才激活，等它回写会让锁屏期间显示成关
+            // 首帧与前端一致：Codex 已添加且没有主动隐藏时默认显示挂件。
             let hud_wanted = {
                 let state = app.state::<AppState>();
                 state
                     .db
                     .lock()
                     .ok()
-                    .and_then(|db| db.get_meta("codex_hud_enabled").ok().flatten())
-                    .map(|value| value == "true")
+                    .map(|db| {
+                        db.get_meta("codex_enabled").ok().flatten().as_deref() == Some("true")
+                            && db.get_meta("codex_hud_enabled").ok().flatten().as_deref() != Some("false")
+                    })
                     .unwrap_or(false)
             };
             let hud_item = CheckMenuItem::with_id(
@@ -233,7 +238,7 @@ fn main() {
                     match event.id.as_ref() {
                         "show" => show_main_window(app),
                         "lock" => commands::auth::request_lock(app),
-                        // 只发意图，翻转与落盘都交给主窗口的挂件桥：锁定态没人监听，点了不会偷偷显示
+                        // 翻转与落盘都交给主窗口的挂件桥，锁定后也保持监听。
                         "hud" => {
                             let _ = app.emit_to("main", "tray-hud-toggle", ());
                         }
@@ -364,6 +369,7 @@ fn main() {
             commands::fileshare::fileshare_get_config,
             commands::fileshare::fileshare_save_config,
             commands::fileshare::fileshare_set_password,
+            commands::fileshare::fileshare_set_theme,
             commands::fileshare::fileshare_import_files,
             // ── 内网穿透 ──
             commands::tunnel::tunnel_binary_status,
@@ -416,6 +422,7 @@ fn main() {
             commands::hud::desko_hud_open_codex,
             commands::hud::desko_hud_set_expanded,
             commands::hud::desko_hud_save_position,
+            commands::hud::desko_hud_context_menu,
             commands::url_paths::list_url_paths,
             commands::url_paths::create_url_path,
             commands::url_paths::update_url_path,
@@ -427,12 +434,16 @@ fn main() {
             commands::file_shortcuts::open_file,
             commands::file_shortcuts::open_terminal,
             // ── Codex 账号管理与切换（命令路径 = 上游 hub，片段经 include! 归入 codex）──
+            commands::codex_bridge::codex_dialog_action,
             codex_core::commands::codex::list_codex_accounts,
             codex_core::commands::codex::get_current_codex_account,
             codex_core::commands::codex::get_codex_config_toml_path,
             codex_core::commands::codex::get_codex_storage_paths,
-            codex_core::commands::codex::get_codex_wsl_auth_status,
-            codex_core::commands::codex::sync_codex_auth_to_wsl,
+            codex_core::commands::codex::get_codex_wsl_assignment,
+            codex_core::commands::codex::preview_codex_switch,
+            codex_core::commands::codex::preview_codex_wsl_assignment,
+            codex_core::commands::codex::assign_codex_account_to_wsl,
+            codex_core::commands::codex::relaunch_codex_clients,
             codex_core::commands::codex::open_codex_config_toml,
             codex_core::commands::codex::get_codex_quick_config,
             codex_core::commands::codex::save_codex_context_management,
@@ -445,7 +456,6 @@ fn main() {
             codex_core::commands::codex::refresh_codex_account_profile,
             codex_core::commands::codex::force_refresh_codex_tokens,
             codex_core::commands::codex::switch_codex_account,
-            codex_core::commands::codex::codex_cancel_account_switch,
             codex_core::commands::codex::delete_codex_account,
             codex_core::commands::codex::start_codex_batch_delete,
             codex_core::commands::codex::get_codex_batch_delete,
@@ -513,6 +523,7 @@ fn main() {
             // 例外：局域网传输在收上传请求，拔监听要快过任何落盘动作。
             if let tauri::RunEvent::Exit { .. } = event {
                 web_access::revoke(app_handle);
+                services::codex_bridge::stop(app_handle);
                 commands::fileshare::stop_for_exit(app_handle);
                 commands::tunnel::stop_for_exit(app_handle);
             }
@@ -585,9 +596,9 @@ mod gate_tests {
     }
 
     #[test]
-    fn desko_own_cmds_never_hit_the_codex_gate() {
+    fn desko_codex_dialog_is_gated_and_other_own_commands_are_not() {
         for name in registered("commands::") {
-            assert!(!is_codex_command(&name), "desko 自有命令 {name} 被 codex 闸门误伤");
+            assert_eq!(is_codex_command(&name), name == "codex_dialog_action", "desko 自有命令 {name} 的授权闸门不正确");
         }
     }
 }

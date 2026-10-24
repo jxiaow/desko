@@ -82,7 +82,7 @@ async function run<T>(fn: () => Promise<T>, done?: (value: T) => string) {
 }
 
 function startLogin() {
-  void run(() => tunnelApi.loginStart(), () => '已在浏览器里发起授权，完成后本页自己会更新')
+  void run(() => tunnelApi.loginStart(), () => '请在浏览器完成授权，页面将自动更新')
 }
 
 function cancelLogin() {
@@ -105,7 +105,7 @@ function createTunnel(adopt: boolean) {
         nameTakenText.value = p.nameTaken ? p.message : ''
         return p
       }),
-    (p) => (p.tunnelId ? '隧道已就位' : '这条还没建：下面那句说清了原因'),
+    (p) => (p.tunnelId ? '隧道已就位' : '隧道未创建，请查看下方原因'),
   )
 }
 
@@ -117,7 +117,7 @@ function revokeAuth() {
   if (acting.value || props.busy) return
   confirmStore.showConfirm(
     '撤销本机授权？',
-    '撤销后隧道会停止，本机的授权凭据和隧道运行凭据会被删除；已登记的服务和隧道记录保留，重新授权后可恢复。Cloudflare 账号侧的登录授权不会被本操作回收，如需彻底吊销请去 Cloudflare 控制台。',
+    '将停止隧道并删除本机凭据，服务与隧道记录会保留，重新授权后可恢复。彻底吊销授权需前往 Cloudflare 控制台。',
     () => {
       void run(() => tunnelApi.revoke(), () => '本机授权已撤销')
     },
@@ -131,8 +131,8 @@ function revokeAuth() {
     <div v-if="collapsed" class="tn-row">
       <span class="step-dot done"><AppIcon name="check" :size="11" /></span>
       <span class="lbl auto">接入准备</span>
-      <span class="tn-value mono ellipsis" :title="provision?.tunnelId ?? ''">
-        {{ provision?.tunnelName }}<span v-if="shortId" class="tn-dim"> · {{ shortId }}… 本机持有</span>
+      <span class="tn-value setup-summary" :title="provision?.tunnelId ?? ''">
+        {{ provision?.tunnelName }}<span v-if="shortId" class="tn-dim setup-id"> · {{ shortId }}… 本机持有</span>
         <span v-if="domain" class="tn-dim"> · {{ domain.name }}</span>
       </span>
       <button class="btn-secondary row-btn" type="button" @click="expanded = true">
@@ -143,8 +143,8 @@ function revokeAuth() {
 
     <template v-else>
       <div class="tn-head">
-        <span>接入准备</span>
-        <span class="head-cnt">第 {{ Math.min(reached + 1, 3) }} 步 / 共 3 步</span>
+        <h2>接入准备</h2>
+        <span class="head-cnt">{{ reached }} / 3 已完成</span>
       </div>
 
       <!-- 一：穿透程序。按固定版本拉、校验哈希，不随安装包分发 -->
@@ -155,8 +155,8 @@ function revokeAuth() {
         </span>
         <span class="lbl">穿透程序</span>
         <span class="mid">
-          <span v-if="binDone" class="sub mono">cloudflared {{ binary?.expectedVersion }} · 已校验</span>
-          <span v-else class="sub">按固定版本下载并校验哈希，产物只落本机目录</span>
+          <span v-if="binDone" class="sub">cloudflared {{ binary?.expectedVersion }} · 已校验</span>
+          <span v-else class="sub">下载并校验 cloudflared</span>
         </span>
         <button v-if="reached === 0" class="btn-primary row-btn" type="button" :disabled="disabled" @click="fetchBinary">
           {{ binary?.installed ? '重新校验' : '获取程序' }}
@@ -169,16 +169,16 @@ function revokeAuth() {
           <AppIcon v-if="authDone" name="check" :size="11" />
           <template v-else>2</template>
         </span>
-        <span class="lbl">授权</span>
+        <span class="lbl">Cloudflare 授权</span>
         <span class="mid">
           <span v-if="waiting" class="sub">
-            等待浏览器里登录 Cloudflare<span class="tn-count mono">{{ loginLeft }}</span>
+            等待浏览器里登录 Cloudflare<span class="tn-count">{{ loginLeft }}</span>
           </span>
           <span v-else-if="authDone" class="sub">
-            本机已有授权凭据<span v-if="domain" class="mono"> · {{ domain.name }}</span>
+            本机已有授权凭据<span v-if="domain" class=""> · {{ domain.name }}</span>
             <span v-else-if="domainLoading"> · 正在读取主域名…</span>
           </span>
-          <span v-else class="sub">在浏览器里登录 Cloudflare，凭据只留本机自己那份目录</span>
+          <span v-else class="sub">通过浏览器授权，凭据保存在本机</span>
         </span>
         <template v-if="reached === 1">
           <button v-if="waiting && login.url" class="btn-secondary row-btn" type="button" @click="openAuthUrl">打开授权页</button>
@@ -210,23 +210,24 @@ function revokeAuth() {
         <span class="lbl">建隧道</span>
         <span class="mid">
           <template v-if="hasTunnel">
-            <span class="sub mono ellipsis" :title="provision?.tunnelId ?? ''">
+            <span class="sub ellipsis" :title="provision?.tunnelId ?? ''">
               {{ provision?.tunnelName }}<span v-if="shortId" class="tn-dim"> · {{ shortId }}… 本机持有</span>
             </span>
           </template>
           <input
             v-else-if="reached === 2"
             v-model="tunnelName"
-            class="tn-input mono"
+            class="tn-input"
             type="text"
             maxlength="64"
             spellcheck="false"
             placeholder="desko"
+            aria-label="隧道名称"
             :disabled="disabled"
             @input="nameTouched = true; nameTakenText = ''"
             @keyup.enter="createTunnel(false)"
           />
-          <span v-else class="sub">授权完成后才能建，本机只建自己这一条</span>
+          <span v-else class="sub">请先完成 Cloudflare 授权</span>
         </span>
         <button
           v-if="step === 'missing-credentials'"
@@ -257,79 +258,54 @@ function revokeAuth() {
 
       <div v-if="stepHint && !collapsed" class="tn-note">{{ stepHint }}</div>
 
-      <button v-if="tunnelDone" class="tn-fold" type="button" @click="expanded = false">收起来</button>
+      <button v-if="tunnelDone" class="tn-fold" type="button" @click="expanded = false">收起</button>
     </template>
     <div v-if="domainError || (domain && domain.status !== 'active')" class="tn-note chip-warn">
       <AppIcon name="alert" :size="12" />
-      <span class="note-text">{{ domainError ? `主域名没读到：${domainError}` : `主域名 ${domain?.name} 尚未启用，请在 Cloudflare 完成域名接入后重试。` }}</span>
+      <span class="note-text">{{ domainError ? `无法读取主域名：${domainError}` : `主域名 ${domain?.name} 尚未启用，请在 Cloudflare 完成域名接入后重试。` }}</span>
       <button class="btn-secondary row-btn" type="button" :disabled="domainLoading" @click="emit('retryDomain')">重试读取主域名</button>
     </div>
   </section>
 </template>
 
 <style scoped>
-/* --font-mono 由页面在 .content-inner 上覆盖，变量能穿过组件边界 */
-.mono { font-family: var(--font-mono); }
-.head-cnt { font-size: var(--text-xs); font-weight: 400; color: var(--text-faint) }
-.row-btn { margin-left: auto; flex-shrink: 0 }
-.row-btn + .row-btn { margin-left: 8px }
-.note-text { flex: 1; min-width: 0 }
-.tn-dim { color: var(--text-muted) }
-.tn-count { margin-left: 6px; color: var(--text-muted) }
-.lbl { flex-shrink: 0; width: 76px; font-size: var(--text-sm); color: var(--text) }
-.lbl.auto { width: auto; font-weight: 600 }
-.mid { flex: 1; min-width: 0 }
-.sub { font-size: var(--text-xs); color: var(--text-muted) }
-
-/* 授权失败的原话最多四行：按顶对齐展开，别让它居中堆成一坨 */
-.tn-note.chip-warn { align-items: flex-start }
-.tn-note.chip-warn .note-text { white-space: pre-line; line-height: 1.5 }
-
-/* 步骤圆点：实心勾 = 做完，数字 = 排到哪一步 */
-.step-dot {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 1px solid var(--border-strong);
-  font-size: 11px;
-  color: var(--text-muted);
+.setup .tn-head { height: auto; min-height: 56px; padding: 12px 20px; border-bottom: 0; }
+.setup h2 { margin: 0; font-size: var(--text-base); font-weight: 600; }
+.head-cnt { margin-left: auto; font-size: var(--text-xs); font-weight: 400; color: var(--text-secondary); }
+.setup .tn-row { min-height: 56px; height: auto; padding: 14px 20px; gap: 12px; }
+.setup .tn-row.cur { min-height: 80px; background: var(--fill); }
+.row-btn { margin-left: auto; flex-shrink: 0; height: 32px; font-size: var(--text-xs); }
+.row-btn + .row-btn { margin-left: 8px; }
+.note-text { flex: 1; min-width: 0; }
+.tn-dim, .tn-count { color: var(--text-secondary); }
+.tn-count { margin-left: 6px; font-variant-numeric: tabular-nums; }
+.lbl { flex-shrink: 0; width: 108px; font-size: var(--text-sm); color: var(--text); }
+.lbl.auto { width: auto; font-weight: 600; }
+.mid { flex: 1; min-width: 0; }
+.sub { display: block; font-size: var(--text-sm); line-height: 20px; color: var(--text-secondary); }
+.setup-summary { font-size: var(--text-sm); line-height: 22px; overflow-wrap: anywhere; }
+.tn-note.chip-warn { align-items: flex-start; }
+.tn-note.chip-warn .note-text { white-space: pre-line; line-height: 1.5; }
+.step-dot { flex-shrink: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-strong); border-radius: 50%; font-size: var(--text-xs); color: var(--text-secondary); }
+.step-dot.done { background: var(--fill); border-color: var(--border); color: var(--text); }
+.cur .step-dot { border-color: var(--text); color: var(--text); }
+.tn-input { width: min(100%, 260px); min-width: 0; height: 32px; padding: 0 10px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: var(--text-sm); font-family: var(--font-ui); transition: border-color var(--transition); }
+.tn-input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tn-input:disabled { color: var(--text-muted); background: var(--bg); }
+.tn-fold { align-self: flex-start; padding: 10px 20px 14px; background: none; border: none; color: var(--text-secondary); font-size: var(--text-xs); cursor: pointer; }
+.tn-fold:hover { color: var(--accent); }
+@media (max-width: 700px) {
+  .setup .tn-head { padding-inline: 16px; }
+  .setup .tn-row { padding: 14px 16px; flex-wrap: wrap; gap: 10px; }
+  .setup .lbl { width: calc(100% - 32px); }
+  .setup .lbl.auto { width: auto; flex: 1; }
+  .setup .mid { flex-basis: calc(100% - 32px); margin-left: 32px; }
+  .setup .row-btn { min-height: 40px; }
+  .setup-summary { order: 4; flex-basis: 100%; padding-left: 32px; }
+  .setup-id { display: none; }
+  .setup .tn-row.cur .row-btn { margin-left: 32px; }
+  .setup .tn-row.cur .row-btn + .row-btn { margin-left: 0; }
+  .setup .tn-note { flex-wrap: wrap; padding-inline: 16px; }
+  .setup .tn-note .note-text { flex-basis: calc(100% - 24px); }
 }
-.step-dot.done { background: var(--accent); border-color: var(--accent); color: var(--accent-on) }
-.cur .step-dot { border-color: var(--accent); color: var(--accent) }
-
-/* 做完的与没轮到的收成 44（全局 .tn-row），当前那步 64 并持有唯一一颗主行动钮；
-   当前步整行吃 5% 主色水洗——三步里一眼看到卡在哪一格 */
-.tn-row.cur { height: 64px; background: color-mix(in srgb, var(--accent) 5%, transparent) }
-.tn-row.cur .sub { color: var(--text) }
-
-.tn-input {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  padding: 0 10px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-size: 13px;
-  font-family: var(--font-mono);
-  transition: border-color var(--transition), box-shadow var(--transition);
-}
-.tn-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring) }
-.tn-input:disabled { color: var(--text-muted); background: var(--bg) }
-
-.tn-fold {
-  align-self: flex-start;
-  padding: 6px 14px 8px;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-.tn-fold:hover { color: var(--accent) }
 </style>

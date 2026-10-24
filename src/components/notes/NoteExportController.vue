@@ -95,13 +95,13 @@ onMounted(() => { if (props.format) void exportNotes() })
         <button class="dialog-close" type="button" :disabled="busy" aria-label="关闭" @click="emit('close')"><AppIcon name="x" :size="16" /></button>
       </header>
       <div class="dialog-body">
-        <p class="export-lead">{{ props.scopeLabel }} · 选择格式后保存到电脑。</p>
+        <p class="export-lead">{{ props.scopeLabel }}</p>
         <div class="seg" role="group" aria-label="导出格式">
           <button v-for="item in NOTE_EXPORT_FORMATS" :key="item.id" type="button" :class="{ on: format === item.id }" :aria-pressed="format === item.id" :disabled="busy" @click="format = item.id">{{ item.label }}</button>
         </div>
-        <p class="export-format-note">{{ format === 'word' ? 'Word 导出为 .doc，可用 Word 或 WPS 打开，不是 .docx。' : format === 'pdf' ? 'A4 纵向 PDF，多条小记合并在一份文档中。' : '保留正文格式与图片附件，多条小记打包为 ZIP。' }}</p>
+        <p class="export-format-note">{{ format === 'word' ? '.doc 格式，可用 Word 或 WPS 打开。' : format === 'pdf' ? 'A4 纵向 PDF，多条小记合为一份。' : '保留格式与图片，多条小记打包为 ZIP。' }}</p>
         <p class="export-filename">默认文件名 <strong>{{ filename }}</strong></p>
-        <p class="export-hint">加密小记需先解锁；取消解锁时跳过，并在完成后提示条数。无法嵌入的图片会保留文字说明。</p>
+        <p class="export-hint">加密小记需先解锁，取消时跳过；无法嵌入的图片以文字说明。</p>
       </div>
       <footer class="dialog-footer">
         <button class="btn-secondary" type="button" :disabled="busy" @click="emit('close')">取消</button>

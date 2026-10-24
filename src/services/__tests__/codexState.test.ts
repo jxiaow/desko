@@ -71,13 +71,12 @@ describe('Codex 锁屏与异步请求', () => {
     })
   }
 
-  it('只给真实切号显示取消状态，其他账号操作不能发切号取消命令', async () => {
+  it('普通账号操作只占忙碌状态，不创建切号事务', async () => {
     const s = await loadState()
     let finish!: () => void
     const request = s.runOn('a', () => new Promise<void>(resolve => { finish = resolve }), '')
     expect(s.busyId.value).toBe('a')
     expect(s.switchingId.value).toBe('')
-    await s.cancelSwitch('a')
     expect(mockInvoke).not.toHaveBeenCalledWith('codex_cancel_account_switch', expect.anything())
     mockInvoke.mockImplementation(async cmd => cmd === 'list_codex_accounts' ? [] : null)
     finish()
@@ -127,7 +126,7 @@ describe('Codex 锁屏与异步请求', () => {
       }
       return account()
     })
-    const request = s.switchTo('a')
+    const request = s.switchTo('a', { restartWindows: false, applyToWsl: false })
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
     s.clearCodexSession()
     finish('openai_api_key')
@@ -398,7 +397,7 @@ describe('codexState 会话档', () => {
     expect(s.sessionTotalCount.value).toBe(1)
   })
 
-  it('首次加载全部收起，手动展开后刷新保留，锁屏后恢复全部收起', async () => {
+  it('首次按更新时间展开最近项目，手动收起后刷新保留，锁屏后重新选择最近项目', async () => {
     const s = await loadState()
     const list = [
       { ...sessionRec('old-a'), cwd: 'C:\\a', updatedAt: 1 },
@@ -407,16 +406,16 @@ describe('codexState 会话档', () => {
     ]
     mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? list : [])
     await s.loadSessions()
-    expect(s.sessionOpenGroups.value.size).toBe(0)
-    s.sessionOpenGroups.value = new Set(['C:\\a'])
+    expect([...s.sessionOpenGroups.value]).toEqual(['C:\\b'])
+    s.sessionOpenGroups.value = new Set()
     await s.loadSessions({ background: true })
-    expect([...s.sessionOpenGroups.value]).toEqual(['C:\\a'])
+    expect(s.sessionOpenGroups.value.size).toBe(0)
     s.clearCodexSession()
     await s.loadSessions()
-    expect(s.sessionOpenGroups.value.size).toBe(0)
+    expect([...s.sessionOpenGroups.value]).toEqual(['C:\\b'])
   })
 
-  it('空列表或读取失败后恢复目录，仍默认全部收起', async () => {
+  it('空列表或读取失败后恢复目录，首次展开最近的未知目录组', async () => {
     const s = await loadState()
     mockInvoke.mockResolvedValueOnce([])
     await s.loadSessions()
@@ -428,10 +427,10 @@ describe('codexState 会话档', () => {
       { ...sessionRec('newer'), cwd: '  ', updatedAt: 2 },
     ] : [])
     await s.loadSessions()
-    expect(s.sessionOpenGroups.value.size).toBe(0)
+    expect([...s.sessionOpenGroups.value]).toEqual(['∅'])
   })
 
-  it('搜索、迟到的搜索结果及清空后加载全量目录，都不写入默认展开态', async () => {
+  it('搜索和迟到的搜索结果不初始化展开态，清空后按全量目录选择最近项目', async () => {
     const s = await loadState()
     s.sessionQuery.value = '命中'
     let finish!: (value: unknown) => void
@@ -447,7 +446,7 @@ describe('codexState 会话档', () => {
       { ...sessionRec('matched'), cwd: 'C:\\matched' },
     ] : [])
     await s.loadSessions()
-    expect(s.sessionOpenGroups.value.size).toBe(0)
+    expect([...s.sessionOpenGroups.value]).toEqual(['C:\\recent'])
   })
 
   it('后台刷新保留旧读数直到新统计到手，目录暂不可读也不清空现有会话', async () => {
@@ -549,7 +548,26 @@ describe('codexState 会话档', () => {
     expect(callsOf(STATS_CMD)).toHaveLength(before)
   })
 
-  it('token 统计只问缺的那几条；刷新清缓存后按全量重新预取', async () => {
+  it('展开期间共享在途统计，失败可重试且空记录有完成状态', async () => {
+    const s = await loadState()
+    let reject!: (error: unknown) => void
+    mockInvoke.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
+    const request = s.loadSessionTokens(['a', 'b'])
+    await s.loadSessionTokens(['a'])
+    expect(callsOf(STATS_CMD)).toHaveLength(1)
+    expect([...s.sessionTokensPending.value]).toEqual(['a', 'b'])
+    reject('目录不可读')
+    await request
+    expect(s.sessionTokensError.value).toBe('目录不可读')
+    expect(s.sessionTokensLoaded.value.size).toBe(0)
+    expect(s.sessionTokensPending.value.size).toBe(0)
+    mockInvoke.mockResolvedValueOnce([])
+    await s.loadSessionTokens(['a', 'b'])
+    expect(s.sessionTokensError.value).toBe('')
+    expect([...s.sessionTokensLoaded.value]).toEqual(['a', 'b'])
+  })
+
+  it('token 统计记住没有记录的会话，刷新时全量更新并保留旧读数', async () => {
     const s = await loadState()
     mockInvoke.mockImplementation(async (cmd: string) =>
       cmd === STATS_CMD
@@ -563,11 +581,11 @@ describe('codexState 会话档', () => {
     await s.loadSessionTokens(['a'])
     expect(callsOf(STATS_CMD)).toHaveLength(1)
     await s.loadSessionTokens(['a', 'b'])
-    expect(callsOf(STATS_CMD).map(([, a]: any) => a.sessionIds)).toEqual([['a', 'b'], ['b']])
+    expect(callsOf(STATS_CMD).map(([, a]: any) => a.sessionIds)).toEqual([['a', 'b']])
 
     await s.reloadSessions()
-    // 清缓存后列表里每条都算缺，预取那一轮一次带走，面板不必再按组补
-    expect(callsOf(STATS_CMD).map(([, a]: any) => a.sessionIds)).toEqual([['a', 'b'], ['b'], ['a', 'b']])
+    // 刷新主动更新全部会话，负缓存也会重新读取。
+    expect(callsOf(STATS_CMD).map(([, a]: any) => a.sessionIds)).toEqual([['a', 'b'], ['a', 'b']])
     // 预取不 await（别拿数字拖慢首屏），落库要等一个宏任务
     await new Promise((r) => setTimeout(r, 0))
     expect(s.sessionTokens.value.a.totalTokens).toBe(11)
@@ -745,17 +763,17 @@ describe('codexState 账号留底', () => {
     const listCalls = callsOf('list_codex_accounts').length
     mockInvoke.mockResolvedValue(undefined)
 
-    expect(await s.deleteRecycledAccount('a')).toBe('已彻底删除这条留底')
+    expect(await s.deleteRecycledAccount('a')).toBe('账号已彻底删除')
     expect(callsOf(RECYCLED_DELETE_CMD).map(([, x]: any) => x.recycleId)).toEqual(['a'])
     expect(s.recycledAccounts.value.map((r: any) => r.id)).toEqual(['b'])
     expect(callsOf('list_codex_accounts')).toHaveLength(listCalls)
 
-    expect(await s.emptyRecycledAccounts()).toBe('已彻底删除 1 条留底')
+    expect(await s.emptyRecycledAccounts()).toBe('已彻底删除 1 个账号')
     expect(callsOf(RECYCLED_EMPTY_CMD).map(([, x]: any) => x.recycleIds)).toEqual([['b']])
     expect(s.recycledAccounts.value).toEqual([])
 
     // 清单已空还点清空：不该发网络，话也要说清楚
-    expect(await s.emptyRecycledAccounts()).toBe('账号留底已经是空的')
+    expect(await s.emptyRecycledAccounts()).toBe('没有已删除的账号')
     expect(callsOf(RECYCLED_EMPTY_CMD)).toHaveLength(1)
   })
 })
@@ -831,6 +849,40 @@ describe('codexState 用量档', () => {
 
     await s.loadTodayUsage()
     expect(callsOf(USAGE_CMD)).toHaveLength(1)
+  })
+
+  it('今日用量跨零点立即作废，不能沿用十分钟缓存', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(2026, 9, 22, 23, 59))
+      const s = await loadState()
+      mockInvoke.mockResolvedValueOnce(usageReportFixture(1234))
+      await s.loadTodayUsage()
+      vi.setSystemTime(new Date(2026, 9, 23, 0, 1))
+      let finish!: (value: unknown) => void
+      mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      const request = s.loadTodayUsage()
+      expect(s.usageToday.value).toBeNull()
+      finish(usageReportFixture(12))
+      await request
+      expect(callsOf(USAGE_CMD)).toHaveLength(2)
+      expect(s.usageToday.value?.totalTokens).toBe(12)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('用量页等待挂件的在途扫描完成，不并发读取日志', async () => {
+    const s = await loadState()
+    let finish!: (value: unknown) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const today = s.loadTodayUsage()
+    mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args))
+    const usage = s.loadUsage()
+    expect(s.usageBusy.value).toBe(true)
+    expect(callsOf(USAGE_CMD)).toHaveLength(1)
+    finish(usageReportFixture(1234))
+    await Promise.all([today, usage])
+    expect(callsOf(USAGE_CMD)).toHaveLength(2)
+    expect(s.usageReport.value?.totals.totalTokens).toBe(1000)
   })
 
   it('会话来源变化后今日汇总一起作废', async () => {

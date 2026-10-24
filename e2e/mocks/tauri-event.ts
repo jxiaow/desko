@@ -30,3 +30,7 @@ export async function once<T = unknown>(
 export async function emit(event: string, payload?: unknown): Promise<void> {
   getBackend().emitEvent(event, payload)
 }
+
+export async function emitTo(_target: string, event: string, payload?: unknown): Promise<void> {
+  getBackend().emitEvent(event, payload)
+}

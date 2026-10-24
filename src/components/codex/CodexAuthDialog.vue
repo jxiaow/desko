@@ -242,8 +242,8 @@ onMounted(() => {
       <div id="codex-auth-content" class="dialog-body auth-content" role="tabpanel" :aria-labelledby="`codex-auth-${mode}`">
         <p v-if="reauthAccountId" class="reauth-identity">正在重新登录：<strong>{{ reauthAccount?.account_name || reauthAccount?.email || '当前账号' }}</strong><template v-if="reauthAccount?.account_name"> · {{ reauthAccount.email }}</template></p>
         <template v-if="mode === 'oauth'">
-          <p class="lead">通过 OpenAI 官方页面登录。授权后会自动返回；浏览器回跳失败时，可手动粘贴回调地址。</p>
-          <p v-if="portBusy && !session" class="note warn">回调端口已被占用，先退出其他正在登录的 Codex 客户端，或改用设备码。</p>
+          <p class="lead">通过 OpenAI 官方页面登录。</p>
+          <p v-if="portBusy && !session" class="note warn">回调端口被占用，请退出其他正在登录的 Codex，或改用设备码。</p>
           <template v-if="session?.mode === 'oauth'">
             <div class="login-state"><span class="chip">{{ phase === 'failed' ? '授权失败' : phase === 'finishing' ? '正在完成登录…' : '等待授权…' }}</span></div>
             <div class="auth-address"><code class="mono url">{{ session.authUrl }}</code><div class="address-actions">
@@ -251,23 +251,21 @@ onMounted(() => {
               <button class="action-btn" type="button" :disabled="phase !== 'waiting'" @click="openInBrowser(session.authUrl)">打开授权页</button>
             </div></div>
             <div v-if="phase === 'waiting'" class="form-group cb-row">
-              <label for="codex-callback">回调地址（浏览器未自动返回时填写）</label>
+              <label for="codex-callback">回调地址（未自动返回时填写）</label>
               <input id="codex-callback" v-model="callbackUrl" aria-label="回调地址" type="text" spellcheck="false" :disabled="busy" placeholder="http://localhost:1455/callback?code=…" @keyup.enter="submitCallback" />
             </div>
           </template>
-          <ol v-else class="login-steps"><li>点「开始登录」，打开官方授权页。</li><li>选择账号并完成授权。</li><li>返回此窗口，登录结果会自动保存。</li></ol>
         </template>
         <template v-else-if="mode === 'device'">
-          <p class="lead">不占用本地回调端口。在 OpenAI 验证页输入设备码，即可完成登录。</p>
+          <p class="lead">在 OpenAI 验证页输入设备码完成登录。</p>
           <template v-if="session?.mode === 'device'">
             <div class="login-state"><span class="chip">{{ phase === 'failed' ? '授权失败' : phase === 'finishing' ? '正在完成登录…' : '等待授权…' }}</span></div>
             <div class="code-box"><span class="code-label mono">{{ session.userCode }}</span><button class="action-btn" type="button" :disabled="phase !== 'waiting'" @click="copy(session.userCode, '设备码')"><AppIcon name="copy" :size="13" />复制码</button></div>
             <div class="auth-address"><code class="mono url">{{ session.verificationUrl }}</code><button class="action-btn" type="button" :disabled="phase !== 'waiting'" @click="openInBrowser(session.verificationUrl)">打开验证页</button></div>
           </template>
-          <ol v-else class="login-steps"><li>点「取设备码」，获取本次登录的授权码。</li><li>在验证页输入设备码并登录。</li><li>返回此窗口等待授权完成。</li></ol>
         </template>
         <template v-else>
-          <p class="lead">密钥保存在 Desko 账号库；切到该账号时才写入 Codex 的供应商配置。</p>
+          <p class="lead">密钥保存在 Desko，切换账号后用于 Codex。</p>
           <div class="form-group"><label for="cx-key">API Key <span class="req" aria-hidden="true">*</span></label><input id="cx-key" v-model="apiKey" class="mono" type="password" autocomplete="off" spellcheck="false" :disabled="busy" placeholder="sk-…" @keyup.enter="addApiKey" /></div>
           <div class="form-group"><label for="cx-base">自定义接口地址（可留空）</label><input id="cx-base" v-model="apiBaseUrl" class="mono" type="text" spellcheck="false" :disabled="busy" placeholder="https://…/v1" @keyup.enter="addApiKey" /></div>
         </template>
@@ -286,21 +284,19 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.auth-dialog { width: 520px; height: min(480px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); }
+.auth-dialog { width: 520px; max-height: calc(100dvh - 40px); }
 .auth-tabs { padding: 0 var(--space-4); flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .auth-tabs .seg { margin-bottom: 0; }
 .auth-import-link { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 4px 0; background: none; border: 0; color: var(--text-muted); font: inherit; font-size: var(--text-xs); cursor: pointer; }
 .auth-import-link:hover:not(:disabled) { color: var(--text-brand); }
 .auth-content { min-height: 0; }
-.reauth-identity { margin: 0 0 var(--space-3); color: var(--text-secondary); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.reauth-identity { margin: 0 0 var(--space-3); color: var(--text-secondary); font-size: var(--text-description); overflow-wrap: anywhere; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.note { font-size: var(--text-xs); color: var(--warning); line-height: 1.6; }
+.note { font-size: var(--text-description); color: var(--warning); line-height: 1.6; }
 .note.warn { background: var(--warning-soft); border-radius: var(--radius-sm); padding: 8px 10px; }
-.login-steps { margin: var(--space-5) 0 0; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.8; }
-.login-steps li + li { margin-top: var(--space-3); }
 .login-state { margin-block: var(--space-4) var(--space-3); }
 .auth-address { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
-.url { font-size: var(--text-xs); line-height: 1.6; color: var(--text-secondary); overflow-wrap: anywhere; }
+.url { font-size: var(--text-description); line-height: 1.6; color: var(--text-secondary); overflow-wrap: anywhere; }
 .address-actions { display: flex; gap: var(--space-2); }
 .cb-row { margin-top: var(--space-4); }
 .code-box { display: flex; align-items: center; gap: var(--space-3); margin-block: var(--space-3); }

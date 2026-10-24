@@ -2,7 +2,7 @@ import router, { EMPTY_PATH, syncModuleRoutes } from '../router'
 import { MODULES, modulePath, type ModuleId } from './registry'
 import { landingPath, loadModuleFlags, moduleFlags, refreshWebModuleFlags, setModuleEnabled, WEB_MODULE_IDS } from './state'
 import { listen } from '../services/events'
-import { isWebRuntime } from '../services/runtime'
+import { isWebRuntime, isCodexWebRuntime } from '../services/runtime'
 import { getActivePinia } from 'pinia'
 import { useAuthStore } from '../stores/auth'
 
@@ -23,6 +23,7 @@ export async function startModuleSync(): Promise<void> {
   const stop = await listen<{ id: ModuleId; enabled: boolean }>('desko:module-changed', async ({ payload }) => {
     if (!MODULES.some(module => module.id === payload.id) || typeof payload.enabled !== 'boolean') return
     if (isWebRuntime() && !WEB_MODULE_IDS.some(id => id === payload.id)) return
+    if (isCodexWebRuntime() && payload.id !== 'codex') return
     const wasEnabled = moduleFlags[payload.id]
     moduleFlags[payload.id] = payload.enabled
     syncModuleRoutes()

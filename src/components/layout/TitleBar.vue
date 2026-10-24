@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { isWebRuntime } from '../../services/runtime'
+import { isWebRuntime, isCodexWebRuntime } from '../../services/runtime'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { releaseHover, suppressHover } from '../../utils/hoverGuard'
 import AppIcon from '../shared/AppIcon.vue'
@@ -13,19 +13,16 @@ import { webAccessApi, type WebAccessStatus } from '../../services/api/webAccess
 
 const props = defineProps<{
   isLocked?: boolean
-  /** 侧栏收到 0 宽时，恢复入口挪到这里 */
-  sidebarHidden?: boolean
-  outer?: boolean
+  modulesOpen?: boolean
 }>()
 
 const emit = defineEmits<{
-  openSettings: []
   lock: []
-  showSidebar: []
   showModules: []
 }>()
 
 const webRuntime = isWebRuntime()
+const codexWebRuntime = isCodexWebRuntime()
 const appWindow = webRuntime ? null : getCurrentWindow()
 const isMaximized = ref(false)
 const appMenuOpen = ref(false)
@@ -33,7 +30,7 @@ const appMenuAnchor = ref<HTMLButtonElement | null>(null)
 const titlebarElement = ref<HTMLElement | null>(null)
 const windowControls = ref<HTMLElement | null>(null)
 let controlsObserver: ResizeObserver | undefined
-function openAppPane(tab: 'profiles' | 'about') {
+function openAppPane(tab: 'profiles' | 'about' | 'appearance' | 'modules') {
   appMenuOpen.value = false
   window.dispatchEvent(new CustomEvent('desko:open-settings-tab', { detail: tab }))
 }
@@ -100,7 +97,7 @@ let unlisten: (() => void) | null = null
 let unlistenFocus: (() => void) | null = null
 
 onMounted(async () => {
-  if (props.outer && windowControls.value) {
+  if (!props.isLocked && windowControls.value) {
     const updateControlsSpace = () => {
       const width = windowControls.value?.getBoundingClientRect().width ?? 0
       titlebarElement.value?.style.setProperty('--workspace-window-space', `${Math.ceil(width) + 12}px`)
@@ -137,15 +134,28 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="titlebarElement" class="titlebar" :class="{ 'titlebar-locked': isLocked, 'titlebar-outer': outer }">
+  <div ref="titlebarElement" class="titlebar" :class="{ 'titlebar-locked': isLocked, 'titlebar-outer': !isLocked }">
     <div class="titlebar-drag" @mousedown="startDrag" @dblclick="toggleMaximize"></div>
 
-    <div v-if="outer && !isLocked" class="titlebar-brandcell">
-      <button ref="appMenuAnchor" class="titlebar-app" type="button" aria-label="Desko 菜单" title="Desko" aria-haspopup="menu" :aria-expanded="appMenuOpen" @click="appMenuOpen = !appMenuOpen" @dblclick.stop><BrandLogo /></button>
+    <div v-if="webRuntime && !codexWebRuntime && !isLocked" class="web-mobile-header">
+      <span class="web-mobile-brand"><BrandLogo />Desko</span>
+      <button class="web-mobile-modules" type="button" aria-label="打开模块导航" aria-haspopup="dialog" aria-controls="web-module-navigation" :aria-expanded="props.modulesOpen ?? false" @click="emit('showModules')">
+        <AppIcon name="panel" :size="16" /><span>模块</span><AppIcon name="chevDown" :size="14" />
+      </button>
+    </div>
+
+    <div v-if="!isLocked" class="titlebar-brandcell">
+      <button ref="appMenuAnchor" class="titlebar-app" type="button" aria-label="Desko 菜单" title="Desko" aria-haspopup="menu" :aria-expanded="appMenuOpen" @click="appMenuOpen = !appMenuOpen" @dblclick.stop><BrandLogo /><span v-if="webRuntime && !codexWebRuntime" class="titlebar-wordmark">Desko</span></button>
       <PopoverMenu v-if="appMenuOpen" :anchor="appMenuAnchor" align="start" :width="176" @close="appMenuOpen = false">
         <div class="app-menu-title">Desko</div>
-        <button class="pop-item" type="button" role="menuitem" @click="openAppPane('profiles')"><AppIcon name="user" :size="15" />档案管理</button>
-        <button class="pop-item" type="button" role="menuitem" @click="openAppPane('about')"><AppIcon name="info" :size="15" />关于 Desko</button>
+        <template v-if="webRuntime">
+          <button class="pop-item" type="button" role="menuitem" @click="openAppPane('appearance')"><AppIcon name="gear" :size="15" />外观设置</button>
+          <button v-if="!codexWebRuntime" class="pop-item" type="button" role="menuitem" @click="openAppPane('modules')"><AppIcon name="panel" :size="15" />模块管理</button>
+        </template>
+        <template v-else>
+          <button class="pop-item" type="button" role="menuitem" @click="openAppPane('profiles')"><AppIcon name="user" :size="15" />档案管理</button>
+          <button class="pop-item" type="button" role="menuitem" @click="openAppPane('about')"><AppIcon name="info" :size="15" />关于 Desko</button>
+        </template>
       </PopoverMenu>
     </div>
 
@@ -157,25 +167,19 @@ onUnmounted(() => {
           title="打开模块导航"
           aria-label="打开模块导航"
           aria-haspopup="dialog"
+          :aria-expanded="props.modulesOpen ?? false"
+          aria-controls="web-module-navigation"
           @click="emit('showModules')"
         >
           <AppIcon name="panel" :size="20" />
         </button>
-        <button
-          v-if="sidebarHidden"
-          class="titlebar-btn tb-util sidebar-restore"
-          title="显示侧栏 (Ctrl+B)"
-          @click="emit('showSidebar')"
-        >
-          <AppIcon name="panel" :size="16" />
-        </button>
         <div class="titlebar-brand" :title="[crumb, pageHead.count].filter(Boolean).join(' · ')">
-          <span class="titlebar-crumb">{{ crumb }}</span>
+          <component :is="pageHead.headingInContent ? 'span' : 'h1'" class="titlebar-crumb">{{ crumb }}</component>
           <span v-if="pageHead.count" class="titlebar-count">{{ pageHead.count }}</span>
         </div>
       </div>
 
-      <div v-if="outer" id="workspace-page-toolbar" class="workspace-page-toolbar"></div>
+      <div v-if="!isLocked" id="workspace-page-toolbar" class="workspace-page-toolbar"></div>
     </div>
 
     <div ref="windowControls" class="titlebar-buttons">
@@ -183,11 +187,8 @@ onUnmounted(() => {
         <span class="web-running-dot" aria-hidden="true"></span>Web
       </button>
       <BackupBadge v-if="!isLocked && !webRuntime" />
-      <!-- 设置仅在侧栏收起时回到顶栏；桌面工作区的锁定与窗口按钮同组。 -->
-      <button v-if="!isLocked && sidebarHidden" class="titlebar-btn tb-util" @click="emit('openSettings')" title="设置">
-        <AppIcon name="gear" :size="16" />
-      </button>
-      <button v-if="!isLocked && (outer || sidebarHidden)" class="titlebar-btn titlebar-lock" type="button" @click="emit('lock')" :title="webRuntime ? '退出浏览器访问' : '锁定'" :aria-label="webRuntime ? '退出浏览器访问' : '锁定'">
+      <!-- 锁定与窗口操作同组，设置入口位于轨底。 -->
+      <button v-if="!isLocked" class="titlebar-btn titlebar-lock" type="button" @click="emit('lock')" :title="webRuntime ? '退出浏览器访问' : '锁定'" :aria-label="webRuntime ? '退出浏览器访问' : '锁定'">
         <AppIcon name="lock" :size="14" />
       </button>
       <button v-if="!webRuntime" class="titlebar-btn" @click="minimize" title="最小化">
@@ -215,25 +216,28 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.web-mobile-header { display: none; }
+.titlebar-wordmark { display: none; }
 .titlebar.titlebar-outer { height: var(--workspace-toolbar-height, 48px); flex: 0 0 var(--workspace-toolbar-height, 48px); overflow: hidden; }
 .titlebar-brandcell { width: var(--sidebar-rail-w, 56px); flex: 0 0 var(--sidebar-rail-w, 56px); align-self: stretch; display: flex; align-items: center; justify-content: center; z-index: 2; }
+.titlebar-brandcell { background: var(--bg-workspace-rail); background-attachment: fixed; }
 .titlebar-page { display: contents; }
-.titlebar-outer .titlebar-page { position: absolute; left: var(--workspace-content-left); right: max(var(--workspace-content-right), var(--workspace-window-space, 122px)); height: 100%; display: flex; align-items: center; z-index: 1; pointer-events: none; }
+.titlebar-outer .titlebar-page { position: absolute; left: var(--workspace-toolbar-left); right: max(var(--workspace-toolbar-right), var(--workspace-window-space, 122px)); height: 100%; display: flex; align-items: center; z-index: 1; pointer-events: none; }
 .titlebar-outer .titlebar-left { flex: 0 0 var(--workspace-heading-width); width: var(--workspace-heading-width); min-width: 0; padding-left: 0; overflow: hidden; pointer-events: auto; }
 /* 服务状态紧随页名，按文字宽度成组，不占用搜索页的固定标题列。 */
-.titlebar-outer .titlebar-page:has(.service-page-bar) { --workspace-heading-width: auto; --workspace-heading-gap: 12px; }
-.titlebar-outer .titlebar-page:has(.cx-header-tabs, .workspace-fs-head) { --workspace-heading-gap: 0px; }
-.titlebar-outer .titlebar-page:has(.cx-header-tabs, .workspace-fs-head) .titlebar-left { display: none; }
+.titlebar-outer .titlebar-page:has([data-workspace-heading="inline"]) { --workspace-heading-width: auto; --workspace-heading-gap: 12px; }
+.titlebar-outer .titlebar-page:has([data-workspace-heading="replace"]) { --workspace-heading-gap: 0px; }
+.titlebar-outer .titlebar-page:has([data-workspace-heading="replace"]) .titlebar-left { display: none; }
 .titlebar-outer .titlebar-brand { min-width: 0; width: 100%; }
-.titlebar-outer .titlebar-crumb { display: block; flex-shrink: 0; max-width: 100%; font-size: 14px; font-weight: 650; letter-spacing: -0.012em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.titlebar-outer .titlebar-count { font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.titlebar-outer .titlebar-crumb { display: block; flex-shrink: 0; max-width: 100%; margin: 0; font-size: var(--text-lg); line-height: 24px; font-weight: 600; letter-spacing: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titlebar-outer .titlebar-count { font-size: var(--text-xs); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .titlebar-outer .workspace-page-toolbar { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; container: workspace-toolbar / inline-size; pointer-events: none; }
 /* 品牌标占的是轨的第一格：盒子与下面的模块方块同档（36px / 10px 圆角 / 同一条中线），
    里面那颗 22px 实标不变，改的是外框——不同尺寸的方框挨在一起才读作「空了一块」。 */
 .titlebar-app { width: 36px; height: 36px; padding: 7px; border: 0; border-radius: 10px; background: transparent; cursor: pointer; }
 .titlebar-app :deep(svg) { display: block; width: 100%; height: 100%; }
 .titlebar-app:hover, .titlebar-app[aria-expanded="true"] { background: var(--hover-chrome); }
-.app-menu-title { padding: 8px 12px 6px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.app-menu-title { padding: 8px 12px 6px; color: var(--text-muted); font-size: var(--text-xs); font-weight: 600; }
 /* 窗口按钮使用 34×30 圆角片，hover 时显示填充。 */
 /* 带子右端分两群：左边是模块动作，右边是应用/窗口控制。中间一根细线隔开，
    留白左右大致等宽（线左 = 带子 padding + gap，线右 = margin + gap）。 */
@@ -246,11 +250,10 @@ onUnmounted(() => {
   margin-right: 8px;
   background: var(--border);
 }
-.web-running { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; margin-right: 4px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--success); background: var(--success-soft); font: inherit; font-size: 11px; cursor: pointer; }
+.web-running { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; margin-right: 4px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--success); background: var(--success-soft); font: inherit; font-size: var(--text-xs); cursor: pointer; }
 .web-running:disabled { cursor: default; }
 .web-running-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .titlebar {
-  height: 42px;
   /* 顶栏透明并入画布，页名与窗口操作用留白分组。 */
   background: transparent;
   display: flex;
@@ -298,10 +301,7 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* 侧栏收进 0 宽后唯一的恢复入口：与右端设置/锁定同档（32×28 圆角方块） */
-.sidebar-restore { margin-right: var(--space-1); }
-
-/* 模块名锚点：15px/650，全窗唯一的页面身份层级（typo-hierarchy 轮拍板） */
+/* 模块名锚点沿用共享字号与半粗字重。 */
 .titlebar-brand {
   display: flex;
   align-items: center;
@@ -312,9 +312,9 @@ onUnmounted(() => {
 .titlebar-crumb {
   display: inline-flex;
   align-items: center;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: normal;
   color: var(--text);
   user-select: none;
   -webkit-user-select: none;
@@ -322,7 +322,7 @@ onUnmounted(() => {
 
 /* 条数是要读的信息，不是装饰：--text-faint 在标题栏带上只有 2.7:1，走 muted 档 */
 .titlebar-count {
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-muted);
   white-space: nowrap;
@@ -368,4 +368,8 @@ onUnmounted(() => {
 }
 
 .web-modules-toggle { display: none; }
+
+@media (max-width: 900px) {
+  .titlebar-outer .titlebar-crumb { font-size: var(--text-base); }
+}
 </style>

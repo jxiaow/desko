@@ -1,6 +1,7 @@
 /* 新布局的底色、强调色与光照。经典布局继续消费原有配方。
    背景以主题中性色为主；柔光进入画布留白，卡片与输入框保持实底。 */
 :root[data-layout="workspace"], .workspace-theme-prev[data-base] {
+  --font-ui: 'HarmonyOS Sans SC', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
   --workspace-accent-source: #1b76c4;
   --accent: var(--workspace-accent-source);
   --accent-hover: oklch(from var(--accent) calc(l - 0.045) c h);
@@ -82,10 +83,10 @@
   --shadow-card: none;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 18%);
   --shadow: 0 4px 14px -2px rgb(0 0 0 / 35%);
-  --text: #dfe1e5;
-  --text-secondary: #b7bfca;
-  --text-muted: #a4adba;
-  --text-faint: #a1aab7;
+  --text: #e5e7eb;
+  --text-secondary: #bcc0c7;
+  --text-muted: #a4a8b0;
+  --text-faint: #989da7;
   --text-url: var(--text-secondary);
   --code-fg: var(--text);
   --badge-cat-bg: var(--fill);

@@ -7,6 +7,7 @@ import { useNotesStore } from './notes'
 import type { Note } from '../types'
 
 vi.mock('../services/transport', () => ({ invoke: vi.fn() }))
+vi.mock('../services/api/settings', () => ({ settingsApi: { getSetting: vi.fn(async () => '') } }))
 vi.mock('../services/api/notes', () => ({ notesApi: { recoverDrafts: vi.fn(async () => []), stageDrafts: vi.fn(async () => {}) } }))
 const sealed = { iv: 'c3ludGhldGljLW5vbmNl', ciphertext: 'c3ludGhldGljLWNpcGhlcnRleHQ=' }
 const html = '<p>局域网浏览器未发布草稿</p>'

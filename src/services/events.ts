@@ -24,9 +24,10 @@ async function poll() {
   const session = webSessionGeneration()
   pending = (async () => {
     try {
-      const result = await invoke<{ cursor: number; events: ProgressEvent[] }>('web_poll_events', { after: cursor })
+      const result = await invoke<{ cursor: number; events: ProgressEvent[]; truncated?: boolean }>('web_poll_events', { after: cursor })
       if (generation !== epoch || session !== webSessionGeneration()) return
       cursor = result.cursor
+      if (result.truncated) window.dispatchEvent(new Event('desko:web-events-reset'))
       for (const event of result.events) {
         for (const callback of subscriptions.get(event.event) ?? []) {
           try {
@@ -38,7 +39,7 @@ async function poll() {
     finally {
       if (generation === epoch) {
         pending = null
-        if (subscriptions.size) timer = setTimeout(() => void poll(), 1000)
+        if (subscriptions.size) timer = setTimeout(() => void poll(), subscriptions.has('codex:dialog') ? 200 : 1000)
       }
     }
   })()
@@ -47,7 +48,7 @@ async function poll() {
 
 export async function listen<T>(event: string, callback: EventCallback<T>): Promise<UnlistenFn> {
   if (!isWebRuntime()) return nativeListen(event, callback)
-  if (!['desko:module-changed', 'codex:switch-progress', 'codex-oauth-login-completed', 'codex-oauth-login-timeout', 'codex-device-auth-error'].includes(event)) {
+  if (!['codex:dialog', 'desko:module-changed', 'codex:switch-progress', 'codex-oauth-login-completed', 'codex-oauth-login-timeout', 'codex-device-auth-error'].includes(event)) {
     throw new Error('浏览器不支持此事件')
   }
   const listener = callback as EventCallback<unknown>

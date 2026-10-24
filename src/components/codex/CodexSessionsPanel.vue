@@ -12,6 +12,9 @@ import {
   sessionQuery,
   sessionSearchMode,
   sessionTokens,
+  sessionTokensLoaded,
+  sessionTokensPending,
+  sessionTokensError,
   sessions,
   sessionsBusy,
   sessionsError,
@@ -21,7 +24,8 @@ import { useConfirmStore } from '../../stores/confirm'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
 import CodexUsageNotes from './CodexUsageNotes.vue'
-import { formatTokenCount as compact, formatUsageCost } from '../../utils/codexUsage'
+import CodexLoadingSkeleton from './CodexLoadingSkeleton.vue'
+import { formatTokenCount as compact, formatUsageCost, formatUsageCostDetail } from '../../utils/codexUsage'
 import { isWebRuntime } from '../../services/runtime'
 import { invoke } from '../../services/transport'
 import { useEscapeClose } from '../../composables/useEscapeClose'
@@ -83,7 +87,7 @@ onMounted(async () => {
   void locateRequestedSession()
 })
 watch([sessionsBusy, sessions, sessionsError], () => { void locateRequestedSession() }, { flush: 'post' })
-usePageAutoRefresh(() => loadSessions({ background: true }), () => sessionsBusy.value || !!busyId.value || debounce !== null)
+usePageAutoRefresh(() => loadSessions({ background: true }), () => sessionsBusy.value || sessionTokensPending.value.size > 0 || !!busyId.value || debounce !== null)
 
 /** token 合计：known 用来区分「一条都没取到」与「真的没有用量」 */
 interface TokenSum {
@@ -138,6 +142,7 @@ const groups = computed(() => {
     g.recent = Math.max(g.recent, s.updatedAt ?? 0)
     const t = sessionTokens.value[s.sessionId]
     if (t) addSum(g.sum, t)
+    else if (sessionTokensLoaded.value.has(s.sessionId)) g.sum.known += 1
   }
   for (const g of byCwd.values()) g.items.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
   return [...byCwd.values()].sort((a, b) => b.recent - a.recent)
@@ -209,7 +214,10 @@ function whenText(sec: number | null | undefined): string {
 
 function recentText(rsec: number): string {
   if (!rsec) return '时间未知'
-  const days = Math.floor((Date.now() / 1000 - rsec) / 86_400)
+  const now = new Date()
+  const then = new Date(rsec * 1000)
+  const days = Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+    - Date.UTC(then.getFullYear(), then.getMonth(), then.getDate())) / 86_400_000)
   if (days < 1) return '今天'
   if (days < 2) return '昨天'
   if (days < 30) return `${days} 天前`
@@ -217,8 +225,10 @@ function recentText(rsec: number): string {
 }
 
 const statsOf = (id: string) => sessionTokens.value[id]
+const tokensBusy = computed(() => sessionTokensPending.value.size > 0)
+const tokensRead = (id: string) => !!statsOf(id) || sessionTokensLoaded.value.has(id)
 
-/** 官方把每轮重发的上下文全记进 inputTokens；减掉缓存命中才是这条真正喂进去的新内容 */
+/** 官方把每轮重发的上下文全记进 inputTokens；减掉缓存命中得到未命中缓存的输入，并不等同于用户新写的内容 */
 const netInput = (t: NonNullable<ReturnType<typeof statsOf>>) => Math.max(t.inputTokens - t.cachedInputTokens, 0)
 const num = (v: number) => v.toLocaleString()
 
@@ -232,7 +242,7 @@ function tokenFacts(id: string): Array<[string, number]> {
     ['缓存写入', t.cacheWriteInputTokens],
     ['输出', t.outputTokens],
     ['其中推理', t.reasoningOutputTokens],
-    ['官方累计', t.totalTokens],
+    ['累计用量', t.totalTokens],
   ]
 }
 
@@ -249,7 +259,7 @@ const sumText = computed(() => {
 })
 const heroSub = computed(() => {
   const a = allSum.value
-  return `${groups.value.length} 个项目 · ${sessions.value.length} 条会话 · 净输入 ${compact(a.input - a.cached)} · 输出 ${compact(a.output)} · 缓存命中 ${compact(a.cached)}`
+  return `净输入 ${compact(a.input - a.cached)} · 输出 ${compact(a.output)} · 缓存命中 ${compact(a.cached)}`
 })
 
 let debounce: ReturnType<typeof setTimeout> | null = null
@@ -286,7 +296,7 @@ function rowLabel(s: CodexSessionRecord): string {
 function askTrash(s: CodexSessionRecord) {
   confirmStore.showConfirm(
     '移到回收站',
-    `删除「${rowLabel(s)}」？desko 先把会话文件留底进回收站（可还原），再从官方 Codex 目录移除并更新会话索引。Codex 若在运行，需重启后其侧栏才同步。`,
+    `将「${rowLabel(s)}」移入回收站？可恢复。运行中的 Codex 需重启后同步列表。`,
     () => {
       void runOnSession(s.sessionId, async () => {
         try {
@@ -323,26 +333,21 @@ async function copySessionValue(value: string, label: string) {
 </script>
 
 <template>
-  <div class="sess-view">
-    <div v-if="sessionsBusy && !groups.length" class="rcard-list" aria-hidden="true">
-      <div class="rcard sess-sk" v-for="n in 2" :key="n">
-        <span class="skeleton-block"></span>
-        <span class="skeleton-line w40"></span>
-      </div>
-    </div>
+  <div class="sess-view" :aria-busy="sessionsBusy || tokensBusy">
+    <CodexLoadingSkeleton v-if="sessionsBusy && !groups.length" variant="sessions" />
 
     <div v-else-if="sessionsError && !groups.length" class="rcard empty-state">
       <div class="empty-icon"><AppIcon name="alert" :size="24" /></div>
-      <div class="empty-title">读不到官方会话目录</div>
+      <h1 class="empty-title">读不到官方会话目录</h1>
       <div class="empty-desc" :title="sessionsError">{{ sessionsError }}</div>
       <button class="action-btn primary" type="button" @click="loadSessions()">重试</button>
     </div>
 
     <div v-else-if="!groups.length" class="rcard empty-state">
       <div class="empty-icon"><AppIcon name="navCodex" :size="24" /></div>
-      <div class="empty-title">
+      <h1 class="empty-title">
         {{ sessionQuery.trim() ? (sessionSearchMode === 'content' ? '没有正文匹配的会话' : '没有标题匹配的会话') : '官方 Codex 还没有会话记录' }}
-      </div>
+      </h1>
       <div class="empty-desc">
         {{ sessionQuery.trim() ? '更换关键词或清空搜索。' : '使用 Codex 后会显示在这里。' }}
       </div>
@@ -350,19 +355,27 @@ async function copySessionValue(value: string, label: string) {
 
     <div v-else class="rcard-list">
       <p v-if="sessionsError" class="page-note" role="status">刷新失败，显示上次结果：{{ sessionsError }}</p>
+      <p v-if="sessionTokensError" class="page-note token-error" role="status">
+        用量读取失败，已有读数保留。<button type="button" class="action-btn" :disabled="tokensBusy" @click="loadSessionTokens(sessions.map(s => s.sessionId), true)">重试统计</button>
+      </p>
       <div class="rcard sess-hero" :title="sumReady ? sumText : undefined">
         <div class="hero-line">
+          <h1 class="hero-scope">会话 <span>{{ groups.length }} 个项目 · {{ sessions.length }} 条</span></h1>
           <template v-if="sumReady">
             <span class="hero-num" :title="`${num(allSum.total)} Token`">{{ compact(allSum.total) }}</span>
             <span class="hero-unit">累计 Token</span>
           </template>
-          <span v-else class="hero-pending">统计中 {{ allSum.known }} / {{ sessions.length }}</span>
+          <span v-else class="hero-placeholder" aria-hidden="true"></span>
         </div>
         <dl v-if="sumReady" class="sess-billing" aria-label="会话金额与请求数">
-          <div><dt>估算金额（USD）</dt><dd>{{ formatUsageCost(allSum.cost) }}</dd></div>
+          <div><dt>估算金额（USD）</dt><dd :title="formatUsageCostDetail(allSum.cost)">{{ formatUsageCost(allSum.cost) }}</dd></div>
           <div><dt>请求数</dt><dd>{{ num(allSum.requests) }}</dd></div>
         </dl>
-        <p class="hero-sub">{{ sumReady ? heroSub : '' }}</p>
+        <p class="hero-sub">
+          <span v-if="sumReady">{{ heroSub }}</span>
+          <span v-if="tokensBusy" class="hero-pending" role="status">{{ sumReady ? '更新用量中…' : '正在读取用量…' }}</span>
+          <span v-else-if="!sumReady" class="hero-pending">部分用量未读取</span>
+        </p>
       </div>
 
       <section v-for="g in groups" :key="g.key" class="rcard sess-group">
@@ -372,17 +385,17 @@ async function copySessionValue(value: string, label: string) {
           :aria-expanded="isOpen(g.key)"
           @click="toggleGroup(g.key, g.items.map((s) => s.sessionId))"
         >
+          <AppIcon class="grp-folder" name="folder" :size="18" />
           <span class="grp-info">
             <span class="grp-l1">
               <span class="grp-name" :title="[g.name, g.cwd].filter(Boolean).join('\n')">{{ g.name }}</span>
               <span class="grp-meta">{{ g.items.length }} 条 · {{ recentText(g.recent) }}</span>
             </span>
+            <span class="grp-path" :title="g.cwd">{{ g.cwd || '未知目录' }}</span>
             <span v-if="groupTokText(g)" class="grp-tok" :title="groupTokText(g)">
               <span>累计 <b>{{ compact(g.sum.total) }}</b> Token</span>
-              <span>净输入 <b>{{ compact(g.sum.input - g.sum.cached) }}</b></span>
-              <span>输出 <b>{{ compact(g.sum.output) }}</b></span>
               <span>请求 <b>{{ num(g.sum.requests) }}</b> 次</span>
-              <span>估算 <b>{{ formatUsageCost(g.sum.cost) }}</b></span>
+              <span>估算 <b :title="formatUsageCostDetail(g.sum.cost)">{{ formatUsageCost(g.sum.cost) }}</b></span>
             </span>
           </span>
           <AppIcon class="grp-caret" name="chevDown" :size="14" />
@@ -399,8 +412,14 @@ async function copySessionValue(value: string, label: string) {
               @click="sessionOpenId = sessionOpenId === s.sessionId ? '' : s.sessionId"
             >
               <span class="sess-title" :class="{ mono: idAsTitle(s) }" :title="titleTip(s)">{{ titleText(s) }}</span>
-              <span v-if="s.sessionKind !== 'conversation'" class="badge off">{{ kindLabel(s.sessionKind) }}</span>
-              <span v-if="whenText(s.updatedAt)" class="sess-time">{{ whenText(s.updatedAt) }}</span>
+              <span class="sess-meta">
+                <span v-if="s.sessionKind !== 'conversation'" class="badge off">{{ kindLabel(s.sessionKind) }}</span>
+                <span v-if="statsOf(s.sessionId)" class="sess-token" :title="`${num(statsOf(s.sessionId)!.totalTokens)} Token`">{{ compact(statsOf(s.sessionId)!.totalTokens) }} <small>Token</small></span>
+                <span v-else-if="!tokensRead(s.sessionId) && tokensBusy" class="row-placeholder" aria-hidden="true"></span>
+                <span v-else class="sess-token">—</span>
+                <span v-if="whenText(s.updatedAt)" class="sess-time">{{ whenText(s.updatedAt) }}</span>
+              </span>
+              <AppIcon class="sess-caret" name="chevDown" :size="12" />
             </button>
 
             <div v-if="sessionOpenId === s.sessionId" class="sess-card">
@@ -424,8 +443,9 @@ async function copySessionValue(value: string, label: string) {
                   <dd :title="`${num(v)} Token`">{{ compact(v) }}</dd>
                 </div>
                 <div><dt>请求数</dt><dd>{{ num(statsOf(s.sessionId)!.requestCount) }}</dd></div>
-                <div><dt>估算金额（USD）</dt><dd>{{ formatUsageCost(statsOf(s.sessionId)!.estimatedCostUsd) }}</dd></div>
+                <div><dt>估算金额（USD）</dt><dd :title="formatUsageCostDetail(statsOf(s.sessionId)!.estimatedCostUsd)">{{ formatUsageCost(statsOf(s.sessionId)!.estimatedCostUsd) }}</dd></div>
               </dl>
+              <p v-else-if="!tokensRead(s.sessionId)" class="sess-no-usage" role="status">{{ tokensBusy ? '正在读取这条会话的用量…' : '用量尚未读取，请重试统计。' }}</p>
               <p v-else class="sess-no-usage">这条会话没有 Token 记录</p>
               <div class="sess-acts">
                 <button class="action-btn" type="button" @click="copySessionValue(s.sessionId, '会话 ID')"><AppIcon name="copy" :size="13" />复制会话 ID</button>
@@ -460,7 +480,7 @@ async function copySessionValue(value: string, label: string) {
           </div>
         </div>
       </section>
-      <CodexUsageNotes />
+      <CodexUsageNotes scope="sessions" />
     </div>
 
     <div v-if="sessionFile" class="dialog-overlay" @click.self="sessionFile = null">
@@ -475,20 +495,11 @@ async function copySessionValue(value: string, label: string) {
 
 <style scoped>
 .sess-view { font-family: var(--font-ui); letter-spacing: normal; }
+.sess-view .empty-title { margin: 0; }
 .session-file-dialog { width: 800px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
 .session-file-dialog .dialog-body { overflow: auto; }
 .session-file-dialog pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-xs); }
 .page-note { font-size: var(--text-xs); }
-/* 页内第二档的分组卡：一档一枚项目卡，展开才往纸面下挂会话行（细线分行，不做卡中卡） */
-.sess-sk {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 52px;
-  padding: 0 14px;
-  animation: skeleton-pulse 1.5s ease-in-out infinite;
-}
-
 /* 总量作为列表摘要，收敛字号和字重，让会话标题保持清晰。 */
 .sess-hero {
   display: grid;
@@ -496,30 +507,46 @@ async function copySessionValue(value: string, label: string) {
   align-content: center;
   align-items: baseline;
   gap: 6px 24px;
-  min-height: 84px;
+  min-height: 72px;
   padding: 12px var(--space-5);
 }
 .hero-line {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  min-height: 30px;
+  min-height: 22px;
 }
+.hero-scope { margin: 0 auto 0 0; font-size: var(--text-base); font-weight: 600; }
+.hero-scope span { margin-left: 8px; font-size: var(--text-sm); font-weight: 400; color: var(--text-muted); }
 .hero-num {
-  font-size: var(--text-2xl);
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: 500;
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
-  color: var(--text);
+  color: var(--text-secondary);
 }
 .hero-unit { font-size: var(--text-xs); color: var(--text-muted); }
 .sess-billing { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
 .sess-billing > div { display: flex; align-items: baseline; gap: 8px; }
-.sess-billing dt { font-size: var(--text-xs); color: var(--text-muted); }
+.sess-billing dt { font-size: var(--text-sm); color: var(--text-muted); }
 .sess-billing dd { margin: 0; font-size: var(--text-base); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text); }
 .hero-pending { font-size: var(--text-sm); color: var(--text-muted); }
-/* 还没统计完时这里只有一行字，不必撑成一张空卡。 */
-.sess-hero:has(.hero-pending) { min-height: 56px; }
+.hero-placeholder, .row-placeholder { display: inline-block; background: var(--border); border-radius: 4px; animation: skeleton-pulse 1.5s ease-in-out infinite; }
+.hero-placeholder { width: 90px; height: 18px; }
+.row-placeholder { width: 75px; height: 12px; }
+.hero-sub { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; }
+.hero-sub .hero-pending { font-size: var(--text-xs); }
+.token-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.grp-folder { flex-shrink: 0; color: var(--text-muted); }
+.grp-path { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--text-muted); }
+.sess-token { flex: 0 0 100px; text-align: right; font-size: var(--text-sm); font-variant-numeric: tabular-nums; color: var(--text-secondary); white-space: nowrap; }
+.sess-token small { font-size: inherit; color: var(--text-muted); }
+.sess-caret { flex-shrink: 0; color: var(--text-muted); }
+.sess-meta { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
+.sess-row[aria-expanded='true'] { background: var(--hover); }
+.sess-row[aria-expanded='true'] .sess-caret { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .hero-placeholder, .row-placeholder { animation: none; } }
+@media (max-width: 760px) { .sess-token { flex-basis: 76px; } .sess-token small { display: none; } }
 .hero-sub {
   grid-column: 1 / -1;
   min-height: 18px;
@@ -533,7 +560,7 @@ async function copySessionValue(value: string, label: string) {
 .grp-tok > span { white-space: nowrap; }
 .grp-tok b {
   margin-left: 4px;
-  font-size: var(--text-xs);
+  font-size: inherit;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
@@ -579,7 +606,7 @@ async function copySessionValue(value: string, label: string) {
 }
 .grp-meta {
   flex-shrink: 0;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 .grp-tok {
@@ -587,7 +614,7 @@ async function copySessionValue(value: string, label: string) {
   flex-wrap: wrap;
   gap: 4px 18px;
   margin-top: 3px;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--text-muted);
 }
@@ -606,8 +633,8 @@ async function copySessionValue(value: string, label: string) {
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 44px;
-  padding: 6px 14px 6px 26px;
+  min-height: 48px;
+  padding: 8px 14px 8px 44px;
   border: none;
   background: transparent;
   font: inherit;
@@ -680,5 +707,18 @@ async function copySessionValue(value: string, label: string) {
 }
 @media (max-width: 600px) {
   .sess-hero { grid-template-columns: minmax(0, 1fr); }
+  .hero-line { flex-wrap: wrap; }
+  .hero-scope { flex-basis: 100%; }
+  .sess-billing { gap: 8px 16px; }
+  .sess-row { display: grid; grid-template-columns: minmax(0, 1fr) 16px; gap: 6px 12px; padding: 12px 16px 12px 20px; }
+  .sess-title { grid-column: 1; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .sess-title.mono { display: block; -webkit-line-clamp: unset; }
+  .sess-meta { grid-column: 1; flex-wrap: wrap; min-width: 0; gap: 6px 12px; }
+  .sess-token { flex-basis: auto; text-align: left; }
+  .sess-token small { display: inline; }
+  .sess-caret { grid-column: 2; grid-row: 1 / 3; }
+  .sess-info, .sess-facts { grid-template-columns: minmax(0, 1fr); }
+  .sess-card { padding-left: 20px; }
+  .sess-acts .action-btn { min-height: 44px; }
 }
 </style>

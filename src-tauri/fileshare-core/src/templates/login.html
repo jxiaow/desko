@@ -1,67 +1,89 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" %%HTML_ATTRS%%>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>访问验证 · Desko</title>
   <style>
-    :root {
-      --r-sm: 6px; --r-xl: 14px;
-      --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      --font-mono: Consolas, 'JetBrains Mono', monospace;
-      --bg:#f7f6f4; --panel:#ffffff; --sunken:#f0efec;
-      --text:#37352f; --muted:#6e6c64; --faint:#98968c;
-      --border:#e9e8e4; --border-strong:#d8d6d1;
-      --accent:#3d5a80; --accent-hover:#31496a; --accent-on:#fff; --ring:rgba(61,90,128,.16);
-      --shadow-card:0 1px 2px 0 rgba(29,28,26,.04);
-      --shadow-pop:0 16px 36px -8px rgba(29,28,26,.12),0 4px 10px -2px rgba(29,28,26,.04),0 0 0 1px rgba(0,0,0,.06);
-      --danger:#a9443c;
-      --g1:#6c88aa; --g3:#283d58;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg:#191816; --panel:#211f1c; --sunken:#131211;
-        --text:#e9e8e5; --muted:#9d9c97; --faint:#7c7b76;
-        --border:#33302b; --border-strong:#47433c;
-        --accent:#7d9fc6; --accent-hover:#96b3d4; --accent-on:#171614; --ring:rgba(125,159,198,.32);
-        --shadow-card:inset 0 1px 0 rgba(255,255,255,.04);
-        --shadow-pop:0 24px 54px -12px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.08);
-        --danger:#e08079;
-        --g1:#a8c3e0; --g3:#5c7ea6;
-      }
-    }
-    @font-face {
-      font-family: 'HarmonyOS Sans SC';
-      src: url('/fonts/app.woff2') format('woff2-variations');
-      font-weight: 40 900; font-style: normal; font-display: swap;
-    }
-    * { box-sizing:border-box; margin:0; padding:0; }
-    body { min-height:100vh; font:14px/1.5 var(--font-ui); background:var(--bg); color:var(--text); display:grid; place-items:center; -webkit-font-smoothing:antialiased; }
-    .card { background:var(--panel); border:1px solid var(--border); border-radius:var(--r-xl); box-shadow:var(--shadow-pop); width:360px; max-width:92vw; padding:28px 24px; }
-    .brand { width:34px; height:34px; border-radius:8px; background:linear-gradient(135deg,var(--g1),var(--g3)); display:grid; place-items:center; margin:0 auto 12px; }
-    .brand svg { color:#fff; }
-    h1 { font:600 15px/1.3 var(--font-ui); text-align:center; margin-bottom:4px; letter-spacing:-.01em; }
-    p { font-size:12px; color:var(--muted); text-align:center; margin-bottom:20px; }
-    input { width:100%; height:32px; padding:0 12px; border:1px solid var(--border); border-radius:var(--r-sm); font:14px/1 var(--font-ui); background:var(--sunken); color:var(--text); margin-bottom:10px; outline:none; transition:border-color .15s, box-shadow .15s, background .15s; }
-    input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); background:var(--panel); }
-    input::placeholder { color:var(--faint); }
-    button { width:100%; height:32px; border:none; border-radius:var(--r-sm); background:var(--accent); color:var(--accent-on); font:500 13px/1 var(--font-ui); cursor:pointer; transition:background .15s; }
-    button:hover { background:var(--accent-hover); }
-    .err { font-size:12px; color:var(--danger); text-align:center; min-height:16px; margin-bottom:8px; }
-    @media (prefers-reduced-motion: reduce) { * { transition-duration:.01ms !important; } }
+/* 主题令牌由 scripts/gen-fileshare-assets.mjs 从 App 生成。
+   页面沿用主题颜色，单独定义浏览器口令页的布局和字号层级。 */
+%%TOKENS%%
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+@font-face { font-family: 'HarmonyOS Sans SC'; src: url('/fonts/app.woff2') format('woff2-variations'); font-weight: 40 900; font-style: normal; font-display: swap; }
+:root { --lan-font: 'HarmonyOS Sans SC', 'Segoe UI', sans-serif; --lan-line: color-mix(in srgb, var(--text) 10%, var(--panel-bg)); }
+html { height: 100%; }
+body { min-height: 100%; font: 14px/1.6 var(--lan-font); background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+svg { display: block; flex-shrink: 0; }
+[hidden] { display: none !important; }
+:where(a, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.pagebar { width: min(calc(100% - 64px), 1120px); margin-inline: auto; min-height: 76px; display: flex; align-items: center; }
+.wordmark { display: inline-flex; align-items: center; gap: 9px; font-size: 21px; font-weight: 650; letter-spacing: -.04em; }
+.stage { min-height: calc(100svh - 152px); display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 32px 24px; }
+.card { width: 420px; max-width: 100%; min-width: 0; padding: 32px; background: var(--panel-bg); border: 1px solid var(--lan-line); border-radius: 8px; }
+.tile { color: var(--text-secondary); margin-bottom: 20px; }
+h1 { font-size: 24px; line-height: 1.3; font-weight: 600; letter-spacing: -.03em; }
+.description { margin-top: 12px; color: var(--text-secondary); font-size: 14px; }
+form { margin-top: 28px; }
+.field-label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; }
+.field { position: relative; width: 100%; height: 48px; display: flex; align-items: center; }
+.field-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
+.field input { width: 100%; height: 100%; padding: 0 52px 0 40px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--panel-bg); color: var(--text); font: 16px var(--lan-font); outline: none; }
+.field input::placeholder { color: var(--text-secondary); }
+.field input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.field input::-ms-reveal, .field input::-ms-clear { display: none; }
+.reveal { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; display: grid; place-items: center; border-radius: 6px; color: var(--text-secondary); }
+.reveal:hover { color: var(--text); background: var(--bg); }
+.reveal .off { display: none; }
+.field.shown .on { display: none; }
+.field.shown .off { display: block; }
+.go { width: 100%; height: 44px; border-radius: 6px; background: var(--text); color: var(--bg); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; transition: opacity var(--transition); }
+.go:hover { opacity: .84; }
+.err-slot { min-height: 32px; padding-top: 6px; font-size: 13px; color: var(--danger); }
+.note { margin-top: 20px; color: var(--text-secondary); font-size: 12px; }
+@media (max-width: 600px) { .pagebar { width: calc(100% - 32px); min-height: 64px; } .stage { padding: 24px 16px; min-height: calc(100svh - 128px); } .card { padding: 24px; } h1 { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; } }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="brand"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
-    <h1>局域网文件传输</h1>
-    <p>该服务已开启访问口令，请输入口令继续</p>
-    %%ERROR%%
-    <form method="post" action="/login">
-      <input type="hidden" name="next" value="%%NEXT%%">
-      <input type="password" name="password" placeholder="访问口令" autofocus required>
-      <button type="submit">进入</button>
-    </form>
-  </div>
+  <header class="pagebar"><a class="wordmark" href="/" aria-label="Desko 共享文件首页">%%I:navLan:24%%desko</a></header>
+  <main class="stage">
+    <div class="card">
+      <div class="tile">%%I:lock:26%%</div>
+      <h1>局域网传输</h1>
+      <p class="description">输入访问口令，连接这台电脑的共享文件。</p>
+      <form method="post" action="/login">
+        <input type="hidden" name="next" value="%%NEXT%%">
+        <label class="field-label" for="pw">访问口令</label>
+        <div class="field" id="field">
+          <span class="field-icon">%%I:lock:16%%</span>
+          <input type="password" id="pw" name="password" placeholder="访问口令"
+                 autocomplete="current-password" autofocus required>
+          <button class="reveal" type="button" id="reveal" aria-label="显示口令" aria-pressed="false">
+            <span class="on">%%I:eye:15%%</span><span class="off">%%I:eyeOff:15%%</span>
+          </button>
+        </div>
+        <div role="alert"><div class="err-slot">%%ERROR%%</div></div>
+        <button class="go" type="submit">进入共享文件%%I:arrowRight:16%%</button>
+      </form>
+      <p class="note">口令只在 desko 的「局域网传输」设置里改</p>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var field = document.getElementById('field');
+      var pw = document.getElementById('pw');
+      var btn = document.getElementById('reveal');
+      btn.addEventListener('click', function () {
+        var shown = field.classList.toggle('shown');
+        pw.type = shown ? 'text' : 'password';
+        btn.setAttribute('aria-pressed', shown ? 'true' : 'false');
+        btn.setAttribute('aria-label', shown ? '隐藏口令' : '显示口令');
+        pw.focus();
+      });
+    })();
+  </script>
 </body>
 </html>

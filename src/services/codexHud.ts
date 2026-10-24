@@ -1,8 +1,9 @@
 import { ref, watch, type WatchStopHandle } from 'vue'
-import type { UnlistenFn } from '@tauri-apps/api/event'
+import { emitTo, type UnlistenFn } from '@tauri-apps/api/event'
 import { errText } from './api/backup'
 import { settingsApi } from './api/settings'
 import { listen } from './events'
+import { requestOpenSettingsTab } from './fileshareSettings'
 import { invoke } from './transport'
 import { isTauriRuntime } from './runtime'
 import { appearance, polarityOf } from './theme'
@@ -34,27 +35,43 @@ export type { CodexHudSkin, CodexHudState, CodexHudWindow } from '../utils/codex
 
 const KEY_HUD_ENABLED = 'codex_hud_enabled'
 const KEY_HUD_SKIN = 'codex_hud_skin'
-const KEY_HUD_WALK = 'codex_hud_walk'
+const KEY_HUD_AMBIENT = 'codex_hud_ambient'
+const KEY_HUD_PINNED = 'codex_hud_pinned'
 const HUD_LABEL = 'codex-hud'
 
-export const hudEnabled = ref(false)
+export const hudEnabled = ref(true)
 export const hudSkin = ref<CodexHudSkin>(DEFAULT_HUD_SKIN)
-export const hudWalk = ref(true)
+export const hudAmbient = ref(true)
+export const hudPinned = ref(false)
 
 /** 落盘写入推进版本：慢一步的读回不得盖掉用户刚点的开关 */
 let hudRevision = 0
 
 export async function loadHudSettings(): Promise<void> {
   const revision = hudRevision
-  const [enabled, skin, walk] = await Promise.all([
+  const [enabled, skin, ambient, pinned] = await Promise.all([
     settingsApi.getSetting(KEY_HUD_ENABLED).catch(() => null),
     settingsApi.getSetting(KEY_HUD_SKIN).catch(() => null),
-    settingsApi.getSetting(KEY_HUD_WALK).catch(() => null),
+    settingsApi.getSetting(KEY_HUD_AMBIENT).catch(() => null),
+    settingsApi.getSetting(KEY_HUD_PINNED).catch(() => null),
   ])
   if (revision !== hudRevision) return
-  if (enabled !== null) hudEnabled.value = enabled === 'true'
+  if (enabled !== null) hudEnabled.value = enabled !== 'false'
   if (skin !== null) hudSkin.value = isHudSkin(skin) ? skin : DEFAULT_HUD_SKIN
-  if (walk !== null) hudWalk.value = walk !== 'false'
+  if (ambient !== null) hudAmbient.value = ambient !== 'false'
+  if (pinned !== null) hudPinned.value = pinned === 'true'
+}
+
+export async function saveHudPinned(pinned: boolean): Promise<void> {
+  hudRevision++
+  const previous = hudPinned.value
+  hudPinned.value = pinned
+  try {
+    await settingsApi.setSetting(KEY_HUD_PINNED, String(pinned))
+  } catch (e) {
+    hudPinned.value = previous
+    throw e
+  }
 }
 
 export async function saveHudEnabled(enabled: boolean): Promise<void> {
@@ -69,14 +86,14 @@ export async function saveHudEnabled(enabled: boolean): Promise<void> {
   }
 }
 
-export async function saveHudWalk(walk: boolean): Promise<void> {
+export async function saveHudAmbient(ambient: boolean): Promise<void> {
   hudRevision++
-  const previous = hudWalk.value
-  hudWalk.value = walk
+  const previous = hudAmbient.value
+  hudAmbient.value = ambient
   try {
-    await settingsApi.setSetting(KEY_HUD_WALK, String(walk))
+    await settingsApi.setSetting(KEY_HUD_AMBIENT, String(ambient))
   } catch (e) {
-    hudWalk.value = previous
+    hudAmbient.value = previous
     throw e
   }
 }
@@ -111,6 +128,9 @@ export function buildCodexHudState(): CodexHudState {
 }
 
 let active = false
+let bridgeReady: Promise<void> | null = null
+let dataActive = false
+let lockedSnapshot: CodexHudState | null = null
 let hudWanted = false
 let hudReady = false
 let dataTask: Promise<void> | null = null
@@ -127,11 +147,16 @@ async function pushState(reveal = false): Promise<void> {
   if (!active || !hudWanted) return
   if (!hudReady) return
   try {
-    const { emitTo } = await import('@tauri-apps/api/event')
     await emitTo(HUD_LABEL, 'codex-hud:state', {
-      state: buildCodexHudState(),
+      state: dataActive ? buildCodexHudState() : {
+        ...(lockedSnapshot ?? { ...buildCodexHudState(), placeholder: '应用已锁定' }),
+        skin: hudSkin.value,
+        theme: buildCodexHudState().theme,
+      },
       reveal,
-      walk: hudWalk.value,
+      ambient: hudAmbient.value,
+      pinned: hudPinned.value,
+      locked: !dataActive,
     } satisfies CodexHudEventPayload)
   } catch {
     hudReady = false
@@ -139,10 +164,11 @@ async function pushState(reveal = false): Promise<void> {
 }
 
 async function ensureHudData(): Promise<void> {
+  if (!dataActive) return
   await loadQuotaSettings()
-  if (!active || !hudWanted) return
+  if (!active || !hudWanted || !dataActive) return
   if (!loaded.value) await refreshAccounts()
-  if (!active || !hudWanted) return
+  if (!active || !hudWanted || !dataActive) return
   acquireQuotaTicker('codex-hud')
   void refreshQuotasOnEnter().then(() => pushState())
   void loadTodayUsage().then(() => pushState())
@@ -161,19 +187,19 @@ async function showHud(): Promise<void> {
     return
   }
   if (!active || !hudEnabled.value || !moduleFlags.codex) {
-    await hideHud()
+    await hideHud(true)
     return
   }
-  hudReady = !created
+  hudReady = hudReady || !created
   if (!created) {
     await dataTask.catch(() => {})
     await pushState(true)
   }
 }
 
-async function hideHud(): Promise<void> {
+async function hideHud(force = false): Promise<void> {
   releaseQuotaTicker('codex-hud')
-  if (!hudWanted) return
+  if (!hudWanted && !force) return
   hudWanted = false
   hudReady = false
   try {
@@ -188,7 +214,7 @@ async function syncHudWindow(): Promise<void> {
   if (!active) return
   const want = hudEnabled.value && moduleFlags.codex && isTauriRuntime()
   if (!want) {
-    await hideHud()
+    await hideHud(true)
     return
   }
   if (!hudWanted) await showHud()
@@ -201,17 +227,16 @@ async function onHudReady(): Promise<void> {
   await pushState(true)
 }
 
-/** 页面重载后主窗口回到锁定态，但窗口是 Rust 侧常驻的：不兜底隐藏就会带着旧额度继续显示 */
-export async function hideStaleHud(): Promise<void> {
-  if (!isTauriRuntime()) return
-  try {
-    await invoke('desko_hud_hide')
-  } catch {
-    /* 窗口不存在时命令会报错，这里只是兜底 */
-  }
+/** 收回账号会话前保留展示快照；锁定期间不读取账号或启动配额轮询。 */
+export function suspendCodexHudData(): void {
+  if (dataActive) lockedSnapshot = buildCodexHudState()
+  dataActive = false
+  releaseQuotaTicker('codex-hud')
+  void pushState()
 }
 
 async function closeFromHud(): Promise<void> {
+  hudRevision++
   hudEnabled.value = false
   try {
     await settingsApi.setSetting(KEY_HUD_ENABLED, 'false')
@@ -220,10 +245,10 @@ async function closeFromHud(): Promise<void> {
   }
 }
 
-/** 托盘勾选项是 `codex_hud_enabled` 的副本，不是窗口可见性：锁屏隐藏不该把它勾掉。 */
+/** 托盘勾选态与模块启用、挂件显示设置保持一致。 */
 async function syncTrayItem(): Promise<void> {
   try {
-    await invoke('desko_hud_set_tray', { checked: hudEnabled.value })
+    await invoke('desko_hud_set_tray', { checked: hudEnabled.value && moduleFlags.codex })
   } catch {
     /* 托盘还没建起来时命令会报错，下一次开关变化会再报 */
   }
@@ -237,19 +262,36 @@ async function toggleHudFromTray(): Promise<void> {
   }
 }
 
-export async function activateCodexHudBridge(): Promise<void> {
+export async function activateCodexHudBridge(unlocked = true): Promise<void> {
   if (!isTauriRuntime()) return
+  dataActive = unlocked
+  if (unlocked) lockedSnapshot = null
   if (active) {
+    await bridgeReady
+    if (!active) return
     await syncHudWindow()
+    if (hudWanted && unlocked) await ensureHudData()
+    await pushState()
     return
   }
   active = true
+  bridgeReady = initializeHudBridge()
+  try {
+    await bridgeReady
+  } finally {
+    bridgeReady = null
+  }
+  await syncHudWindow()
+}
+
+async function initializeHudBridge(): Promise<void> {
   await loadHudSettings()
   await syncTrayItem()
   unlisten = [
     await listen('codex-hud:ready', () => { void onHudReady() }),
     await listen('codex-hud:request-close', () => { void closeFromHud() }),
     await listen('codex-hud:open', () => hudOpenHandler?.()),
+    await listen('codex-hud:open-settings', () => requestOpenSettingsTab('codex')),
     await listen('tray-hud-toggle', () => { void toggleHudFromTray() }),
   ]
   stopWantWatch = watch(
@@ -260,17 +302,18 @@ export async function activateCodexHudBridge(): Promise<void> {
     },
   )
   stopStateWatch = watch(
-    [accounts, currentId, usageToday, hudSkin, hudWalk,
+    [accounts, currentId, usageToday, hudSkin, hudAmbient, hudPinned,
       () => appearance.theme, () => appearance.accent, () => appearance.backgroundAtmosphere],
     () => { void pushState() },
     { deep: true },
   )
-  await syncHudWindow()
 }
 
 export async function deactivateCodexHudBridge(): Promise<void> {
   if (!active) return
   active = false
+  dataActive = false
+  lockedSnapshot = null
   stopWantWatch?.()
   stopWantWatch = null
   stopStateWatch?.()

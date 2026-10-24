@@ -255,7 +255,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       </span>
       <span class="memo-time" :title="edited ? `更新于 ${formatAbsTime(props.note.updated_at)}` : undefined">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
 
-      <!-- hover 显形的动作排：只留这条最常做的四颗，其余进 ⋯（时间在排后让位，实底不吃正文） -->
+      <!-- hover 显形的动作排：常用五颗，其余进 ⋯（时间在排后让位，实底不吃正文） -->
       <span v-if="!props.isBatchMode" class="memo-acts">
         <template v-if="locked">
           <button class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
@@ -264,15 +264,15 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           <NoteMoreMenu v-if="!isWebRuntime()" sealed :note="props.note" :export-disabled="props.exportDisabled" @export="emit('export', $event)" />
         </template>
         <template v-else>
-          <button class="ib" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
+          <button class="ib memo-desktop-action" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
             <AppIcon name="eye" :size="14" />
           </button>
-          <button class="ib memo-edit" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
+          <button class="ib memo-edit memo-desktop-action" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
             <AppIcon name="edit" :size="14" />
           </button>
           <button
             v-if="!props.archivedView"
-            class="ib"
+            class="ib memo-desktop-action"
             type="button"
             :class="{ on: props.note.pinned }"
             :title="props.note.pinned ? '取消置顶' : '置顶'"
@@ -283,7 +283,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           </button>
           <button
             v-else
-            class="ib"
+            class="ib memo-desktop-action"
             type="button"
             title="取消归档，放回「全部」"
             aria-label="取消归档"
@@ -291,12 +291,17 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           >
             <AppIcon name="unarchive" :size="14" />
           </button>
+          <button class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
+            <AppIcon name="copy" :size="15" />
+          </button>
           <NoteMoreMenu
             :note="props.note"
+            :mobile-actions="isWebRuntime()"
             :archived-view="props.archivedView"
             :export-disabled="props.exportDisabled"
-            @copy="emit('copy')"
             @toggle-pin="emit('togglePin')"
+            @view="emit('view')"
+            @edit="openEditor"
             @toggle-star="emit('toggleStar')"
             @toggle-archive="emit('toggleArchive')"
             @export="emit('export', $event)"
@@ -420,9 +425,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   position: relative;
   max-height: var(--memo-max-h);
   overflow: hidden;
-  /* 原型对拍轮：流卡比全屏比，正文降一档（14/24 → 13/20），一屏能多看两条 */
-  font-size: var(--text-sm);
-  line-height: 20px;
+  font-size: var(--text-base);
+  line-height: 24px;
   color: var(--text);
   word-break: break-word;
 }
@@ -465,7 +469,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   cursor: pointer;
   user-select: none;
   border-radius: var(--radius);
-  background: repeating-linear-gradient(-45deg,
+  background: repeating-linear-gradient(-45deg, /* taste-skill-ignore: 保留现有加密态纹理，区别普通小记。 */
     color-mix(in srgb, var(--warning) 5%, transparent) 0 6px,
     transparent 6px 14px);
 }
@@ -482,12 +486,12 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 }
 .lock-meta { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
 /* 锁着也认得出是哪条：只有真标题（h1–h3）会留明文，其余只剩提示语 */
-.locked-title { color: var(--text); font-size: var(--text-md); font-weight: 600; letter-spacing: -0.01em; }
+.locked-title { color: var(--text); font-size: var(--text-md); font-weight: 600; letter-spacing: normal; }
 /* 只给正文顶层块加间距，理由同 NoteEditor：* + * 会把任务项的正文压到勾选框下面 */
 .memo-body :deep(> * + *) { margin-top: var(--space-2); }
 .memo-body :deep(* + h1), .memo-body :deep(* + h2), .memo-body :deep(* + h3) { margin-top: var(--space-4); }
-.memo-body :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.015em; line-height: 28px; }
-.memo-body :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: -0.01em; line-height: 26px; }
+.memo-body :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: normal; line-height: 28px; }
+.memo-body :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: normal; line-height: 26px; }
 .memo-body :deep(h3) { font-size: var(--text-md); font-weight: 600; line-height: 24px; }
 .memo-body :deep(strong) { font-weight: 600; color: var(--text); }
 .memo-body :deep(ul), .memo-body :deep(ol) { padding-left: var(--space-5); }
@@ -518,9 +522,9 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-title {
   flex: 1;
   min-width: 0;
-  font-size: 14.5px;
+  font-size: var(--text-md);
   font-weight: var(--weight-card-title);
-  letter-spacing: -0.01em;
+  letter-spacing: normal;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;

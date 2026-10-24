@@ -34,6 +34,9 @@ const pageActive = usePageActive()
 const workspaceLayout = useWorkspaceLayout()
 
 const busy = ref(false)
+const compactMedia = window.matchMedia('(max-width: 700px)')
+const compact = ref(compactMedia.matches)
+function updateCompact() { compact.value = compactMedia.matches }
 
 const showDetail = ref(false)
 const report = ref<TunnelSplitReport | null>(null)
@@ -49,10 +52,11 @@ watch(() => provision.value?.authorized, (authorized) => {
 const state = computed(() => {
   const s = status.value
   if (!s || !s.alive) return '已停止'
-  return s.registered ? '已连上边缘' : '启动中'
+  return s.registered ? '已连接' : '启动中'
 })
 const running = computed(() => status.value?.running ?? false)
 const bound = computed(() => (status.value?.bound ?? false) && services.value.length > 0)
+const canToggle = computed(() => Boolean(status.value?.alive) || bound.value)
 const unrouted = computed(() => services.value.filter((s) => !s.routed).length)
 const binaryState = computed(() => {
   const b = binary.value
@@ -74,7 +78,7 @@ async function toggle() {
       toastStore.showToast('隧道已停止')
     } else {
       const s = await tunnelApi.start()
-      toastStore.showToast(s.registered ? '隧道已连上 Cloudflare 边缘' : '进程已起，仍在连边缘')
+      toastStore.showToast(s.registered ? '隧道已连接' : '隧道正在连接…')
     }
     await refresh()
   } catch (e) {
@@ -120,6 +124,7 @@ function refreshOnVisible() {
 }
 
 onMounted(() => {
+  compactMedia.addEventListener('change', updateCompact)
   void refreshNow()
   timer = window.setInterval(() => {
     if (pageActive.value && !busy.value) void refresh().catch(() => undefined)
@@ -142,6 +147,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  compactMedia.removeEventListener('change', updateCompact)
   disposed = true
   if (timer) window.clearInterval(timer)
   window.removeEventListener('focus', refreshOnFocus)
@@ -155,7 +161,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
 </script>
 
 <template>
-  <div class="content-inner">
+  <div class="content-inner tunnel-page">
     <div v-if="!loaded" class="tn-card" aria-hidden="true">
       <div class="skeleton-row" v-for="n in 2" :key="n">
         <span class="skeleton-block"></span>
@@ -164,9 +170,9 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
     </div>
 
     <template v-else>
-      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-      <div class="page-bar service-page-bar">
-        <span class="chip" :class="{ live: running }">
+      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive || compact" defer>
+      <div class="page-bar service-page-bar tunnel-page-bar" data-workspace-heading="inline">
+        <span class="chip" :class="{ live: running, connecting: status?.alive && !running }" role="status">
           <span class="dot" aria-hidden="true"></span>
           {{ state }}
         </span>
@@ -178,12 +184,13 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
           <button
             class="btn-primary toggle-btn"
             :class="{ 'ghost-danger': status?.alive }"
-            :disabled="busy || !bound"
-            :title="bound ? '' : (services.length ? '本机还没有可启动的隧道' : '还没有登记要挂出去的本地服务')"
+            :disabled="busy || !canToggle"
+            :title="canToggle ? '' : (services.length ? '请先创建隧道' : '请先添加本地服务')"
             @click="toggle"
+            :aria-busy="busy"
           >
             <AppIcon :name="status?.alive ? 'x' : 'external'" :size="13" />
-            {{ status?.alive ? '停止隧道' : '启动隧道' }}
+            {{ busy ? '处理中…' : status?.alive ? '停止隧道' : '启动隧道' }}
           </button>
         </div>
       </div>
@@ -202,9 +209,10 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
         @retry-domain="loadDomain(true)"
       />
 
-      <div v-if="pollError" class="poll-err">
-        <AppIcon name="alert" :size="12" />
-        状态没读到：{{ pollError }}
+      <div v-if="pollError" class="poll-err" role="alert">
+        <AppIcon name="alert" :size="14" />
+        <span>无法读取状态：{{ pollError }}</span>
+        <button class="foot-btn" type="button" @click="refreshNow">重试</button>
       </div>
 
       <!-- 主角：一条隧道挂着的 N 条服务 -->
@@ -220,30 +228,30 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
       <!-- 程序与进程：默认只给一行摘要，点开再看完整事实 -->
       <section class="tn-card tn-foot" :class="{ expanded: showDetail }">
         <div class="tn-head">
-          <span>程序与进程</span>
-          <span class="diag-summary mono">{{ summary }}</span>
-          <button class="foot-btn" type="button" @click="showDetail = !showDetail">
+          <h2>程序与进程</h2>
+          <span class="diag-summary">{{ summary }}</span>
+          <button class="foot-btn" type="button" :aria-expanded="showDetail" aria-controls="tunnel-diagnostics" @click="showDetail = !showDetail">
             <AppIcon :name="showDetail ? 'chevDown' : 'chevRight'" :size="12" />
             {{ showDetail ? '收起' : '详情' }}
           </button>
         </div>
-        <div v-if="showDetail" class="tn-detail">
+        <div v-if="showDetail" id="tunnel-diagnostics" class="tn-detail">
           <div class="tn-row">
             <span class="tn-label">程序版本</span>
-            <span class="tn-value mono">{{ binary?.expectedVersion ?? '—' }} · {{ binaryState }}</span>
+            <span class="tn-value">{{ binary?.expectedVersion ?? '—' }} · {{ binaryState }}</span>
           </div>
           <div class="tn-row">
-            <span class="tn-label">进 程</span>
-            <span class="tn-value mono">{{ status?.pid ? `PID ${status.pid}` : '无进程' }}</span>
+            <span class="tn-label">进程</span>
+            <span class="tn-value">{{ status?.pid ? `PID ${status.pid}` : '无进程' }}</span>
           </div>
           <div class="tn-row">
             <span class="tn-label">SHA-256</span>
-            <span class="tn-value mono ellipsis" :title="binary?.path ?? ''">{{ binary?.actualSha256 ?? (binary?.installed ? '未校验' : '—') }}</span>
+            <span class="tn-value ellipsis" :title="binary?.path ?? ''">{{ binary?.actualSha256 ?? (binary?.installed ? '未校验' : '—') }}</span>
           </div>
           <div class="tn-row">
             <span class="tn-label">出口检查</span>
             <span class="tn-value" :class="{ 'txt-warn': report?.conflict }">
-              {{ report?.message ?? '查一下这条隧道是不是只有本机这一处在跑' }}
+              {{ report?.message ?? '检查隧道是否同时在其他设备运行' }}
             </span>
             <button
               class="btn-secondary d-btn"
@@ -251,14 +259,14 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
               :disabled="probing || !provision?.tunnelId"
               @click="probe"
             >
-              查一次
+              检查
             </button>
           </div>
           <div v-if="status?.note" class="tn-note chip-warn">
             <AppIcon name="alert" :size="12" />
             {{ status.note }}
           </div>
-          <div class="tn-note">退出程序，公网地址立刻不可用。需要长期在线请保持本程序运行。</div>
+          <div class="tn-note">保持 Desko 运行，公网服务才可访问。</div>
         </div>
       </section>
 
@@ -278,14 +286,24 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
 </template>
 
 <style scoped>
+.tunnel-page :deep(.tn-card) { margin-bottom: 16px; box-shadow: none; }
+.tn-foot h2 { margin: 0; font-size: var(--text-base); font-weight: 600; line-height: 22px; }
+.tunnel-page :deep(.tn-card .btn-primary:not(:disabled)) { background: var(--text); color: var(--bg-surface); box-shadow: none; }
+.tunnel-page :deep(.tn-card .btn-primary:hover:not(:disabled)) { background: var(--text-secondary); color: var(--bg-surface); }
+.tunnel-page :deep(.tn-row) { height: auto; min-height: 48px; }
+.tunnel-page :deep(.tn-note) { line-height: 1.6; color: var(--text-secondary); }
+.tunnel-page :deep(button:focus-visible), .tunnel-page-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .tunnel-services { flex-shrink: 1; min-width: 0; }
 .tunnel-services-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 本页等宽小字与局域网传输页同档：Consolas 优先。
-   栈里必须留中文回退：mono 段里夹了中文（如「已校验的 cloudflared」），
-   只写 monospace 结尾会让中文落到宋体 */
-.content-inner { --font-mono: Consolas, 'Cascadia Mono', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', monospace; }
-.mono { font-family: var(--font-mono); }
+/* 地址和程序信息沿用界面字体，用 tabular-nums 保持数字稳定。 */
+.tunnel-page-bar .chip { background: transparent; padding-inline: 0; color: var(--text-secondary); }
+.tunnel-page-bar .chip + .chip { margin-left: 12px; }
+.tunnel-page-bar .connecting .dot { background: var(--warning); }
+.tunnel-page-bar .toggle-btn:not(.ghost-danger):not(:disabled),
+:global(#workspace-page-toolbar .tunnel-page-bar .toggle-btn:not(.ghost-danger):not(:disabled)) { background: var(--text); color: var(--bg-surface); box-shadow: none; }
+.tunnel-page-bar .toggle-btn:not(.ghost-danger):hover:not(:disabled),
+:global(#workspace-page-toolbar .tunnel-page-bar .toggle-btn:not(.ghost-danger):hover:not(:disabled)) { background: var(--text-secondary); color: var(--bg-surface); }
 
 .toggle-btn.ghost-danger:not(:disabled) {
   background: var(--danger-soft);
@@ -298,22 +316,23 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
   border-color: var(--danger);
   color: var(--danger-hover);
 }
-.chip-warn-text { color: var(--warning) }
+.chip-warn-text { color: var(--text-secondary) }
 /* 回读失败只说明"这一格这次没读到"，坏消息吃 warn 档，不抢主色的注意 */
 .poll-err {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: -6px 0 10px;
-  padding: 6px 10px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
-  color: var(--warning);
+  color: var(--text);
 }
+.poll-err > span { flex: 1; overflow-wrap: anywhere; }
 
 /* 诊断卡：标题 + 一行摘要 + 展开钮（行高/内衬走全局 .tn-card 骨架） */
-.tn-foot .tn-head { border-bottom: none }
+.tn-foot .tn-head { height: auto; min-height: 56px; padding: 12px 20px; border-bottom: none; flex-wrap: wrap; }
 .tn-foot.expanded .tn-head { border-bottom: 1px solid var(--border) }
 .diag-summary {
   margin-left: auto;
@@ -332,11 +351,26 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
   background: none;
   border: none;
   border-radius: var(--radius-sm);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: var(--text-xs);
   cursor: pointer;
 }
 .foot-btn:hover { color: var(--accent); background: var(--hover) }
 .d-btn { margin-left: auto; flex-shrink: 0 }
 .txt-warn { color: var(--warning) }
+.tn-detail .tn-row { padding: 12px 20px; align-items: flex-start; }
+.tn-detail .tn-value { overflow-wrap: anywhere; white-space: normal; line-height: 20px; }
+.tn-detail .tn-label { line-height: 20px; }
+@media (max-width: 700px) {
+  :global(.codex-layout .workspace-main .tunnel-page.content-inner) { padding-inline: 16px; }
+  .tunnel-page .tunnel-page-bar { position: static; min-height: 56px; padding: 0 0 16px; background: transparent; }
+  .tunnel-page-bar .tunnel-services { display: none; }
+  .tunnel-page-bar .toggle-btn { min-height: 40px; font-size: var(--text-sm); }
+  .tn-foot .tn-head { padding: 14px 16px; gap: 8px; }
+  .diag-summary { order: 3; flex-basis: 100%; margin-left: 0; line-height: 20px; }
+  .foot-btn { margin-left: auto; min-height: 32px; }
+  .tn-detail .tn-row { padding-inline: 16px; flex-wrap: wrap; gap: 6px; }
+  .tn-detail .tn-label { width: 64px; }
+  .tn-detail .tn-value { flex-basis: calc(100% - 70px); }
+}
 </style>

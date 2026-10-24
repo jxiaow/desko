@@ -3,15 +3,18 @@ import { computed, provide } from 'vue'
 import { useRoute } from 'vue-router'
 import { hasWorkspaceDirectory, workspaceDirectoryKey, workspaceLayoutKey } from './workspaceLayout'
 import AppIcon from '../shared/AppIcon.vue'
+import { usePageHeadStore } from '../../stores/pageHead'
 
 const props = defineProps<{ directoryVisible: boolean; directoryCompact: boolean; directoryPinned: boolean }>()
 const emit = defineEmits<{ closeDirectory: []; toggleDirectory: []; toggleDirectoryPin: [] }>()
 provide(workspaceLayoutKey, true)
 provide(workspaceDirectoryKey, { visible: computed(() => props.directoryVisible), toggle: () => emit('toggleDirectory') })
 const route = useRoute()
+const pageHead = usePageHeadStore()
 const hasDirectory = computed(() => hasWorkspaceDirectory(String(route.name)))
-const directoryLabel = computed(() => route.name === 'notes' ? '视图与标签' : '收藏分类')
+const directoryLabel = computed(() => pageHead.directoryLabel || (route.name === 'notes' ? '视图与标签' : '收藏分类'))
 function onDirectoryClick(event: MouseEvent) {
+  if ((event.target as HTMLElement).closest('[data-workspace-directory-keep-open]')) return
   if (props.directoryCompact && !props.directoryPinned && (event.target as HTMLElement).closest('#workspace-directory-content button, #workspace-directory-content [role="button"]')) {
     emit('closeDirectory')
   }
@@ -50,6 +53,10 @@ function onDirectoryClick(event: MouseEvent) {
   --workspace-content-padding: max(var(--workspace-gutter), calc((var(--workspace-main-width) - var(--scrollbar-track) - var(--workspace-content-max)) / 2));
   --workspace-content-left: calc(var(--sidebar-rail-w) + var(--workspace-content-padding));
   --workspace-content-right: calc(var(--workspace-directory-offset) + var(--workspace-content-padding) + var(--scrollbar-track));
+  /* 顶栏使用完整窗口的留白，目录开关不会随正文缩窄移出鼠标下方。 */
+  --workspace-toolbar-padding: max(var(--workspace-gutter), calc((100vw - var(--sidebar-rail-w) - var(--scrollbar-track) - var(--workspace-content-max)) / 2));
+  --workspace-toolbar-left: calc(var(--sidebar-rail-w) + var(--workspace-toolbar-padding));
+  --workspace-toolbar-right: calc(var(--workspace-toolbar-padding) + var(--scrollbar-track));
   --workspace-heading-width: 132px;
   --workspace-heading-gap: 24px;
   --page-search-max: 300px;
@@ -61,64 +68,13 @@ function onDirectoryClick(event: MouseEvent) {
 .app-root.codex-layout:not(.locked-bg) { background: var(--bg-workspace); background-attachment: fixed; }
 .codex-layout .app-layout { padding: 0; }
 
-/* Logo 格与下方侧轨组成连续的 56px 导航轨，共用底色和同一束 fixed 光。
-   36px 方块左右各留 10px，图标仍是 22px 那一档（AppIcon 的 size 决定实笔反算，不动）。 */
-.app-root.codex-layout .sidebar.collapsed {
-  width: var(--sidebar-rail-w);
-  padding: 6px 0 10px;
-}
-.app-root.codex-layout :is(.titlebar-brandcell, .sidebar.collapsed) {
-  background: var(--bg-workspace-rail);
-  background-attachment: fixed;
-}
-.app-root.codex-layout .sidebar .sidebar-nav {
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  margin-inline: 0;
-  scrollbar-gutter: auto;
-}
-.app-root.codex-layout .sidebar .nav-item {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  justify-content: center;
-  gap: 0;
-  padding: 0;
-  border-radius: 10px;
-}
-.app-root.codex-layout .sidebar .nav-item:hover:not(.active) {
-  background: var(--hover-chrome);
-  color: var(--text);
-}
-.app-root.codex-layout .sidebar .nav-item:hover:not(.active) .nav-icon { color: var(--text-secondary); }
-/* 激活行不在此覆写：侧栏那一档的底色/字色/字重由 Sidebar.vue 统一出，
-   这里再写一遍只会让码轨和别的页各长一种"选中" */
-.app-root.codex-layout .sidebar .nav-icon,
-.app-root.codex-layout .sidebar .nav-icon svg { width: 22px; height: 22px; }
-.app-root.codex-layout .sidebar .nav-live { top: 5px; right: 5px; box-shadow: 0 0 0 2px var(--bg); }
-/* 轨底工具组走模块行同一档：36px 方块、同一条中线、hover 吃 chrome 填充 */
-.app-root.codex-layout .sidebar .sidebar-foot { align-items: center; gap: 4px; padding-top: 12px; }
-.app-root.codex-layout .sidebar .foot-item {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  justify-content: center;
-  gap: 0;
-  padding: 0;
-  border-radius: 10px;
-}
-.app-root.codex-layout .sidebar .foot-item:hover { background: var(--hover-chrome); color: var(--text); }
-.app-root.codex-layout .sidebar .foot-item:hover .foot-icon { color: var(--text-secondary); }
-.app-root.codex-layout .sidebar .foot-icon,
-.app-root.codex-layout .sidebar .foot-icon svg { width: 22px; height: 22px; }
 .workspace-surface { position: relative; display: flex; flex: 1; min-width: 0; overflow: hidden; background: var(--bg-workspace); background-attachment: fixed; }
 .workspace-surface :is(.content-inner, .stream, .fs-scroll, #workspace-directory-content)::-webkit-scrollbar-track { margin: 0; }
 /* 全屏接管整个内容面；原页保留滚动和目录状态，隐藏后也不会进入 Tab 焦点序列。
    页级控件住在顶栏里，不在内容面内，同样要在全屏时让位。 */
 .workspace-surface:has(> .fs) > :is(.workspace-main, .workspace-directory) { visibility: hidden; }
 .app-root.codex-layout:has(.workspace-surface > .fs) { --workspace-directory-offset: 0px; }
-.app-root.codex-layout:has(.workspace-surface > .fs) #workspace-page-toolbar > :not(.fs-head) { display: none; }
+.app-root.codex-layout:has(.workspace-surface > .fs) #workspace-page-toolbar > :not([data-workspace-toolbar="exclusive"]) { display: none; }
 .workspace-body { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .workspace-body > .main-content { flex: 1; min-width: 0; }
 /* 悬停沿用主题中性色，轻微改变卡面明暗；强调色留给选中、编辑和焦点。 */
@@ -127,7 +83,7 @@ function onDirectoryClick(event: MouseEvent) {
 /* 辅助目录融入同一画布，用留白和浅色选中块建立层次。 */
 .workspace-directory { display: flex; flex-direction: column; flex: 0 0 var(--workspace-directory-width); min-width: 0; overflow: hidden; background: var(--bg-inspector); background-attachment: fixed; }
 .workspace-directory-heading { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 48px; padding: 0 16px 0 22px; }
-.workspace-directory-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.workspace-directory-title { font-size: var(--text-sm); font-weight: 600; color: var(--text); }
 .workspace-directory-actions { display: flex; gap: 2px; color: var(--text-muted); }
 .workspace-directory-actions .ib { width: 28px; height: 28px; border-radius: 8px; }
 .workspace-directory-actions .on { color: var(--text-brand); background: var(--bg-inspector-active); }
@@ -135,7 +91,7 @@ function onDirectoryClick(event: MouseEvent) {
 #workspace-directory .directory-notes { display: flex; flex-direction: column; width: 100%; min-height: 100%; height: auto; overflow: visible; scrollbar-gutter: auto; border: 0; background: transparent; padding: 0; }
 #workspace-directory .directory-list { display: flex; flex-direction: column; align-items: stretch; gap: 0; width: 100%; height: auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; }
 #workspace-directory .directory-list > .directory-link:first-of-type:not(:last-child) { margin-bottom: 12px; }
-#workspace-directory .directory-link { position: relative; display: flex; flex-shrink: 0; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: 36px; min-height: 36px; padding: 0 10px; margin: 0 0 4px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary); text-align: left; font: inherit; font-size: 13px; font-weight: 400; cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); }
+#workspace-directory .directory-link { position: relative; display: flex; flex-shrink: 0; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: 36px; min-height: 36px; padding: 0 10px; margin: 0 0 4px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary); text-align: left; font: inherit; font-size: var(--text-sm); font-weight: 400; cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); }
 #workspace-directory .directory-link svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--text-muted); }
 #workspace-directory .directory-link.active { background: var(--bg-inspector-active); color: var(--text-brand); font-weight: 600; }
 #workspace-directory .directory-link.active svg { color: inherit; }
@@ -143,12 +99,12 @@ function onDirectoryClick(event: MouseEvent) {
 #workspace-directory .directory-link:hover:not(.active) { background: var(--bg-inspector-hover); color: var(--text); }
 #workspace-directory .directory-link.danger { color: var(--danger); }
 #workspace-directory .directory-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#workspace-directory .tab-count, .workspace-directory .directory-count { flex-shrink: 0; margin-left: auto; color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 400; font-variant-numeric: tabular-nums; }
+#workspace-directory .tab-count, .workspace-directory .directory-count { flex-shrink: 0; margin-left: auto; color: var(--text-muted); font-family: var(--font-ui); font-size: var(--text-xs); font-weight: 400; font-variant-numeric: tabular-nums; }
 #workspace-directory .directory-link.active .tab-count { color: var(--text-brand); }
-#workspace-directory .directory-section-heading { display: flex; flex-shrink: 0; align-items: center; margin-top: 24px; padding: 0 10px 10px; color: var(--text-muted); font-size: 11.5px; font-weight: 500; }
-#workspace-directory .rail-empty { padding: 4px 10px; color: var(--text-muted); font-size: 12px; }
+#workspace-directory .directory-section-heading { display: flex; flex-shrink: 0; align-items: center; margin-top: 24px; padding: 0 10px 10px; color: var(--text-muted); font-size: var(--text-xs); font-weight: 500; }
+#workspace-directory .rail-empty { padding: 4px 10px; color: var(--text-muted); font-size: var(--text-xs); }
 #workspace-directory .directory-reset { margin-top: 16px; color: var(--text-muted); }
-#workspace-directory .rail-foot { margin-top: auto; padding: 24px 10px 0; border: 0; color: var(--text-muted); font-size: 11.5px; line-height: 1.6; }
+#workspace-directory .rail-foot { margin-top: auto; padding: 24px 10px 0; border: 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.6; }
 .workspace-directory .tab-thumb { display: none; }
 .codex-layout .workspace-main .day-head { background: var(--bg-workspace); background-attachment: fixed; top: 0; }
 
@@ -156,6 +112,8 @@ function onDirectoryClick(event: MouseEvent) {
 .codex-layout .workspace-main .content-inner { padding: 16px var(--workspace-content-padding) 22px; }
 .codex-layout .workspace-main .content-inner:has(> .cx-tabs-row) { padding-top: 0; }
 .codex-layout .workspace-main .content-inner:has(> .cx-tabs-row:empty) { padding-top: 16px; }
+.codex-layout .workspace-main .content-inner.codex-dialog-view { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; overflow: hidden; scrollbar-gutter: auto; }
+.codex-layout .workspace-main .content-inner.codex-dialog-view:has(> .cx-tabs-row:empty) { padding-top: 0; }
 .codex-layout .workspace-main .stream-inner { padding: 14px var(--workspace-content-padding) var(--dock-clearance); }
 
 /* 通栏控制带里的页栏：脱掉吸顶与底色，控件直接坐在顶栏上。
@@ -181,6 +139,8 @@ function onDirectoryClick(event: MouseEvent) {
 #workspace-page-toolbar :is(.page-bar, .cx-band-controls) > :first-child:not(.page-actions) { margin-left: var(--workspace-heading-gap); }
 #workspace-page-toolbar .page-bar > .search-box:first-child { margin-left: var(--workspace-heading-gap); }
 #workspace-page-toolbar .search-box { flex: 1 1 120px; min-width: 120px; max-width: var(--page-search-max); margin-right: 0; container: workspace-search / inline-size; }
+#workspace-page-toolbar .search-box input { font-size: var(--text-sm); }
+#workspace-page-toolbar :is(.btn-primary, .btn-secondary) { font-size: var(--text-sm); }
 #workspace-page-toolbar .page-actions { margin-left: auto; flex-shrink: 0; gap: 6px; }
 #workspace-page-toolbar :is(.btn-primary, .btn-secondary, .bar-btn) { white-space: nowrap; }
 #workspace-page-toolbar .btn-primary:where(:not(.ghost-danger)):not(:disabled) {
@@ -231,6 +191,11 @@ function onDirectoryClick(event: MouseEvent) {
   box-shadow: none;
   border-radius: 12px;
 }
+/* 对象卡的两行内容留出清晰间隔，网格与工具栏继续共用阅读列。 */
+.codex-layout .workspace-main .grid-card { min-height: 88px; padding-block: 14px; padding-right: 16px; gap: 10px; }
+.codex-layout .workspace-main .grid-card:not(.batching) { padding-left: 16px; }
+.codex-layout .workspace-main .grid-card .card-check { top: 17px; }
+.codex-layout .workspace-main .grid-card:not(.batching) .card-check { left: 17px; }
 /* 空态不是卡：mock 里它直接坐在画布上，图标块换成淡染。 */
 .codex-layout .workspace-main .rcard.empty-state {
   background: transparent;

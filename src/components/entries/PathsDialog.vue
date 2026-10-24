@@ -157,7 +157,7 @@ onMounted(() => pathRef.value?.focus())
 
 .path-add { min-height: 44px; padding: 4px 2px; border-bottom: none }
 .path-add input {
-  height: 32px; padding: 0 11px; font-size: var(--text-sm);
+  height: 32px; padding: 0 11px; font-size: var(--text-content);
   background: var(--bg); color: var(--text);
   border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none;
   transition: all var(--transition); font-family: inherit;

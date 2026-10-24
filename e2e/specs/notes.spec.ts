@@ -233,12 +233,14 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('[aria-label="展开目录"]')).toBeVisible()
   })
 
-  test('复制正文：⋯ 菜单出纯文本', async ({ page }) => {
+  test('复制正文：卡头按钮出纯文本，菜单不再重复', async ({ page }) => {
     await gotoNotes(page)
     const m = memo(page, '第一条小记')
-    await (await noteMenu(page, m)).locator('.pop-item:text-is("复制正文")').click()
+    await m.hover()
+    await m.getByRole('button', { name: '复制正文', exact: true }).click()
     await expectToast(page, '小记已复制')
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('第一条小记：周会纪要与待办')
+    await expect((await noteMenu(page, m)).getByText('复制正文', { exact: true })).toHaveCount(0)
   })
 
   test('一键复制带链接的小记：地址跟着走，纯文本和 HTML 都在', async ({ page }) => {
@@ -246,7 +248,8 @@ test.describe('Notes 小记', () => {
       notes: [{ title: '链接', content_html: '<p>看 <a href="https://gitlab.test/x">GitLab 标题</a></p>' }],
     }, '/notes')
     const m = memo(page, 'GitLab 标题')
-    await (await noteMenu(page, m)).locator('.pop-item:text-is("复制正文")').click()
+    await m.hover()
+    await m.getByRole('button', { name: '复制正文', exact: true }).click()
     await expectToast(page, '小记已复制')
 
     expect(await page.evaluate(() => navigator.clipboard.readText()))
@@ -671,10 +674,10 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.composer')).toHaveCount(0)
     const archived = memo(page, '已经收走')
     await archived.hover()
-    // 归档视图的快捷排与「全部」同构四颗，被让位的开关与低频/危险动作都在 ⋯ 里
-    await expect(archived.locator('.memo-acts button')).toHaveCount(4)
+    // 归档视图的快捷排与「全部」同构五颗，被让位的开关与低频/危险动作都在 ⋯ 里
+    await expect(archived.locator('.memo-acts button')).toHaveCount(5)
     await tipButton(archived, '更多操作').first().click()
-    await expect(page.locator('.popover .pop-item')).toHaveText(['复制正文', '收藏', '置顶', '导出', '加密', '删除'])
+    await expect(page.locator('.popover .pop-item')).toHaveText(['收藏', '置顶', '导出', '加密', '删除'])
     await page.keyboard.press('Escape')
     await expect(page.locator('.popover')).toHaveCount(0)
     await tipButton(archived, '取消归档，放回「全部」').click()
@@ -772,6 +775,83 @@ test.describe('Notes 小记', () => {
     // 删除后退出批量模式
     await expect(page.locator('.batch-dock')).toHaveCount(0)
     expect((await e2e.snapshot(page)).notes).toHaveLength(1)
+  })
+
+  test('合并小记：旧到新焊接同类列表，单选禁用，确认后替换源条目', async ({ page }) => {
+    const tasks = (a: string, b: string) => `<ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>${a}</p></li><li data-type="taskItem" data-checked="false"><p>${b}</p></li></ul>`
+    await bootUnlocked(page, { notes: [
+      { title: '甲', content_html: tasks('甲一', '甲二') + '<p><br></p>' },
+      { title: '乙', content_html: '<p>&nbsp;</p>' + tasks('乙一', '乙二') },
+      { title: '丙', content_html: '<ul><li>丙一</li><li>丙二</li><li>丙三</li></ul>' },
+    ] }, '/notes')
+    const sourceIds = (await e2e.snapshot(page)).notes.map((n: any) => n.id)
+    await memo(page, '甲一').hover()
+    await memo(page, '甲一').locator('.memo-check').click()
+    const merge = page.getByRole('button', { name: '合并', exact: true })
+    await expect(merge).toBeDisabled()
+    await memo(page, '乙一').locator('.memo-check').click()
+    await memo(page, '丙一').locator('.memo-check').click()
+    await merge.click()
+    const confirm = page.locator('.confirm-dialog')
+    await expect(confirm.locator('.dialog-body p')).toHaveText('3 条小记将合成一条，原条目将被删除，此操作不可撤销。')
+    await confirm.getByRole('button', { name: '合并', exact: true }).click()
+    await expectToast(page, '已合并 3 条小记')
+    await expect(page.locator('.memo')).toHaveCount(1)
+    const result = page.locator('.memo')
+    await expect(result.locator('ul[data-type="taskList"]')).toHaveCount(1)
+    await expect(result.locator('ul[data-type="taskList"] > li')).toHaveText(['甲一', '甲二', '乙一', '乙二'])
+    await expect(result.locator('ul:not([data-type]) > li')).toHaveText(['丙一', '丙二', '丙三'])
+    const snapshot = await e2e.snapshot(page)
+    expect(snapshot.notes).toHaveLength(1)
+    expect(sourceIds).not.toContain(snapshot.notes[0].id)
+    await expect(page.locator('.batch-dock')).toHaveCount(0)
+  })
+
+  test('合并加密小记：保留加密属性，可再次锁定且源条目消失', async ({ page }) => {
+    await bootUnlocked(page, { notePassphrase: NOTE_PASS, noteOpen: true, notes: [
+      { title: '甲', content_html: '<ul><li>加密甲</li></ul>', encrypted: true },
+      { title: '乙', content_html: '<ul><li>加密乙</li></ul>', encrypted: true },
+    ] }, '/notes')
+    await memo(page, '加密甲').hover()
+    await memo(page, '加密甲').locator('.memo-check').click()
+    await memo(page, '加密乙').locator('.memo-check').click()
+    await page.getByRole('button', { name: '合并', exact: true }).click()
+    await page.locator('.confirm-dialog').getByRole('button', { name: '合并', exact: true }).click()
+    await expectToast(page, '已合并 2 条小记')
+    await expect(page.locator('.memo')).toHaveCount(1)
+    const snapshot = await e2e.snapshot(page)
+    expect(snapshot.notes[0].encrypted).toBe(true)
+    // 与普通加密操作同口径：本会话仍可读，重新锁定后才显示锁形卡。
+    await expect(page.locator('.memo li')).toHaveText(['加密甲', '加密乙'])
+    await (await noteMenu(page, page.locator('.memo'))).getByText('重新锁定', { exact: true }).click()
+    await expect(page.locator('.memo-locked')).toHaveCount(1)
+    await expect(page.locator('.memo-body')).toHaveCount(0)
+  })
+
+  test('未解锁的小记拒绝合并并显示数量', async ({ page }) => {
+    await bootUnlocked(page, { notePassphrase: NOTE_PASS, notes: [
+      { title: '甲', content_html: '<p>锁着的甲</p>', encrypted: true },
+      { title: '乙', content_html: '<p>锁着的乙</p>', encrypted: true },
+    ] }, '/notes')
+    await page.locator('.memo').first().hover()
+    await page.locator('.memo-check').first().click()
+    await page.locator('.memo-check').nth(1).click()
+    await page.getByRole('button', { name: '合并', exact: true }).click()
+    await expectToast(page, '未合并：2 条小记未解锁')
+    await expect(page.locator('.confirm-dialog')).toHaveCount(0)
+    expect(await e2e.count(page, 'create_note')).toBe(0)
+  })
+
+  test('全屏阅读首栏可以复制正文，菜单不重复', async ({ page }) => {
+    await gotoNotes(page)
+    const first = memo(page, '第一条小记')
+    await first.hover()
+    await first.getByRole('button', { name: '全屏查看', exact: true }).click()
+    await page.locator('.fs-head').getByRole('button', { name: '复制正文', exact: true }).click()
+    await expectToast(page, '小记已复制')
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('第一条小记：周会纪要与待办')
+    await page.locator('.fs-head').getByRole('button', { name: '更多操作', exact: true }).click()
+    await expect(page.locator('.popover').getByText('复制正文', { exact: true })).toHaveCount(0)
   })
 
   test('工具栏「选择」钮：开待选显形勾选框，Esc 整体退出', async ({ page }) => {
@@ -876,7 +956,7 @@ test.describe('Notes 小记', () => {
     // 锁着的条目可解锁或发起明文导出；加密动作仍在明文卡的 ⋯ 里
     await expect(sealed.locator('.memo-acts button')).toHaveCount(2)
     await expect(sealed.getByRole('button', { name: '导出', exact: true })).toHaveCount(1)
-    await expect(plain.locator('.memo-acts button')).toHaveCount(4)
+    await expect(plain.locator('.memo-acts button')).toHaveCount(5)
 
     // 首次加密就是立全库口令，只有这一次要输两格
     await (await noteMenu(page, plain)).locator('.pop-item:text-is("加密")').click()
@@ -949,12 +1029,14 @@ test.describe('Notes 小记', () => {
     expect(await e2e.count(page, 'note_key_recover')).toBe(1)
   })
 
-  test('设置·小记页签：没设过口令只剩一行说明', async ({ page }) => {
+  test('设置·小记页签：粘贴整理默认开启，没设过口令时显示说明', async ({ page }) => {
     await bootUnlocked(page, SEED, '/notes')
     const dialog = await openSettings(page, 'notes')
     const pane = visiblePane(dialog)
-    await expect(pane.locator('.setting-name')).toHaveText('小记口令')
-    await expect(pane.locator('.setting-desc')).toContainText('第一次把小记设为加密时立起来')
+    await expect(pane.getByRole('checkbox', { name: '粘贴时整理格式' })).toBeChecked()
+    const keyRow = pane.locator('.setting-item').filter({ hasText: '小记口令' })
+    await expect(keyRow.locator('.setting-name')).toHaveText('小记口令')
+    await expect(keyRow.locator('.setting-desc')).toContainText('首次加密小记时设置')
     await expect(pane.locator('.setting-item.clickable')).toHaveCount(0)
   })
 

@@ -63,7 +63,7 @@ test.describe('内网穿透', () => {
     await gotoTunnel(page, state(true, false, false, { ...READY }))
     const btn = page.locator('.page-bar .btn-primary')
     await expect(btn).toBeDisabled()
-    await expect(btn).toHaveAttribute('title', '还没有登记要挂出去的本地服务')
+    await expect(btn).toHaveAttribute('title', '请先添加本地服务')
     expect(await e2e.count(page, 'tunnel_start')).toBe(0)
   })
 
@@ -77,8 +77,8 @@ test.describe('内网穿透', () => {
   test('启动与停止：状态、页脚 PID、按钮文案三处同步', async ({ page }) => {
     await gotoTunnel(page, state(true, false, false, { ...READY, installed: true, services: [LIVE] }))
     await page.locator('.page-bar .btn-primary').click()
-    await expectToast(page, '隧道已连上 Cloudflare 边缘')
-    await expect(page.locator('.page-bar .chip').first()).toContainText('已连上边缘')
+    await expectToast(page, '隧道已连接')
+    await expect(page.locator('.page-bar .chip').first()).toContainText('已连接')
     await expect(page.locator('.tn-foot')).toContainText('PID 424242')
     await expect(page.locator('.page-bar .btn-primary')).toHaveText('停止隧道')
     await page.locator('.page-bar .btn-primary').click()
@@ -94,11 +94,40 @@ test.describe('内网穿透', () => {
     await expect(page.locator('.tn-note.chip-warn')).toContainText('进程在跑，尚未连上 Cloudflare 边缘')
   })
 
+  test('运行中即使没有服务，也能停止隧道', async ({ page }) => {
+    await gotoTunnel(page, state(true, true, true, { ...READY, services: [] }))
+    const stop = page.getByRole('button', { name: '停止隧道', exact: true })
+    await expect(stop).toBeEnabled()
+    await stop.click()
+    expect(await e2e.count(page, 'tunnel_stop')).toBe(1)
+    await expect(page.locator('.page-bar .chip').first()).toContainText('已停止')
+  })
+
+  for (const width of [390, 768]) {
+    test(`窄窗口保留完整服务信息，操作可见且弹窗支持键盘（${width}px）`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 })
+      await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE] } })
+      const row = svcRow(page, LIVE.hostname)
+      await expect(row).toContainText('127.0.0.1:8421')
+      await expect(row.getByRole('button', { name: '复制 局域网传输 的公网地址' })).toBeInViewport()
+      expect(await page.locator('.tunnel-page').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+      await page.locator('.services .head-btn').click()
+      const dialog = page.getByRole('dialog', { name: '添加本地服务' })
+      await expect(dialog).toBeVisible()
+      await expect(dialog.getByRole('button', { name: '保存', exact: true })).toBeInViewport()
+      await page.keyboard.press('Shift+Tab')
+      expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true)
+      await page.keyboard.press('Escape')
+      await expect(dialog).toHaveCount(0)
+      await expect(page.locator('.services .head-btn')).toBeFocused()
+    })
+  }
+
   test('获取程序：内容不符与网络失败各说各话', async ({ page }) => {
     await gotoTunnel(page, { ...ROOT, tunnel: { installed: false, fetchFail: 'content' } })
     await page.locator('.tn-card.setup .row-bin .row-btn').click()
     await expectToast(page, '产物校验不符')
-    await expect(page.locator('.tn-card.setup .row-bin')).toContainText('按固定版本下载')
+    await expect(page.locator('.tn-card.setup .row-bin')).toContainText('下载并校验 cloudflared')
 
     await bootUnlocked(page, { ...ROOT, tunnel: { installed: false, fetchFail: 'network' } })
     await page.locator('a.nav-item[href="/tunnel"]').click()
@@ -188,11 +217,11 @@ test.describe('内网穿透', () => {
     test('换端口或换子域后回到未应用：旧记录不能替新指向作证', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE] } })
       await svcRow(page, 'files.example.com').locator('.acts .ib').nth(1).click()
-      await page.locator('.popover .pop-item', { hasText: '改公网设置' }).click()
+      await page.locator('.popover .pop-item', { hasText: '公网设置' }).click()
       const dlg = page.locator('.tunnel-service-dialog')
       await dlg.locator('#tn-svc-port').fill('8500')
       await dlg.locator('.dialog-footer .btn-primary').click()
-      await expect(svcRow(page, 'files.example.com')).toContainText('子域没指过来')
+      await expect(svcRow(page, 'files.example.com')).toContainText('域名待应用')
       expect(await e2e.count(page, 'tunnel_update_service')).toBe(1)
       // 只改基础字段不该碰到公网策略：口令与只读位各是各的命令
       expect(await e2e.count(page, 'tunnel_set_service_policy')).toBe(0)
@@ -201,11 +230,11 @@ test.describe('内网穿透', () => {
     test('公网设置：口令没设过时只翻开关被拒，补上口令同窗生效', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE] } })
       // 新建即「无口令」：行上必须把这个缺口说出来
-      await expect(svcRow(page, 'files.example.com')).toContainText('公网没设口令')
+      await expect(svcRow(page, 'files.example.com')).toContainText('公网未设口令')
 
       const openDialog = async () => {
         await svcRow(page, 'files.example.com').locator('.acts .ib').nth(1).click()
-        await page.locator('.popover .pop-item', { hasText: '改公网设置' }).click()
+        await page.locator('.popover .pop-item', { hasText: '公网设置' }).click()
       }
       const dlg = page.locator('.tunnel-service-dialog')
       await openDialog()
@@ -234,13 +263,13 @@ test.describe('内网穿透', () => {
       expect(snap.tunnel.services[0].hasPassword).toBe(true)
     })
 
-    test('目标端口没在听：行上标事实，不假装通', async ({ page }) => {
+    test('目标端口未监听：行上标事实，不假装通', async ({ page }) => {
       await gotoTunnel(page, {
         ...ROOT,
         tunnel: { ...READY, services: [{ ...LIVE, listening: false }] },
       })
-      await expect(svcRow(page, 'files.example.com')).toContainText('目标端口没在听')
-      await expect(page.locator('.tn-card.services .foot-row')).toContainText('1 条的目标端口此刻没在听')
+      await expect(svcRow(page, 'files.example.com')).toContainText('目标端口未监听')
+      await expect(page.locator('.tn-card.services .foot-row')).toContainText('1 个服务端口未监听，暂无法访问')
     })
 
     test('子域撞车：第二次登记被拒并说清撞在哪', async ({ page }) => {
@@ -272,7 +301,7 @@ test.describe('内网穿透', () => {
       await expect(dlg.locator('.service-note')).toHaveText('访问权限由原服务管理。')
       await expect(dlg.locator('.port-line .port-btn')).toBeHidden()
       await dlg.locator('.seg button', { hasText: '局域网传输' }).click()
-      await expect(dlg.locator('.service-note')).toHaveText('公网访问需设置口令，可在服务设置中配置。')
+      await expect(dlg.locator('.service-note')).toHaveText('保存后需在「公网设置」中设置口令。')
       await expect(dlg.locator('.port-line .port-btn')).toBeVisible()
     })
 
@@ -291,8 +320,8 @@ test.describe('内网穿透', () => {
     test('删除说的是本机这一条，DNS 记录留在云上', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE] } })
       await svcRow(page, 'files.example.com').locator('.acts .ib').nth(1).click()
-      await page.locator('.popover .pop-item', { hasText: '移除这条' }).click()
-      await expect(page.locator('.confirm-dialog .dialog-body')).toContainText('那条 DNS 记录还在 Cloudflare 上')
+      await page.locator('.popover .pop-item', { hasText: '移除服务' }).click()
+      await expect(page.locator('.confirm-dialog .dialog-body')).toContainText('Cloudflare 的 DNS 记录会保留')
       await page.locator('.confirm-dialog .btn-danger').click()
       await expectToast(page, '已移除')
       await expect(page.locator('.tn-card.services .svc-row')).toHaveCount(0)
@@ -316,7 +345,7 @@ test.describe('内网穿透', () => {
 
     test('未授权：新建隧道按不住，原因写在按钮上而不是丢一句失败', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { installed: true, authorized: false } })
-      await expect(row(page, 'auth')).toContainText('在浏览器里登录 Cloudflare')
+      await expect(row(page, 'auth')).toContainText('通过浏览器授权')
       const create = row(page, 'tunnel').locator('.row-btn')
       await expect(create).toHaveCount(0)
       expect(await e2e.count(page, 'tunnel_ensure_tunnel')).toBe(0)
@@ -365,10 +394,10 @@ test.describe('内网穿透', () => {
       // 三步齐了 setup 卡收成一行，先展开才能看到撤销入口
       await page.locator('.tn-card.setup .row-btn', { hasText: '调整' }).click()
       await row(page, 'auth').locator('.row-btn', { hasText: '撤销本机授权' }).click()
-      await expect(page.locator('.confirm-dialog .dialog-body')).toContainText('Cloudflare 账号侧')
+      await expect(page.locator('.confirm-dialog .dialog-body')).toContainText('彻底吊销授权需前往 Cloudflare 控制台')
       await page.locator('.confirm-dialog .btn-danger').click()
       await expectToast(page, '本机授权已撤销')
-      await expect(row(page, 'auth')).toContainText('在浏览器里登录 Cloudflare')
+      await expect(row(page, 'auth')).toContainText('通过浏览器授权')
       const snap = await e2e.snapshot(page)
       expect(snap.tunnel.tunnelId).toBe('e2e-tunnel-0001')
     })
@@ -382,7 +411,7 @@ test.describe('内网穿透', () => {
       expect(await e2e.count(page, 'tunnel_login_start')).toBe(1)
 
       await row(page, 'auth').locator('.row-btn', { hasText: '取消' }).click()
-      await expect(row(page, 'auth')).toContainText('在浏览器里登录 Cloudflare')
+      await expect(row(page, 'auth')).toContainText('通过浏览器授权')
       expect(await e2e.count(page, 'tunnel_login_cancel')).toBe(1)
     })
 

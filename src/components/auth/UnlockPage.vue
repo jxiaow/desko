@@ -262,9 +262,9 @@ onUnmounted(() => {
 
 /* ---------- 应用标题 ---------- */
 .lock-title {
-  font-size: 16px;
+  font-size: var(--text-lg);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: normal;
   color: var(--text);
   margin-bottom: 22px;
 }

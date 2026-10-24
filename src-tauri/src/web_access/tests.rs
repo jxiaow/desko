@@ -462,7 +462,7 @@ fn head_download_checks_session_and_length_without_transferring_file_bytes() {
                 bytes: vec![],
                 mime: "application/octet-stream".into(),
                 download: true,
-                file: Some(std::fs::File::open(&self.0).unwrap()),
+                file: Some(std::fs::File::open(&self.0).unwrap().into()),
             })
         }
     }

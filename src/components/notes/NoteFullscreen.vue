@@ -7,6 +7,7 @@ import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
 import NoteAttachments from './NoteAttachments.vue'
 import NoteMoreMenu from './NoteMoreMenu.vue'
+import NoteScrollTop from './NoteScrollTop.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatAbsTime, stripTagsFromHtml, htmlToText, wordCount } from '../../utils/format'
 import { noteDisplay } from '../../utils/noteDisplay'
@@ -61,6 +62,7 @@ const pageActive = usePageActive()
 const workspaceLayout = useWorkspaceLayout()
 const headerInTitlebar = computed(() => workspaceLayout && pageActive.value)
 const headerRef = ref<HTMLElement | null>(null)
+const scrollRef = ref<HTMLElement | null>(null)
 
 const viewMode = computed(() => props.mode === 'view')
 /** 查看态直接跟库里的正文走，不走编辑草稿的本地快照 */
@@ -133,7 +135,7 @@ function trapFocus(event: KeyboardEvent) {
 <template>
   <section ref="surfaceRef" class="fs" role="dialog" aria-modal="true" tabindex="-1" :aria-owns="headerInTitlebar ? 'note-fullscreen-toolbar' : undefined" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'" @keydown.tab="trapFocus">
     <Teleport :to="workspaceToolbarTarget" :disabled="!headerInTitlebar" defer>
-    <header id="note-fullscreen-toolbar" ref="headerRef" class="fs-head" :class="{ 'workspace-fs-head': headerInTitlebar, 'fs-reading-head': viewMode }" @mousedown="startDrag" @keydown.tab.stop="trapFocus">
+    <header id="note-fullscreen-toolbar" ref="headerRef" class="fs-head" data-workspace-heading="replace" data-workspace-toolbar="exclusive" :class="{ 'workspace-fs-head': headerInTitlebar, 'fs-reading-head': viewMode }" @mousedown="startDrag" @keydown.tab.stop="trapFocus">
       <button class="fs-exit" type="button" @click="emit('close')">
         <AppIcon name="min" :size="13" />
         退出全屏
@@ -158,10 +160,12 @@ function trapFocus(event: KeyboardEvent) {
         <button class="bar-btn primary" type="button" title="进入全屏编辑" aria-label="编辑" @click="emit('edit')">
           <AppIcon name="edit" :size="13" />编辑
         </button>
+        <button class="bar-btn" type="button" title="复制正文" aria-label="复制正文" @click="emit('copy')">
+          <AppIcon name="copy" :size="13" />复制
+        </button>
         <NoteMoreMenu
           variant="bar"
           :note="props.note"
-          @copy="emit('copy')"
           @toggle-star="emit('toggleStar')"
           @toggle-archive="emit('toggleArchive')"
           @export="emit('export', $event)"
@@ -174,7 +178,7 @@ function trapFocus(event: KeyboardEvent) {
     </header>
     </Teleport>
 
-    <div class="fs-scroll">
+    <div ref="scrollRef" class="fs-scroll">
       <div class="fs-inner" :class="viewMode ? 'fs-doc' : 'fs-col'">
         <h1 v-if="viewMode && display.title" class="fs-title">{{ display.title }}</h1>
         <div class="fs-meta">
@@ -209,6 +213,9 @@ function trapFocus(event: KeyboardEvent) {
       </div>
     </div>
 
+    <div v-if="!viewMode" class="fs-scroll-actions">
+      <NoteScrollTop :target="scrollRef" />
+    </div>
     <footer v-if="!viewMode" class="fs-foot">
       <NoteToolbar
         :note="props.note"
@@ -295,7 +302,7 @@ function trapFocus(event: KeyboardEvent) {
 
 .fs-title {
   margin-bottom: 8px;
-  font-size: 18px;
+  font-size: var(--text-xl);
   line-height: 26px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -313,6 +320,7 @@ function trapFocus(event: KeyboardEvent) {
 .fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.5; }
 
 .fs-scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable; min-height: 0; }
+.fs-scroll-actions { position: relative; flex-shrink: 0; }
 /* 阅读列保留水平留白，窄窗也不贴住滚动条。 */
 .fs-scroll:has(.fs-doc) { padding-inline: var(--workspace-gutter, var(--space-5)); scrollbar-gutter: stable; }
 .fs-inner { padding-block: 12px 20px; }
@@ -344,7 +352,7 @@ function trapFocus(event: KeyboardEvent) {
 
 /* 只读正文：排版语言与列表卡片同源，字号行距按全屏阅读放大 */
 .fs-view {
-  font-size: 14.5px;
+  font-size: var(--text-base);
   line-height: 24px;
   color: var(--text);
   word-break: break-word;
@@ -353,9 +361,9 @@ function trapFocus(event: KeyboardEvent) {
 .fs-view.promoted :deep(> :first-child) { display: none; }
 .fs-view.promoted :deep(> :first-child + *) { margin-top: 0; }
 .fs-view :deep(* + h1), .fs-view :deep(* + h2), .fs-view :deep(* + h3) { margin-top: 14px; }
-.fs-view :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.022em; line-height: 30px; }
-.fs-view :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: -0.01em; line-height: 26px; margin-top: 12px; }
-.fs-view :deep(h3) { font-size: 15.5px; font-weight: 600; line-height: 23px; margin-top: 10px; }
+.fs-view :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: normal; line-height: 30px; }
+.fs-view :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: normal; line-height: 26px; margin-top: 12px; }
+.fs-view :deep(h3) { font-size: var(--text-base); font-weight: 600; line-height: 23px; margin-top: 10px; }
 .fs-view :deep(strong) { font-weight: 600; color: var(--text); }
 .fs-view :deep(ul), .fs-view :deep(ol) { padding-left: var(--space-5); }
 .fs-view :deep(li) { margin: 4px 0; }

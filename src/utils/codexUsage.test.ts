@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { formatTokenCount, formatUsageCost, localDayKey, usageHours, usageWindowFrom } from './codexUsage'
+import { formatTokenCount, formatUsageCost, formatUsageCostDetail, localDayKey, usageHours, usageWindowFrom } from './codexUsage'
 
-it.each([[null, '未定价'], [undefined, '未定价'], [0, '$0.00'], [0.000001, '<$0.0001'], [0.012345, '$0.0123'], [1234.5, '$1,234.50']])('金额 %s 显示为 %s', (value, expected) => {
+it.each([[null, '未定价'], [undefined, '未定价'], [0, '$0.00'], [0.000001, '<$0.0001'], [0.004, '$0.0040'], [0.012345, '$0.0123'], [3.9478, '$3.95'], [1234.5, '$1,234.50']])('金额 %s 显示为 %s', (value, expected) => {
   expect(formatUsageCost(value as number | null | undefined)).toBe(expected)
+})
+
+it('金额摘要取整后，提示仍能核对原始精度且缺失定价保持明确', () => {
+  expect(formatUsageCostDetail(3.9478)).toBe('估算金额（USD）：$3.9478')
+  expect(formatUsageCostDetail(0.000001)).toBe('估算金额（USD）：$0.000001')
+  expect(formatUsageCostDetail(null)).toContain('未定价')
 })
 
 it.each([[0, '0'], [9999, '9,999'], [10000, '1万'], [12345, '1.23万'], [1200000, '120万'], [100000000, '1亿'], [1234567890, '12.35亿']])('Token %s 显示为 %s', (value, expected) => {

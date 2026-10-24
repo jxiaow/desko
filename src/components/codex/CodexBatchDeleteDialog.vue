@@ -33,13 +33,13 @@ const pct = computed(() => {
 const stateLine = computed(() => {
   switch (job.value?.status) {
     case 'paused':
-      return '已暂停。按下「继续」接着删剩下的，正在跑的那一条不会被打断。'
+      return '已暂停后续删除，当前一条会继续完成。'
     case 'completed':
-      return '这一批已经处理完，删掉的账号都进了回收站，随时能原样恢复。'
+      return '删除完成，可在回收站恢复。'
     case 'failed':
-      return '这一批跑完了，但有几条没删掉。可以只重试失败的那几条。'
+      return '部分删除失败，可重试失败项。'
     default:
-      return '正在逐条删除，每一条都会先留一份加密底再移出账号列表。'
+      return '正在逐条移入回收站…'
   }
 })
 
@@ -48,7 +48,7 @@ function onAbandon() {
   if (current?.status !== 'paused') return
   confirmStore.showConfirm(
     '放弃删除任务',
-    `确定放弃这批删除任务？剩余 ${Math.max(0, current.total - current.completed)} 条账号将不再继续删除。已删掉的账号仍在回收站中，可以恢复。`,
+    `停止删除剩余 ${Math.max(0, current.total - current.completed)} 个账号？已删除的账号可在回收站恢复。`,
     async () => {
       if (job.value?.jobId !== current.jobId || job.value.status !== 'paused') return
       toast.showToast(await abandonBatchDelete())
@@ -89,10 +89,9 @@ function onAbandon() {
           <div><dt>待处理</dt><dd>{{ Math.max(0, job.total - job.completed) }} 条</dd></div>
         </dl>
 
-        <div class="bd-details">
+        <div v-if="errors.length" class="bd-details">
           <div class="bd-details-title">失败明细</div>
-          <div v-if="!errors.length" class="bd-empty">这一轮还没有失败</div>
-          <div v-else class="bd-list">
+          <div class="bd-list">
             <div v-for="(row, i) in errors" :key="`${row.accountId}-${i}`" class="bd-row">
               <span class="bd-status">失败</span>
               <span class="bd-mail">{{ batchDeleteEmailOf(row.accountId) }}</span>
@@ -142,7 +141,7 @@ function onAbandon() {
 .bd-fail { margin-left: 6px; color: var(--danger) }
 .bd-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); margin: var(--space-4) 0; }
 .bd-summary dt { color: var(--text-muted); font-size: var(--text-xs); }
-.bd-summary dd { margin: var(--space-2) 0 0; color: var(--text); font: 600 var(--text-md) var(--font-mono); }
+.bd-summary dd { margin: var(--space-2) 0 0; color: var(--text); font: 600 var(--text-section) var(--font-ui); font-variant-numeric: tabular-nums; }
 
 .bd-bar {
   margin-top: 10px;
@@ -160,7 +159,6 @@ function onAbandon() {
   letter-spacing: .04em;
   color: var(--text-muted);
 }
-.bd-empty { margin-top: 8px; font-size: var(--text-xs); color: var(--text-muted) }
 .bd-list {
   margin-top: 8px;
   display: flex;

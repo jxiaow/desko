@@ -89,7 +89,7 @@ test('删到只剩一条会话时收起搜索，并显示未命中的剩余会�
   await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
   await expect(page.locator('#codex-view-filters')).toBeHidden()
   await expect(page.locator('.grp-meta')).toContainText('1 条')
-  await page.locator('.grp-head').click()
+  if (await page.locator('.grp-head').getAttribute('aria-expanded') === 'false') await page.locator('.grp-head').click()
   await expect(page.locator('.sess-title')).toHaveText('保留会话')
 })
 

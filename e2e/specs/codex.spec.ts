@@ -66,14 +66,14 @@ test.describe('Codex 账号', () => {
 
     await accountRow(page, 'back@e2e.dev').locator('.action-btn.primary').click()
     // 切号覆写 ~/.codex 官方凭据，先确认；取消则命令面一次都不动
-    const confirm = page.locator('.confirm-dialog')
-    await expect(confirm).toContainText('写入官方凭据文件 ~/.codex')
+    const confirm = page.locator('.codex-account-confirm')
+    await expect(confirm).toContainText('Windows 账号将切换为')
     await confirm.locator('button', { hasText: '取消' }).click()
     expect(await e2e.count(page, 'switch_codex_account')).toBe(0)
 
     await accountRow(page, 'back@e2e.dev').locator('.action-btn.primary').click()
-    await page.locator('.confirm-dialog .dialog-footer button', { hasText: '确定' }).click()
-    await expectToast(page, '已切换账号')
+    await page.locator('.codex-account-confirm').getByRole('button', { name: '切换', exact: true }).click()
+    await expectToast(page, '已切换到 back@e2e.dev')
     expect(await e2e.count(page, 'switch_codex_account')).toBe(1)
     await expect(accountRow(page, 'back@e2e.dev').locator('.badge', { hasText: '当前' })).toBeVisible()
     // 同一种凭据形态之间切号，官方侧边栏的过滤键没变，修复一次都不该跑
@@ -110,8 +110,8 @@ test.describe('Codex 账号', () => {
     })
     // OAuth → API Key 会改写 config.toml 的 model_provider，官方侧栏按它过滤 threads
     await accountRow(page, 'key@e2e.dev').locator('.action-btn.primary').click()
-    await page.locator('.confirm-dialog .dialog-footer button', { hasText: '确定' }).click()
-    await expectToast(page, /已切换账号，并修复 4 处会话可见性/)
+    await page.locator('.codex-account-confirm').getByRole('button', { name: '切换', exact: true }).click()
+    await expectToast(page, /已切换到 key@e2e.dev；已同步会话列表/)
     expect(await e2e.count(page, 'get_codex_history_visibility_provider')).toBe(2)
     expect(await e2e.count(page, 'codex_repair_session_visibility_for_launch_target')).toBe(1)
   })
@@ -128,8 +128,8 @@ test.describe('Codex 账号', () => {
       },
     })
     await accountRow(page, 'key@e2e.dev').locator('.action-btn.primary').click()
-    await page.locator('.confirm-dialog .dialog-footer button', { hasText: '确定' }).click()
-    await expectToast(page, /已切换账号，但会话可见性修复失败/)
+    await page.locator('.codex-account-confirm').getByRole('button', { name: '切换', exact: true }).click()
+    await expectToast(page, /已切换到 key@e2e.dev；会话列表同步失败/)
     expect(await e2e.count(page, 'switch_codex_account')).toBe(1)
     await expect(accountRow(page, 'key@e2e.dev').locator('.badge', { hasText: '当前' })).toBeVisible()
   })
@@ -218,7 +218,7 @@ test.describe('Codex 账号', () => {
     })
     await page.locator('.add-btn').click()
     const dialog = page.locator('.auth-dialog')
-    await expect(dialog.locator('.note.warn')).toHaveText(/回调端口已被占用/)
+    await expect(dialog.locator('.note.warn')).toHaveText(/回调端口被占用/)
     await dialog.locator('button', { hasText: '开始登录' }).click()
     await expectToast(page, /CODEX_OAUTH_PORT_IN_USE/)
   })
@@ -241,7 +241,7 @@ test.describe('Codex 账号', () => {
     const dlg = page.locator('.reset-credit-dialog')
     await expect(dlg).toBeVisible()
     await expect(dlg).toContainText('back@e2e.dev')
-    await expect(dlg).toContainText('还剩 1 次')
+    await expect(dlg).toContainText('剩余 1 次')
     await expect(dlg).toContainText('最近到期')
     await expect(dlg.locator('.rc-row')).toHaveCount(3)
     await expect(dlg.locator('.rc-status', { hasText: '可用' })).toHaveCount(1)
@@ -266,13 +266,13 @@ test.describe('Codex 账号', () => {
     await page.getByRole('button', { name: '导入已有凭据', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '导入 Codex 账号', exact: true })
     await expect(dialog.locator('.pathline code')).toContainText(/\.codex\\auth\.json/)
-    await dialog.getByRole('button', { name: '导入当前本机 Codex', exact: true }).click()
+    await dialog.getByRole('button', { name: '导入本机凭据', exact: true }).click()
     await expectToast(page, /已导入 local@e2e.dev/)
     expect(await e2e.count(page, 'import_codex_from_local')).toBe(1)
 
     await expect(dialog).toHaveCount(0)
     await page.locator('.acc-row').first().locator('.acc-more').click()
-    await page.locator('.popover .pop-item', { hasText: '导出这一条 JSON' }).click()
+    await page.locator('.popover .pop-item', { hasText: '导出 JSON' }).click()
     await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
     expect(await e2e.count(page, 'export_codex_accounts')).toBe(1)
   })
@@ -292,27 +292,23 @@ test.describe('Codex 账号', () => {
     expect(await e2e.count(page, 'open_codex_config_toml')).toBe(1)
   })
 
-  test('切号在途可取消：取消命令落一次，提示不谎称凭据没动过', async ({ page }) => {
-    await gotoCodex(page, {
-      settings: { codex_enabled: 'true' },
-      codex: {
-        accounts: [{ email: 'main@e2e.dev', current: true }, { email: 'back@e2e.dev' }],
-        switchDelayMs: 1500,
-      },
-    })
+  test('切号执行中不能取消或关闭弹窗', async ({ page }) => {
+    await gotoCodex(page, { settings: { codex_enabled: 'true' }, codex: {
+      accounts: [{ email: 'main@e2e.dev', current: true }, { email: 'back@e2e.dev' }], switchDelayMs: 1500,
+    } })
     await accountRow(page, 'back@e2e.dev').locator('.action-btn.primary').click()
-    await page.locator('.confirm-dialog .dialog-footer button', { hasText: '确定' }).click()
-
-    // 在途这几秒：切换钮换成取消，进度字挂上；别的行动作此刻点不动
-    const cancel = accountRow(page, 'back@e2e.dev').locator('.action-btn', { hasText: '取消' })
-    await expect(cancel).toBeVisible()
-    await expect(page.locator('.switch-line')).toContainText(/读取凭据|写入官方凭据/)
-    await cancel.click()
-    await expectToast(page, /已取消切换，以列表里的「当前」为准/)
-    expect(await e2e.count(page, 'codex_cancel_account_switch')).toBe(1)
-    // 取消点不确定在写凭据前还是后，界面不承诺「什么都没动」，只把当前指针交回列表
-    await expect(accountRow(page, 'main@e2e.dev').locator('.badge', { hasText: '当前' })).toBeVisible()
-    await expect(page.locator('.switch-line')).toHaveCount(0)
+    const dialog = page.locator('.codex-account-confirm')
+    await dialog.getByRole('button', { name: '切换', exact: true }).click()
+    await expect(dialog.getByRole('button', { name: '取消', exact: true })).toBeDisabled()
+    await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeDisabled()
+    await page.keyboard.press('Escape'); await expect(dialog).toBeVisible()
+    await page.keyboard.press('Tab')
+    expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true)
+    await page.keyboard.press('Shift+Tab')
+    expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true)
+    await expectToast(page, '已切换到 back@e2e.dev')
+    await expect(dialog).toHaveCount(0)
+    expect(await e2e.count(page, 'codex_cancel_account_switch')).toBe(0)
   })
 
   test('待授权、需重新登录的原因、配额失败原因与上次使用都落在行内', async ({ page }) => {
@@ -339,7 +335,7 @@ test.describe('Codex 账号', () => {
     await expect(accountRow(page, 'bare@e2e.dev').locator('.badge.warn', { hasText: '需重新登录' })).not.toHaveAttribute('title')
 
     const bad = accountRow(page, 'bad@e2e.dev')
-    await expect(bad.locator('.q-when.bad')).toHaveText('配额拉取失败')
+    await expect(bad.locator('.q-when.bad')).toHaveText('配额获取失败')
     await expect(bad.locator('.q-when.bad')).toHaveAttribute('title', /上游限流/)
     await expect(bad.locator('.acc-l3')).toContainText(/上次使用 \d{2}-\d{2} \d{2}:\d{2}/)
 
@@ -389,7 +385,7 @@ test.describe('Codex 账号', () => {
     await page.locator('.edit-dialog #cx-name').fill('换过密钥的')
     await page.locator('.edit-dialog .dialog-footer button', { hasText: '保存' }).click()
     const confirm = page.locator('.confirm-dialog')
-    await expect(confirm).toContainText('还会改写官方凭据文件')
+    await expect(confirm).toContainText('也会更新 Codex 凭据')
     await expect(confirm).not.toContainText('sk-e2e-9999')
     expect(await e2e.count(page, 'update_codex_api_key_credentials')).toBe(0)
     await confirm.getByRole('button', { name: '取消', exact: true }).click()
@@ -397,7 +393,7 @@ test.describe('Codex 账号', () => {
     await expect(page.locator('.edit-dialog #cx-newkey')).toHaveValue('sk-e2e-9999')
     await page.locator('.edit-dialog .dialog-footer button', { hasText: '保存' }).click()
     await confirm.getByRole('button', { name: '确定', exact: true }).click()
-    await expectToast(page, /凭据与档案已按新密钥重建/)
+    await expectToast(page, '账号凭据已更新')
     expect(await e2e.count(page, 'update_codex_api_key_credentials')).toBe(1)
 
     const calls = await page.evaluate(() =>
@@ -415,10 +411,10 @@ test.describe('Codex 账号', () => {
     await page.getByRole('button', { name: '导入已有凭据', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '导入 Codex 账号', exact: true })
     await dialog.getByRole('tab', { name: '粘贴 JSON', exact: true }).click()
-    await expect(dialog.getByRole('button', { name: '导入这段 JSON', exact: true })).toBeDisabled()
+    await expect(dialog.getByRole('button', { name: '导入 JSON', exact: true })).toBeDisabled()
 
     await dialog.locator('#cx-paste').fill('{"accounts":[{"email":"paste@e2e.dev"}]}')
-    await dialog.getByRole('button', { name: '导入这段 JSON', exact: true }).click()
+    await dialog.getByRole('button', { name: '导入 JSON', exact: true }).click()
     await expectToast(page, /已导入 1 条账号/)
     expect(await e2e.count(page, 'import_codex_from_json')).toBe(1)
     await expect(accountRow(page, 'paste@e2e.dev')).toBeVisible()
@@ -537,86 +533,7 @@ test.describe('Codex 账号', () => {
     expect(writes).toEqual(['false', 'true'])
   })
 
-  test('设置·Codex：WSL 登录态同步默认关闭，过期源只提示并禁用同步', async ({ page }) => {
-    await page.setViewportSize({ width: 800, height: 1000 })
-    await bootUnlocked(page, {
-      settings: { codex_enabled: 'true' },
-      codex: {
-        accounts: [{ email: 'main@e2e.dev', plan_type: 'pro', current: true }],
-        wslAuth: {
-          expired: true,
-          targets: [{ distro: 'Ubuntu', user: 'jxiaow', state: 'outdated', email: 'main@e2e.dev' }],
-        },
-      },
-    })
-    const dialog = await openSettings(page, 'codex')
-    const toggle = dialog.getByRole('switch', { name: '自动同步 WSL 登录态', exact: true })
-    await expect(toggle).toBeEnabled()
-    await expect(toggle).not.toBeChecked()
 
-    const target = dialog.locator('.wsl-auth-target')
-    await expect(target).toHaveCount(1)
-    await expect(target).toContainText('Ubuntu / jxiaow')
-    await expect(target.locator('.wsl-auth-target-state')).toHaveText('同账号 · 待同步')
-    await expect(dialog.locator('.wsl-auth-expired')).toContainText('已过期')
-    await expect(dialog.locator('.wsl-auth-warning')).toContainText('Windows 侧凭据已过期')
-    await expect(dialog.getByRole('button', { name: '立即同步', exact: true })).toBeDisabled()
-    expect(await visiblePane(dialog).evaluate(element => element.scrollWidth > element.clientWidth)).toBe(false)
-    await page.screenshot({ path: '.tmp/codex-wsl/settings-wsl-auth-expired.png' })
-
-    await toggle.locator('..').click()
-    await expectToast(page, '已开启 WSL 登录态自动同步')
-    await expect(toggle).toBeChecked()
-    const writes = await page.evaluate(() => (window as any).__E2E__.invocations
-      .filter((call: any) => call.cmd === 'set_setting' && call.args.key === 'codex_wsl_auth_auto_sync')
-      .map((call: any) => call.args.value))
-    expect(writes).toEqual(['true'])
-  })
-
-  test('设置·Codex：立即同步写入待同步目标并刷新状态', async ({ page }) => {
-    await bootUnlocked(page, {
-      settings: { codex_enabled: 'true' },
-      codex: {
-        accounts: [{ email: 'main@e2e.dev', plan_type: 'pro', current: true }],
-        wslAuth: {
-          targets: [{ distro: 'Ubuntu', user: 'jxiaow', state: 'outdated', email: 'main@e2e.dev' }],
-        },
-      },
-    })
-    const dialog = await openSettings(page, 'codex')
-    const target = dialog.locator('.wsl-auth-target')
-    await expect(target.locator('.wsl-auth-target-state')).toHaveText('同账号 · 待同步')
-
-    await dialog.getByRole('button', { name: '立即同步', exact: true }).click()
-    await expectToast(page, '已同步 1 个 WSL 目标')
-    await expect(target.locator('.wsl-auth-target-state')).toHaveText('同账号 · 已最新')
-    await expect(dialog.locator('.wsl-auth-result')).toHaveText('已同步 1 个')
-    await expect(dialog.getByRole('button', { name: '立即同步', exact: true })).toBeEnabled()
-
-    const calls = await page.evaluate(() => (window as any).__E2E__.invocations
-      .filter((call: any) => call.cmd === 'sync_codex_auth_to_wsl').length)
-    expect(calls).toBe(1)
-  })
-
-  test('Codex 页：开启自动同步后进页静默同步 WSL 登录态', async ({ page }) => {
-    await bootUnlocked(page, {
-      settings: { codex_enabled: 'true', codex_wsl_auth_auto_sync: 'true' },
-      codex: {
-        accounts: [{ email: 'main@e2e.dev', plan_type: 'pro', current: true }],
-        wslAuth: {
-          targets: [{ distro: 'Ubuntu', user: 'jxiaow', state: 'outdated', email: 'main@e2e.dev' }],
-        },
-      },
-    })
-    await page.locator('a.nav-item[href="/codex"]').click()
-    await expect.poll(() => page.evaluate(() => (window as any).__E2E__.invocations
-      .filter((call: any) => call.cmd === 'sync_codex_auth_to_wsl').length)).toBe(1)
-
-    const dialog = await openSettings(page, 'codex')
-    await expect(dialog.locator('.wsl-auth-target-state')).toHaveText('同账号 · 已最新')
-    const toggle = dialog.getByRole('switch', { name: '自动同步 WSL 登录态', exact: true })
-    await expect(toggle).toBeChecked()
-  })
 })
 
 
@@ -647,7 +564,7 @@ async function argOf(page: Page, cmd: string, key: string) {
   return calls[calls.length - 1]?.args[key]
 }
 
-/** 项目默认收起；需要读取会话行时展开目标项目。 */
+/** 需要读取会话行时，确保目标项目已展开。 */
 async function expandGroup(page: Page, name: string) {
   const head = page.locator('.grp-head', { hasText: name })
   if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
@@ -681,14 +598,14 @@ test.describe('Codex 会话档', () => {
     expect(await e2e.count(page, LIST_CMD)).toBe(2)
   })
 
-  test('首屏所有项目收起，进档预取 token，展开不补取', async ({ page }) => {
+  test('首屏展开最近项目，进档预取 token，重新展开不补取', async ({ page }) => {
     await gotoSessions(page)
     await expect(page.locator('.grp-head')).toHaveCount(2)
-    // 首次不自动展开，仍预取全部统计。
+    // 首次展开最近项目，同时预取全部统计。
     const notes = page.locator('.grp-head', { hasText: 'demo-notes' })
-    await expect(notes).toHaveAttribute('aria-expanded', 'false')
+    await expect(notes).toHaveAttribute('aria-expanded', 'true')
     await expect(page.locator('.grp-head', { hasText: 'demo-icons' })).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.locator('.sess-row')).toHaveCount(0)
+    await expect(page.locator('.sess-row')).toHaveCount(3)
     // 本机实测 67 个 rollout 全量尾扫 218 ms：等展开才取会让合计量沉在水下
     await expect.poll(() => e2e.count(page, STATS_CMD)).toBe(1)
     expect((await argOf(page, STATS_CMD, 'sessionIds')).slice().sort()).toEqual([
@@ -698,6 +615,9 @@ test.describe('Codex 会话档', () => {
       'sess-p6q7r8s9t0',
     ])
 
+    await notes.click()
+    await expect(notes).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator('.sess-row')).toHaveCount(0)
     await notes.click()
     await expect(page.locator('.sess-row')).toHaveCount(3)
     expect(await e2e.count(page, STATS_CMD)).toBe(1)
@@ -723,7 +643,7 @@ test.describe('Codex 会话档', () => {
       await page.keyboard.press('Enter')
       await expect(notes.locator('.notes-body')).toBeVisible()
       await expect(notes).toContainText('不代表订阅扣费')
-      await expect(notes).toContainText('请求按有用量的 Token 记录去重')
+      await expect(notes).toContainText('请求数按 Token 增量记录估算')
       await page.keyboard.press('Enter')
       await expect(notes.locator('.notes-body')).toBeHidden()
     }
@@ -741,7 +661,7 @@ test.describe('Codex 会话档', () => {
     await page.locator('.search-clear').click()
     await expect(page.locator('.grp-head')).toHaveCount(2)
     await expect(icons).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.locator('.sess-row')).toHaveCount(0)
+    await expect(page.locator('.sess-row')).toHaveCount(3)
   })
 
   test('切到别的档再回来：翻开的组不丢', async ({ page }) => {
@@ -762,17 +682,17 @@ test.describe('Codex 会话档', () => {
   test('合计量上屏：hero 一笔、组头一位，展开行给六个口径', async ({ page }) => {
     await gotoSessions(page)
     await expect(page.locator('.hero-num')).toHaveText('6.51万')
-    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 4 条会话 · 净输入 8,800 · 输出 5,020 · 缓存命中 5.13万')
-    await expect(page.locator('.grp-head').first().locator('.grp-tok > span')).toHaveText(['累计 1.69万 Token', '净输入 3,800', '输出 1,820', '请求 3 次', '估算 $0.0185'])
+    await expect(page.locator('.hero-sub')).toHaveText('净输入 8,800 · 输出 5,020 · 缓存命中 5.13万')
+    await expect(page.locator('.grp-head').first().locator('.grp-tok > span')).toHaveText(['累计 1.69万 Token', '请求 3 次', '估算 $0.0185'])
 
     await expandGroup(page, 'demo-notes')
     const row = page.locator('.sess-row').first()
-    // 行上只有标题与时间，用量进悬停；展开档才逐位铺开
+    // 行上直接显示用量与时间；展开档再逐位铺开
     await expect(row.locator('.sess-time')).toBeVisible()
     await row.click()
     const facts = page.locator('.sess-card .sess-facts')
-    await expect(facts.locator('dt')).toHaveText(['净输入', '缓存命中', '缓存写入', '输出', '其中推理', '官方累计', '请求数', '估算金额（USD）'])
-    await expect(facts.locator('dd')).toHaveText(['1,300', '1.1万', '0', '1,400', '400', '1.37万', '1', '$0.017'])
+    await expect(facts.locator('dt')).toHaveText(['净输入', '缓存命中', '缓存写入', '输出', '其中推理', '累计用量', '请求数', '估算金额（USD）'])
+    await expect(facts.locator('dd')).toHaveText(['1,300', '1.1万', '0', '1,400', '400', '1.37万', '1', '$0.0170'])
   })
 
   test('标题搜索走后端：只填 trim 后的 titleQuery，contentQuery 恒 null', async ({ page }) => {
@@ -847,7 +767,7 @@ test.describe('Codex 会话回收站', () => {
     await gotoTab(page, '会话', '.grp-head')
     await expandGroup(page, 'demo-notes')
     await expect(page.locator('.hero-num')).toHaveText('6.51万')
-    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 4 条会话 · 净输入 8,800 · 输出 5,020 · 缓存命中 5.13万')
+    await expect(page.locator('.hero-sub')).toHaveText('净输入 8,800 · 输出 5,020 · 缓存命中 5.13万')
 
     const row = page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')
     await row.click()
@@ -856,7 +776,7 @@ test.describe('Codex 会话回收站', () => {
 
     await page.locator('.sess-card .trash-btn').click()
     const confirm = page.locator('.confirm-dialog')
-    await expect(confirm).toContainText('删除「修全屏小记的排版」？desko 先把会话文件留底进回收站（可还原）')
+    await expect(confirm).toContainText('将「修全屏小记的排版」移入回收站？可恢复')
     await confirm.locator('button', { hasText: '取消' }).click()
     await expect(page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')).toBeVisible()
     expect(await e2e.count(page, MOVE_CMD)).toBe(0)
@@ -868,7 +788,7 @@ test.describe('Codex 会话回收站', () => {
     await expect(page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')).toHaveCount(0)
     // 合计量不能拿着已删的那条：65.1K 掉到 51.4K，缓存命中同步少 11K
     await expect(page.locator('.hero-num')).toHaveText('5.14万')
-    await expect(page.locator('.hero-sub')).toHaveText('2 个项目 · 3 条会话 · 净输入 7,500 · 输出 3,620 · 缓存命中 4.03万')
+    await expect(page.locator('.hero-sub')).toHaveText('净输入 7,500 · 输出 3,620 · 缓存命中 4.03万')
     await expect(page.locator('.titlebar-count')).toHaveText('3 条')
 
     await page.locator('.cx-tab', { hasText: '回收站' }).click()
@@ -878,7 +798,7 @@ test.describe('Codex 会话回收站', () => {
     await expect(page.locator('.thr-l2').first()).toContainText('删除')
 
     await page.locator('.thr-acts .action-btn').first().click()
-    await expect(confirm).toContainText('把「修全屏小记的排版」的会话文件写回官方 Codex 目录')
+    await expect(confirm).toContainText('恢复会话「修全屏小记的排版」？')
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
     await expectToast(page, '已恢复 1 条会话')
     expect(await argOf(page, RESTORE_CMD, 'sessionIds')).toEqual(['sess-a1b2c3d4e5'])
@@ -909,16 +829,16 @@ test.describe('Codex 会话回收站', () => {
     await expect(second.locator('.thr-l2')).toContainText('3.0 MB')
 
     await second.locator('.action-btn.danger').click()
-    await expect(page.locator('.confirm-dialog')).toContainText('这一步之后无法再恢复')
+    await expect(page.locator('.confirm-dialog')).toContainText('删除后无法恢复')
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
     await expectToast(page, '已永久删除 1 条回收站会话，释放约 3.0 MB')
     expect(await argOf(page, DELETE_CMD, 'sessionIds')).toEqual(['sess-u6u7u8u9u0'])
     await expect(page.locator('.thr-row')).toHaveCount(1)
 
     // 「清空」住在自己那一节的头上：两份留底各清各的
-    const sessSec = page.locator('.thr-sec', { hasText: '会话留底' })
+    const sessSec = page.locator('.thr-sec', { hasText: '会话' })
     await sessSec.locator('.thr-sec-act').click()
-    await expect(page.locator('.confirm-dialog')).toContainText('彻底删除回收站里的 1 条会话留底？')
+    await expect(page.locator('.confirm-dialog')).toContainText('永久删除回收站中的 1 条会话？')
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
     await expectToast(page, '已清空 Codex 会话回收站，永久删除 1 条会话，释放约 2.0 KB')
     await expect(page.locator('.empty-title')).toHaveText('回收站是空的')
@@ -1032,7 +952,7 @@ test.describe('Codex 账号回收站', () => {
 
   test('两份留底分区显示：账号在上、会话在下，页头各计各的', async ({ page }) => {
     await gotoTrash(page)
-    await expect(page.locator('.thr-sec-title')).toHaveText(['账号留底', '会话留底'])
+    await expect(page.locator('.thr-sec-title')).toHaveText(['账号', '会话'])
     await expect(page.locator('.titlebar-count')).toHaveText('2 个账号 · 1 条会话')
     const first = page.locator('.thr-row[data-rid]').first()
     await expect(first.locator('.thr-title')).toHaveText('旧手机上的号')
@@ -1044,13 +964,13 @@ test.describe('Codex 账号回收站', () => {
     await expect(page.locator('.thr-row[data-rid]').nth(1).locator('.thr-sub')).toHaveCount(0)
     // 快照只出摘要那几列：行上不得出现凭据字段的形状
     await expect(page.locator('.thr-row').first()).not.toContainText('at-e2e')
-    await expect(page.locator('.page-note')).toContainText('账号留底是加密快照')
+    await expect(page.locator('.thr-view .page-note')).toHaveCount(0)
   })
 
   test('删除账号真的落进留底：账号页少一条、回收站多一行，恢复后回到列表', async ({ page }) => {
     await gotoCodex(page, TWO)
     await rowMenu(page, 'back@e2e.dev', '删除')
-    await expect(page.locator('.confirm-dialog')).toContainText('会移进回收站、留一份加密底')
+    await expect(page.locator('.confirm-dialog')).toContainText('移入回收站？可恢复')
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
     await expectToast(page, '已移进回收站')
     await expect(page.locator('.acc-row')).toHaveCount(1)
@@ -1061,7 +981,7 @@ test.describe('Codex 账号回收站', () => {
     expect(await e2e.count(page, RECYCLED_LIST_CMD)).toBe(1)
 
     await page.locator('.thr-acts .action-btn').first().click()
-    await expect(page.locator('.confirm-dialog')).toContainText('官方凭据从头到尾没被动过')
+    await expect(page.locator('.confirm-dialog')).toContainText('当前 Codex 登录不受影响')
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
     await expectToast(page, '已恢复到账号列表')
     expect(await argOf(page, RECYCLED_RESTORE_CMD, 'recycleId')).toBeTruthy()
@@ -1078,17 +998,17 @@ test.describe('Codex 账号回收站', () => {
     await gotoTrash(page)
     const gone = await page.locator('.thr-row[data-rid]').first().getAttribute('data-rid')
     await page.locator('.thr-row[data-rid]').first().locator('.action-btn.danger').click()
-    await expect(page.locator('.confirm-dialog')).toContainText('删除「旧手机上的号」在 desko 里的加密留底？')
+    await expect(page.locator('.confirm-dialog')).toContainText('永久删除账号「旧手机上的号」？')
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
-    await expectToast(page, '已彻底删除这条留底')
+    await expectToast(page, '账号已彻底删除')
     expect(await argOf(page, RECYCLED_DELETE_CMD, 'recycleId')).toBe(gone)
     await expect(page.locator('.thr-row[data-rid]')).toHaveCount(1)
 
     const rest = await page.locator('.thr-row[data-rid]').first().getAttribute('data-rid')
-    await page.locator('.thr-sec', { hasText: '账号留底' }).locator('.thr-sec-act').click()
-    await expect(page.locator('.confirm-dialog')).toContainText('彻底删除回收站里的 1 条账号留底？')
+    await page.locator('.thr-sec', { hasText: '账号' }).locator('.thr-sec-act').click()
+    await expect(page.locator('.confirm-dialog')).toContainText('永久删除回收站中的 1 个账号？')
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
-    await expectToast(page, '已彻底删除 1 条留底')
+    await expectToast(page, '已彻底删除 1 个账号')
     expect(await argOf(page, RECYCLED_EMPTY_CMD, 'recycleIds')).toEqual([rest])
     await expect(page.locator('.thr-row[data-rid]')).toHaveCount(0)
     // 账号那一节清空不牵连会话那一节
@@ -1102,7 +1022,7 @@ test.describe('Codex 账号回收站', () => {
     await accountRow(page, 'main@e2e.dev').click()
     await accountRow(page, 'back@e2e.dev').click()
     await page.locator('.batch-dock .dock-btn', { hasText: '删除选中' }).click()
-    await expect(page.locator('.confirm-dialog')).toContainText('它们在 Desko 里的记录会移进回收站留加密底')
+    await expect(page.locator('.confirm-dialog')).toContainText('当前 Codex 登录不受影响。删除过程可暂停')
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
     const dialog = page.locator('.batch-delete-dialog')
     await expect(dialog.locator('.bd-done')).toHaveText('2')
@@ -1259,14 +1179,14 @@ test.describe('Codex 批量删除作业', () => {
 
     await dialog.locator('.dialog-footer button', { hasText: '放弃任务' }).click()
     const confirm = page.locator('.confirm-dialog')
-    await expect(confirm).toContainText('已删掉的账号仍在回收站中')
+    await expect(confirm).toContainText('已删除的账号可在回收站恢复')
     expect(await e2e.count(page, DELETE_CLEAR_CMD)).toBe(0)
     await confirm.getByRole('button', { name: '取消', exact: true }).click()
     await expect(dialog).toHaveAttribute('data-status', 'paused')
     expect(await e2e.count(page, DELETE_CLEAR_CMD)).toBe(0)
     await dialog.locator('.dialog-footer button', { hasText: '放弃任务' }).click()
     await confirm.getByRole('button', { name: '确定', exact: true }).click()
-    await expectToast(page, '已放弃这个删除任务，删掉的账号在回收站里可以还原')
+    await expectToast(page, '任务已放弃，已删除账号可在回收站恢复')
     await expect(page.locator('.batch-delete-dialog')).toHaveCount(0)
     await expect(page.locator('.batch-dock')).toHaveCount(0)
     expect(await e2e.count(page, DELETE_CLEAR_CMD)).toBe(1)

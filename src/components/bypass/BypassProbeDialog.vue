@@ -26,8 +26,8 @@ const summary = computed(() => {
   if (r.verdict === 'needRoute') {
     const egress = r.egress?.interface || '代理接口'
     const connection = r.target.kind === 'cidr' ? `该网段的出口由 ${egress} 接管。`
-      : r.probeMs != null ? `目标可连接，但出口仍由 ${egress} 接管。连接成功不代表已绕过代理。`
-      : `目标仍通过 ${egress} 发出，服务端口尚未确认可连接。`
+      : r.probeMs != null ? `目标可连接，出口仍由 ${egress} 接管。`
+      : `出口由 ${egress} 接管，端口连通性未确认。`
     return `${connection}需配置系统路由以实现直连。`
   }
   if (r.verdict === 'hostsOnly') return `需要将域名解析到实际地址 ${r.chosen || r.realIps[0] || '（未确定）'}，才能使用直连出口。`
@@ -39,10 +39,9 @@ const summary = computed(() => {
 })
 const nextSteps = computed(() => {
   if (!needsConfig.value) return []
-  const steps = props.recorded ? [] : [`点击「${props.existing ? '更新清单' : '加入清单'}」保存本次结果。`]
-  steps.push('点击「配置直连」查看方案，再确认配置并允许管理员授权。')
-  steps.push(`若使用代理客户端，将 ${props.report.target.host} 加入其直连规则（DIRECT）。`)
-  steps.push('系统配置后会自动复验；调整代理规则后，可再次探测确认。')
+  const steps = props.recorded ? [] : [`先${props.existing ? '更新清单' : '加入清单'}。`]
+  steps.push('确认「配置直连」方案并允许管理员授权，完成后自动复验。')
+  steps.push('使用代理时，将目标设为直连（DIRECT），再重新探测。')
   return steps
 })
 const extraPending = computed(() => props.report.pending.filter(text =>
@@ -141,8 +140,8 @@ async function copyConclusion() {
           <div v-if="nextSteps.length" class="concl-next">
             <h4>下一步</h4>
             <ol><li v-for="step in nextSteps" :key="step">{{ step }}</li></ol>
-            <p v-if="recorded" class="concl-saved">本次探测结果已保存到清单。</p>
-            <p v-if="canConfigure && configureCount > 1" class="concl-scope">配置方案将包含清单中 {{ configureCount }} 项待配置目标，请在确认前查看。</p>
+            <p v-if="recorded" class="concl-saved">结果已保存</p>
+            <p v-if="canConfigure && configureCount > 1" class="concl-scope">方案包含清单中 {{ configureCount }} 个待配置目标，请核对。</p>
           </div>
           <ul v-if="extraPending.length" class="concl-pending">
             <li v-for="(p, i) in extraPending" :key="i">

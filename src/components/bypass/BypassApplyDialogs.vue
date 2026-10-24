@@ -62,8 +62,8 @@ function rowLabelOf(id: string) {
           </button>
         </div>
         <div class="dialog-body">
-          <p v-if="plan.ready" class="lead">将配置 {{ plan.ready }} 个目标，修改 hosts 记录或持久路由。暂不配置的目标不会写入任何更改。</p>
-          <p v-else class="lead">暂时没有可配置的目标，请先处理下列原因。尚未写入任何更改。</p>
+          <p v-if="plan.ready" class="lead">将为 {{ plan.ready }} 个目标更新 hosts 或持久路由，其余目标保持不变。</p>
+          <p v-else class="lead">暂无可配置的目标，请处理以下问题后重试。</p>
           <p v-if="busyPlan" role="status">正在更新配置方案…</p>
           <ul class="plan-list plan-preview">
             <li v-for="(r, i) in plan.rows" :key="`${r.id}-${i}`" :class="{ blocked: !!r.blocked }">
@@ -79,31 +79,31 @@ function rowLabelOf(id: string) {
                     </option>
                   </select>
                 </label>
-                <p v-if="r.blocked && r.routeOptions?.length" class="plan-route-hint">请选择能访问该地址的局域网或 VPN，选择后会立即更新方案。</p>
+                <p v-if="r.blocked && r.routeOptions?.length" class="plan-route-hint">选择可访问此地址的局域网或 VPN。</p>
                 <div v-if="isCdnRow(r.id) && (i === 0 || plan.rows[i - 1].id !== r.id)" class="plan-cdn-choice">
                   <label class="plan-cdn">
                     <input type="checkbox" :checked="cdnPinned(r.id)" :disabled="busyPlan" @change="emit('cdn', r.id)" />
                     <span>同意固定当前 IP（<span class="mono">{{ cdnAddress(r.id) }}</span>）</span>
                   </label>
-                  <p class="plan-cdn-hint">仅同意固定解析地址，仍需通过直连出口检查。地址变化后需重新探测并更新配置。</p>
+              <p class="plan-cdn-hint">仍需通过直连出口检查；IP 变化后需重新探测并配置。</p>
                 </div>
               </div>
             </li>
           </ul>
           <section v-if="needsRouteHelp" class="plan-help" aria-label="直连出口处理指引">
             <h4>如何处理直连出口</h4>
-            <p>未找到可用的直连出口，请先检查网络连接。此处没有额外的“人工确认”操作。</p>
+            <p>未找到可用出口，请检查网络或代理规则。</p>
             <ol>
-              <li>按 <kbd>Win + R</kbd>，输入 <code>ncpa.cpl</code> 打开 Windows 网络连接，检查以太网、Wi-Fi 或访问该地址所需的内网 VPN 是否已连接。</li>
-              <li>若使用代理，在代理客户端的“规则 / 分流”设置中，将无法确定出口的目标地址设为直连（DIRECT）。内网服务仍需连接到能访问该网段的网络。</li>
-              <li>调整后关闭此弹窗，点击本页的“检查全部”，再打开“配置直连”。若仍无法生成方案，请检查该网段的网络路由配置。</li>
+              <li>按 <kbd>Win + R</kbd>，输入 <code>ncpa.cpl</code>，检查以太网、Wi-Fi 或所需内网 VPN 是否连接。</li>
+              <li>在代理客户端将目标设为直连（DIRECT）；访问内网仍需连接对应网络或 VPN。</li>
+              <li>调整后点击「检查全部」，再打开「配置直连」。仍失败时请检查该网段的路由。</li>
             </ol>
           </section>
         </div>
         <div class="dialog-footer">
-          <div class="footer-hints">
-            <AppIcon v-if="plan.ready" name="lock" :size="12" />
-            <span>{{ plan.ready ? '点击“确认并配置”后，Windows 将请求管理员授权' : '先处理原因，再重新检查' }}</span>
+          <div v-if="plan.ready" class="footer-hints">
+            <AppIcon name="lock" :size="12" />
+            <span>配置需要 Windows 管理员授权</span>
           </div>
           <button class="btn-secondary" type="button" @click="emit('closePlan')">取消</button>
           <button class="btn-primary" type="button" :disabled="busyPlan || plan.ready === 0" @click="emit('apply')">
@@ -127,9 +127,9 @@ function rowLabelOf(id: string) {
             成功 {{ resultSummary.ok }} · 无需更改 {{ resultSummary.skip }} · 失败 {{ resultSummary.bad }}（按操作计）
           </p>
           <p v-if="applyResult.rolledBack" class="dialog-err">
-            <template v-if="rolledBackClean">部分操作未通过校验，本次更改已撤销。</template>
+            <template v-if="rolledBackClean">校验失败，本次更改已撤销。</template>
             <template v-else
-              >部分操作未通过校验，自动撤销未完成。系统可能保留部分更改，请点击「撤销本次配置」重试。原因：{{
+              >自动撤销未完成，系统可能保留部分更改。请重试「撤销本次配置」。原因：{{
                 applyResult.error
               }}</template
             >

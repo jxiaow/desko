@@ -16,6 +16,7 @@ const props = defineProps<{
   modelValue: string | number
   options: OptionItem[]
   disabled?: boolean
+  matchWidth?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: string | number] }>()
@@ -53,13 +54,14 @@ const pick = (v: string | number) => {
     <span class="opt-value">{{ currentLabel() }}</span>
       <AppIcon class="opt-chev" :class="{ up: open }" name="chevDown" :size="11" />
   </button>
-  <PopoverMenu v-if="open && anchor" :anchor="anchor" modal align="start" @close="open = false">
+  <PopoverMenu v-if="open && anchor" :anchor="anchor" :match-width="matchWidth" modal align="start" @close="open = false">
     <button
       v-for="o in options"
       :key="o.value"
       type="button"
       role="menuitemradio"
       :aria-checked="o.value === modelValue"
+      :title="o.label"
       class="pop-item opt-item"
       :class="{ on: o.value === modelValue }"
       @click="pick(o.value)"
@@ -90,6 +92,7 @@ const pick = (v: string | number) => {
 .opt-chev.up { transform: rotate(180deg); }
 
 .opt-item { justify-content: space-between; }
+.opt-item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .opt-item.on { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
 .opt-item.on::after { content: '✓'; margin-left: var(--space-3); }
 </style>

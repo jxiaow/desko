@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tiny_http::{Header, Request, Response, StatusCode};
 
 use crate::auth::{sanitize_next, LAN_SCOPE, SESSION_COOKIE};
-use crate::config::{ensure_dirs_exist, normalize_share_dirs, PublicPolicy, ShareConfig};
+use crate::config::{ensure_dirs_exist, normalize_share_dirs, PublicPolicy, ShareConfig, ThemeStamp};
 use crate::files::{
     claim_available_name, format_size, list_files, resolve_file_in_share, sanitize_upload_name, FileEntry,
 };
@@ -63,6 +63,16 @@ struct Face {
 impl Face {
     fn is_public(&self) -> bool {
         self.policy.is_some()
+    }
+
+    /// 这一面该画成什么样。公网面不采信主题戳，固定纸·浅·群青——
+    /// 本机换了什么颜色是这台机器的事，不该顺着 Host 头泄给公网访客。
+    fn theme_stamp(&self, cfg: &ShareConfig) -> ThemeStamp {
+        if self.is_public() {
+            ThemeStamp::default()
+        } else {
+            cfg.theme_stamp()
+        }
     }
 
     /// 两维同时计：换来源 IP 绕不开整域那一维
@@ -185,6 +195,8 @@ fn dispatch(
         }
     }
 
+    // 这一面该画成哪套外观（规则见 Face::theme_stamp）
+    let stamp = face.theme_stamp(cfg);
     // 口令门：/login 与字体静态资源之外一律先验会话
     let stored = match &face.policy {
         Some(p) => p.password_sha256.clone(),
@@ -200,23 +212,23 @@ fn dispatch(
             return if method == "GET" {
                 ok_respond(request, redirect_resp(&format!("/login?next={}", url_encode(&next)), None))
             } else {
-                ok_respond(request, html_resp(StatusCode(401), &pages::login_page(Some("口令不正确"), &next), None))
+                ok_respond(request, html_resp(StatusCode(401), &pages::login_page(Some("口令不正确"), &next, &stamp), None))
             };
         }
     }
 
     match (method, path) {
-        ("GET", "/") => handle_index(request, state, cfg, query),
+        ("GET", "/") => handle_index(request, state, cfg, &stamp, query),
         ("GET", "/download") => handle_download(request, state, cfg, query),
         ("POST", "/settings") => handle_settings_post(request, state),
         ("POST", "/upload") => handle_upload(request, state, cfg, query, content_type),
         ("POST", "/save-text") => handle_save_text(request, state, cfg, query),
         ("GET", "/login") => {
             let next = sanitize_next(pair_get(query, "next").unwrap_or(""));
-            ok_respond(request, html_resp(StatusCode(200), &pages::login_page(None, &next), None))
+            ok_respond(request, html_resp(StatusCode(200), &pages::login_page(None, &next, &stamp), None))
         }
         ("GET", "/fonts/app.woff2") => ok_respond(request, font_resp()),
-        ("POST", "/login") => handle_login(request, state, face),
+        ("POST", "/login") => handle_login(request, state, face, &stamp),
         _ => ok_respond(request, text_resp(StatusCode(404), "Not Found")),
     }
 }
@@ -241,8 +253,9 @@ fn original_target(method: &str, path: &str, query: &[(String, String)]) -> Stri
 
 fn handle_index(
     request: Request,
-    state: &Arc<RuntimeState>,
+    _state: &Arc<RuntimeState>,
     cfg: &ShareConfig,
+    stamp: &ThemeStamp,
     query: &[(String, String)],
 ) -> Handled {
     let message = pair_get(query, "message").unwrap_or("").to_string();
@@ -251,7 +264,7 @@ fn handle_index(
     let is_partial = pair_get(query, "partial") == Some("1");
 
     // 无筛选无排序开关：全目录合并，固定按修改时间倒序
-    let (rows, count, shown, has_more) = page_entries(cfg, &search, page);
+    let (rows, count, shown, has_more, dir_counts) = page_entries(cfg, &search, page);
     let count_text = if has_more {
         format!("已显示 {} / {} 个文件", shown, count)
     } else {
@@ -263,22 +276,21 @@ fn handle_index(
     if is_partial {
         let body = pages::partial_response(
             &count_text,
-            &pages::render_more_and(next_page, &search, &pages::render_rows(&rows)),
+            &pages::render_more_and(next_page, &search, &pages::render_rows(&rows, &search)),
         );
         return ok_respond(request, html_resp(StatusCode(200), &body, None));
     }
 
     let dirs: Vec<String> = cfg.share_dirs.iter().map(|d| d.display().to_string()).collect();
-    let upload_dir = dirs.first().map(String::as_str).unwrap_or("");
     let html = pages::home_page(&HomePage {
-        lan_url: &format!("http://{}:{}", state.lan_ip, state.bound_port),
+        stamp,
         toast: if message.is_empty() { None } else { Some(&message) },
         search_q: &search,
         count_text,
-        rows_html: pages::render_more_and(next_page, &search, &pages::render_rows(&rows)),
+        rows_html: pages::render_more_and(next_page, &search, &pages::render_rows(&rows, &search)),
         share_index,
-        upload_dir,
         share_dirs: &dirs,
+        dir_counts: &dir_counts,
     });
     ok_respond(request, html_resp(StatusCode(200), &html, None))
 }
@@ -287,10 +299,13 @@ fn page_entries(
     cfg: &ShareConfig,
     search: &str,
     page: usize,
-) -> (Vec<RowData>, usize, usize, bool) {
+) -> (Vec<RowData>, usize, usize, bool, Vec<usize>) {
     let mut all: Vec<(usize, FileEntry)> = Vec::new();
+    // 齿轮里每个目录要报自己的条数：搜索会裁掉 all，所以条数在过滤前先数好
+    let mut dir_counts = vec![0usize; cfg.share_dirs.len()];
     for (i, dir) in cfg.share_dirs.iter().enumerate() {
         for entry in list_files(dir) {
+            dir_counts[i] += 1;
             all.push((i, entry));
         }
     }
@@ -315,7 +330,7 @@ fn page_entries(
             share_dir: cfg.share_dirs[*i].display().to_string(),
         })
         .collect();
-    (rows, count, end, current < total_pages)
+    (rows, count, end, current < total_pages, dir_counts)
 }
 
 // ── 下载 ────────────────────────────────────────────────────
@@ -497,7 +512,7 @@ fn handle_settings_post(request: Request, state: &Arc<RuntimeState>) -> Handled 
 
 // ── 登录 ────────────────────────────────────────────────────
 
-fn handle_login(request: Request, state: &Arc<RuntimeState>, face: &Face) -> Handled {
+fn handle_login(request: Request, state: &Arc<RuntimeState>, face: &Face, stamp: &ThemeStamp) -> Handled {
     let (request, body) = match read_body(request, MAX_LOGIN_BYTES) {
         Ok(pair) => pair,
         Err((request, ())) => return fail(request, text_resp(StatusCode(400), "Body too large")),
@@ -520,7 +535,7 @@ fn handle_login(request: Request, state: &Arc<RuntimeState>, face: &Face) -> Han
     if public {
         let wait = state.gate.wait_secs(&keys, now);
         if wait > 0 {
-            return ok_respond(request, locked_resp(&next, wait));
+            return ok_respond(request, locked_resp(&next, wait, stamp));
         }
     }
     if !crate::auth::verify_password(&password, &stored) {
@@ -529,10 +544,13 @@ fn handle_login(request: Request, state: &Arc<RuntimeState>, face: &Face) -> Han
             // 藏到下一次请求才显形，客户端这段时间仍在新试
             let wait = state.gate.record_fail(&keys, now);
             if wait > 0 {
-                return ok_respond(request, locked_resp(&next, wait));
+                return ok_respond(request, locked_resp(&next, wait, stamp));
             }
         }
-        return ok_respond(request, html_resp(StatusCode(401), &pages::login_page(Some("口令不正确"), &next), None));
+        return ok_respond(
+            request,
+            html_resp(StatusCode(401), &pages::login_page(Some("口令不正确"), &next, stamp), None),
+        );
     }
     if public {
         state.gate.record_success(&keys);
@@ -550,8 +568,8 @@ fn handle_login(request: Request, state: &Arc<RuntimeState>, face: &Face) -> Han
 }
 
 /// 锁定期内：429 + Retry-After，页面上写还剩多久
-fn locked_resp(next: &str, wait: u64) -> Response<Cursor<Vec<u8>>> {
-    let body = pages::login_page(Some(&format!("试得太多次了，{} 秒后再试", wait)), next);
+fn locked_resp(next: &str, wait: u64, stamp: &ThemeStamp) -> Response<Cursor<Vec<u8>>> {
+    let body = pages::login_page(Some(&format!("试得太多次了，{} 秒后再试", wait)), next, stamp);
     let data = body.as_bytes().to_vec();
     let len = data.len();
     let headers = build_headers(vec![
@@ -723,8 +741,9 @@ mod tests {
     #[test]
     fn page_windowing_clamps_and_slices() {
         let cfg = ShareConfig::default(); // 无目录
-        let (rows, count, shown, has_more) = page_entries(&cfg, "", 999);
+        let (rows, count, shown, has_more, dir_counts) = page_entries(&cfg, "", 999);
         assert_eq!((rows.len(), count, shown, has_more), (0, 0, 0, false));
+        assert_eq!(dir_counts.len(), cfg.share_dirs.len());
     }
 
     fn test_state(dirs: Vec<PathBuf>) -> Arc<RuntimeState> {
@@ -739,6 +758,7 @@ mod tests {
                 share_dirs: dirs,
                 password_sha256: None,
                 public,
+                ..Default::default()
             }),
             sessions: Arc::new(crate::auth::SessionStore::new()),
             gate: Arc::new(FailGate::new(None)),
@@ -795,6 +815,14 @@ mod tests {
 
     fn status_of(resp: &str) -> u16 {
         resp.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0)
+    }
+
+    /// 只取 `<html …>` 开标签。令牌整份随页下发，12 档强调色的选择器在正文里必然都在，
+    /// 要判"本机外观有没有漏给访客"只能看挂在根元素上的那一条。
+    fn html_tag(resp: &str) -> String {
+        let start = resp.find("<html").unwrap_or(0);
+        let end = resp[start..].find('>').map(|i| start + i).unwrap_or(start);
+        resp[start..=end].to_string()
     }
 
     fn header_value(resp: &str, name: &str) -> String {
@@ -1085,6 +1113,31 @@ mod tests {
         assert_eq!(status_of(&resp), 403, "没登记过的域名不该被认成公网面");
         // 局域网面照旧
         assert_eq!(status_of(&get_as(port, "127.0.0.1", "/", "")), 200);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// 主题戳只给局域网面用：公网访客看到的永远是默认纸·蓝，本机换肤不外泄
+    #[test]
+    fn public_face_never_shows_the_desko_appearance() {
+        let dir = temp_dir();
+        let state = test_state_with(vec![dir.clone()], vec![public("files.example.com", Some("sesame"), false)]);
+        {
+            let mut cfg = state.config.write().unwrap();
+            cfg.theme = "ink".to_string();
+            cfg.base = "dark".to_string();
+            cfg.accent = "teal".to_string();
+            cfg.atmosphere = "on".to_string();
+        }
+        let (port, stop) = serve(state);
+        let lan = html_tag(&get_as(port, "127.0.0.1", "/", ""));
+        assert!(lan.contains(r#"data-theme="ink" data-base="dark" data-accent="teal" data-atmosphere="on""#), "局域网面跟 desko 的戳：{lan}");
+        let pub_login = get_as(port, "files.example.com", "/login", "");
+        assert_eq!(status_of(&pub_login), 200);
+        let tag = html_tag(&pub_login);
+        assert!(tag.contains(r#"data-layout="workspace""#), "公网面也挂工作区，只是固定纸·蓝：{tag}");
+        assert!(tag.contains(r#"data-theme="paper" data-base="light" data-accent="ink""#), "公网面不得带出本机外观：{tag}");
+        assert!(!tag.contains("teal") && !tag.contains(r#"data-theme="ink""#), "tag={tag}");
         stop.store(true, std::sync::atomic::Ordering::Relaxed);
         fs::remove_dir_all(&dir).ok();
     }

@@ -25,7 +25,7 @@ describe('通过已授权主域名添加公网服务', () => {
     await wrapper.get('#tn-svc-host').setValue('Files')
     await wrapper.get('#tn-svc-port').setValue('8421')
     expect(wrapper.get('.host-preview').text()).toContain('https://files.example.com')
-    await wrapper.get('.dialog-footer .btn-primary').trigger('click')
+    await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(tunnelApi.addService).toHaveBeenCalledWith({ hostname: 'files.example.com', port: 8421, label: '', preset: '' })
     wrapper.unmount()
@@ -59,7 +59,7 @@ describe('通过已授权主域名添加公网服务', () => {
     const row = { id: 'one', hostname: 'files.example.com', port: 8421, label: '文件', preset: '', routed: true, listening: true, hasPublicPassword: false, publicReadOnly: true }
     const wrapper = mount(TunnelServiceDialog, { props: { ...props, row } })
     expect((wrapper.get('#tn-svc-host').element as HTMLInputElement).value).toBe('files')
-    await wrapper.get('.dialog-footer .btn-primary').trigger('click')
+    await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(tunnelApi.updateService).toHaveBeenCalledWith({ id: 'one', hostname: 'files.example.com', port: 8421, label: '文件' })
     wrapper.unmount()
@@ -86,9 +86,48 @@ describe('通过已授权主域名添加公网服务', () => {
     expect(wrapper.get('.dialog-err').text()).toContain('前缀须为')
     await wrapper.findAll('button').find(button => button.text() === '手动填写完整域名')!.trigger('click')
     expect((wrapper.get('#tn-svc-host').element as HTMLInputElement).value).toBe('files.example.com')
-    await wrapper.get('.dialog-footer .btn-primary').trigger('click')
+    await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(tunnelApi.addService).toHaveBeenCalledWith({ hostname: 'files.example.com', port: 8421, label: '', preset: '' })
+    wrapper.unmount()
+  })
+
+  it('端口拒绝数字前缀、小数和科学计数法', async () => {
+    const wrapper = mount(TunnelServiceDialog, { props })
+    await wrapper.get('#tn-svc-host').setValue('files')
+    for (const value of ['80abc', '8.5', '1e3', '0', '65536']) {
+      await wrapper.get('#tn-svc-port').setValue(value)
+      expect(wrapper.get('.dialog-footer .btn-primary').attributes('disabled')).toBeDefined()
+      await wrapper.get('form').trigger('submit')
+    }
+    expect(tunnelApi.addService).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('手动域名拒绝协议、路径、端口与无效标签', async () => {
+    const wrapper = mount(TunnelServiceDialog, { props })
+    await wrapper.findAll('button').find(button => button.text() === '手动填写完整域名')!.trigger('click')
+    await wrapper.get('#tn-svc-port').setValue('8421')
+    for (const host of ['https://files.example.com', 'files.example.com/path', 'files.example.com:80', '-files.example.com', 'files..com']) {
+      await wrapper.get('#tn-svc-host').setValue(host)
+      expect(wrapper.get('.dialog-footer .btn-primary').attributes('disabled')).toBeDefined()
+      expect(wrapper.get('#tn-svc-host').attributes('aria-invalid')).toBe('true')
+    }
+    wrapper.unmount()
+  })
+
+  it('保存失败保留原因和已填内容，Escape 可关闭', async () => {
+    vi.mocked(tunnelApi.addService).mockRejectedValue('域名已经存在')
+    const wrapper = mount(TunnelServiceDialog, { props })
+    await wrapper.get('#tn-svc-host').setValue('files')
+    await wrapper.get('#tn-svc-port').setValue('8421')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe('域名已经存在')
+    expect((wrapper.get('#tn-svc-host').element as HTMLInputElement).value).toBe('files')
+    expect(wrapper.emitted('close')).toBeUndefined()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(wrapper.emitted('close')).toHaveLength(1)
     wrapper.unmount()
   })
 })

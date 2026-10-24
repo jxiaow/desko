@@ -15,15 +15,16 @@ const props = withDefaults(defineProps<{
   exportDisabled?: boolean
   /** 没解锁的加密条：对密文只有导出有意义，入口本身就是导出钮 */
   sealed?: boolean
+  mobileActions?: boolean
 }>(), {
   variant: 'ib',
   archivedView: false,
   exportDisabled: false,
   sealed: false,
+  mobileActions: false,
 })
 
 const emit = defineEmits<{
-  copy: []
   togglePin: []
   toggleStar: []
   toggleArchive: []
@@ -32,6 +33,8 @@ const emit = defineEmits<{
   relock: []
   removeLock: []
   delete: []
+  view: []
+  edit: []
 }>()
 
 const trigger = ref<HTMLElement | null>(null)
@@ -87,9 +90,11 @@ const exec = (action: () => void) => {
   </PopoverMenu>
 
   <PopoverMenu v-else-if="menuOpen" :anchor="trigger" :width="152" @close="menuOpen = false">
-    <button class="pop-item" type="button" @click="exec(() => emit('copy'))">
-      <AppIcon name="copy" :size="14" />复制正文
-    </button>
+    <template v-if="props.mobileActions">
+      <button class="pop-item note-mobile-action" type="button" aria-label="全屏查看" @click="exec(() => emit('view'))"><AppIcon name="eye" :size="14" />全屏查看</button>
+      <button class="pop-item note-mobile-action" type="button" @click="exec(() => emit('edit'))"><AppIcon name="edit" :size="14" />编辑</button>
+      <button v-if="!props.archivedView" class="pop-item note-mobile-action" type="button" @click="exec(() => emit('togglePin'))"><AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="14" />{{ props.note.pinned ? '取消置顶' : '置顶' }}</button>
+    </template>
     <button class="pop-item" type="button" @click="exec(() => emit('toggleStar'))">
       <AppIcon name="star" :size="14" :filled="props.note.starred" />{{ props.note.starred ? '取消收藏' : '收藏' }}
     </button>
@@ -126,6 +131,10 @@ const exec = (action: () => void) => {
 </template>
 
 <style scoped>
+.note-mobile-action { display: none; }
+@media (max-width: 760px), (hover: none) and (max-width: 1024px) {
+  .note-mobile-action { display: flex; min-height: 44px; }
+}
 /* 钮在别的组件里（本组件是多根，宿主 scoped 规则进不来），尺寸自己按宿主档位补齐 */
 .ib.more { width: 26px; height: 26px; border-radius: 6px; }
 .bar-btn.more { height: 32px; min-width: 32px; padding: 0 var(--space-2); }

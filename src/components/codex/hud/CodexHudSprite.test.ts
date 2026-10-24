@@ -95,19 +95,24 @@ describe('挂件三皮肤', () => {
     expect(mountSkin('penguin').findAll('.flip-l, .flip-r')).toHaveLength(2)
   })
 
-  it('巡游的落脚与步子各有自己一层，抬爪不把趾线留在原地', () => {
-    const bunny = mount(CodexHudSprite, { props: { state: state(), idle: true, lift: 'a', gait: 'a', gaitMs: 340 } })
-    expect(bunny.findAll('.paw-a, .paw-b')).toHaveLength(2)
-    expect(bunny.get('.sprite').classes()).toEqual(expect.arrayContaining(['lift-a', 'gait-a']))
-    expect(bunny.get('.sprite').attributes('style')).toContain('--gait-ms: 340ms')
-    const penguin = mount(CodexHudSprite, { props: { state: state({ skin: 'penguin' }), lift: 'b', gait: 'b' } })
+  it('hop 把双爪一起带走，waddle 连趾线一起换脚', () => {
+    const bunny = mount(CodexHudSprite, { props: { state: state(), idle: true, move: 'hop' } })
+    // 起跳是整个身子离地：爪子留在身子外面就会画出一条脱节的腿
+    expect(bunny.get('.mv-fig').find('.paw-a').exists()).toBe(true)
+    expect(bunny.get('.mv-fig').find('.paw-b').exists()).toBe(true)
+    const penguin = mount(CodexHudSprite, { props: { state: state({ skin: 'penguin' }), idle: true, move: 'waddle' } })
+    expect(penguin.get('.foot-a').findAll('.foot, .toe')).toHaveLength(2)
     expect(penguin.get('.foot-b').findAll('.foot, .toe')).toHaveLength(2)
-    expect(penguin.get('.sprite').classes()).toContain('lift-b')
-    expect(penguin.get('.sprite').classes()).toContain('gait-b')
+    // peek 要从右边探头，遮眼的那只翅得和眼睛在同一张画里
+    const peek = mount(CodexHudSprite, { props: { state: state({ skin: 'penguin' }), idle: true, move: 'peek' } })
+    expect(peek.findAll('.eyes')).toHaveLength(1)
+    expect(peek.findAll('.flip-r')).toHaveLength(1)
+    // 打盹蜗牛身子要退得进壳：壳与身子各有自己一层，一个压一个缩
+    expect(mountSkin('snail').findAll('.mv-body, .mv-shell')).toHaveLength(2)
   })
 
   it('招牌动作只交出一个 class，时长由动作名从同一张表里取', () => {
-    for (const mv of ['bow', 'fold', 'flap', 'stretch', 'tangle', 'tuck'] as CodexHudMove[]) {
+    for (const mv of ['bow', 'fold', 'flap', 'stretch', 'tangle', 'tuck', 'hop', 'waddle', 'peek', 'doze'] as CodexHudMove[]) {
       const wrapper = mount(CodexHudSprite, { props: { state: state(), idle: true, move: mv } })
       expect(wrapper.get('.sprite').classes()).toContain(`mv-${mv}`)
       expect(wrapper.get('.sprite').attributes('style')).toContain(`--mv-dur: ${HUD_MOVE_MS[mv]}ms`)
@@ -122,11 +127,9 @@ describe('挂件三皮肤', () => {
     expect(preview.get('.sprite').classes()).toContain('idle')
     expect(preview.get('.sprite').classes()).not.toContain('react')
     const desktop = mount(CodexHudSprite, {
-      props: { state: state(), expanded: true, idle: true, react: true, poke: true },
+      props: { state: state(), expanded: true, idle: true, react: true },
     })
-    expect(desktop.get('.sprite').classes()).toEqual(
-      expect.arrayContaining(['idle', 'react', 'poke', 'expanded']),
-    )
+    expect(desktop.get('.sprite').classes()).toEqual(expect.arrayContaining(['idle', 'react', 'expanded']))
   })
 })
 
@@ -167,6 +170,39 @@ describe('挂件状态', () => {
     expect(wrapper.get('.prompt').text()).toBe('!')
     expect(wrapper.get('.prompt').classes()).toContain('warn')
     expect(wrapper.get('.v').text()).toBe('68%')
+    expect(wrapper.get('.status-text').text()).toBe('刷新失败 · 缓存')
+    expect(wrapper.get('.status-text').attributes('title')).toContain('≈$12.34')
+  })
+
+  it('额度耗尽时收起态仍有告警，展开后直接说明原因', async () => {
+    const wrapper = mountSkin('snail', {
+      primary: { label: '5h', percentage: 0 }, severe: true,
+    })
+    expect(wrapper.get('.status-mark').attributes('title')).toBe('额度已用尽')
+    expect(wrapper.get('.status-mark').classes()).toContain('danger')
+    await wrapper.setProps({ expanded: true })
+    expect(wrapper.find('.status-mark').exists()).toBe(false)
+    expect(wrapper.get('.status-text').text()).toBe('额度已用尽')
+    expect(wrapper.get('.v').text()).toBe('0%')
+  })
+
+  it('刷新恢复后撤掉异常提示并恢复金额；固定角标独立保留', async () => {
+    const wrapper = mount(CodexHudSprite, {
+      props: { state: state({ stale: true }), pinned: true, expanded: true },
+    })
+    expect(wrapper.find('.pin-mark').exists()).toBe(true)
+    expect(wrapper.get('.status-text').text()).toBe('刷新失败 · 缓存')
+    await wrapper.setProps({ state: state() })
+    expect(wrapper.find('.status-text').exists()).toBe(false)
+    expect(wrapper.find('.prompt').exists()).toBe(false)
+    expect(wrapper.get('.est').text()).toBe('≈$12.34')
+    expect(wrapper.find('.pin-mark').exists()).toBe(true)
+  })
+
+  it('周额度用尽造成不可用时不把仍有余额的主额度写成耗尽', () => {
+    const wrapper = mountExpanded('bunny', { severe: true })
+    expect(wrapper.get('.v').text()).toBe('68%')
+    expect(wrapper.get('.status-text').text()).toBe('额度暂不可用')
   })
 
   it('空态画虚线剪影并显示占位文案，今日用量照常保留', () => {

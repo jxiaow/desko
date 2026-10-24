@@ -1,0 +1,1028 @@
+<!doctype html>
+<!-- Codex 切号简化版（2026-10-23，待拍板 v5）。
+     九帧：A 设置开关 ON / B 账号页独立 WSL 账号 / C 卡片菜单 / D1 切号确认·只切 Windows / D2 切号确认·同时用于 WSL / E WSL 账号确认 / F 设置开关 OFF / G API Key 边界态 / H 已用于 WSL 的卡片菜单。
+     v5：WSL 是否跟随改由每次切号确认里的「同时用于 WSL」勾选决定，默认不勾。
+     重建：node scripts/mock-build.mjs docs/design/codex/22-account-switch-wsl-ux.src.html docs/design/codex/22-account-switch-wsl-ux.html
+     只用 global.css 的原始令牌（--bg/--panel-bg/--sidebar-bg/--fill/--hover），不用 materials.css 的别名槽。 -->
+<html lang="zh"><head><meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+<!--TOKENS-->
+body { font-family: "HarmonyOS Sans SC", system-ui, sans-serif; background: #6f6f6f; color: #ededed;
+  padding: 28px 28px 44px; display: flex; flex-direction: column; gap: 36px; align-items: flex-start; }
+.cap { font-size: 13px; font-weight: 600; letter-spacing: .03em; color: #f2f2f2; }
+.cap small { display: block; margin-top: 5px; font-weight: 400; font-size: 12px; line-height: 1.6; color: #bdbdbd; }
+
+/* ---------- 窗壳：与 1040×670 默认窗同尺寸，画布带一点边缘进光 ---------- */
+.win { position: relative; width: 1040px; height: 670px; border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: column; color: var(--text);
+  background:
+    radial-gradient(ellipse 72% 74% at 10% 10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 88%),
+    radial-gradient(ellipse 68% 72% at 92% 90%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 88%),
+    var(--bg);
+  box-shadow: 0 30px 80px -34px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.22); }
+.win[data-theme="ink"] { background:
+    radial-gradient(ellipse 76% 78% at 8% 8%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 90%),
+    radial-gradient(ellipse 70% 76% at 94% 92%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 90%),
+    var(--bg); }
+.win.plain { width: auto; height: auto; overflow: visible; background: transparent; box-shadow: none; border-radius: 0; }
+
+/* ---------- 顶栏 48：品牌格 + 视图页签 + 页面动作 + 窗口钮 ---------- */
+.tb { flex: 0 0 48px; height: 48px; display: flex; align-items: center; padding: 0 8px 0 10px; }
+.logo { width: 36px; height: 36px; flex: 0 0 36px; display: flex; align-items: center; justify-content: center; color: var(--accent); }
+.logo span { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--accent-on); }
+.tabs { display: flex; align-items: center; gap: 2px; margin-left: 30px; }
+.tab { position: relative; height: 32px; display: inline-flex; align-items: center; padding: 0 12px;
+  font-size: 13px; font-weight: 500; color: var(--text-muted); white-space: nowrap; }
+.tab.on { color: var(--text); font-weight: 650; }
+.tab.on::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; height: 2px; border-radius: 1px; background: var(--accent); }
+.tb-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.tb-act { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: none;
+  border-radius: 9px; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.tb-add { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border: none;
+  border-radius: 9px; background: var(--accent-soft); color: var(--text-brand); font-size: 12px; font-weight: 600; }
+.tb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
+.wbtn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); border-radius: 8px; }
+.wbtn.close { color: var(--text-secondary); }
+
+/* ---------- 左轨 56 + 内容 ---------- */
+.shell { flex: 1; min-height: 0; display: flex; }
+.rail { flex: 0 0 56px; width: 56px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 0 10px; background: var(--sidebar-bg); border-right: 1px solid var(--border); }
+.ri { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+.ri.on { background: var(--accent-soft); color: var(--accent); }
+.rail .foot { margin-top: auto; }
+.main { flex: 1; min-width: 0; overflow: hidden; }
+.content { position: relative; height: 100%; padding: 0 32px 22px; overflow: hidden; }
+
+/* 筛选行：搜索 + 四个下拉，32px 档 */
+.filters { display: flex; align-items: center; gap: 8px; padding-top: 14px; }
+.search { width: 300px; height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 7px; padding: 0 10px;
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text-faint); font-size: 12px; }
+.search svg { flex-shrink: 0; color: var(--text-muted); }
+.select { height: 32px; display: inline-flex; align-items: center; gap: 18px; padding: 0 10px;
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: 9px;
+  color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.select svg { color: var(--text-faint); }
+.summary { margin: 4px 0 10px; font-size: 12px; color: var(--text-muted); }
+
+/* ---------- 账号卡：与真机同构（身份 / 配额 / 行尾动作 / 页脚事实） ---------- */
+.acc { display: grid; grid-template-columns: 34px minmax(0, .85fr) minmax(0, 1.15fr) 78px; gap: 12px;
+  padding: 14px 16px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow-card); margin-bottom: 10px; }
+.avatar { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  margin-top: 2px; font-size: 13px; font-weight: 600; background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text-muted); }
+.avatar.on { background: var(--accent); color: var(--accent-on); }
+.who { min-width: 0; }
+.l1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.mail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: -.01em; }
+.acc-badges { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.badge { height: 20px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 5px; font-size: 11px; font-weight: 600; }
+.badge.own { background: var(--accent-soft); color: var(--text-brand); }
+.badge.off { background: var(--fill); color: var(--text-secondary); }
+.badge.wsl { background: transparent; box-shadow: inset 0 0 0 1px var(--border); color: var(--text-secondary); }
+.badge.wsl svg { color: var(--text-muted); }
+.plan { height: 20px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 0 7px;
+  border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); font-size: 10.5px; font-weight: 700; letter-spacing: .04em; }
+.plan svg { color: var(--text-muted); }
+.email { margin-top: 3px; font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facts { display: grid; gap: 4px; margin-top: 9px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.fact { display: flex; gap: 2px; min-width: 0; }
+.fact i { flex: 0 0 62px; font-style: normal; color: var(--text-muted); }
+.fact span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quota { min-width: 0; align-self: stretch; border-left: 1px solid var(--border); padding-left: 18px; }
+.q-head { min-height: 20px; padding-right: 90px; margin-bottom: 7px; font-size: 12px; color: var(--text-muted); }
+.q { display: grid; grid-template-columns: 88px minmax(0, 1fr) 40px; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+.q + .q-meta { margin-top: 3px; }
+.q + .q { margin-top: 12px; }
+.q-tag { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-bar { height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; }
+.q-bar i { display: block; height: 100%; border-radius: 3px; background: var(--success); }
+.q-bar i.warn { background: var(--warning); }
+.q-num { text-align: right; font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text); }
+.q-num small { font-size: 9.5px; font-weight: 500; color: var(--text-faint); margin-left: 1px; }
+.q-meta { margin: 3px 0 0 96px; font-size: 11px; color: var(--text-faint); }
+.q-empty { font-size: 12px; color: var(--text-secondary); }
+.q-empty small { display: block; margin-top: 2px; font-size: 11px; color: var(--text-faint); }
+.acts { grid-column: 4; grid-row: 1; align-self: start; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.cur { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--accent); }
+.ab { height: 28px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; padding: 0 12px;
+  border: none; border-radius: 7px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: default; white-space: nowrap; }
+.ab.tint { background: var(--accent-soft); color: var(--text-brand); }
+.ib { width: 28px; height: 28px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 7px; background: transparent; color: var(--text-muted); }
+.foot { grid-column: 2 / -1; margin-top: 2px; padding-top: 9px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-muted); }
+.foot .tags { margin-left: auto; }
+.page-note { display: flex; align-items: center; gap: 6px; margin: 8px 2px 0; font-size: 11.5px; color: var(--text-muted); }
+.page-note svg { flex-shrink: 0; }
+
+/* ---------- 卡片 ⋯ 菜单：仅在 mock 里就地摆位，样式沿用 PopoverMenu ---------- */
+.pop { position: absolute; z-index: 20; width: 176px; padding: 6px; background: var(--panel-bg);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-pop); }
+.pop-item { width: 100%; height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: none;
+  border-radius: 6px; background: transparent; color: var(--text-secondary); font-family: inherit; font-size: 12.5px;
+  text-align: left; white-space: nowrap; }
+.pop-item svg { flex-shrink: 0; color: var(--text-muted); }
+.pop-item.danger { color: var(--danger); }
+.pop-item.danger svg { color: var(--danger); }
+.pop-item:disabled { color: var(--text-faint); }
+.pop-item:disabled svg { color: var(--text-faint); }
+.pop-sep { display: block; height: 1px; margin: 5px 4px; background: var(--border-subtle); }
+.pop-note { margin-top: 5px; padding: 7px 8px 3px; border-top: 1px solid var(--border-subtle);
+  font-size: 11px; line-height: 1.55; color: var(--text-muted); }
+
+/* ---------- 遮罩与弹窗：沿用 .dialog 基线 ---------- */
+.scrim { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+  background: var(--overlay); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.dlg { width: 500px; overflow: hidden; background: var(--panel-bg); border: 1px solid var(--border);
+  border-radius: var(--radius-xl); box-shadow: var(--shadow-pop); color: var(--text); }
+.dlg-h { height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
+.dlg-h h3 { font-size: 14px; font-weight: 650; letter-spacing: -.01em; color: var(--text); }
+.dlg-x { margin-left: auto; width: 28px; height: 28px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 7px; background: transparent; color: var(--text-muted); }
+.dlg-b { padding: 16px; }
+.dlg.confirm { width: 360px; }
+.confirm-body { font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+.confirm-body b { font-weight: 600; color: var(--text); }
+.choice { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; }
+.cb { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-strong); border-radius: 4px; background: var(--panel-bg); color: transparent; }
+.cb.on { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+.choice-main { flex: 1; min-width: 0; }
+.choice-title { display: block; font-size: 13px; font-weight: 600; color: var(--text); }
+.choice-desc { display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.55; color: var(--text-muted); }
+.choice-desc b { font-weight: 600; color: var(--text-secondary); }
+.dest-path { margin-top: 3px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
+.restart-list { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.rrow { display: flex; align-items: flex-start; gap: 10px; min-height: 34px; padding: 8px 0; font-size: 12px; }
+.rrow + .rrow { border-top: 1px solid var(--border-subtle); }
+.rlabel { width: 62px; flex-shrink: 0; padding-top: 1px; font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--text-faint); }
+.rval { flex: 1; min-width: 0; color: var(--text-secondary); line-height: 1.55; }
+.rval b { font-weight: 600; color: var(--text); }
+.nw { white-space: nowrap; }
+.dlg-note { display: flex; gap: 6px; margin-top: 10px; font-size: 11.5px; line-height: 1.6; color: var(--text-muted); }
+.dlg-note svg { flex-shrink: 0; margin-top: 2px; color: var(--text-faint); }
+.dlg-note.warn { color: var(--warning); }
+.dlg-note.warn svg { color: var(--warning); }
+.dlg-f { height: 46px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 16px; border-top: 1px solid var(--border); }
+.hint { margin-right: auto; display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted); }
+.kbd { padding: 1px 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel-bg);
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 13px; color: var(--text-muted); }
+.btn { height: 28px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid transparent; border-radius: 7px;
+  font-family: inherit; font-size: 13px; font-weight: 500; }
+.btn.ghost { background: none; color: var(--text-secondary); }
+.btn.danger { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+
+/* ---------- 设置弹窗：与 SettingsDialog 同构（760×560，左菜单 176，右页签内部滚动） ---------- */
+.sdlg { width: 760px; height: 560px; display: flex; overflow: hidden; background: var(--panel-bg);
+  border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop); color: var(--text); }
+.snav { width: 176px; flex-shrink: 0; min-height: 0; display: flex; flex-direction: column; gap: 2px; padding: 16px 12px;
+  background: var(--sidebar-bg); border-right: 1px solid var(--border); }
+.snav-brand { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px; margin-bottom: 20px; font-size: 15px; font-weight: 600; color: var(--text); }
+.snav-brand .mark { width: 20px; height: 20px; border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--accent); color: var(--accent-on); }
+.snav-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 2px; }
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-group + .nav-group { margin-top: 12px; }
+.nav-label { padding: 0 8px 4px; font-size: 11px; font-weight: 600; color: var(--text-faint); }
+.nav-tab { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 14px; color: var(--text-secondary); }
+.nav-tab svg { flex-shrink: 0; opacity: .7; color: var(--text-muted); }
+.nav-tab.on { background: var(--accent-soft); color: var(--text-brand); font-weight: 600; }
+.nav-tab.on svg { color: var(--accent); opacity: 1; }
+.nav-footer { margin-top: 12px; }
+.smain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.shead { flex-shrink: 0; height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
+.shead h2 { font-size: 17px; font-weight: 600; color: var(--text); }
+.spane { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 12px 24px 24px; display: flex; flex-direction: column; }
+.spane > * { flex-shrink: 0; }
+.pane-hint { margin: 0 0 12px; font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+.sec-label { margin: 26px 0 6px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.pane-hint + .sec-label { margin-top: 16px; }
+.srow { display: flex; align-items: center; gap: 14px; min-height: 44px; padding: 8px 0; }
+.srow.top { align-items: flex-start; }
+.srow.top .switch { margin-top: 2px; }
+.srow-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.srow-name { display: block; font-size: 14px; font-weight: 500; color: var(--text); }
+.srow-desc { display: block; font-size: 12px; line-height: 1.55; color: var(--text-secondary); }
+.srow-hint { display: block; margin-top: 7px; font-size: 11.5px; line-height: 1.55; color: var(--text-muted); }
+.path { display: block; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switch { width: 34px; height: 20px; flex-shrink: 0; position: relative; border-radius: 99px; background: var(--border-strong); }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel-bg); box-shadow: var(--shadow-xs); }
+.switch.on { background: var(--accent); }
+.switch.on::after { left: 16px; }
+.srow-warn { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 12px; line-height: 1.55; color: var(--warning); }
+.srow-warn svg { flex-shrink: 0; color: var(--warning); }
+</style></head>
+<body>
+
+<!-- ═══════════════ A · 设置开关 ON ═══════════════ -->
+<div class="cap">A · 设置 → Codex：一个开关（paper）
+  <small>默认关闭。打开后，Windows 切号会关闭并重开 Codex；WSL 是否一起换，在每次切号确认里勾选，默认只切 Windows。WSL 也可以随时在卡片 ⋯ 里单独设置。</small>
+</div>
+<div class="win plain" id="frame-a" data-theme="paper" data-base="light" data-accent="celadon">
+  <div class="sdlg">
+    <aside class="snav">
+      <div class="snav-brand"><span class="mark">{{i:navCodex:12}}</span>设置</div>
+      <div class="snav-scroll">
+        <div class="nav-group">
+          <div class="nav-label">通用</div>
+          <div class="nav-tab">{{i:palette:15}}外观</div>
+          <div class="nav-tab">{{i:navEntries:15}}模块</div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">模块配置</div>
+          <div class="nav-tab on">{{i:navCodex:15}}Codex</div>
+          <div class="nav-tab">{{i:navNotes:15}}小记</div>
+          <div class="nav-tab">{{i:navFiles:15}}文件快捷</div>
+          <div class="nav-tab">{{i:navLan:15}}局域网传输</div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">数据与安全</div>
+          <div class="nav-tab">{{i:shield:15}}网页访问</div>
+          <div class="nav-tab">{{i:user:15}}档案</div>
+          <div class="nav-tab">{{i:database:15}}数据与备份</div>
+          <div class="nav-tab">{{i:lock:15}}安全</div>
+        </div>
+        <div class="nav-footer"><div class="nav-tab">{{i:info:15}}关于</div></div>
+      </div>
+    </aside>
+    <div class="smain">
+      <header class="shead"><h2>Codex</h2><span class="dlg-x">{{i:x:15}}</span></header>
+      <section class="spane">
+        <p class="pane-hint">Codex 只备份账号与账号配置；会话、历史与用量仅在本机。</p>
+
+        <h4 class="sec-label">凭据与文件</h4>
+        <div class="srow">
+          <div class="srow-info">
+            <span class="srow-name">官方凭据路径</span>
+            <span class="path">C:\Users\jxiaow\.codex\auth.json</span>
+          </div>
+        </div>
+
+        <h4 class="sec-label">切换账号</h4>
+        <div class="srow top">
+          <div class="srow-info">
+            <span class="srow-name">切换账号时重启 Codex</span>
+            <span class="srow-desc">Windows 切号会先关闭正在运行的 Codex 应用与 CLI，写入后重开（CLI 回原目录）。WSL 是否一起切，在确认里勾选；默认保持 WSL 的账号与进程不动。</span>
+            <span class="srow-warn">{{i:alert:12}}正在运行的 Windows Codex 任务会中断。</span>
+            <span class="srow-hint">WSL 的账号也可以随时在卡片 ⋯ 里单独设置。</span>
+          </div>
+          <span class="switch on"></span>
+        </div>
+
+        <h4 class="sec-label">会话统计</h4>
+        <div class="srow">
+          <div class="srow-info">
+            <span class="srow-name">自动统计 WSL 会话</span>
+            <span class="srow-desc">自动纳入正在运行的 WSL 发行版里用户目录和 root 下的 .codex</span>
+          </div>
+          <span class="switch on"></span>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ B · 账号页与独立 WSL 账号 ═══════════════ -->
+<div class="cap">B · 账号页：没有跟随条（总开关开启 · paper）
+  <small>WSL 与 Windows 各用一个账号。带「WSL 使用中」的卡片就是 WSL 当前的账号；只切 Windows 不会改写它。要给 WSL 单独换号，用卡片 ⋯。</small>
+</div>
+<div class="win" id="frame-b" data-theme="paper" data-base="light" data-accent="celadon">
+  <header class="tb">
+    <div class="logo"><span>{{i:navCodex:16}}</span></div>
+    <nav class="tabs">
+      <span class="tab on">账号</span><span class="tab">会话</span><span class="tab">用量</span><span class="tab">回收站</span><span class="tab">对话</span>
+    </nav>
+    <div class="tb-right">
+      <span class="tb-act">{{i:refresh:13}}刷新配额</span>
+      <span class="tb-act">{{i:checkall:13}}选择</span>
+      <span class="tb-add">{{i:plus:14}}添加账号</span>
+      <span class="tb-sep"></span>
+      <span class="wbtn">{{i:gear:15}}</span>
+      <span class="wbtn">{{i:lock:14}}</span>
+      <span class="wbtn">{{i:min:12}}</span>
+      <span class="wbtn">{{i:max:12}}</span>
+      <span class="wbtn close">{{i:x:13}}</span>
+    </div>
+  </header>
+  <div class="shell">
+    <aside class="rail">
+      <span class="ri">{{i:navNotes:22}}</span>
+      <span class="ri">{{i:navEntries:22}}</span>
+      <span class="ri">{{i:navFiles:22}}</span>
+      <span class="ri">{{i:navLan:22}}</span>
+      <span class="ri">{{i:navMfa:22}}</span>
+      <span class="ri">{{i:navBypass:22}}</span>
+      <span class="ri on">{{i:navCodex:22}}</span>
+      <span class="ri foot">{{i:gear:20}}</span>
+    </aside>
+    <main class="main"><div class="content">
+      <div class="filters">
+        <div class="search">{{i:search:15}}搜索邮箱、名称、标签…</div>
+        <div class="select">全部类型{{i:chevDown:12}}</div>
+        <div class="select">全部状态{{i:chevDown:12}}</div>
+        <div class="select">全部标签{{i:chevDown:12}}</div>
+        <div class="select">默认排序{{i:chevDown:12}}</div>
+      </div>
+      <p class="summary">2 个账号</p>
+
+      <article class="acc">
+        <span class="avatar on">工</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">工作账号</span>
+            <span class="acc-badges"><span class="badge own">当前</span><span class="plan">{{i:star:11}}PLUS</span></span>
+          </div>
+          <p class="email">main@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>个人账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:62%"></i></span><span class="q-num">62<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:48%"></i></span><span class="q-num">48<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="cur">{{i:check:15}}</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-23 09:12</span><span>额度更新 10-23 09:10</span><span class="tags">标签：工作</span></div>
+      </article>
+
+      <article class="acc">
+        <span class="avatar">团</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">团队账号</span>
+            <span class="acc-badges"><span class="badge wsl">{{i:terminal:11}}WSL 使用中</span><span class="plan">TEAM</span></span>
+          </div>
+          <p class="email">team@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>团队账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:41%"></i></span><span class="q-num">41<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:33%"></i></span><span class="q-num">33<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="ab tint">切换</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-22 18:40</span><span>额度更新 10-23 09:10</span><span class="tags">标签：团队</span></div>
+      </article>
+
+      <p class="page-note">{{i:info:12}}Windows 与 WSL 的账号互不影响；WSL 可在卡片 ⋯ 里单独换号。</p>
+    </div></main>
+  </div>
+</div>
+
+<!-- ═══════════════ C · 卡片菜单：在 WSL 中使用 ═══════════════ -->
+<div class="cap">C · 账号卡片 ⋯ →「在 WSL 中使用」（ink）
+  <small>从任意 OAuth 账号把凭据写入所有正在运行的 WSL。写入前会结束 WSL 的 Codex，避免旧进程把凭据写回；Windows 的当前账号不变。</small>
+</div>
+<div class="win" id="frame-c" data-theme="ink" data-base="dark" data-accent="celadon">
+  <header class="tb">
+    <div class="logo"><span>{{i:navCodex:16}}</span></div>
+    <nav class="tabs">
+      <span class="tab on">账号</span><span class="tab">会话</span><span class="tab">用量</span><span class="tab">回收站</span><span class="tab">对话</span>
+    </nav>
+    <div class="tb-right">
+      <span class="tb-act">{{i:refresh:13}}刷新配额</span>
+      <span class="tb-act">{{i:checkall:13}}选择</span>
+      <span class="tb-add">{{i:plus:14}}添加账号</span>
+      <span class="tb-sep"></span>
+      <span class="wbtn">{{i:gear:15}}</span>
+      <span class="wbtn">{{i:lock:14}}</span>
+      <span class="wbtn">{{i:min:12}}</span>
+      <span class="wbtn">{{i:max:12}}</span>
+      <span class="wbtn close">{{i:x:13}}</span>
+    </div>
+  </header>
+  <div class="shell">
+    <aside class="rail">
+      <span class="ri">{{i:navNotes:22}}</span>
+      <span class="ri">{{i:navEntries:22}}</span>
+      <span class="ri">{{i:navFiles:22}}</span>
+      <span class="ri">{{i:navLan:22}}</span>
+      <span class="ri">{{i:navMfa:22}}</span>
+      <span class="ri">{{i:navBypass:22}}</span>
+      <span class="ri on">{{i:navCodex:22}}</span>
+      <span class="ri foot">{{i:gear:20}}</span>
+    </aside>
+    <main class="main"><div class="content">
+      <div class="filters">
+        <div class="search">{{i:search:15}}搜索邮箱、名称、标签…</div>
+        <div class="select">全部类型{{i:chevDown:12}}</div>
+        <div class="select">全部状态{{i:chevDown:12}}</div>
+        <div class="select">全部标签{{i:chevDown:12}}</div>
+        <div class="select">默认排序{{i:chevDown:12}}</div>
+      </div>
+      <p class="summary">2 个账号</p>
+
+      <article class="acc">
+        <span class="avatar on">工</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">工作账号</span>
+            <span class="acc-badges"><span class="badge own">当前</span><span class="plan">{{i:star:11}}PLUS</span></span>
+          </div>
+          <p class="email">main@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>个人账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:62%"></i></span><span class="q-num">62<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:48%"></i></span><span class="q-num">48<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="cur">{{i:check:15}}</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-23 09:12</span><span>额度更新 10-23 09:10</span><span class="tags">标签：工作</span></div>
+      </article>
+
+      <article class="acc">
+        <span class="avatar">团</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">团队账号</span>
+            <span class="acc-badges"><span class="badge wsl">{{i:terminal:11}}WSL 使用中</span><span class="plan">TEAM</span></span>
+          </div>
+          <p class="email">team@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>团队账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:41%"></i></span><span class="q-num">41<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:33%"></i></span><span class="q-num">33<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="ab tint">切换</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-22 18:40</span><span>额度更新 10-23 09:10</span><span class="tags">标签：团队</span></div>
+      </article>
+
+      <p class="page-note">{{i:info:12}}Windows 与 WSL 的账号互不影响；WSL 可在卡片 ⋯ 里单独换号。</p>
+
+      <div class="pop" style="right:32px; top:124px">
+        <button class="pop-item" type="button">{{i:refresh:14}}刷新这一条配额</button>
+        <button class="pop-item" type="button">{{i:user:14}}刷新账号信息</button>
+        <button class="pop-item" type="button">{{i:shield:14}}强制刷新令牌</button>
+        <button class="pop-item" type="button">{{i:terminal:14}}在 WSL 中使用</button>
+        <button class="pop-item" type="button">{{i:user:14}}重新登录</button>
+        <button class="pop-item" type="button">{{i:undo:14}}重置 5 小时额度</button>
+        <span class="pop-sep"></span>
+        <button class="pop-item" type="button">{{i:edit:14}}名称与备注</button>
+        <button class="pop-item" type="button">{{i:copy:14}}复制邮箱</button>
+        <button class="pop-item" type="button">{{i:download:14}}导出这一条 JSON</button>
+        <span class="pop-sep"></span>
+        <button class="pop-item danger" type="button">{{i:trash:14}}删除</button>
+      </div>
+    </div></main>
+  </div>
+</div>
+
+<!-- ═══════════════ D1 · Windows 切号确认（默认只切 Windows） ═══════════════ -->
+<div class="cap">D1 · Windows 切号确认：默认只切 Windows（总开关开启 · ink）
+  <small>勾选框默认不勾：只写 Windows 的 auth.json，WSL 的账号与进程都不动。需要让 WSL 也跟着换，勾上「同时用于 WSL」——见 D2。总开关关闭时，这份确认的标题去掉「并重启」，也不再出现 Windows 重开行；勾选框仍在。</small>
+</div>
+<div class="win" id="frame-d" data-theme="ink" data-base="dark" data-accent="celadon">
+  <header class="tb">
+    <div class="logo"><span>{{i:navCodex:16}}</span></div>
+    <nav class="tabs">
+      <span class="tab on">账号</span><span class="tab">会话</span><span class="tab">用量</span><span class="tab">回收站</span><span class="tab">对话</span>
+    </nav>
+    <div class="tb-right">
+      <span class="tb-act">{{i:refresh:13}}刷新配额</span>
+      <span class="tb-act">{{i:checkall:13}}选择</span>
+      <span class="tb-add">{{i:plus:14}}添加账号</span>
+      <span class="tb-sep"></span>
+      <span class="wbtn">{{i:gear:15}}</span>
+      <span class="wbtn">{{i:lock:14}}</span>
+      <span class="wbtn">{{i:min:12}}</span>
+      <span class="wbtn">{{i:max:12}}</span>
+      <span class="wbtn close">{{i:x:13}}</span>
+    </div>
+  </header>
+  <div class="shell">
+    <aside class="rail">
+      <span class="ri">{{i:navNotes:22}}</span>
+      <span class="ri">{{i:navEntries:22}}</span>
+      <span class="ri">{{i:navFiles:22}}</span>
+      <span class="ri">{{i:navLan:22}}</span>
+      <span class="ri">{{i:navMfa:22}}</span>
+      <span class="ri">{{i:navBypass:22}}</span>
+      <span class="ri on">{{i:navCodex:22}}</span>
+      <span class="ri foot">{{i:gear:20}}</span>
+    </aside>
+    <main class="main"><div class="content">
+      <div class="filters">
+        <div class="search">{{i:search:15}}搜索邮箱、名称、标签…</div>
+        <div class="select">全部类型{{i:chevDown:12}}</div>
+        <div class="select">全部状态{{i:chevDown:12}}</div>
+        <div class="select">全部标签{{i:chevDown:12}}</div>
+        <div class="select">默认排序{{i:chevDown:12}}</div>
+      </div>
+      <p class="summary">2 个账号</p>
+
+      <article class="acc">
+        <span class="avatar on">工</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">工作账号</span>
+            <span class="acc-badges"><span class="badge own">当前</span><span class="badge wsl">{{i:terminal:11}}WSL 使用中</span><span class="plan">{{i:star:11}}PLUS</span></span>
+          </div>
+          <p class="email">main@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>个人账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:62%"></i></span><span class="q-num">62<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:48%"></i></span><span class="q-num">48<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="cur">{{i:check:15}}</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-23 09:12</span><span>额度更新 10-23 09:10</span><span class="tags">标签：工作</span></div>
+      </article>
+
+      <article class="acc">
+        <span class="avatar">团</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">团队账号</span>
+            <span class="acc-badges"><span class="plan">TEAM</span></span>
+          </div>
+          <p class="email">team@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>团队账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:41%"></i></span><span class="q-num">41<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:33%"></i></span><span class="q-num">33<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="ab tint">切换</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-22 18:40</span><span>额度更新 10-23 09:10</span><span class="tags">标签：团队</span></div>
+      </article>
+    </div></main>
+  </div>
+  <div class="scrim">
+    <div class="dlg confirm">
+      <div class="dlg-h">
+        <h3>切换账号并重启 Codex</h3>
+        <span class="dlg-x">{{i:x:15}}</span>
+      </div>
+      <div class="dlg-b">
+        <p class="confirm-body">将把 <b>team@example.com</b> 写入 Windows 官方凭据。</p>
+        <label class="choice">
+          <span class="cb"></span>
+          <span class="choice-main">
+            <span class="choice-title">同时用于 WSL</span>
+            <span class="choice-desc">不勾时 WSL 保持<b>工作账号（main@example.com）</b>，<span class="nw">账号与进程都不动。</span></span>
+          </span>
+        </label>
+        <div class="restart-list" style="margin-top:12px">
+          <div class="rrow">
+            <span class="rlabel">Windows</span>
+            <span class="rval">关闭 1 个应用、2 个 CLI；写入后重开，<span class="nw">CLI 回原目录</span></span>
+          </div>
+        </div>
+        <p class="dlg-note warn">{{i:alert:12}}<span>正在运行的 Windows Codex 任务会中断。</span></p>
+        <p class="dlg-note">{{i:info:12}}<span>只写 Windows 的 auth.json；WSL 的账号与进程不变。</span></p>
+      </div>
+      <div class="dlg-f">
+        <span class="hint"><span class="kbd">Esc</span>关闭</span>
+        <span class="btn ghost">取消</span>
+        <span class="btn danger">切换并重启</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ D2 · Windows 切号确认（同时用于 WSL） ═══════════════ -->
+<div class="cap">D2 · 同一确认：勾选「同时用于 WSL」（总开关开启 · ink）
+  <small>勾选后 WSL 写入同一个账号，并关闭正在运行的 WSL Codex（不重开）。切换完成后，卡片上的「WSL 使用中」标记跟到新账号。</small>
+</div>
+<div class="win plain" id="frame-d2" data-theme="ink" data-base="dark" data-accent="celadon">
+  <div class="dlg confirm">
+    <div class="dlg-h">
+      <h3>切换账号并重启 Codex</h3>
+      <span class="dlg-x">{{i:x:15}}</span>
+    </div>
+    <div class="dlg-b">
+      <p class="confirm-body">将把 <b>team@example.com</b> 写入 Windows 官方凭据。</p>
+      <label class="choice">
+        <span class="cb on">{{i:check:11}}</span>
+        <span class="choice-main">
+          <span class="choice-title">同时用于 WSL</span>
+          <span class="choice-desc">WSL 也切到<b>团队账号（team@example.com）</b>；<span class="nw">关闭正在运行的 WSL Codex，不重开。</span></span>
+        </span>
+      </label>
+      <div class="restart-list" style="margin-top:12px">
+        <div class="rrow">
+          <span class="rlabel">Windows</span>
+          <span class="rval">关闭 1 个应用、2 个 CLI；写入后重开，<span class="nw">CLI 回原目录</span></span>
+        </div>
+        <div class="rrow">
+          <span class="rlabel">WSL</span>
+          <span class="rval">关闭 1 个后台、3 个 CLI，不重开</span>
+        </div>
+      </div>
+      <p class="dlg-note warn">{{i:alert:12}}<span>正在运行的 Windows 与 WSL Codex 任务会中断。</span></p>
+      <p class="dlg-note">{{i:info:12}}<span>两边都写 auth.json；WSL 下次启动用团队账号。</span></p>
+    </div>
+    <div class="dlg-f">
+      <span class="hint"><span class="kbd">Esc</span>关闭</span>
+      <span class="btn ghost">取消</span>
+      <span class="btn danger">切换并重启</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ E · WSL 账号确认 ═══════════════ -->
+<div class="cap">E · 指定 WSL 账号确认（paper）
+  <small>这是「只改 WSL」的入口：一次写全部正在运行的 WSL 目标，不逐个勾选。只写 auth.json；Windows 的账号与 Codex 不受影响。写入前结束 WSL 的 Codex，CLI 不重开。</small>
+</div>
+<div class="win" id="frame-e" data-theme="paper" data-base="light" data-accent="celadon">
+  <header class="tb">
+    <div class="logo"><span>{{i:navCodex:16}}</span></div>
+    <nav class="tabs">
+      <span class="tab on">账号</span><span class="tab">会话</span><span class="tab">用量</span><span class="tab">回收站</span><span class="tab">对话</span>
+    </nav>
+    <div class="tb-right">
+      <span class="tb-act">{{i:refresh:13}}刷新配额</span>
+      <span class="tb-act">{{i:checkall:13}}选择</span>
+      <span class="tb-add">{{i:plus:14}}添加账号</span>
+      <span class="tb-sep"></span>
+      <span class="wbtn">{{i:gear:15}}</span>
+      <span class="wbtn">{{i:lock:14}}</span>
+      <span class="wbtn">{{i:min:12}}</span>
+      <span class="wbtn">{{i:max:12}}</span>
+      <span class="wbtn close">{{i:x:13}}</span>
+    </div>
+  </header>
+  <div class="shell">
+    <aside class="rail">
+      <span class="ri">{{i:navNotes:22}}</span>
+      <span class="ri">{{i:navEntries:22}}</span>
+      <span class="ri">{{i:navFiles:22}}</span>
+      <span class="ri">{{i:navLan:22}}</span>
+      <span class="ri">{{i:navMfa:22}}</span>
+      <span class="ri">{{i:navBypass:22}}</span>
+      <span class="ri on">{{i:navCodex:22}}</span>
+      <span class="ri foot">{{i:gear:20}}</span>
+    </aside>
+    <main class="main"><div class="content">
+      <div class="filters">
+        <div class="search">{{i:search:15}}搜索邮箱、名称、标签…</div>
+        <div class="select">全部类型{{i:chevDown:12}}</div>
+        <div class="select">全部状态{{i:chevDown:12}}</div>
+        <div class="select">全部标签{{i:chevDown:12}}</div>
+        <div class="select">默认排序{{i:chevDown:12}}</div>
+      </div>
+      <p class="summary">2 个账号</p>
+
+      <article class="acc">
+        <span class="avatar on">工</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">工作账号</span>
+            <span class="acc-badges"><span class="badge own">当前</span><span class="plan">{{i:star:11}}PLUS</span></span>
+          </div>
+          <p class="email">main@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>个人账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:62%"></i></span><span class="q-num">62<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:48%"></i></span><span class="q-num">48<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="cur">{{i:check:15}}</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-23 09:12</span><span>额度更新 10-23 09:10</span><span class="tags">标签：工作</span></div>
+      </article>
+
+      <article class="acc">
+        <span class="avatar">团</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">团队账号</span>
+            <span class="acc-badges"><span class="badge wsl">{{i:terminal:11}}WSL 使用中</span><span class="plan">TEAM</span></span>
+          </div>
+          <p class="email">team@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>团队账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:41%"></i></span><span class="q-num">41<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:33%"></i></span><span class="q-num">33<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="ab tint">切换</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-22 18:40</span><span>额度更新 10-23 09:10</span><span class="tags">标签：团队</span></div>
+      </article>
+    </div></main>
+  </div>
+  <div class="scrim">
+    <div class="dlg confirm">
+      <div class="dlg-h">
+        <h3>在 WSL 中使用账号</h3>
+        <span class="dlg-x">{{i:x:15}}</span>
+      </div>
+      <div class="dlg-b">
+        <p class="confirm-body">将把 <b>team@example.com</b> 写入以下 WSL 目标。</p>
+        <div class="dest-path">~/.codex/auth.json</div>
+        <div class="restart-list" style="margin-top:12px">
+          <div class="rrow">
+            <span class="rlabel">目标</span>
+            <span class="rval"><span class="nw">Ubuntu-26.04（jxiaow）</span>、<span class="nw">Ubuntu-24.04（root）</span></span>
+          </div>
+          <div class="rrow">
+            <span class="rlabel">Codex</span>
+            <span class="rval">关闭后台与 3 个 CLI，不重开</span>
+          </div>
+        </div>
+        <p class="dlg-note warn">{{i:alert:12}}<span>正在运行的 WSL Codex 会中断。</span></p>
+        <p class="dlg-note">{{i:info:12}}<span>Windows 的账号与 Codex 不变；只写 auth.json，不动 config.toml。</span></p>
+      </div>
+      <div class="dlg-f">
+        <span class="hint"><span class="kbd">Esc</span>关闭</span>
+        <span class="btn ghost">取消</span>
+        <span class="btn danger">用于 WSL</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ F · 设置开关 OFF ═══════════════ -->
+<div class="cap">F · 设置 → Codex：开关关闭（paper）
+  <small>默认关闭。Windows 切号只改凭据，不关闭、不重启 Windows 的 Codex。确认里没有 Windows 重开行；有 WSL 目标时仍可勾选同时用于 WSL，勾上会关闭 WSL 的 Codex 并写入同一个账号，不重开。</small>
+</div>
+<div class="win plain" id="frame-f" data-theme="paper" data-base="light" data-accent="celadon">
+  <div class="sdlg">
+    <aside class="snav">
+      <div class="snav-brand"><span class="mark">{{i:navCodex:12}}</span>设置</div>
+      <div class="snav-scroll">
+        <div class="nav-group">
+          <div class="nav-label">通用</div>
+          <div class="nav-tab">{{i:palette:15}}外观</div>
+          <div class="nav-tab">{{i:navEntries:15}}模块</div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">模块配置</div>
+          <div class="nav-tab on">{{i:navCodex:15}}Codex</div>
+          <div class="nav-tab">{{i:navNotes:15}}小记</div>
+          <div class="nav-tab">{{i:navFiles:15}}文件快捷</div>
+          <div class="nav-tab">{{i:navLan:15}}局域网传输</div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">数据与安全</div>
+          <div class="nav-tab">{{i:shield:15}}网页访问</div>
+          <div class="nav-tab">{{i:user:15}}档案</div>
+          <div class="nav-tab">{{i:database:15}}数据与备份</div>
+          <div class="nav-tab">{{i:lock:15}}安全</div>
+        </div>
+        <div class="nav-footer"><div class="nav-tab">{{i:info:15}}关于</div></div>
+      </div>
+    </aside>
+    <div class="smain">
+      <header class="shead"><h2>Codex</h2><span class="dlg-x">{{i:x:15}}</span></header>
+      <section class="spane">
+        <p class="pane-hint">Codex 只备份账号与账号配置；会话、历史与用量仅在本机。</p>
+
+        <h4 class="sec-label">凭据与文件</h4>
+        <div class="srow">
+          <div class="srow-info">
+            <span class="srow-name">官方凭据路径</span>
+            <span class="path">C:\Users\jxiaow\.codex\auth.json</span>
+          </div>
+        </div>
+
+        <h4 class="sec-label">切换账号</h4>
+        <div class="srow top">
+          <div class="srow-info">
+            <span class="srow-name">切换账号时重启 Codex</span>
+            <span class="srow-desc">关闭时，Windows 切号只改写官方凭据，不关闭、不重启 Windows 的 Codex。</span>
+            <span class="srow-hint">这个开关只决定 Windows 是否重启。<br>WSL 是否一起切，在切号确认里勾选。</span>
+          </div>
+          <span class="switch"></span>
+        </div>
+
+        <h4 class="sec-label">会话统计</h4>
+        <div class="srow">
+          <div class="srow-info">
+            <span class="srow-name">自动统计 WSL 会话</span>
+            <span class="srow-desc">自动纳入正在运行的 WSL 发行版里用户目录和 root 下的 .codex</span>
+          </div>
+          <span class="switch on"></span>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ G · API Key 边界态 ═══════════════ -->
+<div class="cap">G · 边界态：API Key 账号（paper）
+  <small>纯 API Key 账号没有可写入 WSL 的 OAuth 登录态，菜单项置灰并说明原因。没有运行中的 WSL、WSL 里没跑过 Codex（没有 ~/.codex）时，这一项直接不出现；Desko 不会替 WSL 创建 ~/.codex。</small>
+</div>
+<div class="win" id="frame-g" data-theme="paper" data-base="light" data-accent="celadon">
+  <header class="tb">
+    <div class="logo"><span>{{i:navCodex:16}}</span></div>
+    <nav class="tabs">
+      <span class="tab on">账号</span><span class="tab">会话</span><span class="tab">用量</span><span class="tab">回收站</span><span class="tab">对话</span>
+    </nav>
+    <div class="tb-right">
+      <span class="tb-act">{{i:refresh:13}}刷新配额</span>
+      <span class="tb-act">{{i:checkall:13}}选择</span>
+      <span class="tb-add">{{i:plus:14}}添加账号</span>
+      <span class="tb-sep"></span>
+      <span class="wbtn">{{i:gear:15}}</span>
+      <span class="wbtn">{{i:lock:14}}</span>
+      <span class="wbtn">{{i:min:12}}</span>
+      <span class="wbtn">{{i:max:12}}</span>
+      <span class="wbtn close">{{i:x:13}}</span>
+    </div>
+  </header>
+  <div class="shell">
+    <aside class="rail">
+      <span class="ri">{{i:navNotes:22}}</span>
+      <span class="ri">{{i:navEntries:22}}</span>
+      <span class="ri">{{i:navFiles:22}}</span>
+      <span class="ri">{{i:navLan:22}}</span>
+      <span class="ri">{{i:navMfa:22}}</span>
+      <span class="ri">{{i:navBypass:22}}</span>
+      <span class="ri on">{{i:navCodex:22}}</span>
+      <span class="ri foot">{{i:gear:20}}</span>
+    </aside>
+    <main class="main"><div class="content">
+      <div class="filters">
+        <div class="search">{{i:search:15}}搜索邮箱、名称、标签…</div>
+        <div class="select">全部类型{{i:chevDown:12}}</div>
+        <div class="select">全部状态{{i:chevDown:12}}</div>
+        <div class="select">全部标签{{i:chevDown:12}}</div>
+        <div class="select">默认排序{{i:chevDown:12}}</div>
+      </div>
+      <p class="summary">2 个账号</p>
+
+      <article class="acc">
+        <span class="avatar on">工</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">工作账号</span>
+            <span class="acc-badges"><span class="badge own">当前</span><span class="plan">{{i:star:11}}PLUS</span></span>
+          </div>
+          <p class="email">main@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>个人账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:62%"></i></span><span class="q-num">62<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:48%"></i></span><span class="q-num">48<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="cur">{{i:check:15}}</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-23 09:12</span><span>额度更新 10-23 09:10</span><span class="tags">标签：工作</span></div>
+      </article>
+
+      <article class="acc">
+        <span class="avatar">A</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">接口账号</span>
+            <span class="acc-badges"><span class="badge off">API Key</span></span>
+          </div>
+          <p class="email">api@example.com</p>
+          <div class="facts"><span class="fact"><i>供应商：</i><span>OpenAI</span></span><span class="fact"><i>登录方式：</i><span>API Key</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">额度状态</div>
+          <div class="q-empty">按供应商计费<small>此服务未提供额度数据</small></div>
+        </div>
+        <div class="acts"><span class="ab tint">切换</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-22 11:20</span><span>额度更新 —</span><span class="tags">标签：接口</span></div>
+      </article>
+
+      <div class="pop" style="right:32px; top:294px">
+        <button class="pop-item" type="button">{{i:refresh:14}}刷新这一条配额</button>
+        <button class="pop-item" type="button">{{i:user:14}}刷新账号信息</button>
+        <button class="pop-item" type="button" disabled>{{i:terminal:14}}在 WSL 中使用</button>
+        <span class="pop-sep"></span>
+        <button class="pop-item" type="button">{{i:edit:14}}账号与密钥</button>
+        <button class="pop-item" type="button">{{i:copy:14}}复制邮箱</button>
+        <button class="pop-item" type="button">{{i:download:14}}导出这一条 JSON</button>
+        <span class="pop-sep"></span>
+        <button class="pop-item danger" type="button">{{i:trash:14}}删除</button>
+        <p class="pop-note">API Key 账号没有可写入 WSL 的登录态。</p>
+      </div>
+    </div></main>
+  </div>
+</div>
+
+<!-- ═══════════════ H · 已分配给 WSL 的卡片菜单 ═══════════════ -->
+<div class="cap">H · 已用于 WSL 的卡片：入口变状态（ink）
+  <small>这就是「Windows 工作账号、WSL 团队账号」的常态。WSL 的入口在团队账号卡片的 ⋯ 里变成不可点的状态，避免重复写入；要换 WSL 账号，去另一张卡的 ⋯。Windows 的「当前」与 WSL 的「使用中」各自独立。</small>
+</div>
+<div class="win" id="frame-h" data-theme="ink" data-base="dark" data-accent="celadon">
+  <header class="tb">
+    <div class="logo"><span>{{i:navCodex:16}}</span></div>
+    <nav class="tabs">
+      <span class="tab on">账号</span><span class="tab">会话</span><span class="tab">用量</span><span class="tab">回收站</span><span class="tab">对话</span>
+    </nav>
+    <div class="tb-right">
+      <span class="tb-act">{{i:refresh:13}}刷新配额</span>
+      <span class="tb-act">{{i:checkall:13}}选择</span>
+      <span class="tb-add">{{i:plus:14}}添加账号</span>
+      <span class="tb-sep"></span>
+      <span class="wbtn">{{i:gear:15}}</span>
+      <span class="wbtn">{{i:lock:14}}</span>
+      <span class="wbtn">{{i:min:12}}</span>
+      <span class="wbtn">{{i:max:12}}</span>
+      <span class="wbtn close">{{i:x:13}}</span>
+    </div>
+  </header>
+  <div class="shell">
+    <aside class="rail">
+      <span class="ri">{{i:navNotes:22}}</span>
+      <span class="ri">{{i:navEntries:22}}</span>
+      <span class="ri">{{i:navFiles:22}}</span>
+      <span class="ri">{{i:navLan:22}}</span>
+      <span class="ri">{{i:navMfa:22}}</span>
+      <span class="ri">{{i:navBypass:22}}</span>
+      <span class="ri on">{{i:navCodex:22}}</span>
+      <span class="ri foot">{{i:gear:20}}</span>
+    </aside>
+    <main class="main"><div class="content">
+      <div class="filters">
+        <div class="search">{{i:search:15}}搜索邮箱、名称、标签…</div>
+        <div class="select">全部类型{{i:chevDown:12}}</div>
+        <div class="select">全部状态{{i:chevDown:12}}</div>
+        <div class="select">全部标签{{i:chevDown:12}}</div>
+        <div class="select">默认排序{{i:chevDown:12}}</div>
+      </div>
+      <p class="summary">2 个账号</p>
+
+      <article class="acc">
+        <span class="avatar">团</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">团队账号</span>
+            <span class="acc-badges"><span class="badge wsl">{{i:terminal:11}}WSL 使用中</span><span class="plan">TEAM</span></span>
+          </div>
+          <p class="email">team@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>团队账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:41%"></i></span><span class="q-num">41<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:33%"></i></span><span class="q-num">33<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="ab tint">切换</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-22 18:40</span><span>额度更新 10-23 09:10</span><span class="tags">标签：团队</span></div>
+      </article>
+
+      <article class="acc">
+        <span class="avatar on">工</span>
+        <div class="who">
+          <div class="l1">
+            <span class="mail">工作账号</span>
+            <span class="acc-badges"><span class="badge own">当前</span><span class="plan">{{i:star:11}}PLUS</span></span>
+          </div>
+          <p class="email">main@example.com</p>
+          <div class="facts"><span class="fact"><i>工作区：</i><span>个人账户</span></span><span class="fact"><i>登录方式：</i><span>OAuth</span></span></div>
+        </div>
+        <div class="quota">
+          <div class="q-head">剩余额度</div>
+          <div class="q"><span class="q-tag">5 小时额度</span><span class="q-bar"><i style="width:62%"></i></span><span class="q-num">62<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-23 00:05（1 小时后重置）</div>
+          <div class="q"><span class="q-tag">周额度</span><span class="q-bar"><i style="width:48%"></i></span><span class="q-num">48<small>%</small></span></div>
+          <div class="q-meta">重置 2026-10-29 23:10（7 天后重置）</div>
+        </div>
+        <div class="acts"><span class="cur">{{i:check:15}}</span><span class="ib">{{i:dots:15}}</span></div>
+        <div class="foot"><span>上次使用 10-23 09:12</span><span>额度更新 10-23 09:10</span><span class="tags">标签：工作</span></div>
+      </article>
+
+      <p class="page-note">{{i:info:12}}Windows 与 WSL 的账号互不影响；WSL 可在卡片 ⋯ 里单独换号。</p>
+
+      <div class="pop" style="right:32px; top:124px">
+        <button class="pop-item" type="button">{{i:refresh:14}}刷新这一条配额</button>
+        <button class="pop-item" type="button">{{i:user:14}}刷新账号信息</button>
+        <button class="pop-item" type="button">{{i:shield:14}}强制刷新令牌</button>
+        <button class="pop-item" type="button" disabled>{{i:check:14}}WSL 已使用此账号</button>
+        <button class="pop-item" type="button">{{i:user:14}}重新登录</button>
+        <button class="pop-item" type="button">{{i:undo:14}}重置 5 小时额度</button>
+        <span class="pop-sep"></span>
+        <button class="pop-item" type="button">{{i:edit:14}}名称与备注</button>
+        <button class="pop-item" type="button">{{i:copy:14}}复制邮箱</button>
+        <button class="pop-item" type="button">{{i:download:14}}导出这一条 JSON</button>
+        <span class="pop-sep"></span>
+        <button class="pop-item danger" type="button">{{i:trash:14}}删除</button>
+      </div>
+    </div></main>
+  </div>
+</div>
+
+</body></html>

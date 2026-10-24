@@ -107,8 +107,8 @@ async function consume() {
       </div>
       <div class="dialog-body">
         <p class="rc-meta">
-          将立即用掉 <b>{{ account.email }}</b> 的一次 5 小时额度重置，用掉后不可撤销（当前还剩
-          <span class="num">{{ left }}</span> 次）。
+          <b>{{ account.email }}</b> 将消耗 1 次重置机会，无法撤销。剩余
+          <span class="num">{{ left }}</span> 次。
         </p>
         <p v-if="nextExpiry" class="rc-exp">
           <AppIcon name="clock" :size="14" />最近到期：{{ clockOf(nextExpiry) }}

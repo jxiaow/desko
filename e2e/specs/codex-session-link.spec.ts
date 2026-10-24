@@ -55,7 +55,7 @@ test('会话详情可复制完整 ID 和工作目录', async ({ page }) => {
   })
   await bootUnlocked(page, seed, '/codex')
   await page.getByRole('button', { name: '会话', exact: true }).click()
-  await page.locator('.grp-head').filter({ hasText: '项目 A' }).click()
+  if (await page.locator('.grp-head').filter({ hasText: '项目 A' }).getAttribute('aria-expanded') === 'false') await page.locator('.grp-head').filter({ hasText: '项目 A' }).click()
   await page.locator('.sess-row[data-sid="session-a"]').click()
   await page.getByRole('button', { name: '复制会话 ID', exact: true }).click()
   await expect.poll(() => page.evaluate(() => (window as any).__copiedSessionValue)).toBe('session-a')

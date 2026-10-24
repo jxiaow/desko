@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::theme_values;
+
 pub const DEFAULT_PORT: u16 = 8000;
 pub const PORT_PROBE_SPAN: u16 = 10;
 
@@ -27,6 +29,14 @@ pub struct ShareConfig {
     /// 只有 Host 命中其中某个 hostname 的请求才受它管，局域网侧行为一律不变。
     #[serde(default)]
     pub public: Vec<PublicPolicy>,
+    /// 主题戳：desko 主程序换外观时写，本进程只读，四值直接挂上网页的 `<html>`。
+    /// 单独四个键而不是一个对象——落盘形态与其余字段平铺一致，读侧不用再多一层 Option。
+    /// 值不在词表里就整戳作废，见 [`ThemeStamp::normalize`]。
+    pub theme: String,
+    pub base: String,
+    pub accent: String,
+    /// "on" / "off"，对应 data-atmosphere
+    pub atmosphere: String,
 }
 
 /// 一条公网子域的策略。口令缺省即拒绝：宁可公网打不通，不可无凭据能读。
@@ -39,6 +49,47 @@ pub struct PublicPolicy {
     /// true = 只给读：上传与写文本一律拒
     #[serde(default)]
     pub read_only: bool,
+}
+
+/// 网页 `<html>` 上那四个外观属性。词表来自生成的 theme_values（与 tokens.css 同源），
+/// 也就是"被接受"严格等价于"复制过来的令牌里真有这一块"。
+/// 四值是 desko 那张 `<html>` 的拓印：读侧只查词表，不替它重新推导极性。
+/// 默认档纸·浅·群青·无氛围同时也是公网面的固定外观——本机换了什么颜色，
+/// 不该顺着 Host 头泄给公网访客。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ThemeStamp {
+    pub theme: &'static str,
+    pub base: &'static str,
+    pub accent: &'static str,
+    pub atmosphere: &'static str,
+}
+
+impl Default for ThemeStamp {
+    fn default() -> Self {
+        ThemeStamp { theme: "paper", base: "light", accent: "ink", atmosphere: "off" }
+    }
+}
+
+impl ThemeStamp {
+    /// 底色、极性、强调色三者任一不在词表里就整戳回落；只信一半会画出 App 里不存在的组合。
+    pub fn normalize(theme: &str, base: &str, accent: &str, atmosphere: &str) -> Self {
+        fn exact(list: &[&'static str], value: &str) -> Option<&'static str> {
+            list.iter().copied().find(|v| *v == value)
+        }
+        match (
+            exact(theme_values::WORKSPACE_THEMES, theme),
+            exact(theme_values::WORKSPACE_BASES, base),
+            exact(theme_values::WORKSPACE_ACCENTS, accent),
+        ) {
+            (Some(t), Some(b), Some(a)) => ThemeStamp {
+                theme: t,
+                base: b,
+                accent: a,
+                atmosphere: if atmosphere == "on" { "on" } else { "off" },
+            },
+            _ => Self::default(),
+        }
+    }
 }
 
 impl ShareConfig {
@@ -59,6 +110,11 @@ impl ShareConfig {
         self.public
             .iter()
             .find(|p| p.hostname.eq_ignore_ascii_case(host))
+    }
+
+    /// 局域网面读这份戳。公网面不走这里，由 handlers 直接给 ThemeStamp::default()
+    pub fn theme_stamp(&self) -> ThemeStamp {
+        ThemeStamp::normalize(&self.theme, &self.base, &self.accent, &self.atmosphere)
     }
 }
 
@@ -229,6 +285,24 @@ mod tests {
     }
 
     #[test]
+    fn theme_stamp_requires_every_value_known() {
+        let teal = ThemeStamp { theme: "ink", base: "dark", accent: "teal", atmosphere: "on" };
+        assert_eq!(ThemeStamp::normalize("ink", "dark", "teal", "on"), teal);
+        // 词表外的强调色 / 旧六套底色：整戳作废，不留半套
+        assert_eq!(ThemeStamp::normalize("ink", "dark", "sky", "on"), ThemeStamp::default());
+        assert_eq!(ThemeStamp::normalize("snow", "light", "ink", "off"), ThemeStamp::default());
+        assert_eq!(ThemeStamp::normalize("ink", "", "teal", "on"), ThemeStamp::default());
+        // 氛围是布尔：脏值只把自己按关算，不牵动另外三值
+        assert_eq!(
+            ThemeStamp::normalize("ink", "dark", "teal", "banana"),
+            ThemeStamp { theme: "ink", base: "dark", accent: "teal", atmosphere: "off" }
+        );
+        // 改版之前的配置文件根本没有这四键
+        let legacy: ShareConfig = serde_json::from_str(r#"{"port":8123,"shareDirs":[]}"#).unwrap();
+        assert_eq!(legacy.theme_stamp(), ThemeStamp::default());
+    }
+
+    #[test]
     fn expand_tilde_passthrough() {
         assert_eq!(expand_tilde("/plain/path"), "/plain/path");
         assert_eq!(expand_tilde(""), "");
@@ -249,6 +323,10 @@ mod tests {
                 password_sha256: Some("pubhash".to_string()),
                 read_only: true,
             }],
+            theme: "ink".to_string(),
+            base: "dark".to_string(),
+            accent: "teal".to_string(),
+            atmosphere: "on".to_string(),
         };
         save_file(&p, &cfg).unwrap();
         let loaded = load_file(&p).unwrap().unwrap();
@@ -262,6 +340,13 @@ mod tests {
         let text = std::fs::read_to_string(&p).unwrap();
         assert!(text.contains("\"passwordSha256\": \"pubhash\""), "{text}");
         assert!(text.contains("\"readOnly\": true"), "{text}");
+        // 主题戳四键平铺、名字照写不动——desko 侧拼错一个字母这边就当没这键，静默回纸色
+        assert!(text.contains("\"theme\": \"ink\""), "{text}");
+        assert!(text.contains("\"atmosphere\": \"on\""), "{text}");
+        assert_eq!(
+            loaded.theme_stamp(),
+            ThemeStamp { theme: "ink", base: "dark", accent: "teal", atmosphere: "on" }
+        );
         assert_eq!(loaded.public_policy("FILES.EXAMPLE.COM").unwrap().password_sha256.as_deref(), Some("pubhash"));
         assert!(loaded.public_policy("other.example.com").is_none());
         assert!(loaded.public_policy("").is_none());

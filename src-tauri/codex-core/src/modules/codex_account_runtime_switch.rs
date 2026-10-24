@@ -723,9 +723,6 @@ fn switch_account_with_prepared(
         codex_home.display(),
         auth_path.display()
     ));
-    sync_default_codex_account_to_wsl(&account_for_write.id, |wsl_dir| {
-        write_prepared_account_bundle_to_dir(wsl_dir, &account_for_write)
-    });
 
     let updated_account = record_current_account(account_id)?;
 
@@ -876,15 +873,13 @@ async fn prepare_freshly_reauthorized_account_switch_locked(
     Ok(PreparedCodexAccountSwitch::Account(account))
 }
 
-async fn commit_account_switch_locked(
+fn commit_account_switch_credentials_locked(
     account_id: &str,
     prepared: PreparedCodexAccountSwitch,
 ) -> Result<CodexAccount, String> {
     match prepared {
         PreparedCodexAccountSwitch::Account(account) => {
             let updated_account = switch_account_with_prepared(account_id, account)?;
-            let codex_home = get_codex_home();
-            activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account).await?;
             Ok(updated_account)
         }
         PreparedCodexAccountSwitch::ApiKeyWithOauth {
@@ -905,9 +900,6 @@ async fn commit_account_switch_locked(
                 codex_home.display(),
                 auth_path.display()
             ));
-            sync_default_codex_account_to_wsl(&account.id, |wsl_dir| {
-                write_api_key_account_bundle_with_oauth_to_dir(wsl_dir, &account, &oauth_account)
-            });
 
             let updated_account = record_current_account(account_id)?;
 
@@ -916,11 +908,15 @@ async fn commit_account_switch_locked(
                 updated_account.email, oauth_account.email
             ));
 
-            activate_provider_gateway_after_switch_if_needed(&codex_home, &updated_account).await?;
-
             Ok(updated_account)
         }
     }
+}
+
+async fn commit_account_switch_locked(account_id: &str, prepared: PreparedCodexAccountSwitch) -> Result<CodexAccount, String> {
+    let account = commit_account_switch_credentials_locked(account_id, prepared)?;
+    activate_provider_gateway_after_switch_if_needed(&get_codex_home(), &account).await?;
+    Ok(account)
 }
 
 pub async fn switch_account_managed(account_id: &str) -> Result<CodexAccount, String> {

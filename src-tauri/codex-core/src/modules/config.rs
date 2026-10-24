@@ -104,24 +104,18 @@ pub struct UserConfig {
     /// OAuth 套餐范围；旧配置默认全部，显式空数组关闭套餐额度轮询。
     #[serde(default = "default_codex_auto_refresh_plan_types")]
     pub codex_auto_refresh_plan_types: Vec<String>,
-    /// Codex 切号时是否同步覆盖 WSL 配置 (Windows Only)
-    #[serde(default = "default_codex_sync_wsl")]
-    pub codex_sync_wsl: bool,
+    /// 切号时是否先关闭再重开 Windows 上正在运行的 Codex（应用与交互式 CLI）。
+    #[serde(default = "default_codex_switch_restart_codex")]
+    pub codex_switch_restart_codex: bool,
     /// 是否启用 Codex 客户端中的 API 服务额度显示注入
     #[serde(default = "default_codex_app_ui_injection_enabled")]
     pub codex_app_ui_injection_enabled: bool,
-    /// Codex WSL 配置目录 (Windows Only)
-    #[serde(default = "default_codex_wsl_config_dir")]
-    pub codex_wsl_config_dir: String,
     /// 会话用量统计的额外 CODEX_HOME，可填写 Windows 可访问的 WSL UNC 目录。
     #[serde(default)]
     pub codex_usage_extra_dirs: Vec<String>,
     /// Windows 上自动统计运行中 WSL 发行版的标准 Codex 目录。
     #[serde(default = "default_codex_usage_auto_wsl")]
     pub codex_usage_auto_wsl: bool,
-    /// 是否在切号后或进入 Codex 页时自动把 Windows 登录凭据同步到运行中的 WSL。
-    #[serde(default = "default_codex_wsl_auth_auto_sync")]
-    pub codex_wsl_auth_auto_sync: bool,
     /// Zed 自动刷新间隔（分钟），-1 表示禁用
     #[serde(default = "default_zed_auto_refresh")]
     pub zed_auto_refresh_minutes: i32,
@@ -736,22 +730,16 @@ fn default_codex_auto_refresh_plan_types() -> Vec<String> {
     ["free", "go", "plus", "pro", "team", "business", "enterprise", "edu_k12", "unknown"]
         .into_iter().map(str::to_string).collect()
 }
-fn default_codex_sync_wsl() -> bool {
+fn default_codex_switch_restart_codex() -> bool {
     false
 }
 fn default_codex_usage_auto_wsl() -> bool {
     true
 }
-fn default_codex_wsl_auth_auto_sync() -> bool {
-    false
-}
 fn default_codex_app_ui_injection_enabled() -> bool {
     true
 }
 
-fn default_codex_wsl_config_dir() -> String {
-    String::new()
-}
 fn default_zed_auto_refresh() -> i32 {
     10
 }
@@ -1227,12 +1215,10 @@ impl Default for UserConfig {
             auto_refresh_minutes: default_auto_refresh(),
             codex_auto_refresh_minutes: default_codex_auto_refresh(),
             codex_auto_refresh_plan_types: default_codex_auto_refresh_plan_types(),
-            codex_sync_wsl: default_codex_sync_wsl(),
+            codex_switch_restart_codex: default_codex_switch_restart_codex(),
             codex_app_ui_injection_enabled: default_codex_app_ui_injection_enabled(),
-            codex_wsl_config_dir: default_codex_wsl_config_dir(),
             codex_usage_extra_dirs: Vec::new(),
             codex_usage_auto_wsl: default_codex_usage_auto_wsl(),
-            codex_wsl_auth_auto_sync: default_codex_wsl_auth_auto_sync(),
             zed_auto_refresh_minutes: default_zed_auto_refresh(),
             ghcp_auto_refresh_minutes: default_ghcp_auto_refresh(),
             windsurf_auto_refresh_minutes: default_windsurf_auto_refresh(),
@@ -1629,24 +1615,10 @@ pub fn load_user_config() -> Result<UserConfig, String> {
             );
         }
 
-        if !obj.contains_key("codex_sync_wsl") {
+        if !obj.contains_key("codex_switch_restart_codex") {
             obj.insert(
-                "codex_sync_wsl".to_string(),
-                json!(default_codex_sync_wsl()),
-            );
-        }
-
-        if !obj.contains_key("codex_wsl_auth_auto_sync") {
-            obj.insert(
-                "codex_wsl_auth_auto_sync".to_string(),
-                json!(default_codex_wsl_auth_auto_sync()),
-            );
-        }
-
-        if !obj.contains_key("codex_wsl_config_dir") {
-            obj.insert(
-                "codex_wsl_config_dir".to_string(),
-                json!(default_codex_wsl_config_dir()),
+                "codex_switch_restart_codex".to_string(),
+                json!(default_codex_switch_restart_codex()),
             );
         }
 
@@ -2607,6 +2579,20 @@ pub fn init_server_status(actual_port: u16, auth_token: String) -> Result<(), St
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn codex_switch_restart_defaults_off_and_retires_wsl_sync_keys() {
+        let mut value=serde_json::to_value(super::UserConfig::default()).unwrap();
+        assert_eq!(value["codex_switch_restart_codex"],false);
+        let object=value.as_object_mut().unwrap();object.remove("codex_switch_restart_codex");
+        object.insert("codex_sync_wsl".into(),serde_json::json!(true));
+        object.insert("codex_wsl_config_dir".into(),serde_json::json!("fixture"));
+        object.insert("codex_wsl_auth_auto_sync".into(),serde_json::json!(true));
+        let mut config: super::UserConfig=serde_json::from_value(value).unwrap();
+        assert!(!config.codex_switch_restart_codex); config.codex_switch_restart_codex=true;
+        let saved=serde_json::to_value(config).unwrap();assert_eq!(saved["codex_switch_restart_codex"],true);
+        for key in ["codex_sync_wsl","codex_wsl_config_dir","codex_wsl_auth_auto_sync"] {assert!(saved.get(key).is_none());}
+    }
+
     #[test]
     fn codex_refresh_scope_legacy_defaults_and_explicit_empty_round_trip() {
         let defaults = UserConfig::default();

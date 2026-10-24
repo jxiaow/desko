@@ -1,5 +1,7 @@
 // 把 global.css 的真 token 块 + utils/icons.ts 的真图标路径注进 mock，产出可直接截图的 html。
 // 用法：node scripts/mock-build.mjs design/xxx/mock-src.html design/xxx/mock.html
+//   --tokens=<仓库相对路径>  改抽生成好的令牌文件（如局域网传输网页端的 tokens.css），
+//                            并给每个 .win 挂上 data-layout="workspace"，让选择器按真页面的样子命中。
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -10,10 +12,15 @@ const POLARITY = readPolarity()
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(here, '..')
 
-const SRC = process.argv[2]
-const OUT = process.argv[3]
+const args = process.argv.slice(2)
+const flag = (name) => {
+  const hit = args.find((a) => a.startsWith(`--${name}=`))
+  return hit ? hit.slice(name.length + 3) : null
+}
+const [SRC, OUT] = args.filter((a) => !a.startsWith('--'))
+const TOKENS_FILE = flag('tokens')
 if (!SRC || !OUT) {
-  console.error('用法: node scripts/mock-build.mjs <mock-src.html> <out.html>')
+  console.error('用法: node scripts/mock-build.mjs <mock-src.html> <out.html> [--tokens=<path>]')
   process.exit(2)
 }
 
@@ -72,12 +79,19 @@ function svg(name, size, icons) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`
 }
 
-const globalCss = readStyleSource(path.join(root, 'src/styles/global.css'))
-const tokens = pickTokenBlocks(globalCss)
-const missing = [':where(:root), [data-theme="paper"]', '[data-theme="ink"]', '[data-base="light"][data-accent="ink"]'].filter(
-  (s) => !tokens.includes(s),
-)
-if (missing.length) throw new Error(`token 块未命中: ${missing.join(', ')}`)
+let tokens
+if (TOKENS_FILE) {
+  // 生成物按 `:root[...]` 写死；mock 一台设备一个 .win，所以把根选择器换成 .win，
+  // 其余选择器与级联顺序保持原样 —— 对拍时颜色算的就是真页面那一份。
+  tokens = readFileSync(path.join(root, TOKENS_FILE), 'utf8').replace(/:root\b/g, '.win')
+} else {
+  const globalCss = readStyleSource(path.join(root, 'src/styles/global.css'))
+  tokens = pickTokenBlocks(globalCss)
+  const missing = [':where(:root), [data-theme="paper"]', '[data-theme="ink"]', '[data-base="light"][data-accent="ink"]'].filter(
+    (s) => !tokens.includes(s),
+  )
+  if (missing.length) throw new Error(`token 块未命中: ${missing.join(', ')}`)
+}
 
 const icons = iconPaths()
 let html = readFileSync(path.resolve(SRC), 'utf8')
@@ -85,6 +99,10 @@ let html = readFileSync(path.resolve(SRC), 'utf8')
 html = html.replace(/data-theme="([\w-]+)"(?![^>]*\bdata-base=)/g, (all, t) =>
   POLARITY[t] ? `${all} data-base="${POLARITY[t]}"` : all,
 )
+// 工作区块挂在 data-layout 上：桌面端 main.ts 就是这么挂的，mock 不挂就等于抽错令牌
+if (TOKENS_FILE) {
+  html = html.replace(/<div class="win(?=[" ])/g, '<div data-layout="workspace" data-atmosphere="off" class="win')
+}
 html = html.replace(/<!--TOKENS-->/, tokens)
 html = html.replace(/\{\{i:([A-Za-z0-9]+):(\d+)\}\}/g, (_, n, s) => svg(n, s, icons))
 writeFileSync(path.resolve(OUT), html, 'utf8')

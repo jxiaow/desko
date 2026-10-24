@@ -25,8 +25,12 @@ export interface CodexHudState {
 export interface CodexHudEventPayload {
   state: CodexHudState
   reveal: boolean
-  /** 允许绕锚点小范围走动；缺省按允许处理 */
-  walk?: boolean
+  /** 允许自发的小动作（生活场景与打盹）；缺省按允许处理 */
+  ambient?: boolean
+  /** 固定展开由设置控制，重建窗口后仍保留。 */
+  pinned?: boolean
+  /** 锁定时展示最近一次快照，不继续读取账号数据。 */
+  locked?: boolean
 }
 
 export const HUD_SKINS = [
@@ -42,23 +46,29 @@ export function isHudSkin(value: string): value is CodexHudSkin {
 }
 
 /** 招牌动作：sprite 里每个动作一组 keyframes，触发方只认这些 id。 */
-export type CodexHudMove = 'bow' | 'fold' | 'flap' | 'stretch' | 'tangle' | 'tuck'
+export type CodexHudMove =
+  | 'bow' | 'fold' | 'flap' | 'stretch' | 'tangle' | 'tuck'
+  | 'hop' | 'waddle' | 'peek' | 'doze'
 
 /** 时长只在这一处定义：CSS 的 `--mv-dur` 和收尾定时器同源，不会漂拍。 */
 export const HUD_MOVE_MS: Record<CodexHudMove, number> = {
   bow: 1150,
   fold: 1350,
-  flap: 900,
+  flap: 1600,
   stretch: 1600,
   tangle: 1400,
   tuck: 1900,
+  hop: 1400,
+  waddle: 1800,
+  peek: 1600,
+  doze: 3200,
 }
 
-/** 巡游节拍间隙抽一个放，取代原来的「张望」；企鹅只有摆翅膀那一手。 */
-export const HUD_IDLE_MOVES: Record<CodexHudSkin, CodexHudMove[]> = {
-  bunny: ['bow', 'fold'],
-  penguin: ['flap'],
-  snail: ['stretch', 'tangle'],
+/** 生活场景池：按顺序轮转，点角色推进一步，不掷骰子。 */
+export const HUD_LIFE_MOVES: Record<CodexHudSkin, CodexHudMove[]> = {
+  bunny: ['bow', 'hop', 'fold'],
+  penguin: ['waddle', 'flap', 'peek'],
+  snail: ['stretch', 'tangle', 'tuck'],
 }
 
 /** 见底 / 刷新失败那一下：蜗牛缩壳，另两只没有壳可缩，用各自「收一下」的那条形。 */
@@ -67,6 +77,13 @@ export const HUD_ALERT_MOVES: Record<CodexHudSkin, CodexHudMove> = {
   penguin: 'flap',
   snail: 'tuck',
 }
+
+/** 打盹不进生活池，由导演按 `HUD_DOZE_EVERY` 插入。 */
+export const HUD_DOZE_MOVE: CodexHudMove = 'doze'
+export const HUD_DOZE_EVERY = 5
+export const HUD_FIRST_SCENE_MS = 3000
+export const HUD_SCENE_GAPS_MS = [7000, 11000, 8000, 14000, 10000]
+export const HUD_DOZE_GAP_MS = 18000
 
 function hudMinutesLabel(minutes: number | null | undefined): string {
   if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return '5h'

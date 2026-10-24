@@ -49,13 +49,17 @@ test.describe('导航与布局', () => {
   })
 
   test('Ctrl+B 只切换有目录的页面，模块图标保持可用', async ({ page }) => {
-    await bootUnlocked(page)
+    await bootUnlocked(page, { notes: [{ title: '目录快捷键', content_html: '<p>目录快捷键 #工作</p>' }] })
     await expect(page.locator('.workspace-directory')).toBeHidden()
     await page.locator('.titlebar-brand').click()
     await page.keyboard.press('Control+b')
     await expect(page.locator('.workspace-directory')).toBeVisible()
     await page.keyboard.press('Control+b')
     await expect(page.locator('.workspace-directory')).toBeHidden()
+    await page.keyboard.press('Control+b')
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.workspace-directory')).toBeHidden()
+    await expect(page.locator('#workspace-directory-toggle')).toBeFocused()
     await page.locator('a.nav-item[href="/files"]').click()
     await page.keyboard.press('Control+b')
     await expect(page.locator('.workspace-directory')).toBeHidden()

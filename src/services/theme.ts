@@ -14,6 +14,7 @@
  * 以及更早的 cool/white/classic/dark/dark-carbon/cyber-hacker），
  * 迁移只在读取时查一次表完成，不回写——用户下次切主题时自然落为新值。 */
 import { reactive, readonly } from 'vue'
+import { fileshareApi } from './api/fileshare'
 import { settingsApi } from './api/settings'
 
 export type ThemeId = (typeof THEMES)[number]['id']
@@ -139,6 +140,30 @@ const isThemeId = (v: string): v is ThemeId => THEMES.some((t) => t.id === v)
 const isAccentId = (v: string): v is AccentId => ACCENTS.some(a => a.id === v) || WORKSPACE_ACCENTS.some(a => a.id === v)
 
 export const polarityOf = (theme: ThemeId): PolarityId => POLARITY[theme]
+
+/* 主题戳：把当前外观四值抄给局域网传输的网页端——sidecar 轮询同一份 JSON，
+   不重启就换肤。去抖 400ms 与它的轮询同档，再快那边也看不见；值没变不发。
+   失败一律静默：这是装饰性契约，不该让换个主题弹出一条错误。 */
+const STAMP_DEBOUNCE_MS = 400
+let stampTimer: number | null = null
+let lastStamp = ''
+const reportThemeStamp = (ap: Appearance) => {
+  const stamp = {
+    theme: ap.theme,
+    base: polarityOf(ap.theme),
+    accent: ap.accent,
+    atmosphere: ap.backgroundAtmosphere ? ('on' as const) : ('off' as const),
+  }
+  const key = `${stamp.theme}/${stamp.base}/${stamp.accent}/${stamp.atmosphere}`
+  if (key === lastStamp) return
+  lastStamp = key
+  if (stampTimer !== null) window.clearTimeout(stampTimer)
+  stampTimer = window.setTimeout(() => {
+    stampTimer = null
+    fileshareApi.setTheme(stamp.theme, stamp.base, stamp.accent, stamp.atmosphere).catch(() => {})
+  }, STAMP_DEBOUNCE_MS)
+}
+
 const applyAppearance = (ap: Appearance) => {
   Object.assign(state, ap)
   const root = document.documentElement
@@ -146,6 +171,14 @@ const applyAppearance = (ap: Appearance) => {
   root.setAttribute('data-base', polarityOf(ap.theme))
   root.setAttribute('data-accent', ap.accent)
   root.setAttribute('data-atmosphere', ap.backgroundAtmosphere ? 'on' : 'off')
+  reportThemeStamp(ap)
+}
+
+/** 让网页端的戳重新追一次当前外观：fileshare.json 可能是刚刚才被第一次读取创建出来的，
+ *  那时四个键还空着，网页会一路画成纸·蓝。 */
+export const syncThemeStamp = () => {
+  lastStamp = ''
+  reportThemeStamp(state)
 }
 
 /** 从设置里读底色、accent 与背景氛围；旧 ID 走迁移表，读不到或不认识都回落到默认。 */
