@@ -31,11 +31,15 @@ const props = defineProps<{
   isBatchMode: boolean
   hasSelection: boolean
   selectedIds: Set<string>
+  /** K：选了但被当前分类/搜索挡住的条数，只用于 dock 的 hover 披露 */
+  hiddenSelected?: number
   visiblePasswords: Record<string, boolean>
   passwordCache: Record<string, { value: string; ts: number }>
 }>()
 
 const showFilters = computed(() => props.tabs.some(tab => tab.count > 0) || !!props.searchKeyword || props.activeTab !== 'all')
+/** 批量钮的口径只等于屏幕上这一屏：筛选生效时钮名换成本屏方言，语义随之收窄 */
+const filtersActive = computed(() => !!props.searchKeyword || props.activeTab !== 'all')
 
 const emit = defineEmits<{
   'update:searchKeyword': [value: string]
@@ -268,8 +272,8 @@ watchEffect(() => {
           class="bar-btn"
           :class="{ active: isBatchMode }"
           type="button"
-          :title="isBatchMode ? '退出选择' : '选择条目'"
-          :aria-label="isBatchMode ? '退出选择' : '选择条目'"
+          :title="isBatchMode ? '完成选择' : '选择条目'"
+          :aria-label="isBatchMode ? '完成选择' : '选择条目'"
           @click="emit('togglePick')"
         >
           <AppIcon name="checkall" :size="16" />
@@ -395,13 +399,14 @@ watchEffect(() => {
       </div>
     </div>
 
-    <div v-if="hasSelection" class="batch-dock">
-      <span class="dock-count">已选 {{ selectedIds.size }} 项</span>
-      <button class="dock-btn" type="button" @click="emit('selectAll')">
-        <AppIcon name="checkall" :size="12" />全选
+    <div v-if="isBatchMode" class="batch-dock">
+      <span class="dock-count" :data-tip="hiddenSelected ? `其中 ${hiddenSelected} 项不在当前筛选结果里` : undefined">已选 {{ selectedIds.size }} 项</span>
+      <span v-if="!hasSelection" class="dock-hint">点收藏选择</span>
+      <button class="dock-btn" type="button" :disabled="!filteredEntries.length" @click="emit('selectAll')">
+        <AppIcon name="checkall" :size="12" />{{ filtersActive ? '全选筛选结果' : '全选' }}
       </button>
       <button class="dock-btn" type="button" :disabled="!selectedIds.size" @click="emit('deselectAll')">
-        <AppIcon name="x" :size="12" />取消全选
+        <AppIcon name="x" :size="12" />{{ filtersActive ? '取消本屏' : '取消全选' }}
       </button>
       <span class="dock-sep"></span>
       <button class="dock-btn danger" type="button" :disabled="!selectedIds.size" @click="emit('batchDelete')">

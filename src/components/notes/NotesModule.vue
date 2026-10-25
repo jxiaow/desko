@@ -44,7 +44,7 @@ const { copyRichToClipboard } = useClipboard()
 const {
   notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, hasActiveFilters,
   noteRailCollapsed, noteRailPinned, noteDraftHtml: draftHtml,
-  isBatchMode, hasNoteSelection, selectedNoteIds, isMergingNotes, noteAttachments, noteSaveState, notePlains, noteKey,
+  isBatchMode, hasNoteSelection, selectedNoteIds, hiddenSelectedNotes, isMergingNotes, noteAttachments, noteSaveState, notePlains, noteKey,
   tagCounts, viewCounts, filteredNotes, groupedNotes, archivedNotes, archiveSummary,
 } = storeToRefs(notesStore)
 const {
@@ -76,10 +76,11 @@ const fsMode = ref<'edit' | 'view'>('edit')
 let fullscreenReturnFocus: HTMLElement | null = null
 /** 全库小记口令弹窗：mode 决定要输什么，thenLock 是口令到手后要补做的那次加密 */
 const keyDialog = ref<{ mode: 'setup' | 'unlock' | 'change'; thenLock?: string } | null>(null)
-const exportRequest = ref<{ ids: string[]; scopeLabel: string; format?: NoteExportFormat } | null>(null)
+const exportRequest = ref<{ ids: string[]; scopeLabel: string; format?: NoteExportFormat; hidden?: number } | null>(null)
 const exportAllCount = computed(() => notes.value.filter(note => note.archived === (noteView.value === 'archived')).length)
-const exportNotes = (ids: string[], scopeLabel: string, format?: NoteExportFormat) => {
-  if (!exportRequest.value && ids.length) exportRequest.value = { ids, scopeLabel, format }
+/** hidden：点了「导出」这一刻攒在 S 里、但不在本屏的条数，结果 toast 要说清口径 */
+const exportNotes = (ids: string[], scopeLabel: string, format?: NoteExportFormat, hidden = 0) => {
+  if (!exportRequest.value && ids.length) exportRequest.value = { ids, scopeLabel, format, hidden }
 }
 const exportAll = () => exportNotes(notes.value.filter(note => note.archived === (noteView.value === 'archived')).map(note => note.id), noteView.value === 'archived' ? '全部归档小记' : '全部未归档小记')
 
@@ -635,16 +636,16 @@ watchEffect(() => {
     </Teleport>
 
     <div v-if="isBatchMode && !fsTarget" class="batch-dock">
-      <span class="dock-count">已选 {{ selectedNoteIds.size }} 条</span>
+      <span class="dock-count" :data-tip="hiddenSelectedNotes ? `其中 ${hiddenSelectedNotes} 条不在当前筛选结果里` : undefined">已选 {{ selectedNoteIds.size }} 条</span>
       <span v-if="!hasNoteSelection" class="dock-hint">点小记选择</span>
-      <button class="dock-btn" type="button" @click="selectAllNotes">
-        <AppIcon name="checkall" :size="12" />全选
+      <button class="dock-btn" type="button" :disabled="!filteredNotes.length" @click="selectAllNotes">
+        <AppIcon name="checkall" :size="12" />{{ hasActiveFilters ? '全选筛选结果' : '全选' }}
       </button>
       <button class="dock-btn" type="button" :disabled="!selectedNoteIds.size" @click="clearSelection">
-        <AppIcon name="x" :size="12" />取消全选
+        <AppIcon name="x" :size="12" />{{ hasActiveFilters ? '取消本屏' : '取消全选' }}
       </button>
       <span class="dock-sep"></span>
-      <button v-if="!isWebRuntime()" class="dock-btn" type="button" :disabled="!selectedNoteIds.size || !!exportRequest" @click="exportNotes([...selectedNoteIds], '已选小记')">
+      <button v-if="!isWebRuntime()" class="dock-btn" type="button" :disabled="!selectedNoteIds.size || !!exportRequest" @click="exportNotes([...selectedNoteIds], '已选小记', undefined, hiddenSelectedNotes)">
         <AppIcon name="download" :size="12" />导出
       </button>
       <button v-if="isArchivedView" class="dock-btn" type="button" :disabled="!hasNoteSelection" @click="batchSetArchived(false)">
@@ -707,7 +708,7 @@ watchEffect(() => {
     />
     </Teleport>
 
-    <NoteExportController v-if="exportRequest" :ids="exportRequest.ids" :format="exportRequest.format" :scope-label="exportRequest.scopeLabel" @close="exportRequest = null" />
+    <NoteExportController v-if="exportRequest" :ids="exportRequest.ids" :format="exportRequest.format" :scope-label="exportRequest.scopeLabel" :hidden="exportRequest.hidden" @close="exportRequest = null" />
 
     <NoteLockDialog
       v-if="keyDialog"

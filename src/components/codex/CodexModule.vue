@@ -65,6 +65,7 @@ import {
   type CodexAccountStatusFilter,
   type CodexAccountSort,
 } from '../../utils/codexAccounts'
+import { hiddenCount, prune } from '../../utils/selection'
 import PopoverMenu from '../shared/PopoverMenu.vue'
 import CodexAuthDialog from './CodexAuthDialog.vue'
 import CodexBatchDeleteDialog from './CodexBatchDeleteDialog.vue'
@@ -158,6 +159,20 @@ const tagOptions = computed(() => [
 ])
 const attentionCount = computed(() => accounts.value.filter(codexNeedsAttention).length)
 const accountFiltersActive = computed(() => !!accountQuery.value || accountAuth.value !== 'all' || accountStatus.value !== 'all' || !!accountTag.value)
+/** V：此刻排在账号列表里的 id。批量钮的范围就是它；K 只用于披露。 */
+const visibleAccountIds = computed(() => visibleAccounts.value.map(a => a.id))
+const hiddenSelected = computed(() => hiddenCount(selected.value, visibleAccountIds.value))
+/** 藏起来的条数：>0 才说一句，量词按 Codex 的「个」 */
+const offScreenSentence = (ids: readonly string[]) => {
+  const k = hiddenCount(new Set(ids), visibleAccountIds.value)
+  return k > 0 ? `其中 ${k} 个不在当前筛选结果里。` : ''
+}
+
+// 账号删掉或回收后，残 id 不能混进下一次批量入参；筛选变化不剪枝——跨筛选攒批是有意保留的。
+watch(accounts, list => {
+  const next = prune(selected.value, list.map(a => a.id))
+  if (next !== selected.value) selected.value = next
+}, { flush: 'post' })
 
 function clearAccountFilters() {
   accountQuery.value = ''
@@ -307,9 +322,10 @@ async function copyEmail(a: CodexAccount) {
 function exportJson(ids: string[]) {
   if (!ids.length) return
   const selectedIds = [...ids]
+  const scope = offScreenSentence(selectedIds)
   confirmStore.showConfirm(
     '导出账号凭据',
-    `将 ${selectedIds.length} 个账号的凭据复制到剪贴板，可能含令牌、API Key 和私密资料。其他应用可能读取，请勿分享。继续导出？`,
+    `将 ${selectedIds.length} 个账号的凭据复制到剪贴板，可能含令牌、API Key 和私密资料。其他应用可能读取，请勿分享。${scope}继续导出？`,
     async () => {
       if (!active) return
       try {
@@ -357,9 +373,10 @@ function askDelete(a: CodexAccount) {
 function askBatchDelete() {
   const ids = Array.from(selected.value)
   if (!ids.length) return
+  const scope = offScreenSentence(ids)
   confirmStore.showConfirm(
     '删除账号',
-    `将选中的 ${ids.length} 个账号移入回收站？可恢复，当前 Codex 登录不受影响。删除过程可暂停。`,
+    `将选中的 ${ids.length} 个账号移入回收站？${scope}可恢复，当前 Codex 登录不受影响。删除过程可暂停。`,
     async () => {
       // 单选与批量共用同一句话术，走的是同一套「先留底再移走」
       selected.value = new Set()
@@ -739,8 +756,8 @@ watchEffect(() => {
 
       <div v-if="view === 'accounts' && (selected.size || batchDeleteJob)" class="batch-dock">
         <template v-if="selected.size">
-          <span class="dock-count">已选 {{ selected.size }} 条</span>
-          <button class="dock-btn" type="button" @click="selected = new Set([...selected, ...visibleAccounts.map((a) => a.id)])">
+          <span class="dock-count" :data-tip="hiddenSelected ? `其中 ${hiddenSelected} 个不在当前筛选结果里` : undefined">已选 {{ selected.size }} 条</span>
+          <button class="dock-btn" type="button" @click="selected = new Set([...selected, ...visibleAccountIds])">
             <AppIcon name="checkall" :size="12" />{{ accountFiltersActive ? '全选筛选结果' : '全选' }}
           </button>
           <button class="dock-btn" type="button" @click="refreshQuotas(Array.from(selected))">

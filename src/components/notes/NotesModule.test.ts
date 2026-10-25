@@ -495,6 +495,28 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
+  it('跨视图攒选：钮名换成本屏方言，计数挂上非本屏提示', async () => {
+    stageNotes([makeNote(), makeNote({ id: 'b', title: '乙', content_html: '<p>乙</p>', archived: true })])
+    const wrapper = await mountModule()
+    const store = useNotesStore()
+
+    await wrapper.find('.memo-check').trigger('click')
+    expect(wrapper.find('.dock-count').attributes('data-tip')).toBeUndefined()
+    expect(wrapper.find('.dock-btn').text()).toBe('全选')
+
+    store.noteView = 'archived'
+    await flushPromises()
+    expect(store.selectedNoteIds.has('a')).toBe(true)
+    expect(wrapper.find('.dock-count').text()).toBe('已选 1 条')
+    expect(wrapper.find('.dock-count').attributes('data-tip')).toBe('其中 1 条不在当前筛选结果里')
+    expect(wrapper.find('.dock-btn').text()).toBe('全选筛选结果')
+
+    store.selectAllNotes()
+    await flushPromises()
+    expect([...store.selectedNoteIds].sort()).toEqual(['a', 'b'])
+    wrapper.unmount()
+  })
+
   it('requires two selections for merging and omits merging in the archived view', async () => {
     stageNotes([makeNote(), makeNote({ id: 'b', title: '乙', content_html: '<p>乙</p>' })])
     const wrapper = await mountModule()

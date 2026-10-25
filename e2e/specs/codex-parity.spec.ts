@@ -130,6 +130,28 @@ test('筛选结果的全选只增加当前可见账号，导出不夹带其他�
   expect(accounts.map((a: { email: string }) => a.email).sort()).toEqual(['main@e2e.dev', 'need@e2e.dev'])
 })
 
+test('跨筛选攒批的批量删除确认说清藏了几个', async ({ page }) => {
+  await boot(page)
+  await page.getByRole('button', { name: '选择', exact: true }).click()
+  // 先勾一条无标签的，再用「工作」把它筛掉：S 里留下一条看不见的
+  await page.locator('.acc-row[data-email="key@e2e.dev"] .pick-box').click()
+  await page.getByRole('textbox', { name: '搜索 Codex 账号' }).fill('工作')
+  await expect(page.locator('.acc-row')).toHaveCount(2)
+  await expect(page.locator('.dock-count')).toHaveText('已选 1 条')
+  await expect(page.locator('.dock-count')).toHaveAttribute('data-tip', '其中 1 个不在当前筛选结果里')
+  await page.getByRole('button', { name: '全选筛选结果', exact: true }).click()
+  await expect(page.locator('.dock-count')).toHaveText('已选 3 条')
+  await page.locator('.batch-dock .dock-btn', { hasText: '删除选中' }).click()
+  await expect(page.locator('.confirm-dialog')).toContainText('将选中的 3 个账号移入回收站？其中 1 个不在当前筛选结果里。')
+  await page.locator('.confirm-dialog').getByRole('button', { name: '取消', exact: true }).click()
+  // 没藏东西时那句话一个字都不许多
+  await page.getByRole('textbox', { name: '搜索 Codex 账号' }).fill('')
+  await expect(page.locator('.dock-count')).not.toHaveAttribute('data-tip', /.*/)
+  await page.locator('.batch-dock .dock-btn', { hasText: '删除选中' }).click()
+  await expect(page.locator('.confirm-dialog')).toContainText('将选中的 3 个账号移入回收站？可恢复')
+  await page.locator('.confirm-dialog').getByRole('button', { name: '取消', exact: true }).click()
+})
+
 test('会话正文搜索接入本地正文查询，切换搜索范围保留关键词', async ({ page }) => {
   await bootUnlocked(page, {
     ...seed,

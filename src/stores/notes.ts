@@ -4,6 +4,7 @@ import { createDraftCipherKey, sealDraft, openDraft, type DraftCipherKey, type S
 import { notesApi as api } from '../services/api/notes'
 import { settingsApi } from '../services/api/settings'
 import { mergeNoteHtml } from '../utils/noteMerge'
+import { hiddenCount, minusVisible, prune, unionVisible } from '../utils/selection'
 import { useToastStore } from './toast'
 import { useConfirmStore } from './confirm'
 import { extractTags, getDateGroupLabel, deriveTitleFromHtml, headingTitle, htmlToTagText, htmlToText } from '../utils/format'
@@ -277,6 +278,24 @@ export const useNotesStore = defineStore('notes', () => {
     result.sort((a, b) => b.created_at - a.created_at)
     return result
   })
+
+  /** V：此刻真正排在流里的小记。批量钮的作用范围就是它。 */
+  const visibleNoteIds = computed(() => filteredNotes.value.map(n => n.id))
+  /** K：攒在 S 里、但被视图/搜索/标签挡住的条数。只用于披露，不参与执行。 */
+  const hiddenSelectedNotes = computed(() => hiddenCount(selectedNoteIds.value, visibleNoteIds.value))
+  /** 非破坏性批量的结果口径：只多这半句，不另加第二颗钮。必须在改数据之前取，
+   *  否则「归档 5 条」会让这 5 条反过来被判成非本屏。 */
+  const offScreenSuffix = (ids: readonly string[]) => {
+    const k = hiddenCount(new Set(ids), visibleNoteIds.value)
+    return k > 0 ? ` · 含 ${k} 条非本屏` : ''
+  }
+
+  // 小记从库里消失（单条删除、批量删除、合并吞掉源条目）就把残 id 摘掉。
+  // 视图/搜索/标签变化不剪枝——跨视图攒批是有意保留的能力。
+  watch(notes, list => {
+    const next = prune(selectedNoteIds.value, list.map(n => n.id))
+    if (next !== selectedNoteIds.value) selectedNoteIds.value = next
+  }, { flush: 'post' })
 
   const groupedNotes = computed<NoteGroup[]>(() => {
     const groups: NoteGroup[] = []
@@ -641,6 +660,7 @@ export const useNotesStore = defineStore('notes', () => {
   const batchSetArchived = async (archived: boolean) => {
     const ids = Array.from(selectedNoteIds.value)
       .filter(id => findNote(id)?.archived !== archived)
+    const off = offScreenSuffix(ids)
     if (!ids.length) {
       toastStore.showToast('没有需要变更的小记')
       return
@@ -651,7 +671,7 @@ export const useNotesStore = defineStore('notes', () => {
       notes.value = notes.value.map(n =>
         ids.includes(n.id) ? { ...n, archived, archived_at: archived ? now : null } : n)
       selectedNoteIds.value = new Set()
-      toastStore.showToast(`已${archived ? '归档' : '取消归档'} ${ids.length} 条小记`)
+      toastStore.showToast(`已${archived ? '归档' : '取消归档'} ${ids.length} 条小记${off}`)
     } catch (e: any) {
       toastStore.showToast('操作失败：' + e.message, 'error')
     }
@@ -906,11 +926,12 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   const selectAllNotes = () => {
-    selectedNoteIds.value = new Set(filteredNotes.value.map(n => n.id))
+    selectedNoteIds.value = unionVisible(selectedNoteIds.value, visibleNoteIds.value)
   }
 
+  /** 与「全选」对称：只摘本屏，别的视图里攒的留着，退批量才清空 */
   const clearSelection = () => {
-    selectedNoteIds.value = new Set()
+    selectedNoteIds.value = minusVisible(selectedNoteIds.value, visibleNoteIds.value)
   }
 
   /** 整体退出批量：收待选态 + 清空选中（钮再点一次 / Escape / dock 完成） */
@@ -927,7 +948,9 @@ export const useNotesStore = defineStore('notes', () => {
   const batchDelete = () => {
     const ids = Array.from(selectedNoteIds.value)
     if (ids.length === 0) return
-    confirmStore.showConfirm('删除所选', `${ids.length} 条小记将被删除，此操作不可撤销。`, async () => {
+    const hidden = hiddenSelectedNotes.value
+    const scope = hidden > 0 ? `，其中 ${hidden} 条不在当前筛选结果里` : ''
+    confirmStore.showConfirm('删除所选', `${ids.length} 条小记将被删除${scope}，此操作不可撤销。`, async () => {
       try {
         await api.batchDeleteNotes(ids)
         notes.value = notes.value.filter(n => !ids.includes(n.id))
@@ -943,6 +966,10 @@ export const useNotesStore = defineStore('notes', () => {
   const mergeSelectedNotes = () => {
     if (isMergingNotes.value || noteView.value === 'archived') return
     const ids = [...selectedNoteIds.value]
+    // 合并是破坏性的：藏着的条数既进确认句，也进结果 toast，两处同一个数
+    const hidden = hiddenCount(new Set(ids), visibleNoteIds.value)
+    const off = hidden > 0 ? ` · 含 ${hidden} 条非本屏` : ''
+    const scope = hidden > 0 ? `，其中 ${hidden} 条不在当前筛选结果里` : ''
     const sourcesForMerge = (): Note[] | null => {
       const rows = ids.map(findNote).filter((n): n is Note => n != null)
       if (rows.length < 2 || rows.length !== ids.length || rows.some(n => n.archived)) return null
@@ -960,7 +987,7 @@ export const useNotesStore = defineStore('notes', () => {
     }
     if (!sourcesForMerge()) return
     const epoch = noteEpoch
-    confirmStore.showConfirm('合并小记', `${ids.length} 条小记将合成一条，原条目将被删除，此操作不可撤销。`, async () => {
+    confirmStore.showConfirm('合并小记', `${ids.length} 条小记将合成一条${scope}，原条目将被删除，此操作不可撤销。`, async () => {
       if (isMergingNotes.value || epoch !== noteEpoch || !sourcesForMerge()) return
       isMergingNotes.value = true
       let merged: Note | null = null
@@ -1013,7 +1040,7 @@ export const useNotesStore = defineStore('notes', () => {
           delete noteAttachments.value[id]
         })
         exitNoteBatch()
-        toastStore.showToast(`已合并 ${ids.length} 条小记`)
+        toastStore.showToast(`已合并 ${ids.length} 条小记${off}`)
       } catch (e: any) {
         const message = String(e.message ?? e)
         if (step === 'delete') {
@@ -1041,6 +1068,7 @@ export const useNotesStore = defineStore('notes', () => {
   const batchSetPinned = async (pinned: boolean) => {
     const ids = Array.from(selectedNoteIds.value)
       .filter(id => findNote(id)?.pinned !== pinned)
+    const off = offScreenSuffix(ids)
     for (const id of ids) {
       try {
         await api.togglePinNote(id)
@@ -1050,12 +1078,13 @@ export const useNotesStore = defineStore('notes', () => {
         toastStore.showToast('操作失败：' + e.message, 'error')
       }
     }
-    toastStore.showToast(ids.length ? `已${pinned ? '置顶' : '取消置顶'} ${ids.length} 条小记` : '没有需要变更的小记')
+    toastStore.showToast(ids.length ? `已${pinned ? '置顶' : '取消置顶'} ${ids.length} 条小记${off}` : '没有需要变更的小记')
   }
 
   const batchSetStarred = async (starred: boolean) => {
     const ids = Array.from(selectedNoteIds.value)
       .filter(id => findNote(id)?.starred !== starred)
+    const off = offScreenSuffix(ids)
     for (const id of ids) {
       try {
         await api.toggleStarNote(id)
@@ -1065,7 +1094,7 @@ export const useNotesStore = defineStore('notes', () => {
         toastStore.showToast('操作失败：' + e.message, 'error')
       }
     }
-    toastStore.showToast(ids.length ? `已${starred ? '收藏' : '取消收藏'} ${ids.length} 条小记` : '没有需要变更的小记')
+    toastStore.showToast(ids.length ? `已${starred ? '收藏' : '取消收藏'} ${ids.length} 条小记${off}` : '没有需要变更的小记')
   }
 
   const loadAttachments = async (noteId: string) => {
@@ -1114,7 +1143,7 @@ export const useNotesStore = defineStore('notes', () => {
     notes, notesLoading, notesLoadError, noteDraftHtml,
     noteSearchKeyword, noteView, activeTags, hasActiveFilters,
     noteRailCollapsed, noteRailPinned,
-    isBatchMode, hasNoteSelection, notePickMode, selectedNoteIds,
+    isBatchMode, hasNoteSelection, notePickMode, selectedNoteIds, hiddenSelectedNotes,
     noteAttachments, noteSaveState,
     notePlains, isUnlocked, noteKey,
     tagCounts, allTags, archivedNotes, archiveSummary, viewCounts, filteredNotes, groupedNotes,

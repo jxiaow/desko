@@ -732,6 +732,39 @@ test.describe('Notes 小记', () => {
     expect((await e2e.snapshot(page)).notes.every((n: any) => !n.archived)).toBe(true)
   })
 
+  test('跨视图攒批：切归档不清选中，全选筛选结果只并入本屏', async ({ page }) => {
+    await bootUnlocked(page, {
+      notes: [
+        { title: '甲', content_html: '<p>在册甲</p>' },
+        { title: '丙', content_html: '<p>已经收走</p>', archived: true },
+      ],
+    }, '/notes')
+
+    const first = memo(page, '在册甲')
+    await first.hover()
+    await first.locator('.memo-check').click()
+    await expect(page.locator('.dock-count')).toHaveText('已选 1 条')
+    await expect(page.locator('.dock-count')).not.toHaveAttribute('data-tip', /.*/)
+
+    await openDirectory(page)
+    await page.locator('.rail button.rail-item', { hasText: '归档' }).click()
+    // 换视图既不清选中，也不剪枝：只是它此刻看不见了
+    await expect(page.locator('.dock-count')).toHaveText('已选 1 条')
+    await expect(page.locator('.dock-count')).toHaveAttribute('data-tip', '其中 1 条不在当前筛选结果里')
+    await page.getByRole('button', { name: '全选筛选结果', exact: true }).click()
+    await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
+    await page.getByRole('button', { name: '取消本屏', exact: true }).click()
+    await expect(page.locator('.dock-count')).toHaveText('已选 1 条')
+
+    await page.getByRole('button', { name: '全选筛选结果', exact: true }).click()
+    await page.locator('button.dock-btn:text-is("删除")').click()
+    const confirm = page.locator('.confirm-dialog')
+    await expect(confirm.locator('.dialog-body p')).toHaveText('2 条小记将被删除，其中 1 条不在当前筛选结果里，此操作不可撤销。')
+    await confirm.locator('button.btn-danger').click()
+    await expectToast(page, '已删除 2 条小记')
+    expect((await e2e.snapshot(page)).notes).toHaveLength(0)
+  })
+
   test('搜索过滤与 rail 视图筛选', async ({ page }) => {    await gotoNotes(page)
     const search = page.locator('.page-bar .search-box input')
     await search.fill('采购')

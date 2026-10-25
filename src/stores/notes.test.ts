@@ -41,12 +41,16 @@ vi.mock('../services/api/notes', () => ({
   },
 }))
 
+// toast 与 confirm 各共享一份：批量口径的用例要读它们收到的那句话
+const toastMock = vi.hoisted(() => ({ showToast: vi.fn() }))
 vi.mock('./toast', () => ({
-  useToastStore: () => ({ showToast: vi.fn() }),
+  useToastStore: () => toastMock,
 }))
 
+// 共享一份 confirm mock：批量口径的用例要读它收到的那句话
+const confirmMock = vi.hoisted(() => ({ showConfirm: vi.fn() }))
 vi.mock('./confirm', () => ({
-  useConfirmStore: () => ({ showConfirm: vi.fn() }),
+  useConfirmStore: () => confirmMock,
 }))
 
 const mockNote = (overrides: Partial<Note> = {}): Note => ({
@@ -95,6 +99,77 @@ describe('Notes Store', () => {
     store.saveNoteContent('1', '<p>改写的旧记录</p>')
     expect(store.groupedNotes[0].label).toBe(label)
     expect(store.notes[0].created_at).toBe(created)
+  })
+
+  describe('批量作用域：钮只管本屏，S 跨视图攒', () => {
+    /** 「全部」屏只有甲，「归档」屏只有乙：视图切换就是最省事的筛选切换 */
+    const seed = () => {
+      const store = useNotesStore()
+      store.notes = [
+        mockNote({ id: 'a', title: '甲' }),
+        mockNote({ id: 'b', title: '乙', archived: true, archived_at: Date.now() }),
+      ]
+      return store
+    }
+
+    it('全选并入本屏、取消本屏只摘本屏，先前攒的不丢', async () => {
+      const store = seed()
+      store.toggleSelectNote('a')
+
+      store.noteView = 'archived'
+      await flushPromises()
+      // 换视图既不清 S 也不剪枝（乙此刻才可见）
+      expect(store.selectedNoteIds.has('a')).toBe(true)
+
+      store.selectAllNotes()
+      expect([...store.selectedNoteIds].sort()).toEqual(['a', 'b'])
+      expect(store.hiddenSelectedNotes).toBe(1)
+
+      store.clearSelection()
+      expect([...store.selectedNoteIds]).toEqual(['a'])
+      expect(store.isBatchMode).toBe(true)
+    })
+
+    it('K=0 的删除确认逐字不变，K>0 才补口径短句', () => {
+      const store = seed()
+      store.toggleSelectNote('a')
+      store.batchDelete()
+      expect(confirmMock.showConfirm).toHaveBeenLastCalledWith(
+        '删除所选', '1 条小记将被删除，此操作不可撤销。', expect.any(Function))
+
+      confirmMock.showConfirm.mockClear()
+      store.noteView = 'archived'
+      store.selectAllNotes()
+      store.batchDelete()
+      expect(confirmMock.showConfirm).toHaveBeenLastCalledWith(
+        '删除所选', '2 条小记将被删除，其中 1 条不在当前筛选结果里，此操作不可撤销。', expect.any(Function))
+    })
+
+    it('小记从库里消失即剪枝 S，视图变化不剪枝', async () => {
+      const store = seed()
+      store.selectAllNotes()
+      expect([...store.selectedNoteIds]).toEqual(['a'])
+
+      store.noteView = 'archived'
+      await flushPromises()
+      expect(store.selectedNoteIds.has('a')).toBe(true)
+
+      store.notes = store.notes.filter(n => n.id !== 'a')
+      await flushPromises()
+      expect(store.selectedNoteIds.size).toBe(0)
+    })
+
+    it('结果 toast 带上非本屏的条数', async () => {
+      const store = seed()
+      store.toggleSelectNote('a')
+      store.noteView = 'archived'
+      store.toggleSelectNote('b')
+
+      await store.batchSetStarred(true)
+
+      expect(notesApi.toggleStarNote).toHaveBeenCalledWith('a')
+      expect(toastMock.showToast).toHaveBeenLastCalledWith('已收藏 2 条小记 · 含 1 条非本屏')
+    })
   })
 
   describe('lock boundary for asynchronous reads', () => {

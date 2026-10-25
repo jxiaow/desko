@@ -28,7 +28,7 @@ const { fetchEntries } = entriesStore
 const { copyToClipboard, copyPassword } = useClipboard()
 
 const {
-  isBatchMode, hasSelection, selectedIds,
+  isBatchMode, hasSelection, selectedIds, hiddenSelected,
   toggleSelect, selectAll, deselectAll, togglePick, exitBatch, doBatchDelete
 } = useBatch()
 
@@ -135,6 +135,7 @@ const duplicateEntry = async (entry: Entry) => {
     :is-batch-mode="isBatchMode"
     :has-selection="hasSelection"
     :selected-ids="selectedIds"
+    :hidden-selected="hiddenSelected"
     :visible-passwords="visiblePasswords"
     :password-cache="passwordCache"
     @update:search-keyword="searchKeyword = $event"

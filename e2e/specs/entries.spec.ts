@@ -216,8 +216,10 @@ test.describe('Entries 网址收藏', () => {
     expect(await e2e.count(page, 'shell:open')).toBe(0)
 
     await page.locator('.dock-btn', { hasText: '取消全选' }).click()
-    // 清空即收：选中归零，底坞自动退出，待选态还在
-    await expect(page.locator('.batch-dock')).toHaveCount(0)
+    // 待选态常驻：选中归零 dock 不收，只改口成 0 选并把动作钮关掉
+    await expect(page.locator('.dock-count')).toHaveText('已选 0 项')
+    await expect(page.locator('.dock-hint')).toHaveText('点收藏选择')
+    await expect(page.locator('.dock-btn.danger')).toBeDisabled()
 
     await entryCard(page, 'GitHub').click() // 二次进入
     await page.locator('.dock-btn:text-is("全选")').click()
@@ -228,24 +230,59 @@ test.describe('Entries 网址收藏', () => {
     await page.locator('.dock-btn.danger').click()
     await confirmDialog(page, '2 条记录将被删除，此操作不可撤销。')
     await expectToast(page, '已删除 2 条记录')
-    // 清空即收：删除后选中归零，批量条自动消失
+    // 删除清空选中，待选态仍在：dock 收进 0 选态，「完成」才真正退出
+    await expect(page.locator('.dock-count')).toHaveText('已选 0 项')
+    await page.locator('.dock-btn:text-is("完成")').click()
     await expect(page.locator('.batch-dock')).toHaveCount(0)
     await expect(page.locator('.entry-card')).toHaveCount(1)
     await expect(entryCard(page, '钉钉')).toBeVisible()
   })
 
-  test('工具栏「选择」钮：开待选显形勾选框，再点整体退出', async ({ page }) => {
+  test('跨筛选攒批：全选只并本屏，确认框说清藏了几条', async ({ page }) => {
+    await bootEntries(page, SEED)
+    await page.locator('.page-bar .bar-btn[aria-label="选择条目"]').click()
+    await entryCard(page, 'GitHub').click()
+    // 搜索生效：GitHub 被筛出屏幕，但不许被抹掉
+    await page.locator('.search-box input').fill('mail')
+    await expect(entryCard(page, 'Gmail')).toBeVisible()
+    await expect(page.locator('.entry-card')).toHaveCount(1)
+    await expect(page.locator('.dock-count')).toHaveText('已选 1 项')
+    await expect(page.locator('.dock-count')).toHaveAttribute('data-tip', '其中 1 项不在当前筛选结果里')
+    await page.locator('.dock-btn', { hasText: '全选筛选结果' }).click()
+    await expect(page.locator('.dock-count')).toHaveText('已选 2 项')
+    // 取消本屏：只摘 Gmail，先前攒的 GitHub 仍在
+    await page.locator('.dock-btn', { hasText: '取消本屏' }).click()
+    await expect(page.locator('.dock-count')).toHaveText('已选 1 项')
+    await page.locator('.dock-btn', { hasText: '全选筛选结果' }).click()
+
+    await page.locator('.dock-btn.danger').click()
+    await confirmDialog(page, '2 条记录将被删除，其中 1 条不在当前筛选结果里，此操作不可撤销。')
+    await expectToast(page, '已删除 2 条记录')
+    // 本屏那条也删了，清掉搜索才看见没被选中的钉钉
+    await expect(page.locator('.entry-card')).toHaveCount(0)
+    await tipButton(page, '清除搜索').click()
+    await expect(page.locator('.entry-card')).toHaveCount(1)
+    await expect(entryCard(page, '钉钉')).toBeVisible()
+    const snap = await e2e.snapshot(page)
+    expect(snap.entries.find((e: any) => e.name === 'GitHub')).toBeUndefined()
+    expect(snap.entries.find((e: any) => e.name === 'Gmail')).toBeUndefined()
+  })
+
+  test('工具栏「选择」钮：开待选即出 0 选 dock，再点整体退出', async ({ page }) => {
     await bootEntries(page, SEED)
     // title 会被全局 tooltip 机制摘走，锚 aria-label
     const pickBtn = page.locator('.page-bar .bar-btn[aria-label="选择条目"]')
     await pickBtn.click()
-    // 待选态：全部行显形勾选框，但没有选中就没有 dock
+    // 待选态：全部行显形勾选框，dock 常驻 0 选态，动作钮 disabled
     await expect(page.locator('.entry-card.batching')).toHaveCount(3)
-    await expect(page.locator('.batch-dock')).toHaveCount(0)
+    await expect(page.locator('.batch-dock')).toBeVisible()
+    await expect(page.locator('.dock-count')).toHaveText('已选 0 项')
+    await expect(page.locator('.dock-hint')).toHaveText('点收藏选择')
+    await expect(page.locator('.dock-btn.danger')).toBeDisabled()
     // 待选态下点行即勾选
     await entryCard(page, 'GitHub').click()
-    await expect(page.locator('.batch-dock')).toBeVisible()
-    await page.locator('.page-bar .bar-btn[aria-label="退出选择"]').click()
+    await expect(page.locator('.dock-count')).toHaveText('已选 1 项')
+    await page.locator('.page-bar .bar-btn[aria-label="完成选择"]').click()
     await expect(page.locator('.entry-card.batching')).toHaveCount(0)
     await expect(page.locator('.batch-dock')).toHaveCount(0)
     // Escape 同样整体退出：再开一轮，选一项后按 Esc

@@ -11,7 +11,7 @@ import NoteLockDialog from './NoteLockDialog.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import type { Note } from '../../types'
 
-const props = defineProps<{ ids: string[]; format?: NoteExportFormat; scopeLabel: string }>()
+const props = defineProps<{ ids: string[]; format?: NoteExportFormat; scopeLabel: string; hidden?: number }>()
 const emit = defineEmits<{ close: [] }>()
 const store = useNotesStore()
 const toast = useToastStore()
@@ -75,7 +75,7 @@ async function exportNotes() {
     await notesApi.writeExport(path, format.value, result.files, readable.map(note => note.id))
     if (!active) return
     const summary = skipped ? `${props.ids.length} 条中 ${readable.length} 条已导出，${skipped} 条未解锁或已不存在，已跳过` : `已导出 ${readable.length} 条小记`
-    toast.showToast(summary + (result.missingImages ? `；${result.missingImages} 张图片未能嵌入，已保留文字说明` : ''), result.missingImages || skipped ? 'info' : 'success')
+    toast.showToast(summary + (props.hidden ? ` · 含 ${props.hidden} 条非本屏` : '') + (result.missingImages ? `；${result.missingImages} 张图片未能嵌入，已保留文字说明` : ''), result.missingImages || skipped ? 'info' : 'success')
     emit('close')
   } catch (error) {
     if (active) toast.showToast('导出失败：' + (error instanceof Error ? error.message : String(error)), 'error')
