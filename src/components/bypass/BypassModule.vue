@@ -96,7 +96,7 @@ const egressText = computed(() => {
       cidr += 1
       continue
     }
-    const name = t.interfaceName || '出口未确定'
+    const name = t.interfaceName || '未确定'
     byIface.set(name, (byIface.get(name) ?? 0) + 1)
   }
   const buckets = [...byIface.entries()]
@@ -665,7 +665,7 @@ watchEffect(() => {
                 </span>
                 <span class="l2">
                   <span v-if="t.kind === 'cidr'" class="l2-note">按网段路由，无需 DNS 解析</span>
-                  <span v-else class="mono">{{ t.address || '尚未确认实际地址' }}</span>
+                  <span v-else-if="t.address !== hostOf(t)" class="mono">{{ t.address || '尚未确认实际地址' }}</span>
                   <span v-if="t.interfaceName">出口 {{ t.interfaceName }}</span>
                   <span v-if="faceNote(t)" class="l2-note">{{ faceNote(t) }}</span>
                 </span>

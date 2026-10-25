@@ -30,6 +30,24 @@ async function connectCloud(page: Page, pane: Locator) {
 }
 
 test.describe('Settings 设置', () => {
+  test('800×600 左栏无需滚动即可看到全部页签', async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 600 })
+    await bootUnlocked(page, {
+      settings: Object.fromEntries(['notes', 'entries', 'files', 'mfa', 'fileshare', 'tunnel', 'bypass', 'codex'].map(id => [`${id}_enabled`, 'true'])),
+    })
+    const dialog = await openSettings(page)
+    await expect(dialog.locator('.settings-nav .nav-tab')).toHaveCount(11)
+    const scroll = dialog.locator('.settings-nav-scroll')
+    expect(await scroll.evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true)
+    const nav = (await dialog.locator('.settings-nav').boundingBox())!
+    for (const tab of await dialog.locator('.settings-nav .nav-tab').all()) {
+      const box = (await tab.boundingBox())!
+      expect(box.y).toBeGreaterThanOrEqual(nav.y)
+      expect(box.y + box.height).toBeLessThanOrEqual(nav.y + nav.height)
+    }
+    await expect(dialog.locator('.nav-footer .nav-tab')).toBeInViewport()
+  })
+
   test('打开设置：加载数据库路径与已有配置', async ({ page }) => {
     await bootUnlocked(page, SEED)
     const dialog = await openSettings(page)
@@ -228,8 +246,8 @@ test.describe('Settings 设置', () => {
     await expect(pane.getByRole('heading', { name: /云端备份/ })).toBeVisible()
     await expect(pane.getByRole('heading', { name: /迁移/ })).toBeVisible()
     // 只有一把闸：既没有第二个"自动同步"开关，也没有单独的"定时备份"行了
-    await expect(pane.locator('.setting-item', { hasText: '自动备份到云' })).toHaveCount(0)
-    await expect(pane.locator('.setting-item', { hasText: '定时备份' })).toHaveCount(0)
+    await expect(pane.locator('.setting-item', { has: page.locator('.setting-name', { hasText: '自动备份到云' }) })).toHaveCount(0)
+    await expect(pane.locator('.setting-name', { hasText: '定时备份' })).toHaveCount(0)
     // WebDAV 没配置时，备份这一档每个控件都摆着看但点不动
     await expect(pane.locator('.setting-item', { hasText: '立即备份' }).locator('button.action-btn')).toBeDisabled()
     await expect(pane.locator('.setting-item', { hasText: '自动备份' }).locator('button.opt-trigger')).toBeDisabled()

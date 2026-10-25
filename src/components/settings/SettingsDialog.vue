@@ -236,12 +236,12 @@ onMounted(() => {
                 <span>{{ FIXED_TAB_LABELS.security }}</span>
               </button>
             </div>
-            <div class="nav-footer">
-              <button class="nav-tab" :class="{ on: tab === 'about' }" @click="tab = 'about'">
-                <AppIcon name="info" :size="16" />
-                <span>{{ FIXED_TAB_LABELS.about }}</span>
-              </button>
-            </div>
+          </div>
+          <div class="nav-footer">
+            <button class="nav-tab" :class="{ on: tab === 'about' }" @click="tab = 'about'">
+              <AppIcon name="info" :size="16" />
+              <span>{{ FIXED_TAB_LABELS.about }}</span>
+            </button>
           </div>
         </aside>
 
@@ -489,7 +489,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-3);
   background: var(--bg-sidebar);
   border-right: 1px solid var(--sidebar-border);
 }
@@ -500,7 +500,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-2);
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-3);
 }
 
 .nav-brand :deep(.brand-logo) {
@@ -521,6 +521,8 @@ onMounted(() => {
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  /* 列表底部留一口气：滚到底时最后一行不贴着页脚 */
+  padding-bottom: var(--space-1);
 }
 
 .nav-group {
@@ -528,16 +530,18 @@ onMounted(() => {
   flex-direction: column;
   gap: 2px;
 }
-.nav-group + .nav-group { margin-top: var(--space-3); }
+.nav-group + .nav-group { margin-top: var(--space-2); }
 .nav-group-label {
-  padding: 0 var(--space-2) var(--space-1);
+  padding: 0 var(--space-2) 2px;
   font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-nav-section);
 }
 
+/* 关于常驻在菜单底部，不跟列表一起滚走 */
 .nav-footer {
-  margin-top: var(--space-3);
+  flex-shrink: 0;
+  margin-top: var(--space-2);
 }
 .nav-footer .nav-tab { width: 100%; }
 
@@ -568,13 +572,13 @@ onMounted(() => {
 }
 
 .nav-tab.on {
-  background: var(--hover-chrome);
-  color: var(--text);
+  background: var(--sidebar-active);
+  color: var(--text-brand);
   font-weight: 600;
 }
 
 .nav-tab.on svg {
-  color: var(--accent);
+  color: inherit;
   opacity: 1;
 }
 
@@ -641,8 +645,8 @@ onMounted(() => {
 
 /* accent 色丸：一颗色点 + 名字，选中加 ring，尺寸落 28px action-btn 档 */
 .accent-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(6, max-content);
   gap: var(--space-2);
 }
 .accent-pill {
@@ -834,5 +838,15 @@ onMounted(() => {
 .dialog-enter-from,
 .dialog-leave-to {
   opacity: 0;
+}
+
+/* 600px 高的窗口里对话框只剩 504px，压紧左侧行距，让全部页签不用滚动就露出来。 */
+@media (max-height: 660px) {
+  .settings-nav { padding: 8px 12px; }
+  .nav-brand { margin-bottom: 4px; }
+  .nav-group + .nav-group { margin-top: 4px; }
+  .nav-group-label { padding-bottom: 0; }
+  .nav-tab { padding: 5px var(--space-2); }
+  .nav-footer { margin-top: 0; }
 }
 </style>

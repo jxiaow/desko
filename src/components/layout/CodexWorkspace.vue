@@ -53,10 +53,10 @@ function onDirectoryClick(event: MouseEvent) {
   --workspace-content-padding: max(var(--workspace-gutter), calc((var(--workspace-main-width) - var(--scrollbar-track) - var(--workspace-content-max)) / 2));
   --workspace-content-left: calc(var(--sidebar-rail-w) + var(--workspace-content-padding));
   --workspace-content-right: calc(var(--workspace-directory-offset) + var(--workspace-content-padding) + var(--scrollbar-track));
-  /* 顶栏使用完整窗口的留白，目录开关不会随正文缩窄移出鼠标下方。 */
-  --workspace-toolbar-padding: max(var(--workspace-gutter), calc((100vw - var(--sidebar-rail-w) - var(--scrollbar-track) - var(--workspace-content-max)) / 2));
-  --workspace-toolbar-left: calc(var(--sidebar-rail-w) + var(--workspace-toolbar-padding));
-  --workspace-toolbar-right: calc(var(--workspace-toolbar-padding) + var(--scrollbar-track));
+  /* 页名与页内操作和正文共用同一条阅读列，目录展开时一起让位；
+     目录开关单独挂在窗口右侧工具位，不会从点击它的指针下方移走。 */
+  --workspace-toolbar-left: var(--workspace-content-left);
+  --workspace-toolbar-right: var(--workspace-content-right);
   --workspace-heading-width: 132px;
   --workspace-heading-gap: 24px;
   --page-search-max: 300px;
@@ -78,7 +78,21 @@ function onDirectoryClick(event: MouseEvent) {
 .workspace-body { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .workspace-body > .main-content { flex: 1; min-width: 0; }
 /* 悬停沿用主题中性色，轻微改变卡面明暗；强调色留给选中、编辑和焦点。 */
-.workspace-main { --bg-surface-hover: color-mix(in srgb, var(--text) 7.5%, var(--bg-surface)); min-width: 0; background: var(--bg-workspace); background-attachment: fixed; }
+.workspace-main { --bg-surface-hover: color-mix(in srgb, var(--text) 7.5%, var(--bg-surface)); position: relative; min-width: 0; background: var(--bg-workspace); background-attachment: fixed; }
+/* 顶沿护边：滚动内容在标题栏下沿淡出，而不是被切成一条硬边。
+   画布底与 .workspace-main 同一条 fixed 配方，叠在内容上时颜色完全对齐，只做遮罩淡出。 */
+.workspace-main::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 25;
+  height: 12px;
+  pointer-events: none;
+  background: var(--bg-workspace);
+  background-attachment: fixed;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
 :root[data-base="dark"] .workspace-main { --bg-surface-hover: color-mix(in srgb, var(--text) 4.5%, var(--bg-surface)); }
 /* 辅助目录融入同一画布，用留白和浅色选中块建立层次。 */
 .workspace-directory { display: flex; flex-direction: column; flex: 0 0 var(--workspace-directory-width); min-width: 0; overflow: hidden; background: var(--bg-inspector); background-attachment: fixed; }
@@ -93,7 +107,7 @@ function onDirectoryClick(event: MouseEvent) {
 #workspace-directory .directory-list > .directory-link:first-of-type:not(:last-child) { margin-bottom: 12px; }
 #workspace-directory .directory-link { position: relative; display: flex; flex-shrink: 0; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; height: 36px; min-height: 36px; padding: 0 10px; margin: 0 0 4px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary); text-align: left; font: inherit; font-size: var(--text-sm); font-weight: 400; cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); }
 #workspace-directory .directory-link svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--text-muted); }
-#workspace-directory .directory-link.active { background: var(--bg-inspector-active); color: var(--text-brand); font-weight: 600; }
+#workspace-directory .directory-link.active { background: var(--sidebar-active); color: var(--text-brand); font-weight: 600; }
 #workspace-directory .directory-link.active svg { color: inherit; }
 #workspace-directory .directory-link.active::before { display: none; }
 #workspace-directory .directory-link:hover:not(.active) { background: var(--bg-inspector-hover); color: var(--text); }
@@ -110,11 +124,13 @@ function onDirectoryClick(event: MouseEvent) {
 
 /* 保留通栏控制带和无边框卡面，正文只约束阅读宽度；目录开关不切换内距档位。 */
 .codex-layout .workspace-main .content-inner { padding: 16px var(--workspace-content-padding) 22px; }
+/* 第一行归内容区自己的内距管；网格的 12px 只用于组与组之间，不再和首行呼吸叠成 28px。 */
+.codex-layout .workspace-main .content-inner > .card-grid:first-child { margin-top: 0; }
 .codex-layout .workspace-main .content-inner:has(> .cx-tabs-row) { padding-top: 0; }
 .codex-layout .workspace-main .content-inner:has(> .cx-tabs-row:empty) { padding-top: 16px; }
 .codex-layout .workspace-main .content-inner.codex-dialog-view { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; overflow: hidden; scrollbar-gutter: auto; }
 .codex-layout .workspace-main .content-inner.codex-dialog-view:has(> .cx-tabs-row:empty) { padding-top: 0; }
-.codex-layout .workspace-main .stream-inner { padding: 14px var(--workspace-content-padding) var(--dock-clearance); }
+.codex-layout .workspace-main .stream-inner { padding: 8px var(--workspace-content-padding) 22px; }
 
 /* 通栏控制带里的页栏：脱掉吸顶与底色，控件直接坐在顶栏上。
    空白处不吃指针，拖窗仍然落在下面的 .titlebar-drag。 */

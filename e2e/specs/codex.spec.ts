@@ -464,10 +464,10 @@ test.describe('Codex 账号', () => {
     const dialog = await openSettings(page, 'codex')
     const pane = visiblePane(dialog)
     const auto = pane.locator('.setting-item', { hasText: '配额自动刷新' })
-    await expect(auto.locator('.setting-desc')).toContainText('每 10 分钟静默取一次数')
+    await expect(auto.locator('.setting-desc')).toContainText('Codex 页面或挂件开启时自动更新')
     await auto.locator('.opt-trigger').click()
     await page.locator('.popover .opt-item', { hasText: '不自动' }).click()
-    await expect(auto.locator('.setting-desc')).toContainText('已关闭')
+    await expect(auto.locator('.setting-desc')).toContainText('仅手动刷新时更新')
 
     const alert = pane.locator('.setting-item', { hasText: '配额预警' })
     await alert.locator('.opt-trigger').click()

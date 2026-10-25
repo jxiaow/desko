@@ -24,7 +24,7 @@ for (const theme of ['paper', 'ink']) {
     }, '/fileshare')
     for (const id of ['fileshare', 'tunnel']) {
       await page.locator(`a.nav-item[href="/${id}"]`).click()
-      const button = page.locator('.toggle-btn')
+      const button = page.locator(id === 'fileshare' ? '.service-toggle' : '.toggle-btn')
       await expect(button).toBeEnabled()
       await expect(button).toHaveClass(/ghost-danger/)
       await page.mouse.move(0, 0)

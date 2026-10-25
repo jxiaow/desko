@@ -38,6 +38,16 @@ const place = (target: HTMLElement, text: string) => {
   el.classList.add('show')
   const box = target.getBoundingClientRect()
   const tip = el.getBoundingClientRect()
+  // 图标轨贴着窗口边缘，居中放只会把每个气泡横躺回轨道、盖住 logo 和相邻图标。
+  // 轨内目标一律向右展开，并垂直居中；右侧放不下才翻到左侧。
+  if (target.closest('.sidebar')) {
+    let left = box.right + GAP
+    if (left + tip.width > window.innerWidth - EDGE) left = Math.max(EDGE, box.left - tip.width - GAP)
+    const top = Math.min(Math.max(EDGE, box.top + box.height / 2 - tip.height / 2), window.innerHeight - tip.height - EDGE)
+    el.style.left = `${left}px`
+    el.style.top = `${top}px`
+    return
+  }
   let left = box.left + box.width / 2 - tip.width / 2
   left = Math.min(Math.max(EDGE, left), window.innerWidth - tip.width - EDGE)
   const top = box.top - tip.height - GAP < EDGE ? box.bottom + GAP : box.top - tip.height - GAP
@@ -69,7 +79,10 @@ const showFor = (el: HTMLElement) => {
   if (timer) clearTimeout(timer)
   timer = setTimeout(() => {
     timer = null
-    if (current === el) place(el, text)
+    if (current !== el) return
+    // 悬停期间 data-tip 可能被状态改写（如目录开合），显示前再取一次
+    const latest = adopt(el)
+    if (latest) place(el, latest)
   }, SHOW_DELAY)
 }
 
@@ -99,17 +112,25 @@ export function setupGlobalTips() {
   window.addEventListener('scroll', hide, true)
   document.addEventListener('pointerdown', hide)
 
-  // Vue 在绑定值变化时会把 title 写回来；悬停期间也要保持接管
+  // Vue 在绑定值变化时会把 title 写回来；悬停期间也要保持接管。
+  // data-tip 虽不是系统 title，状态改写后同样要同步到已展开的气泡。
   new MutationObserver((records) => {
     for (const r of records) {
       const el = r.target as HTMLElement
-      if (el.nodeType !== 1 || !el.hasAttribute('title')) continue
-      const text = adopt(el)
-      if (el === current && text && node?.classList.contains('show')) place(el, text)
+      if (el.nodeType !== 1) continue
+      if (el.hasAttribute('title')) {
+        const text = adopt(el)
+        if (el === current && text && node?.classList.contains('show')) place(el, text)
+        continue
+      }
+      if (el !== current || !node?.classList.contains('show')) continue
+      const latest = el.dataset.tip || ''
+      if (latest) place(el, latest)
+      else hide()
     }
   }).observe(document.documentElement, {
     subtree: true,
     attributes: true,
-    attributeFilter: ['title'],
+    attributeFilter: ['title', 'data-tip'],
   })
 }

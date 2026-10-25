@@ -142,14 +142,13 @@ test.describe('模块开关', () => {
     await expect(page.locator('.notes-page')).toBeVisible()
   })
 
-  test('最小窗口可滚到底栏，八块全选后 CTA 仍落到顺序最前的模块', async ({ page }) => {
+  test('最小窗口底栏直接可见，八块全选后 CTA 仍落到顺序最前的模块', async ({ page }) => {
     await page.setViewportSize({ width: 800, height: 600 })
     await bootUnlocked(page, OFF)
     await expect(page.locator('.onb-page')).toBeVisible()
 
-    await page.locator('.onb-cta').scrollIntoViewIfNeeded()
     await expect(page.locator('.onb-cta')).toBeInViewport()
-    expect(await page.locator('.content-inner.onb-page').evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+    expect(await page.locator('.content-inner.onb-page').evaluate((el) => el.scrollTop)).toBe(0)
 
     for (const name of ['小记', '网址收藏', '文件快捷', '验证码', '局域网传输', '内网穿透', '网络直连', 'Codex']) {
       const tile = page.locator('.module-tile', { hasText: name })

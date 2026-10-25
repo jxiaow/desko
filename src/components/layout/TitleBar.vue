@@ -183,6 +183,7 @@ onUnmounted(() => {
     </div>
 
     <div ref="windowControls" class="titlebar-buttons">
+      <div id="workspace-fixed-tools" class="titlebar-fixed-tools"></div>
       <button v-if="!webRuntime && webStatus?.running" class="web-running" :title="webStatusTitle" :aria-label="webStatusTitle" :disabled="isLocked" @click="openWebSettings">
         <span class="web-running-dot" aria-hidden="true"></span>Web
       </button>
@@ -340,6 +341,10 @@ onUnmounted(() => {
   flex-shrink: 0;
   z-index: 1;
 }
+
+/* 目录开关固定在窗口工具位；空槽不占宽，窗口按钮的占位宽度会把它算进去。 */
+.titlebar-fixed-tools { order: -1; display: flex; align-items: center; gap: 2px; }
+.titlebar-fixed-tools:empty { display: none; }
 
 /* 顶栏按钮统一为 34×30，48px 标题栏内上下各留 9px。 */
 .titlebar-btn {

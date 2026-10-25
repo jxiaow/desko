@@ -82,7 +82,7 @@ const MENU_MIN_H = 168
 /** 菜单与光标之间的间距 */
 const GAP = 6
 
-/** 命令菜单的条目：图标位用线性图标，标题类保留 H1/H2/H3 字形；右侧提示 markdown 触发符 */
+/** 命令菜单的条目：图标位用线性图标，块型（正文/标题）保留字形；右侧提示 markdown 触发符，没有触发符就留空 */
 type SlashCmd = {
   label: string
   icon?: IconName
@@ -90,9 +90,24 @@ type SlashCmd = {
   hint: string
   keys: string
   action: (e: any) => void
+  /** 整行改写型命令：就地作用于当前这块，不另起新块（默认是「在有字的行上另起一块再应用」） */
+  reuseLine?: boolean
+}
+
+/** 这一行洗回正文：换块型之外还要脱掉外壳。
+ *  clearNodes 提不出列表项（li 只收 paragraph），所以列表先交给 liftListItem；
+ *  它动块型不动行内格式，加粗、链接这些跟着走。 */
+const applyBodyText = (e: any) => {
+  const chain = e.chain().focus()
+  if (e.isActive('taskItem')) chain.liftListItem('taskItem')
+  else if (e.isActive('listItem')) chain.liftListItem('listItem')
+  chain.clearNodes().setParagraph().run()
 }
 
 const slashCommands: SlashCmd[] = [
+  // 正文排在最前：标题/列表/引用是回不去的死路，工具栏也没有那颗钮，靠它把这块洗回普通段落。
+  // reuseLine：拆出新块再洗，原来那行还是标题，等于没改。
+  { label: '正文', badge: 'Aa', hint: '', keys: 'text paragraph plain body zhengwen wenzi', reuseLine: true, action: applyBodyText },
   { label: '标题 1', badge: 'H1', hint: '#', keys: 'h1 heading title biaoti', action: (e: any) => e.chain().focus().toggleHeading({ level: 1 }).run() },
   { label: '标题 2', badge: 'H2', hint: '##', keys: 'h2 heading title biaoti', action: (e: any) => e.chain().focus().toggleHeading({ level: 2 }).run() },
   { label: '标题 3', badge: 'H3', hint: '###', keys: 'h3 heading title biaoti', action: (e: any) => e.chain().focus().toggleHeading({ level: 3 }).run() },
@@ -506,8 +521,9 @@ const executeCommand = (cmd: typeof slashCommands[0]) => {
   editor.value.chain().focus().deleteRange({ from: beforeSlash, to: from }).run()
 
   // 行上还有别的内容：先拆成新块，再让命令作用在这个空块上。
-  // 早先用 insertContentAt('\n') 只是插了个段内硬换行，正文会掉到勾选框下面一行
-  if (hasOtherContent) {
+  // 早先用 insertContentAt('\n') 只是插了个段内硬换行，正文会掉到勾选框下面一行。
+  // reuseLine 的命令改的就是这一整块，拆出去只会留下一个刚洗好的空行、原块照旧
+  if (hasOtherContent && !cmd.reuseLine) {
     editor.value.chain().focus().splitBlock().run()
   }
 

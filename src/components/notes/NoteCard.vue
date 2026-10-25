@@ -236,7 +236,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   <article
     v-if="!props.editing"
     class="memo"
-    :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected, 'without-title': !display.title }"
+    :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected, locked, 'without-title': !display.title }"
     tabindex="0"
     role="button"
     :aria-pressed="props.isBatchMode ? props.isSelected : undefined"
@@ -523,7 +523,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   flex: 1;
   min-width: 0;
   font-size: var(--text-md);
-  font-weight: var(--weight-card-title);
+  font-weight: var(--weight-semibold);
   letter-spacing: normal;
   color: var(--text);
   white-space: nowrap;
@@ -630,6 +630,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   height: 28px;
 }
 .memo.without-title .memo-locked { padding-right: var(--memo-controls-width); }
+/* 锁着的卡没有正文可避让：时间行回到常规流，斜纹从时间下方起笔，别穿过后者的字 */
+.memo.without-title.locked .memo-head {
+  position: static;
+  width: auto;
+  margin: 0 0 3px;
+}
+.memo.without-title.locked .memo-locked { padding-right: 0; }
 .memo.without-title .memo-body :deep(> img:first-child),
 .memo.without-title .memo-body :deep(> :first-child img) {
   max-width: calc(100% - var(--memo-controls-width));

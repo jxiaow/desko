@@ -98,10 +98,6 @@ onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
 </template>
 
 <style scoped>
-.onb-page {
-  padding-top: 40px;
-}
-
 .onb-flow {
   display: flex;
   flex-direction: column;
@@ -233,6 +229,14 @@ onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
 }
 
 .onb-cta { flex-shrink: 0; }
+
+/* 600px 高的窗口只剩 552px 正文，三行模块卡按原尺寸会把底栏裁掉。 */
+@media (max-height: 640px) {
+  .onb-lead { margin-bottom: 12px; }
+  .onb-grid { gap: 10px; }
+  .module-tile { min-height: 112px; padding: 10px 12px; gap: 12px; }
+  .onb-footer { padding-top: 12px; }
+}
 
 .empty-state .action-btn {
   margin-top: var(--space-5);

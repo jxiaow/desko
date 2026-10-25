@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import FileShareModule from '../components/fileshare/FileShareModule.vue'
+import FileshareModule from '../components/fileshare/FileshareModule.vue'
 defineOptions({ name: 'fileshare' })
 </script>
 
 <template>
-  <FileShareModule />
+  <FileshareModule />
 </template>

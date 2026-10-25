@@ -54,9 +54,7 @@ useEscapeClose(() => emit('close'), () => true, { afterTarget: true })
         </div>
         <div class="dialog-footer">
           <div class="footer-hints">
-            <span class="kbd">Ctrl</span><span class="kbd">Enter</span><span>保存</span>
-            <span class="hints-dot">·</span>
-            <span class="kbd">Esc</span><span>取消</span>
+            <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span><span>保存</span>
           </div>
           <div class="footer-actions">
             <button class="btn-secondary" type="button" @click="emit('close')">取消</button>

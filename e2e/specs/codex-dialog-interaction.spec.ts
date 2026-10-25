@@ -46,6 +46,29 @@ for (const [width, height] of [[800, 600], [1440, 900], [1920, 1080]]) {
   })
 }
 
+for (const [width, height] of [[800, 600], [1440, 900], [1920, 1080]]) {
+  test(`Codex 对话目录在 ${width}px 并排停靠，页签与对话列对齐`, async ({ page }) => {
+    await page.setViewportSize({ width, height }); await openDialog(page)
+    const mainBefore = (await page.locator('.workspace-main').boundingBox())!
+    await page.keyboard.press('Control+b')
+    await expect(page.locator('.workspace-directory')).toBeVisible()
+    await expect(page.locator('#workspace-directory-content .codex-directory')).toBeVisible()
+    const main = (await page.locator('.workspace-main').boundingBox())!
+    const panel = (await page.locator('.workspace-directory').boundingBox())!
+    expect(main.x + main.width).toBe(panel.x)
+    expect(panel.width).toBeGreaterThanOrEqual(200)
+    expect(panel.width).toBeLessThanOrEqual(248)
+    expect(main.width).toBe(mainBefore.width - panel.width)
+    const column = (await page.locator('.dialog-composer').boundingBox())!
+    const tabs = (await page.locator('.cx-header-tabs').boundingBox())!
+    expect(Math.abs(tabs.x - column.x)).toBeLessThanOrEqual(1)
+    expect(column.x + column.width).toBeLessThanOrEqual(panel.x - 31)
+    await page.getByRole('button', { name: '关闭辅助侧栏', exact: true }).click()
+    await expect(page.locator('.workspace-directory')).toBeHidden()
+    expect((await page.locator('.workspace-main').boundingBox())!).toEqual(mainBefore)
+  })
+}
+
 test('history drafts and new unsent drafts stay separate and recover after remount', async ({ page }) => {
   await openDialog(page); await send(page, '第一段对话'); await expect(page.locator('.dialog-markdown')).toContainText('检查完成')
   const input = page.getByRole('textbox', { name: '发给 Codex 的消息' })

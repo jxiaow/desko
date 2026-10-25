@@ -184,10 +184,12 @@ onUnmounted(() => observer?.disconnect())
 
 <style scoped>
 .codex-dialog { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; color: var(--text); font-family: var(--font-ui); container: codex-conversation / inline-size; }
-.dialog-context { display: flex; flex: none; align-items: center; gap: 12px; padding: 16px calc(var(--workspace-content-padding) + var(--scrollbar-track)) 16px var(--workspace-content-padding); }
-.scope-label, .project-path { color: var(--text-muted); font-size: var(--text-xs); }
-.scope-label { flex: none; }
-.project-trigger { display: inline-flex; flex: none; align-items: center; gap: 8px; width: 260px; height: 32px; padding-inline: 10px; border: 0; background: var(--bg-surface); font-size: var(--text-sm); }
+/* 上下 14 + 控件 36 = 64，控件抬高后仍守原条高 */
+.dialog-context { display: flex; flex: none; align-items: center; gap: 8px; padding: 14px calc(var(--workspace-content-padding) + var(--scrollbar-track)) 14px var(--workspace-content-padding); }
+.project-path { color: var(--text-muted); font-size: var(--text-xs); }
+/* 项目与运行环境共用一条标签/控件轴：标签列 52、间距 8，控件同从 x=148 起 */
+.scope-label { flex: none; width: 52px; color: var(--text-muted); font-size: var(--text-sm); }
+.project-trigger { display: inline-flex; flex: none; align-items: center; gap: 8px; width: 336px; height: 36px; padding-inline: 10px; border: 0; background: var(--bg-surface); font-size: var(--text-sm); }
 .project-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-trigger small { margin-left: auto; color: var(--text-muted); font-size: var(--text-xs); white-space: nowrap; }
 .project-trigger svg { flex: none; color: var(--text-muted); }
@@ -232,7 +234,7 @@ onUnmounted(() => observer?.disconnect())
 .history-options, .project-options { max-height: min(360px, 48dvh); overflow-y: auto; padding: 0 4px; }
 .dialog-thread { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
 .dialog-thread:hover, .project-option:hover { background: var(--hover); }
-.dialog-thread[aria-current='true'] { background: var(--accent-soft); color: var(--text-brand); }
+.dialog-thread[aria-current='true'] { background: var(--sidebar-active); color: var(--text-brand); }
 .dialog-thread > strong { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); line-height: 22px; font-weight: 400; overflow-wrap: anywhere; }
 .dialog-thread > span, .project-option strong { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; color: var(--text-muted); font-size: var(--text-xs); line-height: 18px; }
 .dialog-thread small { font-size: var(--text-xs); }
@@ -267,7 +269,6 @@ onUnmounted(() => observer?.disconnect())
 .inspector-empty { padding: 20px 0; color: var(--text-secondary); font-size: var(--text-xs); }
 .inspector-empty strong { display: block; margin-top: 12px; color: var(--text); font-weight: 500; }
 
-@media (max-width: 900px) { .project-trigger { width: 236px; } }
 @media (max-width: 600px) {
   .dialog-context { flex-wrap: wrap; gap: 8px; padding-top: 12px; padding-bottom: 12px; }
   .project-trigger { flex: 1; min-width: 0; width: auto; min-height: 44px; }

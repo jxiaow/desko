@@ -684,7 +684,6 @@ watchEffect(() => {
             >
               切换
             </button>
-            <span v-else-if="!isBatchMode" class="cur-mark"><AppIcon name="check" :size="15" /></span>
             <button class="ib acc-more" type="button" title="更多操作" aria-label="更多操作" @click.stop="openMenu($event.currentTarget as HTMLElement, a)">
               <AppIcon name="dots" :size="15" />
             </button>
@@ -883,6 +882,12 @@ watchEffect(() => {
 .cx-header-tabs .cx-tab.active::after { left: 12px; right: 12px; }
 .cx-view-count { max-width: 100px; margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: var(--text-xs); }
 #workspace-page-toolbar > .cx-band-controls { container: codex-controls / inline-size; }
+/* 800px 窗口里顶栏只剩 440 左右，五个视图页签按常规字距会把新建入口挤出右缘。 */
+@container workspace-toolbar (max-width: 520px) {
+  #workspace-page-toolbar > .cx-header-tabs { gap: 2px; margin-right: 8px; }
+  .cx-header-tabs .cx-tab { padding: 0 8px; }
+  .cx-header-tabs .cx-tab.active::after { left: 8px; right: 8px; }
+}
 @container workspace-toolbar (max-width: 880px) {
   .cx-view-count { display: none; }
 }
@@ -946,7 +951,7 @@ watchEffect(() => {
   white-space: nowrap;
 }
 .acc-l2 { display: grid; gap: 4px; margin-top: 9px; min-width: 0; font-size: var(--text-xs); line-height: 1.5; color: var(--text-secondary); }
-.acc-fact, .acc-endpoint { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 3px; min-width: 0; }
+.acc-fact, .acc-endpoint { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 3px; min-width: 0; }
 .acc-fact > span, .acc-fact b, .acc-endpoint b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fact-label { color: var(--text-muted); }
 .acc-l2 b { font-weight: 400; }
@@ -960,7 +965,6 @@ watchEffect(() => {
 /* 行尾动作：不给 .grid-acts（那是条目卡的 hover 才显影的一档），这里必须常显 */
 .acc-acts { grid-column: 4; grid-row: 1; display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-height: 28px; }
 .acc-row:has(.pick-box) .acc-acts { grid-column: 5; }
-.cur-mark { color: var(--accent); width: 30px; display: flex; justify-content: center }
 
 /* 作业进行中那一条：读的是计数不是动作，所以吃 accent 而不是 danger（删除已经发生了） */
 .dock-btn.job { color: var(--accent) }

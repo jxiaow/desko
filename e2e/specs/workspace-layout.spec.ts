@@ -179,6 +179,9 @@ test('Codex 横向页签切换会话、用量、回收站，保留模型明细�
   const views = page.getByRole('navigation', { name: 'Codex 视图' })
   await views.getByRole('button', { name: '会话', exact: true }).click()
   await expect(page.locator('.grp-head')).toHaveCount(1)
+  // 首次进入展开最近活动的项目，这里先收起再展开，验证组头交互仍然可用。
+  await expect(page.locator('.sess-row')).toHaveCount(1)
+  await page.locator('.grp-head').click()
   await expect(page.locator('.sess-row')).toHaveCount(0)
   await page.locator('.grp-head').click()
   await expect(page.locator('.sess-row')).toHaveCount(1)

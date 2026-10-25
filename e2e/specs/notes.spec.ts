@@ -1150,6 +1150,48 @@ test.describe('Notes 小记', () => {
     expect(sum).toEqual({ blocks: 'P,UL,P', itemText: 'abc', itemBr: 0, caretInLi: true })
   })
 
+  test('斜杠命令「正文」就地把这行标题洗回段落', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('# 改回正文')
+    await expect(pm.locator('h1')).toHaveText('改回正文')
+    await page.keyboard.type('/')
+    await page.locator('.slash-item', { hasText: '正文' }).first().click()
+    const sum = await page.evaluate(() => {
+      const root = document.querySelector('.composer .ProseMirror')!
+      return {
+        tag: root.children[0]?.tagName ?? null,
+        text: root.children[0]?.textContent ?? '',
+        heads: root.querySelectorAll('h1,h2,h3').length,
+        slashLeft: (root.textContent ?? '').includes('/'),
+      }
+    })
+    // 默认流程是「先拆一块、命令落在新块上」，那样原行还是标题；正文改的就是这一整块
+    expect(sum).toEqual({ tag: 'P', text: '改回正文', heads: 0, slashLeft: false })
+  })
+
+  test('斜杠命令「正文」把任务项提出列表，行内加粗不丢', async ({ page }) => {
+    await gotoNotes(page)
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('[] **重点**')
+    await expect(pm.locator('li')).toHaveCount(1)
+    await page.keyboard.type('/')
+    await page.locator('.slash-item', { hasText: '正文' }).first().click()
+    const sum = await page.evaluate(() => {
+      const root = document.querySelector('.composer .ProseMirror')!
+      const line = Array.from(root.children).find((c) => c.textContent?.includes('重点'))
+      return {
+        tag: line?.tagName ?? null,
+        lists: root.querySelectorAll('ul,li').length,
+        bold: line?.querySelector('strong')?.textContent ?? null,
+      }
+    })
+    // 列表外壳只收 li，clearNodes 提不出来，得先 liftListItem；行内格式不该被连带洗掉
+    expect(sum).toEqual({ tag: 'P', lists: 0, bold: '重点' })
+  })
+
   test('空任务项的正文撑满行宽，光标有行盒可落', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')

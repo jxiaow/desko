@@ -743,9 +743,11 @@ watchEffect(() => {
    工具栏、书写框与小记共用居中阅读列，窄窗口保留最小内距。 */
 .stream-inner {
   width: 100%;
-  padding: 0 var(--page-gutter) var(--dock-clearance);
+  padding: 0 var(--page-gutter) 22px;
   padding-inline: max(var(--page-gutter), calc((100% - var(--stream-max)) / 2));
 }
+/* 96px 净空只服务批选底栏；没开批选时不留死白 */
+.notes-page:has(.batch-dock) .stream-inner { padding-bottom: var(--dock-clearance); }
 /* 书写框与吸顶栏拉开一档间距（列表页首行同款） */
 .stream-inner .composer { margin-top: var(--space-2); }
 

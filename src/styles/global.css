@@ -2022,8 +2022,14 @@ button, input, select, textarea {
 .select:hover:not(:disabled),
 .select-input:hover:not(:disabled) { border-color: var(--accent); }
 /* 禁用态统一在按钮系统那一段（"淡的是面不是字"），这里不再各留一档 opacity */
-/* 关掉自动锁定时这一栏没有数值可填，描边撤掉、只留灰字，别摆出一副能输入的样子 */
-.number-input:disabled { color: var(--text-muted); background: transparent; border-color: transparent; }
+/* 禁用只洗面、不撤形：数值框仍是设置行上的一个字段，不能缩成一行裸数字；
+   字降到 muted，底与描边保留在淡档，一眼是"有这个字段、现在不能改"。 */
+.number-input:disabled {
+  color: var(--text-muted);
+  background: var(--fill);
+  border-color: var(--border);
+  cursor: not-allowed;
+}
 
 /* 关键主操作：品牌实底，一栏里只许一颗，其余都走描边 */
 .action-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
@@ -2421,8 +2427,8 @@ button, input, select, textarea {
   color: var(--text-muted);
 }
 .badge.ok { background: var(--success-soft); color: var(--success) }
-.badge.warn { background: var(--warning-soft); color: var(--warning) }
-.badge.own { background: var(--accent-soft); color: var(--accent) }
+.badge.warn { background: var(--warning-soft); color: color-mix(in srgb, var(--warning) 85%, var(--text)) }
+.badge.own { background: var(--accent-soft); color: var(--text-brand) }
 .badge.off { background: var(--fill); color: var(--text-secondary) }
 /* 红色只留给「这条路走不通」那一档：不可达的目标连清单都不该进。 */
 .badge.bad { background: var(--danger-soft); color: var(--danger) }

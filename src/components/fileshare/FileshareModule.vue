@@ -268,7 +268,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
       <div class="page-bar service-page-bar" data-workspace-heading="inline">
         <span class="chip" :class="{ live: running }"><span class="dot" aria-hidden="true"></span>{{ !fsLoaded ? '读取中' : running ? '监听中' : '已停止' }}</span>
         <div class="page-actions">
-          <button v-if="fsLoaded && fsConfig && status" class="bar-btn service-toggle" :class="running ? 'btn-secondary' : 'btn-primary'" type="button" :disabled="fsBusy || dropping" @click="toggle">{{ serviceAction === 'stop' ? '正在停止…' : serviceAction === 'start' ? '正在启动…' : running ? '停止服务' : '启动服务' }}</button>
+          <button v-if="fsLoaded && fsConfig && status" class="bar-btn service-toggle" :class="running ? 'btn-primary ghost-danger' : 'btn-primary'" type="button" :disabled="fsBusy || dropping" @click="toggle"><AppIcon v-if="running" name="x" :size="13" />{{ serviceAction === 'stop' ? '正在停止…' : serviceAction === 'start' ? '正在启动…' : running ? '停止服务' : '启动服务' }}</button>
           <button class="btn-secondary bar-btn manage-btn" type="button" aria-label="管理共享" title="管理共享" @click="requestOpenSettingsTab('fileshare')"><AppIcon name="gear" :size="16" /></button>
         </div>
       </div>
@@ -319,7 +319,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
             <div class="well-body"><AppIcon class="well-icon" :name="dropping ? 'clock' : 'upload'" :size="28" /><p class="well-title">{{ dropping ? '正在保存文件…' : webRuntime ? '选择文件或拖入上传' : '将文件拖放到这里' }}</p><p class="well-sub">{{ dropping ? '保存后可复制提取链接' : '支持同时投递多个文件，同名文件自动重命名' }}</p><button class="action-btn primary" type="button" :disabled="fsBusy || dropping || !dirs.length" @click="chooseFiles"><AppIcon name="plus" :size="14" />{{ dropping ? '正在投递…' : '选择文件' }}</button></div>
           </section>
           <div v-else class="send-paused"><AppIcon name="upload" :size="28" /><p>启动服务后，即可投递文件</p><span>文件将保存到所选共享文件夹。</span></div>
-          <section class="session-files" aria-label="本次投递"><header class="session-heading"><h3>本次投递</h3><span class="panel-meta" role="status">{{ received.length }} 个文件</span></header><div class="session-content"><div v-if="received.length" ref="receivedList" class="recv-list" aria-label="已投递文件"><button v-for="(f, i) in received" :key="`${f.url}-${i}`" class="recv" type="button" :aria-label="`复制 ${f.name} 的提取链接`" :title="`${f.name} · 点击复制提取链接`" @click="copyUrl(f.url)"><span class="received-name">{{ f.name }}</span></button></div><p v-else class="session-empty">暂无投递记录</p></div></section>
+          <section class="session-files" aria-label="本次投递"><header class="session-heading"><h3>本次投递</h3><span v-if="received.length" class="panel-meta" role="status">{{ received.length }} 个文件</span></header><div class="session-content"><div v-if="received.length" ref="receivedList" class="recv-list" aria-label="已投递文件"><button v-for="(f, i) in received" :key="`${f.url}-${i}`" class="recv" type="button" :aria-label="`复制 ${f.name} 的提取链接`" :title="`${f.name} · 点击复制提取链接`" @click="copyUrl(f.url)"><span class="received-name">{{ f.name }}</span></button></div><p v-else class="session-empty" role="status">暂无投递记录</p></div></section>
         </div>
       </section>
 
@@ -338,10 +338,22 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .lan-page { font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .lan-page :is(h2, h3, p) { margin: 0; }
 .lan-page h2 { font-size: var(--text-sm); font-weight: 500; line-height: 20px; }
+/* 页级组标题与直连页同档：13/600 卡外，计数紧随 */
+.lan-page .panel-heading h2 { font-weight: 600; }
 .lan-page h3 { font-size: var(--text-xs); font-weight: 400; line-height: 18px; }
 .lan-page .rcard { margin-bottom: 0; }
 .manage-btn { width: 32px; padding-inline: 0; }
 .service-toggle { min-width: 76px; }
+/* 停止与「停止隧道」同形：淡红底 + 红字 + ×，不再是一行裸文字 */
+.service-toggle.ghost-danger:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+  box-shadow: none;
+}
+.service-toggle.ghost-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger-hover);
+}
 .lan-text-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 0; background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--text-xs); white-space: nowrap; }
 .lan-text-button:hover:not(:disabled) { color: var(--text); }
 .lan-page button:disabled { cursor: not-allowed; }

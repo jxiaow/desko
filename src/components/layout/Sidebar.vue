@@ -94,8 +94,8 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
 .nav-item { position: relative; text-decoration: none; }
 .nav-item:hover:not(.active), .foot-item:hover { background: var(--hover-chrome); color: var(--text); }
 .nav-item:hover:not(.active) .nav-icon, .foot-item:hover .foot-icon { color: var(--text-secondary); }
-.nav-item.active { background: var(--hover-chrome); color: var(--text); }
-.nav-item.active .nav-icon { color: var(--accent); }
+.nav-item.active { background: var(--sidebar-active); color: var(--text); }
+.nav-item.active .nav-icon { color: var(--text-brand); }
 .nav-item:focus-visible, .foot-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
 .nav-icon, .foot-icon {
   display: flex;

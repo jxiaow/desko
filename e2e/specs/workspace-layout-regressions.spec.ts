@@ -23,14 +23,13 @@ for (const width of [800, 1040, 1920]) {
       await page.setViewportSize({ width, height: 720 })
       await bootUnlocked(page, seed, `/${route}`)
       const toggle = page.locator('#workspace-directory-toggle')
+      await expect(page.locator('.titlebar-buttons #workspace-directory-toggle')).toHaveCount(1)
       const before = await bounds(toggle)
-      const search = await bounds(page.locator('#workspace-page-toolbar .search-box'))
       const point = { x: before.x + before.width / 2, y: before.y + before.height / 2 }
       for (const open of [true, false, true, false]) {
         await page.mouse.click(point.x, point.y)
         await expect(toggle).toHaveAttribute('aria-expanded', String(open))
         expect(await bounds(toggle)).toEqual(before)
-        expect(await bounds(page.locator('#workspace-page-toolbar .search-box'))).toEqual(search)
         expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('button')?.id, point)).toBe('workspace-directory-toggle')
       }
       expect(await e2e.count(page, 'window:startDragging')).toBe(0)
@@ -81,6 +80,8 @@ for (const width of [800, 1040, 1920]) {
       const card = page.locator('.memo, .entry-card, .shortcut-row, .mfa-card:not(.skeleton), .acc-row').first()
       await expect(card).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
       if (route === 'notes' || route === 'entries') {
+        // KeepAlive 会缓存上一个模块；目录开关只能留下当前页面的那一颗。
+        await expect(page.locator('#workspace-directory-toggle')).toHaveCount(1)
         await page.locator('#workspace-directory-toggle').click()
         await page.getByRole('button', { name: '固定目录', exact: true }).click()
         const directory = await bounds(page.locator('.workspace-directory'))
@@ -89,8 +90,10 @@ for (const width of [800, 1040, 1920]) {
         expect(directory.width).toBeGreaterThanOrEqual(200)
         expect(directory.width).toBeLessThanOrEqual(248)
         expect(directory.y).toBe(48)
-        expect(dockedActions).toEqual(actions)
-        expect(await bounds(page.locator('.titlebar-left'))).toEqual(heading)
+        // 页名与操作跟随正文让位：左缘仍同一条阅读列，右缘收到目录左侧。
+        const dockedHeading = await bounds(page.locator('.titlebar-left'))
+        expect(Math.abs(dockedHeading.x - dockedContent.x)).toBeLessThanOrEqual(1)
+        expect(Math.abs(dockedActions.x + dockedActions.width - (dockedContent.x + dockedContent.width))).toBeLessThanOrEqual(1)
         expect(dockedContent.x + dockedContent.width).toBeLessThanOrEqual(directory.x - 32)
         if (width <= 1040) expect((await bounds(toolbar.locator('.search-box'))).x).toBe(searchLeft)
         if (width <= 1040) expect(dockedContent.x).toBe(content.x)
