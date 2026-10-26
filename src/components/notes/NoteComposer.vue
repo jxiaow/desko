@@ -58,7 +58,7 @@ const discard = () => {
         @primary="emit('publish')"
       >
         <template #hint>
-          <span class="composer-hint"><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> 保存</span>
+          <span class="composer-hint"><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span></span>
         </template>
       </NoteToolbar>
     </div>

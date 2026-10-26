@@ -776,8 +776,11 @@ test.describe('Notes 小记', () => {
     // 窄栏默认收起，视图筛选要先展开它
     await openDirectory(page)
     await page.locator('.rail button.rail-item', { hasText: '收藏' }).click()
-    await expect(page.locator('.empty-title')).toHaveText('未找到匹配的小记')
-    await page.locator('.rail button.rail-item.danger', { hasText: '清空筛选' }).click()
+    await expect(page.locator('.empty-title')).toHaveText('还没有收藏的小记')
+    await expect(page.locator('.titlebar-count')).toHaveText('收藏 · 0 / 3 条')
+    // 光切视图不算筛选：红字「清空筛选」不该出现，回「全部」走轨道
+    await expect(page.locator('.rail button.rail-item.danger')).toHaveCount(0)
+    await page.locator('.rail button.rail-item', { hasText: '全部' }).click()
     await expect(page.locator('.memo')).toHaveCount(3)
   })
 

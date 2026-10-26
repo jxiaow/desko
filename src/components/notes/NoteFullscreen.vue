@@ -150,7 +150,7 @@ function trapFocus(event: KeyboardEvent) {
         <button
           class="bar-btn"
           type="button"
-          :class="{ active: props.note.pinned }"
+          :class="{ on: props.note.pinned }"
           :title="props.note.pinned ? '取消置顶' : '置顶'"
           :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
           @click="emit('togglePin')"
@@ -241,7 +241,7 @@ function trapFocus(event: KeyboardEvent) {
           <span
             class="fs-hint"
             :title="`完整快捷语法：# / ## / ### 空格 标题\n- 或 + 空格 无序列表 · 1. 空格 有序列表\n&gt; 空格 引用 · \`\`\` 空格 代码块\n[] 或 [x] 空格 任务 · --- 分割线\n**粗** *斜* ~~删~~ \`码\``"
-          ><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> {{ props.note ? '退出编辑' : '保存' }}</span>
+          ><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span></span>
         </template>
       </NoteToolbar>
     </footer>
@@ -396,6 +396,10 @@ function trapFocus(event: KeyboardEvent) {
 
 /* 编辑沿用标题栏主操作的淡染，次级操作保持无底。 */
 .fs-head .bar-btn { height: 32px; }
+/* 置顶是状态不是主操作：只染字色，页头那一颗实心留给「编辑」；
+   字色走 --text-brand，与目录选中态、主操作同一档可读色 */
+.fs-head .bar-btn.on { background: transparent; color: var(--text-brand); font-weight: 500; }
+.fs-head .bar-btn.on:hover:not(:disabled) { background: var(--hover-chrome); color: var(--text-brand); }
 .fs-head .bar-btn.primary { background: var(--accent-soft); color: var(--text-brand); font-weight: 600; padding: 0 12px; }
 .fs-head .bar-btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text-brand); }
 @container workspace-toolbar (max-width: 460px) {

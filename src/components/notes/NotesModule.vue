@@ -162,9 +162,15 @@ const draftEmpty = computed(() => !draftText.value.trim() && !collectAttachmentN
 const isArchivedView = computed(() => noteView.value === 'archived')
 /** 顶栏那个总数跟着视图走：归档行不该计进「全部」的条数里 */
 const headTotal = computed(() => (isArchivedView.value ? viewCounts.value.archived : viewCounts.value.all))
-/** 空态分「没搜到」还是「这个视图本来就空」：归档视图只认关键词/标签，光切视图不算无果 */
+/** 空态分「没搜到」还是「这个视图本来就空」：光切视图不算无果，各视图自己说清内容从哪来 */
 const hasQueryFilter = computed(() => !!noteSearchKeyword.value.trim() || activeTags.value.size > 0)
-const emptyNoMatch = computed(() => (isArchivedView.value ? hasQueryFilter.value : hasActiveFilters.value))
+const emptyState = computed<{ icon: IconName; title: string; desc: string }>(() => {
+  if (hasQueryFilter.value) return { icon: 'searchEmpty', title: '未找到匹配的小记', desc: '试试清空筛选或其他关键词' }
+  if (isArchivedView.value) return { icon: 'archive', title: '还没有归档的小记', desc: '在小记菜单中选择「归档」' }
+  if (noteView.value === 'pinned') return { icon: 'pin', title: '还没有置顶的小记', desc: '在小记菜单中选择「置顶」' }
+  if (noteView.value === 'starred') return { icon: 'star', title: '还没有收藏的小记', desc: '在小记菜单中选择「收藏」' }
+  return { icon: 'navNotes', title: '还没有小记', desc: '在上方写第一条' }
+})
 const fsNote = computed(() =>
   typeof fsTarget.value === 'string' ? findNote(fsTarget.value) : null)
 
@@ -410,7 +416,10 @@ const pageHead = usePageHeadStore()
 watchEffect(() => {
   if (!pageActive.value) return
   const filtered = isArchivedView.value ? hasQueryFilter.value : hasActiveFilters.value
-  pageHead.setHead('小记', `${filtered ? `${filteredNotes.value.length} / ${headTotal.value}` : headTotal.value} 条`)
+  const total = filtered ? `${filteredNotes.value.length} / ${headTotal.value}` : `${headTotal.value}`
+  // 条数跟着视图换口径，顶栏就得把视图名一起报出来，否则「0 条」看着像总数算错
+  const view = noteView.value === 'all' ? '' : `${VIEWS.find(v => v.key === noteView.value)?.label} · `
+  pageHead.setHead('小记', `${view}${total} 条`)
 })
 </script>
 
@@ -572,10 +581,10 @@ watchEffect(() => {
 
           <div v-else-if="!filteredNotes.length" class="empty-state">
             <div class="empty-icon">
-              <AppIcon :name="emptyNoMatch ? 'searchEmpty' : isArchivedView ? 'archive' : 'navNotes'" :size="24" />
+              <AppIcon :name="emptyState.icon" :size="24" />
             </div>
-            <div class="empty-title">{{ emptyNoMatch ? '未找到匹配的小记' : isArchivedView ? '还没有归档的小记' : '还没有小记' }}</div>
-            <div class="empty-desc">{{ emptyNoMatch ? '试试清空筛选或其他关键词' : isArchivedView ? '在小记菜单中选择「归档」' : '在上方写第一条' }}</div>
+            <div class="empty-title">{{ emptyState.title }}</div>
+            <div class="empty-desc">{{ emptyState.desc }}</div>
           </div>
         </template>
       </div>
@@ -623,7 +632,8 @@ watchEffect(() => {
       </button>
       <div v-if="!tagCounts.length" class="rail-empty">还没有标签</div>
 
-      <template v-if="hasActiveFilters">
+      <!-- 红字只留给真清得掉的关键词/标签；切视图是轨道自己的事，不该长得像删东西 -->
+      <template v-if="hasQueryFilter">
         <div v-if="!workspaceLayout" class="rail-sep"></div>
         <button class="rail-item danger" :class="{ 'directory-link directory-reset': workspaceLayout }" type="button" @click="clearFilters">
           <AppIcon name="x" :size="16" />

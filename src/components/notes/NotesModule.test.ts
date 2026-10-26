@@ -731,10 +731,10 @@ describe('NotesModule', () => {
     expect(wrapper.findComponent(NoteComposer).exists()).toBe(false)
     expect(wrapper.findAll('.memo')).toHaveLength(1)
     expect(wrapper.find('.archive-bar').text()).toContain('已归档')
-    expect(usePageHeadStore().count).toBe('1 条')
+    expect(usePageHeadStore().count).toBe('归档 · 1 条')
     store.noteSearchKeyword = '丙'
     await flushPromises()
-    expect(usePageHeadStore().count).toBe('1 / 1 条')
+    expect(usePageHeadStore().count).toBe('归档 · 1 / 1 条')
     store.noteSearchKeyword = ''
     expect(wrapper.find('.ab-btn').text()).toContain('全部取消归档')
 
