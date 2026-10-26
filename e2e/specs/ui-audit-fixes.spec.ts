@@ -157,7 +157,7 @@ test('Web 设置使用紧凑输入与开关，运行中显示当前端口和修�
 })
 
 test('验证码常驻复制图标、删除动作标签和目录提示位置可见', async ({ page }) => {
-  await bootUnlocked(page, { settings: { mfa_enabled: 'true' }, mfaTokens: [{ issuer: 'GitHub', label: 'synthetic', secret: 'JBSWY3DPEHPK3PXP' }] }, '/mfa')
+  await bootUnlocked(page, { settings: { mfa_enabled: 'true' }, mfaTokens: [{ issuer: 'GitHub', label: 'synthetic', secret: 'JBSWY3DPEHPK3PXP' }], entries: [{ name: '示例收藏', url: 'https://example.com', password: '' }] }, '/mfa')
   const card = page.locator('.mfa-card')
   await expect(card.locator('.card-copy')).toBeVisible()
   await page.screenshot({ path: '.tmp/audit-20261020/fixed/mfa-copy.png', animations: 'disabled' })

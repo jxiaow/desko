@@ -22,9 +22,15 @@ impl Backend for Fake {
         }
     }
     fn asset(&self, path: &str) -> Option<Resource> {
-        (path == "index.html").then(|| Resource {
-            bytes: b"<html><head></head><body>Desko</body></html>".to_vec(),
-            mime: "text/html".into(),
+        let (bytes, mime) = match path {
+            "index.html" => (b"<html><head></head><body>Desko</body></html>".to_vec(), "text/html"),
+            _ if path.starts_with("assets/") => (b"console.log('bundle')".to_vec(), "application/javascript"),
+            _ if path.starts_with("fonts/") => (vec![0u8; 8], "font/woff2"),
+            _ => return None,
+        };
+        Some(Resource {
+            bytes,
+            mime: mime.into(),
             download: false,
             file: None,
         })
@@ -152,6 +158,46 @@ fn host_validation_is_explicit() {
     assert!(valid_host("192.168.1.2:8420", 8420, true, None));
     assert!(!valid_host("evil.example:8420", 8420, true, lan));
     assert!(!valid_host("127.0.0.1:8421", 8420, true, lan));
+}
+
+#[test]
+fn hashed_assets_are_cacheable_while_every_data_face_stays_no_store() {
+    let (_service, _, url) = service();
+    let cache = |path: &str| {
+        ureq::get(&format!("{url}{path}"))
+            .call()
+            .unwrap()
+            .header("Cache-Control")
+            .unwrap()
+            .to_string()
+    };
+    assert_eq!(cache("/assets/main-D2SRyQ0m.js"), "public, max-age=31536000, immutable");
+    assert_eq!(cache("/fonts/harmonyos-sans-sc.woff2"), "public, max-age=604800");
+    assert_eq!(cache("/notes"), "no-store");
+    // 静态档只放编译产物：带数据的一面一颗都不松
+    let cookie = login(&url);
+    assert_eq!(
+        ureq::post(&format!("{url}/api/invoke"))
+            .set("Cookie", &cookie)
+            .set("Content-Type", "application/json")
+            .send_string(r#"{"command":"list_notes"}"#)
+            .unwrap()
+            .header("Cache-Control")
+            .unwrap(),
+        "no-store"
+    );
+    assert_eq!(cache_control_for("/api/attachments/a.png"), "no-store");
+    assert_eq!(cache_control_for("/api/files/x"), "no-store");
+    assert_eq!(cache_control_for("/app-icon.svg"), "no-store");
+    assert_eq!(
+        cache_control_for("/assets/main.js?v=1.0.0"),
+        "public, max-age=31536000, immutable"
+    );
+    // 长缓存档不得顺手改掉其余安全头
+    let bundle = ureq::get(&format!("{url}/assets/main.js")).call().unwrap();
+    assert_eq!(bundle.header("X-Frame-Options").unwrap(), "DENY");
+    assert_eq!(bundle.header("X-Content-Type-Options").unwrap(), "nosniff");
+    assert!(bundle.header("Content-Security-Policy").unwrap().contains("default-src 'self'"));
 }
 
 #[test]

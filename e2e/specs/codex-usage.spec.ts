@@ -263,7 +263,9 @@ test('同小时记录合并为真实用量，可聚焦查看小时数值，未�
 })
 
 test('未来时间戳记录被截止上界排除，总数和小时曲线仍然同账', async ({ page }) => {
-  await page.clock.install({ time: new Date('2026-10-13T04:30:00Z') })
+  // 钉死而不是 install：install 后虚拟时钟仍随真实耗时前进，满载并行时启动会跨过整秒，
+  // 下面那句「上界 = 查询瞬间 + 1s」就恒偏 +1。setFixedTime 让 Date.now() 冻在基准上。
+  await page.clock.setFixedTime(new Date('2026-10-13T04:30:00Z'))
   await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
     seed.codex.sessions[0],
     { ...seed.codex.sessions[1], daysAgo: 0, hoursAgo: -4 },

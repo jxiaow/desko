@@ -11,7 +11,7 @@ it('浏览器设置复用主题设置且退出只通知父级', async () => {
   setActivePinia(createPinia())
   const wrapper = mount(WebSettingsDialog)
   expect(wrapper.text()).not.toContain('备份')
-  expect(wrapper.findAll('.web-theme').map(button => button.text())).toEqual(['纸', '雪', '绢', '雾', '墨', '岩', '夜', '苔'])
+  expect(wrapper.findAll('.web-theme').map(button => button.text())).toEqual(['纸', '墨'])
   await wrapper.findAll('.web-theme').find(button => button.text() === '墨')!.trigger('click')
   await flushPromises()
   expect(settingsApi.setSetting).toHaveBeenCalledWith('theme', 'ink')

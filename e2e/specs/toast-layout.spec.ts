@@ -8,7 +8,8 @@ for (const theme of ['paper', 'ink']) {
       await page.emulateMedia({ reducedMotion: 'reduce' })
       let toastUrl = ''
       page.on('request', request => { if (new URL(request.url()).pathname === '/src/stores/toast.ts') toastUrl = request.url() })
-      await bootUnlocked(page, { settings: { theme } }, '/notes')
+      // 目录只在有内容时挂载（空库 Ctrl+B 空转），这里要的是「固定目录」那颗钮
+      await bootUnlocked(page, { settings: { theme }, notes: [{ title: '种子', content_html: '<p>正文</p>' }] }, '/notes')
       await page.keyboard.press('Control+b')
       await page.getByRole('button', { name: '固定目录', exact: true }).click()
       for (const [index, message] of [

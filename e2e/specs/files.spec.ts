@@ -97,7 +97,7 @@ test.describe('Files 文件快捷', () => {
 
     await e2e.queueDialog(page, 'C:/e2e/queued-folder')
     await tipButton(dialog, '选择文件夹').click()
-    await expect(dialog.locator('input[placeholder="粘贴文件/文件夹路径，或点击右侧浏览"]')).toHaveValue('C:/e2e/queued-folder')
+    await expect(dialog.locator('input[placeholder="文件或文件夹路径"]')).toHaveValue('C:/e2e/queued-folder')
     // 选中文件夹后类型自动切到文件夹
     await expect(dialog.locator('button.seg-btn.on')).toHaveText('文件夹')
   })
@@ -109,7 +109,7 @@ test.describe('Files 文件快捷', () => {
 
     await page.evaluate(() => navigator.clipboard.writeText('C:/e2e/pasted/archive'))
     await tipButton(dialog, '从剪贴板粘贴').click()
-    await expect(dialog.locator('input[placeholder="粘贴文件/文件夹路径，或点击右侧浏览"]')).toHaveValue('C:/e2e/pasted/archive')
+    await expect(dialog.locator('input[placeholder="文件或文件夹路径"]')).toHaveValue('C:/e2e/pasted/archive')
     // 无扩展名 → 自动判为文件夹；段控件的选中块落在「文件夹」
     await expect(dialog.locator('button.seg-btn.on')).toHaveText('文件夹')
   })
@@ -126,7 +126,7 @@ test.describe('Files 文件快捷', () => {
 
     // 先填名称再填路径：路径输入框 @blur 的 onPathInput 只在名称为空时用文件名覆盖，反序会竞态
     await dialog.locator('input[placeholder="快捷方式名称"]').fill('E2E 笔记')
-    await dialog.locator('input[placeholder="粘贴文件/文件夹路径，或点击右侧浏览"]').fill('C:/e2e/notes.txt')
+    await dialog.locator('input[placeholder="文件或文件夹路径"]').fill('C:/e2e/notes.txt')
     await dialog.locator('button.seg-btn:text-is("文件")').click()
     await dialog.locator('button.btn-primary:text-is("添加")').click()
 

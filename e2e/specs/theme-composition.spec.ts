@@ -170,13 +170,15 @@ for (const theme of THEMES) {
 for (const width of [800, 1920]) {
   test(`${width}px 的墨色 Codex 页面保持整窗同场，搜索可见且没有横向溢出`, async ({ page }) => {
     await page.setViewportSize({ width, height: 760 })
-    await bootUnlocked(page, { settings: { theme: 'ink', codex_enabled: 'true', background_atmosphere: 'true' }, codex: { accounts: [{ email: 'layout@example.com' }] } }, '/codex')
+    // Codex 的搜索框在账号数 >1 时才出现（单账号没有可筛的东西）
+    await bootUnlocked(page, { settings: { theme: 'ink', codex_enabled: 'true', background_atmosphere: 'true' }, codex: { accounts: [{ email: 'layout@example.com' }, { email: 'second@example.com' }] } }, '/codex')
     const main = page.locator('.workspace-main')
     expect(await main.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(false)
     const surface = await main.boundingBox()
     expect(width - surface!.x - surface!.width).toBe(0)
     await expect(page.locator('.search-box')).toBeInViewport()
-    await expect(page.locator('.acc-row')).toBeInViewport()
+    await expect(page.locator('.acc-row').first()).toBeInViewport()
+    await expect(page.locator('.acc-row').last()).toBeInViewport()
     await expect(page.locator('.workspace-main')).not.toHaveCSS('background-color', 'rgb(38, 38, 37)')
     await expect(page.locator('.workspace-main')).toHaveCSS('background-image', /radial-gradient/)
   })

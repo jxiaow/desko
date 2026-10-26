@@ -304,6 +304,23 @@ impl Read for GuardedReader {
         self.reader.read(buffer)
     }
 }
+/// 缓存分档：编译产物不带用户数据，且 Vite 文件名自带内容哈希，长缓存是安全的；
+/// 带数据的一面（HTML、/api/*、附件、下载）维持 no-store。公网面实测重放首屏那
+/// 5 个文本请求要 5.21 s，全因原先连静态资产都一律 no-store。
+/// 账与取舍见 docs/design/web/02-tunnel-perf.md。
+fn cache_control_for(path: &str) -> &'static str {
+    let pathname = path.split('?').next().unwrap_or(path);
+    if pathname.starts_with("/assets/") {
+        "public, max-age=31536000, immutable"
+    } else if pathname.starts_with("/fonts/") {
+        // public/ 下的产物没有内容哈希，改名就得动编译出的 CSS：取 7 天，
+        // 短到升级后自愈，又足以让同一会话内的重复访问不再重传
+        "public, max-age=604800"
+    } else {
+        "no-store"
+    }
+}
+
 fn respond_guarded(
     req: Request,
     code: u16,
@@ -334,7 +351,8 @@ fn respond_guarded(
         None,
     );
     for (name, value) in [
-        ("Content-Type", resource.mime.as_str()), ("Cache-Control", "no-store"),
+        ("Content-Type", resource.mime.as_str()),
+        ("Cache-Control", cache_control_for(req.url())),
         ("X-Content-Type-Options", "nosniff"), ("X-Frame-Options", "DENY"),
         ("Referrer-Policy", "no-referrer"),
         ("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"),

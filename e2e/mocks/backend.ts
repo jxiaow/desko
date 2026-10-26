@@ -13,6 +13,9 @@ export interface E2EEntrySeed {
   password: string
   notes?: string
   category?: string
+  /** 不写就按数组顺序铺秒级时间戳；要拍时间列的多种形态（刚刚/几小时前/几天前/日期）就显式给 */
+  created_at?: number
+  updated_at?: number
 }
 
 export interface E2ENoteSeed {
@@ -1027,7 +1030,7 @@ class MockBackend {
 
     // seed 数据按倒序时间戳，保证列表顺序确定（最新在前）
     ;(config.entries ?? []).forEach((e, i) => {
-      const ts = now - (config.entries!.length - i) * 1000
+      const ts = e.created_at ?? now - (config.entries!.length - i) * 1000
       state.entries.push({
         id: nextId(),
         name: e.name,
@@ -1037,7 +1040,7 @@ class MockBackend {
         category: e.category ?? null,
         password: e.password,
         created_at: ts,
-        updated_at: ts,
+        updated_at: e.updated_at ?? ts,
       })
     })
     ;(config.notes ?? []).forEach((n, i) => {

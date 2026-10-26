@@ -37,8 +37,10 @@ Codex Web UI 登录后直接进入对话。填写运行 Desko 的电脑上的工
 
 桌面浏览器的内容列随窗口宽度居中。手机通过标题栏左侧按钮打开模块抽屉，抽屉底部可进入设置；选择模块后自动收起。右侧目录以覆盖方式展开，保留正文宽度和工具栏按钮位置。竖屏与横屏均使用单列内容和常显操作，批量操作栏位于底部安全区域上方。Codex 对话在窄屏下通过「对话」按钮展开历史列表，「改动」打开覆盖面板；消息、输入框和审批保留完整宽度。
 
+Web 面的中文使用系统字体，桌面内嵌的那颗中文字体只在桌面版加载，浏览器首屏因此不必搬运它；两端字形观感略有差异。不含用户数据的编译产物按文件名哈希长期缓存，字体缓存一周；页面、接口、附件与下载内容始终不缓存，换设备或清理浏览器缓存后会重新拉取。公网访问的实测账目与取舍见 `docs/design/web/02-tunnel-perf.md`。
+
 服务每次手动启动，由桌面管理和回收；退出 Desko 后两个服务一起停止。关闭 Codex 模块会停止 Codex Web UI 及其 CLI 连接。Web 进程通过随机密钥保护的本机内部通道访问桌面的数据上下文，不自行打开第二份数据库或继承桌面的小记解锁状态；公开 HTTP 服务没有任意原生命令入口。备份、档案切换、网络直连和系统终端操作仍在桌面端完成。
 
-开发验证：`cargo test -p desko --manifest-path src-tauri/Cargo.toml web_access` 检查鉴权、会话、下载和内部通道；构建后运行 `node scripts/tests/web-worker-smoke.mjs` 验证真实独立进程的启动、登录隔离、停止、重启与父进程控制通道关闭后的退出。冒烟使用内存数据，不启动 Codex CLI 或模型任务。
+开发验证：`cargo test -p desko --manifest-path src-tauri/Cargo.toml web_access` 检查鉴权、会话、下载和内部通道；`node scripts/web-perf.mjs <访问地址> --browser` 对拍公网面首屏的出网字节、字体请求与二次访问复用，判据与账见 `docs/design/web/02-tunnel-perf.md`；构建后运行 `node scripts/tests/web-worker-smoke.mjs` 验证真实独立进程的启动、登录隔离、停止、重启与父进程控制通道关闭后的退出。冒烟使用内存数据，不启动 Codex CLI 或模型任务。
 
 构建后也可运行 `cargo test -p desko --manifest-path src-tauri/Cargo.toml separate_worker_processes -- --ignored`，直接验证 Rust 启动器、Windows Job、worker 崩溃回收、数据代次失效退出及另一服务持续可用。该测试只启动无窗口的内存 fixture 服务。

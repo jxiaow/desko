@@ -458,3 +458,15 @@ PW_CHANNEL=msedge npx playwright test e2e/specs/theme.spec.ts e2e/specs/theme-co
 图标轨和 Logo 格共用 `--bg-workspace-rail`，该角色引用 `--bg-workspace`，与主画布保持同一底色。关闭氛围时一起恢复纯色，开启时沿同一固定坐标采光，整条导航轨融入窗口背景。当前模块通过浅色选中反馈区分。
 
 `theme-composition.spec.ts` 检查关闭氛围后图标轨与画布同色，以及氛围开启后的采光变化和 Logo 接缝连续性；`materials.spec.ts` 检查图标轨、Logo 格与窗口底层的背景图和底色一致。
+
+## 15. 全屏阅读面并入同一光场（2026-10-26）
+
+§13 落码时把 `--bg-workspace` 也给了全屏阅读面：`NoteFullscreen.vue` 里 `.fs:has(.fs-doc)` 用 `var(--bg-workspace)` 配 `background-attachment: fixed`，`.fs` 本体继续用 `var(--bg-editor)`。所以摘要与第 11 节那句「卡片、输入、全屏阅读与书写保持实底」只有一半还成立，现口径按态分档：
+
+- 阅读面（有 `.fs-doc`）与画布同一光场、同一固定坐标，进全屏和退出全屏不出现第二次布光；
+- 书写面（无 `.fs-doc`）恒为实底，不随氛围开关或强调色改变背景图；
+- 卡片与输入继续实底。
+
+`workspace-daylight.spec.ts` 按这条口径重写。柔光颜色由强调色推导（`oklch(from var(--accent) …)` 序列化还带抖动），断言因此只锁光场形状——左上主光 `68% 78% @ 12% 16%`、右下辅光 `72% 80% @ 88% 84%`，颜色一律归一成 `C`；再要求阅读面的 `background-image` 与 `.workspace-surface` 逐字相等、切氛围与强调色后底色不变、切到编辑态回到 `none`。旧断言「阅读态也必须是 `none`」是 §13 之前的账，本轮判为陈旧断言改掉，代码没有回归。
+
+同轮复跑还逮出一处代码偏离本文：墨底四级文字在 `56b388c` 里被顺手改成 `#e5e7eb / #bcc0c7 / #a4a8b0 / #989da7`（前三档提亮、辅助文字反而压暗，层级差被压扁），该提交与本文都没记这笔，已按第 12 节的表回退为 `#dfe1e5 / #b7bfca / #a4adba / #a1aab7`。

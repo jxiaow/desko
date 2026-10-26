@@ -28,7 +28,7 @@ it('old status poll cannot overwrite a completed server start', async () => {
   await wrapper.get('form').trigger('submit')
   await flushPromises()
   expect(wrapper.text()).toContain('服务运行中')
-  expect(webAccessApi.start).toHaveBeenCalledWith({ port: 8420, lan: false })
+  expect(webAccessApi.start).toHaveBeenCalledWith({ port: 8420, lan: false, kind: 'app' })
   expect(wrapper.find('input[type=password]').exists()).toBe(false)
   finish(stopped)
   await flushPromises()

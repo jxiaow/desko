@@ -15,6 +15,13 @@ vi.mock('./modules/state', () => ({ bootEnabledModules: vi.fn(), flushModulesBef
 vi.mock('./composables/useAutoLock', () => ({ useAutoLock: vi.fn() }))
 vi.mock('./composables/useClipboard', () => ({ useClipboard: () => ({ clearClipboardTimer: vi.fn() }) }))
 vi.mock('./utils/hoverGuard', () => ({ installHoverGuard: vi.fn() }))
+// App 的 setup 就要读当前路由（目录承载位按模块判定），这里不装整个导航。
+// 只替 useRoute/useRouter：src/router 在模块加载时就要真的 createRouter。
+vi.mock('vue-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-router')>()),
+  useRoute: () => ({ name: 'notes', path: '/notes', meta: {} }),
+  useRouter: () => ({ push: vi.fn() }),
+}))
 
 let meta: HTMLMetaElement
 beforeEach(() => {

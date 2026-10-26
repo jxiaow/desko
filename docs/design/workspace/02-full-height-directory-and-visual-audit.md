@@ -304,3 +304,36 @@
 卡片尺寸、正文排版与卡片间距沿用此次改动前的实现。布局回归使用最终全高结构更新几何断言，目录持久化及 Web 运行时继续验证原有契约。
 
 验收：106 项相关界面回归、37 项单元测试、TypeScript 检查及前端生产构建通过。纸/墨各十二种强调色通过结构采光与文字层级矩阵；Web 的 320–1920px 阅读列与新模块窄屏检查通过。11 组页面/尺寸对比中，62 个卡片及正文元素的尺寸、字号、字重、行高、内边距和间距保持一致。
+
+## 测试门禁基线（2026-10-26）
+
+外壳 B 整轮回撤（见 `docs/design/workbench/01-two-sets.md` §17）后重跑三门禁：单测 824 条、`vue-tsc --noEmit`、e2e 59 个 spec / 681 条。开局是单测 23 红 + e2e 32 红，红到看不出谁在撒谎，所以逐条判归属，口径只有三问：代码偏离了已记录的账（改代码）、断言找的是搬家前的东西（改断言或补种子）、用例本身不成立（删）。这轮不新增功能、不顺手重构。
+
+### 改代码的四处
+
+| 位置 | 账 |
+| --- | --- |
+| `src/styles/workspace-themes.css:86-89` | 墨底四级文字被 `56b388c` 顺手改掉（前三档提亮、辅助文字反而压暗，层级差被压扁），偏离本文「墨底 12px 辅助字低于基线」一节的结论与 `themes/05` 第 12 节的表。按文档回退，理由与复核记在 `themes/05` §15。 |
+| `src/components/codex/CodexAuthDialog.vue:287` | 新增账号弹窗按内容收高，切登录方式或报错出现时整窗跳一下。补回弹窗基线的定档 `min(480px, calc(100dvh - 40px))`。 |
+| `src/styles/web.css:29`（Web ≥1100px） | 整块 `.titlebar-buttons { display: none }` 把住在 `#workspace-fixed-tools` 里的目录开关一起藏掉，宽屏浏览器只剩 Ctrl+B。改成只藏挂载位以外的子项（窗口钮那颗本来就有 `v-if="!webRuntime"`）。 |
+| `src/styles/web.css:261-273`（Web ≤760px 与触摸 ≤1024px） | 同一处直接放开会把开关塞进 `.web-mobile-header` 的「模块」钮底下——那是 `z-index: 2` 的整行覆盖层。现把挂载位摆到「模块」左侧同一排：`right: 112px`（16px 内距 + 「模块」实占 90px + 6px 间隙，沿用本页 152/210px 预留档的写法）并抬到 `z-index: 3`。 |
+
+窄屏 Web 的目录入口此前是真的没有：整块隐藏 + 手机没键盘 + 侧栏收起，`#workspace-directory` 渲染得出来却打不开。`web-access` 的 320/390px 与「小记侧栏」、`web-workspace` 的 360/390px 这五条红找的是这个洞，不是陈旧断言。实测 320/390px：开关 34×34 落在 174–208 与 244–278，「模块」在 214–304 与 284–374，`.app-root` 无横向溢出。
+
+### 改断言与补种子
+
+- 目录、页栏搜索框、Codex 搜索都改成「有内容才挂载」（`f4e2b31`）：`toast-layout`、`navigation-state`、`workspace-shortcuts`、`ui-audit-fixes`、`theme-composition` 的空库种子补上 notes / entries / fileShortcuts / 两个 Codex 账号，而不是把挂载条件改回去。
+- 文案与结构换档：`appearance` 的保存失败提示、`bypass` 的「N 个待配置目标」、`tunnel` 的 `.poll-err span` + 重试钮与 chip 正文、`files` 的路径输入 placeholder、`web-access` 的「用主密码恢复口令」与侧栏那颗「退出浏览器访问」（`tipButton` 会命中标题栏里的隐藏同名钮）。
+- `workspace-daylight`：全屏阅读面自 `f4e2b31` 起与画布共用同一光场，旧断言「阅读态也必须 `background-image: none`」作废。现锁三件事——光场形状（左上 `68% 78% @ 12% 16%`、右下 `72% 80% @ 88% 84%`，颜色一律归一成 `C`，因为 `oklch(from var(--accent) …)` 序列化带抖动）、阅读面与 `.workspace-surface` 的背景图逐字相等、切到编辑态回到 `none` 且底色全程不变。口径见 `themes/05` §15。
+- 单测：`WebSettingsDialog` 的工作区底色只剩纸/墨两档，`WebAccessPane` 的轮询参数改 `{ port: 8420, lan: false, kind: 'app' }`。
+- jsdom 缺件：新增 `test/setup.ts` 补 `matchMedia` 与 `ResizeObserver` 的最小可调用面，`vitest.config.ts` 挂 `setupFiles`。21 条红是这两片缺件引起的连锁（`BypassModule` 一个文件炸 20 条），真机 WebView2 都有，所以只补面、不模拟行为。
+- 时序：`e2e/specs/codex.spec.ts:1101` 批量删除步进 260ms → 700ms。这条要的是「暂停落在中间」，260ms 时整批只有 1.04s，12 worker 并跑就点得到终态上；5× 并发复跑通过。
+- 虚拟时钟：`e2e/specs/codex-usage.spec.ts:266` 的 `clock.install({ time })` 换成 `clock.setFixedTime(time)`。install 只是把起点钉在 `2026-10-13T04:30:00Z`，虚拟钟仍随真实耗时前进，而该用例第 274 行钉的是 `toTimestamp === 基准 + 1`（应用侧算 `Math.floor(Date.now()/1000)+1`）：单跑绿，满载时启动跨过整秒就恒偏 +1 秒且重试同值——这是 `b5a02e5`（10-14）落下的脆弱断言，不是本轮回归。冻结后基准即当前时间，断言与负载无关；整 spec `--repeat-each=3`（99 条并发）通过，说明解锁与渲染链路不依赖 timer 推进。
+
+### 读数与跑法
+
+- 单测 `npx vitest run`：**824/824**（69 个测试文件），`vue-tsc --noEmit` 干净。
+- e2e 全量：`PW_CHANNEL=msedge npx playwright test` → **681 passed，0 failed，0 flaky**（4.1 分钟，机器上只有一棵 Playwright 树时）。上一轮那份 2 条 flaky（`notes.spec.ts:421` 全屏清空正文后退出、`tunnel.spec.ts:138` 已校验程序给得出实际哈希）在这一轮也是直接绿的，所以不登记成不稳定用例——它们的"飘"就是下面那条污染。
+- 读数是带着并行会话未提交的 web-access / web-perf 改动跑的（`src/main.ts`、`src/services/runtime.ts`、`src-tauri/src/web_access/*`、`web.css` 末尾那段字体覆盖、`docs/web-access.md`）。这三道门禁证明的是"当前工作树自洽"，不替那两个会话的改动背书。
+- 跑法：`PW_CHANNEL=msedge npx playwright test`（本机没装 Chromium 内核时必须带这个环境变量），单测 `npx vitest run`。全量约 4 分钟，分片用 `--shard=1/2`。
+- flaky 计数只在「一棵 Playwright 树」时可信。10-26 有一次全量报 13 flaky，逐条看错误全是 `browserContext.close: ENOENT … test-results\.playwright-artifacts-N\traces\…`（12/13），是上一轮被中途杀掉的 worker 还在与这一轮共用 `test-results/`，把别人的 trace 目录删了——不是这十几条用例不稳。判法：`grep -c "browserContext.close: ENOENT"`，命中数≈flaky 数即污染；跑全量前先确认 `Win32_Process` 里只有一根 `playwright test` 链。同族还有一次 `--shard=1/2` 直接崩在 `ENOENT: mkdir test-results\.playwright-artifacts-6`。

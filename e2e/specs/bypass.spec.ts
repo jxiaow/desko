@@ -173,7 +173,7 @@ test.describe('网络直连', () => {
     }))
     await cardBtn(page, 'one.example.com', '重新探测')
     const dialog = page.getByRole('dialog', { name: '探测结论' })
-    await expect(dialog.locator('.concl-scope')).toContainText('2 项待配置目标')
+    await expect(dialog.locator('.concl-scope')).toContainText('2 个待配置目标')
     await dialog.getByRole('button', { name: '配置直连 2', exact: true }).click()
     const plan = page.getByRole('dialog', { name: '配置确认' })
     await expect(plan).toContainText('one.example.com')

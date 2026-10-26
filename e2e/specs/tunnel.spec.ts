@@ -150,7 +150,8 @@ test.describe('内网穿透', () => {
 
   test('一个命令读失败：其余照读，页上留一句原因', async ({ page }) => {
     await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE], pollFail: '数据库被占用' } })
-    await expect(page.locator('.poll-err')).toContainText('状态没读到：数据库被占用')
+    await expect(page.locator('.poll-err span')).toHaveText('无法读取状态：数据库被占用')
+    await expect(page.locator('.poll-err .foot-btn')).toHaveText('重试')
     // 剩下四格照常更新：整页不许冻在上一帧，用户得能看出是哪一格读不到
     await expect(page.locator('.tn-card.services')).toContainText('files.example.com')
     await expect(page.locator('.tn-card.setup')).toContainText('desko-a')
@@ -378,7 +379,7 @@ test.describe('内网穿透', () => {
     test('域名读取失败不撤回授权，提供重试并阻止生成不完整地址', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { installed: true, authorized: true, domainFail: '无法连接 Cloudflare' } })
       await expect(row(page, 'auth')).toContainText('本机已有授权凭据')
-      await expect(page.locator('.tn-card.setup .tn-note.chip-warn')).toContainText('主域名没读到：无法连接 Cloudflare')
+      await expect(page.locator('.tn-card.setup .tn-note.chip-warn .note-text')).toHaveText('无法读取主域名：无法连接 Cloudflare')
       await page.locator('.tn-card.setup .row-btn', { hasText: '重试读取主域名' }).click()
       await expect.poll(() => e2e.count(page, 'tunnel_authorized_domain')).toBe(2)
       await page.locator('.tn-card.services .head-btn').click()

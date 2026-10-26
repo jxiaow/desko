@@ -24,7 +24,9 @@
   .app-root.web-runtime:not(.codex-web-runtime) .titlebar-app .brand-logo { width: 22px; height: 22px; flex-shrink: 0; }
   .app-root.web-runtime:not(.codex-web-runtime) .titlebar-wordmark { display: block; font-size: var(--text-lg); font-weight: 600; letter-spacing: -.025em; }
   .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-crumb { font-size: var(--text-lg); line-height: 28px; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-buttons { display: none; }
+  /* 浏览器里没有窗口钮，但目录开关住在同一位（.titlebar-fixed-tools）：
+     整块 display:none 会把目录入口一起藏掉，窄屏又没有 Ctrl+B，等于丢了展开目录。 */
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-buttons > :not(.titlebar-fixed-tools) { display: none; }
   .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar :is(.search-box, .bar-btn, .btn-primary, .btn-secondary) { height: 36px; }
   .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .bar-btn { min-width: 36px; }
 }
@@ -256,7 +258,19 @@
   .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-left { width: 100%; height: 48px; flex-basis: 48px; pointer-events: none; }
   .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-crumb { font-size: var(--text-xl); line-height: 28px; letter-spacing: -.02em; }
   .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-brand { width: auto; flex: 0 1 auto; max-width: 100%; gap: 8px; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer :is(.web-modules-toggle, .titlebar-buttons) { display: none; }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .web-modules-toggle { display: none; }
+  /* 目录开关跟着「模块」钮住第一排：整块 display:none 会让窄屏彻底没有目录入口（无键盘、无侧栏），
+     而直接显示又会被 .web-mobile-header 的「模块」钮压住，所以把挂载位摆到它左侧。
+     112px = 16px 内距 + 「模块」钮实占 90px + 6px 间隙，与本页 152/210px 的预留档同一写法。 */
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-buttons {
+    display: flex;
+    align-items: center;
+    top: calc(env(safe-area-inset-top) + 6px);
+    right: 112px;
+    height: 44px;
+    z-index: 3; /* .web-mobile-header 是 z-index:2 的整行覆盖层，不抬高它会用透明面吃掉这一排的点击 */
+  }
+  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-buttons > :not(.titlebar-fixed-tools) { display: none; }
   .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .workspace-page-toolbar { height: 56px; flex: 0 0 56px; overflow: visible; container-type: normal; }
   .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar :is(.page-bar, .cx-band-controls) { height: 56px; min-height: 56px; }
   .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .page-actions { position: absolute; top: 0; right: 0; height: 48px; }
@@ -282,4 +296,18 @@
   .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .create-action { width: 44px; padding-inline: 0; }
   .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .create-action span { display: none; }
   .app-root.web-runtime:not(.codex-web-runtime) .titlebar-page:has(.create-action) .titlebar-brand { max-width: calc(100% - 152px); }
+}
+
+/* 内置中文字体只留给桌面版。--font-ui/--font-mono 把 'HarmonyOS Sans SC' 排在系统 CJK
+   之前，浏览器按字形逐个回退，于是每句中文字都要等这颗 2.7 MB 的可变字体下完——公网面
+   实测冷开首屏 2.85 MB 里 2,736,152 B 是它，而 Cloudflare 只压文本、不压 woff2。
+   标记打在 <html> 而不是 .app-root：弹窗与浮层用 teleport 挂在 app-root 之外，
+   只有根节点覆盖才连它们一起管住。
+   选择器带属性是必需的：workspace-themes.css 用 :root[data-layout="workspace"]（0,2,0）
+   把字体排在最前，裸类名压不过它。账与取舍见 docs/design/web/02-tunnel-perf.md。 */
+html.desko-web,
+html.desko-web[data-layout],
+html.desko-web[data-theme] {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, 'JetBrains Mono', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans Mono CJK SC', monospace;
 }

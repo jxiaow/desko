@@ -1098,7 +1098,9 @@ test.describe('Codex 批量删除作业', () => {
   })
 
   test('暂停停在中间：已删的那几条进回收站，续跑接着删剩下的', async ({ page }) => {
-    const dialog = await startDeleteJob(page, FOUR({ deleteStepMs: 260 }))
+    // 步进 700ms：这一条要的是「暂停落在中间」。260ms 时整批只有 1.04s，
+    // 12 worker 并跑时点「暂停」的这几拍就能删完，落在终态上，done 就成了 4。
+    const dialog = await startDeleteJob(page, FOUR({ deleteStepMs: 700 }))
     await expect(dialog.locator('.bd-done')).not.toHaveText('0')
     await dialog.locator('.dialog-footer button', { hasText: '暂停' }).click()
     await expect(dialog).toHaveAttribute('data-status', 'paused')

@@ -284,7 +284,8 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.auth-dialog { width: 520px; max-height: calc(100dvh - 40px); }
+/* 定高与导入弹窗同档：切登录方式、报错出现都不许改高度（弹窗基线：不得按内容收放）。 */
+.auth-dialog { width: 520px; height: min(480px, calc(100dvh - 40px)); }
 .auth-tabs { padding: 0 var(--space-4); flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .auth-tabs .seg { margin-bottom: 0; }
 .auth-import-link { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 4px 0; background: none; border: 0; color: var(--text-muted); font: inherit; font-size: var(--text-xs); cursor: pointer; }

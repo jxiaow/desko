@@ -5,6 +5,8 @@ test('切回小记保留就地编辑状态，工具栏、标题和搜索快捷�
   await bootUnlocked(page, {
     notes: [{ title: '正在编辑', content_html: '<p>原有正文</p>' }],
     entries: [{ name: '示例收藏', url: 'https://example.com', password: '' }],
+    // 三页的搜索框都只在有内容时挂载，空库那一轮 .search-box 直接不存在
+    fileShortcuts: [{ name: 'demo.txt', path: 'C:/Work/demo.txt', shortcut_type: 'file' }],
   })
   await page.locator('.memo').hover()
   await page.locator('.memo-edit').click()

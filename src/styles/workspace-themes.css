@@ -83,10 +83,10 @@
   --shadow-card: none;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 18%);
   --shadow: 0 4px 14px -2px rgb(0 0 0 / 35%);
-  --text: #e5e7eb;
-  --text-secondary: #bcc0c7;
-  --text-muted: #a4a8b0;
-  --text-faint: #989da7;
+  --text: #dfe1e5;
+  --text-secondary: #b7bfca;
+  --text-muted: #a4adba;
+  --text-faint: #a1aab7;
   --text-url: var(--text-secondary);
   --code-fg: var(--text);
   --badge-cat-bg: var(--fill);

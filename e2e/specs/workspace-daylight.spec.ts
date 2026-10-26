@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { bootUnlocked, openSettings } from '../helpers'
 
+const BEAMS = 'radial-gradient(68% 78% at 12% 16%, C, C 90%), radial-gradient(72% 80% at 88% 84%, C, C 90%), none'
+/** 柔光颜色由强调色推导（oklch 序列化还带抖动），断言只锁光场的形状与坐标，颜色一律归一成 C。 */
+const geometry = (image: string) => image.replace(/(?:(?:rgba?|hsla?|color|oklab|oklch)\([^)]*\))/g, 'C')
+
 for (const theme of ['paper', 'ink']) {
-  test(`${theme} 全屏阅读保持实底，柔光开关和强调色不改变书写面`, async ({ page }) => {
+  test(`${theme} 全屏阅读面与画布同场，书写面保持实底`, async ({ page }) => {
     let themeUrl = ''
     page.on('request', request => { if (new URL(request.url()).pathname === '/src/services/theme.ts') themeUrl = request.url() })
     await bootUnlocked(page, {
@@ -12,19 +16,24 @@ for (const theme of ['paper', 'ink']) {
     await page.locator('.memo').hover()
     await page.getByRole('button', { name: '全屏查看', exact: true }).click()
     const surface = page.locator('.fs')
-    await expect(surface).toHaveCSS('background-image', 'none')
     const color = await surface.evaluate(element => getComputedStyle(element).backgroundColor)
-    for (const enabled of [false, true]) {
+    const field = () => Promise.all([
+      surface.evaluate(element => getComputedStyle(element).backgroundImage),
+      page.locator('.workspace-surface').evaluate(element => getComputedStyle(element).backgroundImage),
+    ] as const)
+    for (const enabled of [true, false, true]) {
       await page.evaluate(async ([url, enabled]) => {
         const service = await import(/* @vite-ignore */ url)
         await service.chooseAccent('rose')
         await service.chooseBackgroundAtmosphere(enabled)
       }, [themeUrl, enabled] as const)
       await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
-      await expect(surface).toHaveCSS('background-image', 'none')
+      const [reading, canvas] = await field()
+      expect(geometry(reading), `氛围${enabled ? '开' : '关'}时的阅读面光场`).toBe(enabled ? BEAMS : 'none')
+      expect(reading, '阅读面与画布共用同一光场，不留第二层底').toBe(canvas)
       await expect(surface).toHaveCSS('background-color', color)
     }
-    await surface.getByRole('button', { name: '编辑', exact: true }).click()
+    await page.locator('.fs-head').getByRole('button', { name: '编辑', exact: true }).click()
     await expect(surface).toHaveCSS('background-image', 'none')
     await expect(surface).toHaveCSS('background-color', color)
   })
