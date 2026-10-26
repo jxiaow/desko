@@ -22,11 +22,10 @@ import {
 const state = ref<CodexHudState | null>(null)
 const expanded = ref(false)
 const pinned = ref(false)
-const locked = ref(false)
 const appWindow = getCurrentWindow()
 const ariaLabel = computed(() => {
   if (!state.value) return 'Codex 桌面挂件'
-  const base = `${hudAriaLabel(state.value)}${locked.value ? '；应用已锁定，解锁后更新' : ''}`
+  const base = hudAriaLabel(state.value)
   if (!expanded.value) return `${base}；悬停展开，点击角色看下一个动作`
   if (pinned.value) return `${base}；已固定展开，可在挂件设置中取消，点击面板打开 Codex`
   return `${base}；移开鼠标收起，点击角色看下一个动作，点击面板打开 Codex`
@@ -109,7 +108,6 @@ async function applyPayload(payload: CodexHudEventPayload): Promise<void> {
   state.value = payload.state
   applyTheme(payload.state)
   ambientEnabled = payload.ambient !== false
-  locked.value = payload.locked === true
   const pinnedChanged = pinned.value !== (payload.pinned === true)
   pinned.value = payload.pinned === true
   // 固定展开来自设置，重建窗口和锁定后继续保留。
@@ -412,7 +410,6 @@ onUnmounted(() => {
       :state="state"
       :expanded="expanded"
       :pinned="pinned"
-      :locked="locked"
       :move="moveId"
       idle
       react

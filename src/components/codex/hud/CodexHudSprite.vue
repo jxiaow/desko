@@ -18,7 +18,6 @@ const props = defineProps<{
   state: CodexHudState
   expanded?: boolean
   pinned?: boolean
-  locked?: boolean
   /** 常驻微动（呼吸 / 摆耳 / 眨眼）：桌面窗口和设置页预览都传 */
   idle?: boolean
   /** 交互触发（展开小跳）：只有桌面窗口传，预览不伪装成可交互 */
@@ -260,8 +259,7 @@ const costValue = computed(() =>
         <span class="unit">tok</span>
       </div>
       <div class="hud-row3">
-        <span v-if="locked" class="est" title="显示最近一次额度，解锁后继续更新">解锁后更新</span>
-        <span v-else-if="statusMessage" class="status-text" :class="promptTone" :title="`${statusMessage}；${costValue}`">{{ statusMessage }}</span>
+        <span v-if="statusMessage" class="status-text" :class="promptTone" :title="`${statusMessage}；${costValue}`">{{ statusMessage }}</span>
         <span v-else class="est">{{ costValue }}</span>
         <span class="open" aria-hidden="true">↗</span>
       </div>

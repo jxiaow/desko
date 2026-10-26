@@ -6,6 +6,8 @@
 
 > **2026-10-23 行为已被 [23 号文档](./23-hud-behavior-redesign.md) 替代**：本文的 §3.8 绕锚巡游、§3.9 常驻步态（`gait-*` / `lift-*`）与「桌面走动」开关（键 `codex_hud_walk`）整套删除，换成锚点固定的「生活行为导演」——招牌动作升级为常驻小动作（每皮肤 3 手 + 打盹），开关改名「桌面小动作」（键 `codex_hud_ambient`），右键改弹挂件自己的两项原生菜单。窗口尺寸、三款角色、悬停 160ms 展开、点角色钉住、点面板打开 Codex、拖动与落盘全部不变。下文 §3.8 / §3.9 / §4 / §5 / §6 里讲巡游、步态、绳长的段落留作历史，以该行说明为准。
 
+> **2026-10-26 锁定行为已被 [24 号文档](./24-hud-locked-refresh.md) 替代**：锁定不再隐藏窗口、也不再冻结快照。挂件继续显示，主窗口的挂件服务改为按「配额自动刷新」间隔调用只读命令 `desko_hud_refresh_locked`，刷新当前账号额度与本机今日用量（0=不联网）；锁屏只拿渲染聚合值，账号、邮箱与凭据都不进前端。下文所有「锁定立即隐藏 / 不展示任何数据 / 解锁重亮相」的段落留作历史，以该行说明为准。
+
 ## 2026-10-22 交互走查修订
 
 以下四点为本轮更新，替代后文历史验收中对应的旧行为；窗口尺寸与三款角色保持不变。
@@ -171,7 +173,7 @@
 | 金额未定价 | `estimatedCostUsd === null` | 不变化 | 第三行 `未定价` |
 | 深色 | `data-theme="ink"` | 角色不变，面板换墨色令牌 | 同版式 |
 | 挂件关闭 / 模块关闭 | 设置关或 Codex 模块关 | 无窗口 | —— |
-| 锁定 | 应用锁定 | 窗口隐藏 | 不展示任何数据 |
+| 锁定 | 应用锁定 | 窗口保留 | 继续展示并刷新当前账号额度与今日用量（见 24 号文档） |
 
 占位文案的优先级：`获取失败且无缓存` > `待授权` > `API Key 无额度` > `无账号` > `暂无额度`。有缓存时永远优先显示缓存 + `!`，不退回剪影；`!` 只由异常态决定，正常态第一行不放任何符号。
 
@@ -183,7 +185,7 @@
 - **左键点面板**：先解钉收起，再打开主窗口并跳到 Codex 账号页；如果主窗口已在用量/会话/回收站页，切回账号页。面板右下角的 `↗` 只是这条动作的可见提示，不单独绑事件。
 - **拖动**：按下后移动超过 4px 才 `startDragging()`；不到 4px 算点击。拖动由窗口的 `Moved` 事件判定（`startDragging` 之后页面未必还收得到 `pointerup`），150ms 没有新的移动才算拖完；拖动中不展开，若正展开则先收起（钉住态不动），拖完指针仍在角色上才重新计时展开。
 - **底边预留，角色不动**：定位与拖动钳制一律按展开高度 144 预留下探空间，`desko_hud_set_expanded` 只改高度不改坐标。早期版本在展开溢出时把整窗上提，收起后又留在被上提的位置——每展开一次角色就永久上移 75px，改成点击时看不出，改成悬停就是抖动回路，故删除。巡游（§3.8）改的是这一轮窗口的实时位置，落盘位置仍是被放置的那一点。
-- **托盘开关**：系统托盘菜单里的「桌面额度挂件」勾选项与设置页那颗开关同源。点它只发 `tray-hud-toggle`，主窗口的挂件桥翻转 `codex_hud_enabled` 并落盘，窗口随之显示/销毁；勾选态再由 `desko_hud_set_tray` 回写。建菜单时先读一次设置真值当首帧，不等解锁后的回写。应用锁定时挂件桥不监听，此时点托盘是安全的空操作——锁屏不该把额度摆上桌面。
+- **托盘开关**：系统托盘菜单里的「桌面额度挂件」勾选项与设置页那颗开关同源。点它只发 `tray-hud-toggle`，主窗口的挂件桥翻转 `codex_hud_enabled` 并落盘，窗口随之显示/销毁；勾选态再由 `desko_hud_set_tray` 回写。建菜单时先读一次设置真值当首帧，不等解锁后的回写。应用锁定时挂件桥仍在监听，点托盘照样开关挂件；关掉即销毁窗口并停掉锁定轮询（见 24 号文档）。
 - **不做右键**：第九轮删掉。收起态只有 136×74，右键既没有可见菜单、又和「点角色钉住」抢同一颗指针，隐藏改由托盘与设置页承担。
 - **Alt+F4 / 系统关闭请求**：隐藏挂件并把 `codex_hud_enabled` 置 false（设置里的开关同步关），由窗口 `CloseRequested` 拦截后发 `codex-hud:request-close`；不销毁后假装还在。
 - **不做双击**：双击会连触两次展开/收起，没有额外语义；也不做「双击隐藏」。
@@ -414,7 +416,7 @@ interface CodexHudState {
 - **今日用量**：新增 `usageToday` ref 与 `loadTodayUsage()`，10 分钟缓存。优先复用 `usageWindowCache.get('today')`（用量页刚扫过就直接用）；缓存新鲜就不重扫；`usageBusy` 时复用缓存，绝不并发起第二份扫描。HUD 激活时先拉一次，之后独立 10 分钟 tick。
 - **进页/激活首刷**：复用 `refreshQuotasOnEnter()` 的 60s 闸门（`codexState.ts:177-181`），HUD 激活时在账号列表就绪后静默补一次配额；`quotaRefreshMinutes === 0` 时不打网络，只显示库里的缓存，设置页给 warning。
 - **主窗口隐藏时的节流**：定时器住在主窗口 WebView；主窗口收进托盘后 Chromium 可能把 10 分钟 tick 推迟到分钟级。接受这个代价，不为此把主窗口设成 `backgroundThrottling: disabled`，也不引入 Rust 侧配额定时器（会复制一套 codex-core 调用）。挂件显示的额度最多晚一分钟，可接受。
-- **锁定时**：HUD 失活 → release 两个 ticker、停止今日扫描；解锁后重新 acquire 并立即刷一轮。
+- **锁定时**：HUD 保留，普通 ticker 仍释放；改由锁定 ticker 按同一间隔（0=关）调 `desko_hud_refresh_locked` 刷新当前账号与今日用量，解锁后停锁定 ticker、重新 acquire 并立即刷一轮。见 24 号文档。
 
 ### 5.3 窗口
 
@@ -454,14 +456,14 @@ interface CodexHudState {
 | hud → main | `codex-hud:request-close` | 窗口关闭请求（Alt+F4），主窗口落 `enabled=false` |
 | tray → main | `tray-hud-toggle` | 托盘勾选项被点：只发意图，翻转与落盘由挂件桥做 |
 | main → rust | `desko_hud_show` / `desko_hud_hide` / `desko_hud_destroy` | 窗口生命周期 |
-| hud → rust | `desko_hud_reveal` | 字体与两帧绘制落定后 show；锁态下拒绝显示 |
+| hud → rust | `desko_hud_reveal` | 字体与两帧绘制落定后 show；锁定态同样显示（数据走只读刷新，24 号文档） |
 | main → rust | `desko_hud_set_tray` | 把 `codex_hud_enabled` 的最新值回写到托盘勾选项（第九轮） |
 | hud → rust | `desko_hud_save_position` | 防抖保存物理位置 |
 | hud → rust | `desko_hud_open_codex` | 显示主窗口并跳到账号页 |
 | hud → rust | `desko_hud_set_expanded` | 展开/收起：只把窗口高度换成 136×144 / 136×74，坐标不动；底边余量由 `reserve_height` 在落位与拖动钳制时预留 |
 | rust → main | `codex-hud:open` | 主窗口收到后 `router.push('/codex')` + 请求账号页签 |
 
-- 命令统一用 `desko_hud_*`，不要用 `codex_hud_*`：后者会被 `is_codex_command` 的 `codex_` 前缀命中（`main.rs:74-87`），锁定/关闭时反而被授权闸门挡住；这些命令只做窗口控制，不返回凭据或用量。
+- 命令统一用 `desko_hud_*`，不要用 `codex_hud_*`：后者会被 `is_codex_command` 的 `codex_` 前缀命中（`main.rs:74-87`），锁定/关闭时反而被授权闸门挡住。窗口命令只做窗口控制；唯一的数据命令是 `desko_hud_refresh_locked`，锁定态只回额度/今日用量的渲染子集，不含账号、邮箱或凭据（见 24 号文档）。
 - 首次显示握手：主窗口先注册监听 → 创建隐藏窗口 → HUD `ready` → 主窗口推 `state` → HUD 推完首帧后 show；`state` 需缓存最后一份，后续更新直接推。今日扫描可以晚到，先显示账号/额度，`today` 到位再推一次。
 - 新增 `src-tauri/capabilities/hud.json`：`windows: ["codex-hud"]`，权限 `core:default` + `core:window:allow-start-dragging`；不需要 shell/dialog/fs。
 - Vite 多页：根目录加 `hud.html`，`vite.config.ts` 的 `build.rollupOptions.input` 加 `hud`；`src/hud.ts` 只挂 Vue + HUD 组件，不装 Pinia/router。
@@ -473,20 +475,20 @@ interface CodexHudState {
 | 时刻 | 行为 |
 |---|---|
 | 启动，已解锁，开关开，模块开 | 加载设置 → 账号/额度 → 创建隐藏 HUD → 推首帧 → show；今日扫描后台补 |
-| 启动，锁屏 | 不创建；若上一次留下的窗口还在（例如页面重载），先兜底 hide，再等解锁走上一行 |
-| 锁定 | 立即 hide（先于清密钥），release ticker/今日扫描；HUD 数据不留在屏幕上 |
-| 解锁 | 重新加载账号/额度（不清空设置），窗口缩回收起态，推新快照后 show |
-| 开关关 | 立即 hide + destroy，release |
-| Codex 模块关 | 立即 hide + destroy，release；模块再开时按开关恢复 |
+| 启动，锁屏 | 按开关创建并显示；首轮数据回来前占位「应用已锁定」，随后只读刷新当前账号与今日用量（24 号文档） |
+| 锁定 | 窗口保留（先于清密钥）；普通 ticker/今日扫描释放，启动锁定 ticker：立即调 `desko_hud_refresh_locked`，之后按配额自动刷新间隔轮询；0=不联网 |
+| 解锁 | 停锁定 ticker；重新加载账号/额度（不清空设置），推新快照；窗口已在则不重建 |
+| 开关关 | 立即 hide + destroy，release，停锁定 ticker |
+| Codex 模块关 | 立即 hide + destroy，release，停锁定 ticker；模块再开时按开关恢复 |
 | 主窗口收进托盘 | HUD 保持显示；定时器允许被 WebView 节流 |
 | 皮肤/主题/强调色变化 | 只推 `state`，不重建窗口、不抢焦点 |
 | Alt+F4 / 系统关闭 | hide，`codex_hud_enabled=false`，设置开关与托盘勾选同步关 |
 | 托盘勾选项 | 翻转 `codex_hud_enabled`（与设置页同一落盘路径），窗口随之显示/销毁 |
 | 应用退出 | 窗口随进程销毁 |
 
-实现上，`App.vue` 在解锁/启动完成后 `activateCodexHudBridge()`，锁定流程一开始 `deactivateCodexHudBridge()`；bridge 监听 `moduleFlags.codex` 和 `hudEnabled`，自己负责 show/destroy。这样模块重开也能恢复，不必等重启。
+实现上，`App.vue` 在解锁/启动完成后 `activateCodexHudBridge()`；锁定流程一开始 `suspendCodexHudData()`（保留窗口、切到锁定 ticker），退出或页面卸载才 `deactivateCodexHudBridge()`。bridge 监听 `moduleFlags.codex` 和 `hudEnabled`，自己负责 show/destroy。这样模块重开也能恢复，不必等重启。
 
-窗口活在 Rust 侧，页面重载（开发期 HMR 整页刷新也算）会让主窗口回到锁定态而挂件仍带着旧数据可见，所以 `checkInitialized()` 判为非解锁时立即 `hideStaleHud()`。同理，`loadHudSettings()` 读回带版本闸门：读盘期间用户点过开关（`saveHudEnabled`/`saveHudSkin` 推进版本）就丢弃这次旧值，否则慢一步的读回会把刚关掉的挂件重新点亮。
+窗口活在 Rust 侧，页面重载（开发期 HMR 整页刷新也算）会让主窗口回到锁定态而挂件仍可见；启动判定为非解锁时走 `activateCodexHudBridge(false)`，窗口按开关保留并只读刷新。同理，`loadHudSettings()` 读回带版本闸门：读盘期间用户点过开关（`saveHudEnabled`/`saveHudSkin` 推进版本）就丢弃这次旧值，否则慢一步的读回会把刚关掉的挂件重新点亮。
 
 ### 5.6 改动清单
 
@@ -526,10 +528,10 @@ interface CodexHudState {
    - 默认 136×74 只露角色；鼠标停在角色上展开到 136×144 且主窗口不动；移开鼠标收起；点角色钉住后移开不收起，再点解钉；面板不滑入、不淡入。
    - 展开/收起全程角色的屏幕坐标不变（同一位置反复 hover 十次，窗口 `outer_position` 不得漂移）；贴在屏幕底边时面板完整可见。
    - 全新档案走完首启两屏后，直接在设置里打开开关就要能出窗：这条覆盖 `bootModules` 是否真的在首启链路里跑过。
-   - 点面板打开账号页（在用量页时也切回账号），挂件同时收起解钉；拖动跟手且拖动过程中不展开；右键不再有隐藏动作（窗口保持显示、开关不变）；Alt+F4 隐藏且开关同步关、托盘勾选同步取消；双击没有额外动作。第九轮原生取证：真指针右键与派发 `contextmenu` 两次都是 `visible=true setting=true`，且 `invoke('desko_hud_request_close')` 返回 `Command ... not found`（命令确实从后端摘掉）。
-   - 托盘「桌面额度挂件」勾选项：点一下 → `codex_hud_enabled` 落盘取反、窗口出现/销毁、设置页那颗开关同步；勾选态跟着设置走，锁屏隐藏期间勾选不得被取消。第九轮原生取证（隔离档案 `com.desko.hudtest`，事件用 `emit_to` 模拟托盘点击）：`set_tray ok` → 点一下 `setting=false visible="none"` → 再点 `setting=true visible=true`；锁定后点托盘 `setting=true visible=false` 一字不变（挂件桥未激活＝空操作）；重启到锁屏时建菜单读回的勾选态为 `true`（临时 `eprintln` 取证后已删）。
+   - 点面板打开账号页（在用量页时也切回账号），挂件同时收起解钉；拖动跟手且拖动过程中不展开；右键不再有隐藏动作（窗口保持显示、开关不变）；Alt+F4 隐藏且开关同步关、托盘勾选同步取消；双击没有额外动作。第九轮原生取证：真指针右键与派发 `contextmenu` 两次都是 `visible=true setting=true`，且 `invoke('desko_hud_request_close')` 返回 `Command ... not found`（命令确实从后端摘掉）。（右键菜单已被 23 号轮重做：恢复「挂件设置… / 隐藏挂件」两项，以 23 号文档 §2.8 为准。）
+   - 托盘「桌面额度挂件」勾选项：点一下 → `codex_hud_enabled` 落盘取反、窗口出现/销毁、设置页那颗开关同步；勾选态跟着设置走，锁屏隐藏期间勾选不得被取消。第九轮原生取证（隔离档案 `com.desko.hudtest`，事件用 `emit_to` 模拟托盘点击）：`set_tray ok` → 点一下 `setting=false visible="none"` → 再点 `setting=true visible=true`；重启到锁屏时建菜单读回的勾选态为 `true`（临时 `eprintln` 取证后已删）。锁定后点托盘仍能开关：关→窗口销毁并停锁定轮询，开→重建并立即刷新（24 号文档；旧「锁定空操作」取证作废）。
    - 默认右下角：角色距底边 24px + 70px 面板预留，即窗口顶边距底边 168px；往下拖会在预留位停住（invisible floor，角色不会跑到面板放不下的高度）；拖到副屏、重启、拔屏后位置仍在 work area 内；100%/125%/150% 缩放。
-   - 锁定立即消失，解锁恢复（收起态）；Codex 模块关闭销毁，重开恢复；退出无残留窗口。
+   - 锁定后窗口保留并继续刷新（立即一轮 + 按配额自动刷新间隔轮询），解锁后恢复常规刷新；额度自动刷新为 0 时锁定不联网。旧「锁定立即消失」验收随 24 号文档作废。
    - 主题/强调色切换立即生效；低额度 9% 珊瑚色 + `!`；无账号/待授权/API Key/无额度/刷新失败五种占位都能画。
    - 动作（原生 `getComputedStyle` / `getAnimations` 取证）：桌面窗口收起态 `.figure` = 呼吸（企鹅 waddle、蜗牛 4.6s）、`.eyes` = 眨眼、`.ear-l/.ear-r` = 耳摆、`.ear-flick` = 抽动、`.act` = none；hover 展开瞬间 `.act` 出现 `hud-hop`，点角色出现 `poke` 且 `.eyes` 从 `hud-blink` 换成 `hud-wink`；设置页三张预览 `idle=true / react=false`，`.figure` 与 `.eyes` 都有动画名，`.act` 恒为 none。9s 采样至少各命中一次：眨眼时眼睛高度压到 0.11px 级、`.ear-flick` 转角到 6.9°（探头要读 `.ear-flick`，读 `.ear-l` 只会量到 ≤2.8° 的耳摆，会把抽动误判成「没动」）；系统开启「减少动画效果」后常驻微动、触发动作与招牌动作全部归零（JS 根本不放 `mv-*` class，CSS 另收 `.mv-fig` / `.mv-body` 的 transition），但巡游的 lane 与落脚照旧——那颗是「桌面走动」用户开关，不在这个偏好里。
    - 巡游（原生 14s 采样 + 开关走真设置页）：窗口 `outer_position` 的 x 在锚点 ±48px 内逐拍移动、y 与尺寸恒为 136×74；整段期间 `codex_hud_position` 一字不变；指针停在角色上（展开）时 6 次采样同一个 x；在设置页点「桌面走动」关掉 → 窗口被送回锚点并停住（采样同一个 x 且等于落盘 x），再打开 → 恢复走动。缺 `core:window:allow-set-position` 时这套会「单测全绿、窗口一动不动」，capability 改动必须重编才生效。
@@ -564,7 +566,7 @@ interface CodexHudState {
 | 低额度阈值 | **主额度 0–9%**，珊瑚色 + `!` | 与配额预警的 20% 阈值解耦；角色是视觉提示，不抢 toast 的语义 |
 | 点击 / 拖动 | **左键角色钉住/解钉、左键面板打开账号页；>4px 才拖动** | 不做双击；悬停已经承担「看一眼」，点击只负责把它留下来 |
 | 隐藏方式 | **托盘勾选项 / Alt+F4 / 设置开关**，无关闭钮、无右键 | 收起只有 136×74，没有位置放关闭钮；右键在第九轮被取消——没有可见菜单，还和「点角色钉住」抢同一颗指针 |
-| 锁定 | **立即隐藏，解锁恢复** | 锁屏不展示任何用量 |
+| 锁定 | **保留窗口并继续刷新当前账号额度与今日用量**（24 号文档） | 用户要求锁定后挂件数据也要更新；锁屏只拿渲染聚合值，不拿账号或凭据 |
 | 主窗口隐藏 | **HUD 继续显示** | 桌面常驻是需求本身 |
 | 刷新为 0 | **尊重设置，不偷偷联网**，设置页 warning | 用户关自动刷新就应该真的关 |
 | 今日刷新 | **10 分钟本地扫描缓存** | 与配额网络解耦；不并发扫 |

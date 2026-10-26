@@ -1,3 +1,8 @@
+use chrono::{Duration, Local, TimeZone};
+use codex_core::models::codex::{
+    CodexAccount, CodexAuthMode, CodexQuota, CodexQuotaErrorInfo,
+};
+use codex_core::modules::{codex_account, codex_quota, codex_session_manager};
 use serde::{Deserialize, Serialize};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -16,6 +21,7 @@ const HUD_EXPANDED_HEIGHT: f64 = 144.0;
 const HUD_MARGIN: i32 = 24;
 const POSITION_KEY: &str = "codex_hud_position";
 const MENU_SETTINGS: &str = "hud-settings";
+const MENU_HIDE: &str = "hud-hide";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 struct HudPosition {
@@ -208,6 +214,7 @@ fn create_hud_window<R: Runtime>(
             }
             let _ = app_for_menu.emit_to(MAIN_LABEL, "codex-hud:open-settings", ());
         }
+        MENU_HIDE => dismiss_hud(&app_for_menu),
         _ => {}
     });
 
@@ -337,6 +344,171 @@ pub async fn desko_hud_context_menu(app: AppHandle) -> Result<(), String> {
     };
     let settings = MenuItem::with_id(&window, MENU_SETTINGS, "挂件设置…", true, None::<&str>)
         .map_err(|err| err.to_string())?;
-    let menu = Menu::with_items(&window, &[&settings]).map_err(|err| err.to_string())?;
+    let hide = MenuItem::with_id(&window, MENU_HIDE, "隐藏挂件", true, None::<&str>)
+        .map_err(|err| err.to_string())?;
+    let menu = Menu::with_items(&window, &[&settings, &hide]).map_err(|err| err.to_string())?;
     window.popup_menu(&menu).map_err(|err| err.to_string())
+}
+
+/// 锁屏时挂件仍要更新，但主窗口拿不到 master key。这里只放行渲染需要的聚合值：
+/// 账号详情本来就由机器本地密钥加密，后端不需要口令也能读。
+fn authorize_locked_hud<R: Runtime>(app: &AppHandle<R>, state: &AppState) -> Result<(), String> {
+    if app.get_webview_window(HUD_LABEL).is_none() {
+        return Err("挂件窗口不存在".into());
+    }
+    let db = state.db.lock().map_err(|_| "读取挂件设置失败".to_string())?;
+    if db.get_meta("codex_enabled").ok().flatten().as_deref() != Some("true") {
+        return Err("Codex 模块未启用".into());
+    }
+    if db.get_meta("codex_hud_enabled").ok().flatten().as_deref() == Some("false") {
+        return Err("桌面挂件已关闭".into());
+    }
+    Ok(())
+}
+
+/// 本地零点。部分时区零点跳时，从当天第一个有效分钟起算，和用量扫描的口径一致。
+fn local_day_start(now: chrono::DateTime<Local>) -> Option<i64> {
+    let midnight = now.date_naive().and_hms_opt(0, 0, 0)?;
+    (0..1440)
+        .find_map(|minute| {
+            Local
+                .from_local_datetime(&(midnight + Duration::minutes(minute)))
+                .earliest()
+        })
+        .map(|value| value.timestamp())
+}
+
+fn locked_today(report: codex_session_manager::CodexSessionUsageReport) -> HudLockedToday {
+    HudLockedToday {
+        tokens: report.totals.total_tokens,
+        cost_usd: report.totals.estimated_cost_usd,
+    }
+}
+
+/// 只留挂件渲染要用的字段；token、邮箱、API Key 在这个结构里不存在。
+fn sanitize_locked_account(account: &CodexAccount) -> HudLockedAccount {
+    HudLockedAccount {
+        auth_mode: account.auth_mode.clone(),
+        authorization_status: account.authorization_status.clone(),
+        quota: account.quota.clone(),
+        quota_error: account.quota_error.clone(),
+        usage_updated_at: account.usage_updated_at,
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HudLockedPayload {
+    account: Option<HudLockedAccount>,
+    today: Option<HudLockedToday>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HudLockedAccount {
+    auth_mode: CodexAuthMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    authorization_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quota: Option<CodexQuota>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quota_error: Option<CodexQuotaErrorInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usage_updated_at: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HudLockedToday {
+    tokens: u64,
+    cost_usd: Option<f64>,
+}
+
+/// 锁屏挂件的一轮刷新：当前账号额度 + 本机今日用量。
+/// 不跑自动切号、不更新托盘、不发预警；锁屏只负责把数摆出来。
+#[tauri::command]
+pub async fn desko_hud_refresh_locked(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<HudLockedPayload, String> {
+    authorize_locked_hud(&app, state.inner())?;
+
+    let now = Local::now();
+    let day_start = local_day_start(now).unwrap_or_else(|| now.timestamp().saturating_sub(86_400));
+    let day_end = now.timestamp().saturating_add(1);
+    let usage = tauri::async_runtime::spawn_blocking(move || {
+        codex_session_manager::query_session_usage(Some(day_start), Some(day_end))
+    });
+
+    let Some(account) = codex_account::get_current_account() else {
+        let today = usage.await.ok().and_then(|result| result.ok()).map(locked_today);
+        return Ok(HudLockedPayload { account: None, today });
+    };
+    let account_id = account.id.clone();
+    codex_quota::refresh_quotas_for_account_ids_in_background(
+        std::slice::from_ref(&account_id),
+        true,
+    )
+    .await?;
+    let latest = codex_account::load_account(&account_id).unwrap_or(account);
+    let today = usage.await.ok().and_then(|result| result.ok()).map(locked_today);
+
+    Ok(HudLockedPayload {
+        account: Some(sanitize_locked_account(&latest)),
+        today,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn locked_payload_only_exposes_render_fields() {
+        let payload = HudLockedPayload {
+            account: Some(HudLockedAccount {
+                auth_mode: CodexAuthMode::OAuth,
+                authorization_status: Some("ok".into()),
+                quota: None,
+                quota_error: None,
+                usage_updated_at: Some(1_700_000_000),
+            }),
+            today: Some(HudLockedToday {
+                tokens: 1234,
+                cost_usd: Some(0.25),
+            }),
+        };
+        let json = serde_json::to_value(payload).expect("serialize hud payload");
+        let account = json["account"].as_object().expect("account object");
+        for key in account.keys() {
+            assert!(
+                matches!(
+                    key.as_str(),
+                    "auth_mode"
+                        | "authorization_status"
+                        | "quota"
+                        | "quota_error"
+                        | "usage_updated_at"
+                ),
+                "unexpected account field: {key}"
+            );
+        }
+        assert!(!account.contains_key("id"));
+        assert!(!account.contains_key("email"));
+        assert!(!account.contains_key("tokens"));
+        assert!(!account.contains_key("openai_api_key"));
+        assert_eq!(account["auth_mode"], "oauth");
+        assert_eq!(json["today"]["tokens"], 1234);
+        assert_eq!(json["today"]["costUsd"], 0.25);
+    }
+
+    #[test]
+    fn local_day_start_is_today_midnight() {
+        let now = Local
+            .with_ymd_and_hms(2026, 10, 26, 15, 30, 0)
+            .single()
+            .expect("local datetime");
+        let start = local_day_start(now).expect("day start");
+        assert!(start <= now.timestamp());
+        assert!(now.timestamp() - start < 24 * 60 * 60 + 1);
+    }
 }

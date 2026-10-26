@@ -43,8 +43,8 @@
 - **时序**：`reveal` 后 3s 先表演一手（hello）；之后按 `[7, 11, 8, 14, 10]s` 的固定间隔轮转；每第 5 个场景换成打盹（`doze` 3.2s），打盹后安静 18s。
 - **不掷骰子**：间隔、动作池、打盹插入点全部用计数器轮转，第几秒放哪一手能数出来，单测才断言得动。
 - **闸门**：展开中、钉住中、指针在窗内、按下未起、正在拖动、减少动效、设置关闭、窗口未 reveal —— 不排新场景。场景进行中被打断时不强行掐断（最长 3.2s），但点角色和告警可以打断。
-- **计数器在 reveal 重置**：解锁重亮相、重开挂件、换皮肤都从第一手开始，不补演。
-- **窗口隐藏不排程**：`document.visibilityState === 'hidden'` 或未 reveal 时清掉场景计时器，省掉锁屏期间的无效计时。
+- **计数器在 reveal 重置**：重开挂件、换皮肤都从第一手开始，不补演。锁定不隐藏窗口（24 号文档），因此没有「解锁重亮相」这一拍。
+- **窗口隐藏不排程**：`document.visibilityState === 'hidden'` 或未 reveal 时清掉场景计时器，省掉窗口被隐藏（托盘关掉、模块关）期间的无效计时。
 
 ```
 reveal ─3s─▶ hello(1手) ─7~14s─▶ 场景 ─7~14s─▶ 场景 … 第5场=打盹(3.2s) ─18s─▶ …
@@ -167,7 +167,7 @@ reveal ─3s─▶ hello(1手) ─7~14s─▶ 场景 ─7~14s─▶ 场景 … �
    - 60s 采样 `outer_position` 一字不变；至少命中 5 手不同动作。
    - 点角色 6 次能看到该皮肤池内全部动作；告警仍只放一次。
    - 关闭「桌面小动作」后 30s 内不再出现 `mv-*`，呼吸/眨眼仍在；reduce 下全部归零。
-   - 悬停展开、点面板打开 Codex、拖动落盘、锁定隐藏/解锁恢复全部回归通过。
+   - 悬停展开、点面板打开 Codex、拖动落盘、锁定保留并继续刷新（24 号文档）全部回归通过。
    - 右键弹出两项原生菜单，无 WebView2 浏览器菜单；「挂件设置…」打开 `codex` 页签且 HUD 不消失；「隐藏挂件」后 `codex_hud_enabled=false`，设置页总开关与托盘勾选同步关闭。
    - 观察 CPU：生活场景不应比现有常驻微动带来可感知的额外占用；不再有每拍 `setPosition`。
 4. 视觉：先出 `.tmp/codex-hud-behavior-20261023/` 下的真 token 动态 mock（三款并排，可切换常驻 / 点击 / 告警 / 打盹），确认观感后再改码；实现完成后再出原生冻帧与 60s 采样。
@@ -197,7 +197,18 @@ reveal ─3s─▶ hello(1手) ─7~14s─▶ 场景 ─7~14s─▶ 场景 … �
 | §2.4 点角色 | 钉住 + 演下一手 | 顺带删掉 `poke` prop 与 `hud-wink` keyframes | 眨眼原本只有点角色一个触发者，改成演下一手后它是死代码 |
 | §2.2 换皮肤 | 计数归零 | 计数归零 **且** 重排首档 3s | 只归零的话，新皮肤会沿用旧池子排到一半的那一档，档期与手感都对不上 mock |
 | §2.2 告警 / 点击 | 优先于生活场景 | `playMove` 进门先 `stopScenes()` | 与 mock 对账查出的偏差：在排的那档不撤，会在告警演到一半时把它掐掉 |
+| §2.8 两项菜单 | 「挂件设置…」+「隐藏挂件」 | 初版只建了「挂件设置…」，`MENU_HIDE` 与路由缺失 | 2026-10-26 原机验收发现漏实现；已补第二项并复用 `dismiss_hud`，隔离档案复验两项均通过 |
 
 单测台另记一条：`vi.useFakeTimers()` 会接管 `requestAnimationFrame`，亮相的两帧桩必须打在它之后（`beforeEach` 里），否则 3s 首档的边界会被真帧时延糊掉。
 
-验收状态：`vue-tsc --noEmit` 0 error、`vitest run` 67 文件 784 例全绿、`cargo check --all-targets` 通过、`e2e/specs/codex-hud-settings.spec.ts` 4 例通过（含 `codex_hud_ambient` 持久化与读回）。§5.3 的原机项（60s `outer_position` 采样、右键两项原生菜单、`codex_hud_enabled` 收口）尚未跑，需要起 `tauri dev`。
+验收状态：`vue-tsc --noEmit` 0 error、`vitest run` 67 文件 784 例全绿、`cargo check --all-targets` 通过、`e2e/specs/codex-hud-settings.spec.ts` 4 例通过（含 `codex_hud_ambient` 持久化与读回）。§5.3 的原机项已于 2026-10-26 补齐，见下。
+
+### 2026-10-26 原机验收（补 §5.3）
+
+- 60s 采样（兔子皮，`outer_position` 61 次）：左上角恒为 `1717,370`，收起态尺寸恒为 `136×74`；中途指针停在角色上展开一次，只向下长到 144（底边 444→514），左上角不动。5 手场景：`waddle` 2.0s、`flap` 10.8s、`peek` 23.4s、`waddle` 37.6s、`doze` 53.4s；第 5 手打盹与 `HUD_DOZE_EVERY` 一致。原文「至少 5 手不同动作」按场景计——单皮肤生活池只有 3 个动作，60s 内三者全部出现，第 5 手固定打盹。
+- 点角色 6 次：企鹅池 `peek` / `waddle` / `flap` 三个动作全部命中。
+- 「桌面小动作」关闭后 31s 采样：`mv-*` 0 次、class 恒为 `sprite idle react`；`.figure` 的呼吸动画仍在；开关已恢复 `true`。
+- 右键（真指针）：弹出两项原生菜单「挂件设置…」「隐藏挂件」，无 WebView2 默认菜单（`desko_hud_context_menu` 走 `popup_menu`）。「挂件设置…」→ 主窗聚焦并打开设置 `Codex` 页签，HUD 保持可见；「隐藏挂件」→ `codex_hud_enabled=false`、HUD 窗口销毁、设置页总开关同步关。Alt+F4 路径（`WM_CLOSE`）同样收口为 `false` + 销毁。
+- CPU：环境开启生活场景期间，HUD 渲染进程 30s `TaskDuration` 增量 0.17%（`ScriptDuration` 0.03%、`LayoutDuration` 0），无每拍 `setPosition`（生活场景单测已锁）。
+- 复验门禁：`vue-tsc --noEmit` 0 error、`vitest run` 69 文件 824 例全绿、Playwright 681 例（679 直接通过 + 2 例首跑 flaky 重试过，单独复跑 6 例全过）、`cargo check --all-targets` 通过。
+- 取证方式：前三项在运行中的 `tauri dev` 上做；右键两项菜单用隔离档案 `com.desko.hudtest` + `tauri build --no-bundle --config` 重编后复验（避免重启主实例）。托盘勾选同步由 `syncTrayItem` 的 watch 覆盖，未单独读回托盘菜单。

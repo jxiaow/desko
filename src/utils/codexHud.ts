@@ -1,5 +1,9 @@
-import type { CodexAccount } from '../services/api/codex'
-import { codexAdditionalQuotaWindows, codexCredits, codexQuotaWindows } from './codexQuota'
+import {
+  codexAdditionalQuotaWindows,
+  codexCredits,
+  codexQuotaWindows,
+  type CodexQuotaAccount,
+} from './codexQuota'
 
 export type CodexHudSkin = 'bunny' | 'penguin' | 'snail'
 
@@ -29,8 +33,6 @@ export interface CodexHudEventPayload {
   ambient?: boolean
   /** 固定展开由设置控制，重建窗口后仍保留。 */
   pinned?: boolean
-  /** 锁定时展示最近一次快照，不继续读取账号数据。 */
-  locked?: boolean
 }
 
 export const HUD_SKINS = [
@@ -100,7 +102,7 @@ function hudMinutesLabel(minutes: number | null | undefined): string {
 }
 
 export interface CodexHudSource {
-  account: CodexAccount | null
+  account: CodexQuotaAccount | null
   skin: CodexHudSkin
   theme: CodexHudState['theme']
   today: CodexHudState['today']
@@ -180,7 +182,7 @@ export function buildCodexHudSnapshot(source: CodexHudSource): CodexHudState {
 }
 
 /** 签上只有两个字宽的位置；id 是稳定来源，不去解析中文 label */
-export function hudQuotaLabel(id: string, account: CodexAccount): string {
+export function hudQuotaLabel(id: string, account: CodexQuotaAccount): string {
   if (id.startsWith('additional:')) return '额外'
   if (id === 'credits') return 'Credits'
   if (account.auth_mode === 'apikey') return '额度'

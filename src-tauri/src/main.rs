@@ -423,6 +423,7 @@ fn main() {
             commands::hud::desko_hud_set_expanded,
             commands::hud::desko_hud_save_position,
             commands::hud::desko_hud_context_menu,
+            commands::hud::desko_hud_refresh_locked,
             commands::url_paths::list_url_paths,
             commands::url_paths::create_url_path,
             commands::url_paths::update_url_path,

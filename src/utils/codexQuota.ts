@@ -1,5 +1,11 @@
 import type { CodexAccount, CodexQuota } from '../services/api/codex'
 
+/** 额度映射只读这几项；锁屏命令只回这个子集，不回账号与凭据。 */
+export type CodexQuotaAccount = Pick<
+  CodexAccount,
+  'auth_mode' | 'authorization_status' | 'quota' | 'quota_error' | 'usage_updated_at'
+>
+
 export interface CodexQuotaWindow {
   id: string
   label: string
@@ -60,7 +66,7 @@ function hasWindow(quota: CodexQuota, kind: 'hourly' | 'weekly'): boolean {
   return true
 }
 
-export function codexQuotaWindows(account: CodexAccount): CodexQuotaWindow[] {
+export function codexQuotaWindows(account: CodexQuotaAccount): CodexQuotaWindow[] {
   const quota = account.quota
   if (!quota || account.authorization_status?.trim().toLowerCase() === 'pending') return []
   const windows: CodexQuotaWindow[] = []
@@ -86,7 +92,7 @@ export function codexQuotaWindows(account: CodexAccount): CodexQuotaWindow[] {
   return windows
 }
 
-export function codexAdditionalQuotaWindows(account: CodexAccount): CodexQuotaWindow[] {
+export function codexAdditionalQuotaWindows(account: CodexQuotaAccount): CodexQuotaWindow[] {
   const limits = record(account.quota?.raw_data)?.additional_rate_limits
   if (account.auth_mode === 'apikey' || account.authorization_status?.trim().toLowerCase() === 'pending' || !Array.isArray(limits)) return []
   const windows: CodexQuotaWindow[] = []
@@ -113,7 +119,7 @@ export function codexAdditionalQuotaWindows(account: CodexAccount): CodexQuotaWi
   return windows
 }
 
-export function codexCredits(account: CodexAccount): CodexCredits | null {
+export function codexCredits(account: CodexQuotaAccount): CodexCredits | null {
   if (account.auth_mode === 'apikey' || account.authorization_status?.trim().toLowerCase() === 'pending') return null
   const raw = record(account.quota?.raw_data)
   const limit = record(record(raw?.spend_control)?.individual_limit)
@@ -134,7 +140,7 @@ export function codexCredits(account: CodexAccount): CodexCredits | null {
   return unlimited || remaining !== null ? { remaining, total: null, percentage: null, unlimited, resetTime: null, monthly: false } : null
 }
 
-export function codexQuotaRemaining(account: CodexAccount): number | null {
+export function codexQuotaRemaining(account: CodexQuotaAccount): number | null {
   const percentages = codexQuotaWindows(account).map(window => window.percentage)
   const credits = codexCredits(account)
   if (credits?.percentage !== null && credits?.percentage !== undefined) percentages.push(credits.percentage)

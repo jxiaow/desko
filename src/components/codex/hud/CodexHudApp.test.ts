@@ -257,13 +257,14 @@ describe('挂件展开手势', () => {
     expect(expandedCalls()).toEqual([true])
   })
 
-  it('锁定后仍显示额度并标明解锁后更新', async () => {
+  it('锁定后快照照常显示额度与今日成本，不再提示解锁后更新', async () => {
     wrapper = await mountRevealed()
-    push({ state, reveal: false, pinned: true, locked: true })
+    push({ state, reveal: false, pinned: true })
     await advance(0)
     expect(wrapper.get('.hud-row1').text()).toContain('68%')
-    expect(wrapper.get('.hud-row3').text()).toContain('解锁后更新')
-    expect(wrapper.attributes('aria-label')).toContain('应用已锁定')
+    expect(wrapper.get('.hud-row3').text()).toContain('≈$12.34')
+    expect(wrapper.text()).not.toContain('解锁后更新')
+    expect(wrapper.attributes('aria-label')).not.toContain('应用已锁定')
   })
 
   it('点面板打开 Codex 并收起未固定的面板', async () => {

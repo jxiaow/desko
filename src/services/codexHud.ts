@@ -14,6 +14,7 @@ import {
   loaded,
   usageToday,
   loadQuotaSettings,
+  quotaRefreshMinutes,
   loadTodayUsage,
   refreshAccounts,
   refreshQuotasOnEnter,
@@ -28,6 +29,8 @@ import {
   type CodexHudSkin,
   type CodexHudState,
 } from '../utils/codexHud'
+import type { CodexQuotaAccount } from '../utils/codexQuota'
+import { localDayKey } from '../utils/codexUsage'
 import { moduleFlags } from '../modules/state'
 import { useToastStore } from '../stores/toast'
 
@@ -111,26 +114,41 @@ export async function saveHudSkin(skin: CodexHudSkin): Promise<void> {
   }
 }
 
+function hudTheme(): CodexHudState['theme'] {
+  return {
+    theme: appearance.theme,
+    base: polarityOf(appearance.theme),
+    accent: appearance.accent,
+    atmosphere: appearance.backgroundAtmosphere,
+  }
+}
+
 export function buildCodexHudState(): CodexHudState {
   return buildCodexHudSnapshot({
     account: currentAccount.value,
     skin: hudSkin.value,
-    theme: {
-      theme: appearance.theme,
-      base: polarityOf(appearance.theme),
-      accent: appearance.accent,
-      atmosphere: appearance.backgroundAtmosphere,
-    },
+    theme: hudTheme(),
     today: usageToday.value
       ? { tokens: usageToday.value.totalTokens, costUsd: usageToday.value.estimatedCostUsd }
       : null,
   })
 }
 
+interface LockedHudPayload {
+  account: CodexQuotaAccount | null
+  today: { tokens: number; costUsd: number | null } | null
+}
+
 let active = false
 let bridgeReady: Promise<void> | null = null
 let dataActive = false
 let lockedSnapshot: CodexHudState | null = null
+let lockedTodayDay = ''
+let lockedTimer: ReturnType<typeof setInterval> | null = null
+let lockedTask: Promise<void> | null = null
+let lockedStarting = false
+/** 解锁、隐藏时递增，晚到的锁定刷新结果不得盖到新快照上。 */
+let lockedEpoch = 0
 let hudWanted = false
 let hudReady = false
 let dataTask: Promise<void> | null = null
@@ -151,16 +169,77 @@ async function pushState(reveal = false): Promise<void> {
       state: dataActive ? buildCodexHudState() : {
         ...(lockedSnapshot ?? { ...buildCodexHudState(), placeholder: '应用已锁定' }),
         skin: hudSkin.value,
-        theme: buildCodexHudState().theme,
+        theme: hudTheme(),
       },
       reveal,
       ambient: hudAmbient.value,
       pinned: hudPinned.value,
-      locked: !dataActive,
     } satisfies CodexHudEventPayload)
   } catch {
     hudReady = false
   }
+}
+
+/** 跨过零点先扔掉昨天的今日用量：新数字没回来之前宁可不显示。 */
+function rollLockedToday(): void {
+  const day = localDayKey(new Date())
+  if (lockedTodayDay === day) return
+  lockedTodayDay = day
+  if (lockedSnapshot) lockedSnapshot = { ...lockedSnapshot, today: null }
+}
+
+async function refreshLockedData(): Promise<void> {
+  if (lockedTask || dataActive) return
+  if (!active || !hudWanted || !hudReady) return
+  const epoch = lockedEpoch
+  const task = (async () => {
+    rollLockedToday()
+    try {
+      const payload = await invoke<LockedHudPayload>('desko_hud_refresh_locked')
+      if (epoch !== lockedEpoch || dataActive || !active) return
+      lockedSnapshot = buildCodexHudSnapshot({
+        account: payload.account,
+        skin: hudSkin.value,
+        theme: hudTheme(),
+        today: payload.today ?? lockedSnapshot?.today ?? null,
+      })
+      if (payload.today) lockedTodayDay = localDayKey(new Date())
+      await pushState()
+    } catch {
+      // 一次网络失败保留上一份快照；额度错误已经落在 quota_error 里。
+      if (epoch === lockedEpoch && !dataActive) await pushState()
+    }
+  })()
+  lockedTask = task
+  try {
+    await task
+  } finally {
+    if (lockedTask === task) lockedTask = null
+  }
+}
+
+/** 锁定态只轮询当前账号额度与本机今日用量；节奏沿用配额自动刷新设置，0=不联网。 */
+async function startLockedRefresh(): Promise<void> {
+  if (lockedStarting || lockedTimer) return
+  if (!active || !hudWanted || !hudReady || dataActive || !isTauriRuntime()) return
+  lockedStarting = true
+  try {
+    await loadQuotaSettings()
+  } finally {
+    lockedStarting = false
+  }
+  if (!active || !hudWanted || !hudReady || dataActive || lockedTimer) return
+  const minutes = quotaRefreshMinutes.value
+  if (minutes <= 0) return
+  void refreshLockedData()
+  lockedTimer = setInterval(() => { void refreshLockedData() }, minutes * 60_000)
+}
+
+function stopLockedRefresh(): void {
+  lockedEpoch++
+  if (lockedTimer) clearInterval(lockedTimer)
+  lockedTimer = null
+  lockedTask = null
 }
 
 async function ensureHudData(): Promise<void> {
@@ -195,9 +274,11 @@ async function showHud(): Promise<void> {
     await dataTask.catch(() => {})
     await pushState(true)
   }
+  if (!dataActive) void startLockedRefresh()
 }
 
 async function hideHud(force = false): Promise<void> {
+  stopLockedRefresh()
   releaseQuotaTicker('codex-hud')
   if (!hudWanted && !force) return
   hudWanted = false
@@ -225,17 +306,23 @@ async function onHudReady(): Promise<void> {
   hudReady = true
   if (dataTask) await dataTask.catch(() => {})
   await pushState(true)
+  if (!dataActive) void startLockedRefresh()
 }
 
-/** 收回账号会话前保留展示快照；锁定期间不读取账号或启动配额轮询。 */
+/** 收回账号会话前保留展示快照；锁定期间只走只读聚合命令继续刷新。 */
 export function suspendCodexHudData(): void {
-  if (dataActive) lockedSnapshot = buildCodexHudState()
+  if (dataActive) {
+    lockedSnapshot = buildCodexHudState()
+    lockedTodayDay = localDayKey(new Date())
+  }
   dataActive = false
   releaseQuotaTicker('codex-hud')
   void pushState()
+  void startLockedRefresh()
 }
 
 async function closeFromHud(): Promise<void> {
+  stopLockedRefresh()
   hudRevision++
   hudEnabled.value = false
   try {
@@ -265,7 +352,11 @@ async function toggleHudFromTray(): Promise<void> {
 export async function activateCodexHudBridge(unlocked = true): Promise<void> {
   if (!isTauriRuntime()) return
   dataActive = unlocked
-  if (unlocked) lockedSnapshot = null
+  if (unlocked) {
+    stopLockedRefresh()
+    lockedSnapshot = null
+    lockedTodayDay = ''
+  }
   if (active) {
     await bridgeReady
     if (!active) return
@@ -313,7 +404,9 @@ export async function deactivateCodexHudBridge(): Promise<void> {
   if (!active) return
   active = false
   dataActive = false
+  stopLockedRefresh()
   lockedSnapshot = null
+  lockedTodayDay = ''
   stopWantWatch?.()
   stopWantWatch = null
   stopStateWatch?.()
