@@ -75,6 +75,8 @@ function onDirectoryClick(event: MouseEvent) {
 .workspace-surface:has(> .fs) > :is(.workspace-main, .workspace-directory) { visibility: hidden; }
 .app-root.codex-layout:has(.workspace-surface > .fs) { --workspace-directory-offset: 0px; }
 .app-root.codex-layout:has(.workspace-surface > .fs) #workspace-page-toolbar > :not([data-workspace-toolbar="exclusive"]) { display: none; }
+/* 目录开关挂在窗口工具位，不属于页栏容器；全屏接管时同样要跟着原页面让位。 */
+.app-root.codex-layout:has(.workspace-surface > .fs) #workspace-directory-toggle { display: none; }
 .workspace-body { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .workspace-body > .main-content { flex: 1; min-width: 0; }
 /* 悬停沿用主题中性色，轻微改变卡面明暗；强调色留给选中、编辑和焦点。 */
