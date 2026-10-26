@@ -142,7 +142,7 @@ function trapFocus(event: KeyboardEvent) {
         <span class="kbd">Esc</span>
       </button>
       <span class="save-hint" :class="props.saveState">
-        {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '未保存') }}
+        {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '未保存') }}<template v-if="props.note && !viewMode"> · {{ wordCount(text) }} 字</template>
       </span>
 
       <!-- 阅读态的动作住在首栏右侧：粘性一行，滚到正文中段也够得着 -->
@@ -181,7 +181,8 @@ function trapFocus(event: KeyboardEvent) {
     <div ref="scrollRef" class="fs-scroll">
       <div class="fs-inner" :class="viewMode ? 'fs-doc' : 'fs-col'">
         <h1 v-if="viewMode && display.title" class="fs-title">{{ display.title }}</h1>
-        <div class="fs-meta">
+        <!-- 元信息只在阅读态占一行；书写面第一行直接是正文，元信息并进底栏 -->
+        <div v-if="viewMode" class="fs-meta">
           <span>{{ props.note ? `创建于 ${formatAbsTime(props.note.created_at)}` : '新小记' }}</span>
           <template v-if="edited && props.note">
             <span class="dotsep"></span>

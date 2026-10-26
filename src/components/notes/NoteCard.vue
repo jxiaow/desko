@@ -291,9 +291,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           >
             <AppIcon name="unarchive" :size="14" />
           </button>
-          <button class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
-            <AppIcon name="copy" :size="15" />
-          </button>
           <NoteMoreMenu
             :note="props.note"
             :mobile-actions="isWebRuntime()"
@@ -302,6 +299,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
             @toggle-pin="emit('togglePin')"
             @view="emit('view')"
             @edit="openEditor"
+            @copy="emit('copy')"
             @toggle-star="emit('toggleStar')"
             @toggle-archive="emit('toggleArchive')"
             @export="emit('export', $event)"
@@ -522,7 +520,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-title {
   flex: 1;
   min-width: 0;
-  font-size: var(--text-md);
+  font-size: var(--text-lg);
   font-weight: var(--weight-semibold);
   letter-spacing: normal;
   color: var(--text);

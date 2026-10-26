@@ -233,14 +233,15 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('[aria-label="展开目录"]')).toBeVisible()
   })
 
-  test('复制正文：卡头按钮出纯文本，菜单不再重复', async ({ page }) => {
+  test('复制正文：收进 ⋯ 菜单出纯文本，卡头动作排不再单列', async ({ page }) => {
     await gotoNotes(page)
     const m = memo(page, '第一条小记')
     await m.hover()
-    await m.getByRole('button', { name: '复制正文', exact: true }).click()
+    await expect(m.getByRole('button', { name: '复制正文', exact: true })).toHaveCount(0)
+    const menu = await noteMenu(page, m)
+    await menu.getByText('复制正文', { exact: true }).click()
     await expectToast(page, '小记已复制')
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('第一条小记：周会纪要与待办')
-    await expect((await noteMenu(page, m)).getByText('复制正文', { exact: true })).toHaveCount(0)
   })
 
   test('一键复制带链接的小记：地址跟着走，纯文本和 HTML 都在', async ({ page }) => {
@@ -249,7 +250,7 @@ test.describe('Notes 小记', () => {
     }, '/notes')
     const m = memo(page, 'GitLab 标题')
     await m.hover()
-    await m.getByRole('button', { name: '复制正文', exact: true }).click()
+    await (await noteMenu(page, m)).getByText('复制正文', { exact: true }).click()
     await expectToast(page, '小记已复制')
 
     expect(await page.evaluate(() => navigator.clipboard.readText()))
@@ -674,10 +675,10 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.composer')).toHaveCount(0)
     const archived = memo(page, '已经收走')
     await archived.hover()
-    // 归档视图的快捷排与「全部」同构五颗，被让位的开关与低频/危险动作都在 ⋯ 里
-    await expect(archived.locator('.memo-acts button')).toHaveCount(5)
+    // 归档视图的快捷排与「全部」同构四颗，复制与被让位的开关/低频/危险动作都在 ⋯ 里
+    await expect(archived.locator('.memo-acts button')).toHaveCount(4)
     await tipButton(archived, '更多操作').first().click()
-    await expect(page.locator('.popover .pop-item')).toHaveText(['收藏', '置顶', '导出', '加密', '删除'])
+    await expect(page.locator('.popover .pop-item')).toHaveText(['复制正文', '收藏', '置顶', '导出', '加密', '删除'])
     await page.keyboard.press('Escape')
     await expect(page.locator('.popover')).toHaveCount(0)
     await tipButton(archived, '取消归档，放回「全部」').click()
@@ -992,7 +993,7 @@ test.describe('Notes 小记', () => {
     // 锁着的条目可解锁或发起明文导出；加密动作仍在明文卡的 ⋯ 里
     await expect(sealed.locator('.memo-acts button')).toHaveCount(2)
     await expect(sealed.getByRole('button', { name: '导出', exact: true })).toHaveCount(1)
-    await expect(plain.locator('.memo-acts button')).toHaveCount(5)
+    await expect(plain.locator('.memo-acts button')).toHaveCount(4)
 
     // 首次加密就是立全库口令，只有这一次要输两格
     await (await noteMenu(page, plain)).locator('.pop-item:text-is("加密")').click()

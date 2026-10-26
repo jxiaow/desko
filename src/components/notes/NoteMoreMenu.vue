@@ -35,6 +35,7 @@ const emit = defineEmits<{
   delete: []
   view: []
   edit: []
+  copy: []
 }>()
 
 const trigger = ref<HTMLElement | null>(null)
@@ -95,6 +96,10 @@ const exec = (action: () => void) => {
       <button class="pop-item note-mobile-action" type="button" @click="exec(() => emit('edit'))"><AppIcon name="edit" :size="14" />编辑</button>
       <button v-if="!props.archivedView" class="pop-item note-mobile-action" type="button" @click="exec(() => emit('togglePin'))"><AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="14" />{{ props.note.pinned ? '取消置顶' : '置顶' }}</button>
     </template>
+    <!-- 复制只住在卡头菜单：全屏阅读头已有带文字的复制钮，同一动作不留两个入口 -->
+    <button v-if="props.variant === 'ib'" class="pop-item" type="button" @click="exec(() => emit('copy'))">
+      <AppIcon name="copy" :size="14" />复制正文
+    </button>
     <button class="pop-item" type="button" @click="exec(() => emit('toggleStar'))">
       <AppIcon name="star" :size="14" :filled="props.note.starred" />{{ props.note.starred ? '取消收藏' : '收藏' }}
     </button>
