@@ -121,10 +121,11 @@
   .app-root.web-runtime .batch-dock .dock-btn { min-height: 40px; }
   .app-root.web-runtime .archive-bar { height: auto; flex-wrap: wrap; padding-block: 10px; }
   .app-root.web-runtime .archive-bar .ab-sub { display: none; }
-  .app-root.web-runtime .fs-col,
   .app-root.web-runtime .fs-head,
-  .app-root.web-runtime .fs-scroll:has(.fs-doc) { padding-inline: 14px; }
+  .app-root.web-runtime .fs-scroll { padding-inline: 14px; }
+  /* 网页版纸面自带 16px 内衬，书写列补同一档，两态行长才一致 */
   .app-root.web-runtime .fs-doc { padding: 16px; }
+  .app-root.web-runtime .fs-col { padding-inline: 16px; }
   /* 首栏右侧的阅读态动作与退出钮一起抬到触摸档 */
   .app-root.web-runtime .fs-head .fs-exit,
   .app-root.web-runtime .fs-head .bar-btn { min-height: 40px; }

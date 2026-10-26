@@ -263,9 +263,10 @@ function trapFocus(event: KeyboardEvent) {
 
 .fs-col {
   width: 100%;
-  max-width: var(--fs-max);
+  /* 与阅读列同一个公式：书写看到多少字一行，提交后就是多少字一行 */
+  max-width: clamp(800px, 80%, var(--fs-max));
   margin: 0 auto;
-  padding-inline: var(--space-6);
+  padding-inline: 0;
 }
 /* 桌面操作并入 48px 通栏顶栏；浏览器内保留同档的页内操作行。 */
 .fs-head {
@@ -319,10 +320,9 @@ function trapFocus(event: KeyboardEvent) {
 }
 .fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.5; }
 
-.fs-scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable; min-height: 0; }
+/* 水平留白两态一致：阅读与书写之间只换内容，不换列位，否则切一次眼就得重找行首。 */
+.fs-scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable; min-height: 0; padding-inline: var(--workspace-gutter, var(--space-5)); }
 .fs-scroll-actions { position: relative; flex-shrink: 0; }
-/* 阅读列保留水平留白，窄窗也不贴住滚动条。 */
-.fs-scroll:has(.fs-doc) { padding-inline: var(--workspace-gutter, var(--space-5)); scrollbar-gutter: stable; }
 .fs-inner { padding-block: 12px 20px; }
 
 /* 阅读列直接落在工作区画布上，用行长和留白组织内容。 */
