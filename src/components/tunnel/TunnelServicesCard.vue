@@ -197,8 +197,8 @@ function remove(row: TunnelServiceRow) {
 <style scoped>
 .services .tn-head { height: auto; min-height: 88px; padding: 20px; gap: 16px; border-bottom: 0; }
 .section-heading { min-width: 0; }
-.section-heading h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: var(--text-xl); line-height: 26px; font-weight: 600; }
-.head-cnt { font-size: var(--text-sm); font-weight: 400; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.section-heading h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: var(--text-base); line-height: 20px; font-weight: 600; }
+.head-cnt { font-size: var(--text-xs); font-weight: 500; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .section-heading p { margin: 5px 0 0; font-size: var(--text-sm); font-weight: 400; line-height: 20px; color: var(--text-secondary); }
 .head-btn { margin-left: auto; flex-shrink: 0; height: 32px; font-size: var(--text-sm); }
 /* 4 tracks + 3 × 20px gaps + 2 × 20px padding = the full panel width. */

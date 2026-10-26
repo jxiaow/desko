@@ -339,7 +339,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .lan-page :is(h2, h3, p) { margin: 0; }
 .lan-page h2 { font-size: var(--text-sm); font-weight: 500; line-height: 20px; }
 /* 页级组标题与直连页同档：13/600 卡外，计数紧随 */
-.lan-page .panel-heading h2 { font-weight: 600; }
+.lan-page .panel-heading h2 { font-weight: 600; color: var(--text-secondary); }
 .lan-page h3 { font-size: var(--text-xs); font-weight: 400; line-height: 18px; }
 .lan-page .rcard { margin-bottom: 0; }
 .manage-btn { width: 32px; padding-inline: 0; }

@@ -17,6 +17,6 @@ const pageActive = usePageActive()
 </template>
 
 <style scoped>
-.workspace-directory-toggle { flex-shrink: 0; }
+.workspace-directory-toggle { flex-shrink: 0; height: 30px; }
 .workspace-directory-toggle[aria-expanded="true"] { background: var(--sidebar-active); color: var(--text-brand); }
 </style>
