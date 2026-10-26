@@ -29,7 +29,7 @@ for (const theme of ['paper', 'ink']) {
     await page.locator('.unlock-input').fill('e2e-master-123')
     await page.locator('.unlock-btn').click()
     await page.locator('a.nav-item[href="/fileshare"]').click()
-    await page.waitForSelector('.dir-add')
+    await page.waitForSelector('.target-field')
     await page.waitForTimeout(260)
   }
 

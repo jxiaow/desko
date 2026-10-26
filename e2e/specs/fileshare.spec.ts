@@ -10,7 +10,7 @@ const ON = {
 async function gotoFileshare(page: Page, config = ON) {
   await bootUnlocked(page, config)
   await page.locator('a.nav-item[href="/fileshare"]').click()
-  await expect(page.locator('.directory-list')).toBeVisible()
+  await expect(page.locator('.target-field')).toBeVisible()
 }
 
 /** 外部文件的路径只有原生拖放事件给得出；测试经 mock 事件桥伪造同一次拖入 */
@@ -82,7 +82,7 @@ test.describe('局域网文件传输', () => {
       fileshare: { port: 9999 },
     })
     await page.locator('a.nav-item[href="/fileshare"]').click()
-    await expect(page.locator('.directory-list')).toBeVisible()
+    await expect(page.locator('.target-field')).toBeVisible()
     await expect(page.locator('.page-bar .chip')).toContainText('已停止')
     await page.locator('.service-toggle').click()
     await expectToast(page, '被占用')
@@ -99,7 +99,8 @@ test.describe('局域网文件传输', () => {
     await expect(page.locator('.local-address')).toContainText('http://127.0.0.1:8000')
     await expect(page.locator('.service-toggle')).toHaveText('停止服务')
     await expect(page.locator('.manage-btn')).toHaveAttribute('aria-label', '管理共享')
-    await expect(page.locator('.dir-row')).toHaveCount(1)
+    await expect(page.locator('#lan-target')).toContainText('shared')
+    await expect(page.locator('.target-path')).toHaveText('C:\\desko-e2e\\shared')
   })
 
   for (const theme of ['paper', 'ink']) {
@@ -128,7 +129,8 @@ test.describe('局域网文件传输', () => {
       settings: { fileshare_enabled: 'true' },
       fileshare: { running: true, shareDirs: ['C:\\desko-e2e\\shared', 'D:\\share\\docs'] },
     })
-    await page.locator('#lan-target').selectOption('1')
+    await page.locator('#lan-target').click()
+    await page.getByRole('menuitemradio', { name: 'docs', exact: true }).click()
     await page.getByRole('button', { name: '选择文件', exact: true }).click()
     expect(await e2e.count(page, 'fileshare_import_files')).toBe(0)
     await e2e.queueDialog(page, ['D:\\tmp\\会议记录.pdf'])
@@ -140,36 +142,68 @@ test.describe('局域网文件传输', () => {
     )
   })
 
-  test('原生文件夹选择器添加目录，移除当前目录后投递目标回退', async ({ page }) => {
+  test('设置里用文件夹选择器添加目录，移除当前目录后投递目标回退', async ({ page }) => {
     await gotoFileshare(page)
+    let dialog = await openSettings(page, 'fileshare')
     await e2e.queueDialog(page, 'D:\\share\\docs')
-    await page.getByRole('button', { name: '选择文件夹', exact: true }).click()
-    await expect(page.locator('.dir-row')).toHaveCount(2)
-    await page.locator('#lan-target').selectOption('1')
-    await page.getByRole('button', { name: '移除共享文件夹 docs', exact: true }).click()
-    await expect(page.locator('.dir-row')).toHaveCount(1)
-    await expect(page.locator('#lan-target')).toHaveValue('0')
+    await visiblePane(dialog).getByRole('button', { name: '添加文件夹', exact: true }).click()
+    await expectToast(page, '共享目录已更新')
+    await expect(visiblePane(dialog).locator('.fs-dir-item')).toHaveCount(2)
+    await dialog.locator('.dialog-close').click()
+    await page.locator('#lan-target').click()
+    await page.getByRole('menuitemradio', { name: 'docs', exact: true }).click()
+    await expect(page.locator('.target-path')).toHaveText('D:\\share\\docs')
+
+    dialog = await openSettings(page, 'fileshare')
+    await visiblePane(dialog).getByRole('button', { name: '移除共享文件夹 docs', exact: true }).click()
+    await expectToast(page, '共享目录已更新')
+    await expect(visiblePane(dialog).locator('.fs-dir-item')).toHaveCount(1)
     expect((await e2e.snapshot(page)).fileshare.shareDirs).toEqual(['C:\\desko-e2e\\shared'])
+    await dialog.locator('.dialog-close').click()
+    await expect(page.locator('#lan-target')).toContainText('shared')
+    await expect(page.locator('.target-path')).toHaveText('C:\\desko-e2e\\shared')
   })
 
-  test('添加共享目录即时保存并出现在列表', async ({ page }) => {
-    await gotoFileshare(page)
-    await page.getByRole('button', { name: '手动输入路径', exact: true }).click()
-    await page.locator('.dir-add').fill('D:\\share\\docs')
-    await page.locator('.dir-add-row button', { hasText: '添加' }).click()
+  test('设置里删掉排在前面的目录，投递目标按路径保持不变', async ({ page }) => {
+    await gotoFileshare(page, {
+      settings: { fileshare_enabled: 'true' },
+      fileshare: { running: true, shareDirs: ['C:\\a\\one', 'C:\\b\\two', 'C:\\c\\three'] },
+    })
+    await page.locator('#lan-target').click()
+    await page.getByRole('menuitemradio', { name: 'three', exact: true }).click()
+    await expect(page.locator('.target-path')).toHaveText('C:\\c\\three')
+    const dialog = await openSettings(page, 'fileshare')
+    const pane = visiblePane(dialog)
+    await expect(pane.locator('.fs-dir-item')).toHaveCount(3)
+    await pane.getByRole('button', { name: '移除共享文件夹 one', exact: true }).click()
     await expectToast(page, '共享目录已更新')
-    await expect(page.locator('.dir-row')).toHaveCount(2)
+    await expect(pane.locator('.fs-dir-item')).toHaveCount(2)
+    await dialog.locator('.dialog-close').click()
+    await expect(page.locator('#lan-target')).toContainText('three')
+    await expect(page.locator('.target-path')).toHaveText('C:\\c\\three')
+  })
+
+  test('手动输入共享目录即时保存并出现在列表', async ({ page }) => {
+    await gotoFileshare(page)
+    const dialog = await openSettings(page, 'fileshare')
+    const pane = visiblePane(dialog)
+    await pane.getByRole('button', { name: '手动输入路径', exact: true }).click()
+    await pane.locator('.fs-dir-input').fill('D:\\share\\docs')
+    await pane.locator('.fs-dir-add').getByRole('button', { name: '添加', exact: true }).click()
+    await expectToast(page, '共享目录已更新')
+    await expect(pane.locator('.fs-dir-item')).toHaveCount(2)
     const snap = await e2e.snapshot(page)
     expect(snap.fileshare.shareDirs).toEqual(['C:\\desko-e2e\\shared', 'D:\\share\\docs'])
   })
 
   test('删除最后一个目录被拦下，不发保存', async ({ page }) => {
     await gotoFileshare(page)
-    await expect(page.locator('.dir-row')).toHaveCount(1)
-    await page.locator('.dir-row').first().locator('.dir-del').click({ force: true })
+    const dialog = await openSettings(page, 'fileshare')
+    await expect(visiblePane(dialog).locator('.fs-dir-item')).toHaveCount(1)
+    await visiblePane(dialog).getByRole('button', { name: '移除共享文件夹 shared', exact: true }).click()
     await expectToast(page, '至少保留一个共享目录')
     expect(await e2e.count(page, 'fileshare_save_config')).toBe(0)
-    await expect(page.locator('.dir-row')).toHaveCount(1)
+    await expect(visiblePane(dialog).locator('.fs-dir-item')).toHaveCount(1)
   })
 
   test('口令：设置弹窗「局域网传输」页签里启用，模块页摘要同步，可清除', async ({ page }) => {
@@ -317,10 +351,10 @@ test.describe('局域网文件传输', () => {
     await expect(page.locator('.fs-idle-title')).toHaveText('服务未启动')
     await expect(page.locator('.fs-idle-desc')).toContainText('本机浏览器')
     await expect(page.locator('.fs-idle-config dd')).toHaveText(['仅本机', '8123', '已设置'])
-    await page.getByRole('button', { name: '手动输入路径', exact: true }).click()
-    await expect(page.locator('.dir-add')).toBeVisible()
-    await expect(page.locator('.dir-row')).toHaveCount(1)
-    await expect(page.locator('.directory-list')).toBeVisible()
+    await expect(page.locator('#lan-target')).toContainText('shared')
+    const dialog = await openSettings(page, 'fileshare')
+    await expect(visiblePane(dialog).locator('.fs-dir-item')).toHaveCount(1)
+    await dialog.locator('.dialog-close').click()
     await expect(page.locator('.drop-card, .fs-banner')).toHaveCount(0)
     await dragPhase(page, 'enter')
     await expect(page.locator('.drop-card')).toHaveCount(0)
@@ -341,9 +375,12 @@ test.describe('局域网文件传输', () => {
       settings: { fileshare_enabled: 'true' },
       fileshare: { running: true, shareDirs: ['C:\\desko-e2e\\shared', 'D:\\share\\docs'] },
     })
-    await expect(page.locator('#lan-target option')).toHaveCount(2)
-    await expect(page.locator('#lan-target')).toHaveValue('0')
-    await page.locator('#lan-target').selectOption('1')
+    await expect(page.locator('#lan-target')).toContainText('shared')
+    expect(await page.locator('#lan-target').evaluate(element => element.tagName)).toBe('BUTTON')
+    await page.locator('#lan-target').click()
+    await expect(page.getByRole('menuitemradio')).toHaveCount(2)
+    await page.getByRole('menuitemradio', { name: 'docs', exact: true }).click()
+    await expect(page.locator('.target-path')).toHaveText('D:\\share\\docs')
     await drop(page, ['C:\\tmp\\ok.txt'])
     await page.locator('.recv').click()
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(

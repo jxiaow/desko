@@ -17,6 +17,8 @@ const props = defineProps<{
   options: OptionItem[]
   disabled?: boolean
   matchWidth?: boolean
+  /** 菜单独立于触发钮的定宽，长选项名不必跟着窄钮一起省略 */
+  menuWidth?: number
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: string | number] }>()
@@ -54,7 +56,7 @@ const pick = (v: string | number) => {
     <span class="opt-value">{{ currentLabel() }}</span>
       <AppIcon class="opt-chev" :class="{ up: open }" name="chevDown" :size="11" />
   </button>
-  <PopoverMenu v-if="open && anchor" :anchor="anchor" :match-width="matchWidth" modal align="start" @close="open = false">
+  <PopoverMenu v-if="open && anchor" :anchor="anchor" :width="menuWidth" :match-width="matchWidth" modal align="start" @close="open = false">
     <button
       v-for="o in options"
       :key="o.value"

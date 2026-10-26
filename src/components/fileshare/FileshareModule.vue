@@ -15,11 +15,11 @@ import {
   fsHasPassword,
   fsLocalOnly,
   fsRefresh,
-  fsSaveConfig,
   requestOpenSettingsTab,
 } from '../../services/fileshareSettings'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
+import OptionSelect from '../shared/OptionSelect.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { usePageActive } from '../../composables/usePageActive'
 import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
@@ -35,11 +35,8 @@ const fileInput = ref<HTMLInputElement | null>(null)
 let active = true
 let poll: ReturnType<typeof setInterval> | undefined
 
-const dirAdd = ref('')
-const showDirAdd = ref(false)
-const dirInput = ref<HTMLInputElement | null>(null)
 const receivedList = ref<HTMLElement | null>(null)
-const targetIdx = ref(0)
+const targetPathValue = ref('')
 const dragActive = ref(false)
 const dropping = ref(false)
 const serviceAction = ref<'start' | 'stop' | null>(null)
@@ -50,21 +47,26 @@ watch(() => received.value.length, async () => {
   if (list) list.scrollTop = list.scrollHeight
 })
 
-async function showDirectoryInput() {
-  showDirAdd.value = true
-  await nextTick()
-  dirInput.value?.focus()
-}
-
 const running = fsRunning
 const status = fsStatus
 const dirs = computed(() => fsConfig.value?.shareDirs ?? [])
 /** 局域网开放且没口令：任何人都能读写共享目录，要提醒一句 */
 const openWarn = computed(() => running.value && !fsLocalOnly.value && !fsHasPassword.value)
-/** 目录可能被别的入口删到少于当前选项，取不到就退回最后一个 */
-const target = computed(() => Math.min(targetIdx.value, Math.max(dirs.value.length - 1, 0)))
-watch(dirs, () => { targetIdx.value = target.value })
-const targetName = computed(() => baseName(dirs.value[target.value] ?? ''))
+/** 按路径记住投递目标：设置里删掉别的目录时，选中项不会跟着下标漂移 */
+const target = computed(() => {
+  const index = dirs.value.indexOf(targetPathValue.value)
+  return index >= 0 ? index : 0
+})
+watch(dirs, (list) => {
+  if (!list.includes(targetPathValue.value)) targetPathValue.value = list[0] ?? ''
+}, { immediate: true })
+const targetName = computed(() => baseName(targetPathValue.value))
+const targetPath = computed(() => targetPathValue.value || '在设置中添加共享目录')
+const dirOptions = computed(() =>
+  dirs.value.length
+    ? dirs.value.map((d, i) => ({ value: i, label: baseName(d) }))
+    : [{ value: 0, label: '请先在设置中添加共享目录' }]
+)
 const linkBase = computed(() => status.value?.lanUrl ?? status.value?.localUrl ?? '')
 /** 连接卡说明访问范围，页条只说明服务是否监听。 */
 const exposure = computed(() => {
@@ -93,15 +95,6 @@ async function chooseFiles() {
   } catch (e) { toastStore.showToast(errText(e), 'error') }
 }
 
-async function chooseDirectory() {
-  try {
-    const path = await dialogOpen({ directory: true, multiple: false, title: '添加共享文件夹' })
-    if (typeof path !== 'string') return
-    dirAdd.value = path
-    await addDir()
-  } catch (e) { toastStore.showToast(errText(e), 'error') }
-}
-
 function baseName(p: string) {
   return p.split(/[\\/]/).filter(Boolean).pop() ?? p
 }
@@ -125,40 +118,6 @@ async function toggle() {
     fsBusy.value = false
     serviceAction.value = null
   }
-}
-
-async function saveDirs(next: string[], okToast: string): Promise<boolean> {
-  const cfg = fsConfig.value
-  if (!cfg) return false
-  try {
-    await fsSaveConfig(next, cfg.port, cfg.localOnly)
-    toastStore.showToast(okToast)
-    return true
-  } catch (e) {
-    toastStore.showToast(errText(e), 'error')
-    return false
-  }
-}
-
-async function addDir() {
-  const p = dirAdd.value.trim()
-  if (!p) {
-    toastStore.showToast('请输入目录路径', 'error')
-    return
-  }
-  if (dirs.value.some((d) => d.toLowerCase() === p.toLowerCase())) {
-    toastStore.showToast('该目录已在列表里', 'error')
-    return
-  }
-  if (await saveDirs([...dirs.value, p], '共享目录已更新')) { dirAdd.value = ''; showDirAdd.value = false }
-}
-
-async function removeDir(i: number) {
-  if (dirs.value.length <= 1) {
-    toastStore.showToast('至少保留一个共享目录', 'error')
-    return
-  }
-  await saveDirs(dirs.value.filter((_, k) => k !== i), '共享目录已更新')
 }
 
 async function copyUrl(url: string) {
@@ -277,7 +236,6 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
     <div v-if="!fsLoaded" class="lan-loading-state" role="status" aria-label="正在读取共享配置">
       <div class="rcard loading-connection" aria-hidden="true"><div class="loading-line"></div><div class="loading-line"></div><div class="loading-line"></div></div>
       <div class="loading-heading" aria-hidden="true"></div><div class="rcard loading-send" aria-hidden="true"><div class="loading-line"></div><div class="loading-well"></div></div>
-      <div class="loading-heading" aria-hidden="true"></div><div v-for="n in 2" :key="n" class="rcard loading-directory" aria-hidden="true"><div class="loading-line"></div></div>
     </div>
     <section v-else-if="!fsConfig || !status" class="lan-load-error" aria-labelledby="lan-error-title">
       <AppIcon name="alert" :size="24" /><h2 id="lan-error-title">无法读取共享配置</h2><p>请重试以获取服务状态和共享文件夹。</p><button class="action-btn" type="button" @click="fsRefresh()">重新加载</button>
@@ -312,7 +270,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
       <section class="send-panel" aria-labelledby="lan-send-title">
         <header class="panel-heading"><h2 id="lan-send-title">投递文件</h2></header>
         <div class="rcard upload-card">
-          <div class="target-field"><label for="lan-target">投递到</label><select id="lan-target" v-model="targetIdx" class="select" :disabled="fsBusy || dropping || !dirs.length" :title="dirs[target]"><option v-if="!dirs.length" :value="0">请先添加共享文件夹</option><option v-for="(d, i) in dirs" :key="d" :value="i">{{ baseName(d) }}</option></select><span class="target-path" :title="dirs[target]">{{ dirs[target] }}</span><span class="file-limit">单文件 4 GiB 内</span></div>
+          <div class="target-field"><span id="lan-target-label" class="target-label">投递到</span><OptionSelect id="lan-target" class="target-select" :model-value="target" :options="dirOptions" :disabled="fsBusy || dropping || !dirs.length" :title="targetPath" :menu-width="320" aria-labelledby="lan-target-label" @update:model-value="targetPathValue = dirs[Number($event)] ?? ''" /><span class="target-path" :title="targetPath">{{ targetPath }}</span><span class="file-limit">单文件 4 GiB 内</span></div>
           <section v-if="running" class="drop-card" :class="{ active: dragActive, busy: dropping }" aria-label="投递文件区域" :aria-busy="dropping"
             @dragover="webRuntime && $event.preventDefault()" @dragenter="webRuntime && (dragActive = true)" @dragleave="webRuntime && !($event.currentTarget as HTMLElement).contains($event.relatedTarget as Node) && (dragActive = false)" @drop="dropBrowserFiles">
             <input v-if="webRuntime" ref="fileInput" type="file" multiple hidden aria-label="上传到共享目录" @change="chooseBrowserFiles" />
@@ -323,14 +281,8 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
         </div>
       </section>
 
-      <section class="directories-panel" aria-labelledby="lan-dirs-title">
-        <header class="panel-heading"><div class="directory-heading"><h2 id="lan-dirs-title">共享文件夹</h2><span class="panel-meta">{{ dirs.length }} 个</span></div><button class="lan-text-button browse-directory" type="button" :disabled="fsBusy || dropping" :aria-label="webRuntime ? '添加共享目录' : '选择文件夹'" @click="webRuntime ? showDirectoryInput() : chooseDirectory()"><AppIcon name="plus" :size="14" />添加目录</button></header>
-        <div class="directory-list"><div v-for="(d, i) in dirs" :key="d" class="rcard"><div class="dir-row rcard-row"><AppIcon name="folder" :size="18" /><div class="dir-info"><span class="directory-name">{{ baseName(d) }}</span><span class="dir-path" :title="d">{{ d }}</span></div><span v-if="i === target" class="badge off directory-current"><AppIcon name="check" :size="11" />当前投递目标</span><button v-else class="lan-text-button directory-target" type="button" :disabled="fsBusy || dropping" :aria-label="`投递到 ${baseName(d)}`" @click="targetIdx = i">设为投递目标</button><button class="ib lan-icon-button dir-del" type="button" :disabled="fsBusy || dropping" :aria-label="`移除共享文件夹 ${baseName(d)}`" title="移除该目录" @click="removeDir(i)"><AppIcon name="trash" :size="16" /></button></div></div><p v-if="!dirs.length" class="directory-empty">暂无共享文件夹，添加后即可投递文件。</p></div>
-        <form v-if="showDirAdd" class="dir-add-row" @submit.prevent="addDir"><label class="path-label" for="lan-add-path">目录路径</label><input id="lan-add-path" ref="dirInput" v-model="dirAdd" class="text-input dir-add" placeholder="输入此电脑上的文件夹路径" autocomplete="off" spellcheck="false" :disabled="fsBusy || dropping" /><button class="action-btn add-btn" type="submit" :disabled="fsBusy || dropping || !dirAdd.trim()"><AppIcon name="plus" :size="14" />添加</button><button class="ib" type="button" aria-label="取消添加目录" :disabled="fsBusy || dropping" @click="showDirAdd = false"><AppIcon name="x" :size="14" /></button></form>
-        <footer class="directory-footer"><p class="directory-description">其他设备可浏览、下载和上传这些文件夹里的文件。</p><button class="lan-text-button manual-directory" type="button" :disabled="fsBusy || dropping" :aria-expanded="showDirAdd" aria-controls="lan-add-path" @click="showDirectoryInput">手动输入路径<AppIcon name="chevRight" :size="13" /></button></footer>
-      </section>
     </div>
-    <Teleport to="body" :disabled="!pageActive"><div v-if="dragActive && running && !dropping" class="fs-drop-hint" aria-hidden="true"><b>松手即投进 {{ targetName }}</b></div></Teleport>
+    <Teleport to="body" :disabled="!pageActive"><div v-if="dragActive && running && !dropping && dirs.length" class="fs-drop-hint" aria-hidden="true"><b>松手即投进 {{ targetName }}</b></div></Teleport>
   </div>
 </template>
 
@@ -357,7 +309,6 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .lan-text-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 0; background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--text-xs); white-space: nowrap; }
 .lan-text-button:hover:not(:disabled) { color: var(--text); }
 .lan-page button:disabled { cursor: not-allowed; }
-.lan-icon-button { width: 32px; height: 32px; flex: none; color: var(--text-muted); }
 .lan-page .action-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; border-radius: var(--radius-ib); font-size: var(--text-xs); }
 .lan-content { display: flex; flex-direction: column; gap: 22px; }
 .connection-body { display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px; }
@@ -389,10 +340,9 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .fs-idle-config dt { color: var(--text-muted); }
 .fs-idle-config dd { margin: 0; color: var(--text-secondary); }
 .panel-heading { display: flex; align-items: center; gap: 8px; min-height: 32px; margin-bottom: 8px; }
-.panel-heading > .browse-directory { margin-left: auto; }
 .panel-meta { color: var(--text-muted); font-size: var(--text-xs); font-weight: 400; line-height: 18px; }
 .target-field { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 20px; border-bottom: 1px solid var(--border-subtle); }
-.target-field label { flex: none; color: var(--text-muted); font-size: var(--text-xs); }
+.target-label { flex: none; color: var(--text-muted); font-size: var(--text-xs); }
 .target-field .select { flex: none; width: 196px; min-width: 0; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-ib); background: var(--bg-canvas-input); color: var(--text); font-size: var(--text-xs); }
 .target-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: var(--text-xs); }
 .file-limit { flex: none; margin-left: auto; color: var(--text-faint); font-size: 11px; white-space: nowrap; }
@@ -417,24 +367,6 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .recv:hover { background: var(--accent-soft); color: var(--text-brand); }
 .recv:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent-ring); color: var(--text-brand); }
 .session-empty { padding: 2px 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 30px; }
-.directory-heading { display: flex; align-items: center; gap: 8px; }
-.directory-list { margin-right: calc(-1 * var(--scrollbar-track)); display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow: auto; scrollbar-gutter: stable; }
-.directory-list > .rcard { flex: none; }
-.dir-row { gap: 12px; min-height: 64px; padding: 0 16px; }
-.dir-row > svg { flex: none; color: var(--text-muted); }
-.dir-info { flex: 1; min-width: 0; }
-.directory-name { display: block; font-size: var(--text-sm); line-height: 20px; color: var(--text); }
-.dir-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; font-size: var(--text-xs); line-height: 18px; color: var(--text-muted); }
-.directory-current { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 400; }
-.directory-target { flex: none; }
-.dir-del:hover:not(:disabled) { color: var(--danger); }
-.dir-add-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: var(--text-xs); color: var(--text-muted); }
-.path-label { flex: none; }
-.dir-add { flex: 1; min-width: 0; height: 34px; }
-.directory-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 8px; font-size: var(--text-xs); line-height: 20px; color: var(--text-muted); }
-.directory-description { min-width: 0; }
-.manual-directory { flex: none; color: var(--text-muted); }
-.directory-empty { padding: 16px; font-size: var(--text-xs); color: var(--text-muted); }
 .lan-load-error { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; padding: 48px 20px; color: var(--text-muted); }
 .lan-load-error h2 { color: var(--text); }
 .lan-load-error p { font-size: var(--text-xs); }
@@ -445,8 +377,6 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .loading-heading { width: 86px; height: 14px; margin-block: 24px 12px; }
 .loading-send { padding: 16px 20px; }
 .loading-well { height: 168px; margin-top: 20px; }
-.loading-directory { display: flex; align-items: center; min-height: 64px; padding-inline: 16px; margin-bottom: 6px !important; }
-.loading-directory .loading-line { margin: 0; }
 .fs-drop-hint { position: fixed; z-index: 800; inset: 8px; display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--bg-surface) 88%, transparent); pointer-events: none; }
 .fs-drop-hint b { padding: 16px 24px; border-radius: var(--radius-ib); background: var(--bg-surface); color: var(--text); font-size: var(--text-lg); font-weight: 500; }
 @media (max-width: 900px) {
@@ -467,7 +397,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
   .connection-meta { font-size: 11px; }
   .local-address { min-height: 36px; }
   .target-field { flex-wrap: wrap; gap: 5px; padding: 12px 14px; }
-  .target-field label { font-size: 11px; }
+  .target-label { font-size: 11px; }
   .target-field .select { flex: 1; width: auto; min-height: 44px; font-size: var(--text-sm); }
   .target-path { flex-basis: 100%; padding-left: 46px; font-size: 11px; }
   .well-body, .send-paused { min-height: 176px; padding: 12px 14px; }
@@ -478,20 +408,6 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
   .session-heading { flex-direction: row; align-items: center; gap: 8px; padding: 0; margin-bottom: 8px; }
   .recv-list { max-height: 144px; }
   .recv { max-width: 100%; height: 44px; line-height: 44px; }
-  .panel-heading > .browse-directory { min-height: 44px; }
-  .directory-list { max-height: 320px; }
-  .dir-row { flex-wrap: wrap; gap: 4px 10px; padding: 10px 12px; }
-  .dir-info { flex-basis: calc(100% - 28px); }
-  .directory-current, .directory-target { margin-left: auto; }
-  .directory-target { min-height: 44px; }
-  .dir-del { width: 44px; height: 44px; }
-  .directory-footer { align-items: flex-start; }
-  .manual-directory { min-height: 44px; }
-  .directory-description { max-width: 20em; font-size: 11px; }
-  .dir-add-row { flex-wrap: wrap; }
-  .path-label { flex-basis: 100%; }
-  .dir-add { flex-basis: calc(100% - 100px); min-height: 44px; font-size: var(--text-sm); }
-  .dir-add-row .action-btn, .dir-add-row .ib { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .lan-page :is(button, input, select, .drop-card) { transition: none; } }
 </style>
