@@ -295,6 +295,10 @@ const editor = useEditor({
     transformPasted: (slice, view) => notesStore.notePasteCleanup
       ? normalizeNotePaste(slice, !!view.state.selection.$from.parent.type.spec.code)
       : slice,
+    // 书写面里块与块只隔 8px，默认的空行分隔会把复制出去的每一行撑成两行。
+    // 一行一块一行；手动换行不是块，仍要还它一个换行，图片那类原子节点不占字。
+    clipboardTextSerializer: (slice) => slice.content.textBetween(0, slice.content.size, '\n',
+      (leaf) => leaf.type.name === 'hardBreak' ? '\n' : ''),
     handleDOMEvents: {
       compositionstart: (view) => {
         if (compositionRange) finishPunctuation(view, compositionRange)

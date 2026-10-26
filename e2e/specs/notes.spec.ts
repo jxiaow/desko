@@ -264,6 +264,22 @@ test.describe('Notes 小记', () => {
     expect(html).toContain('href="https://gitlab.test/x"')
   })
 
+  test('编辑器里复制：一行给一行，手动换行不丢、空行不翻倍', async ({ page }) => {
+    await bootUnlocked(page, {}, '/notes')
+    const pm = page.locator('.composer .ProseMirror')
+    await pm.click()
+    await page.keyboard.type('第一段')
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('第二段甲')
+    await page.keyboard.press('Shift+Enter')
+    await page.keyboard.type('第二段乙')
+    await page.keyboard.press('Control+a')
+    await page.keyboard.press('Control+c')
+    expect(await page.evaluate(() => navigator.clipboard.readText()))
+      .toBe('第一段\n\n第二段甲\n第二段乙')
+  })
+
   test('composer 发布新小记', async ({ page }) => {
     await gotoNotes(page)
     const publish = page.locator('.composer button.btn-primary')
