@@ -75,6 +75,7 @@ import CodexSessionsPanel from './CodexSessionsPanel.vue'
 import CodexTrashPanel from './CodexTrashPanel.vue'
 import CodexUsagePanel from './CodexUsagePanel.vue'
 import { isWebRuntime, isCodexWebRuntime } from '../../services/runtime'
+import { CODEX_DIALOG_ENABLED } from '../../services/featureFlags'
 import CodexSwitchDialog from './CodexSwitchDialog.vue'
 import CodexWslAssignDialog from './CodexWslAssignDialog.vue'
 import CodexWebEntry from './CodexWebEntry.vue'
@@ -503,7 +504,7 @@ watchEffect(() => {
           <button class="cx-tab" :class="{ active: view === 'trash' }" :aria-pressed="view === 'trash'" type="button" @click="view = 'trash'">
             回收站
           </button>
-          <button class="cx-tab" :class="{ active: view === 'dialog' }" :aria-pressed="view === 'dialog'" type="button" @click="view = 'dialog'">对话</button>
+          <button v-if="CODEX_DIALOG_ENABLED" class="cx-tab" :class="{ active: view === 'dialog' }" :aria-pressed="view === 'dialog'" type="button" @click="view = 'dialog'">对话</button>
           <span v-if="workspaceLayout" class="cx-view-count" :title="pageHead.count">{{ pageHead.count }}</span>
         </nav>
         </Teleport>

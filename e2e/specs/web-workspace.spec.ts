@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test'
 import { bootUnlocked, tipButton } from '../helpers'
 import { webApp, selectModule } from '../web-helpers'
+import { CODEX_DIALOG_ENABLED } from '../../src/services/featureFlags'
 
 test('desktop manages two independent Web services and exposes the Codex entry', async ({ page }) => {
+  test.skip(!CODEX_DIALOG_ENABLED, 'Codex 对话入口已屏蔽，见 src/services/featureFlags.ts')
   await bootUnlocked(page, { settings: { codex_enabled: 'true' } }, '/codex')
   await page.getByRole('button', { name: '对话', exact: true }).click()
   await page.getByRole('button', { name: '选择项目', exact: true }).click()

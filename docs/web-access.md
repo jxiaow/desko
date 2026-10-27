@@ -1,13 +1,15 @@
 # Web 访问
 
+> 2026-10-27：Codex 对话已屏蔽——`src/services/featureFlags.ts` 的 `CODEX_DIALOG_ENABLED = false` 收掉桌面「Codex → 对话」页签和「设置 → Web 访问」里的 Codex Web UI 服务卡片。本文关于 Codex 对话与 Codex Web UI 的段落留作实现记录；前端组件与 Rust `codex_bridge` 未删除，改回 `true` 即恢复。
+
 在桌面版解锁 Desko，打开「设置 → Web 访问」，分别启动所需的服务。浏览器使用**当前档案的桌面主密码**登录，无需单独设置 Web 密码。两个服务使用独立进程、端口及登录会话，可以分别停止：
 
 | 服务 | 默认本机入口 | 用途 |
 |---|---|---|
 | Desko Web | `http://127.0.0.1:8420` | 小记、收藏、文件等完整 Web 工作区 |
-| Codex Web UI | `http://127.0.0.1:8421/codex` | Codex 对话、任务、审批与工作区改动 |
+| Codex Web UI | `http://127.0.0.1:8421/codex` | 已屏蔽：Codex 对话、任务、审批与工作区改动 |
 
-端口可修改；Codex Web UI 在启用 Codex 模块后出现。Desko Web 的「Codex → 对话」提供独立服务的入口，桌面「Codex → 对话」仍可直接使用原生对话。
+端口可修改；Codex Web UI 随对话功能屏蔽，当前「设置 → Web 访问」只列出 Desko Web。
 
 需要手机或其他电脑访问时，勾选「允许局域网设备访问」并确认，在同一网络打开页面提供的局域网地址。Windows 防火墙可能需要允许 Desko 访问专用网络。局域网使用 HTTP，适合可信的家庭或办公网络。
 

@@ -1,6 +1,9 @@
 import { test, expect, type Page } from '@playwright/test'
 import { bootUnlocked, e2e } from '../helpers'
 import { webApp } from '../web-helpers'
+import { CODEX_DIALOG_ENABLED } from '../../src/services/featureFlags'
+
+test.skip(!CODEX_DIALOG_ENABLED, 'Codex 对话入口已屏蔽，见 src/services/featureFlags.ts')
 
 async function openDialog(page: Page) {
   await bootUnlocked(page, { settings: { codex_enabled: 'true' } }, '/codex')

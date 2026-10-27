@@ -1,6 +1,9 @@
 import { test, expect, type Page } from '@playwright/test'
 import { bootUnlocked, e2e } from '../helpers'
 import { webApp } from '../web-helpers'
+import { CODEX_DIALOG_ENABLED } from '../../src/services/featureFlags'
+
+test.skip(!CODEX_DIALOG_ENABLED, 'Codex 对话入口已屏蔽，见 src/services/featureFlags.ts')
 
 const histories = [
   { id: 'cli-existing', cwd: 'C:\\Code\\fixture', title: 'CLI 中的项目检查', source: 'cli', text: 'CLI 历史消息已完整载入。' },

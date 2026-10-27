@@ -1,5 +1,7 @@
 # Codex Web UI 原生集成（2026-10-22）
 
+> 2026-10-27：对话入口已屏蔽（`src/services/featureFlags.ts` 的 `CODEX_DIALOG_ENABLED = false`），桌面页签与「设置 → Web 访问」的 Codex Web UI 卡片都不再出现。本文与代码留作实现记录，恢复只需改回 `true`。
+
 用户已选择 Vue + Tauri 原生集成。本记录取代 18 号草案的待定范围：保留参考工作台的工作区写入、四类审批、Markdown 与 Git 查看；选择目录后由 Rust 启动本机 `codex app-server --listen stdio://`。
 
 ## 使用
