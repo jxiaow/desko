@@ -384,15 +384,13 @@ function trapFocus(event: KeyboardEvent) {
 .fs-view :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-4) 0; }
 .fs-view :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 56vh; object-fit: contain; border-radius: var(--radius); }
 
+/* 底栏不铺色、不画顶线：书写面上只允许纸这一种底色，按钮自身的面与描边负责读出边界 */
 .fs-foot {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--border);
-  background: var(--frost-bg);
-  backdrop-filter: blur(10px);
 }
 
 /* 编辑沿用标题栏主操作的淡染，次级操作保持无底。 */
