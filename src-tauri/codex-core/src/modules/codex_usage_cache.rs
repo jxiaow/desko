@@ -1,4 +1,4 @@
-//! 仅缓存统计事件，不保存聊天正文。来源变化、价格表更新或解析版本变化均重新扫描。
+//! 仅缓存 Token 统计事件，不保存聊天正文或金额；价格更新不需要重扫日志。
 use super::UsageFileEntry;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -7,8 +7,7 @@ use std::time::SystemTime;
 
 fn cache_path(source: &Path) -> Option<PathBuf> {
     let mut hash = Sha256::new();
-    hash.update(b"usage-events-v2\0");
-    hash.update(include_bytes!("../../resources/codex_session_pricing.json"));
+    hash.update(b"usage-events-v3\0");
     hash.update(source.as_os_str().as_encoded_bytes());
     Some(crate::modules::config::get_data_dir().ok()?
         .join("codex-usage-cache").join(format!("{:x}.json", hash.finalize())))
@@ -51,7 +50,6 @@ mod tests {
         assert_eq!(cached.events.len(), 1);
         assert_eq!(cached.events[0].cumulative, entry.events[0].cumulative);
         assert_eq!(cached.events[0].usage, entry.events[0].usage);
-        assert_eq!(cached.events[0].estimated_cost_usd, entry.events[0].estimated_cost_usd);
         assert!(read(&source, entry.file_len + 1, entry.modified_at).is_none());
         assert!(read(&source, entry.file_len, None).is_none());
         assert!(read(&source, entry.file_len, Some(SystemTime::UNIX_EPOCH)).is_none());

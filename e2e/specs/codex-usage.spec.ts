@@ -90,6 +90,17 @@ for (const width of [800, 1235]) {
   })
 }
 
+test('Terra 与其他模型混用时总金额、模型明细和会话金额都能定价', async ({ page }) => {
+  await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
+    { sessionId: 'terra', cwd: 'demo', daysAgo: 0, input: 1_000_000, cached: 800_000, output: 100_000, model: 'OpenAI/GPT-6.1-TERRA-20261027', turns: 1 },
+    { sessionId: 'sol', cwd: 'demo', daysAgo: 0, input: 1_000_000, cached: 800_000, output: 100_000, model: 'gpt-6.1-sol', turns: 1 },
+  ] } })
+  await expect(page.locator('.usg-cost')).toHaveText('估算金额 $2.22')
+  await expect(page.locator('.usg-model-row').filter({ hasText: 'gpt-6.1-terra' }).locator('.usg-model-cost')).toHaveText('$0.7400')
+  await page.getByRole('button', { name: '会话', exact: true }).click()
+  await expect(page.locator('.sess-billing dd')).toHaveText(['$2.22', '2'])
+})
+
 test('未知模型不会显示为免费，仍保留请求数和已知模型的金额', async ({ page }) => {
   await boot(page, { ...seed, codex: { ...seed.codex, sessions: [
     { sessionId: 'known', cwd: 'demo', daysAgo: 0, input: 1000, output: 100, model: 'gpt-5.4', turns: 2 },

@@ -18,6 +18,8 @@ use crate::modules;
 
 #[path = "codex_usage_cache.rs"]
 mod usage_cache;
+#[path = "codex_usage_pricing.rs"]
+mod usage_pricing;
 
 const DEFAULT_INSTANCE_ID: &str = "__default__";
 
@@ -447,8 +449,10 @@ pub fn get_session_token_stats_across_instances(
     }
 
     let instances = collect_instances()?;
+    let pricing = usage_pricing::snapshot();
     let mut stats_by_session_id = HashMap::<String, CodexSessionTokenStats>::new();
     let mut seen_events = HashMap::new();
+    let mut missing_price = false;
 
     for instance in &instances {
         for path in usage_rollout_files_in_dirs(std::slice::from_ref(&instance.data_dir))? {
@@ -462,6 +466,7 @@ pub fn get_session_token_stats_across_instances(
             if entry.events.is_empty() {
                 continue;
             }
+            missing_price |= entry.models.iter().any(|model| !pricing.contains_key(model));
             // 同一会话的分页文件全部累加，与用量页共享增量，排除续接历史。
             let stats = stats_by_session_id.entry(id.clone()).or_insert_with(|| {
                 CodexSessionTokenStats {
@@ -478,13 +483,15 @@ pub fn get_session_token_stats_across_instances(
                 stats.reasoning_output_tokens += event.usage.reasoning_output_tokens;
                 stats.total_tokens += event.usage.total_tokens;
                 stats.estimated_cost_usd = stats.estimated_cost_usd
-                    .zip(event.estimated_cost_usd)
+                    .zip(entry.models.get(event.model_index)
+                        .and_then(|model| estimate_usage_cost(model, event.usage, &pricing)))
                     .map(|(total, cost)| total + cost);
             }
             stats.request_count += entry.events.len() as u64;
         }
     }
 
+    if missing_price { usage_pricing::request_refresh(true); }
     let mut stats = stats_by_session_id.into_values().collect::<Vec<_>>();
     stats.sort_by(|left, right| left.session_id.cmp(&right.session_id));
     Ok(stats)
@@ -570,7 +577,6 @@ struct UsageEvent {
     timestamp: i64,
     usage: RolloutTokenUsage,
     model_index: usize,
-    estimated_cost_usd: Option<f64>,
 }
 
 
@@ -818,8 +824,6 @@ fn scan_usage_events(
                     timestamp,
                     usage: delta,
                     model_index: current_model.unwrap_or(UNKNOWN_MODEL_INDEX),
-                    estimated_cost_usd: current_model
-                        .and_then(|index| estimate_usage_cost(&models[index], delta)),
                 });
             }
             _ => {}
@@ -837,15 +841,9 @@ fn scan_usage_events(
 }
 
 /// 与 cockpit-tools 的会话估算口径一致：标准 USD / 百万 Token，推理不重复计费。
-/// 价格表来源：codex_local_access_routing_pricing.rs / codex_local_access_historical_pricing.rs。
-/// https://github.com/jlcodes99/cockpit-tools/tree/main/src-tauri/src/modules
-/// JSON 每项依次为：净输入、缓存输入、输出的标准单价。
-fn estimate_usage_cost(model: &str, usage: RolloutTokenUsage) -> Option<f64> {
-    static PRICES: LazyLock<HashMap<String, [f64; 3]>> = LazyLock::new(|| {
-        serde_json::from_str(include_str!("../../resources/codex_session_pricing.json"))
-            .expect("内置 Codex 会话价格表格式正确")
-    });
-    let [input, cached, output] = PRICES.get(model)?;
+/// 每轮统计用同一份可更新价格，不把金额写进 Token 解析缓存。
+fn estimate_usage_cost(model: &str, usage: RolloutTokenUsage, prices: &usage_pricing::Prices) -> Option<f64> {
+    let [input, cached, output] = prices.get(model)?;
     let cached_tokens = usage.cached_input_tokens.min(usage.input_tokens);
     Some(((usage.input_tokens - cached_tokens) as f64 * input
         + cached_tokens as f64 * cached
@@ -973,6 +971,7 @@ fn query_session_usage_windows_with_config(
         return Err("用量统计窗口无效".into());
     }
     let started = Instant::now();
+    let pricing = usage_pricing::snapshot();
     let mut display_contexts = HashMap::new();
     let mut accumulators = windows
         .into_iter()
@@ -982,8 +981,10 @@ fn query_session_usage_windows_with_config(
     accumulators.insert(String::new(), UsageWindowAccumulator::new(from_timestamp));
 
     let mut seen_events = HashMap::new();
+    let mut missing_price = false;
     for path in usage_rollout_files(config)? {
         let entry = unique_usage_events(load_usage_events(&path)?, &mut seen_events);
+        missing_price |= entry.models.iter().any(|model| !pricing.contains_key(model));
         for accumulator in accumulators.values_mut() {
             let UsageWindowAccumulator {
                 from_timestamp,
@@ -1005,6 +1006,7 @@ fn query_session_usage_windows_with_config(
                 by_hour,
                 &mut file_models,
                 totals,
+                &pricing,
             ) {
                 let session_id = entry
                     .session_id
@@ -1074,6 +1076,7 @@ fn query_session_usage_windows_with_config(
         }
     }
 
+    if missing_price { usage_pricing::request_refresh(true); }
     let scan_millis = started.elapsed().as_millis() as u64;
     let mut reports = accumulators
         .into_iter()
@@ -1171,6 +1174,7 @@ fn accumulate_usage_entry(
     by_hour: &mut HashMap<i64, CodexUsageBucket>,
     by_model: &mut HashMap<String, CodexUsageBucket>,
     totals: &mut CodexUsageTotals,
+    pricing: &usage_pricing::Prices,
 ) -> bool {
     let mut counted = false;
 
@@ -1182,6 +1186,8 @@ fn accumulate_usage_entry(
             continue;
         }
         counted = true;
+        let cost = entry.models.get(event.model_index)
+            .and_then(|model| estimate_usage_cost(model, event.usage, pricing));
         totals.input_tokens += event.usage.input_tokens;
         totals.cached_input_tokens += event.usage.cached_input_tokens;
         totals.cache_write_input_tokens += event.usage.cache_write_input_tokens;
@@ -1190,7 +1196,7 @@ fn accumulate_usage_entry(
         totals.total_tokens += event.usage.total_tokens;
         totals.request_count += 1;
         totals.estimated_cost_usd = totals.estimated_cost_usd
-            .zip(event.estimated_cost_usd)
+            .zip(cost)
             .map(|(total, cost)| total + cost);
 
         let Some((day, hour, hour_label)) = local_usage_keys(event.timestamp) else {
@@ -1208,21 +1214,21 @@ fn accumulate_usage_entry(
                 .entry(day.clone())
                 .or_insert_with(|| new_bucket(day.clone(), day)),
             event.usage,
-            event.estimated_cost_usd,
+            cost,
         );
         add_to_bucket(
             by_hour
                 .entry(hour)
                 .or_insert_with(|| new_bucket(hour.to_string(), hour_label)),
             event.usage,
-            event.estimated_cost_usd,
+            cost,
         );
         add_to_bucket(
             by_model
                 .entry(model_key.clone())
                 .or_insert_with(|| new_bucket(model_key, model_label)),
             event.usage,
-            event.estimated_cost_usd,
+            cost,
         );
     }
 
@@ -2975,7 +2981,7 @@ mod tests {
         // 缓存必须限制在输入以内；推理已在输出内，不再叠加。
         let usage = RolloutTokenUsage { input_tokens: 100, cached_input_tokens: 200,
             cache_write_input_tokens: 0, output_tokens: 10, reasoning_output_tokens: 8, total_tokens: 110 };
-        assert!((estimate_usage_cost("gpt-5.4", usage).unwrap() - 0.000175).abs() < 1e-10);
+        assert!((estimate_usage_cost("gpt-5.4", usage, &usage_pricing::BUILTIN).unwrap() - 0.000175).abs() < 1e-10);
         // 时间窗口只筛选增量，不能把前一天的累计按新模型再次计价。
         let from = DateTime::parse_from_rfc3339("2026-10-11T02:30:00Z").unwrap().timestamp();
         let filtered = query_session_usage_with_config(Some(from), None, &config).unwrap();
@@ -3084,7 +3090,7 @@ mod tests {
         assert_eq!(entry.events[0].usage.input_tokens, 100_000);
         assert_eq!(entry.events[0].usage.cached_input_tokens, 80_000);
         assert_eq!(entry.events[0].usage.output_tokens, 10_000);
-        assert!((entry.events[0].estimated_cost_usd.unwrap() - 0.22).abs() < 1e-10);
+        assert!((estimate_usage_cost("gpt-5.4", entry.events[0].usage, &usage_pricing::BUILTIN).unwrap() - 0.22).abs() < 1e-10);
 
         // 缺少有效的本次用量时，旧记录继续使用累计值。
         for last in [JsonValue::Null, json!({})] {
@@ -3093,6 +3099,62 @@ mod tests {
             assert_eq!(legacy.events.len(), 1);
             assert_eq!(legacy.events[0].usage.input_tokens, 1_000_000);
         }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn usage_prices_new_models_from_cached_tokens_without_rescanning_logs() {
+        let dir = make_temp_dir("codex-dynamic-prices");
+        let source = dir.join("rollout-usage-1.jsonl");
+        let lines = [
+            usage_model_line("turn_context", "gpt-future"),
+            usage_snapshot_line("2026-10-27T01:00:00Z", 1_000_000, 800_000, 100_000),
+        ];
+        fs::write(&source, format!("{}\n", lines.join("\n"))).unwrap();
+        let cached = load_usage_events(&source).unwrap();
+        let restored = usage_cache::read(&source, cached.file_len, cached.modified_at).unwrap();
+        assert!(!serde_json::to_string(&restored).unwrap().contains("estimated_cost_usd"));
+        let mut prices = (**usage_pricing::BUILTIN).clone();
+        for expected in [None, Some(2.34), Some(4.68)] {
+            if let Some(cost) = expected {
+                let factor = cost / 2.34;
+                prices.insert("gpt-future".into(), [3.0 * factor, 0.3 * factor, 15.0 * factor]);
+            }
+            let current = load_usage_events(&source).unwrap();
+            assert!(Arc::ptr_eq(&cached, &current));
+            let mut totals = CodexUsageTotals::default();
+            let (mut days, mut hours, mut models) = (HashMap::new(), HashMap::new(), HashMap::new());
+            accumulate_usage_entry(&current, None, None, &mut days, &mut hours, &mut models, &mut totals, &prices);
+            match expected {
+                Some(cost) => assert!((totals.estimated_cost_usd.unwrap() - cost).abs() < 1e-10),
+                None => assert_eq!(totals.estimated_cost_usd, None),
+            }
+            let mut disk_totals = CodexUsageTotals::default();
+            let (mut days, mut hours, mut models) = (HashMap::new(), HashMap::new(), HashMap::new());
+            accumulate_usage_entry(&restored, None, None, &mut days, &mut hours, &mut models, &mut disk_totals, &prices);
+            assert_eq!(disk_totals.estimated_cost_usd, totals.estimated_cost_usd);
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn usage_cost_prices_terra_and_keeps_mixed_model_totals_priced() {
+        let dir = make_temp_dir("codex-terra-billing");
+        let entry = scan_usage_lines(&dir, &[
+            usage_model_line("turn_context", "OpenAI/GPT-6.1-TERRA-20261027"),
+            usage_snapshot_line("2026-10-27T01:00:00Z", 1_000_000, 800_000, 100_000),
+            usage_model_line("turn_context", "gpt-6.1-sol"),
+            usage_snapshot_line("2026-10-27T02:00:00Z", 2_000_000, 1_600_000, 200_000),
+        ]);
+        let mut totals = CodexUsageTotals::default();
+        let (mut days, mut hours, mut models) = (HashMap::new(), HashMap::new(), HashMap::new());
+        accumulate_usage_entry(&entry, None, None, &mut days, &mut hours, &mut models, &mut totals, &usage_pricing::BUILTIN);
+        // Terra: 200k 净输入 × $1 + 800k 缓存 × $0.05 + 100k 输出 × $5 = $0.74。
+        assert!((models["gpt-6.1-terra"].estimated_cost_usd.unwrap() - 0.74).abs() < 1e-10);
+        assert_eq!(totals.request_count, 2);
+        assert!((totals.estimated_cost_usd.unwrap() - 2.22).abs() < 1e-10);
+        assert!((days.values().map(|day| day.estimated_cost_usd.unwrap()).sum::<f64>() - 2.22).abs() < 1e-10);
+        assert!((hours.values().map(|hour| hour.estimated_cost_usd.unwrap()).sum::<f64>() - 2.22).abs() < 1e-10);
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -3108,7 +3170,7 @@ mod tests {
         ]);
         let mut totals = CodexUsageTotals::default();
         let (mut days, mut hours, mut models) = (HashMap::new(), HashMap::new(), HashMap::new());
-        accumulate_usage_entry(&entry, None, None, &mut days, &mut hours, &mut models, &mut totals);
+        accumulate_usage_entry(&entry, None, None, &mut days, &mut hours, &mut models, &mut totals, &usage_pricing::BUILTIN);
         assert_eq!(totals.request_count, 2);
         assert_eq!(totals.estimated_cost_usd, None);
         assert_eq!(days.values().next().unwrap().estimated_cost_usd, None);
@@ -3153,7 +3215,7 @@ mod tests {
         let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
         let mut by_model = HashMap::<String, CodexUsageBucket>::new();
         let mut totals = CodexUsageTotals::default();
-        assert!(accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_hour, &mut by_model, &mut totals));
+        assert!(accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_hour, &mut by_model, &mut totals, &usage_pricing::BUILTIN));
 
         // 图的账必须等于「会话」档那条累计值，否则同屏两个数互相打脸
         assert_eq!(totals.input_tokens, 150);
@@ -3194,7 +3256,7 @@ mod tests {
         let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
         let mut by_model = HashMap::<String, CodexUsageBucket>::new();
         let mut totals = CodexUsageTotals::default();
-        accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_hour, &mut by_model, &mut totals);
+        accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_hour, &mut by_model, &mut totals, &usage_pricing::BUILTIN);
 
         assert_eq!(by_model.len(), 2);
         // 头两条快照都还是 gpt-sol：累计起算那一条整笔归它
@@ -3224,7 +3286,7 @@ mod tests {
         let mut by_hour = HashMap::<i64, CodexUsageBucket>::new();
         let mut by_model = HashMap::<String, CodexUsageBucket>::new();
         let mut totals = CodexUsageTotals::default();
-        accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_hour, &mut by_model, &mut totals);
+        accumulate_usage_entry(&entry, None, None, &mut by_day, &mut by_hour, &mut by_model, &mut totals, &usage_pricing::BUILTIN);
 
         assert_eq!(totals.input_tokens, 120);
         assert_eq!(totals.output_tokens, 7);
@@ -3262,7 +3324,8 @@ mod tests {
             &mut by_day,
             &mut by_hour,
             &mut by_model,
-            &mut totals
+            &mut totals,
+            &usage_pricing::BUILTIN,
         ));
 
         // 差分是整条链算完再按窗口挑事件，所以窗口内首桶拿到的是当天真实增量 515，不是 1535
@@ -3295,7 +3358,7 @@ mod tests {
         let mut by_model = HashMap::<String, CodexUsageBucket>::new();
         let mut totals = CodexUsageTotals::default();
         accumulate_usage_entry(&entry, Some(at(8, 0).timestamp()), Some(at(10, 0).timestamp()),
-            &mut by_day, &mut by_hour, &mut by_model, &mut totals);
+            &mut by_day, &mut by_hour, &mut by_model, &mut totals, &usage_pricing::BUILTIN);
         assert_eq!(by_hour.len(), 2);
         assert_eq!(by_hour[&at(8, 0).timestamp()].total_tokens, 137);
         assert_eq!(by_hour[&at(8, 0).timestamp()].request_count, 2);
