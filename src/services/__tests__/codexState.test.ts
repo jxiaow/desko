@@ -172,6 +172,165 @@ function account(over: Partial<CodexAccount> = {}): CodexAccount {
   } as CodexAccount
 }
 
+describe('Codex 刷新竞态与恢复', () => {
+  beforeEach(() => { setActivePinia(createPinia()); vi.clearAllMocks() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('较晚返回的配额设置读取不能覆盖用户刚保存的间隔', async () => {
+    const s = await loadState()
+    let finish!: (value: unknown) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    mockInvoke.mockImplementation(async cmd => cmd === 'get_setting' ? '20' : undefined)
+    const old = s.loadQuotaSettings()
+    await s.saveQuotaSettings(5, 10)
+    finish('30')
+    await old
+    expect(s.quotaRefreshMinutes.value).toBe(5)
+    expect(s.quotaAlertThreshold.value).toBe(10)
+  })
+
+  it('配额设置临时读取失败不会重新开启已关闭的自动刷新', async () => {
+    const s = await loadState()
+    s.quotaRefreshMinutes.value = 0
+    s.quotaAlertThreshold.value = 10
+    mockInvoke.mockRejectedValue('临时读取失败')
+    await s.loadQuotaSettings()
+    expect(s.quotaRefreshMinutes.value).toBe(0)
+    expect(s.quotaAlertThreshold.value).toBe(10)
+  })
+
+  it('配额设置保存途中补读不能用磁盘旧值覆盖新选择', async () => {
+    const s = await loadState()
+    const finish: (() => void)[] = []
+    mockInvoke.mockImplementation(async cmd => {
+      if (cmd === 'set_setting') return new Promise<void>(resolve => { finish.push(resolve) })
+      return '10'
+    })
+    const saving = s.saveQuotaSettings(0, 20)
+    await s.loadQuotaSettings()
+    finish.forEach(resolve => resolve())
+    await saving
+    expect(s.quotaRefreshMinutes.value).toBe(0)
+  })
+
+  for (const failed of [false, true]) {
+    it(`较旧的账号读取${failed ? '失败' : '成功'}不能覆盖新账号与额度`, async () => {
+      const s = await loadState()
+      let finish!: (value: unknown) => void
+      let fail!: (reason: unknown) => void
+      mockInvoke.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject }))
+      mockInvoke.mockImplementation(async cmd => cmd === 'list_codex_accounts' ? [account({ id: 'new' })] : account({ id: 'new' }))
+      const old = s.refreshAccounts()
+      await s.refreshAccounts()
+      if (failed) fail('过时的读取错误')
+      else finish([account({ id: 'old' })])
+      await old
+      expect(s.accounts.value.map(a => a.id)).toEqual(['new'])
+      expect(s.accountsError.value).toBe('')
+      expect(useToastStore().toast.show).toBe(false)
+    })
+  }
+
+  it('上一轮配额请求未结束时，进页和定时器共享该轮请求', async () => {
+    vi.useFakeTimers()
+    const s = await loadState()
+    s.quotaRefreshMinutes.value = 5
+    s.accounts.value = [account()]
+    let finish!: (value: unknown) => void
+    mockInvoke.mockImplementation(async cmd => {
+      if (cmd === 'refresh_codex_quotas_batch') return new Promise(resolve => { finish = resolve })
+      if (cmd === 'list_codex_accounts') return [account()]
+      return null
+    })
+    s.acquireQuotaTicker('codex-page')
+    const first = s.refreshQuotasOnEnter()
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    const reenter = s.refreshQuotasOnEnter()
+    expect(callsOf('refresh_codex_quotas_batch')).toHaveLength(1)
+    finish(1)
+    await Promise.all([first, reenter])
+    s.clearCodexSession()
+  })
+
+  it('锁定前未结束的挂件用量查询不能堵住解锁后的用量页', async () => {
+    const s = await loadState()
+    let finish!: (value: unknown) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const old = s.loadTodayUsage()
+    s.clearCodexSession()
+    mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args, 2))
+    const current = s.loadUsage()
+    await Promise.resolve()
+    expect(callsOf(USAGE_CMD)).toHaveLength(2)
+    await current
+    finish(usageReportFixture(1))
+    await old
+    expect(s.usageToday.value?.totalTokens).toBe(2000)
+  })
+
+  for (const kind of ['sessions', 'accounts'] as const) {
+    for (const operation of ['delete', 'empty'] as const) {
+      it(`${kind} 留底扫描期间${operation}成功，迟到清单不能让旧行重新出现`, async () => {
+        const s = await loadState()
+        const listCmd = kind === 'sessions' ? TRASH_CMD : RECYCLED_LIST_CMD
+        let finish!: (value: unknown) => void
+        mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+        mockInvoke.mockImplementation(async cmd => cmd === listCmd ? [] : { message: 'ok' })
+        s.recycledAccounts.value = [recycledRec('a')]
+        const pending = kind === 'sessions' ? s.loadTrash() : s.loadRecycled()
+        if (kind === 'sessions') {
+          if (operation === 'delete') await s.deleteTrashedSession('a')
+          else await s.emptySessionTrash()
+        } else {
+          if (operation === 'delete') await s.deleteRecycledAccount('a')
+          else await s.emptyRecycledAccounts()
+        }
+        finish(kind === 'sessions' ? [trashRec('a')] : [recycledRec('a')])
+        await pending
+        expect(kind === 'sessions' ? s.trashSessions.value : s.recycledAccounts.value).toEqual([])
+        expect(callsOf(listCmd)).toHaveLength(2)
+      })
+    }
+
+    it(`${kind} 留底定时刷新失败时保留已读清单`, async () => {
+      const s = await loadState()
+      const row = kind === 'sessions' ? trashRec('a') : recycledRec('a')
+      mockInvoke.mockResolvedValueOnce([row])
+      if (kind === 'sessions') await s.loadTrash()
+      else await s.loadRecycled()
+      mockInvoke.mockRejectedValueOnce('目录暂不可读')
+      if (kind === 'sessions') await s.loadTrash()
+      else await s.loadRecycled()
+      expect(kind === 'sessions' ? s.trashSessions.value : s.recycledAccounts.value).toEqual([row])
+      expect(kind === 'sessions' ? s.trashError.value : s.recycledError.value).toBe('目录暂不可读')
+    })
+  }
+
+  it('批量删除进度临时读取失败会继续轮询，任务确实不存在时才停', async () => {
+    vi.useFakeTimers()
+    const s = await loadState()
+    let attempt = 0
+    mockInvoke.mockImplementation(async cmd => {
+      if (cmd === DELETE_START_CMD) return jobDto()
+      if (cmd === DELETE_GET_CMD) {
+        if (++attempt === 1) throw '网络暂不可用'
+        if (attempt === 2) return jobDto({ completed: 1 })
+        throw '批量删除任务不存在'
+      }
+      return []
+    })
+    await s.startBatchDelete(['a1', 'a2'])
+    await vi.advanceTimersByTimeAsync(500)
+    expect(s.batchDeleteJob.value?.status).toBe('running')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(s.batchDeleteJob.value?.completed).toBe(1)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(s.batchDeleteJob.value).toBeNull()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(attempt).toBe(3)
+  })
+})
+
 describe('codexState 配额自动刷新', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -839,7 +998,7 @@ describe('codexState 用量档', () => {
     expect(s.usageToday.value?.totalTokens).toBe(1000)
   })
 
-  it('没有缓存时只查今日窗口，10 分钟内再要只读旧值', async () => {
+  it('没有缓存时只查今日窗口，30 秒内再要只读旧值', async () => {
     const s = await loadState()
     mockInvoke.mockImplementation(async (cmd) => cmd === USAGE_CMD ? usageReportFixture(1234) : undefined)
     await s.loadTodayUsage()
@@ -851,14 +1010,31 @@ describe('codexState 用量档', () => {
     expect(callsOf(USAGE_CMD)).toHaveLength(1)
   })
 
-  it('今日用量跨零点立即作废，不能沿用十分钟缓存', async () => {
+  it('今日汇总 30 秒后重新统计，不会被较旧的用量页缓存覆盖', async () => {
     vi.useFakeTimers()
     try {
-      vi.setSystemTime(new Date(2026, 9, 22, 23, 59))
+      const s = await loadState()
+      mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args))
+      await s.loadUsage()
+      await vi.advanceTimersByTimeAsync(30_000)
+      mockInvoke.mockResolvedValue(usageReportFixture(2000))
+      await s.loadTodayUsage()
+      expect(callsOf(USAGE_CMD)).toHaveLength(2)
+      expect(s.usageToday.value?.totalTokens).toBe(2000)
+      await s.loadTodayUsage()
+      expect(callsOf(USAGE_CMD)).toHaveLength(2)
+      expect(s.usageToday.value?.totalTokens).toBe(2000)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('今日用量跨零点立即作废，不能沿用 30 秒缓存', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(2026, 9, 22, 23, 59, 50))
       const s = await loadState()
       mockInvoke.mockResolvedValueOnce(usageReportFixture(1234))
       await s.loadTodayUsage()
-      vi.setSystemTime(new Date(2026, 9, 23, 0, 1))
+      vi.setSystemTime(new Date(2026, 9, 23, 0, 0, 10))
       let finish!: (value: unknown) => void
       mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
       const request = s.loadTodayUsage()

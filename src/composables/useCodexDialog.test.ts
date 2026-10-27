@@ -27,7 +27,90 @@ beforeEach(async () => {
   wrapper = mount(defineComponent({ setup() { client = useCodexDialog(); return () => null } }))
   await flushPromises()
 })
-afterEach(() => { wrapper?.unmount(); vi.unstubAllGlobals() })
+afterEach(() => { wrapper?.unmount(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers() })
+
+it('polls history and workspace while visible, resumes on focus, and preserves conversation drafts', async () => {
+  wrapper.unmount()
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+  wrapper = mount(defineComponent({ setup() { client = useCodexDialog(); return () => null } }))
+  await flushPromises()
+  await client.selectThread('t')
+  client.draft.value = '尚未发送'
+  vi.mocked(dialogAction).mockClear().mockImplementation(async action => {
+    if (action === 'syncThreads') return { threads: [thread, { ...thread, id: 'cli' }] } as never
+    if (action === 'workspace') return { ...base.workspace, branch: 'updated' } as never
+    return {} as never
+  })
+  await vi.advanceTimersByTimeAsync(30_000)
+  expect(client.threads.value.map(t => t.id)).toEqual(['t', 'cli'])
+  expect(client.workspace.value?.branch).toBe('updated')
+  expect(client.selected.value).toBe('t')
+  expect(client.draft.value).toBe('尚未发送')
+  const count = vi.mocked(dialogAction).mock.calls.length
+  visibility.mockReturnValue('hidden')
+  await vi.advanceTimersByTimeAsync(60_000)
+  expect(dialogAction).toHaveBeenCalledTimes(count)
+  visibility.mockReturnValue('visible')
+  window.dispatchEvent(new Event('focus'))
+  await flushPromises()
+  expect(dialogAction).toHaveBeenCalledTimes(count + 2)
+  wrapper.unmount()
+  await vi.advanceTimersByTimeAsync(60_000)
+  window.dispatchEvent(new Event('focus'))
+  expect(dialogAction).toHaveBeenCalledTimes(count + 2)
+})
+
+it('a delayed history query cannot undo a newer threads event', async () => {
+  let resolve!: (value: unknown) => void
+  vi.mocked(dialogAction).mockImplementationOnce(() => new Promise(done => { resolve = done }) as never)
+  const pending = client.refreshHistory()
+  receive({ payload: { type: 'threads', runtimeId: 'r', seq: 1, threads: [thread, { ...thread, id: 'new' }] } })
+  resolve({ threads: [thread] })
+  await pending
+  expect(client.threads.value.map(t => t.id)).toEqual(['t', 'new'])
+})
+
+it('a delayed history query cannot remove a newly created conversation', async () => {
+  let resolve!: (value: unknown) => void
+  vi.mocked(dialogAction).mockImplementationOnce(() => new Promise(done => { resolve = done }) as never)
+  const pending = client.refreshHistory()
+  client.draft.value = '开始检查'
+  vi.mocked(dialogAction).mockResolvedValueOnce({ ...snapshot(), thread: { ...thread, id: 'new' } })
+    .mockResolvedValueOnce({ turn: { id: 'turn', status: 'completed', items: [] } })
+  await client.send()
+  resolve({ threads: [thread] })
+  await pending
+  expect(client.selectedThread.value?.id).toBe('new')
+})
+
+it('a delayed workspace refresh cannot overwrite a newer result', async () => {
+  let resolve!: (value: unknown) => void
+  vi.mocked(dialogAction).mockImplementationOnce(() => new Promise(done => { resolve = done }) as never)
+  const pending = client.refreshWorkspace()
+  vi.mocked(dialogAction).mockResolvedValueOnce({ ...base.workspace, branch: 'new' })
+  await client.refreshWorkspace()
+  resolve({ ...base.workspace, branch: 'old' })
+  await pending
+  expect(client.workspace.value?.branch).toBe('new')
+})
+
+it('reconnecting releases the old history request without letting it clear the new loading state', async () => {
+  let oldResolve!: (value: unknown) => void
+  let currentResolve!: (value: unknown) => void
+  vi.mocked(dialogAction).mockImplementationOnce(() => new Promise(done => { oldResolve = done }) as never)
+  const old = client.refreshHistory()
+  await client.connect('/other')
+  vi.mocked(dialogAction).mockImplementationOnce(() => new Promise(done => { currentResolve = done }) as never)
+  const current = client.refreshHistory()
+  oldResolve({ threads: [{ ...thread, id: 'old' }] })
+  await old
+  expect(client.historyLoading.value).toBe(true)
+  currentResolve({ threads: [{ ...thread, id: 'current' }] })
+  await current
+  expect(client.historyLoading.value).toBe(false)
+  expect(client.threads.value.map(t => t.id)).toEqual(['current'])
+})
 
 it('refreshes imported history without discarding the selected conversation or its draft', async () => {
   await client.selectThread('t')

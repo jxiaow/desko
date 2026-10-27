@@ -2,7 +2,7 @@ import { onMounted, onUnmounted, watch } from 'vue'
 import { usePageActive } from './usePageActive'
 
 /** 只在当前可见页面轮询，切回窗口时补取；重请求由调用方的忙碌状态拦住。 */
-export function usePageAutoRefresh(refresh: () => Promise<void>, busy: () => boolean): void {
+export function usePageAutoRefresh(refresh: () => Promise<void>, busy: () => boolean, { immediate = false } = {}): void {
   const pageActive = usePageActive()
   let timer: ReturnType<typeof setInterval>
   const update = () => {
@@ -14,6 +14,7 @@ export function usePageAutoRefresh(refresh: () => Promise<void>, busy: () => boo
     timer = setInterval(update, 30_000)
     window.addEventListener('focus', update)
     document.addEventListener('visibilitychange', update)
+    if (immediate) update()
   })
   onUnmounted(() => {
     clearInterval(timer)

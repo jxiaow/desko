@@ -10,6 +10,7 @@ import {
   currentId,
   loaded,
   accountsError,
+  accountsBusy,
   busyId,
   switchingId,
   switchStep,
@@ -82,6 +83,7 @@ import CodexQuotaPanel from './CodexQuotaPanel.vue'
 import ResetCreditDialog from './ResetCreditDialog.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { usePageActive } from '../../composables/usePageActive'
+import { usePageAutoRefresh } from '../../composables/usePageAutoRefresh'
 import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 import { codexPlan } from '../../utils/codexPlan'
 import { usagePosterData, type UsagePosterData } from '../../utils/codexUsagePoster'
@@ -413,15 +415,25 @@ async function refreshOnEnter() {
   if (!active || !pageActive.value) return
   if (view.value === 'accounts') void loadWslAssignment()
   syncDeleteTicker()
-  void refreshAccounts().then(() => {
+  void refreshAccounts({ silent: loaded.value }).then(() => {
     if (!active || !pageActive.value) return
     acquireQuotaTicker('codex-page')
     void refreshQuotasOnEnter()
   })
 }
 
+usePageAutoRefresh(async () => {
+  await Promise.all([refreshAccounts({ silent: true }), loadWslAssignment()])
+}, () => codexWeb || view.value !== 'accounts' || accountsBusy.value || !!busyId.value)
+
+function refreshOnResume() {
+  if (document.visibilityState !== 'hidden' && pageActive.value) void refreshOnEnter()
+}
+
 onMounted(async () => {
   if (codexWeb) return
+  window.addEventListener('focus', refreshOnResume)
+  document.addEventListener('visibilitychange', refreshOnResume)
   await refreshOnEnter()
   const stop = await listen<SwitchProgress>('codex:switch-progress', (e) => applySwitchProgress(e.payload))
   if (active) unlisten.push(stop)
@@ -433,7 +445,7 @@ watch(pageActive, visible => {
   else releaseQuotaTicker('codex-page')
 })
 
-watch(view, value => { if (value === 'accounts' && pageActive.value && !codexWeb) void loadWslAssignment() })
+watch(view, value => { if (value === 'accounts' && pageActive.value) void refreshOnEnter() })
 
 watch(codexAccountsViewRequests, () => {
   if (codexWeb) return
@@ -442,6 +454,8 @@ watch(codexAccountsViewRequests, () => {
 
 onUnmounted(() => {
   active = false
+  window.removeEventListener('focus', refreshOnResume)
+  document.removeEventListener('visibilitychange', refreshOnResume)
   unlisten.forEach((f) => f())
   releaseQuotaTicker('codex-page')
 })
@@ -635,7 +649,7 @@ watchEffect(() => {
         <div class="empty-icon"><AppIcon name="navCodex" :size="24" /></div>
         <div class="empty-title">{{ accountsError ? '无法加载 Codex 账号' : '还没有 Codex 账号' }}</div>
         <div class="empty-desc">{{ accountsError || '添加账号登录，或导入已有凭据' }}</div>
-        <button v-if="accountsError" class="action-btn" type="button" @click="refreshAccounts">重试</button>
+        <button v-if="accountsError" class="action-btn" type="button" @click="refreshAccounts()">重试</button>
       </div>
 
       <div v-else-if="view === 'accounts' && !visibleAccounts.length" class="empty-state">

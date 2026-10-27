@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { listen } from '../services/events'
 import { dialogAction, type DialogBootstrap, type DialogEnvironment, type DialogDirectory, type DialogEnvironments, type DialogEvent, type DialogRequest, type DialogSnapshot, type DialogThread, type DialogTurn, type DialogWorkspace } from '../services/api/codexDialog'
 import { finishSend, isBusy, reduceView, restoreView, userText } from '../utils/codexTurnReducer'
+import { usePageAutoRefresh } from './usePageAutoRefresh'
 
 const problem = (error: unknown) => error instanceof Error ? error.message : String(error)
 
@@ -80,6 +81,8 @@ export function useCodexDialog() {
   let active = true
   let selection = 0
   let connectionVersion = 0
+  let workspaceVersion = 0
+  let threadsRevision = 0
   let queue: DialogEvent[] | null = null
   type PendingSend = { threadId: string; text: string; previousTurns: Set<string>; model: string; effort: string }
   let pendingSend: PendingSend | null = null
@@ -94,20 +97,26 @@ export function useCodexDialog() {
   }
   async function refreshWorkspace() {
     const current = runtimeId.value
+    const connectionAt = connectionVersion
+    const version = ++workspaceVersion
+    const currentRequest = () => active && current === runtimeId.value && connectionAt === connectionVersion && version === workspaceVersion
     try {
       const next = await request<DialogWorkspace>('workspace')
-      if (active && current === runtimeId.value) workspace.value = next
-    } catch (e) { if (active && current === runtimeId.value) error.value = problem(e) }
+      if (currentRequest()) workspace.value = next
+    } catch (e) { if (currentRequest()) error.value = problem(e) }
   }
   async function refreshHistory() {
     if (historyLoading.value || connection.value !== 'ready') return
     const current = runtimeId.value
+    const connectionAt = connectionVersion
+    const revision = threadsRevision
+    const currentRequest = () => active && current === runtimeId.value && connectionAt === connectionVersion
     historyLoading.value = true
     try {
       const result = await request<{ threads: DialogThread[] }>('syncThreads')
-      if (active && current === runtimeId.value) threads.value = result.threads
-    } catch (e) { if (active && current === runtimeId.value) error.value = `同步历史失败：${problem(e)}` }
-    finally { if (active) historyLoading.value = false }
+      if (currentRequest() && revision === threadsRevision) threads.value = result.threads
+    } catch (e) { if (currentRequest() && revision === threadsRevision) error.value = `同步历史失败：${problem(e)}` }
+    finally { if (currentRequest()) historyLoading.value = false }
   }
   async function selectThread(id: string, remember = true) {
     const version = ++selection
@@ -143,6 +152,7 @@ export function useCodexDialog() {
   async function connect(path: string, restart = false, target = environment.value) {
     if (!path || connection.value === 'connecting') return
     const version = ++connectionVersion
+    historyLoading.value = false
     selection++
     connection.value = 'connecting'; error.value = ''
     try {
@@ -184,7 +194,7 @@ export function useCodexDialog() {
         const created = await request<DialogSnapshot>('createThread', { model: parameters.model, sandbox: sandbox.value })
         if (!active || version !== selection) return
         id = created.thread.id; selected.value = id
-        if (!threads.value.some(t => t.id === id)) threads.value.unshift(created.thread)
+        if (!threads.value.some(t => t.id === id)) { threadsRevision++; threads.value.unshift(created.thread) }
         localStorage.setItem(storageKey(), id)
       }
       saveDraft()
@@ -238,7 +248,7 @@ export function useCodexDialog() {
       return
     }
     if (message.type === 'warning') error.value = message.error || ''
-    if (message.type === 'threads') threads.value = message.threads || []
+    if (message.type === 'threads') { threadsRevision++; threads.value = message.threads || [] }
     const id = message.params?.threadId || message.request?.params.threadId || message.threadId
     if (!id || id !== selected.value) return
     if (pendingSend?.threadId === id && message.method === 'turn/started' && message.params?.turn) turnSettings[`${id}:${message.params.turn.id}`] = { model: pendingSend.model, effort: pendingSend.effort }
@@ -253,6 +263,9 @@ export function useCodexDialog() {
     void selectThread(selected.value)
   }
   watch([draft, model, effort], () => { if (connection.value === 'ready' && !loading.value) saveDraft() })
+  usePageAutoRefresh(async () => {
+    await Promise.all([refreshHistory(), refreshWorkspace()])
+  }, () => connection.value !== 'ready')
   onMounted(async () => {
     window.addEventListener('desko:web-events-reset', resync)
     try {

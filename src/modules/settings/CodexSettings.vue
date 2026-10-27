@@ -9,7 +9,6 @@ import {
   QUOTA_ALERT_CHOICES,
   loadQuotaSettings,
   saveQuotaSettings,
-  syncQuotaTicker,
   loadUsageExtraDirs,
   saveUsageExtraDirs,
   loadUsageAutoWsl,
@@ -208,7 +207,6 @@ async function pickHudSkin(skin: CodexHudSkin) {
 
 async function pickRefresh(minutes: string | number) {
   await saveQuotaSettings(Number(minutes), quotaAlertThreshold.value)
-  syncQuotaTicker()
 }
 
 async function pickAlert(threshold: string | number) {

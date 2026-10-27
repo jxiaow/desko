@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import type { CodexRecycledAccount, CodexTrashedSessionRecord } from '../../services/api/codex'
 import { errText } from '../../services/api/backup'
 import {
@@ -23,17 +23,12 @@ import {
 import { useConfirmStore } from '../../stores/confirm'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
+import { usePageAutoRefresh } from '../../composables/usePageAutoRefresh'
 
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
 let active = true
 onUnmounted(() => { active = false })
-
-/** 两份留底清单都是本地目录扫描：进这一档才扫，扫过留在内存 */
-onMounted(() => {
-  if (!trashLoaded.value) void loadTrash()
-  if (!recycledLoaded.value) void loadRecycled()
-})
 
 const busyId = ref('')
 
@@ -58,10 +53,10 @@ const rows = computed(() => trashSessions.value.length + recycledAccounts.value.
 const errorText = computed(() => [recycledError.value, trashError.value].filter(Boolean).join('；'))
 const failed = computed(() => !rows.value && !!errorText.value)
 
-function reloadBoth(): void {
-  void loadRecycled()
-  void loadTrash()
+async function reloadBoth(): Promise<void> {
+  await Promise.all([loadRecycled(), loadTrash()])
 }
+usePageAutoRefresh(reloadBoth, () => trashBusy.value || recycledBusy.value || !!busyId.value, { immediate: true })
 
 /** 后端没标题时把整条 UUID 原样填进 title，这里与「会话」档同一读法收成短 ID */
 function labelOf(s: CodexTrashedSessionRecord): string {

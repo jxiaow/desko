@@ -20,6 +20,7 @@ import {
   refreshQuotasOnEnter,
   acquireQuotaTicker,
   releaseQuotaTicker,
+  USAGE_REFRESH_MS,
 } from './codexState'
 import {
   DEFAULT_HUD_SKIN,
@@ -152,6 +153,7 @@ let lockedEpoch = 0
 let hudWanted = false
 let hudReady = false
 let dataTask: Promise<void> | null = null
+let usageTimer: ReturnType<typeof setInterval> | null = null
 let unlisten: UnlistenFn[] = []
 let stopWantWatch: WatchStopHandle | null = null
 let stopStateWatch: WatchStopHandle | null = null
@@ -176,7 +178,7 @@ async function pushState(reveal = false): Promise<void> {
       pinned: hudPinned.value,
     } satisfies CodexHudEventPayload)
   } catch {
-    hudReady = false
+    // 一次 IPC 失败不能撤销 ready 握手；下一轮数据更新继续重试。
   }
 }
 
@@ -242,6 +244,27 @@ function stopLockedRefresh(): void {
   lockedTask = null
 }
 
+async function refreshHudUsage(): Promise<void> {
+  if (!active || !hudWanted || !dataActive) return
+  await loadTodayUsage()
+  await pushState()
+}
+
+function stopUsageRefresh(): void {
+  if (usageTimer) clearInterval(usageTimer)
+  usageTimer = null
+}
+
+function refreshOnResume(): void {
+  if (!active || !hudWanted || document.visibilityState === 'hidden') return
+  if (dataActive) {
+    void refreshHudUsage()
+    void refreshQuotasOnEnter()
+  } else if (quotaRefreshMinutes.value > 0) {
+    void refreshLockedData()
+  }
+}
+
 async function ensureHudData(): Promise<void> {
   if (!dataActive) return
   await loadQuotaSettings()
@@ -249,8 +272,10 @@ async function ensureHudData(): Promise<void> {
   if (!loaded.value) await refreshAccounts()
   if (!active || !hudWanted || !dataActive) return
   acquireQuotaTicker('codex-hud')
+  // 主窗口收进托盘时挂件仍可见，本地用量不随主窗口可见性或联网开关停更。
+  if (!usageTimer) usageTimer = setInterval(() => { void refreshHudUsage() }, USAGE_REFRESH_MS)
   void refreshQuotasOnEnter().then(() => pushState())
-  void loadTodayUsage().then(() => pushState())
+  void refreshHudUsage()
 }
 
 async function showHud(): Promise<void> {
@@ -261,6 +286,7 @@ async function showHud(): Promise<void> {
     created = await invoke<boolean>('desko_hud_show')
   } catch (e) {
     hudWanted = false
+    stopUsageRefresh()
     releaseQuotaTicker('codex-hud')
     useToastStore().showToast(`桌面挂件窗口创建失败：${errText(e)}`, 'error')
     return
@@ -279,6 +305,7 @@ async function showHud(): Promise<void> {
 
 async function hideHud(force = false): Promise<void> {
   stopLockedRefresh()
+  stopUsageRefresh()
   releaseQuotaTicker('codex-hud')
   if (!hudWanted && !force) return
   hudWanted = false
@@ -316,6 +343,7 @@ export function suspendCodexHudData(): void {
     lockedTodayDay = localDayKey(new Date())
   }
   dataActive = false
+  stopUsageRefresh()
   releaseQuotaTicker('codex-hud')
   void pushState()
   void startLockedRefresh()
@@ -323,6 +351,7 @@ export function suspendCodexHudData(): void {
 
 async function closeFromHud(): Promise<void> {
   stopLockedRefresh()
+  stopUsageRefresh()
   hudRevision++
   hudEnabled.value = false
   try {
@@ -385,6 +414,8 @@ async function initializeHudBridge(): Promise<void> {
     await listen('codex-hud:open-settings', () => requestOpenSettingsTab('codex')),
     await listen('tray-hud-toggle', () => { void toggleHudFromTray() }),
   ]
+  window.addEventListener('focus', refreshOnResume)
+  document.addEventListener('visibilitychange', refreshOnResume)
   stopWantWatch = watch(
     [hudEnabled, () => moduleFlags.codex],
     () => {
@@ -405,6 +436,9 @@ export async function deactivateCodexHudBridge(): Promise<void> {
   active = false
   dataActive = false
   stopLockedRefresh()
+  stopUsageRefresh()
+  window.removeEventListener('focus', refreshOnResume)
+  document.removeEventListener('visibilitychange', refreshOnResume)
   lockedSnapshot = null
   lockedTodayDay = ''
   stopWantWatch?.()

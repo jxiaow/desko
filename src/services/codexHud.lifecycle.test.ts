@@ -5,7 +5,7 @@ import { emitTo } from '@tauri-apps/api/event'
 import { settingsApi } from './api/settings'
 import { invoke } from './transport'
 import { moduleFlags } from '../modules/state'
-import { usageToday, loadQuotaSettings, refreshAccounts, acquireQuotaTicker, quotaRefreshMinutes } from './codexState'
+import { usageToday, loadTodayUsage, loadQuotaSettings, refreshAccounts, acquireQuotaTicker, quotaRefreshMinutes } from './codexState'
 import {
   activateCodexHudBridge, deactivateCodexHudBridge, suspendCodexHudData,
   hudEnabled, hudPinned, saveHudEnabled,
@@ -33,6 +33,7 @@ vi.mock('./codexState', async () => {
     loadQuotaSettings: vi.fn(), loadTodayUsage: vi.fn(async () => {}),
     refreshAccounts: vi.fn(), refreshQuotasOnEnter: vi.fn(async () => {}),
     acquireQuotaTicker: vi.fn(), releaseQuotaTicker: vi.fn(),
+    USAGE_REFRESH_MS: 30_000,
   }
 })
 vi.mock('./theme', () => ({
@@ -133,6 +134,74 @@ it('锁定保留最近快照和固定设置，解锁恢复刷新而不重建窗�
   expect(acquireQuotaTicker).toHaveBeenCalledWith('codex-hud')
   expect(payload()).not.toHaveProperty('locked')
   expect(vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === 'desko_hud_show')).toHaveLength(1)
+})
+
+it('主窗口隐藏且配额自动刷新关闭时，挂件仍每 30 秒更新本地今日用量', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+  quotaRefreshMinutes.value = 0
+  await activateCodexHudBridge()
+  await ready()
+  vi.mocked(loadTodayUsage).mockClear()
+  vi.mocked(loadTodayUsage).mockImplementationOnce(async () => {
+    usageToday.value = { totalTokens: 456, estimatedCostUsd: 2 } as NonNullable<typeof usageToday.value>
+  })
+  try {
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(loadTodayUsage).toHaveBeenCalledTimes(1)
+    expect(payload().state.today).toEqual({ tokens: 456, costUsd: 2 })
+    await saveHudEnabled(false)
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(loadTodayUsage).toHaveBeenCalledTimes(1)
+  } finally { visibility.mockRestore() }
+})
+
+it('锁定停掉解锁态用量轮询，解锁后恢复，退出清理定时器', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+  await activateCodexHudBridge()
+  await ready()
+  suspendCodexHudData()
+  await flushPromises()
+  vi.mocked(loadTodayUsage).mockClear()
+  await vi.advanceTimersByTimeAsync(30_000)
+  expect(loadTodayUsage).not.toHaveBeenCalled()
+  await activateCodexHudBridge()
+  await flushPromises()
+  vi.mocked(loadTodayUsage).mockClear()
+  await vi.advanceTimersByTimeAsync(30_000)
+  expect(loadTodayUsage).toHaveBeenCalledTimes(1)
+  await deactivateCodexHudBridge()
+  await vi.advanceTimersByTimeAsync(60_000)
+  window.dispatchEvent(new Event('focus'))
+  expect(loadTodayUsage).toHaveBeenCalledTimes(1)
+})
+
+it('切回主窗口会补取挂件用量', async () => {
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+  try {
+    await activateCodexHudBridge()
+    await ready()
+    vi.mocked(loadTodayUsage).mockClear()
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    expect(loadTodayUsage).toHaveBeenCalledTimes(1)
+  } finally { visibility.mockRestore() }
+})
+
+it('一次快照推送失败后，下一次数据更新仍能送达挂件', async () => {
+  await activateCodexHudBridge()
+  await ready()
+  vi.mocked(emitTo).mockRejectedValueOnce(new Error('temporary IPC failure'))
+  hudPinned.value = true
+  await nextTick()
+  await flushPromises()
+  vi.mocked(emitTo).mockClear()
+  usageToday.value = { totalTokens: 789, estimatedCostUsd: 3 } as NonNullable<typeof usageToday.value>
+  await nextTick()
+  await flushPromises()
+  expect(emitTo).toHaveBeenCalled()
+  expect(payload().state.today).toEqual({ tokens: 789, costUsd: 3 })
 })
 
 it('窗口创建期间关闭显示，不会在创建完成后重新亮起', async () => {

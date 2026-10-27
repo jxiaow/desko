@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { CodexUsageBucket } from '../../services/api/codex'
 import { loadUsage, usageBusy, usageError, usageRange, usageReportRange, usageReport, usageUpdatedAt } from '../../services/codexState'
-import { formatTokenCount as compact, formatUsageCost, formatUsageCostDetail, localDayKey, usageWindowFrom } from '../../utils/codexUsage'
+import { formatTokenCount as compact, formatUsageCost, formatUsageCostDetail, localDayKey } from '../../utils/codexUsage'
 import { writeClipboardText } from '../../utils/clipboard'
 import { useToastStore } from '../../stores/toast'
 import { errText } from '../../services/api/backup'
@@ -24,9 +24,6 @@ async function copySessionId(id: string) {
 const shortSessionId = (id: string) => id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id
 
 onMounted(() => {
-  const lastDay = usageUpdatedAt.value ? localDayKey(new Date(usageUpdatedAt.value)) : ''
-  const wrongWindow = usageReport.value?.fromTimestamp !== usageWindowFrom(usageRange.value)
-  if ((!usageReport.value || wrongWindow || lastDay !== localDayKey(new Date())) && !usageBusy.value) void loadUsage()
   scheduleDayRefresh()
 })
 
@@ -42,7 +39,7 @@ function scheduleDayRefresh() {
   }, next.getTime() - now.getTime() + 100)
 }
 onUnmounted(() => clearTimeout(dayTimer))
-usePageAutoRefresh(loadUsage, () => usageBusy.value)
+usePageAutoRefresh(loadUsage, () => usageBusy.value, { immediate: true })
 
 const num = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 const days = computed(() => usageReport.value?.byDay.slice(-30) ?? [])

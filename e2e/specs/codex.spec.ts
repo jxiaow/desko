@@ -1218,7 +1218,7 @@ test.describe('Codex 用量图', () => {
     return Math.floor(d.getTime() / 1000)
   }
 
-  test('停在别的档不扫目录，切过来扫一次，切回再切来不重扫', async ({ page }) => {
+  test('停在别的档不扫目录，进入与返回用量档都更新', async ({ page }) => {
     await bootUnlocked(page, SEED_SESSIONS)
     await page.locator('a.nav-item[href="/codex"]').click()
     await expect(page.locator('.acc-row').first()).toBeVisible()
@@ -1231,7 +1231,7 @@ test.describe('Codex 用量图', () => {
     await page.locator('.cx-tab', { hasText: '账号' }).click()
     await page.locator('.cx-tab', { hasText: '用量' }).click()
     await expect(page.locator('.usg-sum')).toBeVisible()
-    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
   })
 
   test('总量行与柱子同账：净输入拆开缓存、模型表按量降序、扫描耗时上屏', async ({ page }) => {
@@ -1348,19 +1348,22 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('.usg-num')).toHaveText('5.14万')
     await expect(page.locator('.usg-col[data-recorded="true"]')).toHaveCount(3)
     await expect(page.locator('.titlebar-count')).toHaveText('4 次请求')
-    // 图是官方目录的镜子：只有这一次移动值得重扫，来回切档不再打第二次
+    // 返回用量档补扫官方目录，统计包含刚完成的移动。
     expect(await e2e.count(page, USAGE_CMD)).toBe(2)
   })
 
-  test('只动留底的彻底删除与清空不碰图：回用量档不发网络', async ({ page }) => {
+  test('查看回收站不触发用量统计，返回用量档补刷新且总量不变', async ({ page }) => {
     await gotoUsage(page)
     expect(await e2e.count(page, USAGE_CMD)).toBe(1)
+    const total = await page.locator('.usg-num').textContent()
 
     await page.locator('.cx-tab', { hasText: '回收站' }).click()
     await expect(page.locator('.empty-title')).toHaveText('回收站是空的')
+    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
 
     await page.locator('.cx-tab', { hasText: '用量' }).click()
     await expect(page.locator('.usg-sum')).toBeVisible()
-    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
+    await expect(page.locator('.usg-num')).toHaveText(total!)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
   })
 })

@@ -44,6 +44,7 @@ export const accounts = ref<CodexAccount[]>([])
 export const currentId = ref('')
 export const loaded = ref(false)
 export const accountsError = ref('')
+export const accountsBusy = ref(false)
 export const busyId = ref('')
 export const switchingId = ref('')
 /** 切号进度（后端 codex:switch-progress 事件），只在切号那几秒非空 */
@@ -91,32 +92,42 @@ export function requestCodexAccountsView(): void {
 }
 
 let accountEpoch = 0
+let accountRefreshVersion = 0
 
-export async function refreshAccounts(): Promise<void> {
+export async function refreshAccounts({ silent = false }: { silent?: boolean } = {}): Promise<void> {
   const epoch = accountEpoch
+  const version = ++accountRefreshVersion
   const toast = useToastStore()
+  accountsBusy.value = true
   accountsError.value = ''
   try {
     const [list, cur] = await Promise.all([codexApi.list(), codexApi.current()])
-    if (epoch !== accountEpoch) return
+    if (epoch !== accountEpoch || version !== accountRefreshVersion) return
     accounts.value = list
     currentId.value = cur?.id ?? ''
   } catch (e) {
-    if (epoch !== accountEpoch) return
+    if (epoch !== accountEpoch || version !== accountRefreshVersion) return
     accountsError.value = errText(e)
-    toast.showToast(errText(e), 'error')
+    if (!silent) toast.showToast(errText(e), 'error')
   } finally {
-    if (epoch === accountEpoch) loaded.value = true
+    if (epoch === accountEpoch && version === accountRefreshVersion) {
+      loaded.value = true
+      accountsBusy.value = false
+    }
   }
 }
 
 /** 应用锁定时收回账号凭据与后台轮询。 */
 export function clearCodexSession(): void {
   accountEpoch++
+  accountRefreshVersion++
+  accountsBusy.value = false
+  quotaRequests.clear()
   stopQuotaTicker()
   stopDeleteTicker()
   usageToday.value = null
   usageTodayUpdatedAt.value = null
+  usageTodayRequest = null
   deleteGeneration++
   batchDeleteErrorsBeforeRetry.value = []
   lastQuotaAt = 0
@@ -169,20 +180,31 @@ export function clearCodexSession(): void {
 /** 配额刷新走后台批量：一次点击不该把整页冻在网络请求上。
  *  silent 给定时器与进页那一轮用——每轮都播「配额已刷新」是噪音，失败也不刷屏（行内已有 quota_error 事实位） */
 let lastQuotaAt = 0
+const quotaRequests = new Map<string, Promise<void>>()
 
 export async function refreshQuotas(ids: string[], opts: { silent?: boolean } = {}): Promise<void> {
   const epoch = accountEpoch
   const toast = useToastStore()
   if (!ids.length) return
-  lastQuotaAt = Date.now()
+  const key = JSON.stringify([...new Set(ids)].sort())
+  let request = quotaRequests.get(key)
+  if (!request) {
+    lastQuotaAt = Date.now()
+    request = (async () => {
+      await codexApi.refreshAllQuotas(ids)
+      if (epoch === accountEpoch) await refreshAccounts({ silent: opts.silent })
+    })()
+    quotaRequests.set(key, request)
+  }
   try {
-    await codexApi.refreshAllQuotas(ids)
+    await request
     if (epoch !== accountEpoch) return
     if (!opts.silent) toast.showToast('配额已刷新')
-    await refreshAccounts()
-    if (epoch === accountEpoch) checkQuotaAlert()
+    checkQuotaAlert()
   } catch (e) {
     if (epoch === accountEpoch && !opts.silent) toast.showToast(errText(e), 'error')
+  } finally {
+    if (quotaRequests.get(key) === request) quotaRequests.delete(key)
   }
 }
 
@@ -298,6 +320,8 @@ const DEFAULT_ALERT_THRESHOLD = 20
 
 export const quotaRefreshMinutes = ref(DEFAULT_REFRESH_MINUTES)
 export const quotaAlertThreshold = ref(DEFAULT_ALERT_THRESHOLD)
+let quotaSettingsRevision = 0
+let quotaSettingsSaving = 0
 
 const clampChoice = (raw: string, choices: number[], fallback: number) => {
   const n = Number.parseInt(raw, 10)
@@ -305,22 +329,31 @@ const clampChoice = (raw: string, choices: number[], fallback: number) => {
 }
 
 export async function loadQuotaSettings(): Promise<void> {
+  if (quotaSettingsSaving) return
+  const revision = quotaSettingsRevision
+  const previous = quotaRefreshMinutes.value
   try {
     const [minutes, threshold] = await Promise.all([
       settingsApi.getSetting(KEY_REFRESH_MINUTES),
       settingsApi.getSetting(KEY_ALERT_THRESHOLD),
     ])
+    if (revision !== quotaSettingsRevision) return
     quotaRefreshMinutes.value = clampChoice(minutes, QUOTA_REFRESH_CHOICES, DEFAULT_REFRESH_MINUTES)
     quotaAlertThreshold.value = clampChoice(threshold, QUOTA_ALERT_CHOICES, DEFAULT_ALERT_THRESHOLD)
   } catch {
-    quotaRefreshMinutes.value = DEFAULT_REFRESH_MINUTES
-    quotaAlertThreshold.value = DEFAULT_ALERT_THRESHOLD
+    // 初始值已是默认档；临时读失败不能把用户已关闭的自动刷新重新打开。
+    return
   }
+  if (previous !== quotaRefreshMinutes.value) syncQuotaTicker()
 }
 
 export async function saveQuotaSettings(minutes: number, threshold: number): Promise<void> {
+  quotaSettingsRevision++
+  quotaSettingsSaving++
+  const previous = quotaRefreshMinutes.value
   quotaRefreshMinutes.value = minutes
   quotaAlertThreshold.value = threshold
+  if (previous !== minutes) syncQuotaTicker()
   // 阈值改了要允许重新报一次，否则调低阈值永远静默
   alerted.clear()
   try {
@@ -330,6 +363,8 @@ export async function saveQuotaSettings(minutes: number, threshold: number): Pro
     ])
   } catch (e) {
     useToastStore().showToast(errText(e), 'error')
+  } finally {
+    quotaSettingsSaving--
   }
 }
 
@@ -407,8 +442,7 @@ export function resetsIn(ts: number | null | undefined): string {
   return `${Math.floor(h / 24)} 天后重置`
 }
 
-/** 会话视图的共享状态：官方目录的一次全扫是重 I/O，扫完留在内存——
- *  页头计数与会话面板读同一份，切档、离页再进都不重扫，只有「刷新」才重取 */
+/** 会话视图的共享状态：页头与面板共用最近读数，进入页面及可见时定期刷新。 */
 export const sessions = ref<CodexSessionRecord[]>([])
 /** 未搜索时的总数，搜索结果变少不应收起搜索入口。 */
 export const sessionTotalCount = ref(0)
@@ -525,11 +559,12 @@ export async function loadSessionTokens(ids: string[], force = false): Promise<v
   }
 }
 
-/** desko 回收站：留底清单的一次扫描，口径同会话列表——进档才扫，扫过留在内存 */
+/** desko 回收站：保留最近清单，进入页面及可见时定期刷新。 */
 export const trashSessions = ref<CodexTrashedSessionRecord[]>([])
 export const trashLoaded = ref(false)
 export const trashBusy = ref(false)
 export const trashError = ref('')
+let trashSourcesVersion = 0
 
 export async function loadTrash(): Promise<void> {
   if (trashBusy.value) return
@@ -537,15 +572,22 @@ export async function loadTrash(): Promise<void> {
   trashError.value = ''
   const epoch = accountEpoch
   try {
-    const list = await codexApi.listTrash()
-    if (epoch !== accountEpoch) return
-    trashSessions.value = list
-    trashLoaded.value = true
-  } catch (e) {
-    if (epoch !== accountEpoch) return
-    trashSessions.value = []
-    trashLoaded.value = false
-    trashError.value = errText(e)
+    while (epoch === accountEpoch) {
+      const version = trashSourcesVersion
+      try {
+        const list = await codexApi.listTrash()
+        if (epoch !== accountEpoch) return
+        if (version !== trashSourcesVersion) continue
+        trashSessions.value = list
+        trashLoaded.value = true
+      } catch (e) {
+        if (epoch !== accountEpoch) return
+        if (version !== trashSourcesVersion) continue
+        if (!trashLoaded.value) trashSessions.value = []
+        trashError.value = errText(e)
+      }
+      return
+    }
   } finally {
     if (epoch === accountEpoch) trashBusy.value = false
   }
@@ -567,6 +609,7 @@ export async function moveSessionToTrash(sessionId: string): Promise<string> {
   const next = { ...sessionTokens.value }
   delete next[sessionId]
   sessionTokens.value = next
+  trashSourcesVersion++
   trashLoaded.value = false
   invalidateUsage()
   return summary.message
@@ -599,22 +642,25 @@ export async function emptySessionTrash(): Promise<string> {
   const epoch = accountEpoch
   const summary = await codexApi.emptyTrash()
   if (epoch !== accountEpoch) return ''
+  trashSourcesVersion++
   trashSessions.value = []
   return summary.message
 }
 
 function dropTrashRow(sessionId: string): void {
+  trashSourcesVersion++
   trashSessions.value = trashSessions.value.filter((t) => t.sessionId !== sessionId)
 }
 
 /**
  * 账号留底。删除那一步后端早就在写密文快照（`remove_accounts` 先 archive 再剔索引），
- * 这一族只是把已经在磁盘上的那份读回来——口径同会话留底：进档才扫，扫过留在内存。
+ * 这一族读取磁盘快照，与会话留底一起在回收站可见时刷新。
  */
 export const recycledAccounts = ref<CodexRecycledAccount[]>([])
 export const recycledLoaded = ref(false)
 export const recycledBusy = ref(false)
 export const recycledError = ref('')
+let recycledSourcesVersion = 0
 
 export async function loadRecycled(): Promise<void> {
   if (recycledBusy.value) return
@@ -622,15 +668,22 @@ export async function loadRecycled(): Promise<void> {
   recycledError.value = ''
   const epoch = accountEpoch
   try {
-    const list = await codexApi.listRecycled()
-    if (epoch !== accountEpoch) return
-    recycledAccounts.value = list
-    recycledLoaded.value = true
-  } catch (e) {
-    if (epoch !== accountEpoch) return
-    recycledAccounts.value = []
-    recycledLoaded.value = false
-    recycledError.value = errText(e)
+    while (epoch === accountEpoch) {
+      const version = recycledSourcesVersion
+      try {
+        const list = await codexApi.listRecycled()
+        if (epoch !== accountEpoch) return
+        if (version !== recycledSourcesVersion) continue
+        recycledAccounts.value = list
+        recycledLoaded.value = true
+      } catch (e) {
+        if (epoch !== accountEpoch) return
+        if (version !== recycledSourcesVersion) continue
+        if (!recycledLoaded.value) recycledAccounts.value = []
+        recycledError.value = errText(e)
+      }
+      return
+    }
   } finally {
     if (epoch === accountEpoch) recycledBusy.value = false
   }
@@ -662,11 +715,13 @@ export async function emptyRecycledAccounts(): Promise<string> {
   if (!ids.length) return '没有已删除的账号'
   await codexApi.emptyRecycled(ids)
   if (epoch !== accountEpoch) return ''
-  recycledAccounts.value = []
+  recycledSourcesVersion++
+  recycledAccounts.value = recycledAccounts.value.filter(row => !ids.includes(row.id))
   return `已彻底删除 ${ids.length} 个账号`
 }
 
 function dropRecycledRow(recycleId: string): void {
+  recycledSourcesVersion++
   recycledAccounts.value = recycledAccounts.value.filter((r) => r.id !== recycleId)
 }
 
@@ -730,11 +785,13 @@ async function pollBatchDelete(): Promise<void> {
     if (generation === deleteGeneration && batchDeleteJob.value?.jobId === jobId && next.jobId === jobId) {
       applyBatchDeleteJob(next)
     }
-  } catch {
+  } catch (e) {
     if (generation !== deleteGeneration || batchDeleteJob.value?.jobId !== jobId) return
-    // 读不回就是任务已经没了（clear 过 / 后端重启过），不能挂成永久「删除中」
-    stopDeleteTicker()
-    batchDeleteJob.value = null
+    // 临时 IPC/网络/磁盘错误保留入口，下一拍重试；只有后端确认任务不存在才收回。
+    if (errText(e) === '批量删除任务不存在') {
+      stopDeleteTicker()
+      batchDeleteJob.value = null
+    }
   } finally {
     if (pollInFlightGeneration === generation) pollInFlightGeneration = null
   }
@@ -744,7 +801,10 @@ function applyBatchDeleteJob(next: CodexBatchDeleteJobStatus): void {
   const moved = next.completed !== batchDeleteJob.value?.completed
   batchDeleteJob.value = next
   // 每处理一条账号页少一条、回收站多一份留底，不重读就是「进度走了、列表没动」的假象
-  if (moved) void refreshAccounts()
+  if (moved) {
+    recycledSourcesVersion++
+    void refreshAccounts({ silent: true })
+  }
   recycledLoaded.value = false
   if (next.status !== 'running') batchDeleteErrorsBeforeRetry.value = []
   syncDeleteTicker()
@@ -863,7 +923,7 @@ export const usageError = ref('')
 export const usageToday = ref<{ totalTokens: number; estimatedCostUsd: number | null } | null>(null)
 export const usageTodayUpdatedAt = ref<number | null>(null)
 let usageSourcesVersion = 0
-const USAGE_TODAY_TTL = 10 * 60_000
+export const USAGE_REFRESH_MS = 30_000
 let usageTodayRequest: Promise<void> | null = null
 const USAGE_RANGES: UsageRange[] = ['today', 'week', 'month', 'all']
 const usageWindowCache = new Map<UsageRange, {
@@ -919,7 +979,7 @@ async function saveUsageSetting(key: string, value: string): Promise<void> {
   if (refresh) void loadUsage()
 }
 
-/** WSL 身份只读探测；进入账号页及显式写入后刷新，不挂定时同步。 */
+/** WSL 身份只读探测；账号页可见时定期读取，显式写入后补读。 */
 export const wslAssignment = ref<CodexWslAssignment | null>(null)
 let wslAssignmentEpoch = 0
 export async function loadWslAssignment(): Promise<void> {
@@ -985,11 +1045,13 @@ function adoptCachedToday(): boolean {
   if (!cached) return false
   if (localDayKey(new Date(cached.updatedAt)) !== localDayKey(new Date())) return false
   if (cached.fromTimestamp !== usageWindowFrom('today')) return false
-  publishToday(cached.report, cached.updatedAt)
+  if (!usageToday.value || cached.updatedAt > (usageTodayUpdatedAt.value ?? 0)) {
+    publishToday(cached.report, cached.updatedAt)
+  }
   return true
 }
 
-/** 10 分钟缓存；用量页正在全扫时只认缓存，绝不并发起第二份扫描 */
+/** 30 秒缓存；用量页正在全扫时只认缓存，绝不并发起第二份扫描 */
 export async function loadTodayUsage(): Promise<void> {
   adoptCachedToday()
   const updatedAt = usageTodayUpdatedAt.value
@@ -997,7 +1059,7 @@ export async function loadTodayUsage(): Promise<void> {
     usageToday.value = null
     usageTodayUpdatedAt.value = null
   }
-  if (usageToday.value && Date.now() - (usageTodayUpdatedAt.value ?? 0) < USAGE_TODAY_TTL) return
+  if (usageToday.value && Date.now() - (usageTodayUpdatedAt.value ?? 0) < USAGE_REFRESH_MS) return
   if (usageTodayRequest) return usageTodayRequest
   if (usageBusy.value) return
   const epoch = accountEpoch
