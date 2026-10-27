@@ -288,8 +288,6 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
 <style scoped>
 .tunnel-page :deep(.tn-card) { margin-bottom: 16px; box-shadow: none; }
 .tn-foot h2 { margin: 0; font-size: var(--text-base); font-weight: 600; line-height: 22px; }
-.tunnel-page :deep(.tn-card .btn-primary:not(:disabled)) { background: var(--text); color: var(--bg-surface); box-shadow: none; }
-.tunnel-page :deep(.tn-card .btn-primary:hover:not(:disabled)) { background: var(--text-secondary); color: var(--bg-surface); }
 .tunnel-page :deep(.tn-row) { height: auto; min-height: 48px; }
 .tunnel-page :deep(.tn-note) { line-height: 1.6; color: var(--text-secondary); }
 .tunnel-page :deep(button:focus-visible), .tunnel-page-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -300,20 +298,14 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
 .tunnel-page-bar .chip { background: transparent; padding-inline: 0; color: var(--text-secondary); }
 .tunnel-page-bar .chip + .chip { margin-left: 12px; }
 .tunnel-page-bar .connecting .dot { background: var(--warning); }
-.tunnel-page-bar .toggle-btn:not(.ghost-danger):not(:disabled),
-:global(#workspace-page-toolbar .tunnel-page-bar .toggle-btn:not(.ghost-danger):not(:disabled)) { background: var(--text); color: var(--bg-surface); box-shadow: none; }
-.tunnel-page-bar .toggle-btn:not(.ghost-danger):hover:not(:disabled),
-:global(#workspace-page-toolbar .tunnel-page-bar .toggle-btn:not(.ghost-danger):hover:not(:disabled)) { background: var(--text-secondary); color: var(--bg-surface); }
-
+.toggle-btn { border-radius: var(--radius-ib); }
 .toggle-btn.ghost-danger:not(:disabled) {
   background: var(--danger-soft);
   color: var(--danger);
-  border: 1px solid var(--danger-border);
   box-shadow: none;
 }
 .toggle-btn.ghost-danger:hover:not(:disabled) {
   background: var(--danger-soft);
-  border-color: var(--danger);
   color: var(--danger-hover);
 }
 .chip-warn-text { color: var(--text-secondary) }

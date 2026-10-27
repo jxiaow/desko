@@ -279,8 +279,6 @@ async function save() {
 .tunnel-service-dialog .seg button { height: 30px; font-size: var(--text-sm); }
 .tunnel-service-dialog .seg button.on { background: var(--bg-surface); color: var(--text); box-shadow: none; }
 .tunnel-service-dialog .dialog-footer { padding: 14px 24px; gap: 8px; flex-wrap: wrap; }
-.tunnel-service-dialog .dialog-footer .btn-primary { background: var(--text); color: var(--bg-surface); box-shadow: none; border: 0; }
-.tunnel-service-dialog .dialog-footer .btn-primary:hover:not(:disabled) { background: var(--text-secondary); transform: none; }
 .tunnel-service-dialog button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .tunnel-service-dialog .save-error { white-space: pre-line; overflow-wrap: anywhere; }
 
