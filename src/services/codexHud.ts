@@ -158,6 +158,7 @@ let unlisten: UnlistenFn[] = []
 let stopWantWatch: WatchStopHandle | null = null
 let stopStateWatch: WatchStopHandle | null = null
 let hudOpenHandler: (() => void) | null = null
+let windowSync: Promise<void> = Promise.resolve()
 
 export function setCodexHudOpenHandler(handler: (() => void) | null): void {
   hudOpenHandler = handler
@@ -258,6 +259,7 @@ function stopUsageRefresh(): void {
 function refreshOnResume(): void {
   if (!active || !hudWanted || document.visibilityState === 'hidden') return
   if (dataActive) {
+    void refreshAccounts({ silent: true })
     void refreshHudUsage()
     void refreshQuotasOnEnter()
   } else if (quotaRefreshMinutes.value > 0) {
@@ -318,14 +320,17 @@ async function hideHud(force = false): Promise<void> {
   }
 }
 
-async function syncHudWindow(): Promise<void> {
-  if (!active) return
-  const want = hudEnabled.value && moduleFlags.codex && isTauriRuntime()
-  if (!want) {
-    await hideHud(true)
-    return
-  }
-  if (!hudWanted) await showHud()
+function syncHudWindow(): Promise<void> {
+  // Native hide/destroy/show must finish in order. A slow destroy from a
+  // previous toggle must not remove the window just enabled by the next one.
+  const task = windowSync.catch(() => {}).then(async () => {
+    if (!active) return
+    const want = hudEnabled.value && moduleFlags.codex && isTauriRuntime()
+    if (!want) await hideHud(true)
+    else if (!hudWanted) await showHud()
+  })
+  windowSync = task
+  return task
 }
 
 async function onHudReady(): Promise<void> {
@@ -451,6 +456,9 @@ export async function deactivateCodexHudBridge(): Promise<void> {
   hudWanted = false
   dataTask = null
   if (isTauriRuntime()) {
-    try { await invoke('desko_hud_hide') } catch { /* 锁定收尾不能卡在窗口命令上 */ }
+    windowSync = windowSync.catch(() => {}).then(async () => {
+      try { await invoke('desko_hud_hide') } catch { /* 锁定收尾不能卡在窗口命令上 */ }
+    })
+    await windowSync
   }
 }

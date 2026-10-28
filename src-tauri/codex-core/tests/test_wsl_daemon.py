@@ -87,6 +87,27 @@ class WslHelperTests(unittest.TestCase):
         self.assertEqual(helper.process_kind(info, (99123, 100)), 'daemon')
         self.assertIsNone(helper.process_kind(info, (99123, 99)))
 
+    def test_command_names_in_option_values_and_resume_ids_remain_interactive(self):
+        for args in [
+            ['codex', '--profile', 'review'],
+            ['codex', '--cd', 'exec', '--model', 'review'],
+            ['codex', '--image', 'help'],
+            ['codex', '--', 'review'],
+            ['codex', 'resume', 'help'],
+            ['codex', 'fork', 'login'],
+        ]:
+            with self.subTest(args=args):
+                self.assertEqual(helper.process_kind(process(args=args)), 'cli')
+
+    def test_noninteractive_subcommands_after_options_remain_excluded(self):
+        for args in [
+            ['codex', '--profile', 'review', 'app-server'],
+            ['codex', '--model=fixture', 'exec', 'prompt'],
+            ['codex', '-c', 'feature=true', 'review'],
+        ]:
+            with self.subTest(args=args):
+                self.assertIsNone(helper.process_kind(process(args=args)))
+
     def test_pid_reuse_uid_and_exec_changes_reject_before_signal(self):
         expected = process()
         for changes in [{'ticks': 101}, {'uid': os.getuid()+1}, {'exe': '/fake/other'}, {'args': ['other']}]:

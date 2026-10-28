@@ -52,6 +52,7 @@ docs/design/**/*.png
 # 实跑校验脚本与中间产物，跑完即可弃
 tmp/
 .tmp/
+.taste-skill/
 
 # 走查生成的 txt 报告（reports 下历史 audit-*.json 是显式入库的，不受影响）
 .design-qa/reports/*.txt

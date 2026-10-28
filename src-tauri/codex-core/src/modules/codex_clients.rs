@@ -31,6 +31,7 @@ struct ProcessInfo {
     pid: u32,
     parent: Option<u32>,
     started: u64,
+    exited: bool,
     name: String,
     exe: Option<PathBuf>,
     cwd: Option<PathBuf>,
@@ -116,10 +117,29 @@ fn interactive(args: &[OsString]) -> bool {
         "help",
         "pid-update-loop",
     ];
-    !args
-        .iter()
-        .skip(1)
-        .any(|arg| EXCLUDED.contains(&arg.to_string_lossy().as_ref()))
+    const VALUE_OPTIONS: &[&str] = &[
+        "-c", "--config", "--enable", "--disable", "--remote", "--remote-auth-token-env",
+        "-i", "--image", "-m", "--model", "--local-provider", "-p", "--profile",
+        "-s", "--sandbox", "-C", "--cd", "--add-dir", "-a", "--ask-for-approval",
+    ];
+    let mut args = args.iter().skip(1);
+    while let Some(arg) = args.next() {
+        let arg = arg.to_string_lossy();
+        if arg == "--" {
+            return true;
+        }
+        let option = arg.split('=').next().unwrap_or_default();
+        if VALUE_OPTIONS.contains(&option) {
+            if !arg.contains('=') {
+                args.next();
+            }
+        } else if !arg.starts_with('-') {
+            // Only the first positional argument can be a subcommand. A
+            // profile name, prompt or resumed session ID may itself be "review".
+            return !EXCLUDED.contains(&arg.as_ref());
+        }
+    }
+    true
 }
 fn package_contains(path: &Path, location: &Path) -> bool {
     path.to_string_lossy()
@@ -149,7 +169,7 @@ fn classify(
     let app_pids = processes
         .iter()
         .filter(|p| {
-            p.name.eq_ignore_ascii_case("chatgpt.exe")
+            !p.exited && p.name.eq_ignore_ascii_case("chatgpt.exe")
                 && p.exe.as_ref().is_some_and(|path| {
                     packages
                         .iter()
@@ -159,6 +179,9 @@ fn classify(
         .map(|p| p.pid)
         .collect::<HashSet<_>>();
     for process in processes {
+        if process.exited {
+            continue;
+        }
         if has_ancestor(process.pid, &excluded, processes)
             || process
                 .parent
@@ -182,7 +205,11 @@ fn classify(
             app_roots.insert(process.pid);
             let mut tree: Vec<ProcessInfo> = processes
                 .iter()
-                .filter(|p| has_ancestor(p.pid, &HashSet::from([process.pid]), processes))
+                .filter(|p| {
+                    !p.exited
+                        && !has_ancestor(p.pid, &excluded, processes)
+                        && has_ancestor(p.pid, &HashSet::from([process.pid]), processes)
+                })
                 .cloned()
                 .collect();
             tree.sort_by_key(|p| if p.pid == process.pid { 0 } else { 1 });
@@ -200,7 +227,7 @@ fn classify(
         }
     }
     for process in processes {
-        if !process.name.eq_ignore_ascii_case("codex.exe")
+        if process.exited || !process.name.eq_ignore_ascii_case("codex.exe")
             || has_ancestor(process.pid, &app_roots, processes)
             || has_ancestor(process.pid, &excluded, processes)
         {
@@ -253,6 +280,43 @@ fn counts(clients: &[Client]) -> ClientCounts {
             .count(),
     }
 }
+fn capture_process_identities_with(
+    mut processes: Vec<ProcessInfo>,
+    mut identity: impl FnMut(u32) -> Result<Option<u64>, String>,
+) -> Vec<ProcessInfo> {
+    let roots = processes
+        .iter()
+        .filter(|p| {
+            p.name.eq_ignore_ascii_case("codex.exe")
+                || p.name.eq_ignore_ascii_case("chatgpt.exe")
+        })
+        .map(|p| p.pid)
+        .collect::<HashSet<_>>();
+    let candidates = processes
+        .iter()
+        .filter(|p| has_ancestor(p.pid, &roots, &processes))
+        .map(|p| p.pid)
+        .collect::<HashSet<_>>();
+    for process in &mut processes {
+        if !candidates.contains(&process.pid) {
+            continue;
+        }
+        match identity(process.pid) {
+            Ok(Some(started)) => {
+                process.started = started;
+                process.exited = false;
+            }
+            // Short-lived Electron helpers may exit after sysinfo's snapshot.
+            // Keep their parent links so surviving descendants remain in the tree.
+            Ok(None) => process.exited = true,
+            Err(_) => {
+                process.started = 0;
+                process.exited = false;
+            }
+        }
+    }
+    processes
+}
 #[cfg(windows)]
 fn enumerate() -> Result<Vec<Client>, String> {
     use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
@@ -271,13 +335,8 @@ fn enumerate() -> Result<Vec<Client>, String> {
         .map(|(pid, p)| ProcessInfo {
             pid: pid.as_u32(),
             parent: p.parent().map(|p| p.as_u32()),
-            started: if p.name().eq_ignore_ascii_case("codex.exe")
-                || p.name().eq_ignore_ascii_case("chatgpt.exe")
-            {
-                process_identity(pid.as_u32()).ok().flatten().unwrap_or(0)
-            } else {
-                0
-            },
+            started: 0,
+            exited: false,
             name: p.name().to_string_lossy().into_owned(),
             exe: p.exe().map(Path::to_path_buf),
             cwd: p.cwd().map(Path::to_path_buf),
@@ -287,10 +346,11 @@ fn enumerate() -> Result<Vec<Client>, String> {
     if processes.is_empty() {
         return Err("Windows 进程预览失败，请重试".into());
     }
+    let processes = capture_process_identities_with(processes, process_identity);
     // No package lookup is needed on machines without a running desktop client.
     let packages = if processes
         .iter()
-        .any(|p| p.name.eq_ignore_ascii_case("chatgpt.exe"))
+        .any(|p| !p.exited && p.name.eq_ignore_ascii_case("chatgpt.exe"))
     {
         packages()?
     } else {
@@ -415,6 +475,9 @@ fn is_running(process: &ProcessInfo) -> Result<bool, String> {
 }
 #[cfg(windows)]
 fn terminate(process: &ProcessInfo) -> Result<(), String> {
+    if process.started == 0 {
+        return Err("无法核验 Codex 子进程身份，请手动退出后重试".into());
+    }
     // Creation FILETIME and termination use the same kernel handle. A reused
     // PID must never turn into permission to stop an unrelated process.
     if let Some(handle) = open_process(process.pid, true)? {
@@ -683,11 +746,49 @@ pub fn relaunch(plan_id: &str) -> Result<ClientOutcome, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn own_process_identity_is_readable_and_matches_same_handle() {
+        let pid = std::process::id();
+        let started = process_identity(pid).unwrap().expect("test process is running");
+        assert_ne!(started, 0);
+        let handle = open_process(pid, false).unwrap().unwrap();
+        assert_eq!(handle_identity(&handle).unwrap(), Some(started));
+    }
+    #[cfg(windows)]
+    #[test]
+    fn termination_checks_creation_time_before_stopping_synthetic_process() {
+        use std::{os::windows::process::CommandExt, process::{Command, Stdio}};
+        let mut child = Command::new("cmd.exe")
+            .args(["/d", "/c", "set /p desko_fixture="])
+            .creation_flags(0x0800_0000)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn().unwrap();
+        let started = process_identity(child.id()).unwrap().unwrap();
+        let mut fixture = process(child.id(), None, "cmd.exe", &[]);
+        fixture.started = started + 1;
+        terminate(&fixture).unwrap();
+        assert!(child.try_wait().unwrap().is_none(), "mismatched identity must not stop the process");
+        fixture.started = started;
+        terminate(&fixture).unwrap();
+        child.wait().unwrap();
+    }
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "opt-in: reads installed Windows client process metadata, never closes or launches Codex"]
+    fn installed_client_preview_is_read_only() {
+        let result = preview();
+        println!("Windows Codex preview: {result:?}");
+        assert!(result.is_ok());
+    }
     fn process(pid: u32, parent: Option<u32>, name: &str, args: &[&str]) -> ProcessInfo {
         ProcessInfo {
             pid,
             parent,
             started: 1,
+            exited: false,
             name: name.into(),
             exe: Some(PathBuf::from(format!("C:/Codex/{name}"))),
             cwd: Some(PathBuf::from("C:/fixture")),
@@ -709,6 +810,31 @@ mod tests {
         assert_eq!(counts(&result).cli_count, 2);
     }
     #[test]
+    fn command_names_in_option_values_or_resume_ids_remain_interactive() {
+        for args in [
+            vec!["codex", "--profile", "review"],
+            vec!["codex", "--cd", "exec", "--model", "review"],
+            vec!["codex", "--image", "help"],
+            vec!["codex", "--", "review"],
+            vec!["codex", "resume", "help"],
+            vec!["codex", "fork", "login"],
+        ] {
+            let args = args.iter().map(OsString::from).collect::<Vec<_>>();
+            assert!(interactive(&args), "interactive invocation was skipped: {args:?}");
+        }
+    }
+    #[test]
+    fn noninteractive_subcommands_after_options_remain_excluded() {
+        for args in [
+            vec!["codex", "--profile", "review", "app-server"],
+            vec!["codex", "--model=fixture", "exec", "prompt"],
+            vec!["codex", "-c", "feature=true", "review"],
+        ] {
+            let args = args.iter().map(OsString::from).collect::<Vec<_>>();
+            assert!(!interactive(&args));
+        }
+    }
+    #[test]
     fn app_tree_is_one_app_and_excludes_children_from_cli() {
         let processes = vec![
             process(1, None, "ChatGPT.exe", &[]),
@@ -723,6 +849,83 @@ mod tests {
         let result = classify(&processes, &packages, 99).unwrap();
         assert_eq!(counts(&result).app_count, 1);
         assert_eq!(counts(&result).cli_count, 1);
+    }
+    #[test]
+    fn exited_app_snapshot_does_not_block_preview() {
+        let processes = capture_process_identities_with(
+            vec![process(1, None, "ChatGPT.exe", &[])], |_| Ok(None),
+        );
+        let packages = [Package {
+            location: "C:/Codex".into(), aumid: "Fixture!App".into(),
+        }];
+        assert_eq!(
+            counts(&classify(&processes, &packages, 99).unwrap()).app_count, 0,
+        );
+    }
+    #[test]
+    fn captures_identity_for_entire_app_tree_without_querying_unrelated_processes() {
+        let processes = vec![
+            process(1, None, "ChatGPT.exe", &[]),
+            process(2, Some(1), "helper.exe", &[]),
+            process(3, Some(2), "worker.exe", &[]),
+            process(4, None, "other.exe", &[]),
+        ];
+        let captured = capture_process_identities_with(processes, |pid| {
+            assert_ne!(pid, 4);
+            Ok(Some(100 + pid as u64))
+        });
+        let packages = [Package {
+            location: "C:/Codex".into(), aumid: "Fixture!App".into(),
+        }];
+        let clients = classify(&captured, &packages, 99).unwrap();
+        let Client::App { root, tree, .. } = &clients[0] else {
+            panic!("expected app")
+        };
+        assert_eq!(root.started, 101);
+        assert_eq!(
+            tree.iter().map(|p| p.started).collect::<HashSet<_>>(),
+            HashSet::from([101, 102, 103]),
+        );
+    }
+    #[test]
+    fn app_tree_never_stops_desko_or_its_descendants() {
+        let processes = vec![
+            process(1, None, "ChatGPT.exe", &[]),
+            process(2, Some(1), "desko.exe", &[]),
+            process(3, Some(2), "codex.exe", &["codex"]),
+            process(4, Some(1), "helper.exe", &[]),
+        ];
+        let packages = [Package {
+            location: "C:/Codex".into(), aumid: "Fixture!App".into(),
+        }];
+        let clients = classify(&processes, &packages, 2).unwrap();
+        let Client::App { tree, .. } = &clients[0] else { panic!("expected app") };
+        assert_eq!(tree.iter().map(|p| p.pid).collect::<HashSet<_>>(), HashSet::from([1, 4]));
+        assert_eq!(counts(&clients).cli_count, 0);
+    }
+    #[test]
+    fn exited_intermediate_helper_preserves_surviving_descendants() {
+        let processes = capture_process_identities_with(vec![
+            process(1, None, "ChatGPT.exe", &[]),
+            process(2, Some(1), "helper.exe", &[]),
+            process(3, Some(2), "worker.exe", &[]),
+        ], |pid| Ok(if pid == 2 { None } else { Some(100 + pid as u64) }));
+        let packages = [Package {
+            location: "C:/Codex".into(), aumid: "Fixture!App".into(),
+        }];
+        let clients = classify(&processes, &packages, 99).unwrap();
+        let Client::App { tree, .. } = &clients[0] else { panic!("expected app") };
+        assert_eq!(tree.iter().map(|p| p.pid).collect::<HashSet<_>>(), HashSet::from([1, 3]));
+    }
+    #[test]
+    fn unreadable_live_app_still_blocks_switch() {
+        let processes = capture_process_identities_with(
+            vec![process(1, None, "ChatGPT.exe", &[])], |_| Err("access denied".into()),
+        );
+        let packages = [Package {
+            location: "C:/Codex".into(), aumid: "Fixture!App".into(),
+        }];
+        assert!(classify(&processes, &packages, 99).is_err());
     }
     #[test]
     fn missing_executable_or_cwd_fails_closed_but_missing_argv_reopens_bare() {

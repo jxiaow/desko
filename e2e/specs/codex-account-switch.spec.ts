@@ -38,12 +38,12 @@ test('A/B 设置只有 Windows 重启开关，默认关闭，保留 WSL 用量�
   expect(await e2e.count(page, 'get_codex_wsl_assignment')).toBeGreaterThan(0)
 })
 
-test('C/H WSL 徽标来自探测，当前项禁用，API Key 有禁用原因', async ({ page }) => {
+test('C/H WSL 徽标来自探测，当前项可重新应用，API Key 有禁用原因', async ({ page }) => {
   await boot(page, { wsl: { targets } })
   await expect(row(page, 0).locator('.badge.wsl')).toHaveText('WSL 使用中')
   await shot(page, 'C-accounts')
   let pop = await menu(page, 0)
-  await expect(pop.getByRole('button', { name: 'WSL 已使用此账号', exact: true })).toBeDisabled()
+  await expect(pop.getByRole('button', { name: '重新应用到 WSL', exact: true })).toBeEnabled()
   await shot(page, 'H-already-assigned')
   await page.keyboard.press('Escape')
   pop = await menu(page, 2)
@@ -117,14 +117,41 @@ test('G 总开关关闭仍可单独勾 WSL，不触碰 Windows 客户端', async
   expect(await operations(page)).not.toContain('closeWindows')
 })
 
-test('目标已在 WSL 使用时复选框禁用且不重复停止写入', async ({ page }) => {
+test('目标已在 WSL 使用时可重新写入最新凭据，也可取消勾选', async ({ page }) => {
   await boot(page, { wsl: { targets: targets.map(t => ({ ...t, email: emails[1] })) } })
   const dialog = await switchDialog(page)
   await expect(dialog.getByRole('checkbox')).toBeChecked()
-  await expect(dialog.getByRole('checkbox')).toBeDisabled()
+  await expect(dialog.getByRole('checkbox')).toBeEnabled()
+  await expect(dialog).toContainText('重新写入最新登录信息')
+  await dialog.getByRole('checkbox').uncheck()
+  await dialog.getByRole('checkbox').check()
   await dialog.getByRole('button', { name: '切换', exact: true }).click()
   await expect(modal(page)).toHaveCount(0)
-  expect((await operations(page)).some(op => op.includes('Wsl'))).toBe(false)
+  expect((await operations(page)).filter(op => op.startsWith('writeWsl'))).toEqual(['writeWsl:alice', 'writeWsl:bob'])
+})
+
+test('当前账号导入同账号新文件后，无需删除即可重新应用到 Windows 和 WSL', async ({ page }) => {
+  await boot(page, { wsl: { targets } }, false)
+  await page.evaluate(async () => {
+    const { codexApi } = await import('/src/services/api/codex.ts' as string)
+    const { refreshAccounts } = await import('/src/services/codexState.ts' as string)
+    await codexApi.importJson(JSON.stringify({ email: 'main@example.invalid', access_token: 'synthetic-new-token' }))
+    await refreshAccounts()
+  })
+  await expect(page.locator('.acc-row')).toHaveCount(3)
+  await expect(row(page, 0).getByRole('button', { name: '重新应用', exact: true })).toBeEnabled()
+  const dialog = await switchDialog(page, 0)
+  await expect(dialog.getByRole('checkbox')).toBeChecked()
+  await dialog.getByRole('button', { name: '切换', exact: true }).click()
+  await expect(modal(page)).toHaveCount(0)
+  expect(await operations(page)).toEqual(['credentials', 'writeCredentials', 'stopWsl:alice', 'stopWsl:bob', 'writeWsl:alice', 'writeWsl:bob'])
+  const pop = await menu(page, 0)
+  await pop.getByRole('button', { name: '重新应用到 WSL', exact: true }).click()
+  await expect(modal(page).getByRole('button', { name: '用于 WSL', exact: true })).toBeEnabled()
+  await modal(page).getByRole('button', { name: '用于 WSL', exact: true }).click()
+  await expect(modal(page)).toHaveCount(0)
+  expect((await operations(page)).filter(op => op.startsWith('writeWsl'))).toHaveLength(4)
+  await expect(row(page, 0).locator('.badge').filter({ hasText: '当前' })).toBeVisible()
 })
 
 test('API Key 的 WSL 复选框禁用并显示原因', async ({ page }) => {
@@ -166,8 +193,31 @@ for (const mode of ['stop', 'write', 'mismatch'] as const) {
     await expect(row(page, 1).locator('.badge').filter({ hasText: '当前' })).toBeVisible()
     await expect(page.locator('.badge.wsl')).toHaveCount(mode === 'stop' ? 1 : 0)
     if (mode === 'stop') expect((await operations(page)).some(op => op.startsWith('writeWsl'))).toBe(false)
+    await expect(dialog.getByRole('alert')).toContainText('账号已切换')
+    await expect(dialog.getByRole('button', { name: '重试 WSL', exact: true })).toBeEnabled()
+    await page.evaluate(targets => window.__E2E__!.setCodexSwitchUx({ wsl: { targets } }), targets)
+    await dialog.getByRole('button', { name: '重试 WSL', exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+    expect(await e2e.count(page, 'switch_codex_account')).toBe(1)
+    expect(await e2e.count(page, 'assign_codex_account_to_wsl')).toBe(1)
+    expect((await operations(page)).filter(op => op === 'writeCredentials')).toHaveLength(1)
+    await expect(row(page, 1).locator('.badge.wsl')).toBeVisible()
   })
 }
+
+test('WSL 独立应用部分失败保留具体目标，修复后可在原弹窗重试', async ({ page }) => {
+  await boot(page, { wsl: { targets: targets.map((t, i) => ({ ...t, writeFails: i === 1 })) } })
+  await (await menu(page, 1)).getByRole('button', { name: '在 WSL 中使用', exact: true }).click()
+  const dialog = modal(page)
+  await dialog.getByRole('button', { name: '用于 WSL', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Debian（bob）')
+  await page.evaluate(targets => window.__E2E__!.setCodexSwitchUx({ wsl: { targets } }), targets)
+  await dialog.getByRole('button', { name: '重试', exact: true }).click()
+  await dialog.getByRole('button', { name: '用于 WSL', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(await e2e.count(page, 'switch_codex_account')).toBe(0)
+  expect(await e2e.count(page, 'assign_codex_account_to_wsl')).toBe(2)
+})
 
 for (const expired of [false, true]) {
   test(`重开失败只拿计划 id 重试${expired ? '，过期提示手动打开' : '成功后关闭'}`, async ({ page }) => {

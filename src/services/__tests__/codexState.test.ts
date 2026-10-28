@@ -124,6 +124,7 @@ describe('Codex 锁屏与异步请求', () => {
         if (++reads === 1) return 'openai'
         return new Promise(resolve => { finish = resolve })
       }
+      if (cmd === 'switch_codex_account') return { account: account(), windows: { reopenFailures: 0 } }
       return account()
     })
     const request = s.switchTo('a', { restartWindows: false, applyToWsl: false })
@@ -133,6 +134,49 @@ describe('Codex 锁屏与异步请求', () => {
     await request
     expect(useToastStore().toast.show).toBe(false)
     expect(mockInvoke.mock.calls.some(([cmd]) => cmd === 'list_codex_accounts' || cmd === 'codex_repair_session_visibility_for_launch_target')).toBe(false)
+  })
+})
+
+describe('切号后的当前账号发布', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.resetAllMocks()
+  })
+
+  it('列表与当前账号读取跨过导入时，挂件仍能找到当前账号', async () => {
+    const s = await loadState(), active = account()
+    mockInvoke.mockImplementation(async cmd => cmd === 'list_codex_accounts' ? [] : active)
+    await s.refreshAccounts()
+    expect(s.currentAccount.value).toEqual(active)
+  })
+
+  it('成功结果立即发布，后续读取失败和切号前的迟到回包不能抹掉当前账号', async () => {
+    const s = await loadState(), active = account()
+    let finishList!: (value: CodexAccount[]) => void
+    let finishProvider!: (value: string) => void
+    mockInvoke.mockImplementation(async cmd => cmd === 'list_codex_accounts'
+      ? new Promise(resolve => { finishList = resolve }) : null)
+    const oldRefresh = s.refreshAccounts({ silent: true })
+    let providerReads = 0
+    mockInvoke.mockImplementation(async cmd => {
+      if (cmd === 'switch_codex_account') return { account: active, windows: { reopenFailures: 0 } }
+      if (cmd === 'get_codex_history_visibility_provider') {
+        if (++providerReads === 1) return 'openai'
+        return new Promise(resolve => { finishProvider = resolve })
+      }
+      if (cmd === 'list_codex_accounts') throw new Error('read failed')
+      return null
+    })
+    const work = s.switchTo(active.id, { restartWindows: false, applyToWsl: false })
+    await vi.waitFor(() => expect(finishProvider).toBeTypeOf('function'))
+    expect(s.currentAccount.value).toEqual(active)
+    finishList([])
+    await oldRefresh
+    expect(s.currentAccount.value).toEqual(active)
+    finishProvider('openai')
+    await work
+    expect(s.currentAccount.value).toEqual(active)
+    expect(s.busyId.value).toBe('')
   })
 })
 

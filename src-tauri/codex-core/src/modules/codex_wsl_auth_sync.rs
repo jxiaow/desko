@@ -379,7 +379,24 @@ fn apply_prepared_account_to_wsl(
     account: &CodexAccount,
     payload: serde_json::Value,
 ) -> CodexWslOutcome {
-    let rows = match read_assignment_targets() {
+    apply_prepared_account_to_wsl_with(
+        account,
+        payload,
+        read_assignment_targets,
+        run_wsl_assignment_action,
+    )
+}
+fn apply_prepared_account_to_wsl_with(
+    account: &CodexAccount,
+    payload: serde_json::Value,
+    read_targets: impl FnOnce() -> Result<Vec<(WslCodexHomeTarget, WslProbe)>, String>,
+    action: impl FnMut(
+        &WslCodexHomeTarget,
+        &str,
+        Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, String>,
+) -> CodexWslOutcome {
+    let rows = match read_targets() {
         Ok(rows) => rows,
         Err(message) => {
             return CodexWslOutcome {
@@ -397,23 +414,13 @@ fn apply_prepared_account_to_wsl(
         }
     };
     let expected = account_wsl_identity(account);
-    if consistent_wsl_identity(&rows)
-        .is_some_and(|identity| wsl_identities_match(&identity, &expected))
-    {
-        return CodexWslOutcome {
-            status: "done".into(),
-            targets: rows.len(),
-            written: 0,
-            daemons_stopped: 0,
-            clis_stopped: 0,
-            failures: vec![],
-        };
-    }
+    // Identity equality does not imply credential equality: an import or
+    // refresh may have replaced this account's tokens since the last write.
     let targets = rows
         .into_iter()
         .map(|(target, _)| target)
         .collect::<Vec<_>>();
-    write_wsl_targets_with(&targets, &payload, &expected, run_wsl_assignment_action)
+    write_wsl_targets_with(&targets, &payload, &expected, action)
 }
 fn validate_wsl_auth_payload(
     account: &CodexAccount,
@@ -499,6 +506,43 @@ mod explicit_wsl_tests {
             },
             linux_dir: format!("/home/{user}/.codex"),
         }
+    }
+    #[test]
+    fn same_account_identity_still_reapplies_new_credentials() {
+        let account = CodexAccount::new(
+            "fixture".into(),
+            "same@fake".into(),
+            CodexTokens {
+                id_token: String::new(),
+                access_token: "new-access".into(),
+                refresh_token: Some("new-refresh".into()),
+            },
+        );
+        let payload = serde_json::json!({"tokens":{"access_token":"new-access","refresh_token":"new-refresh"}});
+        let mut operations = vec![];
+        let result = apply_prepared_account_to_wsl_with(
+            &account,
+            payload.clone(),
+            || Ok(vec![(
+                target("one"),
+                WslProbe {
+                    identity: Some(account_wsl_identity(&account)),
+                    ..Default::default()
+                },
+            )]),
+            |_, action, input| {
+                operations.push(action.to_string());
+                if action == "write-auth" {
+                    assert_eq!(input, Some(payload.clone()));
+                    Ok(serde_json::json!({"identity":{"email":"same@fake"}}))
+                } else {
+                    Ok(serde_json::json!({}))
+                }
+            },
+        );
+        assert_eq!(operations, ["stop", "write-auth"]);
+        assert_eq!(result.status, "done");
+        assert_eq!(result.written, 1);
     }
     #[test]
     fn workspace_identity_wins_over_same_email() {

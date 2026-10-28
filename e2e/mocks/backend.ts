@@ -633,6 +633,7 @@ export interface E2EBridge {
   emitEvent(event: string, payload?: unknown): void
   /** 演「后台正有一轮在跑」：真实后端的 busy 是原子闸门，mock 的命令是同步跑的，只能由测试拨 */
   setBackupBusy(busy: boolean): void
+  setCodexSwitchUx(config: SwitchUxConfig): void
   hasListener(event: string): boolean
   count(cmd: string): number
 }
@@ -1126,6 +1127,9 @@ class MockBackend {
         merged.mfa = [...merged.mfa, ...this.state.mfa]
         merged.settings = { ...this.state.settings, ...merged.settings }
         this.state = merged
+      },
+      setCodexSwitchUx: (config: SwitchUxConfig) => {
+        this.state.codex.switchUx.config = structuredClone(config)
       },
       queueDialog: (value: unknown) => this.dialogQueue.push(value),
       emitEvent: (event: string, payload?: unknown) => {
@@ -3694,6 +3698,9 @@ class MockBackend {
       }
       if (!rows.length) throw '没有可导入的账号'
       return rows.map((item) => {
+        const existing = this.state.codex.accounts.find(a => a.email === item.email
+          && a.auth_mode === (item.auth_mode === 'apikey' ? 'apikey' : 'oauth'))
+        if (existing) return { ...existing }
         const rec = this.codexPush(item.email || 'pasted@e2e.dev', {
           auth_mode: item.auth_mode === 'apikey' ? 'apikey' : 'oauth',
           api_base_url: item.api_base_url ?? null,

@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { codexApi, type CodexAccount, type CodexWslAssignmentPreview } from '../../services/api/codex'
 import { assignToWsl, switchStep } from '../../services/codexState'
 import { errText } from '../../services/api/backup'
+import { codexWslFailure } from '../../utils/codexWsl'
 import CodexAccountConfirm from './CodexAccountConfirm.vue'
 import AppIcon from '../shared/AppIcon.vue'
 const props = defineProps<{ account: CodexAccount }>()
@@ -20,7 +21,6 @@ async function load() {
     if (!active || epoch !== generation) return
     preview.value = next
     if (!next.targets.length) error.value = '未检测到运行中的 WSL 目标'
-    else if (next.alreadyAssigned) error.value = 'WSL 已使用此账号'
     else if (!next.canApply) error.value = '此账号不支持用于 WSL'
   } catch (e) { if (active && epoch === generation) error.value = errText(e) }
   finally { if (active && epoch === generation) loading.value = false }
@@ -31,8 +31,9 @@ async function confirm() {
   try {
     const result = await assignToWsl(props.account)
     if (!active) return
-    if (result?.status === 'aborted') error.value = result.failures[0]?.message || 'WSL 未切换，请手动退出 Codex 后重试'
-    else emit('close')
+    if (!result) return
+    error.value = codexWslFailure(result)
+    if (!error.value) emit('close')
   } catch (e) { if (active) error.value = errText(e) }
   finally { if (active) busy.value = false }
 }

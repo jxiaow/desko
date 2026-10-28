@@ -39,7 +39,6 @@ export function applyWsl(ctx: Context, account: Account) {
   const { config, operations } = ctx.switchUx
   const targets = config.wsl?.targets ?? []
   const result = { status: targets.length ? 'done' : 'skipped', targets: targets.length, written: 0, daemonsStopped: 0, clisStopped: 0, failures: [] as { distro: string; user: string; message: string }[] }
-  if (assignment(ctx).current?.id === account.id) return result
   if (config.wsl?.probeError || config.wsl?.stopError) {
     operations.push('stopWsl:failed'); result.status = 'aborted'
     result.failures.push({ distro: 'WSL', user: '', message: config.wsl.probeError || config.wsl.stopError || '' }); return result

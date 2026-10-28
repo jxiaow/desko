@@ -61,7 +61,8 @@ test.describe('Codex 账号', () => {
     await expect(page.locator('.acc-row')).toHaveCount(2)
     const cur = accountRow(page, 'main@e2e.dev')
     await expect(cur.locator('.badge', { hasText: '当前' })).toBeVisible()
-    await expect(cur.locator('.action-btn.primary')).toHaveCount(0)
+    // 当前账号也留主按钮：同一身份可能已换过凭据，要能点「重新应用」重写落盘
+    await expect(cur.locator('.action-btn.primary')).toHaveText('重新应用')
     await expect(accountRow(page, 'back@e2e.dev').locator('.q.low')).toBeVisible()
 
     await accountRow(page, 'back@e2e.dev').locator('.action-btn.primary').click()

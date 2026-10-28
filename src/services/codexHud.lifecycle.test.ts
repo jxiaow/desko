@@ -5,7 +5,7 @@ import { emitTo } from '@tauri-apps/api/event'
 import { settingsApi } from './api/settings'
 import { invoke } from './transport'
 import { moduleFlags } from '../modules/state'
-import { usageToday, loadTodayUsage, loadQuotaSettings, refreshAccounts, acquireQuotaTicker, quotaRefreshMinutes } from './codexState'
+import { accounts, currentId, usageToday, loadTodayUsage, loadQuotaSettings, refreshAccounts, acquireQuotaTicker, quotaRefreshMinutes } from './codexState'
 import {
   activateCodexHudBridge, deactivateCodexHudBridge, suspendCodexHudData,
   hudEnabled, hudPinned, saveHudEnabled,
@@ -26,9 +26,10 @@ vi.mock('../modules/state', async () => {
   return { moduleFlags: reactive({ codex: true }) }
 })
 vi.mock('./codexState', async () => {
-  const { ref } = await import('vue')
+  const { computed, ref } = await import('vue')
+  const accounts = ref<{ id: string; auth_mode: string }[]>([]), currentId = ref('')
   return {
-    accounts: ref([]), currentAccount: ref(null), currentId: ref(''), loaded: ref(false),
+    accounts, currentAccount: computed(() => accounts.value.find(a => a.id === currentId.value) ?? null), currentId, loaded: ref(false),
     usageToday: ref(null), quotaRefreshMinutes: ref(10),
     loadQuotaSettings: vi.fn(), loadTodayUsage: vi.fn(async () => {}),
     refreshAccounts: vi.fn(), refreshQuotasOnEnter: vi.fn(async () => {}),
@@ -59,6 +60,8 @@ beforeEach(() => {
   moduleFlags.codex = true
   hudEnabled.value = true
   hudPinned.value = false
+  accounts.value = []
+  currentId.value = ''
   usageToday.value = null
   quotaRefreshMinutes.value = 10
   vi.mocked(settingsApi.getSetting).mockResolvedValue('')
@@ -71,6 +74,33 @@ beforeEach(() => {
 afterEach(async () => {
   await deactivateCodexHudBridge()
   vi.useRealTimers()
+})
+
+it('挂件已显示暂无账号后，切号发布的账号与额度立即推送到同一窗口', async () => {
+  await activateCodexHudBridge()
+  await ready()
+  expect(payload().state.placeholder).toBe('暂无账号')
+  accounts.value = [{ id: 'switched', auth_mode: 'oauth', quota: {
+    hourly_percentage: 42, weekly_percentage: 77,
+    hourly_window_present: true, weekly_window_present: true,
+  } } as NonNullable<typeof accounts.value>[number]]
+  currentId.value = 'switched'
+  await nextTick()
+  await flushPromises()
+  expect(payload().state.placeholder).toBeNull()
+  expect(payload().state.primary).toMatchObject({ percentage: 42 })
+  expect(payload().state.secondary).toMatchObject({ percentage: 77 })
+  expect(vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === 'desko_hud_show')).toHaveLength(1)
+})
+
+it('关闭配额自动刷新后，回到主窗口仍会重新读取当前账号', async () => {
+  quotaRefreshMinutes.value = 0
+  await activateCodexHudBridge()
+  await ready()
+  vi.mocked(refreshAccounts).mockClear()
+  window.dispatchEvent(new Event('focus'))
+  await flushPromises()
+  expect(refreshAccounts).toHaveBeenCalledWith({ silent: true })
 })
 
 it('添加 Codex 模块后自动显示挂件；移除模块会销毁窗口', async () => {
@@ -218,6 +248,40 @@ it('窗口创建期间关闭显示，不会在创建完成后重新亮起', asyn
   await ready()
   expect(invoke).toHaveBeenCalledWith('desko_hud_hide')
   expect(emitTo).not.toHaveBeenCalled()
+})
+
+it('关闭命令未完成就重新开启时，最后保留可用的挂件窗口', async () => {
+  let finishHide!: () => void
+  const pendingHide = new Promise<void>(resolve => { finishHide = resolve })
+  let exists = false, blockHide = false
+  vi.mocked(invoke).mockImplementation(async cmd => {
+    if (cmd === 'desko_hud_show') {
+      const created = !exists
+      exists = true
+      return created
+    }
+    if (cmd === 'desko_hud_hide' && blockHide) await pendingHide
+    if (cmd === 'desko_hud_destroy') exists = false
+  })
+  try {
+    await activateCodexHudBridge()
+    await ready()
+    blockHide = true
+    await saveHudEnabled(false)
+    await flushPromises()
+    await saveHudEnabled(true)
+    await flushPromises()
+    finishHide()
+    await flushPromises()
+    expect(hudEnabled.value).toBe(true)
+    expect(exists).toBe(true)
+    const windowCommands = vi.mocked(invoke).mock.calls.map(([cmd]) => cmd).filter(cmd => ['desko_hud_show', 'desko_hud_destroy'].includes(cmd))
+    expect(windowCommands[windowCommands.length - 1]).toBe('desko_hud_show')
+  } finally {
+    blockHide = false
+    finishHide()
+    await flushPromises()
+  }
 })
 
 it('窗口先发 ready、创建命令后返回时，后续快照仍能送达', async () => {

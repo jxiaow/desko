@@ -708,13 +708,13 @@ watchEffect(() => {
           <span class="acc-acts">
             <span v-if="!isBatchMode && switchingId === a.id" class="switch-row-status">正在处理…</span>
             <button
-              v-else-if="!isBatchMode && a.id !== currentId"
+              v-else-if="!isBatchMode"
               class="action-btn primary"
               type="button"
               :disabled="!!busyId"
               @click.stop="doSwitch(a)"
             >
-              切换
+              {{ a.id === currentId ? '重新应用' : '切换' }}
             </button>
             <button class="ib acc-more" type="button" title="更多操作" aria-label="更多操作" @click.stop="openMenu($event.currentTarget as HTMLElement, a)">
               <AppIcon name="dots" :size="15" />
@@ -733,8 +733,8 @@ watchEffect(() => {
         <button v-if="menuAccount.auth_mode !== 'apikey'" class="pop-item" type="button" @click="askRefreshTokens(menuAccount!); closeMenu()">
           <AppIcon name="shield" :size="14" />强制刷新令牌
         </button>
-        <button v-if="hasWslTargets" class="pop-item" type="button" :disabled="!!busyId || menuAccount.auth_mode === 'apikey' || menuAccount.id === wslCurrentId" @click="useInWsl(menuAccount!)">
-          <AppIcon :name="menuAccount.id === wslCurrentId ? 'check' : 'terminal'" :size="14" />{{ menuAccount.id === wslCurrentId ? 'WSL 已使用此账号' : '在 WSL 中使用' }}
+        <button v-if="hasWslTargets" class="pop-item" type="button" :disabled="!!busyId || menuAccount.auth_mode === 'apikey'" @click="useInWsl(menuAccount!)">
+          <AppIcon name="terminal" :size="14" />{{ menuAccount.id === wslCurrentId ? '重新应用到 WSL' : '在 WSL 中使用' }}
         </button>
         <button
           v-if="menuAccount.auth_mode !== 'apikey'"

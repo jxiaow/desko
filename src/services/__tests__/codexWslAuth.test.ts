@@ -50,6 +50,21 @@ describe('WSL 显式账号分配', () => {
     pending.resolve({ status: 'aborted', failures: [{ message: 'cannot stop' }] }); await work
     expect(call.mock.calls.some(([cmd]) => cmd === 'switch_codex_account')).toBe(false)
   })
+  it('明确要求同步 WSL、但目标消失时，保留 Windows 成功并显示失败提示', async () => {
+    const s = await state()
+    const result: CodexSwitchOutcome = { account, windows, wsl: { status: 'skipped', targets: 0, written: 0, daemonsStopped: 0, clisStopped: 0, failures: [] } }
+    call.mockImplementation(async cmd => {
+      if (cmd === 'switch_codex_account') return result
+      if (cmd === 'get_codex_history_visibility_provider') return 'openai'
+      if (cmd === 'list_codex_accounts') return [account]
+      if (cmd === 'get_current_codex_account') return account
+      return assignment
+    })
+    await s.switchTo(account.id, { restartWindows: false, applyToWsl: true })
+    expect(s.currentId.value).toBe(account.id)
+    expect(useToastStore().toast.type).toBe('error')
+    expect(useToastStore().toast.message).toContain('未检测到 WSL 目标')
+  })
 })
 describe('Windows 重启设置与结果摘要', () => {
   it('缺省关闭，保存失败保留原值，切号时拒绝改值', async () => {

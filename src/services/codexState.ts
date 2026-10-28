@@ -19,6 +19,7 @@ import { settingsApi } from './api/settings'
 import { isWebRuntime } from './runtime'
 import { useToastStore } from '../stores/toast'
 import { codexQuotaRemaining } from '../utils/codexAccounts'
+import { codexWslFailure } from '../utils/codexWsl'
 import { localDayKey, usageWindowFrom, type UsageRange } from '../utils/codexUsage'
 export type { UsageRange } from '../utils/codexUsage'
 
@@ -103,7 +104,9 @@ export async function refreshAccounts({ silent = false }: { silent?: boolean } =
   try {
     const [list, cur] = await Promise.all([codexApi.list(), codexApi.current()])
     if (epoch !== accountEpoch || version !== accountRefreshVersion) return
-    accounts.value = list
+    // The two reads can straddle an import/switch. Keep the explicitly active
+    // account available even when the list was captured before it was saved.
+    accounts.value = cur && !list.some(a => a.id === cur.id) ? [...list, cur] : list
     currentId.value = cur?.id ?? ''
   } catch (e) {
     if (epoch !== accountEpoch || version !== accountRefreshVersion) return
@@ -263,6 +266,13 @@ export async function switchTo(id: string, policy: CodexSwitchPolicy): Promise<C
     if (epoch !== accountEpoch) return null
     const result = await codexApi.switchCodexAccount(id, policy)
     if (epoch !== accountEpoch) return null
+    // Publish the committed account before follow-up reads/repairs. A failed
+    // refresh must not leave the HUD showing the pre-switch empty state.
+    accountRefreshVersion++
+    accounts.value = accounts.value.some(a => a.id === result.account.id)
+      ? accounts.value.map(a => a.id === result.account.id ? result.account : a)
+      : [...accounts.value, result.account]
+    currentId.value = result.account.id
     const providerAfter = await readVisibilityProvider()
     if (epoch !== accountEpoch) return null
     await refreshAccounts()
@@ -271,7 +281,7 @@ export async function switchTo(id: string, policy: CodexSwitchPolicy): Promise<C
     if (repair?.warning) result.warnings = [...result.warnings ?? [], repair.warning]
     if (epoch !== accountEpoch) return null
     void loadWslAssignment()
-    const partial = result.windows.reopenFailures > 0 || !!result.wsl?.failures.length || !!result.warnings?.length
+    const partial = result.windows.reopenFailures > 0 || !!codexWslFailure(result.wsl) || !!result.warnings?.length
     const repairText = (repair?.repaired ?? 0) > 0 ? '；已同步会话列表' : ''
     useToastStore().showToast(switchOutcomeText(result) + repairText, partial ? 'error' : 'success')
     return result
@@ -1010,9 +1020,8 @@ export async function saveSwitchRestart(value: boolean): Promise<void> {
   } finally { switchRestartSaving.value = false }
 }
 export function wslOutcomeText(email: string, result: CodexWslOutcome): string {
-  if (result.status === 'aborted') return 'WSL 未切换，请手动退出 Codex 后重试'
-  if (result.status === 'skipped') return '未检测到运行中的 WSL 目标'
-  if (result.failures.length) return `WSL ${result.written} 个目标成功、${result.failures.length} 个失败`
+  const failure = codexWslFailure(result)
+  if (failure) return failure
   if (!result.written) return `${email} 已用于 WSL，无需重复写入`
   const closed = result.daemonsStopped + result.clisStopped
   return `${email} 已用于 WSL；${result.written} 个目标${closed ? `，${closed} 个 Codex 已关闭` : ''}`
@@ -1026,7 +1035,7 @@ export async function assignToWsl(account: CodexAccount): Promise<CodexWslOutcom
     if (epoch !== accountEpoch) return null
     await loadWslAssignment()
     if (epoch !== accountEpoch) return null
-    useToastStore().showToast(wslOutcomeText(account.email, result), result.failures.length ? 'error' : 'success')
+    useToastStore().showToast(wslOutcomeText(account.email, result), codexWslFailure(result) ? 'error' : 'success')
     return result
   } finally { if (epoch === accountEpoch) { busyId.value = ''; switchingId.value = ''; switchStep.value = '' } }
 }

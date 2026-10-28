@@ -29,6 +29,11 @@ NON_INTERACTIVE = {
     "mcp", "mcp-server", "completion", "completions", "debug", "sandbox",
     "apply", "a", "cloud", "features", "help", "pid-update-loop",
 }
+VALUE_OPTIONS = {
+    "-c", "--config", "--enable", "--disable", "--remote", "--remote-auth-token-env",
+    "-i", "--image", "-m", "--model", "--local-provider", "-p", "--profile",
+    "-s", "--sandbox", "-C", "--cd", "--add-dir", "-a", "--ask-for-approval",
+}
 
 
 def token_claims(token):
@@ -86,6 +91,20 @@ def process_info(pid, proc=Path("/proc")):
             "exe": os.readlink(path / "exe"), "args": args}
 
 
+def interactive(args):
+    remaining = iter(args[1:])
+    for arg in remaining:
+        if arg == "--":
+            return True
+        if arg.partition("=")[0] in VALUE_OPTIONS:
+            if "=" not in arg:
+                next(remaining, None)
+        elif not arg.startswith("-"):
+            # Command names inside option values or resume IDs are not subcommands.
+            return arg not in NON_INTERACTIVE
+    return True
+
+
 def process_kind(info, managed=None):
     if Path(info["exe"]).name != "codex" or info["state"] in ("Z", "X"):
         return None
@@ -93,7 +112,7 @@ def process_kind(info, managed=None):
     if managed and (info["pid"], info["ticks"]) == managed:
         return "daemon" if "app-server" in args and "--managed-daemon" in args else None
     tty_major = (info["tty"] >> 8) & 0xfff
-    if 136 <= tty_major <= 143 and not NON_INTERACTIVE.intersection(args):
+    if 136 <= tty_major <= 143 and interactive(info["args"]):
         return "cli"
     return None
 
