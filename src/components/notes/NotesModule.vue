@@ -59,6 +59,10 @@ const pageEl = ref<HTMLElement | null>(null)
 const railEl = ref<HTMLElement | null>(null)
 const railToggleEl = ref<HTMLButtonElement | null>(null)
 const searchEl = ref<HTMLInputElement | null>(null)
+const viewportWidth = ref(window.innerWidth)
+const moreTagsOpen = ref(false)
+const moreTagsAnchor = ref<HTMLElement | null>(null)
+const tagQuery = ref('')
 const kbdHint = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'
 const composerRef = ref<InstanceType<typeof NoteComposer> | null>(null)
 const fsRef = ref<InstanceType<typeof NoteFullscreen> | null>(null)
@@ -148,6 +152,8 @@ const onRailOutsideClick = (event: MouseEvent) => {
   closeRail()
 }
 const selectView = (view: NoteView) => {
+  // 标签计数不含归档条目，带着旧标签进归档只会得到没有可见原因的空列表。
+  if (view === 'archived' && activeTags.value.size) activeTags.value = new Set()
   noteView.value = view
   if (isWebRuntime() && railOverlay.value && !noteRailPinned.value) closeRail()
 }
@@ -160,6 +166,26 @@ const draftText = computed(() => htmlToText(draftHtml.value))
 const draftEmpty = computed(() => !draftText.value.trim() && !collectAttachmentNames(draftHtml.value).length)
 /** 归档视图只读不回书写面：书写框收掉，页栏搜索改口径 */
 const isArchivedView = computed(() => noteView.value === 'archived')
+const tagLimit = computed(() => viewportWidth.value <= 1100 ? 4 : viewportWidth.value <= 1400 ? 5 : 6)
+/** 已选标签优先占位，其余按使用频次补满；超出的进「更多标签」。 */
+const visibleTagCounts = computed<[string, number][]>(() => {
+  if (tagCounts.value.length <= tagLimit.value) return tagCounts.value
+  const selected = tagCounts.value.filter(([tag]) => activeTags.value.has(tag))
+  const rest = tagCounts.value.filter(([tag]) => !activeTags.value.has(tag))
+  const visible = new Set([...selected, ...rest].slice(0, tagLimit.value).map(([tag]) => tag))
+  return tagCounts.value.filter(([tag]) => visible.has(tag))
+})
+const hiddenTagCounts = computed(() => tagCounts.value.filter(([tag]) => !visibleTagCounts.value.some(([visible]) => visible === tag)))
+const filteredMoreTags = computed(() => {
+  const query = tagQuery.value.trim().toLowerCase()
+  return query ? hiddenTagCounts.value.filter(([tag]) => tag.toLowerCase().includes(query)) : hiddenTagCounts.value
+})
+const toggleMoreTags = (el: HTMLElement) => {
+  if (moreTagsOpen.value) { moreTagsOpen.value = false; return }
+  moreTagsAnchor.value = el
+  tagQuery.value = ''
+  moreTagsOpen.value = true
+}
 /** 顶栏那个总数跟着视图走：归档行不该计进「全部」的条数里 */
 const headTotal = computed(() => (isArchivedView.value ? viewCounts.value.archived : viewCounts.value.all))
 /** 空态分「没搜到」还是「这个视图本来就空」：光切视图不算无果，各视图自己说清内容从哪来 */
@@ -374,8 +400,10 @@ watch(notes, () => {
 
 let observer: ResizeObserver | null = null
 let unlistenDrag: (() => void) | undefined
+const onResize = () => { viewportWidth.value = window.innerWidth }
 onMounted(() => {
   document.addEventListener('keydown', onKeyDown)
+  window.addEventListener('resize', onResize)
   if (!workspaceLayout) document.addEventListener('click', onRailOutsideClick, true)
   if (!isWebRuntime()) {
     // 桌面侧拖进来的文件只有原生层知道路径，与局域网传输吃同一窗口级事件；
@@ -406,6 +434,7 @@ onBeforeUnmount(() => {
   active = false
   void flushNoteSave().catch(() => {})
   document.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('resize', onResize)
   document.removeEventListener('click', onRailOutsideClick, true)
   unlistenDrag?.()
   observer?.disconnect()
@@ -491,10 +520,76 @@ watchEffect(() => {
             >
               <AppIcon name="panel" :size="16" />
             </button>
-            <WorkspaceDirectoryToggle v-if="workspaceLayout && showFilters" />
+            <WorkspaceDirectoryToggle v-if="isWebRuntime() && showFilters" />
           </div>
         </div>
         </Teleport>
+
+        <div v-if="workspaceLayout && !isWebRuntime() && showFilters" class="workspace-workbar notes-workbar">
+          <nav class="workspace-workbar-tabs" aria-label="小记视图">
+            <button
+              v-for="v in VIEWS"
+              :key="v.key"
+              class="wb-tab"
+              :class="{ active: noteView === v.key }"
+              type="button"
+              :aria-pressed="noteView === v.key"
+              @click="selectView(v.key)"
+            >
+              <span>{{ v.label }}</span>
+              <span class="wb-count">{{ viewCounts[v.key] }}</span>
+            </button>
+          </nav>
+          <template v-if="!isArchivedView && tagCounts.length">
+            <span class="wb-divider" aria-hidden="true"></span>
+            <div class="wb-tags" aria-label="小记标签">
+              <button
+                v-for="[tag, count] in visibleTagCounts"
+                :key="tag"
+                class="wb-tab"
+                :class="{ active: activeTags.has(tag) }"
+                type="button"
+                :aria-pressed="activeTags.has(tag)"
+                @click="toggleTagFilter(tag)"
+              >
+                <span>#{{ tag }}</span>
+                <span class="wb-count">{{ count }}</span>
+              </button>
+              <button
+                v-if="hiddenTagCounts.length"
+                class="wb-tab wb-more"
+                type="button"
+                :aria-label="`更多标签，已收起 ${hiddenTagCounts.length} 项`"
+                :aria-expanded="moreTagsOpen"
+                @click="toggleMoreTags($event.currentTarget as HTMLElement)"
+              >更多 <span class="wb-count">{{ hiddenTagCounts.length }}</span> <AppIcon name="chevDown" :size="13" /></button>
+            </div>
+          </template>
+        </div>
+        <PopoverMenu v-if="moreTagsOpen && moreTagsAnchor" :anchor="moreTagsAnchor" align="start" :width="224" @close="moreTagsOpen = false">
+          <div class="tag-pop">
+            <div class="search-box flat tag-pop-search">
+              <AppIcon name="search" :size="13" />
+              <input v-model="tagQuery" placeholder="搜索标签…" aria-label="搜索标签" />
+            </div>
+            <div class="tag-pop-list">
+              <button
+                v-for="[tag, count] in filteredMoreTags"
+                :key="tag"
+                class="pop-item"
+                :class="{ on: activeTags.has(tag) }"
+                type="button"
+                :aria-pressed="activeTags.has(tag)"
+                @click="toggleTagFilter(tag)"
+              >
+                <span class="tag-pop-name">#{{ tag }}</span>
+                <span class="tag-pop-count">{{ count }}</span>
+                <AppIcon v-if="activeTags.has(tag)" name="check" :size="14" />
+              </button>
+              <div v-if="!filteredMoreTags.length" class="tag-pop-empty">无匹配标签</div>
+            </div>
+          </div>
+        </PopoverMenu>
 
         <div v-if="isArchivedView" class="archive-bar">
           <span class="ab-lead"><b>已归档</b> · 不出现在「全部」列表，可在本视图搜索</span>
@@ -761,6 +856,18 @@ watchEffect(() => {
 .notes-page:has(.batch-dock) .stream-inner { padding-bottom: var(--dock-clearance); }
 /* 书写框与吸顶栏拉开一档间距（列表页首行同款） */
 .stream-inner .composer { margin-top: var(--space-2); }
+.notes-workbar + .composer { margin-top: 0; }
+
+/* 「更多标签」面板：保持打开以支持连续多选，搜索与选中状态都在面板内完成。 */
+.tag-pop { width: 224px; display: flex; flex-direction: column; gap: var(--space-1); }
+.tag-pop-search { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; }
+.tag-pop-search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; outline: none; font: inherit; font-size: var(--text-sm); color: var(--text); }
+.tag-pop-list { max-height: 220px; overflow-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
+.tag-pop-list .pop-item { display: flex; align-items: center; gap: 8px; }
+.tag-pop-list .pop-item.on { background: var(--accent-soft); color: var(--text-brand); font-weight: 600; }
+.tag-pop-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-pop-count { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tag-pop-empty { padding: var(--space-2) 8px; color: var(--text-muted); font-size: var(--text-sm); text-align: center; }
 
 /* ---------- 顶部工具条：吃 global.css 的 .page-bar 骨架（64px 吸顶画布），
    本页只有一处与全宽页不同：搜索框随流伸缩（上限 320）。

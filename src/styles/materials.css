@@ -154,29 +154,34 @@
 /* 氛围为静态背景，不创建持续动画或额外的模糊合成层。 */
 .material-decoration { display: var(--material-decoration-display); }
 
-/* 工作区柔光：主光与辅光落在留白两端，卡片、输入与书写面保持实底。
+/* 工作区柔光：与对话框同一套材质——左上主光、右下补光，两角都掺强调色。
+   卡片、输入与书写面仍是实底，光只叠在它们上面。
    经典布局与锁屏材质沿用上方配方。 */
 :root[data-layout="workspace"], .workspace-theme-prev[data-base] {
   --material-inspector-base: var(--bg);
-  --material-workspace-key: oklch(from var(--accent) 0.9 calc(c * 0.55) h);
-  --material-workspace-fill: oklch(from var(--accent) 0.92 calc(c * 0.5) calc(h + 24));
-  --material-workspace-key-strength: 22%;
-  --material-workspace-fill-strength: 22%;
-  /* 光源移入可见区域：左上主光、右下辅光；外框与画布使用相同发散点。 */
-  --material-workspace-key-position: 12% 16%;
-  --material-workspace-fill-position: 88% 84%;
-  --material-workspace-key-size: 68% 78%;
-  --material-workspace-fill-size: 72% 80%;
+  /* 白纸上「明暗」这条路已经试到头：纯白提亮被 #fafafa 只剩的 5 个色阶卡死（实测 255→250，
+     1.7ΔE 等于没有），而压暗右下的斜坡会被读成脏角。方向改由「色光」承担，明度不参与。
+     两角强度 18%/14% 与对话框逐位一致，纸底和弹窗因此始终同一色温、同一浓度。 */
+  --material-key: oklch(from var(--accent) 0.9 calc(c * 0.55) h);
+  --material-fill: oklch(from var(--accent) 0.92 calc(c * 0.5) calc(h + 24));
+  --material-workspace-light: #ffffff;
+  /* 对话框 78% 是它自己 520px 的面（半径约 405px）；照搬到 1040px 的工作区就是 810px，
+     空页中段会被整片染色。按同一物理半径折算到工作区约 52% 54%，光只守两个角。 */
   --material-workspace-field:
-    radial-gradient(ellipse var(--material-workspace-key-size) at var(--material-workspace-key-position), color-mix(in srgb, var(--material-workspace-key) var(--material-workspace-key-strength), transparent), transparent 90%),
-    radial-gradient(ellipse var(--material-workspace-fill-size) at var(--material-workspace-fill-position), color-mix(in srgb, var(--material-workspace-fill) var(--material-workspace-fill-strength), transparent), transparent 90%);
+    radial-gradient(ellipse 52% 54% at 0% 0%, color-mix(in srgb, var(--material-key) 18%, transparent), transparent 100%),
+    radial-gradient(ellipse 52% 54% at 100% 100%, color-mix(in srgb, var(--material-fill) 14%, transparent), transparent 100%);
+  /* 卡面吃同一层光：卡片占掉内容区大半，光只铺在画布上就只剩卡片缝可见，
+     看起来等于没开。墨底保持 none——深底再加一层彩光会把卡面糊成色块。 */
+  --material-surface-field: none;
   --material-floating-field:
-    radial-gradient(ellipse 80% 65% at var(--material-workspace-key-position), color-mix(in srgb, var(--material-workspace-key) 10%, transparent), transparent 90%),
+    radial-gradient(ellipse 80% 65% at 0% 0%, color-mix(in srgb, var(--material-workspace-light) 10%, transparent), transparent 90%),
     var(--panel-bg);
-  /* 对话框在自己的边界内布光，大小和窗口位置变化时仍能看到两端柔光。 */
+  /* 弹窗与工作区共用 key/fill，尺寸差异由各自的 ellipse 承担（墨底另在 dark 块里覆写）。 */
+  --material-dialog-key: var(--material-key);
+  --material-dialog-fill: var(--material-fill);
   --material-dialog-field:
-    radial-gradient(ellipse 78% 72% at 0% 0%, color-mix(in srgb, var(--material-workspace-key) 18%, transparent), transparent 100%),
-    radial-gradient(ellipse 78% 72% at 100% 100%, color-mix(in srgb, var(--material-workspace-fill) 14%, transparent), transparent 100%),
+    radial-gradient(ellipse 78% 72% at 0% 0%, color-mix(in srgb, var(--material-dialog-key) 18%, transparent), transparent 100%),
+    radial-gradient(ellipse 78% 72% at 100% 100%, color-mix(in srgb, var(--material-dialog-fill) 14%, transparent), transparent 100%),
     var(--panel-bg);
   --bg-workspace: var(--bg);
   /* Logo 格与导航轨融入画布，共用底色和同一坐标的氛围光。 */
@@ -188,37 +193,51 @@
   --bg-workspace-search: color-mix(in oklab, var(--panel-bg) 72%, var(--workspace-frame));
   --bg-inspector-hover: color-mix(in srgb, var(--text) 4%, var(--material-inspector-base));
   --bg-inspector-active: var(--bg-surface);
-  --bg-workspace-primary: var(--accent);
-  --bg-workspace-primary-hover: var(--accent-hover);
-  --bg-workspace-primary-active: var(--accent-active);
+  /* 纸底主钮：直接把强调色铺满会压出一块深色板。抬 5.5% 明度、收 6% 彩度后
+     仍是同一个色相，白字还有约 3.9:1；悬停回落一档、按下再落一档做反馈。 */
+  --bg-workspace-primary: oklch(from var(--accent) calc(l + 0.055) calc(c * 0.94) h);
+  --bg-workspace-primary-hover: oklch(from var(--accent) calc(l + 0.02) calc(c * 0.97) h);
+  --bg-workspace-primary-active: oklch(from var(--accent) calc(l + 0.005) c h);
   --text-workspace-primary: var(--accent-on);
 }
 
 :root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
-  --material-workspace-key: oklch(from var(--accent) 0.48 calc(c * 0.85) h);
-  --material-workspace-fill: oklch(from var(--accent) 0.46 calc(c * 0.7) calc(h + 24));
-  --material-workspace-key-strength: 10%;
-  --material-workspace-fill-strength: 10%;
+  /* 暗底的光要抬「明度」而不是再压暗：强调色先抬到近白再混，
+     5% 落在画布上只升不让偏色；右下换成黑色阴影，暗底才读得出方向。 */
+  --material-workspace-light: color-mix(in srgb, var(--accent) 24%, #fff);
+  --material-workspace-light-strength: 5%;
+  --material-workspace-light-mid: 2.1%;
+  --material-workspace-shade: #000;
+  --material-workspace-shade-strength: 42%;
+  --material-workspace-field:
+    linear-gradient(132deg,
+      color-mix(in srgb, var(--material-workspace-light) var(--material-workspace-light-strength), transparent) 0%,
+      color-mix(in srgb, var(--material-workspace-light) var(--material-workspace-light-mid), transparent) 40%,
+      transparent 66%,
+      color-mix(in srgb, var(--material-workspace-shade) var(--material-workspace-shade-strength), transparent) 100%);
+  /* 墨底弹窗沿用提亮档；画布光已改成近白混色，弹窗仍需要独立的提亮 key。 */
+  --material-dialog-key: oklch(from var(--accent) 0.54 calc(c * 0.7) h);
+  --material-dialog-fill: oklch(from var(--accent) 0.5 calc(c * 0.55) calc(h + 20));
   --bg-workspace-primary: color-mix(in oklab, var(--accent) 14%, var(--bg));
   --bg-workspace-primary-hover: color-mix(in oklab, var(--accent) 17%, var(--bg));
   --bg-workspace-primary-active: color-mix(in oklab, var(--accent) 20%, var(--bg));
   --text-workspace-primary: color-mix(in oklab, var(--accent) 50%, var(--text));
 }
 
-/* 中性色只改变光的明暗，避免把大面积留白再刷成灰色。 */
-:root[data-layout="workspace"]:is([data-accent="graphite"], [data-accent="sand"]),
-.workspace-theme-prev:is([data-accent="graphite"], [data-accent="sand"]) {
-  --material-workspace-key: oklch(from var(--accent) 1 0 none);
-  --material-workspace-fill: oklch(from var(--accent) 1 0 none);
-}
+/* 暗底的中性强调色只改变光的明暗，避免把大面积留白再刷成灰色。 */
 :root[data-layout="workspace"][data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]),
 .workspace-theme-prev[data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]) {
-  --material-workspace-key: oklch(from var(--accent) 0.48 0 none);
-  --material-workspace-fill: oklch(from var(--accent) 0.48 0 none);
+  --material-workspace-light: oklch(from var(--accent) 0.62 0 none);
 }
 
 :root[data-layout="workspace"][data-atmosphere="on"], .workspace-theme-prev[data-atmosphere="on"] {
   --bg-dialog: var(--material-dialog-field);
   --dialog-background-attachment: scroll;
   --bg-workspace: var(--material-workspace-field), var(--bg);
+}
+
+/* 纸底把同一层光铺到卡面；墨底不进这一条。 */
+:root[data-layout="workspace"][data-theme="paper"][data-atmosphere="on"],
+.workspace-theme-prev[data-theme="paper"][data-atmosphere="on"] {
+  --material-surface-field: var(--material-workspace-field);
 }

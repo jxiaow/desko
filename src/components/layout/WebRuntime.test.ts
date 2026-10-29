@@ -8,7 +8,7 @@ import NoteFullscreen from '../notes/NoteFullscreen.vue'
 
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: vi.fn(() => { throw new Error('no native window in browser') }) }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ meta: {}, path: '/notes' }) }))
-vi.mock('../../modules/state', () => ({ enabledModules: { value: [] }, webModuleGroups: { value: [] } }))
+vi.mock('../../modules/state', () => ({ enabledModules: { value: [] }, moduleGroups: { value: [] }, webModuleGroups: { value: [] } }))
 
 beforeEach(() => {
   setActivePinia(createPinia())

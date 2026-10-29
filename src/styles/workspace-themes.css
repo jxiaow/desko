@@ -24,8 +24,9 @@
   --workspace-frame: #efefee;
   --workspace-light: #ffffff;
 
-  /* 普通卡片保持平整、轻边界；选中、编辑和焦点沿用各自的强调色反馈。 */
-  --border-card: var(--border);
+  /* 普通卡片保持平整、轻边界；选中、编辑和焦点沿用各自的强调色反馈。
+     边界比全局 --border 再深一档：卡面与画布只差 6 级时，发丝线太淡会显得没画完。 */
+  --border-card: color-mix(in srgb, var(--border) 62%, var(--border-strong));
   --border-card-hover: var(--border-hover);
   --shadow-card-rest: none;
   --shadow-card-hover: none;
@@ -33,17 +34,34 @@
 }
 
 :root[data-layout="workspace"][data-theme="paper"], .workspace-theme-prev[data-theme="paper"] {
-  --bg: #f6f6f4;
+  /* 白纸：画布近白、内容面纯白，字色与描边全部退回中性。
+     近白灰一律 R=G=B：大片留白上 3 级偏蓝的灰会被整体读成冷灰，白纸立刻不像白纸。
+     白底会把控件填色和发丝线冲淡一档，所以填色与描边整体深一格；
+     输入槽单独给灰面、不再跟随画布，否则落在白卡和白弹窗上等于隐形。
+     画布 #fafafa 是白场上限：再白一级，白光柔光和新增小记的色阶就都掉到 1.5ΔE 以下。 */
+  --bg: #fafafa;
   --panel-bg: #ffffff;
-  --sunken: #ececea;
-  --fill: #eeeeed;
-  --hover: #f3f3f2;
-  --active: #e8e8e6;
-  --border: #e5e5e3;
-  --border-strong: #cdcdca;
-  --border-subtle: #efefed;
-  --border-hover: #c1c1be;
+  --sunken: #f5f5f5;
+  --fill: #f0f0f0;
+  --hover: #f3f3f3;
+  --active: #ececec;
+  --border: #e6e6e6;
+  --border-strong: #cfcfcf;
+  --border-subtle: #f0f0f0;
+  --border-hover: #c2c2c2;
   --border-search: color-mix(in srgb, var(--border) 80%, var(--border-hover));
+  --bg-input: #f4f4f4;
+  --text: #1f2023;
+  --text-secondary: #55585d;
+  --text-muted: #74777c;
+  --text-faint: #8c8f94;
+  --text-url: var(--text-secondary);
+  --badge-cat-bg: #f3f3f3;
+  --badge-cat-border: #e8e8e8;
+  --badge-cat-text: var(--text-secondary);
+  --sidebar-bg: #fafafa;
+  --sidebar-hover: #f0f0f0;
+  --workspace-frame: #f0f0f0;
 }
 
 :root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {

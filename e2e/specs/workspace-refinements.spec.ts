@@ -2,65 +2,51 @@ import { test, expect } from '@playwright/test'
 import { bootUnlocked, e2e } from '../helpers'
 
 for (const width of [800, 1280]) {
-  test(`${width}px 辅助侧栏未固定可收起，固定后不打断正文编辑且手动关闭保留固定状态`, async ({ page }) => {
+  test(`${width}px 页级筛选不打断正文编辑，宽导航可随时收起`, async ({ page }) => {
     await page.setViewportSize({ width, height: 720 })
     await bootUnlocked(page, { notes: [{ title: '清单', content_html: '<p>待办 #工作</p>', pinned: true }] })
-    const panel = page.locator('.workspace-directory')
-    const toggle = page.locator('#workspace-directory-toggle')
-    await toggle.click()
-    const bounds = (await panel.boundingBox())!
-    const surface = (await page.locator('.workspace-surface').boundingBox())!
-    const content = (await page.locator('.workspace-body > .main-content').boundingBox())!
-    expect(bounds.x).toBe(content.x + content.width)
-    expect(bounds.x + bounds.width).toBe(surface.x + surface.width)
-    expect(bounds.y).toBe(surface.y)
-    expect(bounds.height).toBe(surface.height)
-    await expect(page.locator('.workspace-directory-backdrop')).toHaveCount(0)
-    await panel.getByRole('button', { name: '固定目录', exact: true }).click()
-    await expect(panel.getByRole('button', { name: '取消固定目录', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    const workbar = page.locator('.workspace-workbar')
     const editor = page.locator('.composer .ProseMirror')
+    await expect(workbar).toBeVisible()
+    await expect(page.locator('.workspace-directory')).toBeHidden()
     await editor.click()
-    await editor.fill('固定侧栏时继续写作')
-    await page.locator('.page-bar .search-box input').click()
-    await page.keyboard.press('Escape')
-    await expect(panel).toBeVisible()
-    await expect(page.locator('.workspace-directory-backdrop')).toHaveCount(0)
-    await panel.getByRole('button', { name: /置顶/ }).click()
-    await expect(panel).toBeVisible()
-    await expect(editor).toHaveText('固定侧栏时继续写作')
+    await editor.fill('切换筛选时继续写作')
+    await workbar.getByRole('button', { name: /置顶/ }).click()
+    await expect(page.locator('.memo')).toHaveCount(1)
+    await expect(editor).toHaveText('切换筛选时继续写作')
+    const expanded = (await page.locator('.workspace-main').boundingBox())!.width
+    if (width >= 900) {
+      await page.getByRole('button', { name: '收起侧栏', exact: true }).click()
+      await expect(editor).toHaveText('切换筛选时继续写作')
+      await expect.poll(async () => (await page.locator('.workspace-main').boundingBox())!.width).toBeGreaterThan(expanded)
+    } else {
+      await expect(page.locator('.sidebar')).toHaveCSS('width', '56px')
+      await expect(page.locator('.titlebar-outer .sidebar-toggle')).toBeHidden()
+    }
     await page.locator('.composer button.btn-primary').click()
     await expect.poll(async () => (await e2e.snapshot(page)).notes.length).toBe(2)
-    await expect(panel).toBeVisible()
-    await panel.getByRole('button', { name: '关闭辅助侧栏', exact: true }).click()
-    await expect(panel).toBeHidden()
-    await toggle.click()
-    await expect(panel.getByRole('button', { name: '取消固定目录', exact: true })).toBeVisible()
-    await panel.getByRole('button', { name: '取消固定目录', exact: true }).click()
-    await page.locator('.page-bar .search-box input').click()
-    await expect(panel).toBeHidden()
+    if (width >= 900) await page.getByRole('button', { name: '展开侧栏', exact: true }).click()
   })
 }
 
-test('固定状态按模块独立保存，重启恢复并能取消固定', async ({ page, context }) => {
+test('侧栏状态跨模块与重启保持，桌面不再出现辅助目录', async ({ page, context }) => {
   const content = {
     notes: [{ title: '目录检查', content_html: '<p>保留小记目录</p>' }],
     entries: [{ name: '目录检查', url: 'https://example.invalid', category: '工作' }],
   }
   await bootUnlocked(page, content)
-  await page.locator('#workspace-directory-toggle').click()
-  await page.getByRole('button', { name: '固定目录', exact: true }).click()
+  await page.getByRole('button', { name: '收起侧栏', exact: true }).click()
   await page.getByRole('link', { name: '网址收藏', exact: true }).click()
-  await page.locator('#workspace-directory-toggle').click()
-  await expect(page.getByRole('button', { name: '固定目录', exact: true })).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '56px')
+  await expect(page.locator('.workspace-directory')).toBeHidden()
   await page.getByRole('link', { name: '小记', exact: true }).click()
-  await expect(page.getByRole('button', { name: '取消固定目录', exact: true })).toBeVisible()
-  await expect.poll(async () => (await e2e.snapshot(page)).settings.workspace_directory_pinned).toBe('{"notes":true}')
+  await expect(page.locator('.workspace-workbar')).toBeVisible()
+  await expect(page.locator('.workspace-directory')).toBeHidden()
   const saved = (await e2e.snapshot(page)).settings
   const restarted = await context.newPage()
   await bootUnlocked(restarted, { ...content, settings: saved })
-  await expect(restarted.locator('.workspace-directory')).toBeVisible()
-  await restarted.getByRole('button', { name: '取消固定目录', exact: true }).click()
-  await expect.poll(async () => (await e2e.snapshot(restarted)).settings.workspace_directory_pinned).toBe('{"notes":false}')
+  await expect(restarted.locator('.sidebar')).toHaveCSS('width', '56px')
+  await expect(restarted.locator('.workspace-directory')).toBeHidden()
   await restarted.close()
 })
 
@@ -68,7 +54,7 @@ test('左上角 Desko 菜单可进入档案和关于，Esc 只关闭菜单', asy
   await bootUnlocked(page)
   const brand = page.getByRole('button', { name: 'Desko 菜单', exact: true })
   const box = (await brand.boundingBox())!
-  expect(box.x + box.width).toBeLessThanOrEqual(56)
+  expect(box.x + box.width).toBeLessThanOrEqual(148)
   expect(box.y + box.height).toBeLessThanOrEqual(48)
   await brand.click()
   await page.keyboard.press('Escape')

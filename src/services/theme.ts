@@ -131,7 +131,7 @@ const RETIRED_ACCENT: Record<string, AccentId> = {
 }
 let workspaceLayout = false
 
-export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink', backgroundAtmosphere: false }
+export const DEFAULT_APPEARANCE: Appearance = { theme: 'paper', accent: 'ink', backgroundAtmosphere: true }
 const state = reactive<Appearance>({ ...DEFAULT_APPEARANCE })
 /** 全应用共享的当前外观；只能通过选择入口更新，避免状态和根属性各自变化。 */
 export const appearance = readonly(state)

@@ -415,7 +415,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 /* hover 与收藏/文件行卡同一配方：描边显色 + 背景微沉（轻量化轮，抬影退役） */
 .memo:hover {
   border-color: var(--border-card-hover);
-  background: var(--bg-surface-hover);
+  background-color: var(--bg-surface-hover);
 }
 .memo.pinned { border-color: var(--accent-light); }
 .memo.editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }
@@ -470,8 +470,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   user-select: none;
   border-radius: var(--radius);
   background: repeating-linear-gradient(-45deg, /* taste-skill-ignore: 保留现有加密态纹理，区别普通小记。 */
-    color-mix(in srgb, var(--warning) 5%, transparent) 0 6px,
-    transparent 6px 14px);
+    color-mix(in srgb, var(--warning) 2.5%, transparent) 0 4px,
+    transparent 4px 18px);
 }
 .lock-disc {
   width: 34px;
@@ -578,7 +578,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 /* 时间让位给动作排：实底只有排这么宽，长标题会被右缘裁掉，留着时间就是叠字 */
 .memo:not(.editing):not(.batchable):hover .memo-time, .memo:not(.editing):not(.batchable):focus-within .memo-time { opacity: 0; }
 .memo-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
-.memo-acts .ib :deep(svg) { width: 15px; height: 15px; }
+.memo-acts .ib :deep(svg) { width: 16px; height: 16px; }
 
 .memo-check {
   position: absolute;

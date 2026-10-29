@@ -56,9 +56,7 @@ for (const theme of ['paper', 'ink']) {
       await dock.getByRole('button', { name: '完成', exact: true }).click()
       await expect(page.locator('.composer')).toBeVisible()
 
-      await page.getByRole('button', { name: '展开目录', exact: true }).click()
-      await page.getByRole('button', { name: '固定目录', exact: true }).click()
-      await page.locator('.rail button.rail-item').filter({ hasText: '归档' }).click()
+      await page.locator('.workspace-workbar .wb-tab').filter({ hasText: '归档' }).click()
       await expect(page.locator('.titlebar-count')).toHaveText('归档 · 1 条')
       await expect(page.locator('.ab-lead')).toHaveText('已归档 · 不出现在「全部」列表，可在本视图搜索')
       expect(await page.locator('.archive-bar').evaluate(el => {

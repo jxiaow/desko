@@ -595,13 +595,8 @@ watchEffect(() => {
 
 
 /* ---------- 添加/编辑弹窗：与收藏表单弹窗同一套骨架 ----------
-   520px 壳、居中悬浮（遮罩走全局居中基线，只把磨砂提到 6px 与首页同档）、44px 头（无底描边）、
-   46px 透明底栏 + 一道顶线 + 28px 钮，壳/头/底全走 global.css 的 .dialog-* */
-.form-overlay {
-  background: var(--overlay);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
+   520px 壳、居中悬浮（遮罩走全局 .dialog-overlay，纯色压暗、不采样 backdrop）、
+   44px 头（无底描边）、46px 透明底栏 + 一道顶线 + 28px 钮，壳/头/底全走 global.css 的 .dialog-* */
 .shortcut-dialog {
   width: 520px;
   max-height: 91vh;

@@ -4,7 +4,7 @@ import { lab } from '../../scripts/lib/theme-tokens.mjs'
 
 // 正式桌面使用纸/墨两套底色和十二种强调色；通过真实设置入口验证全部组合。
 const BASES = {
-  paper: { name: '纸', pol: 'light', bg: 'rgb(246, 246, 244)', text: 'rgb(36, 35, 33)' },
+  paper: { name: '纸', pol: 'light', bg: 'rgb(250, 250, 250)', text: 'rgb(31, 32, 35)' },
   ink: { name: '墨', pol: 'dark', bg: 'rgb(24, 25, 27)', text: 'rgb(223, 225, 229)' },
 } as const
 const ACCENT_HEX = {
@@ -37,7 +37,7 @@ const readAnchors = (page: import('@playwright/test').Page) =>
   })
 
 test.describe('主题', () => {
-  test('没存过外观时用默认：纸底 × 蓝，背景保持纯色', async ({ page }) => {
+  test('没存过外观时用默认：纸底 × 蓝，背景保留静态柔光', async ({ page }) => {
     await bootUnlocked(page)
     const got = await readAnchors(page)
     expect(got.theme).toBe('paper')
@@ -46,10 +46,10 @@ test.describe('主题', () => {
     expect(got.text).toBe(BASES.paper.text)
     expect(got.base).toBe('light')
     expect(got.accent).toBe(accentOf('paper', 'ink'))
-    await expect(page.locator('html')).toHaveAttribute('data-atmosphere', 'off')
-    await expect(page.locator('.app-root')).toHaveCSS('background-image', 'none')
+    await expect(page.locator('html')).toHaveAttribute('data-atmosphere', 'on')
+    await expect(page.locator('.workspace-main')).toHaveCSS('background-image', /radial-gradient/)
     const dialog = await openSettings(page)
-    await expect(dialog.getByRole('switch', { name: '背景氛围' })).not.toBeChecked()
+    await expect(dialog.getByRole('switch', { name: '背景氛围' })).toBeChecked()
   })
 
   test('已存的外观在首屏之前就挂上，不走默认色', async ({ page }) => {

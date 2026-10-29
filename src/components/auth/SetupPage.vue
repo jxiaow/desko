@@ -291,7 +291,7 @@ const doSetup = async () => {
   transition: background-color var(--transition);
 }
 
-.setup-submit svg { width: 13px; height: 13px; }
+.setup-submit svg { width: 14px; height: 14px; }
 
 .setup-submit:hover:not(:disabled) { background: var(--accent-hover); }
 

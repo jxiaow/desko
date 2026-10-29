@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import router from './router'
 import { setupGlobalTips } from './utils/tooltip'
 import { initializeAppearance } from './services/theme'
+import { initializeSidebar } from './services/sidebar'
 import { markWebRuntimeRoot } from './services/runtime'
 import { installModules } from './modules/runtime'
 import './styles/global.css'
@@ -17,6 +18,8 @@ async function bootstrap() {
   markWebRuntimeRoot()
   // 先把主题挂上再挂载：否则墨色主题会先闪一屏纸色
   await initializeAppearance({ workspaceLayout: true })
+  // 侧栏状态在挂载前就位，避免先画展开再跳收起。
+  await initializeSidebar()
   // 模块开关同理：挂载后才读到，侧栏和路由会闪一帧不该存在的东西
   await installModules()
 

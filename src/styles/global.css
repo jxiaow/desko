@@ -152,11 +152,11 @@
   --active: #eae7e2;
   --overlay: rgba(29, 28, 26, 0.42);
 
-  /* 文字：四级近中性，深字浅底一眼可读 */
-  --text: #242321;
-  --text-secondary: #53514d;
-  --text-muted: #6d6963;
-  --text-faint: #77726c;
+  /* 文字：四级近中性，深字浅底一眼可读；主字不用纯黑，纸底上留一点空气 */
+  --text: #34322e;
+  --text-secondary: #5c5954;
+  --text-muted: #756f68;
+  --text-faint: #837d75;
 
   /* 描边：层级靠边框，不靠色块 */
   --border: #e8e5e0;
@@ -165,10 +165,10 @@
   --border-hover: #c9c3ba;
 
   /* URL 与胶囊徽标：浅色下各自贴边框族和强调族 */
-  --text-url: #53514d;
+  --text-url: #5c5954;
   --badge-cat-bg: #f0ede6;
   --badge-cat-border: #e4dfd7;
-  --badge-cat-text: #53514d;
+  --badge-cat-text: #5c5954;
   --badge-ver-bg: #dde4f6;
   --badge-ver-text: #234bad;
 
@@ -1556,16 +1556,21 @@ button, input, select, textarea {
 .dialog-enter-active, .dialog-leave-active { transition: opacity var(--transition-slow); }
 .dialog-enter-from, .dialog-leave-to { opacity: 0; }
 
+/* 遮罩只做「压暗 + 极轻的四周收拢」，不再用 backdrop-filter：
+   WebView2 在画布（background-attachment: fixed）之上做 backdrop 采样时会发白、
+   出现块状断层，同一个遮罩在设置弹窗正常、在页内弹窗发灰就是这个原因。
+   纯色遮罩在各渲染器上完全一致，弹窗一出现整窗就稳稳定住。 */
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: var(--overlay);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background:
+    radial-gradient(128% 104% at 50% 46%, transparent 42%, rgba(0, 0, 0, 0.1) 100%),
+    var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  isolation: isolate;
 }
 
 .dialog {
@@ -1829,7 +1834,7 @@ button, input, select, textarea {
   align-items: center;
   flex-shrink: 0;
 }
-.search-icon svg { width: 15px; height: 15px; }
+.search-icon svg { width: 16px; height: 16px; }
 .search-clear {
   display: flex;
   align-items: center;
@@ -2290,7 +2295,8 @@ button, input, select, textarea {
 :is(.page-bar, .cx-band-controls) .search-box,
 .search-box.flat {
   height: 32px;
-  background: var(--bg-canvas-input);
+  /* 输入框要有自己的实底：底色若与画布同值，只剩一圈描边，看着像没画完。 */
+  background: var(--bg-surface);
   border-radius: 9px;
 }
 :is(.page-bar, .cx-band-controls) .search-box input,
@@ -2312,25 +2318,25 @@ button, input, select, textarea {
   margin-right: var(--space-2);
 }
 :is(.page-bar, .cx-band-controls) :is(.btn-primary, .btn-secondary, .bar-btn) { height: 32px; }
-/* 栏内主钮改淡染方言：accent-soft 底 + brand 字，不做实心深蓝大胶囊。
-   圆角收到 8px 方角档，去掉彩色投影与 hover 抬升（ Things 静默控件）。 */
+/* 页头主钮吃强调色：它是一页唯一需要先被看见的动作。
+   hover 只调底色，不抬影、不位移；禁用态继续走文件末尾的统一浅面。 */
 .page-bar .btn-primary:where(:not(.ghost-danger)) {
-  background: var(--accent-soft);
-  color: var(--text-brand);
-  border: none;
+  background: var(--accent);
+  color: var(--accent-on);
+  border: 1px solid transparent;
   border-radius: var(--radius-ib);
   font-weight: 600;
   box-shadow: none;
 }
 .page-bar .btn-primary:hover:not(:disabled):not(.ghost-danger) {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--text-brand);
+  background: var(--accent-hover);
+  color: var(--accent-on);
   transform: none;
   box-shadow: none;
 }
 .page-bar .btn-primary:active:not(:disabled):not(.ghost-danger) {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
-  color: var(--text-brand);
+  background: var(--accent-active);
+  color: var(--accent-on);
   transform: none;
   box-shadow: none;
 }
@@ -2518,6 +2524,14 @@ button, input, select, textarea {
 }
 .page-note svg { flex-shrink: 0; }
 
+/* 工作区卡面统一吃同一层氛围光：卡片占内容区大半，光只铺在画布上就只剩卡片缝可见。
+   固定在窗口上，卡片滚动时是穿过同一片光，而不是各自带一条渐变。
+   选择器压过各组件 scoped 里的 background 简写，卡面自己的 hover 改色只换 background-color。 */
+:root[data-layout="workspace"] .workspace-main :is(.memo, .composer, .grid-card, .mfa-card, .rcard, .tn-card, .clean-group-card, .rowlist) {
+  background-image: var(--material-surface-field, none);
+  background-attachment: fixed;
+}
+
 /* 浮岛网格（V5.2 收编轮 P3，C1/C1b）：卡片直接浮在画布上，不包 .rowlist 白面板，
    否则卡中卡。列数由容器宽自适应——minmax 取 280px 而非 spec 的 310px：默认窗内容宽 928px
    下 310 只落 2 列，与 spec 自己写的「3 列自适应」矛盾。
@@ -2555,15 +2569,15 @@ button, input, select, textarea {
   border-color: var(--border-card-hover);
   box-shadow: var(--shadow-card-hover);
 }
-[data-base="light"] .grid-card:hover:not(.selected) { background: var(--sunken); }
-[data-base="dark"] .grid-card:hover:not(.selected) { background: var(--hover); }
+[data-base="light"] .grid-card:hover:not(.selected) { background-color: var(--sunken); }
+[data-base="dark"] .grid-card:hover:not(.selected) { background-color: var(--hover); }
 .grid-card:focus-visible {
   outline: none;
   transform: translateY(-1px);
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-pop);
 }
-.grid-card.selected { background: var(--accent-soft); border-color: var(--accent); }
+.grid-card.selected { background-color: var(--accent-soft); border-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   .grid-card:hover, .grid-card:focus-visible { transform: none; } }
 
@@ -3101,4 +3115,37 @@ input[type="datetime-local"]:focus-visible {
   box-shadow: none;
   transform: none;
   cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   动效 · 切页与卡片入场
+   只动透明度，不参与布局；截图（animations: disabled）与
+   prefers-reduced-motion 下直接落终态，不留下位移残影。 */
+@keyframes page-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes card-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 填充用 backwards：both 会让动画结束后一直持有末帧样式，
+   .main-content 因此永远是堆叠上下文，页内弹窗遮罩（z-1000）被困在
+   内容层里，标题栏永远压在弹窗之上（分享海报的关闭钮被顶栏盖住）。 */
+.main-content.page-enter { animation: page-fade-in 180ms ease-out backwards; }
+
+:is(.card-grid, .day-list, .rcard-list) > * { animation: card-fade-in 200ms ease-out backwards; }
+:is(.card-grid, .day-list, .rcard-list) > *:nth-child(2) { animation-delay: 18ms; }
+:is(.card-grid, .day-list, .rcard-list) > *:nth-child(3) { animation-delay: 36ms; }
+:is(.card-grid, .day-list, .rcard-list) > *:nth-child(4) { animation-delay: 54ms; }
+:is(.card-grid, .day-list, .rcard-list) > *:nth-child(5) { animation-delay: 72ms; }
+:is(.card-grid, .day-list, .rcard-list) > *:nth-child(6) { animation-delay: 90ms; }
+:is(.card-grid, .day-list, .rcard-list) > *:nth-child(7) { animation-delay: 108ms; }
+:is(.card-grid, .day-list, .rcard-list) > *:nth-child(8) { animation-delay: 126ms; }
+:is(.card-grid, .day-list, .rcard-list) > *:nth-child(n + 9) { animation-delay: 140ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .main-content.page-enter,
+  :is(.card-grid, .day-list, .rcard-list) > * { animation: none; }
 }

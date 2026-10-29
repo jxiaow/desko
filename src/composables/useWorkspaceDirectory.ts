@@ -6,6 +6,7 @@ import { useNotesStore } from '../stores/notes'
 import { useToastStore } from '../stores/toast'
 import { usePageHeadStore } from '../stores/pageHead'
 import { hasWorkspaceDirectory, workspaceDirectoryMediaQuery } from '../components/layout/workspaceLayout'
+import { isWebRuntime } from '../services/runtime'
 import { useWorkspaceDirectoryPreferences } from '../components/layout/useWorkspaceDirectoryPreferences'
 import { useEscapeClose } from './useEscapeClose'
 
@@ -24,6 +25,8 @@ export function useWorkspaceDirectory() {
   const directoryAvailable = computed(() => {
     if (!hasWorkspaceDirectory(String(route.name))) return false
     if (route.name === 'codex') return !!pageHead.directoryLabel
+    // 桌面的小记与收藏把筛选放回内容顶部；浏览器仍保留右侧栏的窄屏交互。
+    if (!isWebRuntime()) return false
     return route.name === 'notes'
       ? notesStore.notes.length > 0 || notesStore.hasActiveFilters
       : entriesStore.entries.length > 0 || !!entriesStore.searchKeyword || entriesStore.activeTab !== 'all'

@@ -57,7 +57,7 @@ pub fn set_setting(state: State<AppState>, app: AppHandle, key: String, value: S
         }).map_err(AppError::Setting)?;
         return Ok(());
     }
-    const ALLOWED_KEYS: &[&str] = &["auto_lock_timeout", "lock_on_close", "lock_on_system_lock", "theme", "accent", "background_atmosphere", "note_paste_cleanup", "workspace_directory_open", "workspace_directory_pinned", "auto_backup_interval", "auto_backup_realtime", "keep_remote", "terminal", "notes_enabled", "entries_enabled", "files_enabled", "mfa_enabled", "fileshare_enabled", "tunnel_enabled", "codex_enabled", "bypass_enabled", "codex_quota_auto_refresh_minutes", "codex_quota_alert_threshold", "codex_hud_enabled", "codex_hud_skin", "codex_hud_ambient", "codex_hud_pinned"];
+    const ALLOWED_KEYS: &[&str] = &["auto_lock_timeout", "lock_on_close", "lock_on_system_lock", "theme", "accent", "background_atmosphere", "note_paste_cleanup", "sidebar_collapsed", "workspace_directory_open", "workspace_directory_pinned", "auto_backup_interval", "auto_backup_realtime", "keep_remote", "terminal", "notes_enabled", "entries_enabled", "files_enabled", "mfa_enabled", "fileshare_enabled", "tunnel_enabled", "codex_enabled", "bypass_enabled", "codex_quota_auto_refresh_minutes", "codex_quota_alert_threshold", "codex_hud_enabled", "codex_hud_skin", "codex_hud_ambient", "codex_hud_pinned"];
     if !ALLOWED_KEYS.contains(&key.as_str()) {
         return Err(AppError::Database(format!("setting key not allowed: {}", key)));
     }

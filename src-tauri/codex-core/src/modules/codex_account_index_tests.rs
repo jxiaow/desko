@@ -4,6 +4,7 @@ use std::sync::{Barrier, MutexGuard};
 struct Store {
     root: PathBuf,
     previous: Option<std::ffi::OsString>,
+    previous_codex_home: Option<std::ffi::OsString>,
     _environment: MutexGuard<'static, ()>,
 }
 
@@ -16,10 +17,13 @@ impl Store {
             std::env::temp_dir().join(format!("desko-index-concurrency-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
         let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+        let previous_codex_home = std::env::var_os("CODEX_HOME");
         std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &root);
+        std::env::set_var("CODEX_HOME", root.join("official"));
         Self {
             root,
             previous,
+            previous_codex_home,
             _environment: environment,
         }
     }
@@ -31,6 +35,10 @@ impl Drop for Store {
         match &self.previous {
             Some(value) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", value),
             None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+        }
+        match &self.previous_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
         }
     }
 }
@@ -53,6 +61,103 @@ fn api(id: usize) -> CodexAccount {
         None,
     )
     .unwrap()
+}
+
+fn oauth(email: &str, workspace: &str) -> CodexAccount {
+    let claims = serde_json::json!({
+        "email": email,
+        "https://api.openai.com/auth": {
+            "chatgpt_account_id": workspace,
+            "chatgpt_user_id": "synthetic-user",
+        },
+    });
+    let token = format!("e30.{}.synthetic", URL_SAFE_NO_PAD.encode(claims.to_string()));
+    upsert_account(CodexTokens {
+        id_token: token.clone(),
+        access_token: token,
+        refresh_token: Some("synthetic-stored-refresh".into()),
+    }).unwrap()
+}
+
+fn write_local_oauth(account: &CodexAccount) {
+    let home = get_codex_home();
+    fs::create_dir_all(&home).unwrap();
+    fs::write(home.join("auth.json"), serde_json::json!({
+        "auth_mode": "chatgpt",
+        "tokens": {
+            "id_token": account.tokens.id_token,
+            "access_token": account.tokens.access_token,
+            "refresh_token": "synthetic-local-refresh",
+            "account_id": account.account_id,
+        },
+    }).to_string()).unwrap();
+}
+
+#[test]
+fn current_account_recovers_local_login_without_a_previous_switch() {
+    let store = Store::new();
+    let account = oauth("current@example.invalid", "workspace-a");
+    write_local_oauth(&account);
+    let index_path = store.root.join("codex_accounts.json");
+    let index_before = fs::read(&index_path).unwrap();
+    let auth_before = fs::read(get_auth_json_path()).unwrap();
+    assert!(load_account_index().current_account_id.is_none());
+
+    let current = get_current_account().expect("recognize the official local login");
+    assert_eq!(current.id, account.id);
+    assert_eq!(current.tokens.refresh_token, account.tokens.refresh_token);
+    assert_eq!(fs::read(&index_path).unwrap(), index_before, "ordinary reads stay read-only");
+
+    list_accounts_checked().unwrap();
+    assert_eq!(load_account_index().current_account_id.as_deref(), Some(account.id.as_str()));
+    assert_eq!(fs::read(get_auth_json_path()).unwrap(), auth_before);
+    assert_eq!(load_account(&account.id).unwrap().tokens.refresh_token, account.tokens.refresh_token);
+}
+
+#[test]
+fn current_account_recognition_distinguishes_workspaces_with_the_same_email() {
+    let _store = Store::new();
+    let _other = oauth("same@example.invalid", "workspace-a");
+    let current = oauth("same@example.invalid", "workspace-b");
+    write_local_oauth(&current);
+    assert_eq!(get_current_account().unwrap().id, current.id);
+    list_accounts_checked().unwrap();
+    assert_eq!(load_account_index().current_account_id.as_deref(), Some(current.id.as_str()));
+}
+
+#[test]
+fn current_account_recognition_does_not_pick_an_unmatched_saved_account() {
+    let _store = Store::new();
+    let mut local = oauth("same@example.invalid", "workspace-a");
+    assert!(get_current_account().is_none(), "a saved account alone is not a login");
+    local.account_id = Some("workspace-not-saved".into());
+    write_local_oauth(&local);
+    assert!(get_current_account().is_none());
+    list_accounts_checked().unwrap();
+    assert!(load_account_index().current_account_id.is_none());
+}
+
+#[test]
+fn current_account_recognition_preserves_an_explicit_switch() {
+    let _store = Store::new();
+    let selected = oauth("selected@example.invalid", "workspace-a");
+    let local = oauth("local@example.invalid", "workspace-b");
+    record_current_account(&selected.id).unwrap();
+    write_local_oauth(&local);
+    assert_eq!(get_current_account().unwrap().id, selected.id);
+    list_accounts_checked().unwrap();
+    assert_eq!(load_account_index().current_account_id.as_deref(), Some(selected.id.as_str()));
+}
+
+#[test]
+fn current_account_recognition_respects_the_configured_auth_store() {
+    let _store = Store::new();
+    let account = oauth("current@example.invalid", "workspace-a");
+    write_local_oauth(&account);
+    fs::write(get_config_toml_path(&get_codex_home()), "cli_auth_credentials_store = 'ephemeral'\n").unwrap();
+    assert!(get_current_account().is_none());
+    list_accounts_checked().unwrap();
+    assert!(load_account_index().current_account_id.is_none());
 }
 
 #[test]

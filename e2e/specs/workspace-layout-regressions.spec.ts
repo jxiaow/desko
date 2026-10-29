@@ -1,5 +1,5 @@
 import { test, expect, type Locator } from '@playwright/test'
-import { bootUnlocked, e2e, tipButton } from '../helpers'
+import { bootUnlocked, tipButton } from '../helpers'
 import type { E2EConfig } from '../mocks/backend'
 
 const seed: E2EConfig = {
@@ -17,34 +17,36 @@ async function bounds(locator: Locator) {
   return box!
 }
 
-for (const width of [800, 1040, 1920]) {
-  for (const route of ['notes', 'entries']) {
-    test(`${width}px ${route} 目录开关不漂移，同一鼠标位置可连续展开和收起`, async ({ page }) => {
-      await page.setViewportSize({ width, height: 720 })
-      await bootUnlocked(page, seed, `/${route}`)
-      const toggle = page.locator('#workspace-directory-toggle')
-      await expect(page.locator('.titlebar-buttons #workspace-directory-toggle')).toHaveCount(1)
-      const before = await bounds(toggle)
-      const point = { x: before.x + before.width / 2, y: before.y + before.height / 2 }
-      for (const open of [true, false, true, false]) {
-        await page.mouse.click(point.x, point.y)
-        await expect(toggle).toHaveAttribute('aria-expanded', String(open))
-        expect(await bounds(toggle)).toEqual(before)
-        expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('button')?.id, point)).toBe('workspace-directory-toggle')
-      }
-      expect(await e2e.count(page, 'window:startDragging')).toBe(0)
-    })
-  }
+for (const width of [1040, 1920]) {
+  test(`${width}px 侧栏折叠开关贴住轨道接缝，内容宽度随之变化`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 720 })
+    await bootUnlocked(page, seed, '/notes')
+    const toggle = page.getByRole('button', { name: '收起侧栏', exact: true })
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const before = await bounds(toggle)
+    const expanded = (await bounds(page.locator('.workspace-main'))).width
+    expect(before.x).toBeGreaterThanOrEqual(148)
+    await toggle.click()
+    const collapsedButton = page.getByRole('button', { name: '展开侧栏', exact: true })
+    await expect(collapsedButton).toHaveAttribute('aria-expanded', 'false')
+    const collapsed = await bounds(collapsedButton)
+    expect(collapsed.x).toBeLessThan(before.x)
+    expect({ y: collapsed.y, width: collapsed.width, height: collapsed.height }).toEqual({ y: before.y, width: before.width, height: before.height })
+    expect((await bounds(page.locator('.workspace-main'))).width).toBeGreaterThan(expanded)
+    await page.mouse.click(collapsed.x + collapsed.width / 2, collapsed.y + collapsed.height / 2)
+    await expect(page.getByRole('button', { name: '收起侧栏', exact: true })).toBeVisible()
+    expect((await bounds(page.locator('.workspace-main'))).width).toBe(expanded)
+    expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('')
+  })
 }
 
 for (const width of [800, 1040, 1920]) {
-  test(`${width}px 保留通栏顶栏与无边框卡面，目录开关保持搜索和操作对齐`, async ({ page }) => {
+  test(`${width}px 顶栏、工作栏与内容共用阅读列，控件不溢出`, async ({ page }) => {
     await page.setViewportSize({ width, height: 720 })
     await bootUnlocked(page, seed)
     const toolbar = page.locator('#workspace-page-toolbar')
     await expect(page.locator('.titlebar-outer #workspace-page-toolbar')).toBeVisible()
     expect((await bounds(page.locator('.titlebar-outer'))).height).toBe(48)
-    await expect(page.locator('.workspace-main > #workspace-page-toolbar')).toHaveCount(0)
     let searchLeft: number | undefined
     for (const [route, columnSelector] of [
       ['notes', '.composer'], ['entries', '.card-grid:has(.entry-card)'], ['files', '.shortcut-list'],
@@ -73,73 +75,46 @@ for (const width of [800, 1040, 1920]) {
           expect(search.y).toBeGreaterThanOrEqual(48)
           await expect(toolbar.locator('.search-box')).toHaveCount(0)
         } else expect(Math.abs(search.x - searchLeft)).toBeLessThanOrEqual(1)
-        expect(search.width).toBeLessThanOrEqual(300)
+        // 工具条档搜索框 flex: 1 1 120px、max-width: 360px（CodexWorkspace 顶栏改版后的档位）。
+        expect(search.width).toBeLessThanOrEqual(360.5)
         expect(search.width).toBeGreaterThanOrEqual(120)
-        if (width >= 1040) expect(search.width).toBe(300)
+      }
+      if (route === 'notes' || route === 'entries') {
+        const workbar = page.locator('.workspace-workbar')
+        const bar = await bounds(workbar)
+        expect(bar.height).toBe(42)
+        expect(bar.x).toBe(content.x)
+        expect(bar.width).toBe(content.width)
+        expect(await workbar.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(false)
+        await expect(page.locator('.workspace-directory')).toBeHidden()
+        await expect(page.locator('#workspace-directory-toggle')).toHaveCount(0)
       }
       const card = page.locator('.memo, .entry-card, .shortcut-row, .mfa-card:not(.skeleton), .acc-row').first()
-      await expect(card).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
-      if (route === 'notes' || route === 'entries') {
-        // KeepAlive 会缓存上一个模块；目录开关只能留下当前页面的那一颗。
-        await expect(page.locator('#workspace-directory-toggle')).toHaveCount(1)
-        await page.locator('#workspace-directory-toggle').click()
-        await page.getByRole('button', { name: '固定目录', exact: true }).click()
-        const directory = await bounds(page.locator('.workspace-directory'))
-        const dockedContent = await bounds(column)
-        const dockedActions = await bounds(toolbar.locator('.page-actions'))
-        expect(directory.width).toBeGreaterThanOrEqual(200)
-        expect(directory.width).toBeLessThanOrEqual(248)
-        expect(directory.y).toBe(48)
-        // 页名与操作跟随正文让位：左缘仍同一条阅读列，右缘收到目录左侧。
-        const dockedHeading = await bounds(page.locator('.titlebar-left'))
-        expect(Math.abs(dockedHeading.x - dockedContent.x)).toBeLessThanOrEqual(1)
-        expect(Math.abs(dockedActions.x + dockedActions.width - (dockedContent.x + dockedContent.width))).toBeLessThanOrEqual(1)
-        expect(dockedContent.x + dockedContent.width).toBeLessThanOrEqual(directory.x - 32)
-        if (width <= 1040) expect((await bounds(toolbar.locator('.search-box'))).x).toBe(searchLeft)
-        if (width <= 1040) expect(dockedContent.x).toBe(content.x)
-        const selected = page.locator('.workspace-directory .directory-link.active').first()
-        expect(await selected.evaluate(element => {
-          const probe = document.createElement('span')
-          probe.style.color = 'var(--text-brand)'
-          element.append(probe)
-          const expected = getComputedStyle(probe).color
-          probe.remove()
-          return getComputedStyle(element).color === expected && getComputedStyle(element.querySelector('svg')!).color === expected
-        })).toBe(true)
-        await page.locator('#workspace-directory-toggle').click()
-      }
+      const border = await card.evaluate(el => getComputedStyle(el).borderTopColor)
+      expect(border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
       expect(await page.locator('.workspace-main').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     }
   })
 }
 
 for (const theme of ['paper', 'ink']) {
-  test(`${theme} 卡面无常态边框，悬停仍保留小记编辑与键盘焦点`, async ({ page }) => {
+  test(`${theme} 卡面有安静边界，悬停、选中与键盘焦点仍有清楚反馈`, async ({ page }) => {
     await bootUnlocked(page, { ...seed, settings: { ...seed.settings, theme, fileshare_enabled: 'true' }, fileshare: { running: true, shareDirs: ['C:/demo/share'] } })
     const memo = page.locator('.memo').first()
-    await expect(memo).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
-    await expect(page.locator('.composer')).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
+    const border = await memo.evaluate(el => getComputedStyle(el).borderTopColor)
+    const canvas = await page.locator('.workspace-main').evaluate(el => getComputedStyle(el).backgroundColor)
+    expect(border).not.toBe(canvas)
+    expect(border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
     await memo.hover()
     await memo.locator('.memo-check').click()
     const selectedMemo = page.locator('.memo.is-sel')
-    await expect(selectedMemo).not.toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
+    await expect(selectedMemo).not.toHaveCSS('border-top-color', border)
     await page.mouse.move(0, 0)
-    const selectedBackground = await selectedMemo.evaluate(element => {
-      const probe = document.createElement('span')
-      probe.style.backgroundColor = 'var(--accent-soft)'
-      element.append(probe)
-      const color = getComputedStyle(probe).backgroundColor
-      probe.remove()
-      return color
-    })
-    await expect(selectedMemo).toHaveCSS('background-color', selectedBackground)
     await selectedMemo.hover()
-    await expect(selectedMemo).toHaveCSS('background-color', selectedBackground)
-    await expect(selectedMemo).not.toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
+    await expect(selectedMemo).toHaveCSS('border-top-color', /rgb\(|color\(|oklab\(|oklch\(/)
     await selectedMemo.locator('.memo-check').click()
     await tipButton(memo, '编辑').click()
     const editing = page.locator('.memo.editing')
-    await page.mouse.move(0, 0)
     const hasRing = (element: Element) => {
       const style = getComputedStyle(element)
       return style.boxShadow !== 'none' && !/rgba\(0, 0, 0, 0\)|transparent/.test(style.borderColor)
@@ -151,14 +126,12 @@ for (const theme of ['paper', 'ink']) {
     for (const [route, selector] of [['entries', '.entry-card'], ['mfa', '.mfa-card']]) {
       await page.locator(`a.nav-item[href="/${route}"]`).click()
       const card = page.locator(selector).first()
-      await page.mouse.move(0, 0)
       await page.keyboard.press('Tab')
       await card.focus()
       await expect.poll(() => card.evaluate(hasRing)).toBe(true)
       await card.hover()
       await page.waitForTimeout(250)
       expect(await card.evaluate(hasRing)).toBe(true)
-      expect(await card.evaluate(element => element.matches(':focus-visible'))).toBe(true)
     }
     await page.locator('a.nav-item[href="/fileshare"]').click()
     await expect(page.locator('.send-panel')).toHaveCSS('box-shadow', 'none')

@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { isWebRuntime, isCodexWebRuntime } from '../../services/runtime'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { releaseHover, suppressHover } from '../../utils/hoverGuard'
+import { sidebarCollapsed, setSidebarCollapsed } from '../../services/sidebar'
 import AppIcon from '../shared/AppIcon.vue'
 import BrandLogo from '../shared/BrandLogo.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
@@ -56,6 +57,10 @@ function openWebSettings() {
 const route = useRoute()
 const pageHead = usePageHeadStore()
 const crumb = computed(() => pageHead.label || (route.meta.title as string) || 'Desko')
+
+const toggleSidebar = () => {
+  void setSidebarCollapsed(!sidebarCollapsed.value)
+}
 
 const updateMaximizedState = async () => {
   if (appWindow) isMaximized.value = await appWindow.isMaximized()
@@ -145,7 +150,7 @@ onUnmounted(() => {
     </div>
 
     <div v-if="!isLocked" class="titlebar-brandcell">
-      <button ref="appMenuAnchor" class="titlebar-app" type="button" aria-label="Desko 菜单" title="Desko" aria-haspopup="menu" :aria-expanded="appMenuOpen" @click="appMenuOpen = !appMenuOpen" @dblclick.stop><BrandLogo /><span v-if="webRuntime && !codexWebRuntime" class="titlebar-wordmark">Desko</span></button>
+      <button ref="appMenuAnchor" class="titlebar-app" type="button" aria-label="Desko 菜单" title="Desko" aria-haspopup="menu" :aria-expanded="appMenuOpen" @click="appMenuOpen = !appMenuOpen" @dblclick.stop><BrandLogo /><span class="titlebar-wordmark">Desko</span></button>
       <PopoverMenu v-if="appMenuOpen" :anchor="appMenuAnchor" align="start" :width="176" @close="appMenuOpen = false">
         <div class="app-menu-title">Desko</div>
         <template v-if="webRuntime">
@@ -160,6 +165,18 @@ onUnmounted(() => {
     </div>
 
     <div class="titlebar-page">
+      <button
+        v-if="!isLocked && !webRuntime"
+        class="sidebar-toggle"
+        type="button"
+        :aria-label="sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
+        :title="sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
+        :aria-expanded="!sidebarCollapsed"
+        aria-controls="app-sidebar"
+        @click="toggleSidebar"
+      >
+        <AppIcon name="panel" :size="18" />
+      </button>
       <div v-if="!isLocked" class="titlebar-left" @mousedown="startDrag" @dblclick="toggleMaximize">
         <button
           v-if="webRuntime"
@@ -222,7 +239,51 @@ onUnmounted(() => {
 .titlebar.titlebar-outer { height: var(--workspace-toolbar-height, 48px); flex: 0 0 var(--workspace-toolbar-height, 48px); overflow: hidden; }
 .titlebar-brandcell { width: var(--sidebar-rail-w, 56px); flex: 0 0 var(--sidebar-rail-w, 56px); align-self: stretch; display: flex; align-items: center; justify-content: center; z-index: 2; }
 .titlebar-brandcell { background: var(--bg-workspace-rail); background-attachment: fixed; }
+.app-root:not(.web-runtime) .titlebar-brandcell {
+  /* 桌面端不自带背景：fixed 附着层会从弹窗遮罩上穿出（WebView2），
+     导轨光由 .app-root::before 整列提供，这里透出它即可。 */
+  background: none;
+  justify-content: flex-start;
+  padding-left: 15px;
+  border-right: 1px solid var(--border);
+}
 .titlebar-page { display: contents; }
+/* 页头沟槽里的侧栏开关：热区 32、可见底块 24（比页名 26px 行高略小一档）、图标 18。
+   热区往右让 4px，可见底块离侧栏接缝 8px、离页名 16px——两侧留白对称，
+   底块不再贴着那条 1px 分割线。展开/收起两态都停在同一处，不会跟着页名跑。 */
+.titlebar-outer .sidebar-toggle {
+  position: absolute;
+  left: calc(-1 * var(--workspace-content-padding) + 4px);
+  top: 50%;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+  pointer-events: auto;
+  transition: color var(--transition-fast);
+}
+.titlebar-outer .sidebar-toggle::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  z-index: 0;
+  border-radius: 7px;
+  background: transparent;
+  transition: background-color var(--transition-fast);
+}
+.titlebar-outer .sidebar-toggle :deep(svg) { position: relative; z-index: 1; }
+.titlebar-outer .sidebar-toggle:hover { color: var(--text); }
+.titlebar-outer .sidebar-toggle:hover::before { background: var(--hover-chrome); }
+.titlebar-outer .sidebar-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .titlebar-outer .titlebar-page { position: absolute; left: var(--workspace-toolbar-left); right: max(var(--workspace-toolbar-right), var(--workspace-window-space, 122px)); height: 100%; display: flex; align-items: center; z-index: 1; pointer-events: none; }
 .titlebar-outer .titlebar-left { flex: 0 0 var(--workspace-heading-width); width: var(--workspace-heading-width); min-width: 0; padding-left: 0; overflow: hidden; pointer-events: auto; }
 /* 服务状态紧随页名，按文字宽度成组，不占用搜索页的固定标题列。 */
@@ -230,7 +291,7 @@ onUnmounted(() => {
 .titlebar-outer .titlebar-page:has([data-workspace-heading="replace"]) { --workspace-heading-gap: 0px; }
 .titlebar-outer .titlebar-page:has([data-workspace-heading="replace"]) .titlebar-left { display: none; }
 .titlebar-outer .titlebar-brand { min-width: 0; width: 100%; }
-.titlebar-outer .titlebar-crumb { display: block; flex-shrink: 0; max-width: 100%; margin: 0; font-size: var(--text-lg); line-height: 24px; font-weight: 600; letter-spacing: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titlebar-outer .titlebar-crumb { display: block; flex-shrink: 0; max-width: 100%; margin: 0; font-size: var(--text-xl); line-height: 26px; font-weight: 600; letter-spacing: -.015em; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .titlebar-outer .titlebar-count { font-size: var(--text-xs); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .titlebar-outer .workspace-page-toolbar { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; container: workspace-toolbar / inline-size; pointer-events: none; }
 /* 品牌标占的是轨的第一格：盒子与下面的模块方块同档（36px / 10px 圆角 / 同一条中线），
@@ -374,7 +435,59 @@ onUnmounted(() => {
 
 .web-modules-toggle { display: none; }
 
-@media (max-width: 900px) {
+@media (max-width: 899px) {
   .titlebar-outer .titlebar-crumb { font-size: var(--text-base); }
+  /* 最小桌面窗由布局自动使用图标轨，不再显示无视觉反馈的折叠开关。 */
+  .titlebar-outer .sidebar-toggle { display: none; }
+  .app-root:not(.web-runtime) .titlebar-brandcell { justify-content: center; padding-left: 0; }
+  .app-root:not(.web-runtime) .titlebar-app {
+    width: 36px;
+    height: 36px;
+    justify-content: center;
+    padding: 7px;
+    gap: 0;
+  }
+  .app-root:not(.web-runtime) .titlebar-app :deep(svg) { width: 100%; height: 100%; }
+  .app-root:not(.web-runtime) .titlebar-wordmark { display: none; }
 }
+
+/* 展开态把品牌锁标放回侧栏中轴：Logo 与导航图标同列，字标与模块名同列。 */
+.app-root:not(.web-runtime) .titlebar-app {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: auto;
+  height: 34px;
+  padding: 4px 7px;
+  border-radius: 8px;
+}
+.app-root:not(.web-runtime) .titlebar-app :deep(svg) {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.app-root:not(.web-runtime) .titlebar-wordmark {
+  display: block;
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: 650;
+  line-height: 20px;
+  letter-spacing: -.02em;
+}
+.app-root:not(.web-runtime).sidebar-collapsed .titlebar-brandcell {
+  justify-content: center;
+  padding-left: 0;
+}
+.app-root:not(.web-runtime).sidebar-collapsed .titlebar-app {
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  padding: 7px;
+  gap: 0;
+}
+.app-root:not(.web-runtime).sidebar-collapsed .titlebar-app :deep(svg) {
+  width: 100%;
+  height: 100%;
+}
+.app-root:not(.web-runtime).sidebar-collapsed .titlebar-wordmark { display: none; }
 </style>

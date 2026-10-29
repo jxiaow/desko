@@ -67,13 +67,8 @@ useEscapeClose(() => emit('close'), () => true, { afterTarget: true })
 </template>
 
 <style scoped>
-/* 居中悬浮：遮罩走全局 .dialog-overlay 的居中基线，这里只加深磨砂一档 */
-.form-overlay {
-  background: var(--overlay);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
+/* 遮罩完全沿用全局 .dialog-overlay（纯色压暗、无 backdrop-filter）：
+   表单弹窗挂在画布内，磨砂采样会把画布的 fixed 背景混成一层灰雾。 */
 .entry-form-dialog {
   width: 520px;
   /* 上下各留 4.5vh：内容自然高在此内，绝不触发外层滚动 */

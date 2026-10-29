@@ -368,7 +368,7 @@ onUnmounted(() => {
   transition: background-color var(--transition);
 }
 
-.unlock-btn svg { width: 13px; height: 13px; }
+.unlock-btn svg { width: 14px; height: 14px; }
 
 .unlock-btn:hover { background: var(--accent-hover); }
 

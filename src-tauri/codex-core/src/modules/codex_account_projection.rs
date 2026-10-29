@@ -3,7 +3,7 @@
 #[path = "codex_external_bridge.rs"]
 mod external_bridge;
 
-/// 获取当前激活的账号（基于 Tools 显式 current_account_id）
+/// 获取当前激活的账号；尚未显式切号时，按官方本机登录身份识别已保存账号。
 pub fn get_current_account() -> Option<CodexAccount> {
     let base_dir = get_codex_home();
     get_current_account_from_loaded(
@@ -18,13 +18,35 @@ fn get_current_account_from_loaded(
     mut load: impl FnMut(&str) -> Option<CodexAccount>,
     base_dir: &Path,
 ) -> Option<CodexAccount> {
-    let current_id = index.current_account_id?;
-    let mut account = load(&current_id)?;
+    let mut account = match index.current_account_id.as_deref() {
+        Some(current_id) => load(current_id)?,
+        None => find_current_account_from_local_auth(&index, &mut load, base_dir)?,
+    };
 
     if account.is_api_key_auth() {
         sync_api_key_account_from_local_state(&mut account, base_dir);
     }
     Some(account)
+}
+
+/// 只匹配身份，不回灌本机 Token，也不把任意已保存账号视为当前账号。
+fn find_current_account_from_local_auth(
+    index: &CodexAccountIndex,
+    mut load: impl FnMut(&str) -> Option<CodexAccount>,
+    base_dir: &Path,
+) -> Option<CodexAccount> {
+    let snapshot = load_local_oauth_snapshot_from_official_store(base_dir)?;
+    let mut matches = index
+        .accounts
+        .iter()
+        .filter_map(|summary| load(&summary.id))
+        .filter(|account| {
+            is_oauth_identity_candidate(account)
+                && local_oauth_snapshot_matches_account(&snapshot, account)
+        });
+    let account = matches.next()?;
+    // 历史重复档案无法唯一对应时，仍由用户显式切号确定。
+    matches.next().is_none().then_some(account)
 }
 
 fn is_codex_auth_token_payload_key(key: &str) -> bool {

@@ -49,11 +49,12 @@ export function isModuleEnabled(id: ModuleId): boolean {
 
 export const enabledModules = computed(() => MODULES.filter((m) => isModuleEnabled(m.id)))
 
-/** 浏览器大小屏共用分组，启停模块后同时更新两处导航。 */
-export const webModuleGroups = computed(() => [
+/** 桌面与浏览器共用分组，启停模块后同时更新各处导航。 */
+export const moduleGroups = computed(() => [
   { label: '日常工具', modules: enabledModules.value.filter(m => ['notes', 'entries', 'files', 'mfa'].includes(m.id)) },
   { label: '开发与连接', modules: enabledModules.value.filter(m => !['notes', 'entries', 'files', 'mfa'].includes(m.id)) },
 ].filter(group => group.modules.length))
+export const webModuleGroups = moduleGroups
 
 /** 落地页：启用模块里排最前的那个；全关时没有页面可去，交给空态壳 */
 export function landingPath(): string | null {

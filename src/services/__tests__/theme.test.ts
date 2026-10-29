@@ -11,13 +11,13 @@ vi.mock('../api/fileshare', () => ({ fileshareApi: { setTheme: vi.fn().mockResol
 beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks() })
 afterEach(() => { document.documentElement.removeAttribute('data-theme'); vi.useRealTimers() })
 
-it.each(['', 'unknown'])('未保存或无效的氛围值 %s 使用纯色默认外观', async raw => {
+it.each(['', 'unknown'])('未保存或无效的氛围值 %s 使用带柔光的默认外观', async raw => {
   vi.mocked(settingsApi.getSetting).mockImplementation(async key => key === 'background_atmosphere' ? raw : '')
 
   await initializeAppearance()
 
-  expect(appearance).toEqual({ theme: 'paper', accent: 'ink', backgroundAtmosphere: false })
-  expect(document.documentElement.dataset.atmosphere).toBe('off')
+  expect(appearance).toEqual({ theme: 'paper', accent: 'ink', backgroundAtmosphere: true })
+  expect(document.documentElement.dataset.atmosphere).toBe('on')
   expect(settingsApi.setSetting).not.toHaveBeenCalled()
 })
 
@@ -113,7 +113,7 @@ it('外观四值去抖抄给局域网传输网页端，同值不重复发', asyn
 
   await vi.advanceTimersByTimeAsync(400)
   expect(fileshareApi.setTheme).toHaveBeenCalledTimes(1)
-  expect(fileshareApi.setTheme).toHaveBeenCalledWith('paper', 'light', 'teal', 'off')
+  expect(fileshareApi.setTheme).toHaveBeenCalledWith('paper', 'light', 'teal', 'on')
 
   // 再点一次同一个强调色：值没变就不该再碰配置文件（每次写都让服务进程多轮询一次）
   await chooseAccent('teal')
@@ -122,7 +122,7 @@ it('外观四值去抖抄给局域网传输网页端，同值不重复发', asyn
 
   await chooseTheme('ink')
   await vi.advanceTimersByTimeAsync(400)
-  expect(fileshareApi.setTheme).toHaveBeenLastCalledWith('ink', 'dark', 'teal', 'off')
+  expect(fileshareApi.setTheme).toHaveBeenLastCalledWith('ink', 'dark', 'teal', 'on')
 })
 
 it('主题戳上报失败不打扰换主题', async () => {

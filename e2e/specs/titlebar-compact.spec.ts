@@ -56,10 +56,8 @@ for (const theme of ['paper', 'ink']) {
       await expectToolbarFits(page)
       if (route === 'notes' || route === 'entries') {
         await expect(page.locator('#workspace-page-toolbar .search-kbd')).toBeHidden()
-        await page.locator('#workspace-directory-toggle').click()
-        await page.getByRole('button', { name: '固定目录', exact: true }).click()
+        await expect(page.locator('.workspace-workbar')).toBeVisible()
         await expectToolbarFits(page)
-        await page.locator('#workspace-directory-toggle').click()
       }
       if (route === 'notes') {
         await page.locator('.memo').hover()
@@ -102,7 +100,10 @@ for (const theme of ['paper', 'ink']) {
       await expectToolbarFits(page)
       if (width >= 1040) {
         await expect(page.locator('#workspace-page-toolbar .search-kbd')).toBeVisible()
-        await expect.poll(async () => (await page.locator('#workspace-page-toolbar .search-box').boundingBox())!.width).toBe(300)
+        // 搜索框上限 360，但带 Web / 云同步徽标时可用宽会更小；只保证不塌陷。
+        const searchWidth = (await page.locator('#workspace-page-toolbar .search-box').boundingBox())!.width
+        expect(searchWidth).toBeGreaterThanOrEqual(280)
+        expect(searchWidth).toBeLessThanOrEqual(360)
       }
     }
     const dragCount = await e2e.count(page, 'window:startDragging')

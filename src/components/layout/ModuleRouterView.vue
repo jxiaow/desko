@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, watch } from 'vue'
+import { computed, nextTick, onMounted, watch } from 'vue'
 import { useRoute, type RouteRecordName } from 'vue-router'
 import { enabledModules } from '../../modules/state'
 
@@ -20,9 +20,21 @@ watch(() => route.name, (_name, previous) => {
   }
 }, { flush: 'sync' })
 
+// 切页时给内容区重放一次淡入：KeepAlive 的缓存页不会重新挂载，
+// 所以在 .main-content 上换类名重启动画，只动透明度、不动几何。
+function playPageEnter() {
+  const el = document.querySelector<HTMLElement>('.main-content')
+  if (!el) return
+  el.classList.remove('page-enter')
+  void el.offsetWidth
+  el.classList.add('page-enter')
+}
+onMounted(playPageEnter)
+
 watch(() => route.name, async name => {
   await nextTick()
   if (name == null || route.name !== name) return
+  playPageEnter()
   document.getElementById('workspace-directory-content')?.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   for (const { element, top, left } of scrollPositions.get(name) ?? []) {
     element.scrollTo({ top, left, behavior: 'instant' })

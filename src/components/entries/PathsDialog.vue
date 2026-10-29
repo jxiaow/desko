@@ -120,9 +120,8 @@ onMounted(() => pathRef.value?.focus())
 
 <style scoped>
 .paths-overlay {
+  /* 与全局一致：纯色压暗，不做 backdrop 采样（页内弹窗在画布之上会发灰）。 */
   background: var(--overlay);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
 }
 
 /* 壳（宽高/描边/投影/头 44/底栏）全在 global.css，这里只留本页独有的列表行 */

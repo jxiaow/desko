@@ -275,13 +275,12 @@ const doSwitch = (p: Profile) => {
 /* 叠在设置弹窗之上：同为 fixed z-1000，靠 z-index 抬一层压上主壳 */
 .pane-overlay { z-index: 1100; }
 
-/* 切换遮罩：盖住整块面板，随进程消失 */
+/* 切换遮罩：盖住整块面板，随进程消失；与全局遮罩一致，不做 backdrop 采样 */
 .switch-guard {
   position: fixed;
   inset: 0;
   z-index: 1200;
   background: var(--overlay);
-  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;

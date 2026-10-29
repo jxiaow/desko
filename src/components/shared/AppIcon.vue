@@ -18,14 +18,17 @@ const markup = computed(() => {
 })
 // viewBox 24 上写死 stroke 2 会让小图标相对更粗（20px 落 1.67px、12px 落 0.6px），
 // 和窗控三键的发丝线不在一档。按尺寸反算，全窗实笔恒为 STROKE_PX。
-const STROKE_PX = 1.15
-const strokeWidth = computed(() => +(STROKE_PX * 24 / props.size).toFixed(2))
+// 渲染尺寸取偶数：15/13 这类奇数落在 28/32 的偶数容器里会居中到半像素，
+// 1× 屏上的抗锯齿边缘就会发毛；取整后每颗图标都落在整像素上。
+const STROKE_PX = 1.5
+const renderSize = computed(() => Math.max(8, Math.round(props.size / 2) * 2))
+const strokeWidth = computed(() => +(STROKE_PX * 24 / renderSize.value).toFixed(2))
 </script>
 
 <template>
   <svg
-    :width="props.size"
-    :height="props.size"
+    :width="renderSize"
+    :height="renderSize"
     viewBox="0 0 24 24"
     :fill="props.filled ? 'currentColor' : 'none'"
     :stroke="props.filled ? 'none' : 'currentColor'"

@@ -350,7 +350,7 @@ onMounted(() => {
               <div class="setting-item">
                 <div class="setting-info">
                   <span class="setting-name">背景氛围</span>
-                  <span id="background-atmosphere-desc" class="setting-desc">随强调色显示背景柔光</span>
+                  <span id="background-atmosphere-desc" class="setting-desc">随强调色为背景叠加柔光</span>
                 </div>
                 <label class="switch">
                   <input
@@ -457,16 +457,8 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
+/* 遮罩统一走 global.css 的 .dialog-overlay（纯色压暗 + 四周收拢）；
+   这里不再另写一份磨砂，避免同一个遮罩在页内/弹窗两处表现不一致。 */
 
 .settings-dialog {
   display: flex;
@@ -838,6 +830,23 @@ onMounted(() => {
 .dialog-enter-from,
 .dialog-leave-to {
   opacity: 0;
+}
+
+/* 背板淡入的同时，面板从 0.985 抬起：只动 transform，不参与布局。 */
+.dialog-enter-active .settings-dialog,
+.dialog-leave-active .settings-dialog {
+  transition: transform 0.2s cubic-bezier(.2, .8, .2, 1), opacity 0.2s ease;
+}
+.dialog-enter-from .settings-dialog,
+.dialog-leave-to .settings-dialog {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dialog-enter-active .settings-dialog,
+  .dialog-leave-active .settings-dialog { transition: opacity 0.2s ease; }
+  .dialog-enter-from .settings-dialog,
+  .dialog-leave-to .settings-dialog { transform: none; }
 }
 
 /* 600px 高的窗口里对话框只剩 504px，压紧左侧行距，让全部页签不用滚动就露出来。 */

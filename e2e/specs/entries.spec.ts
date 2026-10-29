@@ -47,8 +47,8 @@ test.describe('Entries 网址收藏', () => {
     // 域名行剥掉协议，只剩 host
     await expect(entryCard(page, 'GitHub').locator('.ec-domain')).toHaveText('github.com')
     // 未设分类才有未分类；这里 3 条各有分类。tabs：全部 + 分类，按聚合顺序
-    const allTab = page.locator('.tabs .tab', { hasText: '全部' })
-    await expect(allTab.locator('.tab-count')).toHaveText('3')
+    const allTab = page.locator('.workspace-workbar .wb-tab', { hasText: '全部' })
+    await expect(allTab.locator('.wb-count')).toHaveText('3')
     await expect(allTab).toHaveClass(/active/)
   })
 
@@ -67,13 +67,13 @@ test.describe('Entries 网址收藏', () => {
     await expect(page.locator('.entry-card')).toHaveCount(3)
   })
 
-  test('展开收藏目录后按分类筛选并返回全部', async ({ page }) => {
+  test('页级工作栏按分类筛选并返回全部', async ({ page }) => {
     await bootEntries(page, SEED)
-    await page.getByRole('button', { name: '展开目录', exact: true }).click()
-    await page.locator('.workspace-directory .tab', { hasText: '邮箱' }).click()
+    const workbar = page.locator('.workspace-workbar')
+    await workbar.locator('.wb-tab', { hasText: '邮箱' }).click()
     await expect(page.locator('.entry-card')).toHaveCount(1)
     await expect(entryCard(page, 'Gmail')).toBeVisible()
-    await page.locator('.tabs .tab', { hasText: '全部' }).click()
+    await workbar.locator('.wb-tab', { hasText: '全部' }).click()
     await expect(page.locator('.entry-card')).toHaveCount(3)
   })
 
@@ -347,9 +347,9 @@ test.describe('Entries 网址收藏', () => {
     // 等 0.18s 入场过渡落定，仍在 0.8s 驻留窗口内
     await page.waitForTimeout(220)
 
-    // 顶沿：标题栏 42 + 10；横向：侧栏以右那一片的正中
+    // 顶沿：标题栏 48 + 页级工作栏 42 + 两段呼吸 = 118；横向：侧栏以右那一片的正中
     const box = await toast.boundingBox()
-    expect(box.y).toBe(52)
+    expect(box.y).toBe(118)
     const main = (await page.locator('.workspace-body > .main-content').boundingBox())!
     expect(Math.abs(box.x + box.width / 2 - (main.x + main.width / 2))).toBeLessThanOrEqual(1)
 

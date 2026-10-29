@@ -1,8 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { bootUnlocked, openSettings } from '../helpers'
 
-const BEAMS = 'radial-gradient(68% 78% at 12% 16%, C, C 90%), radial-gradient(72% 80% at 88% 84%, C, C 90%), none'
-/** 柔光颜色由强调色推导（oklch 序列化还带抖动），断言只锁光场的形状与坐标，颜色一律归一成 C。 */
+// 纸底与对话框同一套材质：两角各一团掺强调色的径向光，画布与阅读面共用；墨底保持四段。
+const FIELDS: Record<string, string> = {
+  paper: 'radial-gradient(52% 54% at 0% 0%, C, C 100%), radial-gradient(52% 54% at 100% 100%, C, C 100%), none',
+  ink: 'linear-gradient(132deg, C 0%, C 40%, C 66%, C 100%), none',
+}
+/** 柔光颜色由强调色推导（oklch 序列化还带抖动），断言只锁光场的形状与停靠点，颜色一律归一成 C。 */
 const geometry = (image: string) => image.replace(/(?:(?:rgba?|hsla?|color|oklab|oklch)\([^)]*\))/g, 'C')
 
 for (const theme of ['paper', 'ink']) {
@@ -29,7 +33,7 @@ for (const theme of ['paper', 'ink']) {
       }, [themeUrl, enabled] as const)
       await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
       const [reading, canvas] = await field()
-      expect(geometry(reading), `氛围${enabled ? '开' : '关'}时的阅读面光场`).toBe(enabled ? BEAMS : 'none')
+      expect(geometry(reading), `氛围${enabled ? '开' : '关'}时的阅读面光场`).toBe(enabled ? FIELDS[theme] : 'none')
       expect(reading, '阅读面与画布共用同一光场，不留第二层底').toBe(canvas)
       await expect(surface).toHaveCSS('background-color', color)
     }

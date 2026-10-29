@@ -33,6 +33,7 @@ import SetupPage from './components/auth/SetupPage.vue'
 import UnlockPage from './components/auth/UnlockPage.vue'
 import { authApi } from './services/api/auth'
 import { isWebRuntime, isCodexWebRuntime } from './services/runtime'
+import { sidebarCollapsed } from './services/sidebar'
 import WebSettingsDialog from './components/settings/WebSettingsDialog.vue'
 import SettingsDialog from './components/settings/SettingsDialog.vue'
 import ChangePasswordDialog from './components/settings/ChangePasswordDialog.vue'
@@ -63,6 +64,10 @@ const showSettings = ref(false)
 const showWebModules = ref(false)
 const settingsInitialTab = ref<SettingsTabId>('appearance')
 const showChangePassword = ref(false)
+const compactSidebarQuery = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 899px)') : null
+const compactSidebar = ref(compactSidebarQuery?.matches ?? false)
+const syncCompactSidebar = (event: MediaQueryListEvent) => { compactSidebar.value = event.matches }
+const sidebarIsCompact = computed(() => !isWebRuntime() && (sidebarCollapsed.value || compactSidebar.value))
 /** 小记口令没在手时，设置页那一步得先解锁再改，mode 就是当前该问哪一句 */
 const noteKeyMode = ref<'unlock' | 'change' | null>(null)
 
@@ -183,6 +188,10 @@ onMounted(async () => {
     await activateCodexHudBridge(false)
   }
 
+  if (compactSidebarQuery) {
+    compactSidebar.value = compactSidebarQuery.matches
+    compactSidebarQuery.addEventListener('change', syncCompactSidebar)
+  }
   // WebView 收不到窗口隐藏/最小化时的 mouseleave，:hover 与 tooltip 会残留到下次打开
   installHoverGuard()
   window.addEventListener('desko:open-settings-tab', onOpenSettingsTab)
@@ -191,6 +200,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  compactSidebarQuery?.removeEventListener('change', syncCompactSidebar)
   setCodexHudOpenHandler(null)
   void deactivateCodexHudBridge()
   unlistenKdfWarning?.()
@@ -210,7 +220,7 @@ function onGlobalKey(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="app-root codex-layout" :class="{ 'locked-bg': appState === 'locked', 'web-runtime': isWebRuntime(), 'codex-web-runtime': isCodexWebRuntime() }" :style="{ '--toast-side': 'var(--sidebar-rail-w)', '--toast-right': toastRight }">
+  <div class="app-root codex-layout" :class="{ 'locked-bg': appState === 'locked', 'sidebar-collapsed': sidebarIsCompact, 'web-runtime': isWebRuntime(), 'codex-web-runtime': isCodexWebRuntime() }" :style="{ '--toast-side': 'var(--sidebar-rail-w)', '--toast-right': toastRight }">
     <!-- 锁定/初始化态：顶栏浮在页面上；解锁态：顶栏横跨工作区。 -->
     <TitleBar
       v-if="appState !== 'unlocked'"

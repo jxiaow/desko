@@ -68,20 +68,21 @@ test.describe('背景材质', () => {
     const control = dialog.locator('.setting-item', { hasText: '背景氛围' })
     const toggle = control.getByRole('switch')
 
-    const background = (selector: string) => page.locator(selector).evaluate((el) => {
-      const style = getComputedStyle(el)
+    const background = (selector: string, pseudo = '') => page.locator(selector).evaluate((el, pseudo) => {
+      const style = getComputedStyle(el, pseudo)
       return { image: style.backgroundImage, color: style.backgroundColor }
-    })
+    }, pseudo)
 
     await expect(toggle).toBeChecked()
-    // 主光与辅光分布在留白两端，卡片和输入区域继续保持实底。
+    // 纸底与对话框同一套材质：左上主光、右下补光，卡片和输入区域继续持各自实底。
     expect((await background('.app-root')).image).toContain('radial-gradient')
-    const sidebar = await background('.sidebar')
-    // 图标轨、Logo 格与画布共用底色和光场。
-    expect(sidebar.image).toContain('radial-gradient')
-    expect(sidebar.color).not.toMatch(/rgba|transparent|\//)
-    expect(sidebar).toEqual(await background('.app-root'))
-    expect(await background('.titlebar-brandcell')).toEqual(sidebar)
+    // 导轨氛围光整列只画在 .app-root::before 一层上，图标轨与 Logo 格透出它，
+    // 不再各自 fixed 采样（fixed 附着层会从弹窗遮罩上穿出）。
+    const railLight = await background('.app-root', '::before')
+    expect(railLight.image).toContain('radial-gradient')
+    expect(railLight.color).not.toMatch(/rgba|transparent|\//)
+    expect((await background('.sidebar')).image).toBe('none')
+    expect((await background('.titlebar-brandcell')).image).toBe('none')
     expect((await background('.settings-dialog')).image).toContain('radial-gradient')
     expect((await background('.settings-nav')).color).toMatch(/rgba|\/\s*0\./)
 
@@ -90,9 +91,10 @@ test.describe('背景材质', () => {
     expect((await e2e.snapshot(page)).settings.background_atmosphere).toBe('false')
     expect((await background('.app-root')).image).toBe('none')
     expect((await background('.settings-dialog')).image).toBe('none')
-    // 关闭氛围后，导航轨和画布一起恢复纯色。
-    expect((await background('.sidebar')).image).toBe('none')
-    expect((await background('.sidebar')).color).toBe(sidebar.color)
+    // 关闭氛围后，导轨光层一起恢复纯色。
+    const railFlat = await background('.app-root', '::before')
+    expect(railFlat.image).toBe('none')
+    expect(railFlat.color).toBe(railLight.color)
 
     await control.locator('label.switch').click()
     await expect(toggle).toBeEnabled()

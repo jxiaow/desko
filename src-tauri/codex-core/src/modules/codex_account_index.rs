@@ -1239,7 +1239,18 @@ pub fn list_accounts_checked() -> Result<Vec<CodexAccount>, String> {
         ));
     }
 
-    if sync_loaded_accounts_to_index_cache(&mut index, &accounts) {
+    let mut changed = sync_loaded_accounts_to_index_cache(&mut index, &accounts);
+    if index.current_account_id.is_none() {
+        if let Some(current) = find_current_account_from_local_auth(
+            &index,
+            |id| accounts.iter().find(|account| account.id == id).cloned(),
+            &get_codex_home(),
+        ) {
+            index.current_account_id = Some(current.id);
+            changed = true;
+        }
+    }
+    if changed {
         save_account_index_unlocked(&index)?;
     }
 

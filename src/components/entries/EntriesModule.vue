@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import type { Entry, Tab } from '../../types'
 import { splitUrlHostPath } from '../../utils/format'
 import { avatarLetter } from '../../utils/avatar'
@@ -13,8 +13,7 @@ import PopoverMenu from '../shared/PopoverMenu.vue'
 import EntryActionMenu from './EntryActionMenu.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { isWebRuntime } from '../../services/runtime'
-import { useWorkspaceLayout, workspaceDirectoryTarget, workspaceToolbarTarget } from '../layout/workspaceLayout'
-import WorkspaceDirectoryToggle from '../layout/WorkspaceDirectoryToggle.vue'
+import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 
 const webRuntime = isWebRuntime()
 const workspaceLayout = useWorkspaceLayout()
@@ -96,10 +95,22 @@ const hueOf = (category?: string | null): string => {
 const slotClass = (item: Entry) => (favOf(item) ? 'grid-slot--icon' : hasCat(item) ? 'grid-slot--hue' : undefined)
 const slotStyle = (item: Entry) => (!favOf(item) && hasCat(item) ? { '--gc-hue': hueOf(item.category) } : undefined)
 
-/* ── 分类标签：全部 + 前 2 枚高频常驻，其余收进「更多」下拉（面板内可搜索） ── */
-const visibleTabs = computed(() => workspaceLayout ? props.tabs : props.tabs.slice(0, 3))
-const hiddenTabs = computed(() => workspaceLayout ? [] : props.tabs.slice(3))
-/** 选中的分类藏在「更多」里时，触发器要顶出激活态 */
+/* ── 分类标签：页级工作栏常驻有限项，其余收进可搜索的「更多」；
+   当前分类被收起时顶替末位常驻格，行内始终看得见选中的是谁。 ── */
+const viewportWidth = ref(window.innerWidth)
+const tabLimit = computed(() => viewportWidth.value <= 1100 ? 8 : viewportWidth.value <= 1400 ? 10 : 12)
+const visibleTabs = computed(() => {
+  if (!workspaceLayout) return props.tabs.slice(0, 3)
+  if (props.tabs.length <= tabLimit.value) return props.tabs
+  const base = props.tabs.slice(0, tabLimit.value)
+  const active = props.tabs.find(t => t.id === props.activeTab)
+  if (active && !base.some(t => t.id === active.id)) return [...base.slice(0, -1), active]
+  return base
+})
+const hiddenTabs = computed(() => workspaceLayout
+  ? props.tabs.filter(t => !visibleTabs.value.some(visible => visible.id === t.id))
+  : props.tabs.slice(3))
+/** 选中的分类藏在「更多」里时，触发器仍保持静止文案，只顶出激活态 */
 const activeHiddenTab = computed(() =>
   hiddenTabs.value.find(t => t.id === props.activeTab) ?? null)
 const moreOpen = ref(false)
@@ -123,30 +134,8 @@ const pickTab = (id: string) => {
   moreOpen.value = false
 }
 
-/* ── 分类滑轨：一枚浮白滑块跟住当前分类，切换是"滑过去"不是"跳过去"。
-   与 type-seg 分段凹槽同一套语言；「更多」顶出激活态时滑块也滑到触发钮上。 ── */
-const tabsRef = ref<HTMLElement | null>(null)
-const thumb = ref({ left: 0, width: 0, show: false })
-const thumbStyle = computed(() =>
-  thumb.value.show
-    ? { left: `${thumb.value.left}px`, width: `${thumb.value.width}px`, opacity: '1' }
-    : { opacity: '0' })
-const syncThumb = () => {
-  if (!pageActive.value) return
-  const nav = tabsRef.value
-  const el = nav?.querySelector('.tab.active') as HTMLElement | null
-  if (!nav || !el) { thumb.value = { ...thumb.value, show: false }; return }
-  thumb.value = { left: el.offsetLeft, width: el.offsetWidth, show: true }
-}
-watch(
-  () => [props.activeTab, props.tabs, visibleTabs.value.length] as const,
-  () => { nextTick(syncThumb) }
-)
-watch(pageActive, visible => { if (visible) void nextTick(syncThumb) })
-onMounted(() => {
-  nextTick(syncThumb)
-  window.addEventListener('resize', syncThumb)
-})
+const onResize = () => { viewportWidth.value = window.innerWidth }
+onMounted(() => { window.addEventListener('resize', onResize) })
 
 /** 一次只开一张行的动作菜单 */
 const menuAnchor = ref<HTMLElement | null>(null)
@@ -195,7 +184,7 @@ const { onGridKeydown } = useGridKeys({
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalKey)
-  window.removeEventListener('resize', syncThumb)
+  window.removeEventListener('resize', onResize)
   if (copiedTimer) window.clearTimeout(copiedTimer)
 })
 
@@ -220,53 +209,6 @@ watchEffect(() => {
           <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <Teleport v-if="showFilters" :to="workspaceDirectoryTarget" :disabled="!workspaceLayout || !pageActive" defer>
-      <nav ref="tabsRef" class="tabs" :class="{ 'directory-list': workspaceLayout }" aria-label="收藏分类">
-        <span class="tab-thumb" :style="thumbStyle" aria-hidden="true"></span>
-        <button
-          v-for="t in visibleTabs"
-          :key="t.id"
-          class="tab"
-          :class="{ active: activeTab === t.id, 'directory-link': workspaceLayout }"
-          type="button"
-          :aria-pressed="activeTab === t.id"
-          @click="pickTab(t.id)"
-        >
-          <AppIcon v-if="workspaceLayout" :name="t.id === 'all' ? 'all' : 'tag'" :size="16" />
-          <span class="directory-label">{{ t.name }}</span>
-          <span class="tab-count">{{ t.count }}</span>
-        </button>
-        <button
-          v-if="hiddenTabs.length"
-          class="tab tab-more"
-          :class="{ active: !!activeHiddenTab }"
-          type="button"
-          @click="toggleMore($event.currentTarget as HTMLElement)"
-        >{{ activeHiddenTab ? activeHiddenTab.name : '更多' }} ({{ hiddenTabs.length }}) ▾</button>
-      </nav>
-      </Teleport>
-      <PopoverMenu v-if="moreOpen && moreAnchor" :anchor="moreAnchor" align="start" @close="moreOpen = false">
-        <div class="tab-pop">
-          <div class="search-box tab-pop-search">
-            <AppIcon name="search" :size="13" />
-            <input v-model="tabQuery" placeholder="搜索分类…" />
-          </div>
-          <div class="tab-pop-list">
-            <button
-              v-for="t in filteredHidden"
-              :key="t.id"
-              class="pop-item"
-              :class="{ on: activeTab === t.id }"
-              type="button"
-              @click="pickTab(t.id)"
-            >
-              {{ t.name }}
-              <span class="tab-count">{{ t.count }}</span>
-            </button>
-            <div v-if="!filteredHidden.length" class="tab-pop-empty">无匹配分类</div>
-          </div>
-        </div>
-      </PopoverMenu>
       <div class="page-actions">
         <button
           class="bar-btn"
@@ -279,10 +221,57 @@ watchEffect(() => {
           <AppIcon name="checkall" :size="16" />
         </button>
         <CreateAction label="新增条目" @click="emit('openAdd')" />
-        <WorkspaceDirectoryToggle v-if="workspaceLayout && showFilters" />
       </div>
     </div>
     </Teleport>
+
+    <div v-if="workspaceLayout && !webRuntime && showFilters" class="workspace-workbar entries-workbar">
+      <nav class="workspace-workbar-tabs" aria-label="收藏分类">
+        <button
+          v-for="t in visibleTabs"
+          :key="t.id"
+          class="wb-tab"
+          :class="{ active: activeTab === t.id }"
+          type="button"
+          :aria-pressed="activeTab === t.id"
+          @click="pickTab(t.id)"
+        >
+          <span>{{ t.name }}</span>
+          <span class="wb-count">{{ t.count }}</span>
+        </button>
+        <button
+          v-if="hiddenTabs.length"
+          class="wb-tab wb-more"
+          :class="{ active: !!activeHiddenTab }"
+          type="button"
+          :aria-label="`更多分类，已收起 ${hiddenTabs.length} 项`"
+          :aria-expanded="moreOpen"
+          @click="toggleMore($event.currentTarget as HTMLElement)"
+        >更多 <span class="wb-count">{{ hiddenTabs.length }}</span> <AppIcon name="chevDown" :size="13" /></button>
+      </nav>
+    </div>
+    <PopoverMenu v-if="moreOpen && moreAnchor" :anchor="moreAnchor" align="start" @close="moreOpen = false">
+      <div class="tab-pop">
+        <div class="search-box tab-pop-search">
+          <AppIcon name="search" :size="13" />
+          <input v-model="tabQuery" placeholder="搜索分类…" />
+        </div>
+        <div class="tab-pop-list">
+          <button
+            v-for="t in filteredHidden"
+            :key="t.id"
+            class="pop-item"
+            :class="{ on: activeTab === t.id }"
+            type="button"
+            @click="pickTab(t.id)"
+          >
+            {{ t.name }}
+            <span class="tab-count">{{ t.count }}</span>
+          </button>
+          <div v-if="!filteredHidden.length" class="tab-pop-empty">无匹配分类</div>
+        </div>
+      </div>
+    </PopoverMenu>
 
     <nav v-if="webRuntime && showFilters" class="web-entry-categories" aria-label="快捷收藏分类">
       <button v-for="tab in tabs" :key="tab.id" type="button" :aria-pressed="activeTab === tab.id" @click="pickTab(tab.id)">{{ tab.name }}</button>
@@ -432,38 +421,9 @@ watchEffect(() => {
 /* .content-inner / .page-bar / 搜索框 / 主按钮 / 骨架行形全部走 global.css 的页面骨架，
    此处只留本页特有的东西 */
 
-/* 分类在行内横向滚动，不换行：换行会把工具栏顶出第二种高度。
-   行宽有上限（常驻 3 枚 + 「更多」那颗），所以这里不参与收缩：窄窗先由搜索框让位
-   （global 的 .page-bar .search-box 可缩到 120），别让隐藏滚动条把「更多」裁成半个字。 */
-.tabs {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1 0 auto;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding: 2px 0;
-}
-.tabs::-webkit-scrollbar { display: none; }
-.tabs .tab { position: relative; z-index: 1; height: 30px; display: inline-flex; align-items: center; padding: 0 10px; font-family: inherit; font-size: var(--text-xs); color: var(--text-muted); border-radius: var(--radius-tag); }
-/* 滑块：减重轮起胶囊底，改 2px accent 下划线，切换时仍沿弹簧曲线滑到位 */
-.tab-thumb {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--accent);
-  opacity: 0;
-  pointer-events: none;
-  transition: left var(--transition-spring), width var(--transition-spring), opacity var(--transition);
-}
-.tabs .tab.active { background: transparent; box-shadow: none; color: var(--text); font-weight: 600; }
-.tab-more { font-family: inherit; font-size: var(--text-xs); flex-shrink: 0; }
+/* 工作栏下方的第一块内容由工作栏的 12px 下距接管，不再叠加网格上距。 */
+.entries-workbar + :is(.card-grid, .empty-state, .error-state) { margin-top: 0; }
 .tab-count { display: inline-block; background: none; color: var(--text-muted); font-size: var(--text-xs); padding: 0; margin-left: 4px; font-weight: 500; line-height: 14px; }
-.tab.active .tab-count { background: none; color: var(--accent); }
 
 /* 「更多」下拉：224px 面板，内置分类搜索，列表最高 192px 再滚动 */
 .tab-pop { width: 224px; display: flex; flex-direction: column; gap: var(--space-1); }

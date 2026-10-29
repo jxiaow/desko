@@ -64,15 +64,12 @@ for (const width of [800, 1280]) {
     await expect(page.locator('.fs')).toHaveCount(0)
     await expect(editor).toHaveText('全屏草稿补充')
     await expect(page.locator('#workspace-page-toolbar .search-box')).toBeVisible()
-    await page.getByRole('button', { name: '展开目录', exact: true }).click()
-    // 窄窗的浮层会遮住书写框，先用 Escape 退出；宽窗保留展开状态。
-    if (width < 1100) await page.keyboard.press('Escape')
-    else await page.getByRole('button', { name: '固定目录', exact: true }).click()
+    await expect(page.locator('.workspace-workbar')).toBeVisible()
     await tipButton(page.locator('.composer'), '全屏书写').click()
     await expectFullscreen(page)
-    await expect(page.locator('.workspace-directory')).toBeHidden()
+    await expect(page.locator('.workspace-workbar')).toBeHidden()
     await page.keyboard.press('Escape')
-    if (width >= 1100) await expect(page.locator('.workspace-directory')).toBeVisible()
+    await expect(page.locator('.workspace-workbar')).toBeVisible()
   })
 
   test(`${width}px 已有小记全屏阅读切换编辑覆盖整个内容面并保存`, async ({ page }) => {

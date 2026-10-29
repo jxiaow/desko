@@ -6,10 +6,10 @@ test.describe('导航与布局', () => {
     await expect(page).toHaveURL(/\/notes$/)
   })
 
-  test('图标导航常驻，模块切换更新外层标题并保留业务数据', async ({ page }) => {
+  test('模块名常驻侧栏，模块切换更新外层标题并保留业务数据', async ({ page }) => {
     await bootUnlocked(page)
-    await expect(page.locator('.sidebar .nav-text')).toHaveCount(0)
-    await expect(page.locator('.sidebar-toggle')).toHaveCount(0)
+    await expect(page.locator('.sidebar .nav-text').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: '收起侧栏', exact: true })).toBeVisible()
     expect(await page.locator('.sidebar-nav .nav-item').evaluateAll(
       els => els.map(el => el.getAttribute('href')),
     )).toEqual(['/notes', '/entries', '/files'])
@@ -48,18 +48,13 @@ test.describe('导航与布局', () => {
     expect(await hit()).toBe('button')
   })
 
-  test('Ctrl+B 只切换有目录的页面，模块图标保持可用', async ({ page }) => {
+  test('Ctrl+B 在页级筛选页面无副作用，模块导航保持可用', async ({ page }) => {
     await bootUnlocked(page, { notes: [{ title: '目录快捷键', content_html: '<p>目录快捷键 #工作</p>' }] })
     await expect(page.locator('.workspace-directory')).toBeHidden()
+    await expect(page.locator('.workspace-workbar')).toBeVisible()
     await page.locator('.titlebar-brand').click()
     await page.keyboard.press('Control+b')
-    await expect(page.locator('.workspace-directory')).toBeVisible()
-    await page.keyboard.press('Control+b')
     await expect(page.locator('.workspace-directory')).toBeHidden()
-    await page.keyboard.press('Control+b')
-    await page.keyboard.press('Escape')
-    await expect(page.locator('.workspace-directory')).toBeHidden()
-    await expect(page.locator('#workspace-directory-toggle')).toBeFocused()
     await page.locator('a.nav-item[href="/files"]').click()
     await page.keyboard.press('Control+b')
     await expect(page.locator('.workspace-directory')).toBeHidden()
