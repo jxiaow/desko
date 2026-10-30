@@ -1,6 +1,6 @@
 import { test, expect, Page, Locator } from '@playwright/test'
 import type { Editor } from '@tiptap/core'
-import { bootUnlocked, e2e, expectToast, openSettings, tipButton, visiblePane, waitForToastGone } from '../helpers'
+import { bootUnlocked, e2e, expectToast, openNoteRead, openSettings, tipButton, visiblePane, waitForToastGone } from '../helpers'
 
 /** 全库一把小记口令：立的时候卡位数，之后解锁照原样填 */
 const NOTE_PASS = 'note-pw-1234'
@@ -136,7 +136,7 @@ test.describe('Notes 小记', () => {
     await expect(fs).toBeVisible()
     expect(await e2e.count(page, 'create_note')).toBe(0)
     await expect(fs.locator('.ProseMirror')).toHaveText('顶部  输入的内容，全屏里接着写')
-    await fs.locator('.fs-foot button.eb.primary', { hasText: '保存' }).click()
+    await page.locator('.fs-head').getByRole('button', { name: '保存', exact: true }).click()
     await expect(fs).toHaveCount(0)
     await expect(composer).toHaveText('')
     await expect(memo(page, '顶部  输入的内容')).toBeVisible()
@@ -171,8 +171,7 @@ test.describe('Notes 小记', () => {
     await expect(card.locator('.memo-body img')).toHaveAttribute('src', /missing\.png/)
     await expect(card.locator('.memo-body img')).not.toHaveAttribute('onerror')
     await expect(card.locator('.memo-body script')).toHaveCount(0)
-    await card.hover()
-    await tipButton(card, '全屏查看').click()
+    await openNoteRead(card)
     const view = page.locator('.fs-view')
     await expect(view.locator('input[type="checkbox"]')).toBeChecked()
     await expect(view.locator('a')).not.toHaveAttribute('href')
@@ -299,22 +298,28 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.composer .ProseMirror')).toHaveText('')
   })
 
-  test('composer 默认三行，聚焦不跳高，超过三行后随内容增高', async ({ page }) => {
+  test('composer 空态收成一行，落笔展开三行，有内容后随内容增高', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')
+    const composer = page.locator('.composer')
     // scrollHeight 取整、行高 24.65，比对留 2px 余量
     const height = () => pm.evaluate((el) => el.getBoundingClientRect().height)
     const line = () => pm.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))
     const over = async (base: number) => (await height()) - base
 
+    // 本轮未落笔：46px 单行便签条，工具栏不出现
     const idle = await height()
+    await expect(composer).toHaveClass(/is-empty/)
+    await expect(page.locator('.composer-bar')).toBeHidden()
+    expect(idle).toBeGreaterThan(44)
+    expect(idle).toBeLessThan(50)
+
     await pm.click()
     const floor = await height()
     const lh = await line()
-
-    // 初始就预留三行，聚焦不改变输入区高度。
-    expect(idle).toBeGreaterThanOrEqual(3 * lh)
-    expect(Math.abs(floor - idle)).toBeLessThan(2)
+    // 聚焦后展开三行：三行才装得下两条带段距的段落
+    expect(floor).toBeGreaterThanOrEqual(3 * lh)
+    await expect(page.locator('.composer-bar')).toBeVisible()
 
     // 地板吃得下前两行，不再逐键跳动
     await page.keyboard.type('第一行')
@@ -332,45 +337,58 @@ test.describe('Notes 小记', () => {
     await page.keyboard.type('第四行')
     expect(await over(floor)).toBeGreaterThan(2 * lh - 6)
 
-    // 失焦不收回：内容还在就保持高
-    await page.locator('.memo').first().click()
+    // 失焦不收回：内容还在就保持高，工具栏也常驻
+    await pm.evaluate((el: HTMLElement) => el.blur())
     await page.waitForTimeout(300)
     expect(await over(floor)).toBeGreaterThan(2 * lh - 6)
+    await expect(page.locator('.composer-bar')).toBeVisible()
 
-    // 删干净或按 Esc 都保留默认三行。
+    // 删干净再失焦：回到 46px 一行，工具栏一起收起
     await pm.click()
     await page.keyboard.press('Control+a')
     await page.keyboard.press('Backspace')
     await expect.poll(async () => await over(floor), { timeout: 3000 }).toBeLessThan(2)
-    await page.keyboard.press('Escape')
-    await expect.poll(async () => await over(idle), { timeout: 3000 }).toBeLessThan(2)
+    await pm.evaluate((el: HTMLElement) => el.blur())
+    await expect.poll(async () => await height(), { timeout: 3000 }).toBeLessThan(50)
+    await expect(page.locator('.composer-bar')).toBeHidden()
   })
 
-  test('composer 工具栏常显，聚焦、失焦和空内容按 Esc 都不收起', async ({ page }) => {
+  test('composer 工具栏随落笔和内容显隐，失焦不收回', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')
     const bar = page.locator('.composer-bar')
-    const visible = () => bar.evaluate((el) => getComputedStyle(el).visibility)
 
-    await expect(visible).resolves.toBe('visible')
+    await expect(bar).toBeHidden()
+
+    // 指针按下即算落笔：三行地板和工具栏一起长出来
     await pm.click()
-    await expect.poll(visible, { timeout: 3000 }).toBe('visible')
+    await expect(bar).toBeVisible()
 
-    await page.locator('.memo').first().click()
-    await page.waitForTimeout(300)
-    await expect(visible).resolves.toBe('visible')
+    // 空着失焦不收回：当场收高度会把同一颗点击的 mouseup 从卡排底下抽走
+    await pm.evaluate((el: HTMLElement) => el.blur())
+    await expect(bar).toBeVisible()
 
+    // 有内容：失焦也保持工具条
     await pm.click()
-    await page.keyboard.press('Escape')
-    await expect.poll(visible, { timeout: 3000 }).toBe('visible')
+    await page.keyboard.type('常驻内容')
+    await pm.evaluate((el: HTMLElement) => el.blur())
+    await expect(bar).toBeVisible()
+
+    // 发布清空：这一轮写完，回到 46px 一行，工具栏一起收起
+    await page.locator('.composer button.btn-primary').click()
+    await expect(bar).toBeHidden()
+    await expect(pm.evaluate((el: HTMLElement) => el.getBoundingClientRect().height)).resolves.toBeLessThan(50)
   })
 
   test('就地编辑：悬停按钮进入、自动保存、退出编辑', async ({ page }) => {
     await gotoNotes(page)
     const target = memo(page, '第一条小记')
-    // 双击编辑已移除：手一抖就进编辑，误触太多
+    // 双击不再进编辑：单击已是阅读层，手一抖不会连开两层书写面
     await target.dblclick()
     await expect(page.locator('.memo.editing')).toHaveCount(0)
+    await expect(page.locator('.fs')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.fs')).toHaveCount(0)
     await target.hover()
     await tipButton(target, '编辑').click()
     const editor = page.locator('.memo.editing .ProseMirror')
@@ -411,6 +429,14 @@ test.describe('Notes 小记', () => {
       await expect(redo).toBeDisabled()
       if (mode === 'card') {
         await expect.poll(() => surface.locator('.memo-time').evaluate(el => getComputedStyle(el).opacity)).toBe('1')
+      } else {
+        // 首栏是小记级动作的唯一住址：读写共用一组，主按钮换字；底栏只剩写作工具
+        const head = page.locator('.fs-head')
+        await expect(head.getByRole('button', { name: /置顶/ })).toHaveCount(1)
+        await expect(head.getByRole('button', { name: '完成', exact: true })).toHaveCount(1)
+        await expect(head.getByRole('button', { name: '复制正文', exact: true })).toHaveCount(1)
+        await expect(head.getByRole('button', { name: '更多操作', exact: true })).toHaveCount(1)
+        await expect(toolbar.getByRole('button', { name: /置顶|复制正文|更多操作/ })).toHaveCount(0)
       }
       const savedText = async () => {
         const snapshot = await e2e.snapshot(page)
@@ -427,7 +453,10 @@ test.describe('Notes 小记', () => {
       await redo.click()
       await expect(pm).toHaveText(changed)
       // 重做后立即退出，最后一笔还在防抖窗口里也必须写入。
-      await toolbar.getByRole('button', { name: '退出编辑', exact: true }).click()
+      await (mode === 'card'
+        ? toolbar.getByRole('button', { name: '退出编辑', exact: true })
+        : page.locator('.fs-head').getByRole('button', { name: '完成', exact: true })
+      ).click()
       await expect(surface).toHaveCount(0)
       expect(await savedText()).toBe(`<p>${changed}</p>`)
       await expect(memo(page, changed)).toBeVisible()
@@ -444,7 +473,7 @@ test.describe('Notes 小记', () => {
     await tipButton(page.locator('.memo.editing'), '全屏书写').click()
     const fs = page.locator('.fs')
     await fs.locator('.ProseMirror').fill('')
-    const exit = fs.locator('.note-toolbar').getByRole('button', { name: '退出编辑', exact: true })
+    const exit = page.locator('.fs-head').getByRole('button', { name: '完成', exact: true })
     await expect(exit).toBeEnabled()
     await exit.click()
     await expect(fs).toHaveCount(0)
@@ -457,10 +486,14 @@ test.describe('Notes 小记', () => {
     await composer.fill('尚未发布的内容')
     await tipButton(page.locator('.composer'), '全屏书写').click()
     const fs = page.locator('.fs')
+    const head = page.locator('.fs-head')
     const toolbar = fs.locator('.note-toolbar')
-    await expect(toolbar.getByRole('button', { name: '保存', exact: true })).toBeEnabled()
+    // 新小记没有小记级对象：首栏只放 放弃/保存，底栏只放写作工具
+    await expect(head.getByRole('button', { name: '保存', exact: true })).toBeEnabled()
+    await expect(head.getByRole('button', { name: '放弃', exact: true })).toHaveCount(1)
+    await expect(toolbar.getByRole('button', { name: '保存', exact: true })).toHaveCount(0)
     await expect(toolbar.getByRole('button', { name: '退出编辑', exact: true })).toHaveCount(0)
-    await toolbar.getByRole('button', { name: '放弃', exact: true }).click()
+    await head.getByRole('button', { name: '放弃', exact: true }).click()
     await expect(fs).toHaveCount(0)
     await expect(composer).toHaveText('')
     await page.locator('a.nav-item[href="/entries"]').click()
@@ -594,8 +627,7 @@ test.describe('Notes 小记', () => {
   test('全屏书写开着时拖图：图落全屏面并按小记登记', async ({ page }) => {
     await gotoNotes(page)
     const m = memo(page, '第一条小记')
-    await m.hover()
-    await tipButton(m, '全屏查看').click()
+    await openNoteRead(m)
     await page.locator('.fs-head .bar-btn.primary').click()
     const pm = page.locator('section.fs .ProseMirror')
     await expect(pm).toBeVisible()
@@ -690,8 +722,8 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.composer')).toHaveCount(0)
     const archived = memo(page, '已经收走')
     await archived.hover()
-    // 归档视图的快捷排与「全部」同构五颗，被让位的开关与低频/危险动作都在 ⋯ 里
-    await expect(archived.locator('.memo-acts button')).toHaveCount(5)
+    // 归档视图的快捷排与「全部」同构四颗，被让位的开关与低频/危险动作都在 ⋯ 里
+    await expect(archived.locator('.memo-acts button')).toHaveCount(4)
     await tipButton(archived, '更多操作').first().click()
     await expect(page.locator('.popover .pop-item')).toHaveText(['收藏', '置顶', '导出', '加密', '删除'])
     await page.keyboard.press('Escape')
@@ -894,8 +926,7 @@ test.describe('Notes 小记', () => {
   test('全屏阅读首栏可以复制正文，菜单不重复', async ({ page }) => {
     await gotoNotes(page)
     const first = memo(page, '第一条小记')
-    await first.hover()
-    await first.getByRole('button', { name: '全屏查看', exact: true }).click()
+    await openNoteRead(first)
     await page.locator('.fs-head').getByRole('button', { name: '复制正文', exact: true }).click()
     await expectToast(page, '小记已复制')
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('第一条小记：周会纪要与待办')
@@ -926,7 +957,7 @@ test.describe('Notes 小记', () => {
 
     await fs.locator('.ProseMirror').click()
     await page.keyboard.type('全屏书写的内容')
-    await fs.locator('.fs-foot button.eb.primary', { hasText: '保存' }).click()
+    await page.locator('.fs-head').getByRole('button', { name: '保存', exact: true }).click()
     await expect(fs).toHaveCount(0)
     await expect(memo(page, '全屏书写的内容')).toBeVisible()
     await expect(page.locator('.memo')).toHaveCount(4)
@@ -964,8 +995,7 @@ test.describe('Notes 小记', () => {
   test('全屏查看：只读渲染、转编辑、Esc 关闭', async ({ page }) => {
     await gotoNotes(page)
     const m = memo(page, '第一条小记')
-    await m.hover()
-    await tipButton(m, '全屏查看').click()
+    await openNoteRead(m)
     const fs = page.locator('section.fs')
     await expect(fs).toBeVisible()
     await expect(fs.locator('.fs-title')).toHaveCount(0)
@@ -976,6 +1006,12 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.fs-head .save-hint')).toHaveText('只读浏览')
     await expect(fs.locator('.fs-hint')).toHaveCount(0)
     await expect(fs.locator('.fs-foot')).toHaveCount(0)
+    // 首栏读写共用一组小记级动作，阅读态主按钮是「编辑」
+    const head = page.locator('.fs-head')
+    await expect(head.getByRole('button', { name: /置顶/ })).toHaveCount(1)
+    await expect(head.getByRole('button', { name: '编辑', exact: true })).toHaveCount(1)
+    await expect(head.getByRole('button', { name: '复制正文', exact: true })).toHaveCount(1)
+    await expect(head.getByRole('button', { name: '更多操作', exact: true })).toHaveCount(1)
 
     // 查看转编辑：书写面接管同一条正文
     await page.locator('.fs-head .bar-btn.primary').click()
@@ -984,6 +1020,77 @@ test.describe('Notes 小记', () => {
 
     await page.keyboard.press('Escape')
     await expect(fs).toHaveCount(0)
+  })
+
+  test('全屏书写：Tab 缩进两格，Shift-Tab 收回，列表里 Tab 下沉一级', async ({ page }) => {
+    await gotoNotes(page)
+    await page.locator('.composer .ProseMirror').click()
+    await tipButton(page.locator('.composer'), '全屏书写').click()
+    const fs = page.locator('section.fs')
+    const pm = fs.locator('.ProseMirror')
+    await pm.click()
+    await page.keyboard.type('第一行')
+    await page.keyboard.press('Home')
+
+    await page.keyboard.press('Tab')
+    // 全角空格会被 Playwright 的文本归一化吃掉，这里读原始 textContent
+    await expect.poll(() => pm.locator('p').first().evaluate(el => el.textContent)).toBe('　　第一行')
+    // 全屏焦点陷阱没把光标甩到工具栏上
+    await expect(pm).toBeFocused()
+
+    await page.keyboard.press('Shift+Tab')
+    await expect.poll(() => pm.locator('p').first().evaluate(el => el.textContent)).toBe('第一行')
+
+    await page.keyboard.press('End')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('- 一')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('二')
+    await page.keyboard.press('Tab')
+    await expect(pm.locator('ul ul li')).toHaveText('二')
+    await page.keyboard.press('Shift+Tab')
+    await expect(pm.locator('ul ul li')).toHaveCount(0)
+  })
+
+  test('阅读面与书写面共用一套正文排版：空段留行、行首空格不塌', async ({ page }) => {
+    await bootUnlocked(page, {
+      notes: [{ title: '排版', content_html: '<p>甲</p><p></p><p>  乙</p>' }],
+    }, '/notes')
+    const m = page.locator('.memo').first()
+    await openNoteRead(m)
+    const fs = page.locator('section.fs')
+    await expect(fs.locator('.fs-view')).toBeVisible()
+
+    const measure = (el: Element) => {
+      const ps = Array.from(el.children).filter(n => n.tagName === 'P')
+      const lead = ps[2]?.firstChild
+      let leadWidth = 0
+      if (lead && lead.nodeType === 3) {
+        const r = document.createRange()
+        r.setStart(lead, 0)
+        r.setEnd(lead, 2)
+        leadWidth = r.getBoundingClientRect().width
+      }
+      return {
+        ws: getComputedStyle(el).whiteSpace,
+        lineH: getComputedStyle(el).lineHeight,
+        emptyH: ps[1]?.getBoundingClientRect().height ?? 0,
+        gap: parseFloat(getComputedStyle(ps[2]).marginTop),
+        leadWidth,
+      }
+    }
+    const read = await fs.locator('.fs-view').evaluate(measure)
+    // 空段在阅读面同样占一行，行首两个空格有宽度
+    expect(read.emptyH).toBeGreaterThan(20)
+    expect(read.leadWidth).toBeGreaterThan(2)
+
+    await page.locator('.fs-head .bar-btn.primary').click()
+    const edit = await fs.locator('.ProseMirror').evaluate(measure)
+    expect(edit.ws).toBe(read.ws)
+    expect(edit.lineH).toBe(read.lineH)
+    expect(Math.round(edit.emptyH)).toBe(Math.round(read.emptyH))
+    expect(edit.gap).toBe(read.gap)
+    expect(Math.abs(edit.leadWidth - read.leadWidth)).toBeLessThan(1)
   })
 
   test('小记口令：一把开全库，行操作全平铺', async ({ page }) => {
@@ -1005,7 +1112,7 @@ test.describe('Notes 小记', () => {
     // 锁着的条目可解锁或发起明文导出；加密动作仍在明文卡的 ⋯ 里
     await expect(sealed.locator('.memo-acts button')).toHaveCount(2)
     await expect(sealed.getByRole('button', { name: '导出', exact: true })).toHaveCount(1)
-    await expect(plain.locator('.memo-acts button')).toHaveCount(5)
+    await expect(plain.locator('.memo-acts button')).toHaveCount(4)
 
     // 首次加密就是立全库口令，只有这一次要输两格
     await (await noteMenu(page, plain)).locator('.pop-item:text-is("加密")').click()

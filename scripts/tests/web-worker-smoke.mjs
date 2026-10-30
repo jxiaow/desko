@@ -43,11 +43,11 @@ await once(gateway, 'listening')
 const address = `http://127.0.0.1:${gateway.address().port}`
 const program = resolve(process.argv[2] || `src-tauri/target/debug/desko${process.platform === 'win32' ? '.exe' : ''}`)
 const workers = []
-async function start(kind, port = 0) {
+async function start(port = 0) {
   const child = spawn(program, ['--desko-web-worker'], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
   workers.push(child)
   const line = once(createInterface({ input: child.stdout }), 'line')
-  child.stdin.write(`${JSON.stringify({ address, secret, kind, port, lan: false })}\n`)
+  child.stdin.write(`${JSON.stringify({ address, secret, port, lan: false })}\n`)
   const [text] = await Promise.race([line, new Promise((_, reject) => child.once('error', reject)), new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Worker startup timed out')), 15000); timer.unref() })])
   const status = JSON.parse(text)
   assert(!status.error, status.error)
@@ -66,31 +66,24 @@ async function login(worker) {
   return reply.headers.get('set-cookie').split(';')[0]
 }
 try {
-  const app = await start('app')
-  const codex = await start('codex')
+  const app = await start()
   assert.notEqual(app.child.pid, process.pid)
-  assert.notEqual(app.child.pid, codex.child.pid)
   const appCookie = await login(app)
-  const codexCookie = await login(codex)
   assert(appCookie.startsWith('desko_web='))
-  assert(codexCookie.startsWith('desko_codex_web='))
-  assert.equal((await request(codex, '/api/session', appCookie)).status, 401)
-  assert.equal((await request(app, '/api/session', codexCookie)).status, 401)
-  const html = await (await request(codex, '/codex')).text()
-  assert.match(html, /name="desko-service" content="codex"/)
+  const html = await (await request(app, '/codex')).text()
+  assert.match(html, /name="desko-runtime" content="web"/)
+  assert(!html.includes('desko-service'))
   const reply = await request(app, '/api/invoke', appCookie, { command: 'list_notes', args: {} })
   assert.deepEqual(await reply.json(), { command: 'list_notes', args: {} })
   const download = await request(app, '/api/files/fixture', appCookie)
   assert.equal((await download.arrayBuffer()).byteLength, 256 * 1024)
   await stop(app)
-  assert.equal((await request(codex, '/api/session', codexCookie)).status, 200)
-  const restarted = await start('app', app.status.port)
+  const restarted = await start(app.status.port)
   assert.equal((await request(restarted, '/api/session', appCookie)).status, 401)
   epoch++
-  assert.equal((await request(codex, '/api/session', codexCookie)).status, 401)
+  assert.equal((await request(restarted, '/api/session', appCookie)).status, 401)
   await stop(restarted)
-  await stop(codex)
-  console.log('Two headless processes verified: login isolation, streamed download, independent stop, immediate restart, epoch revocation and parent EOF cleanup.')
+  console.log('Headless process verified: login, streamed download, immediate restart, epoch revocation and parent EOF cleanup.')
 } finally {
   for (const child of workers) if (child.exitCode === null) child.kill()
   gateway.closeAllConnections()

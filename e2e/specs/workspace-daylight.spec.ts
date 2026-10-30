@@ -1,30 +1,26 @@
 import { test, expect } from '@playwright/test'
-import { bootUnlocked, openSettings } from '../helpers'
+import { bootUnlocked, openNoteRead, openSettings } from '../helpers'
 
-// 纸底与对话框同一套材质：两角各一团掺强调色的径向光，画布与阅读面共用；墨底保持四段。
-const FIELDS: Record<string, string> = {
-  paper: 'radial-gradient(52% 54% at 0% 0%, C, C 100%), radial-gradient(52% 54% at 100% 100%, C, C 100%), none',
-  ink: 'linear-gradient(132deg, C 0%, C 40%, C 66%, C 100%), none',
-}
-/** 柔光颜色由强调色推导（oklch 序列化还带抖动），断言只锁光场的形状与停靠点，颜色一律归一成 C。 */
-const geometry = (image: string) => image.replace(/(?:(?:rgba?|hsla?|color|oklab|oklch)\([^)]*\))/g, 'C')
-
+// 骨架契约：柔光只染窗框，全屏阅读面就是内容浮片本身——实底、不吃光，
+// 无论氛围开还是关、换成哪个强调色，阅读面始终是同一块底色。
 for (const theme of ['paper', 'ink']) {
-  test(`${theme} 全屏阅读面与画布同场，书写面保持实底`, async ({ page }) => {
+  test(`${theme} 全屏阅读面与浮片同场，书写面保持实底`, async ({ page }) => {
     let themeUrl = ''
     page.on('request', request => { if (new URL(request.url()).pathname === '/src/services/theme.ts') themeUrl = request.url() })
     await bootUnlocked(page, {
       settings: { theme, background_atmosphere: 'true' },
       notes: [{ title: '专注阅读', content_html: '<p>柔光留在背景，书写面保持清晰。</p>' }],
     }, '/notes')
-    await page.locator('.memo').hover()
-    await page.getByRole('button', { name: '全屏查看', exact: true }).click()
+    await openNoteRead(page.locator('.memo'))
     const surface = page.locator('.fs')
-    const color = await surface.evaluate(element => getComputedStyle(element).backgroundColor)
-    const field = () => Promise.all([
-      surface.evaluate(element => getComputedStyle(element).backgroundImage),
-      page.locator('.workspace-surface').evaluate(element => getComputedStyle(element).backgroundImage),
-    ] as const)
+    const fill = () => surface.evaluate(element => {
+      const cs = getComputedStyle(element)
+      return { image: cs.backgroundImage, color: cs.backgroundColor }
+    })
+    const sheetColor = await page.locator('.workspace-surface').evaluate(element => getComputedStyle(element).backgroundColor)
+    const reading = await fill()
+    expect(reading.image, '阅读面不接窗框的柔光').toBe('none')
+    expect(reading.color, '阅读面就是浮片底色').toBe(sheetColor)
     for (const enabled of [true, false, true]) {
       await page.evaluate(async ([url, enabled]) => {
         const service = await import(/* @vite-ignore */ url)
@@ -32,14 +28,16 @@ for (const theme of ['paper', 'ink']) {
         await service.chooseBackgroundAtmosphere(enabled)
       }, [themeUrl, enabled] as const)
       await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
-      const [reading, canvas] = await field()
-      expect(geometry(reading), `氛围${enabled ? '开' : '关'}时的阅读面光场`).toBe(enabled ? FIELDS[theme] : 'none')
-      expect(reading, '阅读面与画布共用同一光场，不留第二层底').toBe(canvas)
-      await expect(surface).toHaveCSS('background-color', color)
+      // 光只换窗框那一层，阅读面纹丝不动。
+      const frame = await page.locator('.app-root').evaluate(element => getComputedStyle(element).backgroundImage)
+      expect(frame === 'none', `氛围${enabled ? '开' : '关'}时的窗框光场`).toBe(!enabled)
+      const now = await fill()
+      expect(now.image, `氛围${enabled ? '开' : '关'}时的阅读面光场`).toBe('none')
+      expect(now.color, `氛围${enabled ? '开' : '关'}时的阅读面底色`).toBe(reading.color)
     }
     await page.locator('.fs-head').getByRole('button', { name: '编辑', exact: true }).click()
     await expect(surface).toHaveCSS('background-image', 'none')
-    await expect(surface).toHaveCSS('background-color', color)
+    await expect(surface).toHaveCSS('background-color', reading.color)
   })
 }
 

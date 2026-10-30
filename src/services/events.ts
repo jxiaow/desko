@@ -39,7 +39,7 @@ async function poll() {
     finally {
       if (generation === epoch) {
         pending = null
-        if (subscriptions.size) timer = setTimeout(() => void poll(), subscriptions.has('codex:dialog') ? 200 : 1000)
+        if (subscriptions.size) timer = setTimeout(() => void poll(), 1000)
       }
     }
   })()
@@ -48,7 +48,7 @@ async function poll() {
 
 export async function listen<T>(event: string, callback: EventCallback<T>): Promise<UnlistenFn> {
   if (!isWebRuntime()) return nativeListen(event, callback)
-  if (!['codex:dialog', 'desko:module-changed', 'codex:switch-progress', 'codex-oauth-login-completed', 'codex-oauth-login-timeout', 'codex-device-auth-error'].includes(event)) {
+  if (!['desko:module-changed', 'codex:switch-progress', 'codex-oauth-login-completed', 'codex-oauth-login-timeout', 'codex-device-auth-error'].includes(event)) {
     throw new Error('浏览器不支持此事件')
   }
   const listener = callback as EventCallback<unknown>

@@ -1,7 +1,6 @@
 import { ref } from 'vue'
 import { settingsApi } from '../../services/api/settings'
 import { hasWorkspaceDirectory } from './workspaceLayout'
-import { isCodexWebRuntime } from '../../services/runtime'
 
 const SETTING_KEY = 'workspace_directory_open'
 const PIN_SETTING_KEY = 'workspace_directory_pinned'
@@ -15,14 +14,13 @@ function readModules(raw: string): Record<string, boolean> {
 }
 
 export function useWorkspaceDirectoryPreferences() {
-  const browser = isCodexWebRuntime()
   const open = ref<Record<string, boolean>>({})
   const pinned = ref<Record<string, boolean>>({})
   let pendingSave: Promise<void> = Promise.resolve()
 
   async function restore() {
     const values = await Promise.all([SETTING_KEY, PIN_SETTING_KEY].map(async key => {
-      try { return browser ? localStorage.getItem(`desko.codex.web.${key}`) || '' : await settingsApi.getSetting(key) }
+      try { return await settingsApi.getSetting(key) }
       catch { return '' }
     }))
     open.value = readModules(values[0])
@@ -32,10 +30,7 @@ export function useWorkspaceDirectoryPreferences() {
   function save(key: string, modules: Record<string, boolean>): Promise<void> {
     const value = JSON.stringify(modules)
     // 连续开关按操作顺序落盘，前一次失败不阻止后续保存。
-    pendingSave = pendingSave.catch(() => {}).then(() => {
-      if (browser) localStorage.setItem(`desko.codex.web.${key}`, value)
-      else return settingsApi.setSetting(key, value)
-    })
+    pendingSave = pendingSave.catch(() => {}).then(() => settingsApi.setSetting(key, value))
     return pendingSave
   }
 

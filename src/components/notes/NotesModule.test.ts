@@ -162,13 +162,15 @@ describe('NotesModule', () => {
     } finally { base.mockRestore(); meta.remove() }
   })
 
-  it('loads notes on mount and groups them under today', async () => {
-    stageNotes([makeNote(), makeNote({ id: 'b', title: '乙', content_html: '<p>乙内容</p>' })])
+  it('loads notes on mount as one stream with a pinned label', async () => {
+    stageNotes([makeNote({ pinned: true }), makeNote({ id: 'b', title: '乙', content_html: '<p>乙内容</p>' })])
     const wrapper = await mountModule()
 
     expect(notesApi.listNotes).toHaveBeenCalledTimes(1)
-    expect(wrapper.findAll('.memo')).toHaveLength(2)
-    expect(wrapper.find('.day-head').text()).toContain('今天')
+    expect(wrapper.findAll('.slip-stream .memo')).toHaveLength(2)
+    expect(wrapper.find('.slip-label').text()).toContain('置顶')
+    expect(wrapper.find('.slip-label-count').text()).toBe('1')
+    expect(wrapper.find('.day-head').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -246,13 +248,19 @@ describe('NotesModule', () => {
     wrapper.unmount()
   })
 
-  it('单击正文不进编辑，编辑只走悬停按钮', async () => {
+  it('单击正文只进阅读层，编辑仍走卡排上的编辑钮', async () => {
     stageNotes([makeNote()])
     const wrapper = await mountModule()
 
     await wrapper.find('.memo').trigger('click')
-    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    expect(wrapper.findComponent(NoteFullscreen).exists()).toBe(true)
     expect(wrapper.find('.memo.editing').exists()).toBe(false)
+
+    wrapper.findComponent(NoteFullscreen).vm.$emit('close')
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    expect(wrapper.findComponent(NoteFullscreen).exists()).toBe(false)
 
     await openCard(wrapper)
     expect(wrapper.find('.memo.editing').exists()).toBe(true)

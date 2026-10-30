@@ -309,6 +309,7 @@ onMounted(() => {
                     <span class="tp-rail-line" />
                     <span class="tp-rail-line short" />
                   </span>
+                  <span v-if="workspaceLayout" class="tp-sheet" aria-hidden="true" />
                   <span class="tp-rows">
                     <span class="tp-row">
                       <span class="tp-row-ink" />
@@ -775,9 +776,40 @@ onMounted(() => {
 .workspace-theme-prev .tp-rail-dot { left: 3px; top: 12px; width: 4px; height: 5px; }
 .workspace-theme-prev .tp-rail-line { left: 3px; top: 26px; width: 4px; }
 .workspace-theme-prev .tp-rail-line.short { top: 37px; width: 4px; }
-.workspace-theme-prev .tp-rows { left: 14%; right: 3px; top: 8px; bottom: 3px; padding: 5px 28% 5px 5px; gap: 4px; justify-content: center; }
-.workspace-theme-prev .tp-row { height: 11px; flex-shrink: 0; padding: 0 3px; }
-.tp-workspace-context { position: absolute; top: 16px; right: 3px; bottom: 3px; width: 20%; border-left: 1px solid var(--border); border-radius: 0 0 5px 0; background: var(--bg-inspector); }
+/* 缩略图按新骨架重画：框（有色）→ 片（浅灰、圆角、柔影）→ 卡（白 + 发丝线）。
+   缩略图只有一百来像素，三层明度差要比真实界面更狠才读得出来；影也按比例缩，
+   不能直接搬浮片那套 16/36 的影。 */
+.workspace-theme-prev .tp-sheet {
+  position: absolute;
+  left: calc(12% + 2px);
+  right: 2px;
+  top: 5px;
+  bottom: 2px;
+  border-radius: 4px;
+  background: var(--bg-sheet);
+  box-shadow: 0 1px 1px rgb(15 23 42 / 8%), 0 3px 7px -3px rgb(15 23 42 / 22%);
+}
+.workspace-theme-prev[data-base="dark"] .tp-sheet {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 1px 2px rgb(0 0 0 / 45%);
+}
+.workspace-theme-prev .tp-rows { left: 14%; right: 4px; top: 8px; bottom: 4px; padding: 4px 28% 4px 4px; gap: 4px; justify-content: center; }
+.workspace-theme-prev .tp-row { height: 11px; flex-shrink: 0; padding: 0 3px; background: var(--bg-card); border-color: var(--border-card); box-shadow: 0 1px 1px rgb(15 23 42 / 6%); }
+.workspace-theme-prev .tp-row:nth-child(2) { background: color-mix(in srgb, var(--text) 4%, var(--bg-card)); }
+.workspace-theme-prev[data-base="dark"] .tp-row { box-shadow: 0 1px 1px rgb(0 0 0 / 40%); }
+/* 目录栏在缩略图里只是一块空色块会显得没画完：给它两条行线，读成「一列条目」。 */
+.tp-workspace-context { position: absolute; top: 16px; right: 3px; bottom: 2px; width: 20%; border-left: 1px solid var(--border-card); border-radius: 0 0 4px 0; background: transparent; }
+.workspace-theme-prev .tp-workspace-context::before,
+.workspace-theme-prev .tp-workspace-context::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text);
+  opacity: 0.18;
+}
+.workspace-theme-prev .tp-workspace-context::before { top: 8px; width: 60%; }
+.workspace-theme-prev .tp-workspace-context::after { top: 15px; width: 44%; }
 .theme-chip-name { font-size: var(--text-sm); font-weight: 600; color: var(--text); line-height: 1.3; }
 
 /* 关于页不再是一座居中小岛：品牌就是页面上的第一块，左边缘与其他页签的正文对齐，

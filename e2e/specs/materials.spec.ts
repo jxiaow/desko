@@ -76,13 +76,14 @@ test.describe('背景材质', () => {
     await expect(toggle).toBeChecked()
     // 纸底与对话框同一套材质：左上主光、右下补光，卡片和输入区域继续持各自实底。
     expect((await background('.app-root')).image).toContain('radial-gradient')
-    // 导轨氛围光整列只画在 .app-root::before 一层上，图标轨与 Logo 格透出它，
-    // 不再各自 fixed 采样（fixed 附着层会从弹窗遮罩上穿出）。
-    const railLight = await background('.app-root', '::before')
-    expect(railLight.image).toContain('radial-gradient')
-    expect(railLight.color).not.toMatch(/rgba|transparent|\//)
+    // 柔光整窗只画在 .app-root 一层：导轨与品牌格透明，坐在同一层光上。
     expect((await background('.sidebar')).image).toBe('none')
     expect((await background('.titlebar-brandcell')).image).toBe('none')
+    // 空页是品牌时刻：氛围开着时浮片化开，整窗就是光；关灯后浮片回到实底。
+    const sheet = await background('.workspace-surface')
+    expect(sheet.image).toBe('none')
+    // 化开带 260ms 过渡，断言要能等到它落定。
+    await expect(page.locator('.workspace-surface')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
     expect((await background('.settings-dialog')).image).toContain('radial-gradient')
     expect((await background('.settings-nav')).color).toMatch(/rgba|\/\s*0\./)
 
@@ -91,10 +92,8 @@ test.describe('背景材质', () => {
     expect((await e2e.snapshot(page)).settings.background_atmosphere).toBe('false')
     expect((await background('.app-root')).image).toBe('none')
     expect((await background('.settings-dialog')).image).toBe('none')
-    // 关闭氛围后，导轨光层一起恢复纯色。
-    const railFlat = await background('.app-root', '::before')
-    expect(railFlat.image).toBe('none')
-    expect(railFlat.color).toBe(railLight.color)
+    // 关闭氛围后窗框恢复纯色，浮片重新成为一块实底。
+    await expect(page.locator('.workspace-surface')).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 
     await control.locator('label.switch').click()
     await expect(toggle).toBeEnabled()

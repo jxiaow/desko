@@ -145,8 +145,8 @@ function trapFocus(event: KeyboardEvent) {
         {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '未保存') }}<template v-if="props.note && !viewMode"> · {{ wordCount(text) }} 字</template>
       </span>
 
-      <!-- 阅读态的动作住在首栏右侧：粘性一行，滚到正文中段也够得着 -->
-      <template v-if="viewMode && props.note">
+      <!-- 小记级动作只有首栏这一个住址：读写两态同一组按钮，主按钮只换字 -->
+      <template v-if="props.note">
         <button
           class="bar-btn"
           type="button"
@@ -157,8 +157,11 @@ function trapFocus(event: KeyboardEvent) {
         >
           <AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="13" />{{ props.note.pinned ? '取消置顶' : '置顶' }}
         </button>
-        <button class="bar-btn primary" type="button" title="进入全屏编辑" aria-label="编辑" @click="emit('edit')">
+        <button v-if="viewMode" class="bar-btn primary" type="button" title="进入全屏编辑" aria-label="编辑" @click="emit('edit')">
           <AppIcon name="edit" :size="13" />编辑
+        </button>
+        <button v-else class="bar-btn primary" type="button" title="完成编辑（自动保存）" aria-label="完成" @click="onPrimary">
+          <AppIcon name="check" :size="13" />完成
         </button>
         <button class="bar-btn" type="button" title="复制正文" aria-label="复制正文" @click="emit('copy')">
           <AppIcon name="copy" :size="13" />复制
@@ -174,6 +177,15 @@ function trapFocus(event: KeyboardEvent) {
           @remove-lock="emit('removeLock')"
           @delete="emit('delete')"
         />
+      </template>
+      <!-- 新小记还没有可操作的小记对象：首栏只放提交，底栏只放写作工具 -->
+      <template v-else-if="!viewMode">
+        <button v-if="!empty" class="bar-btn" type="button" title="放弃这条小记" aria-label="放弃" @click="emit('discard')">
+          <AppIcon name="x" :size="13" />放弃
+        </button>
+        <button class="bar-btn primary" type="button" title="保存这条小记" aria-label="保存" :disabled="empty" @click="onPrimary">
+          <AppIcon name="check" :size="13" />保存
+        </button>
       </template>
     </header>
     </Teleport>
@@ -192,7 +204,7 @@ function trapFocus(event: KeyboardEvent) {
           <span>{{ wordCount(text) }} 字</span>
         </div>
 
-        <div v-if="viewMode" class="fs-view" :class="{ promoted: display.hideFirstBlock }" v-html="displayHtml" @click="openLinkFromClick" />
+        <div v-if="viewMode" class="fs-view note-doc" :class="{ promoted: display.hideFirstBlock }" v-html="displayHtml" @click="openLinkFromClick" />
         <NoteEditor
           v-else
           ref="editorRef"
@@ -221,10 +233,9 @@ function trapFocus(event: KeyboardEvent) {
       <NoteToolbar
         :note="props.note"
         :save-state="props.saveState"
-        :primary-label="props.note ? '退出编辑' : '保存'"
-        :primary-disabled="!props.note && empty"
-        :cancel-label="props.note ? '' : '放弃'"
         :show-fullscreen="false"
+        :show-state-actions="false"
+        :show-primary="false"
         show-history
         :can-undo="canUndo"
         :can-redo="canRedo"
@@ -232,11 +243,6 @@ function trapFocus(event: KeyboardEvent) {
         @insert-tag="insertTag"
         @undo="editorRef?.undo()"
         @redo="editorRef?.redo()"
-        @toggle-pin="emit('togglePin')"
-        @toggle-star="emit('toggleStar')"
-        @delete="emit('delete')"
-        @cancel="emit('discard')"
-        @primary="onPrimary"
       >
         <template #hint>
           <span
@@ -256,12 +262,9 @@ function trapFocus(event: KeyboardEvent) {
   z-index: 150;
   display: flex;
   flex-direction: column;
-  /* 阅读与书写使用更轻的柔光，让正文保持接近底色。 */
-  background: var(--bg-editor);
-  background-attachment: var(--editor-background-attachment);
+  /* 阅读与书写都落在浮片上：实底、不吃窗框的柔光。 */
+  background: var(--bg-sheet, var(--bg-editor));
 }
-.fs:has(.fs-doc) { background: var(--bg-workspace, var(--bg-editor)); background-attachment: fixed; }
-
 .fs-col {
   width: 100%;
   /* 与阅读列同一个公式：书写看到多少字一行，提交后就是多少字一行 */
@@ -351,38 +354,12 @@ function trapFocus(event: KeyboardEvent) {
 }
 .tag-pill:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* 只读正文：排版语言与列表卡片同源，字号行距按全屏阅读放大 */
-.fs-view {
-  font-size: var(--text-base);
-  line-height: 24px;
-  color: var(--text);
-  word-break: break-word;
-}
-.fs-view :deep(> * + *) { margin-top: 10px; }
+/* 只读正文与书写面共用 global.css 的 .note-doc：预览和编辑只有一套排版，
+   这里只剩两处只读专属：首屏把已提升为标题的首块藏掉、勾选框不接操作 */
 .fs-view.promoted :deep(> :first-child) { display: none; }
 .fs-view.promoted :deep(> :first-child + *) { margin-top: 0; }
-.fs-view :deep(* + h1), .fs-view :deep(* + h2), .fs-view :deep(* + h3) { margin-top: 14px; }
-.fs-view :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: normal; line-height: 30px; }
-.fs-view :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: normal; line-height: 26px; margin-top: 12px; }
-.fs-view :deep(h3) { font-size: var(--text-base); font-weight: 600; line-height: 23px; margin-top: 10px; }
-.fs-view :deep(strong) { font-weight: 600; color: var(--text); }
-.fs-view :deep(ul), .fs-view :deep(ol) { padding-left: var(--space-5); }
-.fs-view :deep(li) { margin: 4px 0; }
-.fs-view :deep(li::marker) { color: var(--text-faint); }
-.fs-view :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-4); color: var(--text-secondary); }
-.fs-view :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
-.fs-view :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 22px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-3) var(--space-4); overflow-x: auto; }
-.fs-view :deep(pre code) { background: none; border: none; padding: 0; color: inherit; }
-.fs-view :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 5px; }
-.fs-view :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
-.fs-view :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
-/* 勾选框的自绘配方在 global.css，B 档行高 23 下要往下挪一格 */
-.fs-view :deep(ul[data-type='taskList'] input) { margin-top: 5px; }
 /* 只读层里的勾选框不接操作，别让人点了以为改了状态 */
 .fs-view :deep(input[type='checkbox']) { pointer-events: none; }
-/* 正文分隔线不吃 --border（chrome 发丝档，纸底实测 1.15:1 等于没画），从字色反推 */
-.fs-view :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-4) 0; }
-.fs-view :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 56vh; object-fit: contain; border-radius: var(--radius); }
 
 /* 底栏不铺色、不画顶线：书写面上只允许纸这一种底色，按钮自身的面与描边负责读出边界 */
 .fs-foot {
@@ -401,9 +378,17 @@ function trapFocus(event: KeyboardEvent) {
 .fs-head .bar-btn.on:hover:not(:disabled) { background: var(--hover-chrome); color: var(--text-brand); }
 .fs-head .bar-btn.primary { background: var(--accent-soft); color: var(--text-brand); font-weight: 600; padding: 0 12px; }
 .fs-head .bar-btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text-brand); }
-@container workspace-toolbar (max-width: 460px) {
-  .workspace-fs-head.fs-reading-head .save-hint, .workspace-fs-head.fs-reading-head .fs-exit .kbd { display: none; }
-  .workspace-fs-head.fs-reading-head .fs-exit { margin-right: auto; }
+/* 窄栏（800px 窗再带 Web/云徽标时首栏只剩 ~416px）放不下状态字：
+   读写两态都让状态让位给动作，退出钮吃掉省下的 auto 外边距 */
+@container workspace-toolbar (max-width: 520px) {
+  .workspace-fs-head .save-hint, .workspace-fs-head .fs-exit .kbd { display: none; }
+  .workspace-fs-head .fs-exit { margin-right: auto; }
+}
+/* 页内首栏没有 workspace-toolbar 容器，同样在窄屏收掉状态字 */
+@media (max-width: 640px) {
+  .fs-head { gap: var(--space-1); }
+  .fs-head .save-hint, .fs-head .fs-exit .kbd { display: none; }
+  .fs-head .fs-exit { margin-right: auto; }
 }
 
 .fs-hint {

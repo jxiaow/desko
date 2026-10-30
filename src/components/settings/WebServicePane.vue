@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { webAccessApi, type WebAccessStatus, type WebServiceKind } from '../../services/api/webAccess'
+import { webAccessApi, type WebAccessStatus } from '../../services/api/webAccess'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { writeClipboardText } from '../../utils/clipboard'
 import AppIcon from '../shared/AppIcon.vue'
 import { openExternal } from '../../utils/openExternal'
 
-const props = defineProps<{ kind: WebServiceKind; title: string; defaultPort: number }>()
+const props = defineProps<{ title: string; defaultPort: number }>()
 
 const status = ref<WebAccessStatus>({ running: false, lan: false, port: props.defaultPort, urls: [] })
 const port = ref(props.defaultPort)
@@ -22,7 +22,7 @@ let poll: ReturnType<typeof setInterval> | undefined
 async function refresh() {
   const epoch = ++statusGeneration
   try {
-    const next = await webAccessApi.status(props.kind)
+    const next = await webAccessApi.status()
     if (active && epoch === statusGeneration) { status.value = next; failure.value = '' }
   } catch (e) { if (active && epoch === statusGeneration) failure.value = String(e) }
 }
@@ -32,7 +32,7 @@ async function start(input: { port: number; lan: boolean }) {
   busy.value = true
   failure.value = ''
   try {
-    const next = await webAccessApi.start({ ...input, kind: props.kind })
+    const next = await webAccessApi.start(input)
     if (active) { status.value = next; toast.showToast('Web 服务已启动') }
   } catch (e) { if (active) failure.value = String(e) }
   finally { if (active) busy.value = false }
@@ -42,7 +42,7 @@ async function stop() {
   statusGeneration++
   busy.value = true
   failure.value = ''
-  try { await webAccessApi.stop(props.kind); if (active) { await refresh(); if (active) toast.showToast('Web 服务已停止，浏览器会话已退出') } }
+  try { await webAccessApi.stop(); if (active) { await refresh(); if (active) toast.showToast('Web 服务已停止，浏览器会话已退出') } }
   catch (e) { if (active) failure.value = String(e) }
   finally { if (active) busy.value = false }
 }
@@ -72,7 +72,7 @@ onUnmounted(() => { active = false; clearInterval(poll) })
         <span v-if="status.running" class="web-scope">{{ status.lan ? '· 本机与局域网' : '· 仅本机' }}</span>
       </div>
       <button v-if="status.running" class="action-btn" type="button" :disabled="busy" @click="requestStop">{{ busy ? '正在停止…' : '停止服务' }}</button>
-      <button v-else class="action-btn primary" type="submit" :form="`web-access-${kind}-form`" :disabled="busy">{{ busy ? '正在启动…' : '启动 Web 服务' }}</button>
+      <button v-else class="action-btn primary" type="submit" form="web-access-form" :disabled="busy">{{ busy ? '正在启动…' : '启动 Web 服务' }}</button>
     </div>
 
     <template v-if="status.running">
@@ -91,21 +91,21 @@ onUnmounted(() => { active = false; clearInterval(poll) })
       </div>
       <p class="pane-hint" v-if="status.lan && status.urls.length < 2">未获取局域网地址，请使用本机 IPv4 地址与端口 {{ status.port }}。</p>
     </template>
-    <form v-else :id="`web-access-${kind}-form`" @submit.prevent="requestStart">
+    <form v-else id="web-access-form" @submit.prevent="requestStart">
       <div class="setting-item">
         <div class="setting-info">
-          <label class="setting-name" :for="`web-access-${kind}-port`">端口</label>
+          <label class="setting-name" for="web-access-port">端口</label>
           <span class="setting-desc">1024～65535，需使用空闲端口</span>
         </div>
-        <input :id="`web-access-${kind}-port`" v-model.number="port" class="number-input web-port" type="number" min="1024" max="65535" :disabled="busy" />
+        <input id="web-access-port" v-model.number="port" class="number-input web-port" type="number" min="1024" max="65535" :disabled="busy" />
       </div>
       <div class="setting-item">
         <div class="setting-info">
-          <label class="setting-name" :for="`web-access-${kind}-lan`">允许局域网设备访问</label>
+          <label class="setting-name" for="web-access-lan">允许局域网设备访问</label>
           <span class="setting-desc">关闭时仅本机可访问。</span>
         </div>
         <label class="switch">
-          <input :id="`web-access-${kind}-lan`" v-model="lan" type="checkbox" role="switch" :disabled="busy" />
+          <input id="web-access-lan" v-model="lan" type="checkbox" role="switch" :disabled="busy" />
           <span class="switch-slider"></span>
         </label>
       </div>

@@ -47,7 +47,9 @@ test.describe('主题', () => {
     expect(got.base).toBe('light')
     expect(got.accent).toBe(accentOf('paper', 'ink'))
     await expect(page.locator('html')).toHaveAttribute('data-atmosphere', 'on')
-    await expect(page.locator('.workspace-main')).toHaveCSS('background-image', /radial-gradient/)
+    // 柔光在窗框那一层：内容面是实底浮片。
+    await expect(page.locator('.app-root')).toHaveCSS('background-image', /radial-gradient/)
+    await expect(page.locator('.workspace-surface')).toHaveCSS('background-image', 'none')
     const dialog = await openSettings(page)
     await expect(dialog.getByRole('switch', { name: '背景氛围' })).toBeChecked()
   })

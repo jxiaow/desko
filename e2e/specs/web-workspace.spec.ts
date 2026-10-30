@@ -1,29 +1,6 @@
 import { test, expect } from '@playwright/test'
-import { bootUnlocked, tipButton } from '../helpers'
+import { openNoteRead, tipButton } from '../helpers'
 import { webApp, selectModule } from '../web-helpers'
-import { CODEX_DIALOG_ENABLED } from '../../src/services/featureFlags'
-
-test('desktop manages two independent Web services and exposes the Codex entry', async ({ page }) => {
-  test.skip(!CODEX_DIALOG_ENABLED, 'Codex 对话入口已屏蔽，见 src/services/featureFlags.ts')
-  await bootUnlocked(page, { settings: { codex_enabled: 'true' } }, '/codex')
-  await page.getByRole('button', { name: '对话', exact: true }).click()
-  await page.getByRole('button', { name: '选择项目', exact: true }).click()
-  await page.getByRole('button', { name: '设置 Web 访问', exact: true }).click()
-  const settings = page.locator('.settings-dialog')
-  await expect(settings.getByRole('heading', { name: 'Web 访问', exact: true })).toBeVisible()
-  const app = settings.locator('.web-access-pane').filter({ has: page.getByRole('heading', { name: 'Desko Web', exact: true }) })
-  const codex = settings.locator('.web-access-pane').filter({ has: page.getByRole('heading', { name: 'Codex Web UI', exact: true }) })
-  await expect(app.getByLabel('端口', { exact: true })).toHaveValue('8420')
-  await expect(codex.getByLabel('端口', { exact: true })).toHaveValue('8421')
-  await app.getByRole('button', { name: '启动 Web 服务', exact: true }).click()
-  await codex.getByRole('button', { name: '启动 Web 服务', exact: true }).click()
-  await expect(app.getByRole('link')).toHaveAttribute('href', 'http://127.0.0.1:8420')
-  await expect(codex.getByRole('link')).toHaveAttribute('href', 'http://127.0.0.1:8421')
-  await codex.getByRole('button', { name: '停止服务', exact: true }).click()
-  await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
-  await expect(codex.getByText('服务未启动', { exact: true })).toBeVisible()
-  await expect(app.getByText('服务运行中', { exact: true })).toBeVisible()
-})
 
 for (const width of [360, 390, 768, 1040, 1440]) {
   test(`shared Web workspace remains usable at ${width}px`, async ({ page }) => {
@@ -43,9 +20,7 @@ for (const width of [360, 390, 768, 1040, 1440]) {
         await page.getByRole('button', { name: '关闭辅助侧栏', exact: true }).click()
       }
     }
-    await page.locator('.memo').first().hover()
-    if (width <= 760) await page.locator('.memo').first().getByRole('button', { name: '更多操作', exact: true }).click()
-    await page.getByRole('button', { name: '全屏查看', exact: true }).first().click()
+    await openNoteRead(page.locator('.memo').first())
     await expect(page.getByRole('dialog', { name: '全屏查看小记' })).toBeVisible()
     const toolbar = page.locator('#note-fullscreen-toolbar')
     await expect(toolbar.getByRole('button', { name: '复制正文', exact: true })).toBeInViewport()
@@ -75,47 +50,5 @@ for (const width of [360, 390, 768, 1040, 1440]) {
     await settings.getByRole('button', { name: '完成', exact: true }).click()
     await page.screenshot({ path: `.tmp/web-workspace/notes-${width}-ink.png`, animations: 'disabled' })
     expect(app.errors).toEqual([])
-  })
-}
-
-for (const { width, height } of [{ width: 360, height: 844 }, { width: 390, height: 844 }, { width: 1040, height: 844 }, { width: 844, height: 390 }]) {
-  test.describe(`Codex Web ${width}×${height}`, () => {
-    test.use({ hasTouch: width === 844, isMobile: width === 844 })
-    test(`dedicated Codex Web connects, streams and handles approval at ${width}px`, async ({ page }) => {
-      await page.setViewportSize({ width, height })
-      const app = await webApp(page, { settings: { codex_enabled: 'true' } }, '/codex', 'codex')
-      await app.login('.codex-dialog')
-      if (width <= 760 || height === 390) {
-        expect((await page.locator('.titlebar-outer').boundingBox())!.height).toBeLessThan(60)
-        expect((await page.locator('.codex-dialog').boundingBox())!.y).toBeLessThan(80)
-      }
-      await expect(page.getByRole('button', { name: '账号', exact: true })).toHaveCount(0)
-      await page.getByRole('textbox', { name: '服务器工作目录', exact: true }).fill('C:\\Code\\fixture')
-      await page.getByRole('button', { name: '连接工作目录', exact: true }).click()
-      await expect(page.getByRole('status').filter({ hasText: '已连接' })).toBeVisible()
-      const message = page.getByRole('textbox', { name: '发给 Codex 的消息' })
-      await message.fill('测试审批')
-      await page.getByRole('button', { name: '发送', exact: true }).click()
-      await expect(page.getByRole('region', { name: '待处理的 Codex 请求' })).toContainText('git status --short')
-      await page.getByRole('button', { name: '拒绝', exact: true }).click()
-      await expect(page.getByRole('region', { name: '待处理的 Codex 请求' })).toHaveCount(0)
-      await expect(page.locator('.dialog-user')).toHaveCount(1)
-      await expect(message).toBeInViewport()
-      await expect(page.getByRole('button', { name: '发送', exact: true })).toBeInViewport()
-      if (width <= 760 || height === 390) {
-        await page.getByRole('button', { name: '历史对话', exact: true }).click()
-        await expect(page.getByRole('dialog', { name: '当前项目历史' })).toBeVisible()
-        await page.locator('.dialog-thread').first().click()
-        await expect(page.getByRole('dialog', { name: '当前项目历史' })).toHaveCount(0)
-        await expect(page.getByText('正在恢复对话…', { exact: true })).toHaveCount(0)
-      }
-      expect(await page.locator('.codex-dialog').evaluate(el => el.scrollWidth > el.clientWidth + 1)).toBe(false)
-      await page.screenshot({ path: `.tmp/web-workspace/codex-${width}-paper.png`, animations: 'disabled' })
-      await page.evaluate(() => { document.documentElement.setAttribute('data-theme', 'ink'); document.documentElement.setAttribute('data-base', 'dark') })
-      await page.screenshot({ path: `.tmp/web-workspace/codex-${width}-ink.png`, animations: 'disabled' })
-      expect(app.invocations).not.toContain('list_notes')
-      expect(app.invocations).not.toContain('get_codex_accounts')
-      expect(app.errors).toEqual([])
-    })
   })
 }

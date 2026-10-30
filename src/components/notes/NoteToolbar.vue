@@ -8,7 +8,7 @@ const props = withDefaults(defineProps<{
   /** null 表示还没发布的小记：置顶/收藏/删除都无处可存，于是不出现 */
   note: Note | null
   saveState?: NoteSaveState
-  primaryLabel: string
+  primaryLabel?: string
   primaryDisabled?: boolean
   defaultHint?: string
   /** 新建态用无边框轻量按钮，编辑态用描边按钮 */
@@ -19,6 +19,8 @@ const props = withDefaults(defineProps<{
   dense?: boolean
   /** 编辑态顶栏：置顶/收藏/删除这类状态动作退回只读悬停排，编辑条只管写作 */
   showStateActions?: boolean
+  /** 全屏书写面把主按钮交给首栏，底栏只留写作工具 */
+  showPrimary?: boolean
   /** 未发布内容可提供「放弃」；已有小记自动保存，只需退出编辑 */
   cancelLabel?: string
   /** 编辑工具栏提供撤销/重做，与编辑器快捷键共用历史栈 */
@@ -27,12 +29,14 @@ const props = withDefaults(defineProps<{
   canRedo?: boolean
 }>(), {
   saveState: '',
+  primaryLabel: '',
   primaryDisabled: false,
   defaultHint: '',
   plain: false,
   showFullscreen: true,
   dense: false,
   showStateActions: true,
+  showPrimary: true,
   cancelLabel: '',
   showHistory: false,
   canUndo: false,
@@ -145,14 +149,14 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
     </button>
 
     <button
-      v-if="props.plain"
+      v-if="props.showPrimary && props.plain"
       class="btn-primary go"
       type="button"
       :disabled="props.primaryDisabled"
       @click="emit('primary')"
     >{{ props.primaryLabel }}</button>
     <button
-      v-else
+      v-else-if="props.showPrimary"
       class="eb primary"
       type="button"
       :disabled="props.primaryDisabled"

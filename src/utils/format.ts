@@ -155,12 +155,13 @@ function tagTextGroups(root: Element): Text[][] {
 export function stripTagsFromHtml(html: string): string {
   if (!html) return html
   const div = parseHtmlFragment(html)
+  const touched = new Set<Element>()
   for (const nodes of tagTextGroups(div)) {
     let offset = 0
     const parts = nodes.map(node => {
       const start = offset
       offset += node.length
-      return { node, start, end: offset }
+      return { node, start, end: offset, changed: false }
     })
     const text = nodes.map(node => node.data).join('')
     // 从后往前删文字，保留节点结构和前面范围的原始偏移。
@@ -170,9 +171,31 @@ export function stripTagsFromHtml(html: string): string {
       for (const part of parts) {
         const from = Math.max(start, part.start)
         const to = Math.min(end, part.end)
-        if (from < to) part.node.deleteData(from - part.start, to - from)
+        if (from < to) {
+          part.node.deleteData(from - part.start, to - from)
+          part.changed = true
+        }
       }
     }
+    for (const part of parts) {
+      if (!part.changed) continue
+      for (let el = part.node.parentElement; el && el !== div; el = el.parentElement) {
+        if (/^(P|DIV|H[1-6]|BLOCKQUOTE|LI)$/.test(el.tagName)) touched.add(el)
+      }
+    }
+  }
+  // 阅读面给空段落留了行高（作者敲的空行得看得见），所以被标签洗空的块要一起收掉，
+  // 否则标签消失后会多出一行空白。只动本次删字波及的块，原本就空的段落不碰。
+  const depth = (el: Element) => {
+    let d = 0
+    for (let n = el.parentElement; n && n !== div; n = n.parentElement) d++
+    return d
+  }
+  for (const el of [...touched].sort((a, b) => depth(b) - depth(a))) {
+    if ((el.textContent || '').trim()) continue
+    // 只剩图片、分隔线、换行或勾选框的块仍是内容，不收
+    if (el.querySelector('img, hr, br, input, video, audio, iframe, table, pre')) continue
+    el.remove()
   }
   return div.innerHTML
 }

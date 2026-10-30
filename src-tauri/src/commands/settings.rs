@@ -3,7 +3,7 @@ use crate::AppState;
 use tauri::{AppHandle, Emitter, State};
 
 pub(crate) fn notify_module_change(app: &AppHandle, key: &str, value: &str) {
-    if key == "codex_enabled" && value != "true" { crate::services::codex_bridge::stop(app); crate::web_access::stop_codex(app); }
+    if key == "codex_enabled" && value != "true" { crate::services::codex_bridge::stop(app); }
     if let Some(id) = key.strip_suffix("_enabled").filter(|id| matches!(*id, "notes" | "entries" | "files" | "mfa" | "codex" | "fileshare" | "tunnel" | "bypass")) {
         let _ = app.emit("desko:module-changed", serde_json::json!({"id":id,"enabled":value == "true"}));
     }

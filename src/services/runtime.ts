@@ -4,10 +4,6 @@ export function isWebRuntime(): boolean {
     && document.querySelector('meta[name="desko-runtime"]')?.getAttribute('content') === 'web'
 }
 
-export function isCodexWebRuntime(): boolean {
-  return isWebRuntime() && document.querySelector('meta[name="desko-service"]')?.getAttribute('content') === 'codex'
-}
-
 /** 在 <html> 落 Web 标记，供 CSS 把内置中文字体留在桌面端。返回是否已标记。 */
 export function markWebRuntimeRoot(): boolean {
   if (!isWebRuntime() || typeof document === 'undefined') return false

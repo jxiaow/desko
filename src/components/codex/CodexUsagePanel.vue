@@ -214,11 +214,11 @@ function pct(part: number, whole: number): number {
 .usg-session-open:hover { color: var(--text-brand); text-decoration: underline; text-underline-offset: 3px; }
 .usg-view { --usage-fresh: #376cb3; --usage-cached: #32856f; --usage-output: #b96b25; display: flex; flex-direction: column; gap: var(--space-3); }
 [data-base='dark'] .usg-view { --usage-fresh: #8aadf4; --usage-cached: #6bc5b4; --usage-output: #e8ac68; }
-.usg-sum { padding: 12px 18px; }
+.usg-sum { padding: 10px 18px; }
 .usg-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; }
 .usg-heading :is(h1, h3) { margin: 0; font-size: var(--text-base); font-weight: 600; color: var(--text); }
 .usg-period { font-size: var(--text-xs); color: var(--text-muted); }
-.usg-overview { display: flex; align-items: center; gap: 32px; padding: 6px 0; }
+.usg-overview { display: flex; align-items: center; gap: 32px; padding: 4px 0; }
 .usg-sum-main { display: grid; grid-template-columns: max-content auto; align-items: baseline; flex: 0 0 25%; gap: 4px 8px; }
 .usg-num { font-size: var(--text-2xl); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; letter-spacing: normal; color: var(--text); }
 .usg-sum-label { font-size: var(--text-xs); color: var(--text-muted); }
@@ -236,10 +236,12 @@ function pct(part: number, whole: number): number {
 .part-fresh { background: var(--usage-fresh); }
 .part-cached, .usg-metric[data-metric='cached'] dt::before { background: var(--usage-cached); background-image: repeating-linear-gradient(135deg, transparent 0 3px, #ffffff40 3px 4px); } /* taste-skill-ignore: 缓存数据纹理，与图例保持一致 */
 .part-output { background: var(--usage-output); }
-.usg-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding-top: 10px; border-top: 1px solid var(--border); font-size: var(--text-xs); color: var(--text-muted); }
+.usg-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding-top: 8px; border-top: 1px solid var(--border); font-size: var(--text-xs); color: var(--text-muted); }
 .usg-facts b { font-weight: 500; color: var(--text-secondary); }
 .usg-updated { margin-left: auto; }
-.usg-daily, .usg-models { padding: 14px 18px 8px; }
+/* 浮片吃掉了下沿 10px 的窗框：用量页把三段内距各收一点，
+   670px 窗口下「按模型」首行仍然完整落在首屏。 */
+.usg-daily, .usg-models { padding: 10px 18px 8px; }
 .usg-table-scroll { overflow: auto; max-height: 236px; margin-top: 10px; scrollbar-gutter: stable; }
 .usg-table-scroll table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); white-space: nowrap; }
 .usg-table-scroll th, .usg-table-scroll td { padding: 9px 8px; text-align: right; border-top: 1px solid var(--border); }

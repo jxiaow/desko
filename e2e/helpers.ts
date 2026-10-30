@@ -71,6 +71,11 @@ export function tipButton(scope: Page | Locator, text: string): Locator {
   return scope.locator(`button[title="${text}"], button[data-tip="${text}"]`)
 }
 
+/** 卡片即摘要：点正文/Enter 进阅读层，眼睛钮已退役（docs/design/notes/09-slip-stream.md） */
+export async function openNoteRead(card: Locator): Promise<void> {
+  await card.press('Enter')
+}
+
 /** 卡片动作收进 ⋯ 菜单：先悬停露出入口，再按菜单项文字点 */
 export async function openCardMenu(page: Page, name: string): Promise<Locator> {
   const card = page.locator(cardByName(name))

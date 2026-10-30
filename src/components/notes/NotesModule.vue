@@ -14,6 +14,7 @@ import NoteLockDialog from './NoteLockDialog.vue'
 import NoteExportController from './NoteExportController.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
+import CreateAction from '../shared/CreateAction.vue'
 import { htmlToLinkText, htmlToText } from '../../utils/format'
 import { isPageShortcutBlocked } from '../../utils/pageShortcuts'
 import { attachmentSrc, collectAttachmentNames, type SaveImage } from '../../services/attachmentSrc'
@@ -45,7 +46,7 @@ const {
   notes, notesLoading, notesLoadError, noteSearchKeyword, noteView, activeTags, hasActiveFilters,
   noteRailCollapsed, noteRailPinned, noteDraftHtml: draftHtml,
   isBatchMode, hasNoteSelection, selectedNoteIds, hiddenSelectedNotes, isMergingNotes, noteAttachments, noteSaveState, notePlains, noteKey,
-  tagCounts, viewCounts, filteredNotes, groupedNotes, archivedNotes, archiveSummary,
+  tagCounts, viewCounts, filteredNotes, archivedNotes, archiveSummary,
 } = storeToRefs(notesStore)
 const {
   fetchNotes, findNote, publishNote, saveNoteContent, flushNoteSave, clearFilters, toggleTagFilter,
@@ -87,6 +88,10 @@ const exportNotes = (ids: string[], scopeLabel: string, format?: NoteExportForma
   if (!exportRequest.value && ids.length) exportRequest.value = { ids, scopeLabel, format, hidden }
 }
 const exportAll = () => exportNotes(notes.value.filter(note => note.archived === (noteView.value === 'archived')).map(note => note.id), noteView.value === 'archived' ? '全部归档小记' : '全部未归档小记')
+
+/** 便签流：置顶只换一条 18px 小标，不再按日期切章；置顶条仍按时间排在最前 */
+const pinnedNotes = computed(() => filteredNotes.value.filter(note => note.pinned))
+const streamNotes = computed(() => pinnedNotes.value.concat(filteredNotes.value.filter(note => !note.pinned)))
 
 const requestRemoveLock = async (id: string) => {
   const err = await removeNoteLock(id)
@@ -216,6 +221,9 @@ const afterPublish = async () => {
   await nextTick()
   composerRef.value?.focus()
 }
+
+/** 页头主钮：长列表滚下去后一键回到书写面（聚焦本身会把它带回视口） */
+const startWriting = () => composerRef.value?.focus()
 
 const publishDraft = async () => {
   const note = await publishNote(draftHtml.value)
@@ -521,6 +529,7 @@ watchEffect(() => {
               <AppIcon name="panel" :size="16" />
             </button>
             <WorkspaceDirectoryToggle v-if="isWebRuntime() && showFilters" />
+            <CreateAction v-if="showFilters" class="notes-create" label="写小记" @click="startWriting" />
           </div>
         </div>
         </Teleport>
@@ -612,7 +621,7 @@ watchEffect(() => {
           @fullscreen="openFullscreen('new')"
         />
 
-        <div v-if="notesLoading && !notes.length" class="day-list">
+        <div v-if="notesLoading && !notes.length" class="slip-stream">
           <div v-for="n in 3" :key="n" class="memo-skeleton">
             <span class="sl sl-1"></span>
             <span class="sl sl-2"></span>
@@ -621,49 +630,47 @@ watchEffect(() => {
         </div>
 
         <template v-else>
-          <div v-for="group in groupedNotes" :key="group.label" class="day">
-            <div class="day-head" :class="{ pinned: group.pinned }">
-              <span>{{ group.label }}</span>
-              <span class="day-separator" aria-hidden="true">·</span>
-              <span class="day-count">{{ group.notes.length }}</span>
+          <div class="slip-stream">
+            <div v-if="pinnedNotes.length" class="slip-label">
+              <AppIcon name="pin" :size="12" />
+              <span>置顶</span>
+              <span class="slip-label-count">{{ pinnedNotes.length }}</span>
             </div>
-            <div class="day-list">
-              <NoteCard
-                v-for="note in group.notes"
-                :key="note.id"
-                ref="cardRefs"
-                :note="note"
-                :editing="editingId === note.id"
-                :save-image="saveImage"
-                :is-batch-mode="isBatchMode"
-                :is-selected="selectedNoteIds.has(note.id)"
-                :attachments="noteAttachments[note.id] ?? []"
-                :save-state="editingId === note.id ? noteSaveState : ''"
-                :unlocked="notePlains[note.id] != null"
-                :active-tags="activeTags"
-                :archived-view="isArchivedView"
-                :export-disabled="!!exportRequest"
-                @open="openCard(note)"
-                @update="saveNoteContent(note.id, $event)"
-                @close="closeCard"
-                @fullscreen="openFullscreen(note.id)"
-                @view="openFullscreen(note.id, 'view')"
-                @encrypt="requestEncrypt(note.id)"
-                @unlock="requestOpenNote(note.id)"
-                @relock="relockNote(note.id)"
-                @remove-lock="requestRemoveLock(note.id)"
-                @add-image="addImageToNote(note.id)"
-                @toggle-pin="togglePin(note)"
-                @toggle-star="toggleStar(note)"
-                @toggle-archive="setArchived(note, !note.archived)"
-                @export="exportNotes([note.id], '单条小记', $event)"
-                @copy="copyNote(note)"
-                @delete="doDeleteNote(note)"
-                @select="selectNote(note.id)"
-                @tag-click="toggleTagFilter($event)"
-                @remove-attachment="deleteAttachment(note.id, $event)"
-              />
-            </div>
+            <NoteCard
+              v-for="note in streamNotes"
+              :key="note.id"
+              ref="cardRefs"
+              :note="note"
+              :editing="editingId === note.id"
+              :save-image="saveImage"
+              :is-batch-mode="isBatchMode"
+              :is-selected="selectedNoteIds.has(note.id)"
+              :attachments="noteAttachments[note.id] ?? []"
+              :save-state="editingId === note.id ? noteSaveState : ''"
+              :unlocked="notePlains[note.id] != null"
+              :active-tags="activeTags"
+              :archived-view="isArchivedView"
+              :export-disabled="!!exportRequest"
+              @open="openCard(note)"
+              @update="saveNoteContent(note.id, $event)"
+              @close="closeCard"
+              @fullscreen="openFullscreen(note.id)"
+              @view="openFullscreen(note.id, 'view')"
+              @encrypt="requestEncrypt(note.id)"
+              @unlock="requestOpenNote(note.id)"
+              @relock="relockNote(note.id)"
+              @remove-lock="requestRemoveLock(note.id)"
+              @add-image="addImageToNote(note.id)"
+              @toggle-pin="togglePin(note)"
+              @toggle-star="toggleStar(note)"
+              @toggle-archive="setArchived(note, !note.archived)"
+              @export="exportNotes([note.id], '单条小记', $event)"
+              @copy="copyNote(note)"
+              @delete="doDeleteNote(note)"
+              @select="selectNote(note.id)"
+              @tag-click="toggleTagFilter($event)"
+              @remove-attachment="deleteAttachment(note.id, $event)"
+            />
           </div>
           <div v-if="!filteredNotes.length && notesLoadError" class="error-state">
             <div class="empty-icon">
@@ -674,12 +681,16 @@ watchEffect(() => {
             <button class="btn-secondary retry-btn" @click="fetchNotes()">重试</button>
           </div>
 
-          <div v-else-if="!filteredNotes.length" class="empty-state">
+          <div v-else-if="!filteredNotes.length" class="empty-state" :class="{ 'is-filter': hasQueryFilter }">
             <div class="empty-icon">
               <AppIcon :name="emptyState.icon" :size="24" />
             </div>
             <div class="empty-title">{{ emptyState.title }}</div>
             <div class="empty-desc">{{ emptyState.desc }}</div>
+            <!-- 空态明说「试试清空筛选」，清空入口却只长在导轨里——导轨在工作台布局下
+                 是折起来的目录面板，用户得先去开一个面板才能执行一句话里提到的动作。
+                 把动作放到句子下面，说到哪按到哪。 -->
+            <button v-if="hasQueryFilter" class="btn-secondary empty-action" type="button" @click="clearFilters">清空筛选</button>
           </div>
         </template>
       </div>
@@ -831,6 +842,8 @@ watchEffect(() => {
   min-height: 0;
   overflow: hidden;
   position: relative;
+  /* 便签流：卡面只留三行给扫读，读全文去阅读层 */
+  --memo-max-h: 72px;
 }
 .rail-heading { display: flex; align-items: center; justify-content: space-between; }
 .rail-heading-actions { display: flex; align-items: center; gap: var(--space-1); }
@@ -857,6 +870,10 @@ watchEffect(() => {
 /* 书写框与吸顶栏拉开一档间距（列表页首行同款） */
 .stream-inner .composer { margin-top: var(--space-2); }
 .notes-workbar + .composer { margin-top: 0; }
+/* 最小桌面窗让位给搜索：书写面就在首屏，页头不必再放一颗「写小记」。 */
+@media (max-width: 899px) {
+  .notes-create { display: none; }
+}
 
 /* 「更多标签」面板：保持打开以支持连续多选，搜索与选中状态都在面板内完成。 */
 .tag-pop { width: 224px; display: flex; flex-direction: column; gap: var(--space-1); }
@@ -914,30 +931,36 @@ watchEffect(() => {
 .archive-bar .ab-btn:hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .archive-bar .ab-btn:disabled { color: var(--text-faint); }
 
-/* ---------- 日期分组 ---------- */
-.day { margin-bottom: var(--space-4); }
-.day-head {
-  position: sticky;
-  top: var(--stream-bar-h);
-  z-index: 10;
+/* ---------- 便签流：一列连续的纸片，没有日期章节 ---------- */
+.slip-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding-bottom: 8px;
+}
+/* 置顶只留一行小标，不吸顶：小记一天没几条，章节把流切得太碎。
+   图钉 + 文字 + 计数，字色和字号跟工作栏页签的计数同一档。 */
+.slip-label {
   display: flex;
   align-items: center;
   gap: 6px;
+  height: 18px;
+  margin-top: 8px;
+  padding-left: 2px;
   font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--text-canvas-meta);
+  color: var(--text-secondary);
   letter-spacing: 0.02em;
-  padding: var(--space-2) 0 var(--space-2) var(--space-1);
-  /* 与 .page-bar 同一条画布配方（materials.css --bg-app）：吸顶件若铺平色（原先 var(--bg)）
-     会把画布光晕压掉一档，静止时就显出一条亮带。fixed 附着让它取到身后那一小条视口切片 */
-  background: var(--bg-app);
-  background-attachment: fixed;
 }
-.day-separator, .day-count { font-weight: 400; color: var(--text-canvas-meta); }
-.day-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+.slip-label :deep(svg) { color: var(--text-muted); flex: 0 0 auto; }
+.slip-label-count { font-weight: 400; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-left: -2px; }
+/* 空态里的动作：比页头主钮小一档，和说明句同一条中轴，不抢「写小记」的位置 */
+.empty-action {
+  height: 30px;
+  margin-top: var(--space-4);
+  padding: 0 var(--space-4);
+  font-size: var(--text-sm);
 }
 
 .memo-skeleton {

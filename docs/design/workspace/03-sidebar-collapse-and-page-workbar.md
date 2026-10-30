@@ -2,9 +2,9 @@
 
 状态：待放行（v16 对拍收敛三处；v17 把极值配方换成固定上限，见 5.3；v18 补全站卡面内配方对账，见 6.1。本文只定方案与落点，未落 `src/`。另一批未提交的 density pass 改动已备份并复位出工作树，见 12.8）
 日期：2026-10-28
-范围：桌面工作区（纸 / 墨两套底色）；Web、Codex Web 不在此次范围
+范围：桌面工作区（纸 / 墨两套底色）；Web 不在此次范围
 基准：1040×670 默认窗真机页面（DPR 1.5），900 / 1440 宽窗探针；配色与字号均吃生产令牌
-关系：延续 [01-desktop-layout.md](./01-desktop-layout.md)；本文的侧栏与收藏/小记目录条款在放行后覆盖 01 对应段落；[08-two-pane-surface.md](../notes/08-two-pane-surface.md) 的作废结论不变；02 的目录垂直锚定仅对 Codex 保留
+关系：延续 [01-desktop-layout.md](./01-desktop-layout.md)；本文的侧栏与收藏/小记目录条款在放行后覆盖 01 对应段落；[08-two-pane-surface.md](../notes/08-two-pane-surface.md) 的作废结论不变；02 的目录垂直锚定随 Codex 对话移除失效
 
 > 方案已在注入式真机原型上拍过两态帧，原型与截图在 `.tmp/visual-additive-20261028/`（当前基准 v16），不入库。本文是落码依据，不代表已经实施。
 
@@ -13,14 +13,14 @@
 - 侧栏只有 56px 图标轨，模块名与分组都不可见，八个模块靠记住图标；宽窗下左缘仍是一条窄轨道加整片空白。信息架构读不出来，是「太素」的第一来源。
 - 收藏分类、小记视图与标签住在右侧 200–248px 的辅助目录里。它们本质是页面级导航，却为一个短列表常年让出一整列，还多出一颗只在筛选页出现的目录钮和一条 Ctrl+B。
 - 默认 1040 窗同时存在 48px 顶栏、64px 页栏和右侧目录三层壳，正文被夹在中间；目录收起时右缘又空一片，密度两头都不讨好。
-- 目录与小记/收藏深度耦合：承载位、展开/固定偏好、外部点击、Escape、窄窗自动收起和大量 E2E 都围着一个低频面板转。Codex 对话被 `CODEX_DIALOG_ENABLED = false` 屏蔽后，桌面目录已经没有实际消费者。
+- 目录与小记/收藏深度耦合：承载位、展开/固定偏好、外部点击、Escape、窄窗自动收起和大量 E2E 都围着一个低频面板转，为它常年让出一整列的成本与使用频率不匹配。
 
 ## 2. 结论
 
 两个动作，同一轮落地：
 
 1. **侧栏 148 ⇄ 56 两态**：展开态直接显示模块名和两个分组，收起态回到现有 56px 图标轨；开关常驻页头，状态按档案持久化，首帧前生效。
-2. **页级工作栏 42px**：收藏分类、小记视图与标签从右侧目录回到页面内容列顶端；右侧目录层只留给 Codex，当前休眠。
+2. **页级工作栏 42px**：收藏分类、小记视图与标签从右侧目录回到页面内容列顶端；右侧目录层随之退役。
 
 另带一档卡面/纸面密度修正：卡片 80px、档面 26px，小记纸面 12/16/12/20、正文 22px 行高，全部去常态阴影。视觉身份仍是纸画布 + 浮岛卡 + 单列小记流，不引入表格、双栏索引、衬线或入场动画。
 
@@ -105,7 +105,7 @@
 - 28×28、圆角 7、`panel` 16px 图标、`--text-muted`；hover 吃 `--hover-chrome`，文字转 `--text`；焦点 2px `--accent` 外环。
 - 位置：`.titlebar-page` 内、`.titlebar-left` 之前，`position: absolute; left: -32px; top: 50%; translateY(-50%)`。它是页头控件，不占品牌格、不占 36px 模块格，也不会被 `.titlebar-left` 的 `overflow: hidden` 裁掉。
 - 语义：`aria-expanded` 跟随状态，`aria-controls` 指向侧栏根节点；`aria-label` / 提示在「收起侧栏」「展开侧栏」之间切换。
-- 锁定态随顶栏一起隐藏，折叠状态保留；Web 与 Codex Web 不渲染。不新增键盘快捷键。
+- 锁定态随顶栏一起隐藏，折叠状态保留；Web 不渲染。不新增键盘快捷键。
 
 不放在侧栏内部：56px 时会和 Logo 抢同一格；展开时又会挤在模块列表顶上。不放在品牌格右侧：56px 下没有第二格，展开下会把品牌 lockup 推离左侧轴。
 
@@ -240,11 +240,10 @@
 
 ## 7. 目录退役
 
-- `hasWorkspaceDirectory` 收窄为 `['codex']`；小记与收藏不再 Teleport 到目录，也不再渲染 `WorkspaceDirectoryToggle`。
-- 目录组件、偏好键、外部点击 / Escape / 固定、Codex 的「改动」入口全部保留；Codex 对话标志关闭期间这一层只是休眠，不删实现。Ctrl+B 随之只在有目录的模块生效（当前即无操作）。
-- `WorkspaceDirectoryToggle.vue` 失去最后一个消费者，删除；Codex 的目录由「改动文件」动作自行打开。
-- 偏好读取会按新名单丢弃 `notes` / `entries` 键且不回写；下一次 Codex 保存时自然收窄。旧 JSON 留在盘上不碍事。
-- Codex 目录相关 E2E 继续按 `CODEX_DIALOG_ENABLED` 跳过，不因这次改动新增跳过。
+- 2026-10-30 注：Codex 对话已移除，成稿时预留的 Codex 目录消费者不存在了；当前代码 `hasWorkspaceDirectory` 为 `['notes','entries']`。本节其余条款按「工作栏落地后目录层整体退役」执行。
+- 小记与收藏不再 Teleport 到目录，也不再渲染 `WorkspaceDirectoryToggle`。
+- 目录组件、偏好键、外部点击 / Escape / 固定处理和 Ctrl+B 随最后一个消费者一并删除，不留休眠实现。
+- 偏好 JSON 中的旧键留在盘上不碍事。
 - 放行后同步修订 01：图标轨 56 段、目录承载模块、`workspace_directory_open` 段落与 Ctrl+B 描述。
 
 ## 8. 落点
@@ -260,8 +259,8 @@
 | `src/components/layout/TitleBar.vue` | 桌面字标；28×28 折叠开关；品牌格 148 轴与收起态；接缝；页名 18px / 行高 26（≤900 回 16px） |
 | `src/styles/global.css` | `.page-bar .btn-primary` 淡染方言改墨底实心（`:2317`），同步改 `:2315` 那条注释；`:disabled` 仍走文件末尾统一块；新增 6.1 的四档卡内距变量，`.rcard-row`（`:2491`）等公共档改引变量 |
 | `src/modules/state.ts` | `webModuleGroups` 更名 `moduleGroups`，过滤空分组，桌面与 Web 共用 |
-| `src/components/layout/workspaceLayout.ts` | `hasWorkspaceDirectory` 收窄为 Codex |
-| `src/composables/useWorkspaceDirectory.ts` | 关闭目录后的焦点回位改指向 Codex 的 `[data-workspace-directory-trigger]`，不再指向已删除的开关 |
+| `src/components/layout/workspaceLayout.ts` | `hasWorkspaceDirectory` 随目录层退役删除（见 §7） |
+| `src/composables/useWorkspaceDirectory.ts` | 随目录组件删除 |
 | `src/components/entries/EntriesModule.vue` | 目录 Teleport 换工作栏；文字页签分档固定上限 + 更多（选中项顶替末位、触发器不改名）；计数 muted |
 | `src/components/notes/NotesModule.vue` | 目录 Teleport 换工作栏；视图 + 标签分档固定上限（已选优先占位）+ 更多；归档隐藏标签并清空；计数 muted；不再需要横滚容器与 sticky 触发器（5.3 已作废） |
 | `src/components/layout/WorkspaceDirectoryToggle.vue` | 删除（无消费者） |
@@ -282,7 +281,7 @@
 
 | 文件 | 现状 | 处理 |
 | --- | --- | --- |
-| `e2e/specs/workspace-layout.spec.ts` | 目录可用性表、开关位置、两页目录交互、36px 导航、无折叠钮 | 表按新名单改写：两页恒为 false，Codex 仍随目录数据决定（标志关闭时也为 false）；开关/目录断言换折叠与工作栏；导航宽度按两态断言 |
+| `e2e/specs/workspace-layout.spec.ts` | 目录可用性表、开关位置、两页目录交互、36px 导航、无折叠钮 | 目录用例随目录层退役删除；开关/目录断言换折叠与工作栏；导航宽度按两态断言 |
 | `e2e/specs/workspace-layout-regressions.spec.ts` | 目录开关不漂移、目录几何、选中色 | 换折叠开关不漂移、两态几何、工作栏选中色 |
 | `e2e/specs/workspace-refinements.spec.ts` | 小记目录固定 / 外部点击 / Escape | 删除目录用例，补折叠持久化、首帧、焦点与锁定态 |
 | `e2e/specs/notes-rail.spec.ts` | 小记目录默认态与固定 | 全量改写为工作栏视图/标签/更多/归档 |
@@ -295,7 +294,7 @@
 | `e2e/specs/ui-audit-fixes.spec.ts` | 目录开关几何 | 改折叠开关几何 |
 | `e2e/specs/empty-content.spec.ts` | 空库时目录显隐 | 改工作栏仍可见、目录不出现 |
 | `e2e/specs/files.spec.ts` | 非目录页无开关 | 保留为 0 断言 |
-| `src/components/layout/useWorkspaceDirectoryPreferences.test.ts` | 恢复 notes / entries | 名单收窄为 Codex；其余串行保存语义保留 |
+| `src/components/layout/useWorkspaceDirectoryPreferences.test.ts` | 恢复 notes / entries | 随目录层退役删除 |
 
 新增单测：`sidebar` 服务的缺省 / 非法值 / 保存失败 / Web 不读写；`moduleGroups` 空分组过滤；工作栏取 N 的纯函数（若抽成可测函数）。
 
@@ -336,7 +335,7 @@
 ## 12. 放行清单
 
 1. 默认展开 148，存量档案也按展开处理；新增 `sidebar_collapsed`，不做自动折叠。
-2. 小记 / 收藏退役右侧目录；目录层与偏好留给 Codex，标志关闭期间休眠，Ctrl+B 暂为无操作。
+2. 小记 / 收藏退役右侧目录；目录层与偏好一并删除，Ctrl+B 移除。
 3. 工作栏取「分类分档固定上限 + 更多」「标签同档上限（已选优先占位）+ 更多」「归档隐藏标签并清空标签筛选」。v17 已把 v16 的「按宽取 N + 标签区横滚 + sticky 触发器」换成这一套，四配方对拍与四档宽度实测见 5.3。
 4. 收藏 256 / 80 / 26 与小记 12/16/12/20、22 行高的密度配方随同一轮落地，不拆成后续波次。
 5. 页名 16 → 18px / 行高 26（≤900 回 16），顶栏只留这一处强层级。

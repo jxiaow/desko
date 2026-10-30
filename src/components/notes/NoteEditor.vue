@@ -11,7 +11,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Extension, mergeAttributes, Node } from '@tiptap/core'
-import { Plugin, TextSelection } from '@tiptap/pm/state'
+import { Plugin, TextSelection, type EditorState } from '@tiptap/pm/state'
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { createLowlight } from 'lowlight'
@@ -119,6 +119,26 @@ const slashCommands: SlashCmd[] = [
   { label: '分割线', icon: 'divider', hint: '---', keys: 'hr divider line fengexian', action: (e: any) => e.chain().focus().setHorizontalRule().run() },
 ]
 
+/** 全屏书写面的缩进单位：两个全角空格正好是中文首行缩进的两格 */
+const INDENT = '　　'
+
+/** 选区覆盖的每个文字块的首尾位置；折叠选区就是光标所在那一块 */
+function selectionTextblocks(state: EditorState): { from: number; to: number }[] {
+  if (state.selection.empty) {
+    const $from = state.selection.$from
+    // 光标落在图片这类原子节点上时没有可缩进的文字块
+    if (!$from.parent.isTextblock) return []
+    return [{ from: $from.start(), to: $from.end() }]
+  }
+  const blocks: { from: number; to: number }[] = []
+  state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
+    if (!node.isTextblock) return true
+    blocks.push({ from: pos + 1, to: pos + 1 + node.content.size })
+    return false
+  })
+  return blocks
+}
+
 const slashQuery = ref('')
 const filteredCommands = computed(() => {
   const query = slashQuery.value.trim().toLowerCase()
@@ -172,6 +192,35 @@ const SlashCommandExtension = Extension.create({
       'Mod-Enter': () => {
         if (showSlashMenu.value) return false
         emit('submit')
+        return true
+      },
+      // 全屏面有自己的焦点陷阱，Tab 不接管就只会把光标甩到工具栏上。
+      // 列表里是嵌套层级，正文里是行首两格；卡片与胶囊没有陷阱，Tab 仍用来出门。
+      Tab: ({ editor }) => {
+        if (props.variant !== 'full') return false
+        if (editor.isActive('taskItem')) { editor.commands.sinkListItem('taskItem'); return true }
+        if (editor.isActive('listItem')) { editor.commands.sinkListItem('listItem'); return true }
+        if (editor.isActive('codeBlock')) {
+          const { to } = editor.state.selection
+          editor.view.dispatch(editor.state.tr.insertText('  ', to, to))
+          return true
+        }
+        let tr = editor.state.tr
+        for (const block of selectionTextblocks(editor.state).reverse()) tr = tr.insertText(INDENT, block.from)
+        editor.view.dispatch(tr.scrollIntoView())
+        return true
+      },
+      'Shift-Tab': ({ editor }) => {
+        if (props.variant !== 'full') return false
+        if (editor.isActive('taskItem')) { editor.commands.liftListItem('taskItem'); return true }
+        if (editor.isActive('listItem')) { editor.commands.liftListItem('listItem'); return true }
+        let tr = editor.state.tr
+        for (const block of selectionTextblocks(editor.state).reverse()) {
+          const head = tr.doc.textBetween(block.from, Math.min(block.to, block.from + 2))
+          const unit = head.match(/^(　　|\t| {2})/)
+          if (unit) tr = tr.delete(block.from, block.from + unit[0].length)
+        }
+        if (tr.docChanged) editor.view.dispatch(tr.scrollIntoView())
         return true
       },
     }
@@ -291,6 +340,8 @@ const editor = useEditor({
   // 卡片就地编辑和全屏面是用户主动进入的书写面，才需要落点即写。
   autofocus: false,
   editorProps: {
+    // 全屏面与阅读面共用一份正文排版（global.css 的 .note-doc），预览和编辑不再各排一套
+    attributes: props.variant === 'full' ? { class: 'note-doc' } : {},
     handlePaste: (view, event) => notesStore.notePasteCleanup ? pasteLinkAsUrl(view, event) : false,
     transformPasted: (slice, view) => notesStore.notePasteCleanup
       ? normalizeNotePaste(slice, !!view.state.selection.$from.parent.type.spec.code)
@@ -963,7 +1014,9 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 }
 
 /* 草稿输入：默认三行，内容自然撑高，46vh 是滚动上限。
-   min-height 不加过渡——伸缩要的是跟手，缓动会让高度慢半拍 */
+   min-height 不加过渡——伸缩要的是跟手，缓动会让高度慢半拍。
+   三行是有意的：一行段距 8px，两行只够写一句半，第三条一落笔就撑高，
+   「默认高度」反而成了逐键跳动的起点。 */
 .note-editor.v-composer :deep(.ProseMirror) {
   padding: var(--space-3) var(--space-4) var(--space-2);
   font-size: var(--text-base);
@@ -973,9 +1026,9 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   scrollbar-gutter: stable;
   overflow-y: auto;
 }
-/* 竖长图只封顶宽会撑出半屏高；书写面里按视口高度收着放，全屏给更大的额度 */
+/* 竖长图只封顶宽会撑出半屏高；书写面里按视口高度收着放，全屏与阅读面同一上限 */
 .note-editor :deep(.img-node img) { max-height: 34vh; object-fit: contain; }
-.note-editor.v-full :deep(.img-node img) { max-height: 60vh; }
+.note-editor.v-full :deep(.img-node img) { max-height: 56vh; }
 
 /* 就地书写沿用只读字号，切换编辑时保持文字层级。 */
 .note-editor.v-card :deep(.ProseMirror) {
@@ -988,23 +1041,14 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   overflow-y: auto;
 }
 
-/* 全屏书写：一张纸的排版尺度（密一档，一屏多放几行） */
+/* 全屏书写只定纸面盒子：字号行距、段距、列表、代码块全交给 .note-doc，
+   与阅读面同一份配方，点「编辑」时正文不跳行、不换行距 */
 .note-editor.v-full :deep(.ProseMirror) {
   padding: 0;
-  font-size: var(--text-base);
-  line-height: 1.6;
   letter-spacing: normal;
   min-height: 40vh;
   caret-color: var(--accent);
 }
-
-.note-editor.v-full :deep(.ProseMirror > * + *) { margin-top: 8px; }
-.note-editor.v-full :deep(h1) { font-size: var(--text-xl); font-weight: 600; line-height: 1.32; letter-spacing: normal; margin-top: var(--space-4); }
-.note-editor.v-full :deep(h2) { font-size: var(--text-lg); font-weight: 600; line-height: 1.42; letter-spacing: normal; margin-top: 12px; }
-.note-editor.v-full :deep(h3) { font-size: var(--text-base); font-weight: 600; }
-.note-editor.v-full :deep(blockquote) { border-left-width: 3px; padding-left: var(--space-4); }
-.note-editor.v-full :deep(pre) { font-size: var(--text-base); line-height: 1.75; padding: var(--space-4); background: var(--bg-surface); border: none; box-shadow: var(--shadow-xs); }
-.note-editor.v-full :deep(hr) { border: none; height: 1px; background: linear-gradient(90deg, transparent, var(--border-strong), transparent); margin: var(--space-6) 0; }
 
 .note-editor :deep(.ProseMirror p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder);
@@ -1014,28 +1058,29 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   height: 0;
 }
 
-/* 只给文档顶层块加间距：写成 * + * 会连任务项里 label 后面的正文 div 一起压下去 8px */
-.note-editor :deep(.ProseMirror > * + *) { margin-top: var(--space-2); }
-.note-editor :deep(* + h1), .note-editor :deep(* + h2), .note-editor :deep(* + h3) { margin-top: var(--space-4); }
-.note-editor :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
-.note-editor :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: normal; line-height: 1.5; }
-.note-editor :deep(h3) { font-size: var(--text-base); font-weight: 600; line-height: 1.5; }
-.note-editor :deep(p) { margin: 0; }
-.note-editor :deep(ul), .note-editor :deep(ol) { padding-left: var(--space-5); margin: 0; }
-.note-editor :deep(li) { margin: 2px 0; }
-.note-editor :deep(li::marker) { color: var(--text-faint); }
-.note-editor :deep(strong) { font-weight: 600; color: var(--text); }
-.note-editor :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
-.note-editor :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
-.note-editor :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
-.note-editor :deep(pre code) { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
-.note-editor :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-3) 0; }
-.note-editor :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.note-editor :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
+/* 卡片与胶囊的紧凑排版；全屏面走 .note-doc，和阅读面用同一套尺度。
+   只给文档顶层块加间距：写成 * + * 会连任务项里 label 后面的正文 div 一起压下去 8px */
+.note-editor:not(.v-full) :deep(.ProseMirror > * + *) { margin-top: var(--space-2); }
+.note-editor:not(.v-full) :deep(* + h1), .note-editor:not(.v-full) :deep(* + h2), .note-editor:not(.v-full) :deep(* + h3) { margin-top: var(--space-4); }
+.note-editor:not(.v-full) :deep(h1) { font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.015em; line-height: 1.45; }
+.note-editor:not(.v-full) :deep(h2) { font-size: var(--text-lg); font-weight: 600; letter-spacing: normal; line-height: 1.5; }
+.note-editor:not(.v-full) :deep(h3) { font-size: var(--text-base); font-weight: 600; line-height: 1.5; }
+.note-editor:not(.v-full) :deep(p) { margin: 0; }
+.note-editor:not(.v-full) :deep(ul), .note-editor:not(.v-full) :deep(ol) { padding-left: var(--space-5); margin: 0; }
+.note-editor:not(.v-full) :deep(li) { margin: 2px 0; }
+.note-editor:not(.v-full) :deep(li::marker) { color: var(--text-faint); }
+.note-editor:not(.v-full) :deep(strong) { font-weight: 600; color: var(--text); }
+.note-editor:not(.v-full) :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
+.note-editor:not(.v-full) :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
+.note-editor:not(.v-full) :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.note-editor:not(.v-full) :deep(pre code) { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+.note-editor:not(.v-full) :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-3) 0; }
+.note-editor:not(.v-full) :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.note-editor:not(.v-full) :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
 /* 正文必须撑满剩余宽度：弹性项默认按内容收缩，空条目会缩成 0 宽，光标没有行盒可落 = 看不见光标 */
-.note-editor :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
+.note-editor:not(.v-full) :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
 /* 勾选框的自绘配方在 global.css，这里只按本层行高把它挪到第一行居中 */
-.note-editor :deep(ul[data-type='taskList'] input) { margin-top: 4px; }
+.note-editor:not(.v-full) :deep(ul[data-type='taskList'] input) { margin-top: 4px; }
 
 /* 语法高亮的配色规则在 global.css：那里写一次，编辑器与只读渲染共用 */
 

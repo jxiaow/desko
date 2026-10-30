@@ -171,5 +171,5 @@ test('验证码常驻复制图标、删除动作标签和侧栏折叠入口可�
   await expect(toggle).toHaveAttribute('aria-expanded', 'true')
   await toggle.click()
   await expect(page.getByRole('button', { name: '展开侧栏', exact: true })).toBeVisible()
-  await expect(page.locator('.sidebar')).toHaveCSS('width', '56px')
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '60px')
 })

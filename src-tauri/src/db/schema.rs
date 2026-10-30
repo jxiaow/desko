@@ -3,6 +3,8 @@ use crate::error::AppError;
 
 pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
     conn.execute_batch("
+        -- 对话界面已移除，codex_bridge 仍保留：每次打开库先清空旧对话数据，再补回空表
+        DROP TABLE IF EXISTS codex_dialog_threads;
         CREATE TABLE IF NOT EXISTS codex_dialog_threads (
             environment TEXT NOT NULL DEFAULT 'native',
             id TEXT NOT NULL,
@@ -111,25 +113,6 @@ pub fn run_schema(conn: &Connection) -> Result<(), AppError> {
             updated_at INTEGER NOT NULL
         );
     ")?;
-
-    // A copied CLI thread can exist in multiple execution environments.
-    let has_dialog_environment: bool = conn.query_row(
-        "SELECT COUNT(*) FROM pragma_table_info('codex_dialog_threads') WHERE name='environment'",
-        [], |r| r.get::<_, i64>(0),
-    )? > 0;
-    if !has_dialog_environment {
-        conn.execute_batch("SAVEPOINT codex_dialog_environment;
-            ALTER TABLE codex_dialog_threads RENAME TO codex_dialog_threads_legacy;
-            CREATE TABLE codex_dialog_threads (
-                environment TEXT NOT NULL DEFAULT 'native', id TEXT NOT NULL,
-                metadata TEXT NOT NULL, updated_at INTEGER NOT NULL,
-                PRIMARY KEY (environment, id)
-            );
-            INSERT INTO codex_dialog_threads (id, metadata, updated_at)
-                SELECT id, metadata, updated_at FROM codex_dialog_threads_legacy;
-            DROP TABLE codex_dialog_threads_legacy;
-            RELEASE codex_dialog_environment;")?;
-    }
 
     // 迁移：为 notes 表添加 pinned 和 starred 字段（如果不存在）
     let has_pinned: bool = conn.query_row(

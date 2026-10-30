@@ -135,7 +135,7 @@ test.describe('统一外观状态', () => {
   test('未选中的主题预览直接跟随 CSS 色值，且不影响当前主题', async ({ page }) => {
     await bootUnlocked(page, { settings: { theme: 'paper', accent: 'rose' } })
     const dialog = await openSettings(page)
-    await page.addStyleTag({ content: '.workspace-theme-prev[data-theme="ink"] { --panel-bg: rgb(13, 29, 47); } .workspace-theme-prev[data-base="dark"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="rose"] { --workspace-accent-source: rgb(121, 61, 97); }' })
+    await page.addStyleTag({ content: '.workspace-theme-prev[data-theme="ink"] { --bg-card: rgb(13, 29, 47); } .workspace-theme-prev[data-base="dark"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="rose"] { --workspace-accent-source: rgb(121, 61, 97); }' })
 
     const preview = dialog.locator('.theme-prev[data-theme="ink"]')
     await expect(preview.locator('.tp-row').first()).toHaveCSS('background-color', 'rgb(13, 29, 47)')

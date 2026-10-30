@@ -1815,17 +1815,19 @@ button, input, select, textarea {
   height: 100%;
 }
 .search-box input::placeholder { color: var(--text-muted); }
-/* 搜索框右侧快捷键角标：收藏/文件两页共用，无输入时显示 */
+/* 搜索框右侧快捷键角标：收藏/文件两页共用，无输入时显示。
+   只留字不着底：搜索框本身已经是一个盒子，里面再套一个键帽就是盒中盒。 */
 .search-kbd {
   flex-shrink: 0;
   margin-right: 2px;
-  padding: 1px 6px;
+  padding: 1px 4px;
   font-family: var(--font-ui);
   font-size: var(--text-xs);
   color: var(--text-muted);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--sunken);
+  background: none;
+  opacity: .85;
 }
 .search-icon {
   color: var(--text-muted);
@@ -2041,6 +2043,18 @@ button, input, select, textarea {
 .action-btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-on); }
 .action-btn.primary:active:not(:disabled) { background: var(--accent-active); }
 
+/* 行内主操作降为淡染：账号列、配置档列里每行都有一颗"切换"，铺实底 accent 就成了
+   一排蓝块，把"当前""PRO""状态点"全压下去。实底只留给页面/对话框里那颗唯一的主操作。 */
+.rcard-row .action-btn.primary,
+.acc-acts .action-btn.primary,
+.pacts .action-btn.primary { background: var(--accent-soft); border-color: var(--accent-light); color: var(--text-brand); }
+.rcard-row .action-btn.primary:hover:not(:disabled),
+.acc-acts .action-btn.primary:hover:not(:disabled),
+.pacts .action-btn.primary:hover:not(:disabled) { background: var(--accent-light); border-color: var(--accent); color: var(--text-brand); }
+.rcard-row .action-btn.primary:active:not(:disabled),
+.acc-acts .action-btn.primary:active:not(:disabled),
+.pacts .action-btn.primary:active:not(:disabled) { background: var(--accent-light); }
+
 /* 危险操作：平时只是红字（无底无框，不给它实底的重量），悬停才透出红底 */
 .action-btn.danger { color: var(--danger); background: transparent; border-color: transparent; }
 .action-btn.danger:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); border-color: var(--danger); }
@@ -2132,7 +2146,9 @@ button, input, select, textarea {
 .empty-title { font-size: var(--text-base); font-weight: 600; color: var(--text); margin-bottom: var(--space-1); }
 .empty-desc { font-size: var(--text-sm); color: var(--text-muted); }
 .empty-motto { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 22px; }
-.empty-motto .w { font-size: var(--text-2xs); color: var(--text-faint); letter-spacing: 0.14em; }
+/* 标语是装饰，不是说明：字距放到 .14em 又用 faint 色，在亮柔光底上会散成一条灰雾。
+   收到 .06em、色提一档到 muted，读得出「这是一句话」但仍退在正文之后。 */
+.empty-motto .w { font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: 0.06em; }
 
 /* 滚动条：轨道透明，thumb 是浮在 9px 槽中的一根 3px 细胶囊（3px 透明内衬 + padding-box 裁切），
    hover 只变亮不变粗。贴边的方条和浮岛卡+发丝描边不是同一只手 */
@@ -2539,20 +2555,24 @@ button, input, select, textarea {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
+  /* 外间距对齐卡内左右内距（14）：网格间隙比卡片自己的边距还窄时，
+     一排卡会读成"贴在一起、但每张里面很空"。 */
+  gap: 14px;
   margin-top: var(--space-3);
   /* 顶部留 2px：hover 抬影的 -1px 与 3px 焦点环不被内容区上缘裁掉 */
   padding-top: 2px;
 }
-/* 78px 双行浮岛卡（Things 参照）：一行身份、一行等宽副址，
-   动作收进右下角 hover 才显形的浮岛（与右下对勾同轴）。 */
+/* 72px 双行浮岛卡（Things 参照）：一行身份、一行等宽副址，
+   动作收进右下角 hover 才显形的浮岛（与右下对勾同轴）。
+   两行必须垂直居中而不是 space-between：多余高度若全塞进两行之间，
+   名称与副址会被撑到 28px 开外，读不成一个整体，卡片也跟着显空。 */
 .grid-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 78px;
+  justify-content: center;
+  gap: 4px;
+  min-height: 72px;
   padding: 12px 14px;
   cursor: pointer;
   background: var(--bg-surface);
@@ -2582,9 +2602,9 @@ button, input, select, textarea {
   .grid-card:hover, .grid-card:focus-visible { transform: none; } }
 
 /* 通用双行壳：身份行（档面 + 名称 + 右对齐类型/分类），副址行缩进到名称起笔
-   （24 档面 + 9 间距 = 33）。收藏 / 文件两页共用，skeleton 也走同一对行。 */
+   （22 档面 + 9 间距 = 31）。收藏 / 文件两页共用，skeleton 也走同一对行。 */
 .row1 { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.row2 { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: 33px; }
+.row2 { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: 31px; }
 
 /* 图标槽：字母块只吃字色淡染（色彩留给 favicon / 扩展名色底） */
 .grid-slot {
@@ -2621,8 +2641,9 @@ button, input, select, textarea {
   color: color-mix(in srgb, var(--warning) 65%, var(--text));
 }
 
-/* 卡内档面收进 24px（浮岛双行的身份块比行/弹窗的 34px 矮一档），img 跟着缩 */
-.grid-card .grid-slot { width: 24px; height: 24px; border-radius: 7px; font-size: var(--text-2xs) }
+/* 卡内档面收进 22px（浮岛双行的身份块比行/弹窗的 34px 矮一档），img 跟着缩。
+   档面每大 1px，名称与副址的基线距离就被撑开 0.5px——22 是仍读得出 favicon 的下限。 */
+.grid-card .grid-slot { width: 22px; height: 22px; border-radius: 6px; font-size: var(--text-2xs) }
 .grid-card .grid-slot img { width: 16px; height: 16px }
 /* 分类淡染：favicon 到货前/抓不到时的字母兜底按分类 hue 上一点色（13% 底 + 色字），
    --gc-hue 由页面按分类哈希给（收藏页）；到货后走 .grid-slot--icon 的中性/亮底，未分类走基色档。
@@ -2690,8 +2711,8 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
 /* 勾选位：hover 时浮在 34px 槽的点心上，批量态让出左栏位（与一行卡同一套手势） */
 .grid-card .card-check {
   position: absolute;
-  left: 15px; /* padding 12 + 24/2 − 18/2：浮在 24px 档面的点心 */
-  top: 15px;
+  left: 14px; /* padding 12 + 22/2 − 18/2：浮在 22px 档面的点心 */
+  top: 16px;
   width: 18px;
   height: 18px;
   border: 1.5px solid var(--border-strong);
@@ -2714,7 +2735,7 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
 .grid-card .card-check:hover { border-color: var(--accent); }
 .grid-card .card-check.checked { background: var(--accent); border-color: var(--accent); }
 .grid-card.batching { padding-left: 43px; }
-.grid-card.batching .card-check { left: 15px; }
+.grid-card.batching .card-check { left: 14px; }
 .grid-card.batching .grid-acts { display: none; }
 
 /* 骨架卡：与真卡同皮同高（78 双行），加载完不跳版面；呼吸只走在容器上 */
@@ -2808,7 +2829,11 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
 .batch-dock {
   position: fixed;
   bottom: var(--space-5);
-  left: 50%;
+  /* 页内浮底条按「阅读列」居中，不是按视口。fixed + left:50% 量的是视口，
+     左侧站着 208 的侧栏，条子就整体偏左一格——1240 窗下偏了 98px，
+     和它正上方居中的卡片列对不上轴。补半个侧栏宽即回到列的轴线上；
+     侧栏折叠（60）或 web 运行时，这个令牌自己会跟着变，不用另写断点。 */
+  left: calc(50% + var(--sidebar-rail-w, 0px) / 2);
   transform: translateX(-50%);
   z-index: 120;
   display: flex;
@@ -2932,6 +2957,42 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
   text-decoration: line-through;
   color: var(--text-muted);
 }
+
+/* 小记正文排版：全屏书写面与只读阅读面共用这一份。
+   两边原先各写一套（行距 1.6 / 24、段距 8 / 10、空段 0 / 一行），预览一打开
+   排版就跟编辑时对不上；字号行距取阅读面的尺度，书写面照着它排，所见即所读。 */
+.note-doc {
+  font-size: var(--text-base);
+  line-height: 24px;
+  color: var(--text);
+  word-break: break-word;
+  /* 与 ProseMirror 的断行口径一致：行首空格、连续空格原样保留，缩进阅读时不塌 */
+  white-space: break-spaces;
+}
+.note-doc > * + * { margin-top: 8px; }
+/* 空段是一行留白：编辑时看得见，阅读面不能塌成 0 */
+.note-doc p:empty { min-height: 1lh; }
+.note-doc * + h1 { margin-top: 14px; }
+.note-doc * + h2 { margin-top: 12px; }
+.note-doc * + h3 { margin-top: 10px; }
+.note-doc h1 { font-size: var(--text-xl); font-weight: 600; letter-spacing: normal; line-height: 30px; }
+.note-doc h2 { font-size: var(--text-lg); font-weight: 600; letter-spacing: normal; line-height: 26px; }
+.note-doc h3 { font-size: var(--text-base); font-weight: 600; line-height: 23px; }
+.note-doc ul, .note-doc ol { padding-left: var(--space-5); }
+.note-doc li { margin: 4px 0; }
+.note-doc li::marker { color: var(--text-faint); }
+.note-doc strong { font-weight: 600; color: var(--text); }
+.note-doc blockquote { border-left: 2px solid var(--accent-light); padding-left: var(--space-4); color: var(--text-secondary); }
+.note-doc code { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
+.note-doc pre { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 22px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-3) var(--space-4); overflow-x: auto; }
+.note-doc pre code { background: none; border: none; padding: 0; color: inherit; }
+.note-doc ul[data-type='taskList'] { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 5px; }
+.note-doc ul[data-type='taskList'] li { display: flex; align-items: flex-start; gap: var(--space-2); }
+/* 正文必须撑满剩余宽度：弹性项默认按内容收缩，空条目会缩成 0 宽，光标没有行盒可落 */
+.note-doc ul[data-type='taskList'] li > div { flex: 1 1 auto; min-width: 0; }
+.note-doc ul[data-type='taskList'] input { margin-top: 5px; }
+.note-doc hr { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-4) 0; }
+.note-doc img[data-note-image] { display: block; max-width: 100%; max-height: 56vh; object-fit: contain; border-radius: var(--radius); }
 
 /* 浮层菜单 */
 .popover {

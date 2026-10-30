@@ -20,7 +20,7 @@ for (const width of [800, 1280]) {
       await expect(editor).toHaveText('切换筛选时继续写作')
       await expect.poll(async () => (await page.locator('.workspace-main').boundingBox())!.width).toBeGreaterThan(expanded)
     } else {
-      await expect(page.locator('.sidebar')).toHaveCSS('width', '56px')
+      await expect(page.locator('.sidebar')).toHaveCSS('width', '60px')
       await expect(page.locator('.titlebar-outer .sidebar-toggle')).toBeHidden()
     }
     await page.locator('.composer button.btn-primary').click()
@@ -37,7 +37,7 @@ test('侧栏状态跨模块与重启保持，桌面不再出现辅助目录', as
   await bootUnlocked(page, content)
   await page.getByRole('button', { name: '收起侧栏', exact: true }).click()
   await page.getByRole('link', { name: '网址收藏', exact: true }).click()
-  await expect(page.locator('.sidebar')).toHaveCSS('width', '56px')
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '60px')
   await expect(page.locator('.workspace-directory')).toBeHidden()
   await page.getByRole('link', { name: '小记', exact: true }).click()
   await expect(page.locator('.workspace-workbar')).toBeVisible()
@@ -45,7 +45,7 @@ test('侧栏状态跨模块与重启保持，桌面不再出现辅助目录', as
   const saved = (await e2e.snapshot(page)).settings
   const restarted = await context.newPage()
   await bootUnlocked(restarted, { ...content, settings: saved })
-  await expect(restarted.locator('.sidebar')).toHaveCSS('width', '56px')
+  await expect(restarted.locator('.sidebar')).toHaveCSS('width', '60px')
   await expect(restarted.locator('.workspace-directory')).toBeHidden()
   await restarted.close()
 })
@@ -54,7 +54,7 @@ test('左上角 Desko 菜单可进入档案和关于，Esc 只关闭菜单', asy
   await bootUnlocked(page)
   const brand = page.getByRole('button', { name: 'Desko 菜单', exact: true })
   const box = (await brand.boundingBox())!
-  expect(box.x + box.width).toBeLessThanOrEqual(148)
+  expect(box.x + box.width).toBeLessThanOrEqual(208)
   expect(box.y + box.height).toBeLessThanOrEqual(48)
   await brand.click()
   await page.keyboard.press('Escape')

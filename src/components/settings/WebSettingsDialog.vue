@@ -4,7 +4,6 @@ import { WORKSPACE_THEMES as THEMES, WORKSPACE_ACCENTS as ACCENTS, appearance, c
 import { useToastStore } from '../../stores/toast'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from '../shared/AppIcon.vue'
-import { isCodexWebRuntime } from '../../services/runtime'
 import NotesSettings from '../../modules/settings/NotesSettings.vue'
 import { WEB_MODULE_IDS, moduleFlags } from '../../modules/state'
 import { moduleById, type SettingsTabId } from '../../modules/registry'
@@ -16,10 +15,9 @@ const CodexSettings = defineAsyncComponent(() => import('../../modules/settings/
 const props = defineProps<{ initialTab?: SettingsTabId }>()
 const emit = defineEmits<{ close: []; lock: []; openChangeNoteKey: [mode: 'unlock' | 'change'] }>()
 const toast = useToastStore()
-const codexWeb = isCodexWebRuntime()
-const tabs = codexWeb ? [{ id: 'appearance', label: '外观' }] : [{id:'appearance',label:'外观'},{id:'notes',label:'小记'},{id:'modules',label:'模块'},{id:'fileshare',label:'局域网传输'},{id:'codex',label:'Codex'}]
-const tab = ref(codexWeb ? 'appearance' : props.initialTab ?? 'appearance')
-watch(() => props.initialTab, value => { tab.value = codexWeb ? 'appearance' : value ?? 'appearance' })
+const tabs = [{id:'appearance',label:'外观'},{id:'notes',label:'小记'},{id:'modules',label:'模块'},{id:'fileshare',label:'局域网传输'},{id:'codex',label:'Codex'}]
+const tab = ref(props.initialTab ?? 'appearance')
+watch(() => props.initialTab, value => { tab.value = value ?? 'appearance' })
 watch(tab, value => { if (value === 'fileshare' && moduleFlags.fileshare) void fsRefresh() }, { immediate: true })
 const saving = ref(false)
 useEscapeClose(() => emit('close'))

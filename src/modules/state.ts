@@ -1,11 +1,11 @@
-import { isWebRuntime, isCodexWebRuntime } from '../services/runtime'
+import { isWebRuntime } from '../services/runtime'
 import { computed, reactive } from 'vue'
 import { settingsApi } from '../services/api/settings'
 import { MODULES, moduleById, type ModuleId } from './registry'
 
 export const WEB_MODULE_IDS = ['notes', 'entries', 'files', 'mfa', 'fileshare', 'tunnel', 'codex'] as const
 const WEB_MODULES = new Set<ModuleId>(WEB_MODULE_IDS)
-const availableInRuntime = (id: ModuleId) => isCodexWebRuntime() ? id === 'codex' : !isWebRuntime() || WEB_MODULES.has(id)
+const availableInRuntime = (id: ModuleId) => !isWebRuntime() || WEB_MODULES.has(id)
 
 /** 八块模块一律默认关：库里没写过这个键就没有侧栏入口，落地页交给 /start 空态。 */
 export const moduleFlags = reactive<Record<ModuleId, boolean>>(

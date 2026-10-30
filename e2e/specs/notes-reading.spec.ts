@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { bootUnlocked, e2e } from '../helpers'
+import { bootUnlocked, e2e, openNoteRead } from '../helpers'
 
 for (const theme of ['paper', 'ink']) {
   for (const width of [800, 1040]) {
@@ -16,8 +16,7 @@ for (const theme of ['paper', 'ink']) {
       }, '/notes')
       const reading = page.locator('.memo').filter({ hasText: '阅读记录' })
       await expect(reading.locator('.memo-time')).toContainText('已编辑')
-      await reading.hover()
-      await reading.getByRole('button', { name: '全屏查看', exact: true }).click()
+      await openNoteRead(reading)
       await expect(page.locator('.fs-title')).toHaveText('阅读记录')
       await expect(page.locator('.fs-view > :first-child')).toBeHidden()
       await expect(page.locator('.fs-view')).not.toContainText('#工作')
@@ -100,8 +99,7 @@ test('首段混排图片和任务时，阅读标题不隐藏正文中的媒体�
     notes: [{ title: '混排记录', content_html: '<p>配图说明<img src="attachments/preview.png" data-note-image></p><blockquote><p>任务说明</p><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><label><input type="checkbox"></label><div><p>待办</p></div></li></ul></blockquote>' }],
   }, '/notes')
   await expect(page.locator('.memo-body > p')).toBeVisible()
-  await page.locator('.memo').hover()
-  await page.getByRole('button', { name: '全屏查看', exact: true }).click()
+  await openNoteRead(page.locator('.memo'))
   await expect(page.locator('.fs-view > p')).toBeVisible()
   await expect(page.locator('.fs-view img')).toBeVisible()
   await expect(page.locator('.fs-view input[type="checkbox"]')).toBeVisible()
@@ -120,7 +118,7 @@ test('普通首段、引用和自动摘要保持正文，只有标题格式生�
   await expect(plain.locator('.memo-body > p').first()).toBeVisible()
   await expect(plain.locator('.memo-body > p').first()).toHaveCSS('font-weight', '400')
   await plain.hover()
-  await plain.getByRole('button', { name: '全屏查看', exact: true }).click()
+  await openNoteRead(plain)
   await expect(page.locator('.fs-title')).toHaveCount(0)
   await expect(page.locator('.fs-view > p').first()).toBeVisible()
   await expect(page.locator('.fs-view > p').first()).toHaveCSS('font-weight', '400')
@@ -133,7 +131,7 @@ test('普通首段、引用和自动摘要保持正文，只有标题格式生�
   await page.keyboard.press('Escape')
   const quote = page.locator('.memo').filter({ hasText: '引用首段' })
   await quote.hover()
-  await quote.getByRole('button', { name: '全屏查看', exact: true }).click()
+  await openNoteRead(quote)
   await expect(page.locator('.fs-title')).toHaveCount(0)
   await expect(page.locator('.fs-view > blockquote')).toBeVisible()
 })

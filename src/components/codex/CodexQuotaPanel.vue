@@ -48,15 +48,20 @@ const formatNumber = (value: number) => value.toLocaleString('zh-CN', { maximumF
 
 <style scoped>
 .acc-quota { min-width: 0; align-self: stretch; border-left: 1px solid var(--border); padding-left: 18px; }
-.quota-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 28px; padding-right: 90px; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.5; margin-bottom: 7px; }
+/* 标题要比它管的这几行"重"：旧值用 muted，比下面的"5 小时额度"还淡，层级是倒的。
+   提到 secondary + 500，靠字重而不是字号拉开，不占额外高度。 */
+.quota-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 24px; padding-right: 90px; color: var(--text-secondary); font-size: var(--text-xs); font-weight: 500; line-height: 1.5; margin-bottom: 4px; }
 .quota-windows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
-.q { display: grid; grid-template-columns: 88px minmax(0, 1fr) 40px; align-items: center; gap: 4px 8px; min-width: 0; color: var(--text-secondary); font-size: var(--text-xs); }
+/* 标签列 76px：够放下"5 小时额度"，又不至于在标签和进度条之间留一段读不过去的空白。 */
+.q { display: grid; grid-template-columns: 76px minmax(0, 1fr) 40px; align-items: center; gap: 4px 8px; min-width: 0; color: var(--text-secondary); font-size: var(--text-xs); }
 .q-top { display: contents; }
 .q-tag { grid-column: 1; grid-row: 1; min-width: 0; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .q-num { grid-column: 3; grid-row: 1; text-align: right; color: var(--text); font-size: var(--text-lg); font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .q-num small { margin-left: 2px; color: var(--text-muted); font-size: var(--text-xs); font-weight: 400; }
 .q-bar { grid-column: 2; grid-row: 1; display: block; height: 5px; border-radius: 3px; background: var(--fill); overflow: hidden; }
-.q-bar i { display: block; height: 100%; background: var(--success); border-radius: inherit; }
+/* 健康态走品牌色，不用绿：一块灰蓝卡里突然一条饱和绿，读起来像"另一个系统的状态条"，
+   而且它自己的用量面板（CodexUsagePanel）早就用 accent 了。绿/黄/红只留给真正需要预警的两档。 */
+.q-bar i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 .q.mid .q-bar i { background: var(--warning); }
 .q.low .q-bar i { background: var(--danger); }
 .q-when, .credit-total { color: var(--text-muted); font-size: var(--text-xs); line-height: 1.5; }

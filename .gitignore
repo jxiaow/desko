@@ -64,3 +64,7 @@ scripts/.tmp-*
 # （同轮的轻量版 05-visual-audit.html / 06-spatial-applied.html 不内嵌图，已入库）
 docs/design/atmosphere/02-accent-source.html
 docs/design/atmosphere/03-accent-source-recalibrated.html
+
+# 本机运行态与 Python 编译缓存，不入业务仓库
+.workbuddy/
+__pycache__/

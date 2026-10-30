@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { isWebRuntime, isCodexWebRuntime } from '../../services/runtime'
+import { isWebRuntime } from '../../services/runtime'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { releaseHover, suppressHover } from '../../utils/hoverGuard'
 import { sidebarCollapsed, setSidebarCollapsed } from '../../services/sidebar'
@@ -23,7 +23,6 @@ const emit = defineEmits<{
 }>()
 
 const webRuntime = isWebRuntime()
-const codexWebRuntime = isCodexWebRuntime()
 const appWindow = webRuntime ? null : getCurrentWindow()
 const isMaximized = ref(false)
 const appMenuOpen = ref(false)
@@ -142,7 +141,7 @@ onUnmounted(() => {
   <div ref="titlebarElement" class="titlebar" :class="{ 'titlebar-locked': isLocked, 'titlebar-outer': !isLocked }">
     <div class="titlebar-drag" @mousedown="startDrag" @dblclick="toggleMaximize"></div>
 
-    <div v-if="webRuntime && !codexWebRuntime && !isLocked" class="web-mobile-header">
+    <div v-if="webRuntime && !isLocked" class="web-mobile-header">
       <span class="web-mobile-brand"><BrandLogo />Desko</span>
       <button class="web-mobile-modules" type="button" aria-label="打开模块导航" aria-haspopup="dialog" aria-controls="web-module-navigation" :aria-expanded="props.modulesOpen ?? false" @click="emit('showModules')">
         <AppIcon name="panel" :size="16" /><span>模块</span><AppIcon name="chevDown" :size="14" />
@@ -155,7 +154,7 @@ onUnmounted(() => {
         <div class="app-menu-title">Desko</div>
         <template v-if="webRuntime">
           <button class="pop-item" type="button" role="menuitem" @click="openAppPane('appearance')"><AppIcon name="gear" :size="15" />外观设置</button>
-          <button v-if="!codexWebRuntime" class="pop-item" type="button" role="menuitem" @click="openAppPane('modules')"><AppIcon name="panel" :size="15" />模块管理</button>
+          <button class="pop-item" type="button" role="menuitem" @click="openAppPane('modules')"><AppIcon name="panel" :size="15" />模块管理</button>
         </template>
         <template v-else>
           <button class="pop-item" type="button" role="menuitem" @click="openAppPane('profiles')"><AppIcon name="user" :size="15" />档案管理</button>
@@ -240,12 +239,12 @@ onUnmounted(() => {
 .titlebar-brandcell { width: var(--sidebar-rail-w, 56px); flex: 0 0 var(--sidebar-rail-w, 56px); align-self: stretch; display: flex; align-items: center; justify-content: center; z-index: 2; }
 .titlebar-brandcell { background: var(--bg-workspace-rail); background-attachment: fixed; }
 .app-root:not(.web-runtime) .titlebar-brandcell {
-  /* 桌面端不自带背景：fixed 附着层会从弹窗遮罩上穿出（WebView2），
-     导轨光由 .app-root::before 整列提供，这里透出它即可。 */
+  /* 桌面端不自带背景：整条导航列坐在窗框上，直接透出柔光，
+     与浮片之间靠留白分界，不再画一条贯穿的接缝线。 */
   background: none;
   justify-content: flex-start;
   padding-left: 15px;
-  border-right: 1px solid var(--border);
+  border-right: 0;
 }
 .titlebar-page { display: contents; }
 /* 页头沟槽里的侧栏开关：热区 32、可见底块 24（比页名 26px 行高略小一档）、图标 18。
@@ -253,7 +252,7 @@ onUnmounted(() => {
    底块不再贴着那条 1px 分割线。展开/收起两态都停在同一处，不会跟着页名跑。 */
 .titlebar-outer .sidebar-toggle {
   position: absolute;
-  left: calc(-1 * var(--workspace-content-padding) + 4px);
+  left: calc(-1 * var(--workspace-content-padding) - var(--sheet-inset-left) + 4px);
   top: 50%;
   z-index: 2;
   width: 32px;

@@ -40,19 +40,14 @@ pub(super) struct AppBackend {
     vault: super::vault::WebVault,
     draft_key: Vec<u8>,
     events: Arc<super::events::WebEvents>,
-    kind: super::WebKind,
-    dialog: Arc<crate::services::codex_bridge::BridgeState>,
 }
 impl AppBackend {
-    pub(super) fn new_kind(app: AppHandle, kind: super::WebKind) -> Result<Self, String> {
+    pub(super) fn new(app: AppHandle) -> Result<Self, String> {
         let _lease = super::SESSION_GATE.read().map_err(|_| "Web 会话状态无法读取")?;
         let desktop = app.state::<AppState>();
         let vault = super::vault::WebVault::new(&desktop).map_err(|e| e.user_message())?;
         let events = super::events::WebEvents::new(app.clone());
-        let sink = events.clone();
-        let dialog = Arc::new(crate::services::codex_bridge::BridgeState::with_events(Arc::new(move |payload| sink.push("codex:dialog", payload))));
-        if kind == super::WebKind::Codex { crate::authorize_codex(&vault.state).map_err(str::to_string)?; }
-        Ok(Self { app, vault, draft_key: crate::crypto::random_bytes(32), events, kind, dialog })
+        Ok(Self { app, vault, draft_key: crate::crypto::random_bytes(32), events })
     }
     fn state(&self) -> crate::command_state::CommandState<'_, AppState> {
         crate::command_state::CommandState::from_ref(&self.vault.state)
@@ -111,8 +106,6 @@ fn within(root: &Path, relative: &str) -> Result<PathBuf, String> {
     Ok(target)
 }
 impl Backend for AppBackend {
-    fn kind(&self) -> super::WebKind { self.kind }
-    fn stop(&self) { self.dialog.stop(); }
     fn public_hosts(&self, port: u16) -> Vec<String> {
         let state = self.app.state::<AppState>();
         let Ok(db) = state.db.lock() else { return Vec::new(); };
@@ -124,7 +117,6 @@ impl Backend for AppBackend {
             .map(|service| service.hostname).collect()
     }
     fn epoch(&self) -> Option<u64> {
-        if self.kind == super::WebKind::Codex && crate::authorize_codex(&self.vault.state).is_err() { return None; }
         self.vault.epoch()
     }
     fn verify_password(&self, password: &str) -> Result<(), String> {
@@ -137,12 +129,9 @@ impl Backend for AppBackend {
         let _lease = super::SESSION_GATE.read().map_err(|_| "Web 会话状态无法读取")?;
         if self.epoch().is_none() { return Err("Web 服务已失效，请在桌面端重新启动服务".into()); }
         let vault = super::vault::WebVault::new(&self.vault.state).map_err(|e| e.user_message())?;
-        Ok(Some(Arc::new(Self { app: self.app.clone(), vault, draft_key: self.draft_key.clone(), events: self.events.clone(), kind: self.kind, dialog: self.dialog.clone() })))
+        Ok(Some(Arc::new(Self { app: self.app.clone(), vault, draft_key: self.draft_key.clone(), events: self.events.clone() })))
     }
     fn invoke(&self, command: &str, args: Value, expected_epoch: u64) -> Result<Value, String> {
-        if self.kind == super::WebKind::Codex && !matches!(command, "codex_dialog_action" | "web_poll_events" | "get_setting") {
-            return Err("此服务只提供 Codex 对话，请通过 Desko Web 访问其他功能".into());
-        }
         macro_rules! call { ($module:ident::$name:ident $(, $key:literal)* ) => {{
             // Pending drafts and key revocation must still finish after a module closes.
             if !matches!(stringify!($name), "stage_note_drafts" | "note_key_relock") {
@@ -170,15 +159,6 @@ impl Backend for AppBackend {
             expected_epoch,
             || self.epoch(),
             || {
-                if command == "codex_dialog_action" {
-                    if self.kind != super::WebKind::Codex { return Err("请通过独立的 Codex Web UI 使用对话".into()); }
-                    crate::authorize_codex(&self.vault.state).map_err(str::to_string)?;
-                    return self.dialog.dispatch_with_state(&self.app, &self.vault.state, args["action"].as_str().ok_or("对话操作无效")?, &args["params"]);
-                }
-                if command == "web_codex_service_status" {
-                    self.require_module("codex_enabled")?;
-                    return serde_json::to_value(super::web_access_status(self.app.state::<super::WebAccessState>(), Some(super::WebKind::Codex))?).map_err(|_| "无法读取服务状态".into());
-                }
                 if crate::is_codex_command(command) {
                     crate::authorize_codex(&self.vault.state).map_err(str::to_string)?;
                     if command == "web_codex_read_session" {
@@ -202,7 +182,6 @@ impl Backend for AppBackend {
                     "web_poll_events" => Ok(self.events.since(arg(&args, "after")?)),
                     "get_setting" | "set_setting" => {
                         let key: String = arg(&args, "key")?;
-                        if self.kind == super::WebKind::Codex && key != "codex_enabled" { return Ok(json!("false")); }
                         if !WEB_MODULE_KEYS.contains(&key.as_str()) {
                             return Err("请在桌面端修改此设置".into());
                         }
@@ -306,7 +285,6 @@ impl Backend for AppBackend {
         Some(bytes(asset.bytes, &asset.mime_type))
     }
     fn private_resource(&self, path: &str) -> Result<Resource, String> {
-        if self.kind == super::WebKind::Codex { return Err("Codex Web UI 不提供文件下载".into()); }
         let url =
             reqwest::Url::parse(&format!("http://localhost{path}")).map_err(|_| "路径无效")?;
         if let Some(name) = url.path().strip_prefix("/api/attachments/") {
@@ -406,7 +384,6 @@ impl Backend for AppBackend {
         })
     }
     fn import_shared_file(&self, path: &Path, name: &str, index: usize, epoch: u64) -> Result<Value, String> {
-        if self.kind == super::WebKind::Codex { return Err("Codex Web UI 不提供文件上传".into()); }
         super::with_session_epoch(epoch, || self.epoch(), || {
             self.require_module("fileshare_enabled")?;
             super::network::import_file(&self.app, path, name, index)

@@ -35,7 +35,7 @@ test('桌面默认启用宽导航，外观和侧栏状态可持久化', async ({
   await expect(page.locator('.titlebar-outer .sidebar-toggle')).toHaveAttribute('aria-expanded', 'true')
   const expanded = (await page.locator('.workspace-main').boundingBox())!.width
   await page.getByRole('button', { name: '收起侧栏', exact: true }).click()
-  await expect(page.locator('.sidebar')).toHaveCSS('width', '56px')
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '60px')
   await expect.poll(async () => (await page.locator('.workspace-main').boundingBox())!.width).toBeGreaterThan(expanded)
   await expect.poll(async () => (await e2e.snapshot(page)).settings.sidebar_collapsed).toBe('true')
   await tipButton(page, '设置').click()
@@ -49,9 +49,9 @@ test('桌面默认启用宽导航，外观和侧栏状态可持久化', async ({
   await expect(restarted.locator('html')).toHaveAttribute('data-accent', 'indigo')
   await expect(restarted.locator('html')).toHaveAttribute('data-atmosphere', 'off')
   await expect(restarted.locator('.app-root')).toHaveClass(/sidebar-collapsed/)
-  await expect(restarted.locator('.sidebar')).toHaveCSS('width', '56px')
+  await expect(restarted.locator('.sidebar')).toHaveCSS('width', '60px')
   await restarted.getByRole('button', { name: '展开侧栏', exact: true }).click()
-  await expect(restarted.locator('.sidebar')).toHaveCSS('width', '148px')
+  await expect(restarted.locator('.sidebar')).toHaveCSS('width', '208px')
   await restarted.close()
 })
 
@@ -74,10 +74,10 @@ for (const width of [800, 1280]) {
         await expect(page.locator('.workspace-workbar')).toBeVisible()
         const workbar = (await page.locator('.workspace-workbar').boundingBox())!
         expect(workbar.height).toBe(42)
-        expect(workbar.width).toBeLessThanOrEqual(width - (width < 900 ? 56 : 148) - 24)
+        expect(workbar.width).toBeLessThanOrEqual(width - (width < 900 ? 60 : 208) - 24)
       }
       const surface = (await page.locator('.workspace-surface').boundingBox())!
-      expect(width - (surface.x + surface.width), `${label} 的内容面通栏到右缘`).toBe(0)
+      expect(width - (surface.x + surface.width), `${label} 的浮片右侧留出窗框`).toBe(10)
     }
     for (const button of [tipButton(page, '锁定'), tipButton(page, '最小化'), tipButton(page, '最大化'), tipButton(page, '关闭')]) {
       const r = await button.boundingBox()
@@ -98,15 +98,15 @@ for (const width of [800, 1280]) {
     const settings = (await tipButton(page, '设置').boundingBox())!
     expect(settings.y).toBeGreaterThanOrEqual(48)
     expect(settings.y + settings.height).toBeLessThanOrEqual(720)
-    expect(settings.x + settings.width).toBeLessThanOrEqual(width < 900 ? 56 : 148)
+    expect(settings.x + settings.width).toBeLessThanOrEqual(width < 900 ? 60 : 208)
     if (width < 900) {
       // 最小桌面窗回到图标轨，把宽度让给搜索和页内动作。
-      await expect(page.locator('.sidebar')).toHaveCSS('width', '56px')
+      await expect(page.locator('.sidebar')).toHaveCSS('width', '60px')
       await expect(page.locator('.sidebar .nav-text').first()).toBeHidden()
       await expect(page.locator('.titlebar-outer .sidebar-toggle')).toBeHidden()
       expect(parseFloat(await page.locator('.sidebar-nav .nav-item').first().evaluate((el) => getComputedStyle(el).width))).toBe(36)
     } else {
-      // 展开态：品牌锁标与导航行同处 148px 轨道，模块名称和分组常驻。
+      // 展开态：品牌锁标与导航行同处 208px 轨道，模块名称和分组常驻。
       expect(parseFloat(await page.locator('.sidebar-nav .nav-item').first().evaluate((el) => getComputedStyle(el).width))).toBeGreaterThan(120)
       await expect(page.locator('.sidebar-group-title').first()).toBeVisible()
       await expect(page.locator('.sidebar .nav-text').first()).toBeVisible()
@@ -114,7 +114,7 @@ for (const width of [800, 1280]) {
     }
     await expect(page.locator('.sidebar .sidebar-toggle')).toHaveCount(0)
     await expect(page.locator('.workspace-page-heading')).toHaveCount(0)
-    expect((await page.locator('.workspace-main').boundingBox())!.y).toBe(48)
+expect((await page.locator('.workspace-main').boundingBox())!.y).toBe(48)
     expect(errors).toEqual([])
   })
 }
@@ -198,8 +198,9 @@ test('800px 最小桌面窗自动使用图标轨，页级筛选不挤压布局',
   await page.setViewportSize({ width: 800, height: 600 })
   await boot(page)
   await expect(page.locator('.workspace-directory')).toBeHidden()
-  expect((await page.locator('.workspace-main').boundingBox())!.width).toBe(744)
-  await expect(page.locator('.sidebar')).toHaveCSS('width', '56px')
+  // 800 窗：图标轨 60 + 浮片四周 18 = 722。
+  expect((await page.locator('.workspace-main').boundingBox())!.width).toBe(722)
+  await expect(page.locator('.sidebar')).toHaveCSS('width', '60px')
   await expect(page.locator('.titlebar-outer .sidebar-toggle')).toBeHidden()
   await navigate(page, '网址收藏')
   const workbar = page.locator('.workspace-workbar')
@@ -211,7 +212,7 @@ test('800px 最小桌面窗自动使用图标轨，页级筛选不挤压布局',
   await workbar.locator('.wb-tab').filter({ hasText: '设备' }).click()
   await expect(cards).toHaveCount(1)
   await navigate(page, 'Codex')
-  expect((await page.locator('.workspace-main').boundingBox())!.width).toBe(744)
+  expect((await page.locator('.workspace-main').boundingBox())!.width).toBe(722)
 })
 
 test('工作栏与正文同轴，宽窄窗切换不产生横向溢出', async ({ page }) => {
@@ -249,7 +250,7 @@ test('工作栏与正文同轴，宽窄窗切换不产生横向溢出', async ({
 })
 
 for (const theme of ['paper', 'ink']) {
-  test(`${theme} 下目录收起时画布仍有柔光，${theme === 'paper' ? '卡片吃同一层光' : '卡片保持实底'}，暗色画布保持中性`, async ({ page }) => {
+  test(`${theme} 下目录收起时柔光只染窗框，浮片与卡片保持实底`, async ({ page }) => {
     await boot(page, { ...seed, settings: { ...seed.settings, theme, accent: 'plum', background_atmosphere: 'true' } })
     // 比较稳态材质，不采样切换强调色时的过渡帧。
     await page.addStyleTag({ content: 'html.theme-anim,html.theme-anim *{transition:none!important}' })
@@ -258,39 +259,39 @@ for (const theme of ['paper', 'ink']) {
       return { image: cs.backgroundImage, color: cs.backgroundColor }
     })
     await expect(page.locator('.workspace-directory')).toBeHidden()
-    const workspace = await background('.workspace-main')
+    // 柔光只在窗框：整窗那一层是光场，内容面是一块实底浮片。
+    const workspace = await background('.app-root')
     expect(workspace.image).toMatch(/gradient/)
+    const sheet = await background('.workspace-surface')
     const card = await background('.memo:not(.editing) >> nth=0')
-    await expect(page.locator('.workspace-main')).toHaveCSS('background-attachment', /^fixed(?:,\s*fixed)*$/)
+    expect(sheet.image).toBe('none')
+    expect(card.image).toBe('none')
+    // 卡片比浮片再亮一档，三层明度靠明度本身分层。
+    expect(card.color).not.toBe(sheet.color)
     const band = await background('#workspace-page-toolbar .page-bar')
     expect(band.image).toBe('none')
     expect(band.color).toBe('rgba(0, 0, 0, 0)')
-    if (theme === 'ink') {
-      expect(card.image).toBe('none')
-      expect(workspace.color).not.toBe(card.color)
-    } else {
-      // 纸底卡片接入画布光场，并与画布一样固定到窗口。
-      expect(card.image).toMatch(/radial-gradient/)
-      await expect(page.locator('.memo:not(.editing)').first()).toHaveCSS('background-attachment', /^fixed(?:,\s*fixed)*$/)
-    }
     await tipButton(page, '设置').click()
     const dialog = page.locator('.settings-dialog')
     await dialog.getByRole('radio', { name: '橙', exact: true }).click()
     await expect(page.locator('html')).toHaveAttribute('data-accent', 'clay')
     await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
     // 两种底色的光都由强调色推导，换色必须换光。
-    expect((await background('.workspace-main')).image, '换强调色后光场跟着换').not.toBe(workspace.image)
+    expect((await background('.app-root')).image, '换强调色后光场跟着换').not.toBe(workspace.image)
+    // 关灯后的底色仍由当前强调色推导，先记下换色后的纯色基准。
+    const clayFrame = await background('.app-root')
     const control = dialog.locator('.setting-item', { hasText: '背景氛围' })
     await control.locator('label.switch').click()
     await expect(control.getByRole('switch')).toBeEnabled()
-    await expect(page.locator('.workspace-main')).toHaveCSS('background-image', 'none')
-    expect((await background('.workspace-main')).color).toBe(workspace.color)
+    await expect(page.locator('.app-root')).toHaveCSS('background-image', 'none')
+    expect((await background('.app-root')).color).toBe(clayFrame.color)
     const cardOff = await background('.memo:not(.editing) >> nth=0')
     expect(cardOff.image).toBe('none')
     expect(cardOff.color).toBe(card.color)
+    expect((await background('.workspace-surface')).color).toBe(sheet.color)
     await control.locator('label.switch').click()
     await expect(control.getByRole('switch')).toBeEnabled()
-    await expect(page.locator('.workspace-main')).toHaveCSS('background-image', /gradient/)
+    await expect(page.locator('.app-root')).toHaveCSS('background-image', /gradient/)
     expect((await e2e.snapshot(page)).settings.background_atmosphere).toBe('true')
     await page.keyboard.press('Escape')
     await page.locator('.workspace-workbar').getByRole('button', { name: /^置顶/ }).click()

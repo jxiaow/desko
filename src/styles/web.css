@@ -4,7 +4,7 @@
 /* 宽屏浏览器用有名称的导航；216px 侧栏 + 两侧 32px 留白 + 内容列。
    内容列最多 1280px，工具栏沿用同一列的外边缘；中等窗口保留原图标轨。 */
 @media (min-width: 1100px) {
-  .app-root.web-runtime:not(.codex-web-runtime) {
+  .app-root.web-runtime.codex-layout {
     --sidebar-rail-w: 216px;
     --workspace-toolbar-height: 64px;
     --workspace-content-max: 1280px;
@@ -20,15 +20,15 @@
   .web-runtime .web-workspace-sidebar .nav-item.active .nav-text { font-weight: 600; }
   .web-runtime .web-workspace-sidebar .sidebar-foot { align-items: stretch; gap: 4px; padding-top: 16px; }
   .web-runtime .web-workspace-sidebar .web-sidebar-logout { display: flex; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-app { display: flex; align-items: center; gap: 10px; width: calc(100% - 24px); height: 40px; padding: 0 14px; color: var(--text); text-align: left; font: inherit; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-app .brand-logo { width: 22px; height: 22px; flex-shrink: 0; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-wordmark { display: block; font-size: var(--text-lg); font-weight: 600; letter-spacing: -.025em; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-crumb { font-size: var(--text-lg); line-height: 28px; }
+  .app-root.web-runtime.codex-layout .titlebar-app { display: flex; align-items: center; gap: 10px; width: calc(100% - 24px); height: 40px; padding: 0 14px; color: var(--text); text-align: left; font: inherit; }
+  .app-root.web-runtime.codex-layout .titlebar-app .brand-logo { width: 22px; height: 22px; flex-shrink: 0; }
+  .app-root.web-runtime.codex-layout .titlebar-wordmark { display: block; font-size: var(--text-lg); font-weight: 600; letter-spacing: -.025em; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-crumb { font-size: var(--text-lg); line-height: 28px; }
   /* 浏览器里没有窗口钮，但目录开关住在同一位（.titlebar-fixed-tools）：
      整块 display:none 会把目录入口一起藏掉，窄屏又没有 Ctrl+B，等于丢了展开目录。 */
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-buttons > :not(.titlebar-fixed-tools) { display: none; }
-  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar :is(.search-box, .bar-btn, .btn-primary, .btn-secondary) { height: 36px; }
-  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .bar-btn { min-width: 36px; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-buttons > :not(.titlebar-fixed-tools) { display: none; }
+  .app-root.web-runtime.codex-layout #workspace-page-toolbar :is(.search-box, .bar-btn, .btn-primary, .btn-secondary) { height: 36px; }
+  .app-root.web-runtime.codex-layout #workspace-page-toolbar .bar-btn { min-width: 36px; }
 }
 
 @media (max-width: 760px), (hover: none) and (max-width: 1024px) {
@@ -67,15 +67,16 @@
   .app-root.web-runtime .memo .memo-head,
   .app-root.web-runtime .memo.without-title .memo-head { display: contents; position: static; width: auto; margin: 0; }
   .app-root.web-runtime .memo .memo-title { grid-column: 1; order: 0; margin-bottom: 8px; }
+  .app-root.web-runtime .memo .memo-pin { display: none; }
   .app-root.web-runtime .memo .memo-state { grid-column: 2; order: 0; align-self: center; }
   .app-root.web-runtime .memo .memo-state:empty { display: none; }
   .app-root.web-runtime .memo :is(.memo-body, .memo-locked) { grid-column: 1 / -1; order: 1; }
-  .app-root.web-runtime .memo :is(.memo-foot, .memo-unfold) { grid-column: 1 / -1; order: 2; }
+  .app-root.web-runtime .memo .memo-foot { grid-column: 1 / -1; order: 2; }
   .app-root.web-runtime .memo.without-title .memo-body::before { display: none; }
   .app-root.web-runtime .memo.without-title .memo-locked { padding-right: 0; }
   .app-root.web-runtime .memo.without-title .memo-body > img:first-child,
   .app-root.web-runtime .memo.without-title .memo-body > :first-child img { max-width: 100%; }
-  .app-root.web-runtime .memo .memo-head .memo-acts {
+  .app-root.web-runtime .memo .memo-acts {
     position: static;
     transform: none;
     order: 3;
@@ -216,26 +217,15 @@
   .app-root.web-runtime #workspace-page-toolbar .fs-head { min-width: 0; height: 52px; padding: 0; }
   .app-root.web-runtime #workspace-page-toolbar .fs-head .fs-meta { display: none; }
   .app-root.web-runtime .workspace-main .content-inner { padding-top: 12px; }
-  .app-root.web-runtime.codex-web-runtime { --workspace-toolbar-height: 48px; }
-  .app-root.web-runtime.codex-web-runtime .titlebar-outer { height: calc(48px + env(safe-area-inset-top)); flex-basis: calc(48px + env(safe-area-inset-top)); }
-  .app-root.web-runtime.codex-web-runtime .titlebar-outer .titlebar-page { height: 48px; right: 56px; flex-direction: row; align-items: center; gap: 4px; }
-  .app-root.web-runtime.codex-web-runtime .titlebar-outer .titlebar-left { flex: 1; width: auto; min-width: 70px; }
-  .app-root.web-runtime.codex-web-runtime .titlebar-outer .workspace-page-toolbar { display: flex; flex: 0 0 auto; width: max-content; height: 48px; overflow: visible; container-type: normal; }
-  .app-root.web-runtime.codex-web-runtime #workspace-page-toolbar .page-bar { height: 48px; min-height: 48px; }
-  .app-root.web-runtime.codex-web-runtime #workspace-page-toolbar .page-actions { gap: 2px; }
-  .app-root.web-runtime.codex-web-runtime #workspace-page-toolbar .create-action { padding-inline: 10px; gap: 6px; }
-  .app-root.web-runtime.codex-web-runtime #workspace-page-toolbar .btn-secondary { padding-inline: 0; min-width: 40px; }
-  .app-root.web-runtime.codex-web-runtime .dialog-reconnect { display: none; }
-  .app-root.web-runtime.codex-web-runtime .titlebar-crumb { font-size: 14px; }
 }
 
-/* 手机使用第二版设计的三行页头；普通 Web 与独立 Codex 对话使用各自的高度。 */
+/* 手机使用第二版设计的三行页头。 */
 @media (max-width: 760px), (hover: none) and (max-width: 1024px) {
-  .app-root.web-runtime:not(.codex-web-runtime) {
+  .app-root.web-runtime.codex-layout {
     --workspace-toolbar-height: 160px;
     --workspace-content-padding: max(16px, env(safe-area-inset-left), env(safe-area-inset-right));
   }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer {
+  .app-root.web-runtime.codex-layout .titlebar-outer {
     height: calc(160px + env(safe-area-inset-top));
     flex-basis: calc(160px + env(safe-area-inset-top));
     overflow: visible;
@@ -255,15 +245,15 @@
   .web-runtime .web-mobile-modules { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--radius-ib); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-sm); cursor: pointer; }
   .web-runtime .web-mobile-modules:hover, .web-runtime .web-mobile-modules[aria-expanded="true"] { background: var(--fill); }
   .web-runtime .web-mobile-modules:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-page { inset: calc(56px + env(safe-area-inset-top)) var(--workspace-content-padding) 0; height: 104px; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-left { width: 100%; height: 48px; flex-basis: 48px; pointer-events: none; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-crumb { font-size: var(--text-xl); line-height: 28px; letter-spacing: -.02em; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-brand { width: auto; flex: 0 1 auto; max-width: 100%; gap: 8px; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .web-modules-toggle { display: none; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-page { inset: calc(56px + env(safe-area-inset-top)) var(--workspace-content-padding) 0; height: 104px; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-left { width: 100%; height: 48px; flex-basis: 48px; pointer-events: none; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-crumb { font-size: var(--text-xl); line-height: 28px; letter-spacing: -.02em; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-brand { width: auto; flex: 0 1 auto; max-width: 100%; gap: 8px; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .web-modules-toggle { display: none; }
   /* 目录开关跟着「模块」钮住第一排：整块 display:none 会让窄屏彻底没有目录入口（无键盘、无侧栏），
      而直接显示又会被 .web-mobile-header 的「模块」钮压住，所以把挂载位摆到它左侧。
      112px = 16px 内距 + 「模块」钮实占 90px + 6px 间隙，与本页 152/210px 的预留档同一写法。 */
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-buttons {
+  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-buttons {
     display: flex;
     align-items: center;
     top: calc(env(safe-area-inset-top) + 6px);
@@ -271,13 +261,13 @@
     height: 44px;
     z-index: 3; /* .web-mobile-header 是 z-index:2 的整行覆盖层，不抬高它会用透明面吃掉这一排的点击 */
   }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .titlebar-buttons > :not(.titlebar-fixed-tools) { display: none; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-outer .workspace-page-toolbar { height: 56px; flex: 0 0 56px; overflow: visible; container-type: normal; }
-  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar :is(.page-bar, .cx-band-controls) { height: 56px; min-height: 56px; }
-  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .page-actions { position: absolute; top: 0; right: 0; height: 48px; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-page:has(.page-actions) .titlebar-brand { max-width: calc(100% - 152px); }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-page:has(.create-action) .titlebar-brand { max-width: calc(100% - 210px); }
-  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .search-box { max-width: none; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-buttons > :not(.titlebar-fixed-tools) { display: none; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .workspace-page-toolbar { height: 56px; flex: 0 0 56px; overflow: visible; container-type: normal; }
+  .app-root.web-runtime.codex-layout #workspace-page-toolbar :is(.page-bar, .cx-band-controls) { height: 56px; min-height: 56px; }
+  .app-root.web-runtime.codex-layout #workspace-page-toolbar .page-actions { position: absolute; top: 0; right: 0; height: 48px; }
+  .app-root.web-runtime.codex-layout .titlebar-page:has(.page-actions) .titlebar-brand { max-width: calc(100% - 152px); }
+  .app-root.web-runtime.codex-layout .titlebar-page:has(.create-action) .titlebar-brand { max-width: calc(100% - 210px); }
+  .app-root.web-runtime.codex-layout #workspace-page-toolbar .search-box { max-width: none; }
   .app-root.web-runtime .workspace-main :is(.stream, .content-inner, .fs-scroll) { scrollbar-width: none; scrollbar-gutter: auto; }
   .app-root.web-runtime .workspace-main :is(.stream, .content-inner, .fs-scroll)::-webkit-scrollbar { display: none; }
   .app-root.web-runtime .workspace-main .stream-inner { padding-top: 12px; }
@@ -294,9 +284,9 @@
 }
 
 @media (max-width: 380px) {
-  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .create-action { width: 44px; padding-inline: 0; }
-  .app-root.web-runtime:not(.codex-web-runtime) #workspace-page-toolbar .create-action span { display: none; }
-  .app-root.web-runtime:not(.codex-web-runtime) .titlebar-page:has(.create-action) .titlebar-brand { max-width: calc(100% - 152px); }
+  .app-root.web-runtime.codex-layout #workspace-page-toolbar .create-action { width: 44px; padding-inline: 0; }
+  .app-root.web-runtime.codex-layout #workspace-page-toolbar .create-action span { display: none; }
+  .app-root.web-runtime.codex-layout .titlebar-page:has(.create-action) .titlebar-brand { max-width: calc(100% - 152px); }
 }
 
 /* 内置中文字体只留给桌面版。--font-ui/--font-mono 把 'HarmonyOS Sans SC' 排在系统 CJK

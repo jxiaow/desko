@@ -47,12 +47,6 @@ const SESSION_IDLE: Duration = Duration::from_secs(30 * 60);
 const SESSION_MAX: Duration = Duration::from_secs(12 * 60 * 60);
 const COOKIE: &str = "desko_web";
 
-#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum WebKind { #[default] App, Codex }
-impl WebKind {
-    fn cookie(self) -> &'static str { if self == Self::Codex { "desko_codex_web" } else { COOKIE } }
-}
 
 pub(super) struct ResourceStream {
     reader: Box<dyn Read + Send>,
@@ -72,7 +66,6 @@ pub(super) struct Resource {
     pub file: Option<ResourceStream>,
 }
 pub(super) trait Backend: Send + Sync + 'static {
-    fn kind(&self) -> WebKind { WebKind::App }
     fn stop(&self) {}
     fn public_hosts(&self, _: u16) -> Vec<String> { Vec::new() }
     fn epoch(&self) -> Option<u64>;
@@ -100,11 +93,9 @@ pub struct WebStatus {
 pub struct StartInput {
     port: u16,
     lan: bool,
-    #[serde(default)]
-    kind: WebKind,
 }
 #[derive(Default)]
-pub struct WebAccessState(Mutex<HashMap<String, process::WebProcess>>);
+pub struct WebAccessState(Mutex<Option<process::WebProcess>>);
 struct Session {
     epoch: u64,
     backend: Arc<dyn Backend>,
@@ -215,10 +206,10 @@ fn same_origin(req: &Request, context: &Context) -> bool {
     }
     !matches!(header(req, "Sec-Fetch-Site"), Some("cross-site"))
 }
-fn cookie_token(req: &Request, kind: WebKind) -> Option<String> {
+fn cookie_token(req: &Request) -> Option<String> {
     header(req, "Cookie")?.split(';').find_map(|part| {
         let (key, value) = part.trim().split_once('=')?;
-        (key == kind.cookie() && value.len() == 64).then(|| value.to_string())
+        (key == COOKIE && value.len() == 64).then(|| value.to_string())
     })
 }
 #[derive(Clone)]
@@ -251,7 +242,7 @@ fn authenticate(req: &Request, ctx: &Context) -> Option<Authorization> {
         return None;
     }
     let epoch = ctx.backend.epoch()?;
-    let key = cookie_token(req, ctx.backend.kind())?;
+    let key = cookie_token(req)?;
     let mut security = ctx.security.lock().ok()?;
     security.sessions.retain(|_, session| {
         session.epoch == epoch
@@ -458,7 +449,7 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
             });
             // Refreshing this browser replaces its old credential only after
             // successful authentication; failed logins cannot evict a valid session.
-            if let Some(previous) = cookie_token(&req, ctx.backend.kind()) {
+            if let Some(previous) = cookie_token(&req) {
                 security.sessions.remove(&previous);
             }
             if security.sessions.len() >= 32 {
@@ -489,13 +480,13 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
                 file: None,
             },
             Some(format!(
-                "{}={key}; Path=/api; HttpOnly; SameSite=Strict", ctx.backend.kind().cookie()
+                "{}={key}; Path=/api; HttpOnly; SameSite=Strict", COOKIE
             )),
         );
     }
     if path.starts_with("/api/") {
         if path == "/api/logout" && method == Method::Post {
-            if let Some(key) = cookie_token(&req, ctx.backend.kind()) {
+            if let Some(key) = cookie_token(&req) {
                 ctx.security.lock().unwrap().sessions.remove(&key);
             }
             return respond(
@@ -508,7 +499,7 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
                     file: None,
                 },
                 Some(format!(
-                    "{}=; Path=/api; Max-Age=0; HttpOnly; SameSite=Strict", ctx.backend.kind().cookie()
+                    "{}=; Path=/api; Max-Age=0; HttpOnly; SameSite=Strict", COOKIE
                 )),
             );
         }
@@ -580,12 +571,8 @@ fn handle(mut req: Request, ctx: &Arc<Context>) {
     match ctx.backend.asset(asset_path) {
         Some(mut resource) => {
             if resource.mime.starts_with("text/html") {
-                let html = String::from_utf8_lossy(&resource.bytes).replace(
-                    "<head>",
-                    if ctx.backend.kind() == WebKind::Codex {
-                        "<head><meta name=\"desko-runtime\" content=\"web\"><meta name=\"desko-service\" content=\"codex\">"
-                    } else { "<head><meta name=\"desko-runtime\" content=\"web\">" },
-                );
+                let html = String::from_utf8_lossy(&resource.bytes)
+                    .replace("<head>", "<head><meta name=\"desko-runtime\" content=\"web\">");
                 resource.bytes = html.into_bytes();
             }
             respond(req, 200, resource, None);
@@ -692,11 +679,10 @@ fn start(
     })
 }
 #[tauri::command]
-pub fn web_access_status(state: tauri::State<WebAccessState>, kind: Option<WebKind>) -> Result<WebStatus, String> {
+pub fn web_access_status(state: tauri::State<WebAccessState>) -> Result<WebStatus, String> {
     let mut running = state.0.lock().map_err(|_| "无法读取服务状态")?;
-    let key = if kind.unwrap_or_default() == WebKind::Codex { "codex" } else { "app" };
-    if running.get_mut(key).is_some_and(|service| !service.alive()) { running.remove(key); }
-    Ok(running.get(key).map(|service| service.current_status()).unwrap_or_default())
+    if running.as_mut().is_some_and(|service| !service.alive()) { *running = None; }
+    Ok(running.as_ref().map(|service| service.current_status()).unwrap_or_default())
 }
 #[tauri::command]
 pub async fn web_access_start(app: AppHandle, input: StartInput) -> Result<WebStatus, String> {
@@ -706,46 +692,37 @@ pub async fn web_access_start(app: AppHandle, input: StartInput) -> Result<WebSt
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<WebAccessState>();
         let mut running = state.0.lock().map_err(|_| "无法读取服务状态")?;
-        let key = if input.kind == WebKind::Codex { "codex" } else { "app" };
-        if running.get_mut(key).is_some_and(|service| !service.alive()) { running.remove(key); }
-        if running.contains_key(key) {
+        if running.as_mut().is_some_and(|service| !service.alive()) { *running = None; }
+        if running.is_some() {
             return Err("服务已启动，请先停止再修改配置".into());
         }
         let service = process::WebProcess::launch(
-            Arc::new(bridge::AppBackend::new_kind(app.clone(), input.kind)?),
+            Arc::new(bridge::AppBackend::new(app.clone())?),
             input.port,
             input.lan,
         )?;
         let status = service.current_status();
-        running.insert(key.to_string(), service);
+        *running = Some(service);
         Ok(status)
     })
     .await
     .map_err(|_| "服务启动失败")?
 }
 #[tauri::command]
-pub async fn web_access_stop(app: AppHandle, kind: Option<WebKind>) -> Result<(), String> {
+pub async fn web_access_stop(app: AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<WebAccessState>();
         let mut running = state.0.lock().map_err(|_| "无法停止服务")?;
-        if let Some(kind) = kind {
-            running.remove(if kind == WebKind::Codex { "codex" } else { "app" });
-        } else { running.clear(); }
+        *running = None;
         Ok(())
     })
     .await
     .map_err(|_| "停止服务失败")?
 }
-pub(crate) fn stop_codex(app: &AppHandle) {
-    if let Some(state) = app.try_state::<WebAccessState>() {
-        let service = state.0.lock().unwrap_or_else(|e| e.into_inner()).remove("codex");
-        drop(service);
-    }
-}
 pub fn revoke(app: &AppHandle) {
     if let Some(state) = app.try_state::<WebAccessState>() {
         if let Ok(mut service) = state.0.lock() {
-            service.clear();
+            *service = None;
         }
     }
 }

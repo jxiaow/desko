@@ -69,11 +69,10 @@ const emit = defineEmits<{
 
 const draft = ref(props.note.content_html)
 const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
+const rootEl = ref<HTMLElement | null>(null)
 const bodyEl = ref<HTMLElement | null>(null)
-const clipped = ref(false)
-const expanded = ref(false)
 
-/** 截断容差：只藏掉这么多像素就不算截断，别为一行空隙冒出「展开全文」 */
+/** 截断容差：只藏掉这么多像素就不算截断，别为一行空隙把上限压到块边界 */
 const CLAMP_TOL = 8
 
 /**
@@ -84,10 +83,8 @@ const applyClamp = async () => {
   await nextTick()
   const el = bodyEl.value
   if (!el || !pageActive.value) return
-  // 内联上限一清就回到 CSS 预算，展开态也正是要全露，两种情况都只留这一句
+  // 内联上限一清就回到 CSS 预算
   el.style.maxHeight = ''
-  // 展开态量不出截断（内容全露），保留上一次结果，收起时再重算
-  if (expanded.value) return
 
   const style = getComputedStyle(el)
   const budget = parseFloat(style.maxHeight) || Number.MAX_SAFE_INTEGER
@@ -101,7 +98,7 @@ const applyClamp = async () => {
     cut = bottom
     cutIndex = i
   }
-  // 孤行标题：最后一块正好是标题、后面还有正文，收起来就剩个头悬在「展开全文」上
+  // 孤行标题：最后一块正好是标题、后面还有正文，收起来就剩个头贴在截断线上
   const last = kids[cutIndex]
   if (cutIndex >= 0 && cutIndex < kids.length - 1 && /^H[1-4]$/.test(last?.tagName ?? '')) {
     const prev = kids[cutIndex - 1]
@@ -110,8 +107,7 @@ const applyClamp = async () => {
   // 首块就超预算时按整行切，至少露得出开头
   if (cut === 0) cut = Math.max(1, Math.floor(budget / lineH)) * lineH
 
-  clipped.value = el.scrollHeight > cut + CLAMP_TOL
-  if (clipped.value) el.style.maxHeight = `${Math.round(cut)}px`
+  if (el.scrollHeight > cut + CLAMP_TOL) el.style.maxHeight = `${Math.round(cut)}px`
 }
 
 const onResize = () => applyClamp()
@@ -121,7 +117,6 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 
 // 只读正文在编辑态会整个卸掉，回来时是一个新元素，组件本身不会重新挂载
 watch(bodyEl, applyClamp)
-watch(expanded, applyClamp)
 watch(pageActive, visible => { if (visible) void applyClamp() })
 
 // 就地编辑开始的那一刻才取快照：全屏层可能已把这行正文改过并落库
@@ -182,10 +177,18 @@ const edited = computed(() => props.note.updated_at - props.note.created_at > 60
 /** 列表标签只在底部展示，与筛选、分类共用 noteMeta 的派生结果。 */
 const noteTags = computed(() => (locked.value ? [] : noteMeta(props.note.content_html).tags))
 
+/** 卡是摘要，全文在阅读层：点正文/标题、按 Enter 都是读这条。 */
+const openView = () => {
+  // 阅读层关掉后把焦点交还这张卡，而不是被卸载的 DOM 节点
+  rootEl.value?.focus({ preventScroll: true })
+  emit('view')
+}
+
 /* 头部条不吃正文点击（时间/附件/操作按钮区），但批量态下整卡都是选择热区。 */
 const onHeadClick = (e: MouseEvent) => {
   e.stopPropagation()
   if (props.isBatchMode) emit('select')
+  else if (!locked.value) openView()
 }
 
 const onBodyClick = (e: MouseEvent) => {
@@ -203,9 +206,12 @@ const onBodyClick = (e: MouseEvent) => {
     toggleTask(e, box)
     return
   }
-  // 正文里的链接是内容不是入口：点开交给本机浏览器，别顺路把卡片切到编辑态
+  // 正文里的链接是内容不是入口：点开交给本机浏览器，别顺路把卡片切到阅读层
   if (openLinkFromClick(e)) return
-  // 展开收起交给正文下的显式按钮：正文单击曾是唯一的展开入口，但它和框选文字冲突
+  // 拖选文字是在读卡面摘要，不该被顺手推进阅读层
+  const selection = window.getSelection()
+  if (selection && !selection.isCollapsed) return
+  openView()
 }
 
 const onKeydown = (e: KeyboardEvent) => {
@@ -213,7 +219,7 @@ const onKeydown = (e: KeyboardEvent) => {
   e.preventDefault()
   if (props.isBatchMode) emit('select')
   else if (locked.value) emit('unlock')
-  else emit('open')
+  else openView()
 }
 
 const onUpdate = (value: string) => {
@@ -235,12 +241,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 <template>
   <article
     v-if="!props.editing"
+    ref="rootEl"
     class="memo"
     :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected, locked, 'without-title': !display.title }"
     tabindex="0"
     role="button"
     :aria-pressed="props.isBatchMode ? props.isSelected : undefined"
-    :aria-label="props.isBatchMode ? `选择小记：${titleText}` : locked ? `已加密小记${props.note.title ? '：' + props.note.title : ''}（${formatRelativeTime(props.note.created_at)}，点击解锁）` : `小记：${titleText}（Enter 或悬停按钮编辑）`"
+    :aria-label="props.isBatchMode ? `选择小记：${titleText}` : locked ? `已加密小记${props.note.title ? '：' + props.note.title : ''}（${formatRelativeTime(props.note.created_at)}，点击解锁）` : `小记：${titleText}（Enter 阅读）`"
     @click="onBodyClick"
     @keydown="onKeydown"
   >
@@ -249,96 +256,90 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     </span>
 
     <div class="memo-head" @click="onHeadClick">
+      <span v-if="props.note.pinned" class="memo-pin" aria-hidden="true"><AppIcon name="pin" :size="12" /></span>
       <span v-if="display.title" class="memo-title">{{ display.title }}</span>
-      <span class="memo-state">
-        <span v-if="props.note.starred" class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
-      </span>
-      <span class="memo-time" :title="edited ? `更新于 ${formatAbsTime(props.note.updated_at)}` : undefined">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
-
-      <!-- hover 显形的动作排：常用五颗，其余进 ⋯（时间在排后让位，实底不吃正文） -->
-      <span v-if="!props.isBatchMode" class="memo-acts">
-        <template v-if="locked">
-          <button class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
-            <AppIcon name="unlock" :size="14" />
-          </button>
-          <NoteMoreMenu v-if="!isWebRuntime()" sealed :note="props.note" :export-disabled="props.exportDisabled" @export="emit('export', $event)" />
-        </template>
-        <template v-else>
-          <button class="ib memo-desktop-action" type="button" title="全屏查看" aria-label="全屏查看" @click.stop="emit('view')">
-            <AppIcon name="eye" :size="14" />
-          </button>
-          <button class="ib memo-edit memo-desktop-action" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
-            <AppIcon name="edit" :size="14" />
-          </button>
-          <button
-            v-if="!props.archivedView"
-            class="ib memo-desktop-action"
-            type="button"
-            :class="{ on: props.note.pinned }"
-            :title="props.note.pinned ? '取消置顶' : '置顶'"
-            :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
-            @click.stop="emit('togglePin')"
-          >
-            <AppIcon name="pin" :size="14" />
-          </button>
-          <button
-            v-else
-            class="ib memo-desktop-action"
-            type="button"
-            title="取消归档，放回「全部」"
-            aria-label="取消归档"
-            @click.stop="emit('toggleArchive')"
-          >
-            <AppIcon name="unarchive" :size="14" />
-          </button>
-          <button class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
-            <AppIcon name="copy" :size="15" />
-          </button>
-          <NoteMoreMenu
-            :note="props.note"
-            :mobile-actions="isWebRuntime()"
-            :archived-view="props.archivedView"
-            :export-disabled="props.exportDisabled"
-            @toggle-pin="emit('togglePin')"
-            @view="emit('view')"
-            @edit="openEditor"
-            @toggle-star="emit('toggleStar')"
-            @toggle-archive="emit('toggleArchive')"
-            @export="emit('export', $event)"
-            @encrypt="emit('encrypt')"
-            @relock="emit('relock')"
-            @remove-lock="emit('removeLock')"
-            @delete="emit('delete')"
-          />
-        </template>
-      </span>
+      <template v-if="!locked">
+        <span class="memo-state">
+          <span v-if="props.note.starred" class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
+        </span>
+        <span class="memo-time" :title="edited ? `更新于 ${formatAbsTime(props.note.updated_at)}` : undefined">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
+      </template>
     </div>
 
-    <div v-if="locked" class="memo-locked">
+    <!-- hover 显形的动作排：常用五颗，其余进 ⋯（时间在排后让位，实底不吃正文） -->
+    <span v-if="!props.isBatchMode" class="memo-acts" @click.stop>
+      <template v-if="locked">
+        <button class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
+          <AppIcon name="unlock" :size="16" />
+        </button>
+        <NoteMoreMenu v-if="!isWebRuntime()" sealed :note="props.note" :export-disabled="props.exportDisabled" @export="emit('export', $event)" />
+      </template>
+      <template v-else>
+        <button class="ib memo-edit memo-desktop-action" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
+          <AppIcon name="edit" :size="16" />
+        </button>
+        <button
+          v-if="!props.archivedView"
+          class="ib memo-desktop-action"
+          type="button"
+          :class="{ on: props.note.pinned }"
+          :title="props.note.pinned ? '取消置顶' : '置顶'"
+          :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
+          @click.stop="emit('togglePin')"
+        >
+          <AppIcon name="pin" :size="16" />
+        </button>
+        <button
+          v-else
+          class="ib memo-desktop-action"
+          type="button"
+          title="取消归档，放回「全部」"
+          aria-label="取消归档"
+          @click.stop="emit('toggleArchive')"
+        >
+          <AppIcon name="unarchive" :size="16" />
+        </button>
+        <button class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
+          <AppIcon name="copy" :size="16" />
+        </button>
+        <NoteMoreMenu
+          :note="props.note"
+          :mobile-actions="isWebRuntime()"
+          :archived-view="props.archivedView"
+          :export-disabled="props.exportDisabled"
+          @toggle-pin="emit('togglePin')"
+          @view="emit('view')"
+          @edit="openEditor"
+          @toggle-star="emit('toggleStar')"
+          @toggle-archive="emit('toggleArchive')"
+          @export="emit('export', $event)"
+          @encrypt="emit('encrypt')"
+          @relock="emit('relock')"
+          @remove-lock="emit('removeLock')"
+          @delete="emit('delete')"
+        />
+      </template>
+    </span>
+
+    <div v-if="locked" class="memo-locked" :class="{ 'has-title': props.note.title }">
       <span class="lock-disc"><AppIcon name="lock" :size="16" /></span>
       <span class="lock-meta">
         <span v-if="props.note.title" class="locked-title">{{ props.note.title }}</span>
-        <span class="locked-hint">{{ props.note.title ? '· 点击解锁' : '已加密 · 点击解锁' }}</span>
+        <span class="locked-hint">已加密 · 点击解锁</span>
       </span>
+      <span v-if="props.note.starred" class="memo-state">
+        <span class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
+      </span>
+      <span class="memo-time" :title="edited ? `更新于 ${formatAbsTime(props.note.updated_at)}` : undefined">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
     </div>
     <template v-else>
       <div
         ref="bodyEl"
         class="memo-body"
-        :class="{ expanded, promoted: promote }"
+        :class="{ promoted: promote }"
         v-html="bodyHtml"
         @load.capture="applyClamp"
       />
-      <button
-        v-if="clipped && !props.isBatchMode"
-        class="memo-unfold"
-        type="button"
-        :aria-expanded="expanded"
-        @click.stop="expanded = !expanded"
-      >
-        <AppIcon name="chevDown" :size="12" :class="{ up: expanded }" />
-        {{ expanded ? '收起' : '展开全文' }}
-      </button>
     </template>
 
     <div v-if="!locked && (visibleAtts.length || noteTags.length)" class="memo-foot" @click="onHeadClick">
@@ -411,13 +412,17 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   padding: 14px var(--space-4) 14px var(--space-6);
   box-shadow: var(--shadow-card-rest);
   transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition), transform var(--transition);
+  /* 点正文就是打开阅读：卡是摘要，读全文去阅读层 */
+  cursor: pointer;
 }
 /* hover 与收藏/文件行卡同一配方：描边显色 + 背景微沉（轻量化轮，抬影退役） */
 .memo:hover {
   border-color: var(--border-card-hover);
   background-color: var(--bg-surface-hover);
 }
-.memo.pinned { border-color: var(--accent-light); }
+/* 置顶不再给卡面描一道强调色边：置顶已经有「置顶」分组标题说，同一列里两张不同的
+   边框色只会让人以为"这张是选中的"。而且它的权重压过了 hover（两者同权、它在后），
+   置顶卡反而少了悬停反馈。 */
 .memo.editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }
 .memo:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 
@@ -429,49 +434,27 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   line-height: 24px;
   color: var(--text);
   word-break: break-word;
+  cursor: pointer;
 }
-.memo-body.expanded { max-height: none; }
 /* 首块已提升为标题行：正文里藏掉它避免重复。用 display:none 而非删节点，
    保住 toggleTask「渲染序 == 库序」的 checkbox 对位 */
 .memo-body.promoted :deep(> :first-child) { display: none; }
+/* 被藏掉的标题块的邻接段距不该把三行预算挤掉一行 */
+.memo-body.promoted :deep(> :first-child + *) { margin-top: 0; }
 
-/* 截断由 JS 收在整行边界，入口就是这一颗，不再靠渐隐暗示。
-   28px = 卡上带文字按钮的档位（与 .action-btn 同轴），不另开 26 */
-.memo-unfold {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  margin-top: 3px;
-  padding: 0 var(--space-1);
-  margin-left: calc(0px - var(--space-1));
-  border: none;
-  border-radius: var(--radius-ib);
-  background: transparent;
-  color: var(--accent);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-}
-.memo-unfold:hover { background: var(--accent-soft); }
-.memo-unfold :deep(svg) { transition: transform var(--transition); }
-.memo-unfold :deep(svg.up) { transform: rotate(180deg); }
-
-/* 加密锁标识：占掉正文位置，一眼知道这条要看密码。
-   底纹走极淡斜纹——不读字也能扫出"这块是锁着的"，浓到贴纸感就过头 */
+/* 加密锁标识：整张卡退化成一条封条——锁徽 + 标题/提示 + 时间，一行读完。
+   时间挪进这一行：原先它自己占一条 24px 的标题行，下面再放一条 44px 的锁行，
+   满宽的卡里两行都只有右端/左端各自一个元素，中间是一大片空的，读起来像卡没渲染完。
+   斜纹也一并去掉：900px 宽的极淡斜纹在屏幕上更像脏印，锁徽和文案已经说明这条要口令。 */
+.memo.locked { cursor: pointer; }
+.memo.locked .memo-head { display: none; }
 .memo-locked {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-height: 44px;
-  font-size: var(--text-base);
-  color: var(--text-muted);
   cursor: pointer;
   user-select: none;
-  border-radius: var(--radius);
-  background: repeating-linear-gradient(-45deg, /* taste-skill-ignore: 保留现有加密态纹理，区别普通小记。 */
-    color-mix(in srgb, var(--warning) 2.5%, transparent) 0 4px,
-    transparent 4px 18px);
 }
 .lock-disc {
   width: 34px;
@@ -484,9 +467,16 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   align-items: center;
   justify-content: center;
 }
-.lock-meta { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+/* 标题与提示纵向成一段，和普通卡「标题行 + 正文首行」同一节奏 */
+.lock-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
 /* 锁着也认得出是哪条：只有真标题（h1–h3）会留明文，其余只剩提示语 */
-.locked-title { color: var(--text); font-size: var(--text-md); font-weight: 600; letter-spacing: normal; }
+.locked-title { color: var(--text); font-size: var(--text-md); font-weight: 600; line-height: 24px; letter-spacing: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.locked-hint { font-size: var(--text-sm); line-height: 19px; color: var(--text-muted); }
+/* 没有明文标题的老条目只剩这一句，它是整张卡唯一的字，不该按副标题的 13px 排 */
+.memo-locked:not(.has-title) .locked-hint { font-size: var(--text-base); color: var(--text-secondary); }
+.memo-locked .memo-time { margin-left: auto; }
+/* 有标题时时间落在标题那一行（普通卡的时间也在标题行）；只有提示语时跟它居中对齐 */
+.memo-locked.has-title .memo-time { align-self: flex-start; margin-top: 3px; }
 /* 只给正文顶层块加间距，理由同 NoteEditor：* + * 会把任务项的正文压到勾选框下面 */
 .memo-body :deep(> * + *) { margin-top: var(--space-2); }
 .memo-body :deep(* + h1), .memo-body :deep(* + h2), .memo-body :deep(* + h3) { margin-top: var(--space-4); }
@@ -509,14 +499,17 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-body :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 34vh; object-fit: contain; border-radius: var(--radius); }
 
 /* 标题行：标题(粗) + 收藏标 + 时间(右)，对齐 mock .t */
+/* 行高与正文首行对齐：正文是 14px / line-height 24，首行中心距顶 12；
+   这里取 24 高、下距 0，时间与标题的中心同样落在 12——
+   20 + 3 的旧值会把时间顶高 2px，单行小记看着像时间悬在正文之外。 */
 .memo-head {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  margin-bottom: 3px;
-  min-height: 20px;
+  margin-bottom: 0;
+  min-height: 24px;
   cursor: pointer;
 }
 .memo-title {
@@ -531,9 +524,11 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   text-overflow: ellipsis;
 }
 .memo-time { font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; transition: opacity var(--transition); }
+/* 置顶卡在标题前挂一枚小图钉：滚过「置顶」小标也认得出 */
+.memo-pin { display: inline-flex; align-items: center; flex: 0 0 auto; color: var(--text-muted); margin-right: -3px; }
 .memo.batchable .memo-tags { pointer-events: none; }
 /* 底部 meta 行：附件数 + 标签胶囊（对齐 mock .tags，从顶部 meta 行下移） */
-.memo-foot { display: flex; align-items: center; gap: 10px; margin-top: 2px; min-height: 20px; }
+.memo-foot { display: flex; align-items: center; gap: 10px; margin-top: 8px; min-height: 20px; }
 .memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); color: var(--text-muted); flex-shrink: 0; }
 /* 标签胶囊：20px 档与卡片里的其余胶囊同高。
    命中的那颗转主色，点下去看得见自己生效了；悬停不跟着动作排一起淡掉——它是筛选入口不是状态标 */
@@ -557,12 +552,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
 .memo:not(.batchable):hover .memo-state, .memo:not(.batchable):focus-within .memo-state { opacity: 0; }
 .state-star { color: var(--warning); display: inline-flex; }
-/* 动作排就地顶替时间：底取悬停后的卡面档，看不出另贴了一块；正文永不被压 */
+/* 动作排就地顶替时间：底取悬停后的卡面档，看不出另贴了一块；正文永不被压。
+   它挂在卡上而不是标题行里——锁着的卡整行退化成封条，没有标题行可挂，
+   挂卡上才能让两种卡的动作都落在右上角同一处（11 / 21 就是两行各自的行心）。 */
 .memo-acts {
   position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  right: var(--space-4);
+  top: 11px;
   z-index: 15;
   display: flex;
   gap: 2px;
@@ -573,12 +569,15 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   pointer-events: none;
   transition: opacity var(--transition);
 }
+.memo.locked .memo-acts { top: 21px; }
 /* 悬停/聚焦才显形，且不吞正文点击（透明态 pointer-events 关） */
 .memo:hover .memo-acts, .memo:focus-within .memo-acts { opacity: 1; pointer-events: auto; }
 /* 时间让位给动作排：实底只有排这么宽，长标题会被右缘裁掉，留着时间就是叠字 */
 .memo:not(.editing):not(.batchable):hover .memo-time, .memo:not(.editing):not(.batchable):focus-within .memo-time { opacity: 0; }
 .memo-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
-.memo-acts .ib :deep(svg) { width: 16px; height: 16px; }
+/* 图标尺寸交给 AppIcon 的 :size：它按渲染尺寸反算描边，全窗实笔恒为 1.5px。
+   早先这里写 :size="14" 再用 CSS 拉到 16，svg 被放大 14%，描边跟着变成 1.71px——
+   五颗悬停钮比旁边同为 16px 的图标都重一点，正是"看着不齐"的来源。 */
 
 .memo-check {
   position: absolute;
@@ -629,14 +628,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   width: var(--memo-controls-width);
   height: 28px;
 }
-.memo.without-title .memo-locked { padding-right: var(--memo-controls-width); }
-/* 锁着的卡没有正文可避让：时间行回到常规流，斜纹从时间下方起笔，别穿过后者的字 */
-.memo.without-title.locked .memo-head {
-  position: static;
-  width: auto;
-  margin: 0 0 3px;
-}
-.memo.without-title.locked .memo-locked { padding-right: 0; }
 .memo.without-title .memo-body :deep(> img:first-child),
 .memo.without-title .memo-body :deep(> :first-child img) {
   max-width: calc(100% - var(--memo-controls-width));

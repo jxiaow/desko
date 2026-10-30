@@ -33,19 +33,18 @@ mod tests {
     }
 
     #[test]
-    fn legacy_index_migrates_and_same_thread_id_can_exist_in_windows_and_wsl() {
+    fn reopening_the_database_clears_threads_and_same_id_can_exist_in_windows_and_wsl() {
         let db = Database::new(":memory:").unwrap();
-        db.conn.execute_batch("DROP TABLE codex_dialog_threads;
-            CREATE TABLE codex_dialog_threads (id TEXT PRIMARY KEY, metadata TEXT NOT NULL, updated_at INTEGER NOT NULL);").unwrap();
-        let old = serde_json::json!({"id":"same-id","cwd":"C:/repo","title":"Windows 历史","model":null,"sandbox":"read-only","createdAt":1,"updatedAt":2});
-        db.conn.execute("INSERT INTO codex_dialog_threads VALUES (?1, ?2, ?3)", rusqlite::params!["same-id",old.to_string(),2]).unwrap();
-        crate::db::schema::run_schema(&db.conn).unwrap();
-        crate::db::schema::run_schema(&db.conn).unwrap();
-        let mut thread = db.codex_dialog_threads().unwrap().remove(0);
-        assert_eq!(thread.environment, crate::services::codex_bridge::environment::Environment::Native);
-        thread.environment = crate::services::codex_bridge::environment::Environment::Wsl { distro: "Ubuntu".into(), user: "alice".into() };
-        thread.cwd = "/mnt/c/repo".into(); thread.title = "WSL 历史".into();
+        let thread = Thread { id: "same-id".into(), environment: Default::default(), session_id: "session".into(), cwd: "C:/repo".into(), title: "Windows 历史".into(), source: None, model: None, sandbox: "read-only".into(), created_at: 1, updated_at: 2 };
         db.save_codex_dialog_thread(&thread).unwrap();
+        crate::db::schema::run_schema(&db.conn).unwrap();
+        crate::db::schema::run_schema(&db.conn).unwrap();
+        assert!(db.codex_dialog_threads().unwrap().is_empty());
+        let mut wsl = thread.clone();
+        wsl.environment = crate::services::codex_bridge::environment::Environment::Wsl { distro: "Ubuntu".into(), user: "alice".into() };
+        wsl.cwd = "/mnt/c/repo".into(); wsl.title = "WSL 历史".into(); wsl.updated_at = 3;
+        db.save_codex_dialog_thread(&thread).unwrap();
+        db.save_codex_dialog_thread(&wsl).unwrap();
         let rows = db.codex_dialog_threads().unwrap();
         assert_eq!(rows.len(), 2);
         assert!(rows.iter().any(|t| t.title == "Windows 历史"));

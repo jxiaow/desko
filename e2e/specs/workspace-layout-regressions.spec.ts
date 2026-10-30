@@ -25,7 +25,7 @@ for (const width of [1040, 1920]) {
     await expect(toggle).toHaveAttribute('aria-expanded', 'true')
     const before = await bounds(toggle)
     const expanded = (await bounds(page.locator('.workspace-main'))).width
-    expect(before.x).toBeGreaterThanOrEqual(148)
+    expect(before.x).toBeGreaterThanOrEqual(208)
     await toggle.click()
     const collapsedButton = page.getByRole('button', { name: '展开侧栏', exact: true })
     await expect(collapsedButton).toHaveAttribute('aria-expanded', 'false')
@@ -47,7 +47,8 @@ for (const width of [800, 1040, 1920]) {
     const toolbar = page.locator('#workspace-page-toolbar')
     await expect(page.locator('.titlebar-outer #workspace-page-toolbar')).toBeVisible()
     expect((await bounds(page.locator('.titlebar-outer'))).height).toBe(48)
-    let searchLeft: number | undefined
+    let searchOffset: number | undefined
+    const columns: Record<string, { x: number; width: number }> = {}
     for (const [route, columnSelector] of [
       ['notes', '.composer'], ['entries', '.card-grid:has(.entry-card)'], ['files', '.shortcut-list'],
       ['mfa', '.card-grid:has(.mfa-card:not(.skeleton))'], ['codex', '.rcard-list:has(.acc-row)'],
@@ -57,6 +58,7 @@ for (const width of [800, 1040, 1920]) {
       await expect(column).toBeVisible()
       const main = await bounds(page.locator('.workspace-main'))
       const content = await bounds(column)
+      columns[route] = { x: content.x, width: content.width }
       expect(content.width).toBeLessThanOrEqual(1120.5)
       expect(content.x).toBeGreaterThanOrEqual(main.x + 32)
       expect(content.x + content.width).toBeLessThanOrEqual(main.x + main.width - 32)
@@ -69,12 +71,14 @@ for (const width of [800, 1040, 1920]) {
       expect(actions.y + actions.height).toBeLessThanOrEqual(48)
       if (route !== 'mfa') {
         const search = await bounds((route === 'codex' ? page.locator('#codex-view-filters') : toolbar).locator('.search-box'))
-        if (searchLeft === undefined) searchLeft = search.x
+        // 各页阅读列宽度不同（小记与 Codex 940、其余 1120），比较的是搜索框在列内的起始偏移。
+        const offset = search.x - content.x
+        if (searchOffset === undefined) searchOffset = offset
         if (route === 'codex') {
           expect(search.x).toBe(content.x)
           expect(search.y).toBeGreaterThanOrEqual(48)
           await expect(toolbar.locator('.search-box')).toHaveCount(0)
-        } else expect(Math.abs(search.x - searchLeft)).toBeLessThanOrEqual(1)
+        } else expect(Math.abs(offset - searchOffset)).toBeLessThanOrEqual(1)
         // 工具条档搜索框 flex: 1 1 120px、max-width: 360px（CodexWorkspace 顶栏改版后的档位）。
         expect(search.width).toBeLessThanOrEqual(360.5)
         expect(search.width).toBeGreaterThanOrEqual(120)
@@ -94,6 +98,9 @@ for (const width of [800, 1040, 1920]) {
       expect(border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
       expect(await page.locator('.workspace-main').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     }
+    // 小记与 Codex 同一个外壳、同一条页头，列宽必须一致：小记早先单走 720，
+    // 切页时页名与搜索框横跳约 94px（1240 窗），窄列本身也在宽窗里空掉两侧。
+    expect(columns.notes).toEqual(columns.codex)
   })
 }
 
@@ -135,7 +142,8 @@ for (const theme of ['paper', 'ink']) {
     }
     await page.locator('a.nav-item[href="/fileshare"]').click()
     await expect(page.locator('.send-panel')).toHaveCSS('box-shadow', 'none')
-    await expect(page.locator('.drop-card')).toHaveCSS('box-shadow', 'none')
+    // 卡面改为柔影分层（描边只留一丝），仍是一层短软影，不是抬起的浮层。
+    await expect(page.locator('.drop-card')).toHaveCSS('box-shadow', /0px 1px 2px/)
   })
 }
 

@@ -165,13 +165,41 @@
   --material-key: oklch(from var(--accent) 0.9 calc(c * 0.55) h);
   --material-fill: oklch(from var(--accent) 0.92 calc(c * 0.5) calc(h + 24));
   --material-workspace-light: #ffffff;
-  /* 对话框 78% 是它自己 520px 的面（半径约 405px）；照搬到 1040px 的工作区就是 810px，
-     空页中段会被整片染色。按同一物理半径折算到工作区约 52% 54%，光只守两个角。 */
+  /* 骨架改为「窗框 + 浮片」：光染窗框（非阅读面），浮片保持安静。
+     框比阅读面深一级，光才第一次有可见的载体——这是柔光能被读成「光」而不是「染色」的前提。
+     一级仍然要在：L 收到 .95 时框和片几乎同色，三层塌成两层，画面反而发闷；
+     取 .945 留一档可读的色差，彩度退到 .062 只去掉「底板感」，不抹掉色温。 */
+  --frame-base: oklch(from var(--accent) 0.945 calc(c * 0.062) h);
+  --glow-core: rgb(255 255 255 / 62%);
+  --glow-key: oklch(from var(--accent) 0.85 calc(c * 0.7) h);
+  --glow-comp: oklch(from var(--accent) 0.87 calc(c * 0.55) calc(h + 38));
+  --glow-fill: oklch(from var(--accent) 0.87 calc(c * 0.5) calc(h + 30));
+  /* 第三团色相（-42°）只在空态品牌时刻出场：日常画面里三色相会吵，空页才撑得住。 */
+  --glow-warm: oklch(from var(--accent) 0.885 calc(c * 0.5) calc(h - 42));
+  /* 颗粒层：没有噪点的大渐变在低强度下发闷、高强度出色带；4% 的 fractalNoise 正好压住。
+     直接作为背景最上层，不额外造元素——避免又一个可能被提升到遮罩之上的层。 */
+  --workspace-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+  /* 主光带白核（左上）→ 中段过渡 → 伴光（右侧偏上，色相 +38，打破双角对称）→ 辅光（右下） */
   --material-workspace-field:
-    radial-gradient(ellipse 52% 54% at 0% 0%, color-mix(in srgb, var(--material-key) 18%, transparent), transparent 100%),
-    radial-gradient(ellipse 52% 54% at 100% 100%, color-mix(in srgb, var(--material-fill) 14%, transparent), transparent 100%);
-  /* 卡面吃同一层光：卡片占掉内容区大半，光只铺在画布上就只剩卡片缝可见，
-     看起来等于没开。墨底保持 none——深底再加一层彩光会把卡面糊成色块。 */
+    radial-gradient(ellipse 72% 54% at -10% -14%, var(--glow-core) 0%, transparent 64%),
+    radial-gradient(ellipse 115% 85% at -8% -12%,
+      color-mix(in srgb, var(--glow-key) 30%, transparent) 0%,
+      color-mix(in srgb, var(--glow-key) 11%, transparent) 45%,
+      transparent 76%),
+    radial-gradient(ellipse 62% 56% at 106% 30%,
+      color-mix(in srgb, var(--glow-comp) 15%, transparent) 0%,
+      color-mix(in srgb, var(--glow-comp) 5%, transparent) 50%,
+      transparent 78%),
+    radial-gradient(ellipse 95% 80% at 110% 114%,
+      color-mix(in srgb, var(--glow-fill) 26%, transparent) 0%,
+      color-mix(in srgb, var(--glow-fill) 10%, transparent) 48%,
+      transparent 80%);
+  /* 浮片：内容直接坐在这一层上。三层明度 框(有色) > 片(浅灰) > 卡(纯白)。 */
+  --bg-sheet: #f7f7f5;
+  --bg-card: #ffffff;
+  /* 浮片只托一档：它的影子要比卡片更短更轻，否则一块贴着窗框的大面板会读成
+     「悬在桌面上」，把里面卡片的高度一起压没。分层主要交给明度（框 > 片 > 卡）。 */
+  --shadow-sheet: 0 1px 2px rgb(15 23 42 / 4%), 0 5px 14px -8px rgb(15 23 42 / 10%);
   --material-surface-field: none;
   --material-floating-field:
     radial-gradient(ellipse 80% 65% at 0% 0%, color-mix(in srgb, var(--material-workspace-light) 10%, transparent), transparent 90%),
@@ -183,10 +211,10 @@
     radial-gradient(ellipse 78% 72% at 0% 0%, color-mix(in srgb, var(--material-dialog-key) 18%, transparent), transparent 100%),
     radial-gradient(ellipse 78% 72% at 100% 100%, color-mix(in srgb, var(--material-dialog-fill) 14%, transparent), transparent 100%),
     var(--panel-bg);
-  --bg-workspace: var(--bg);
-  /* Logo 格与导航轨融入画布，共用底色和同一坐标的氛围光。 */
-  --bg-workspace-rail: var(--bg-workspace);
-  --bg-inspector: var(--bg-workspace);
+  --bg-workspace: var(--frame-base);
+  /* Logo 格与导航轨全部透明：坐在窗框上，直接透出同一层光。 */
+  --bg-workspace-rail: transparent;
+  --bg-inspector: transparent;
   --bg-editor: var(--bg);
   --bg-workspace-selected: color-mix(in oklab, var(--accent) 10%, var(--panel-bg));
   --bg-workspace-hover: color-mix(in oklab, var(--text) 5%, var(--panel-bg));
@@ -202,19 +230,37 @@
 }
 
 :root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
-  /* 暗底的光要抬「明度」而不是再压暗：强调色先抬到近白再混，
-     5% 落在画布上只升不让偏色；右下换成黑色阴影，暗底才读得出方向。 */
+  /* 暗底的光要抬「明度」而不是再压暗：强调色先抬到近白再混。 */
   --material-workspace-light: color-mix(in srgb, var(--accent) 24%, #fff);
   --material-workspace-light-strength: 5%;
   --material-workspace-light-mid: 2.1%;
   --material-workspace-shade: #000;
   --material-workspace-shade-strength: 42%;
+  /* 墨底框压到 L .215，浮片 .262 才浮得起来；四层光与纸底同构，只是强度收一档。 */
+  --frame-base: oklch(from var(--accent) 0.165 calc(c * 0.1) h);
+  --glow-core: color-mix(in srgb, var(--glow-key) 8%, transparent);
+  --glow-key: color-mix(in srgb, var(--accent) 60%, #ffffff);
+  --glow-comp: oklch(from var(--accent) 0.6 calc(c * 0.5) calc(h + 38));
+  --glow-fill: oklch(from var(--accent) 0.6 calc(c * 0.45) calc(h + 30));
+  --glow-warm: oklch(from var(--accent) 0.615 calc(c * 0.45) calc(h - 42));
+  --bg-sheet: #26292f;
+  /* 墨底卡面比浮片再抬一档：片 .231、卡 .258、框 .165，三层才拉得开。
+     只换卡面自己的 --bg-surface（见 CodexWorkspace 的本地绑定），
+     输入框与弹窗仍读全局卡面，否则搜索框描边会跟着掉对比度。 */
+  --bg-card: #2c2f35;
+  --shadow-sheet: inset 0 1px 0 rgb(255 255 255 / 7%), 0 1px 2px rgb(0 0 0 / 26%), 0 5px 14px -8px rgb(0 0 0 / 30%);
+  --material-surface-field: none;
   --material-workspace-field:
-    linear-gradient(132deg,
-      color-mix(in srgb, var(--material-workspace-light) var(--material-workspace-light-strength), transparent) 0%,
-      color-mix(in srgb, var(--material-workspace-light) var(--material-workspace-light-mid), transparent) 40%,
-      transparent 66%,
-      color-mix(in srgb, var(--material-workspace-shade) var(--material-workspace-shade-strength), transparent) 100%);
+    radial-gradient(ellipse 72% 54% at -10% -14%, var(--glow-core) 0%, transparent 64%),
+    radial-gradient(ellipse 115% 85% at -8% -12%,
+      color-mix(in srgb, var(--glow-key) 14%, transparent) 0%,
+      color-mix(in srgb, var(--glow-key) 6%, transparent) 45%,
+      transparent 76%),
+    radial-gradient(ellipse 58% 52% at 106% 30%,
+      color-mix(in srgb, var(--glow-comp) 10%, transparent) 0%, transparent 62%),
+    radial-gradient(ellipse 95% 80% at 110% 114%,
+      color-mix(in srgb, var(--glow-fill) 8%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 85% 70% at 112% 118%, rgb(0 0 0 / 30%) 0%, transparent 66%);
   /* 墨底弹窗沿用提亮档；画布光已改成近白混色，弹窗仍需要独立的提亮 key。 */
   --material-dialog-key: oklch(from var(--accent) 0.54 calc(c * 0.7) h);
   --material-dialog-fill: oklch(from var(--accent) 0.5 calc(c * 0.55) calc(h + 20));
@@ -222,6 +268,58 @@
   --bg-workspace-primary-hover: color-mix(in oklab, var(--accent) 17%, var(--bg));
   --bg-workspace-primary-active: color-mix(in oklab, var(--accent) 20%, var(--bg));
   --text-workspace-primary: color-mix(in oklab, var(--accent) 50%, var(--text));
+}
+
+/* 纸底试光：主光从左上落下来，伴光收在右缘与下缘，光沿窗框绕一圈。
+   浮片与正文仍是实底，色彩只在框上；不做纵向整屏压灰。 */
+:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"] {
+  --bg-workspace:
+    radial-gradient(ellipse 28% 34% at 50% -8%, rgb(255 255 255 / 96%) 0%, transparent 78%),
+    radial-gradient(ellipse 88% 108% at 38% -20%,
+      color-mix(in srgb, var(--glow-key) 30%, transparent) 0%,
+      color-mix(in srgb, var(--glow-key) 18%, transparent) 44%,
+      transparent 84%),
+    radial-gradient(ellipse 74% 120% at 102% 78%,
+      color-mix(in srgb, var(--glow-comp) 26%, transparent) 0%,
+      transparent 80%),
+    linear-gradient(180deg, #f1f3f4 0%, #e9edef 100%);
+}
+/* 顶带单独补一层横向色光：否则窗框只有左轨够宽，整窗看着像左上角一块染色。
+   顶光从窗口上沿落下，到标题栏下沿已经淡尽，侧栏接着同一个底色，不留接缝。
+   空页整窗自有光域配方，这里不再叠一层。 */
+:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"]:not(:has(.empty-state:not(.rcard):not(.is-filter))) .titlebar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--glow-key) 14%, transparent) 0%,
+    color-mix(in srgb, var(--glow-key) 5%, transparent) 42%,
+    transparent 62%,
+    color-mix(in srgb, var(--glow-comp) 13%, transparent) 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgb(0 0 0 / 45%) 55%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, rgb(0 0 0 / 45%) 55%, transparent 100%);
+}
+:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"] .workspace-surface {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 90%),
+    0 0 0 1px color-mix(in srgb, var(--glow-key) 22%, transparent),
+    0 1px 3px rgb(15 23 42 / 6%),
+    0 14px 32px -16px rgb(15 23 42 / 17%);
+}
+:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"]
+  .workspace-surface:not(:has(.empty-state:not(.rcard):not(.is-filter)))::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 26;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--glow-key) 11%, transparent) 0, transparent 26px),
+    linear-gradient(270deg, color-mix(in srgb, var(--glow-comp) 9%, transparent) 0, transparent 30px),
+    linear-gradient(0deg, color-mix(in srgb, var(--glow-comp) 8%, transparent) 0, transparent 26px);
 }
 
 /* 暗底的中性强调色只改变光的明暗，避免把大面积留白再刷成灰色。 */
@@ -233,11 +331,110 @@
 :root[data-layout="workspace"][data-atmosphere="on"], .workspace-theme-prev[data-atmosphere="on"] {
   --bg-dialog: var(--material-dialog-field);
   --dialog-background-attachment: scroll;
-  --bg-workspace: var(--material-workspace-field), var(--bg);
+  --bg-workspace: var(--workspace-grain), var(--material-workspace-field), var(--frame-base);
 }
 
-/* 纸底把同一层光铺到卡面；墨底不进这一条。 */
-:root[data-layout="workspace"][data-theme="paper"][data-atmosphere="on"],
-.workspace-theme-prev[data-theme="paper"][data-atmosphere="on"] {
-  --material-surface-field: var(--material-workspace-field);
+/* 空态品牌时刻：整页只剩一句空态时，浮片化开，整窗落回「光域」——
+   四层有机色光（白光从天顶落下来，主光/伴光/暖光三团色相相依），
+   配方取自 r3 原型，比日常那两层浓一档：日常只有框能承载光，空页整窗都能。
+   卡片级的 .rcard.empty-state 与「搜不到」的 .is-filter 都不算，
+   所以它只在「这一页确实什么都没有」时出现；关掉背景氛围就不触发。 */
+/* 注意：必须写在 :root 上。--bg-workspace 是在 :root 合成的，
+   里面的 var(--material-workspace-field) 会先按根节点的值展开；
+   覆盖写在 .app-root 上，合成早就完成了，等于白写（这条坑踩过一次）。 */
+:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"]:has(.empty-state:not(.rcard):not(.is-filter)) {
+  /* 整窗当画布：底色压到 .912，光才有地方落。
+     关键约定：色光必须比底色「亮」——用 glow 与白混出浅染色，
+     直接叠 glow-key（L .85）会比底色暗，整片只会变灰，不叫光。 */
+  --frame-base: oklch(from var(--accent) 0.912 0.016 h);
+  --material-workspace-field:
+    radial-gradient(ellipse 82% 64% at 10% -18%,
+      rgb(255 255 255 / 88%) 0%, rgb(255 255 255 / 44%) 42%, transparent 72%),
+    radial-gradient(ellipse 86% 76% at -12% 10%,
+      color-mix(in oklab, var(--glow-key) 50%, #ffffff) 0%,
+      color-mix(in oklab, var(--glow-key) 24%, #ffffff) 45%,
+      transparent 80%),
+    radial-gradient(ellipse 64% 62% at 104% 34%,
+      color-mix(in oklab, var(--glow-comp) 40%, #ffffff) 0%,
+      color-mix(in oklab, var(--glow-comp) 18%, #ffffff) 48%,
+      transparent 80%),
+    radial-gradient(ellipse 78% 62% at 18% 118%,
+      color-mix(in oklab, var(--glow-warm) 38%, #ffffff) 0%,
+      color-mix(in oklab, var(--glow-warm) 16%, #ffffff) 50%,
+      transparent 82%),
+    radial-gradient(ellipse 72% 62% at 112% 112%, rgb(28 46 78 / 13%) 0%, transparent 72%);
+}
+
+/* 墨底同一套光，只是框要浅一档（.165 → .225）：浮片没了，整窗就是底，
+   太深的底会让光全被吃掉。右下保留一团黑，暗底才有方向。 */
+:root[data-layout="workspace"][data-atmosphere="on"][data-base="dark"]:has(.empty-state:not(.rcard):not(.is-filter)) {
+  --frame-base: oklch(from var(--accent) 0.225 calc(c * 0.1) h);
+  --material-workspace-field:
+    /* 暗底也要有一个「光源点」：近白核心收紧、提亮，左上角才读成发光体。
+       只在暗底这么做——纸底的白核已经由天光承担。 */
+    radial-gradient(ellipse 40% 34% at 4% -6%,
+      color-mix(in srgb, color-mix(in oklab, var(--glow-key) 45%, #ffffff) 34%, transparent) 0%,
+      color-mix(in srgb, color-mix(in oklab, var(--glow-key) 45%, #ffffff) 12%, transparent) 44%,
+      transparent 72%),
+    radial-gradient(ellipse 84% 66% at 6% -16%,
+      color-mix(in srgb, var(--glow-key) 62%, transparent) 0%,
+      color-mix(in srgb, var(--glow-key) 24%, transparent) 46%,
+      transparent 78%),
+    radial-gradient(ellipse 74% 64% at -10% 26%,
+      color-mix(in srgb, var(--glow-key) 32%, transparent) 0%, transparent 70%),
+    radial-gradient(ellipse 62% 58% at 106% 28%,
+      color-mix(in srgb, var(--glow-comp) 42%, transparent) 0%,
+      color-mix(in srgb, var(--glow-comp) 15%, transparent) 50%,
+      transparent 80%),
+    radial-gradient(ellipse 78% 62% at 26% 118%,
+      color-mix(in srgb, var(--glow-warm) 30%, transparent) 0%, transparent 76%),
+    radial-gradient(ellipse 74% 60% at 110% 112%, rgb(0 0 0 / 34%) 0%, transparent 68%);
+}
+
+/* 浮片在这时不该还在：留着一块实底面板，光就只能从四周漏进来，读起来是「面板染了色」。
+   顶沿护边也一起收掉——那条 12px 的 --bg-sheet 正是标题栏下面那道横接缝。 */
+:root[data-layout="workspace"][data-atmosphere="on"]
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter)) {
+  background: transparent;
+  box-shadow: none;
+  transition: background-color 260ms ease, box-shadow 260ms ease;
+}
+:root[data-layout="workspace"][data-atmosphere="on"]
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
+  .workspace-main::before { display: none; }
+
+/* 空态本体跟着抬一档：图标坐到一枚真正的浮片上，标题回到页标题的字阶。 */
+:root[data-layout="workspace"][data-atmosphere="on"]
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
+  .empty-state:not(.rcard):not(.is-filter) {
+  animation: empty-moment-in 520ms cubic-bezier(.2, .7, .3, 1) backwards;
+}
+:root[data-layout="workspace"][data-atmosphere="on"]
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
+  .empty-state:not(.rcard):not(.is-filter) .empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: var(--bg-card);
+  border-color: var(--border-card);
+  color: var(--text-brand);
+  box-shadow: var(--shadow-sheet);
+}
+:root[data-layout="workspace"][data-atmosphere="on"]
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
+  .empty-state:not(.rcard):not(.is-filter) .empty-icon svg { width: 26px; height: 26px; }
+:root[data-layout="workspace"][data-atmosphere="on"]
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
+  .empty-state:not(.rcard):not(.is-filter) .empty-title {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+:root[data-layout="workspace"][data-atmosphere="on"]
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
+  .empty-state:not(.rcard):not(.is-filter) .empty-desc { color: var(--text-secondary); }
+
+@keyframes empty-moment-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

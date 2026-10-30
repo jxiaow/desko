@@ -29,7 +29,7 @@ test('切回小记保留就地编辑状态，工具栏、标题和搜索快捷�
   await expect.poll(async () => (await e2e.snapshot(page)).notes[0].content_html).toContain('切换模块后继续编辑')
 })
 
-test('切回小记保留卡片展开状态和列表滚动位置', async ({ page }) => {
+test('切回小记保留列表滚动位置：卡片是摘要，读全文去阅读层', async ({ page }) => {
   await bootUnlocked(page, {
     notes: Array.from({ length: 30 }, (_, i) => ({
       title: `记录 ${i}`,
@@ -37,7 +37,11 @@ test('切回小记保留卡片展开状态和列表滚动位置', async ({ page 
     })),
   })
   const first = page.locator('.memo').first()
-  await first.getByRole('button', { name: '展开全文', exact: true }).click()
+  const body = first.locator('.memo-body')
+  // 长正文按预算整块收行，卡上不再就地展开
+  await expect(first.locator('.memo-unfold')).toHaveCount(0)
+  await expect.poll(() => body.evaluate(el => el.style.maxHeight)).not.toBe('')
+  const clamped = await body.evaluate(el => el.getBoundingClientRect().height)
   const stream = page.locator('.stream')
   await stream.evaluate(el => { el.scrollTop = 600 })
   await expect.poll(() => stream.evaluate(el => el.scrollTop)).toBe(600)
@@ -47,7 +51,7 @@ test('切回小记保留卡片展开状态和列表滚动位置', async ({ page 
   await page.locator('a.nav-item[href="/notes"]').click()
   await expect(page).toHaveURL(/\/notes$/)
 
-  await expect(first.locator('.memo-unfold')).toHaveAttribute('aria-expanded', 'true')
+  await expect(body).toHaveCSS('height', `${clamped}px`)
   await expect.poll(() => stream.evaluate(el => el.scrollTop)).toBe(600)
 })
 

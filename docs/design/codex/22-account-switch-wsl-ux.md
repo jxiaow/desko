@@ -21,7 +21,7 @@
 | WSL 目标发现 | `codex_wsl_auth_sync.rs`：运行中发行版里已存在的用户/root `~/.codex` | 复用发现逻辑；不创建 `~/.codex`。 |
 | Windows 客户端枚举 | 当前没有；`process.rs:119` 的 `collect_codex_process_entries()` 是恒空桩 | 新写 `codex_clients.rs`，不要改这个桩的语义。 |
 | WSL 交互式 CLI | TUI 挂在 pts 上，外部进程无法把新 `codex` 塞回原终端 | v5 明确：关闭后**不重开**，由用户自己再启动。 |
-| desko 自己的 Codex 对话 runtime | 单例 `codex app-server`，与官方客户端共用默认 `~/.codex` | 不在重启范围，见 §9。 |
+| desko 自己的 Codex 对话 runtime | 2026-10-30 已随对话功能移除，desko 不再运行自己的 `codex app-server` | 不涉及。 |
 
 ## 2. 目标与非目标
 
@@ -32,7 +32,7 @@
 | 勾选后 WSL 跟着切，并关闭 WSL 后台与 CLI（不重开） | 重开 WSL CLI / 新窗口重跑 / 自动续对话 |
 | 卡片 ⋯「在 WSL 中使用」：只改 WSL，Windows 不动 | 同步到指定某一个 WSL 目标（仍是一次写全部目标） |
 | 卡片上的「WSL 使用中」状态标 | 反向同步 WSL → Windows |
-| 关闭 Windows 应用与交互式 CLI，写入后重开；CLI 回原目录 | 重启 desko 自己的对话 runtime、IDE 插件或 `codex exec` |
+| 关闭 Windows 应用与交互式 CLI，写入后重开；CLI 回原目录 | 重启 IDE 插件或 `codex exec` |
 | 删除设置里的 WSL 登录态同步、进页自动同步、旧单目录写穿 | 同步 `config.toml`、模型目录、会话历史 |
 | Windows/WSL 各用不同账号；同一账号也能显式一起切 | 后台定时器、文件监听、自动拉起 WSL |
 | WSL 仅接受 OAuth 账号 | 逐客户端勾选（重启范围固定为识别到的全部） |
@@ -240,7 +240,7 @@ Esc 关闭                                  取消   用于 WSL
 |---|---|---|---|
 | Codex 应用 | MSIX 包 `OpenAI.Codex_2p2nqsd0c76g0` 的进程树：`ChatGPT.exe` 及 `codex.exe app-server` / `exec-server` / `codex-code-mode-host` 等子进程 | 按包路径/进程树匹配；先向主窗口发关闭消息，等 3s，必要时整树结束 | 仅原本在运行才重开；运行时解析包族 `!App` AUMID，经 `shell:AppsFolder` 拉起，不硬编码版本 |
 | 交互式 CLI | `codex.exe`，argv 不含 `app-server` / `exec-server` / `exec` 等非交互子命令，且祖先不是 Codex 应用或 desko | 结束进程；控制台程序没有等价优雅关闭 | 新 Windows Terminal 窗口，原 cwd + 原 exe/argv；WT 不可用退回新控制台 |
-| 不算 | `codex exec`、IDE 插件 app-server、desko 自己的 runtime、`pid-update-loop` | 不结束 | 不重开 |
+| 不算 | `codex exec`、IDE 插件 app-server、`pid-update-loop` | 不结束 | 不重开 |
 
 - `spawn_wt_command(dir, exe, args)` 复用 `file_shortcuts.rs` 的 WT 候选与 740 回退；不要把命令拼成 shell 字符串。
 - 若无法可靠取得原 argv，只在原 cwd 重开裸 `codex`，不猜测参数；文案不承诺恢复原命令。
@@ -388,7 +388,7 @@ type CodexWslAssignmentPreview = {
 - **总开关关闭只改凭据。** 不关应用、不重开，正在运行的 Windows Codex 可能继续用旧账号；确认里必须写明。
 - **跨提权。** desko 与 Codex 权限不同时可能关不掉；中止并提示，不静默跳过。
 - **应用更新。** MSIX 包族或 AUMID 变化会导致重开失败；给「重新打开」并保留计划，不硬编码版本。
-- **desko 自己的 runtime。** 单例 `codex app-server` 不在重启范围；它可能继续持有旧进程内凭据。若实测会回写 `~/.codex/auth.json`，后续再纳入“先关后写”。这是已知边界，不在本期扩大范围。
+- **desko 自己的 runtime。** 对话功能已移除，desko 不再运行自己的 `codex app-server`；若后续恢复类似能力，需重新评估是否纳入“先关后写”。
 - **IDE / 非交互进程。** `codex exec`、IDE app-server、`codex-code-mode-host` 不属于“Codex 应用/CLI”，不关也不重开。
 - **慢探测。** Windows 客户端或 WSL 探测可能超过 2 秒；弹窗先开、行内显示检查中，主按钮在 Windows 预览未完成且总开关为开时禁用；不无限等待。
 - **计划过期。** 重开计划 10 分钟后失效；过期后按钮改提示“请手动打开 Codex”，不重复拉起。
@@ -427,7 +427,7 @@ type CodexWslAssignmentPreview = {
 | D2 | WSL 是否跟随由谁决定？ | **每次切号确认里的「同时用于 WSL」，默认不勾。** 开关只管 Windows。 |
 | D3 | 卡片 ⋯ 还保留 WSL 入口吗？ | **保留。** 它是只改 WSL、不动 Windows 的入口。 |
 | D4 | 勾选后 WSL 怎么处理？ | **关闭共享后台与交互式 CLI，不重开。** 不恢复终端、不续对话。 |
-| D5 | Windows 重启范围？ | **应用 + 交互式 CLI；写入后重开，CLI 回原目录。** 不含 `codex exec`、IDE app-server、desko runtime。 |
+| D5 | Windows 重启范围？ | **应用 + 交互式 CLI；写入后重开，CLI 回原目录。** 不含 `codex exec`、IDE app-server。 |
 | D6 | WSL 支持哪些账号？ | **仅普通 OAuth；API Key / Agent Identity / Web Session 不写。** |
 | D7 | 还要跟随条/状态矩阵/手动同步吗？ | **不要。** 只留卡片状态标与卡片 ⋯ 入口。 |
 | D8 | 旧 WSL 同步链路怎么处理？ | **整体退役。** 含 `codex_sync_wsl`、`codex_wsl_config_dir`、`codex_wsl_auth_auto_sync` 与进页/切号自动同步。 |
@@ -438,7 +438,6 @@ type CodexWslAssignmentPreview = {
 
 - [17-wsl-auth-sync.md](17-wsl-auth-sync.md)：WSL 目标发现、只写 auth.json、源过期不代刷、RT 轮换边界；v5 沿用这些契约，只换了入口与交互。
 - [20-quota-hud.md](20-quota-hud.md)：额度挂件，与本交互无耦合。
-- [21-codex-web-ui-integration.md](21-codex-web-ui-integration.md)：Codex 对话的 Windows/WSL 运行环境选择；与账号切号是两件事。
 
 
 ## 13. 实现与验证（2026-10-23）

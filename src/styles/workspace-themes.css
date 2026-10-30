@@ -24,13 +24,16 @@
   --workspace-frame: #efefee;
   --workspace-light: #ffffff;
 
-  /* 普通卡片保持平整、轻边界；选中、编辑和焦点沿用各自的强调色反馈。
-     边界比全局 --border 再深一档：卡面与画布只差 6 级时，发丝线太淡会显得没画完。 */
-  --border-card: color-mix(in srgb, var(--border) 62%, var(--border-strong));
-  --border-card-hover: var(--border-hover);
-  --shadow-card-rest: none;
-  --shadow-card-hover: none;
+  /* 卡片的分层由「发丝线 + 短影」一起承担，两者不能同时削弱：
+     线负责说清边界在哪，影负责说清它浮在上一层；任何一边归零，卡片就会糊进背景。
+     影要短：扩散收到 ~12px 净值和一张卡的尺寸同量级，既浮起又不会在并排时连成灰带。 */
+  --border-card: var(--card-line-soft, var(--border));
+  --border-card-hover: var(--card-line-strong, var(--border-hover));
+  --shadow-card-rest: 0 1px 2px rgb(15 23 42 / 4%), 0 10px 24px -12px rgb(15 23 42 / 11%);
+  --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 5%), 0 16px 30px -12px rgb(15 23 42 / 15%);
   --weight-card-title: 500;
+  /* 分类徽章不再画盒子：淡底 + 文字已经够分，多一根描边就多一层边框噪声。 */
+  --badge-cat-border: transparent;
 }
 
 :root[data-layout="workspace"][data-theme="paper"], .workspace-theme-prev[data-theme="paper"] {
@@ -49,6 +52,8 @@
   --border-strong: #cfcfcf;
   --border-subtle: #f0f0f0;
   --border-hover: #c2c2c2;
+  --card-line-soft: rgb(15 23 42 / 7%);
+  --card-line-strong: rgb(15 23 42 / 12%);
   --border-search: color-mix(in srgb, var(--border) 80%, var(--border-hover));
   --bg-input: #f4f4f4;
   --text: #1f2023;
@@ -97,6 +102,10 @@
   --border-strong: #4b505a;
   --border-subtle: #30333a;
   --border-hover: #5c626e;
+  --card-line-soft: rgb(255 255 255 / 8%);
+  --card-line-strong: rgb(255 255 255 / 14%);
+  --shadow-card-rest: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 24px -12px rgb(0 0 0 / 42%);
+  --shadow-card-hover: 0 2px 4px rgb(0 0 0 / 34%), 0 16px 30px -12px rgb(0 0 0 / 50%);
   --shadow-xs: none;
   --shadow-card: none;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 18%);

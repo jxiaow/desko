@@ -1,6 +1,6 @@
 //! Public HTTP runs in a headless child. The desktop owns authenticated data
 //! contexts and exposes only Backend operations over a private loopback channel.
-use super::{Backend, Resource, ResourceStream, WebKind, WebStatus};
+use super::{Backend, Resource, ResourceStream, WebStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -24,7 +24,6 @@ struct Bootstrap {
     secret: String,
     port: u16,
     lan: bool,
-    kind: WebKind,
 }
 
 struct Gateway {
@@ -274,7 +273,6 @@ impl WebProcess {
             secret: gateway.state.secret.clone(),
             port,
             lan,
-            kind: backend.kind(),
         };
         let mut command = Command::new(exe);
         command
@@ -395,7 +393,6 @@ struct RemoteBackend {
     address: String,
     secret: String,
     session: String,
-    kind: WebKind,
     agent: ureq::Agent,
 }
 impl RemoteBackend {
@@ -459,9 +456,6 @@ impl RemoteBackend {
     }
 }
 impl Backend for RemoteBackend {
-    fn kind(&self) -> WebKind {
-        self.kind
-    }
     fn public_hosts(&self, port: u16) -> Vec<String> {
         self.rpc(json!({"operation":"hosts","port":port}))
             .ok()
@@ -485,7 +479,6 @@ impl Backend for RemoteBackend {
             address: self.address.clone(),
             secret: self.secret.clone(),
             session,
-            kind: self.kind,
             agent: self.agent.clone(),
         })))
     }
@@ -552,7 +545,6 @@ fn worker() {
             address: input.address,
             secret: input.secret,
             session: "root".into(),
-            kind: input.kind,
             agent: ureq::AgentBuilder::new()
                 .timeout_connect(Duration::from_secs(3))
                 .timeout(Duration::from_secs(120))
@@ -627,12 +619,11 @@ mod tests {
             })
         }
     }
-    fn remote(gateway: &GatewayServer, kind: WebKind) -> Arc<RemoteBackend> {
+    fn remote(gateway: &GatewayServer) -> Arc<RemoteBackend> {
         Arc::new(RemoteBackend {
             address: gateway.address.clone(),
             secret: gateway.state.secret.clone(),
             session: "root".into(),
-            kind,
             agent: ureq::AgentBuilder::new()
                 .timeout(Duration::from_secs(3))
                 .build(),
@@ -647,7 +638,7 @@ mod tests {
             .set("Content-Type", "application/json")
             .send_string("{}")
             .is_err());
-        let remote = remote(&gateway, WebKind::App);
+        let remote = remote(&gateway);
         assert_eq!(remote.epoch(), Some(5));
         assert_eq!(remote.verify_password("incorrect").unwrap_err(), "密码错误");
         remote.verify_password("correct").unwrap();
@@ -671,54 +662,39 @@ mod tests {
     }
 
     #[test]
-    fn app_and_codex_services_use_separate_cookies_and_html_identity() {
+    fn web_service_uses_the_web_cookie_and_html_identity() {
         let gateway =
             GatewayServer::start(Arc::new(DataBackend(Arc::new(AtomicU64::new(1))))).unwrap();
-        let app = super::super::start(remote(&gateway, WebKind::App), 0, false).unwrap();
-        let codex = super::super::start(remote(&gateway, WebKind::Codex), 0, false).unwrap();
-        let login = |url: &str| {
-            ureq::post(&format!("{url}/api/login"))
-                .set("Content-Type", "application/json")
-                .send_string(r#"{"password":"correct"}"#)
-                .unwrap()
-                .header("Set-Cookie")
-                .unwrap()
-                .split(';')
-                .next()
-                .unwrap()
-                .to_string()
-        };
-        let app_cookie = login(&app.status.urls[0]);
-        let codex_cookie = login(&codex.status.urls[0]);
-        assert!(app_cookie.starts_with("desko_web="));
-        assert!(codex_cookie.starts_with("desko_codex_web="));
-        assert!(ureq::get(&format!("{}/api/session", codex.status.urls[0]))
-            .set("Cookie", &app_cookie)
+        let running = super::super::start(remote(&gateway), 0, false).unwrap();
+        let url = &running.status.urls[0];
+        let cookie = ureq::post(&format!("{url}/api/login"))
+            .set("Content-Type", "application/json")
+            .send_string(r#"{"password":"correct"}"#)
+            .unwrap()
+            .header("Set-Cookie")
+            .unwrap()
+            .to_string();
+        assert!(cookie.starts_with("desko_web="));
+        let pair = cookie.split(';').next().unwrap().to_string();
+        assert!(ureq::get(&format!("{url}/api/session"))
+            .set("Cookie", &pair)
             .call()
-            .is_err());
-        assert!(ureq::get(&format!("{}/api/session", app.status.urls[0]))
-            .set("Cookie", &codex_cookie)
-            .call()
-            .is_err());
-        let html = ureq::get(&format!("{}/codex", codex.status.urls[0]))
+            .is_ok());
+        let html = ureq::get(&format!("{url}/codex"))
             .call()
             .unwrap()
             .into_string()
             .unwrap();
-        assert!(html.contains("name=\"desko-service\" content=\"codex\""));
-        app.stop_and_wait();
-        assert!(ureq::get(&format!("{}/api/session", codex.status.urls[0]))
-            .set("Cookie", &codex_cookie)
-            .call()
-            .is_ok());
-        codex.stop_and_wait();
+        assert!(html.contains("name=\"desko-runtime\" content=\"web\""));
+        assert!(!html.contains("desko-service"));
+        running.stop_and_wait();
     }
 
     #[test]
     fn replacing_login_at_browser_limit_does_not_exhaust_internal_sessions() {
         let gateway =
             GatewayServer::start(Arc::new(DataBackend(Arc::new(AtomicU64::new(1))))).unwrap();
-        let running = super::super::start(remote(&gateway, WebKind::App), 0, false).unwrap();
+        let running = super::super::start(remote(&gateway), 0, false).unwrap();
         let url = &running.status.urls[0];
         let login = |cookie: &str| {
             ureq::post(&format!("{url}/api/login"))
@@ -762,8 +738,8 @@ mod tests {
         let first = Arc::new(DataBackend(Arc::new(AtomicU64::new(1))));
         let second = Arc::new(DataBackend(Arc::new(AtomicU64::new(1))));
         let mut app = WebProcess::launch_program(first.clone(), 0, false, &executable).unwrap();
-        let mut codex = WebProcess::launch_program(second, 0, false, &executable).unwrap();
-        assert_ne!(app.status.pid, codex.status.pid);
+        let mut other = WebProcess::launch_program(second, 0, false, &executable).unwrap();
+        assert_ne!(app.status.pid, other.status.pid);
         assert_ne!(app.status.pid, Some(std::process::id()));
         let port = app.status.port;
         let login = |service: &WebProcess| {
@@ -790,7 +766,7 @@ mod tests {
         }
         assert!(app.gateway.state.stopped.load(Ordering::SeqCst));
         assert!(!app.alive());
-        assert!(codex.alive());
+        assert!(other.alive());
         drop(app);
         let mut restarted =
             WebProcess::launch_program(first.clone(), port, false, &executable).unwrap();
@@ -813,8 +789,8 @@ mod tests {
             Ok(None)
         ));
         assert!(!restarted.alive());
-        assert!(codex.alive());
+        assert!(other.alive());
         drop(restarted);
-        drop(codex);
+        drop(other);
     }
 }

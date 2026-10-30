@@ -22,7 +22,7 @@ function onDirectoryClick(event: MouseEvent) {
 </script>
 
 <template>
-  <div id="workspace-surface" class="workspace-surface" :class="{ 'directory-docked': directoryVisible, 'workspace-notes': route.name === 'notes' }">
+  <div id="workspace-surface" class="workspace-surface" :class="{ 'directory-docked': directoryVisible, 'workspace-notes': route.name === 'notes', 'workspace-codex': route.name === 'codex' }">
     <main class="main-area workspace-main">
       <div class="workspace-body">
         <div class="main-content"><slot /></div>
@@ -49,10 +49,12 @@ function onDirectoryClick(event: MouseEvent) {
   --workspace-toolbar-height: 48px;
   --workspace-gutter: 48px;
   --workspace-content-max: 1120px;
-  --workspace-main-width: calc(100vw - var(--sidebar-rail-w) - var(--workspace-directory-offset));
+  --workspace-main-width: calc(100vw - var(--sidebar-rail-w) - var(--workspace-directory-offset) - var(--sheet-gutter));
   --workspace-content-padding: max(var(--workspace-gutter), calc((var(--workspace-main-width) - var(--scrollbar-track) - var(--workspace-content-max)) / 2));
-  --workspace-content-left: calc(var(--sidebar-rail-w) + var(--workspace-content-padding));
-  --workspace-content-right: calc(var(--workspace-directory-offset) + var(--workspace-content-padding) + var(--scrollbar-track));
+  /* 浮片把内容整体右移 8px、左收 10px；页名与页内操作要跟着片走，
+     否则标题栏还停在旧画布的列上，正文与页头差半格。 */
+  --workspace-content-left: calc(var(--sidebar-rail-w) + var(--sheet-inset-left) + var(--workspace-content-padding));
+  --workspace-content-right: calc(var(--workspace-directory-offset) + var(--sheet-inset-right) + var(--workspace-content-padding) + var(--scrollbar-track));
   /* 页名与页内操作和正文共用同一条阅读列，目录展开时一起让位；
      目录开关单独挂在窗口右侧工具位，不会从点击它的指针下方移走。 */
   --workspace-toolbar-left: var(--workspace-content-left);
@@ -60,41 +62,45 @@ function onDirectoryClick(event: MouseEvent) {
   --workspace-heading-width: 120px;
   --workspace-heading-gap: 24px;
   --page-search-max: 300px;
+  /* 浮片四周的留白：左 8、右 10、下 10，与标题栏的 48px 合起来是完整一圈窗框。 */
+  --sheet-inset-left: 8px;
+  --sheet-inset-right: 10px;
+  --sheet-gutter: 18px;
 }
 @media (max-width: 900px) {
   .codex-layout { --workspace-heading-width: 112px; --workspace-heading-gap: 12px; }
 }
 /* 桌面默认使用可读的宽导航；Web 自己管理 216px 导航，不参与这两档。 */
-.app-root.codex-layout:not(.web-runtime) { --sidebar-rail-w: 148px; }
-.app-root.codex-layout:not(.web-runtime).sidebar-collapsed { --sidebar-rail-w: 56px; }
+.app-root.codex-layout:not(.web-runtime) { --sidebar-rail-w: 208px; }
+.app-root.codex-layout:not(.web-runtime).sidebar-collapsed { --sidebar-rail-w: 60px; }
 /* 最小桌面窗先让导航收起成图标轨，把宽度留给搜索与页内动作；偏好本身不改。 */
 @media (max-width: 899px) {
-  .app-root.codex-layout:not(.web-runtime) { --sidebar-rail-w: 56px; }
+  .app-root.codex-layout:not(.web-runtime) { --sidebar-rail-w: 60px; }
 }
+/* 阅读列分模块取宽：小记与 Codex 共用一条 940 的列（两者同一外壳、同一工作栏，
+   列宽不同的话切页时正文会横跳一格），其余模块沿用 1120 的表格面。
+   小记早先取 720，是照原型里「720 含 28px 内距」的写法读成了卡面宽，实际排出来
+   比原型宽 56px 却又比同壳的 Codex 窄 220px，两侧空得最多——按"同壳同列"收进 940。 */
+.app-root.codex-layout:has(.workspace-surface.workspace-notes) { --workspace-content-max: 940px; --stream-max: 940px; }
+.app-root.codex-layout:has(.workspace-surface.workspace-codex) { --workspace-content-max: 940px; }
 .app-root.codex-layout:has(.workspace-surface.directory-docked) { --workspace-directory-offset: var(--workspace-directory-width); }
 .app-root.codex-layout:not(.locked-bg) { background: var(--bg-workspace); background-attachment: fixed; }
-/* 导轨氛围光整列只画一层：品牌格与侧栏本体透明，透出这同一层光，
-   接缝处天然连续。不再让品牌格自带 background-attachment: fixed——
-   fixed 附着层叠上 flex 子项的 z-index 堆叠上下文后，会在 WebView2
-   合成器里被提升到弹窗遮罩之上（左上角白格从遮罩里穿出）。 */
-.app-root.codex-layout:not(.locked-bg):not(.web-runtime)::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: var(--sidebar-rail-w, 56px);
-  background: var(--bg-workspace-rail);
-  /* 光锚在视口上而不是这条窄栏上：不写 fixed（会被提升到弹窗遮罩之上），
-     改用整窗尺寸的图并对齐左上角，宽度与画布那边的视口光逐像素一致。 */
-  background-size: 100vw 100vh;
-  background-position: 0 0;
-  background-repeat: no-repeat;
-  pointer-events: none;
-}
+/* 导轨氛围光交给整窗那一层（.app-root 的 --bg-workspace）：品牌格与侧栏透明，
+   光从同一层透出，接缝天然连续。这里不再单独画一列，避免两套配方在接缝处对不齐。 */
 .codex-layout .app-layout { padding: 0; }
 
-.workspace-surface { position: relative; display: flex; flex: 1; min-width: 0; overflow: hidden; background: var(--bg-workspace); background-attachment: fixed; }
+/* 浮片：内容区是一块内嵌的圆角面板，坐在窗框的柔光上。
+   框比片深一级、片比卡深一级——三层明度各差一档，层级由明度与影子承担，不靠边到边的分割线。 */
+.workspace-surface {
+  position: relative; display: flex; flex: 1; min-width: 0; overflow: hidden;
+  margin: 0 var(--sheet-inset-right) 10px var(--sheet-inset-left);
+  border-radius: 12px;
+  /* 不画描边：边框会把内容面整体推 1px，所有几何断言和吸顶位置都跟着偏。
+     这一层的分开主要交给明度，影子只留一档短影把边压住；深色下的顶沿高光由
+     --shadow-sheet 的内阴影承担。 */
+  background: var(--bg-sheet);
+  box-shadow: var(--shadow-sheet);
+}
 .workspace-surface :is(.content-inner, .stream, .fs-scroll, #workspace-directory-content)::-webkit-scrollbar-track { margin: 0; }
 /* 全屏接管整个内容面；原页保留滚动和目录状态，隐藏后也不会进入 Tab 焦点序列。
    页级控件住在顶栏里，不在内容面内，同样要在全屏时让位。 */
@@ -107,9 +113,9 @@ function onDirectoryClick(event: MouseEvent) {
 .workspace-body > .main-content { flex: 1; min-width: 0; }
 /* 悬停沿用主题中性色，轻微改变卡面明暗；强调色留给选中、编辑和焦点。
    纸底取 8%：对白卡仍在上限 7.5ΔE 内，落到画布上也有清楚的色阶差。 */
-.workspace-main { --bg-surface-hover: color-mix(in srgb, var(--text) 8%, var(--bg-surface)); position: relative; min-width: 0; background: var(--bg-workspace); background-attachment: fixed; }
+.workspace-main { --bg-surface-hover: color-mix(in srgb, var(--text) 8%, var(--bg-surface)); position: relative; min-width: 0; background: transparent; }
 /* 顶沿护边：滚动内容在标题栏下沿淡出，而不是被切成一条硬边。
-   画布底与 .workspace-main 同一条 fixed 配方，叠在内容上时颜色完全对齐，只做遮罩淡出。 */
+   片内是同一个实色，直接用片色做遮罩即可（不再需要 fixed 附着层对齐视口光）。 */
 .workspace-main::before {
   content: '';
   position: absolute;
@@ -117,14 +123,13 @@ function onDirectoryClick(event: MouseEvent) {
   z-index: 25;
   height: 12px;
   pointer-events: none;
-  background: var(--bg-workspace);
-  background-attachment: fixed;
+  background: var(--bg-sheet);
   -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
   mask-image: linear-gradient(to bottom, #000 70%, transparent);
 }
 :root[data-base="dark"] .workspace-main { --bg-surface-hover: color-mix(in srgb, var(--text) 4.8%, var(--bg-surface)); }
-/* 辅助目录融入同一画布，用留白和浅色选中块建立层次。 */
-.workspace-directory { display: flex; flex-direction: column; flex: 0 0 var(--workspace-directory-width); min-width: 0; overflow: hidden; background: var(--bg-inspector); background-attachment: fixed; }
+/* 辅助目录同一片内，用留白和浅色选中块建立层次，不再自带画布底色。 */
+.workspace-directory { display: flex; flex-direction: column; flex: 0 0 var(--workspace-directory-width); min-width: 0; overflow: hidden; background: transparent; }
 .workspace-directory-heading { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 48px; padding: 0 16px 0 22px; }
 .workspace-directory-title { font-size: var(--text-sm); font-weight: 600; color: var(--text); }
 .workspace-directory-actions { display: flex; gap: 2px; color: var(--text-muted); }
@@ -149,7 +154,6 @@ function onDirectoryClick(event: MouseEvent) {
 #workspace-directory .directory-reset { margin-top: 16px; color: var(--text-muted); }
 #workspace-directory .rail-foot { margin-top: auto; padding: 24px 10px 0; border: 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.6; }
 .workspace-directory .tab-thumb { display: none; }
-.codex-layout .workspace-main .day-head { background: var(--bg-workspace); background-attachment: fixed; top: 0; }
 
 /* 保留通栏控制带和无边框卡面，正文只约束阅读宽度；目录开关不切换内距档位。 */
 .codex-layout .workspace-main .content-inner { padding: 16px var(--workspace-content-padding) 22px; }
@@ -157,11 +161,10 @@ function onDirectoryClick(event: MouseEvent) {
 .codex-layout .workspace-main .content-inner > .card-grid:first-child { margin-top: 0; }
 .codex-layout .workspace-main .content-inner:has(> .cx-tabs-row) { padding-top: 0; }
 .codex-layout .workspace-main .content-inner:has(> .cx-tabs-row:empty) { padding-top: 16px; }
-.codex-layout .workspace-main .content-inner.codex-dialog-view { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; overflow: hidden; scrollbar-gutter: auto; }
-.codex-layout .workspace-main .content-inner.codex-dialog-view:has(> .cx-tabs-row:empty) { padding-top: 0; }
 .codex-layout .workspace-main .stream-inner { padding: 8px var(--workspace-content-padding) 22px; }
 
-/* 页级筛选：贴着内容的一行导航，只有一根底线，不形成第二层工具条。 */
+/* 页级筛选：贴着内容的一行导航。不再画整条底线——一条横贯阅读列的线
+   会在视觉上把页面切成两截；选中项自己的下划线已经够定位。 */
 .workspace-workbar {
   display: flex;
   align-items: center;
@@ -169,8 +172,8 @@ function onDirectoryClick(event: MouseEvent) {
   min-width: 0;
   height: 42px;
   min-height: 42px;
-  margin: 8px 0 12px;
-  border-bottom: 1px solid var(--border);
+  margin: 6px 0 14px;
+  border-bottom: 0;
 }
 .workspace-workbar-tabs,
 .workspace-workbar .wb-tags {
@@ -206,7 +209,7 @@ function onDirectoryClick(event: MouseEvent) {
   content: '';
   position: absolute;
   right: 0;
-  bottom: -1px;
+  bottom: 0;
   left: 0;
   height: 2px;
   border-radius: 1px 1px 0 0;
@@ -305,11 +308,16 @@ function onDirectoryClick(event: MouseEvent) {
   #workspace-page-toolbar .search-kbd { display: none; }
 }
 
-/* 卡面用一根安静的边界与画布分层，不靠常态投影；悬停只加深边界和极轻的色温。 */
+/* 卡面浮在片色上：白卡 + 柔影，描边只留一丝；悬停加深影子，不换线。
+   卡面本地改绑 --bg-surface：组件自己的 `background: var(--bg-surface)` 与悬停
+   `--bg-surface-hover` 都不必逐页改，弹窗与输入框仍读全局那一档。 */
 .app-root.codex-layout .workspace-main :is(.memo, .composer, .grid-card, .mfa-card, .rcard, .tn-card, .clean-group-card, .drop-card, .rowlist):where(:not(.editing):not(.selected):not(.is-sel):not(:focus-visible)) {
-  border-color: var(--border);
-  box-shadow: none;
-  border-radius: 12px;
+  --bg-surface: var(--bg-card);
+  --bg-surface-hover: color-mix(in srgb, var(--text) 7%, var(--bg-card));
+  border-color: var(--border-card);
+  box-shadow: var(--shadow-card-rest);
+  /* 卡比片小一号圆角：同值嵌套会让边角叠成一圈厚弧，读起来像两层硬壳。 */
+  border-radius: 10px;
 }
 /* 对象卡的两行内容留出清晰间隔，网格与工具栏继续共用阅读列。 */
 .codex-layout .workspace-main .grid-card { min-height: 88px; padding-block: 14px; padding-right: 16px; gap: 10px; }
@@ -337,8 +345,9 @@ function onDirectoryClick(event: MouseEvent) {
   justify-content: center;
   padding-block: 32px;
 }
-/* 身份列与额度列之间靠留白分开，mock 里不画这根竖线。 */
-.codex-layout .workspace-main .acc-quota { border-left: 0; padding-left: 28px; }
+/* 身份列与额度列之间靠留白分开，mock 里不画这根竖线。
+   20px 是两列之间仍读得出"分开"的下限：再宽就变成两簇信息各占一半、中间空一条带。 */
+.codex-layout .workspace-main .acc-quota { border-left: 0; padding-left: 20px; }
 
 /* 直连页的探测行按小记输入卡的方言画：整行是一块面，字段不再自带描边，段末不画规则线。 */
 .codex-layout .workspace-main .bp-probe { padding-bottom: 0; border-bottom: 0; }
@@ -351,8 +360,8 @@ function onDirectoryClick(event: MouseEvent) {
 .codex-layout .workspace-main .bp-probe .probe-box { height: 100%; border: 0; background: transparent; }
 .codex-layout .workspace-main .bp-probe .btn-primary { height: 40px; }
 .codex-layout .workspace-main :is(.memo, .grid-card, .mfa-card, .rcard):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(:focus-visible)):not(.empty-state) {
-  border-color: var(--border-hover);
-  box-shadow: none;
+  border-color: var(--border-card-hover);
+  box-shadow: var(--shadow-card-hover);
   transform: none;
 }
 /* 各模块的列表统一中性悬停，分组列表只反馈指针所在的行。 */
@@ -364,7 +373,8 @@ function onDirectoryClick(event: MouseEvent) {
 }
 .codex-layout .workspace-main .grid-acts { background: inherit; box-shadow: none; }
 .codex-layout .workspace-main .memo.editing { background: var(--bg-surface); }
-.codex-layout .workspace-main .memo.pinned:where(:not(.editing):not(.is-sel):not(:focus-visible)) { border-color: color-mix(in srgb, var(--accent) 34%, var(--border)); }
+/* 置顶卡不再描一道 34% accent 的边：它已经把「置顶」写在分组标题上，同一列出现第二种
+   边框色只会被读成"这张被选中"。彩色边框整页只留一个用途——选中/编辑。 */
 .codex-layout .workspace-main .grid-card.selected { border-color: var(--accent); }
 .codex-layout .workspace-main .memo.editing,
 .codex-layout .workspace-main :is(.memo, .grid-card, .mfa-card):focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); transform: none; }

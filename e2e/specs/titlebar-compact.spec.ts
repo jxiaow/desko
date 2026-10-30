@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { bootUnlocked, e2e, tipButton } from '../helpers'
+import { bootUnlocked, e2e, openNoteRead, tipButton } from '../helpers'
 
 async function expectToolbarFits(page: Page) {
   await expect.poll(() => page.locator('#workspace-page-toolbar').evaluate(toolbar => {
@@ -60,8 +60,7 @@ for (const theme of ['paper', 'ink']) {
         await expectToolbarFits(page)
       }
       if (route === 'notes') {
-        await page.locator('.memo').hover()
-        await page.getByRole('button', { name: '全屏查看', exact: true }).click()
+        await openNoteRead(page.locator('.memo'))
         const header = page.locator('#workspace-page-toolbar > .fs-head')
         await expect(header).toBeVisible()
         await expectToolbarFits(page)
@@ -101,8 +100,10 @@ for (const theme of ['paper', 'ink']) {
       if (width >= 1040) {
         await expect(page.locator('#workspace-page-toolbar .search-kbd')).toBeVisible()
         // 搜索框上限 360，但带 Web / 云同步徽标时可用宽会更小；只保证不塌陷。
+        // 1040 窗的余量按 208px 导航 + 18px 片外留白重算：这两项各吃掉一档，
+        // 搜索落到 ~240 仍能完整显示占位文案，所以下限随规格改到 240。
         const searchWidth = (await page.locator('#workspace-page-toolbar .search-box').boundingBox())!.width
-        expect(searchWidth).toBeGreaterThanOrEqual(280)
+        expect(searchWidth).toBeGreaterThanOrEqual(240)
         expect(searchWidth).toBeLessThanOrEqual(360)
       }
     }

@@ -4,7 +4,6 @@ import { switchUxState, assignment, wslPreview, switchPreview, applyWsl, relaunc
 import type { CodexQuota } from '../../src/services/api/codex'
 import codexSessionPrices from '../../src-tauri/codex-core/resources/codex_session_pricing.json'
 import type { PlannedRow, RouteOption, RouteOverride } from '../../src/services/api/bypass'
-import { CodexDialogMock, type DialogHistorySeed } from './codex-dialog'
 
 export interface E2EEntrySeed {
   name: string
@@ -54,7 +53,6 @@ export interface E2EMfaSeed {
 }
 
 export interface E2EConfig {
-  codexDialogHistories?: DialogHistorySeed[]
   /** true 时视为已初始化（设置过主密码），默认 true */
   initialized?: boolean
   masterPassword?: string
@@ -733,7 +731,6 @@ function headingTitle(html: string): string {
 }
 
 class MockBackend {
-  private codexDialog = new CodexDialogMock((event, payload) => this.emit(event, payload))
   private state: BackendState
   readonly invocations: Invocation[] = []
   private dialogQueue: unknown[] = []
@@ -745,14 +742,12 @@ class MockBackend {
   private noteOpen = false
   private noteDrafts = new Map<string, { title: string; content_html: string; category?: string | null }>()
   private webAccess = { running: false, lan: false, port: 8420, urls: [] as string[] }
-  private codexWebAccess = { running: false, lan: false, port: 8421, urls: [] as string[] }
   private notesUpdateFailCount = 0
   private bypassProbes = new Map<string, () => void>()
   private cancelledBypassProbes = new Set<string>()
   private bypassReports = new Map<string, { at: number; report: BypassReport }>()
 
   constructor(config: E2EConfig = {}) {
-    this.codexDialog.seed(config.codexDialogHistories || [])
     this.state = this.freshState(config)
     this.install()
   }
@@ -1881,22 +1876,17 @@ class MockBackend {
   // handler 的 args 键名与 src/services/api/*.ts 中 JS 侧发送的一致
   // （Tauri v2 的 camelCase → snake_case 转换发生在 IPC 层，本 mock 在其之上）
   private commands: Record<string, (args: Record<string, any>) => unknown> = {
-    codex_dialog_action: ({ action, params }) => this.codexDialog.dispatch(action, params),
     quit_app: () => {},
     // ===== auth.rs =====
-    web_access_status: ({ kind }) => ({ ...(kind === 'codex' ? this.codexWebAccess : this.webAccess) }),
-    web_codex_service_status: () => ({ ...this.codexWebAccess }),
+    web_access_status: () => ({ ...this.webAccess }),
     web_access_start: ({ input }) => {
       this.requireUnlocked()
-      const key = input.kind === 'codex' ? 'codexWebAccess' : 'webAccess'
-      if (this[key].running) throw '服务已启动，请先停止再修改配置'
-      if ([this.webAccess, this.codexWebAccess].some(service => service.running && service.port === input.port)) throw '无法启动，请检查端口是否被占用'
-      this[key] = { running: true, lan: input.lan, port: input.port, urls: [`http://127.0.0.1:${input.port}`, ...(input.lan ? [`http://192.168.1.2:${input.port}`] : [])] }
-      return { ...this[key] }
+      if (this.webAccess.running) throw '服务已启动，请先停止再修改配置'
+      this.webAccess = { running: true, lan: input.lan, port: input.port, urls: [`http://127.0.0.1:${input.port}`, ...(input.lan ? [`http://192.168.1.2:${input.port}`] : [])] }
+      return { ...this.webAccess }
     },
-    web_access_stop: ({ kind }) => {
-      if (!kind || kind === 'app') this.webAccess = { running: false, lan: false, port: 8420, urls: [] }
-      if (!kind || kind === 'codex') this.codexWebAccess = { running: false, lan: false, port: 8421, urls: [] }
+    web_access_stop: () => {
+      this.webAccess = { running: false, lan: false, port: 8420, urls: [] }
     },
     is_initialized: () => this.state.initialized,
 

@@ -65,20 +65,20 @@ it('desktop listeners keep native events, while Web rejects events outside the p
   expect(nativeListen).toHaveBeenCalledWith('codex:switch-progress', callback)
 })
 
-it('Codex Web polls promptly and signals a snapshot reset after queue truncation', async () => {
+it('Web signals a snapshot reset after queue truncation', async () => {
   const { invoke } = await import('./transport')
   vi.mocked(invoke).mockResolvedValueOnce({ cursor: 1, events: [] }).mockResolvedValueOnce({ cursor: 5000, truncated: true, events: [
-    { id: 5000, event: 'codex:dialog', payload: { type: 'event', runtimeId: 'r', seq: 5000 } },
+    { id: 5000, event: 'desko:module-changed', payload: { id: 'codex', enabled: true } },
   ] })
   const reset = vi.fn()
   const callback = vi.fn()
   window.addEventListener('desko:web-events-reset', reset)
   const { listen } = await import('./events')
-  const stop = await listen('codex:dialog', callback)
+  const stop = await listen('desko:module-changed', callback)
   try {
-    await vi.advanceTimersByTimeAsync(200)
+    await vi.advanceTimersByTimeAsync(1000)
     expect(invoke).toHaveBeenLastCalledWith('web_poll_events', { after: 1 })
     expect(reset).toHaveBeenCalledTimes(1)
-    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ payload: { type: 'event', runtimeId: 'r', seq: 5000 } }))
+    expect(callback).toHaveBeenCalledWith({ id: 5000, event: 'desko:module-changed', payload: { id: 'codex', enabled: true } })
   } finally { stop(); window.removeEventListener('desko:web-events-reset', reset) }
 })

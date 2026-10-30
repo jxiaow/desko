@@ -219,7 +219,7 @@ pub(crate) async fn restore_package_while_busy(
     .map_err(|e| AppError::Backup(format!("恢复任务失败: {}", e)))??;
 
     // End independent Web access before changing the vault and its attachments.
-    crate::web_access::web_access_stop(app.clone(), None).await.map_err(AppError::Backup)?;
+    crate::web_access::web_access_stop(app.clone()).await.map_err(AppError::Backup)?;
     // 阶段二（持锁）：关连接 → 换文件 → 重开
     emit_progress(&app, "restore", "替换数据库", 92);
     app.state::<crate::services::codex_bridge::BridgeState>().stop_during(|| -> Result<(), AppError> {

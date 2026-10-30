@@ -3,19 +3,17 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { moduleGroups } from '../../modules/state'
 import { modulePath, type ModuleDef } from '../../modules/registry'
-import { isWebRuntime, isCodexWebRuntime } from '../../services/runtime'
+import { isWebRuntime } from '../../services/runtime'
 import { sidebarCollapsed } from '../../services/sidebar'
 import AppIcon from '../shared/AppIcon.vue'
 
 const emit = defineEmits<{ openSettings: []; lock: [] }>()
 const route = useRoute()
-const codexWeb = isCodexWebRuntime()
-const webWorkspace = isWebRuntime() && !codexWeb
+const webWorkspace = isWebRuntime()
 const groups = computed(() => moduleGroups.value)
 const supportsMedia = typeof window.matchMedia === 'function'
 const narrow = ref(supportsMedia && window.matchMedia('(max-width: 899px)').matches)
-/** Codex Web 是独立对话壳，始终保留紧凑图标轨。 */
-const labelsVisible = computed(() => !codexWeb && (webWorkspace || (!sidebarCollapsed.value && !narrow.value)))
+const labelsVisible = computed(() => webWorkspace || (!sidebarCollapsed.value && !narrow.value))
 let narrowQuery: MediaQueryList | undefined
 const syncNarrow = (event: MediaQueryListEvent) => { narrow.value = event.matches }
 onMounted(() => {
@@ -69,14 +67,14 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
 .sidebar {
   width: var(--sidebar-rail-w);
   height: 100%;
-  padding: 10px 10px 12px;
+  padding: 8px 10px 10px;
   background: var(--bg-workspace-rail);
   background-attachment: fixed;
   /* 光锚在视口左上角，和整窗尺寸的图对齐；侧栏本身从视口 (0,0) 起，两者重合。 */
   background-size: 100vw 100vh;
   background-position: 0 0;
   background-repeat: no-repeat;
-  border-right: 1px solid var(--border);
+  border-right: 0;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -94,28 +92,29 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 18px;
+  gap: 14px;
 }
 .sidebar-nav::-webkit-scrollbar { display: none; }
-.sidebar-group { display: flex; flex-direction: column; align-items: stretch; gap: 3px; width: 100%; }
+.sidebar-group { display: flex; flex-direction: column; align-items: stretch; gap: 2px; width: 100%; }
 .sidebar-group-title {
   display: block;
-  padding: 1px 10px 6px;
+  padding: 12px 10px 5px;
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 500;
   line-height: 18px;
-  letter-spacing: .015em;
+  letter-spacing: .04em;
   white-space: nowrap;
 }
+.sidebar-group:first-child .sidebar-group-title { padding-top: 4px; }
 .nav-item, .foot-item {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 11px;
   width: 100%;
-  height: 38px;
-  flex: 0 0 38px;
+  height: 34px;
+  flex: 0 0 34px;
   padding: 0 10px;
   border-radius: 9px;
   color: var(--text-secondary);
@@ -134,7 +133,14 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   line-height: 20px;
 }
 .nav-item:hover:not(.active), .foot-item:hover { background: var(--hover-chrome); color: var(--text); }
-.nav-item.active { background: var(--sidebar-active); color: var(--text-brand); }
+/* 激活项做成与浮片同材质的白片：导航与内容读作同一套层级，
+   不再用强调色底洗——一屏只剩一处彩色，留给品牌与图标。
+   不带投影：导轨上只有一层空气，片一凸起就变成「按钮」，整列跟着发重。 */
+.nav-item.active {
+  background: var(--bg-surface);
+  color: var(--text);
+  box-shadow: none;
+}
 .nav-item.active .nav-text { font-weight: 600; }
 .nav-item.active .nav-icon { color: var(--text-brand); }
 .nav-item:focus-visible, .foot-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }

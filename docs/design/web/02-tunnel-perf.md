@@ -2,7 +2,7 @@
 
 日期：2026-10-25　状态：R1、R2 已落码并本地验收（浏览器对拍 + Rust 单测）；新包已装本机，公网面复跑只差把 Web 服务起点起来（§5.5）；R3–R6 另批待拍板
 
-适用范围：`web_access`（Desko Web，`127.0.0.1:8420`）经内网穿透公网面访问。局域网面与 Codex Web UI（8421）本次未实测，见 §6。
+适用范围：`web_access`（Desko Web，`127.0.0.1:8420`）经内网穿透公网面访问。局域网面本次未实测，见 §6。
 
 ## 1. 结论
 
@@ -75,7 +75,7 @@
 
 动作（原方案）：`mod.rs:564-572` 已在 `<head>` 注入 runtime meta，把同一处扩成给 `<html>` 加 `class="desko-web"`；`src/styles/global.css` 末尾追加一条 `html.desko-web { --font-ui: … }`。
 
-实际落法与此有一处不同，且更省事也更可靠：Rust 侧不动，标记由前端自己打。`src/services/runtime.ts` 新增 `markWebRuntimeRoot()`，读既有的 `meta[name="desko-runtime"][content="web"]` 后给 `<html>` 加 `desko-web`；`main.ts` 在 `mount` 之前、`initializeAppearance` 之前调用它——首屏还没有文字，字体档先就位，就不会去要那颗字体。覆盖规则写在 `src/styles/web.css`（`main.ts` 里它排在 `global.css`、`workspace-themes.css` 之后导入），选择器取 `html.desko-web` + `[data-layout]` + `[data-theme]`：`workspace-themes.css` 用 `:root[data-layout="workspace"]`（0,2,0）把内嵌族排在最前，裸类名压不过它，必须带属性升权；写在 `<html>` 而不是 `.app-root`，是因为弹窗与浮层 teleport 在 app-root 之外。桌面与 E2E 页面没有这行 meta，`markWebRuntimeRoot()` 直接返回 false，仍吃内嵌字体。Codex Web UI（8421）同样注入 `desko-runtime`，因此一并生效。
+实际落法与此有一处不同，且更省事也更可靠：Rust 侧不动，标记由前端自己打。`src/services/runtime.ts` 新增 `markWebRuntimeRoot()`，读既有的 `meta[name="desko-runtime"][content="web"]` 后给 `<html>` 加 `desko-web`；`main.ts` 在 `mount` 之前、`initializeAppearance` 之前调用它——首屏还没有文字，字体档先就位，就不会去要那颗字体。覆盖规则写在 `src/styles/web.css`（`main.ts` 里它排在 `global.css`、`workspace-themes.css` 之后导入），选择器取 `html.desko-web` + `[data-layout]` + `[data-theme]`：`workspace-themes.css` 用 `:root[data-layout="workspace"]`（0,2,0）把内嵌族排在最前，裸类名压不过它，必须带属性升权；写在 `<html>` 而不是 `.app-root`，是因为弹窗与浮层 teleport 在 app-root 之外。桌面与 E2E 页面没有这行 meta，`markWebRuntimeRoot()` 直接返回 false，仍吃内嵌字体。
 
 预期：冷开 2.85 MB → 约 0.12 MB（br 后文本），首屏时间从 10 s 级降到 2–3 s 级。
 实测：见 §2.1，2,867.5 KB → 158.4 KB，字体请求归零。
@@ -104,7 +104,7 @@
 ### R5 并发与轮询自适应
 
 动作：worker 4 → 16（有界，配合 R3 后每请求更短）；`events.ts:42` 的间隔按访问面分档，公网面 200 ms 档并入 1 s 档。流式改单请求分块不在本轮，风险与收益不划算。
-预期：多标签/对话期间不再出现轮询吃满 worker。
+预期：多标签期间不再出现轮询吃满 worker。
 
 ### R6 收尾
 
@@ -126,7 +126,6 @@
 
 - 9.22 s / 290 KB/s 是**这台电脑的上行**，不是访问者的下行速率；外地手机经 Cloudflare 到边缘是另一条账，只可能更差不会更好。
 - 未做并发压测：§3 的 P1-3、P1-4、P2-6 是按代码路径推的排队，不是实测出的等待时间。
-- Codex Web UI（8421）那一面 `epoch()` 每次要跑 `authorize_codex`（`bridge.rs:126-129`），叠加 P2-6 的每 8 KB 复查会更贵；本轮未测。
 - 局域网面与 fileshare 页未复测；`Downloads` 目前 45 个文件，"每请求全目录重扫"（`fileshare-core/handlers.rs:298-334`）在这台机器上还不构成瓶颈，文件数上千时需要单独立账。
 
 ## 7. 待点头清单

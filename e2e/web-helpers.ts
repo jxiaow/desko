@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 import type { E2EConfig } from './mocks/backend'
 
-export async function webApp(page: Page, config: E2EConfig = {}, initialPath = '/notes', service: 'app' | 'codex' = 'app') {
+export async function webApp(page: Page, config: E2EConfig = {}, initialPath = '/notes') {
   let authorized = false
   let expired = false
   const invocations: string[] = []
@@ -29,8 +29,6 @@ export async function webApp(page: Page, config: E2EConfig = {}, initialPath = '
         const { getBackend } = await import('/e2e/mocks/backend.ts' as string)
         await getBackend().invoke('unlock', { password: 'e2e-master-123' })
         await getBackend().invoke('note_key_relock', {})
-        ;(window as any).__webDialogStop?.()
-        ;(window as any).__webDialogStop = getBackend().onEvent('codex:dialog', payload => (window as any).__pushWebEvent('codex:dialog', payload))
       })
       authorized = true
       return send(200, null)
@@ -49,8 +47,6 @@ export async function webApp(page: Page, config: E2EConfig = {}, initialPath = '
     if (path === '/api/invoke') {
       const body = route.request().postDataJSON()
       invocations.push(body.command)
-      if (service === 'codex' && !['get_setting', 'web_poll_events', 'codex_dialog_action'].includes(body.command)) return send(403, { error: '此服务只提供 Codex 对话' })
-      if (service === 'codex' && body.command === 'get_setting' && body.args.key !== 'codex_enabled') return send(200, 'false')
       if (body.command === 'preview_codex_switch') return send(200, { windows: { appCount: 0, cliCount: 0 }, wsl: null })
       if (body.command === 'switch_codex_account') body.args.clientPolicy = { restartWindows: false, applyToWsl: false }
       if (['get_codex_wsl_assignment', 'preview_codex_wsl_assignment', 'assign_codex_account_to_wsl', 'relaunch_codex_clients'].includes(body.command)) return send(403, { error: '需要桌面端操作' })
@@ -70,7 +66,7 @@ export async function webApp(page: Page, config: E2EConfig = {}, initialPath = '
   })
   await page.route(/http:\/\/127\.0\.0\.1:\d+\/(?:start|notes|entries|files|mfa|codex|fileshare|tunnel)?$/, async route => {
     const response = await route.fetch()
-    const html = (await response.text()).replace('<head>', `<head><meta name="desko-runtime" content="web">${service === 'codex' ? '<meta name="desko-service" content="codex">' : ''}`)
+    const html = (await response.text()).replace('<head>', '<head><meta name="desko-runtime" content="web">')
     await route.fulfill({ response, body: html })
   })
   await page.goto(initialPath)

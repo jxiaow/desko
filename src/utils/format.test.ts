@@ -40,7 +40,7 @@ describe('列表正文标签', () => {
   })
 
   it('跨粗体节点的标签完整隐藏，代码和换行会中断标签', () => {
-    expect(stripTagsFromHtml('<p>#工<strong>作</strong> <strong>#</strong>产品</p>')).toBe('<p><strong></strong> <strong></strong></p>')
+    expect(stripTagsFromHtml('<p>#工<strong>作</strong> <strong>#</strong>产品</p>')).toBe('')
     expect(stripTagsFromHtml('<p>#工<code>代码</code>作<br>后续</p>')).toBe('<p><code>代码</code>作<br>后续</p>')
   })
 
@@ -61,7 +61,12 @@ describe('列表正文标签', () => {
   it('换行和列表项中断标签，提取与展示使用相同边界', () => {
     const html = '<p>#工作<br>下一行</p><ul><li>#生活</li><li>普通内容</li></ul>'
     expect(extractTags(htmlToTagText(html))).toEqual(['工作', '生活'])
-    expect(stripTagsFromHtml(html)).toBe('<p><br>下一行</p><ul><li></li><li>普通内容</li></ul>')
+    expect(stripTagsFromHtml(html)).toBe('<p><br>下一行</p><ul><li>普通内容</li></ul>')
+  })
+
+  it('被标签洗空的块整块收起，空行与图片块保留', () => {
+    const html = '<p>#工作</p><p></p><p><strong>#产品</strong></p><h2>#生活</h2><blockquote><p>#引用</p></blockquote><ul><li>#标签</li><li><img src="attachments/a.png"></li></ul>'
+    expect(stripTagsFromHtml(html)).toBe('<p></p><ul><li><img src="attachments/a.png"></li></ul>')
   })
 })
 

@@ -3,31 +3,6 @@ import { readFile } from 'node:fs/promises'
 import { bootUnlocked, tipButton } from '../helpers'
 import type { E2EConfig } from '../mocks/backend'
 import { webApp, selectModule } from '../web-helpers'
-import { CODEX_DIALOG_ENABLED } from '../../src/services/featureFlags'
-
-test('Web Codex links to the independent dialogue service', async ({ page }) => {
-  test.skip(!CODEX_DIALOG_ENABLED, 'Codex 对话入口已屏蔽，见 src/services/featureFlags.ts')
-  const web = await webApp(page, { settings: { codex_enabled: 'true' } }, '/codex')
-  await web.login('.cx-tabs')
-  await expect(page.getByRole('button', { name: '账号', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '对话', exact: true }).click()
-  await expect(page.getByRole('region', { name: 'Codex Web UI 入口' })).toContainText('设置 → Web 访问')
-  expect(web.invocations).not.toContain('codex_dialog_action')
-  expect(web.errors).toEqual([])
-})
-
-test('Codex 对话已屏蔽：页签、Web 入口卡片与服务卡片都不出现', async ({ page }) => {
-  test.skip(CODEX_DIALOG_ENABLED, '对话入口开启时不适用')
-  await bootUnlocked(page, { settings: { codex_enabled: 'true' } }, '/codex')
-  await expect(page.locator('.cx-tab', { hasText: '账号' })).toBeVisible()
-  await expect(page.locator('.cx-tab', { hasText: '对话' })).toHaveCount(0)
-  await tipButton(page, '设置').click()
-  const settings = page.locator('.settings-dialog')
-  await settings.getByRole('button', { name: 'Web 访问', exact: true }).click()
-  await expect(settings.getByRole('heading', { name: 'Codex Web UI', exact: true })).toHaveCount(0)
-  await expect(settings.getByText('启用 Codex 模块后可启动 Codex Web UI。', { exact: true })).toHaveCount(0)
-  await expect(settings.getByRole('heading', { name: 'Desko Web', exact: true })).toBeVisible()
-})
 
 const allWebModulesOff = Object.fromEntries(['notes', 'entries', 'files', 'mfa', 'fileshare', 'tunnel', 'codex'].map(id => [`${id}_enabled`, 'false']))
 

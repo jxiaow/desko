@@ -80,15 +80,3 @@ test('1040px 浏览器使用紧凑轨，调整到宽屏后显示模块名称', a
   expect(app.errors).toEqual([])
 })
 
-test('独立 Codex Web 保持紧凑对话布局', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 })
-  const app = await webApp(page, { settings }, '/codex', 'codex')
-  await app.login('.codex-dialog')
-  await expect(page.locator('.sidebar')).toHaveCSS('width', '56px')
-  await expect(page.locator('.titlebar-outer')).toHaveCSS('height', '48px')
-  await expect(page.locator('.sidebar .nav-text')).toHaveCount(0)
-  await page.getByRole('textbox', { name: '服务器工作目录', exact: true }).fill('C:\\Code\\fixture')
-  await page.getByRole('button', { name: '连接工作目录', exact: true }).click()
-  await expect(page.locator('.dialog-composer')).toBeVisible()
-  expect(app.errors).toEqual([])
-})

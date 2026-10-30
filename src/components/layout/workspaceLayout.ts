@@ -8,5 +8,5 @@ export const workspaceToolbarTarget = '#workspace-page-toolbar'
 export const workspaceSurfaceTarget = '#workspace-surface'
 export const workspaceDirectoryKey: InjectionKey<{ visible: ComputedRef<boolean>; toggle: () => void }> = Symbol('workspaceDirectory')
 export const workspaceDirectoryMediaQuery = '(min-width: 1100px)'
-export const hasWorkspaceDirectory = (moduleId: string) => ['notes', 'entries', 'codex'].includes(moduleId)
+export const hasWorkspaceDirectory = (moduleId: string) => ['notes', 'entries'].includes(moduleId)
 export const useWorkspaceLayout = () => inject(workspaceLayoutKey, false)

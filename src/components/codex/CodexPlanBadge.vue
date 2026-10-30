@@ -10,34 +10,26 @@ const plan = computed(() => codexPlan(props.account))
 
 <template>
   <span class="tier" :class="`plan-${plan.kind}`" :title="`账号类型：${plan.label}`">
-    <AppIcon :name="plan.icon" :size="12" :filled="plan.kind === 'pro' || plan.kind === 'pro-max'" />
+    <AppIcon :name="plan.icon" :size="12" :filled="plan.kind.startsWith('pro')" />
     {{ plan.label }}
   </span>
 </template>
 
 <style scoped>
+/* 档位片只有一个色：中性片，和 PRO 家族的品牌淡染。
+   原先 9 个档位各配一套手写 pastel（绿/蓝/紫/金/粉/石青…），单看都还行，
+   放到一列账号里就成了一张调色板——而且和页面其余部分（灰阶 + 一个 accent）不是一套语言。
+   档位名已经写着 PLUS / PRO 200 / TEAM，颜色不需要再复述一遍；
+   只有 PRO 家族值得被强调，于是沿用「当前」「主操作」同一支强调色。
+   尺寸也对齐 global 的 .badge（20px、无描边）：它和「当前」并排在同一行，
+   一个是 22px 带框、一个是 20px 无框，会读成两套牌。 */
 .tier {
   display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
-  padding: 2px 7px; border: 1px solid transparent; border-radius: var(--radius-xs);
-  font-size: var(--text-2xs); font-weight: 600; line-height: 18px; letter-spacing: .03em;
+  height: 20px; padding: 0 7px; border-radius: var(--radius-tag);
+  font-size: var(--text-2xs); font-weight: 600; letter-spacing: .03em;
   color: var(--text-secondary); background: var(--fill); white-space: nowrap;
 }
-.plan-plus { color: #176746; background: #e9f5ee; border-color: #c8e4d4; }
-.plan-go { color: #1f6480; background: #eaf4f8; border-color: #cce2eb; }
-.plan-pro-lite { color: #675194; background: #f0ecf8; border-color: #dcd1ef; }
-.plan-pro { color: #715224; background: #f8efde; border-color: #e4cfa4; }
-.plan-pro-max { color: #fae7ba; background: #705080; border-color: #b39a71; }
-.plan-team { color: #335f97; background: #eaf0fa; border-color: #cedcf0; }
-.plan-business { color: #35526d; background: #e9eff4; border-color: #c9d7e3; }
-.plan-enterprise { color: #536078; background: #edf0f6; border-color: #cdd4e0; }
-.plan-edu { color: #8c4967; background: #f7ecf1; border-color: #e8cfda; }
-.plan-api { color: var(--text-secondary); background: var(--fill); border-color: var(--border); }
-[data-base='dark'] .plan-plus { color: #95d6b0; background: #243a30; border-color: #385547; }
-[data-base='dark'] .plan-go { color: #9ccde1; background: #24343e; border-color: #3a5261; }
-[data-base='dark'] .plan-pro-lite { color: #c4b3e8; background: #342e43; border-color: #534666; }
-[data-base='dark'] .plan-pro { color: #e7cc96; background: #3e3525; border-color: #66563a; }
-[data-base='dark'] .plan-team { color: #a6c4ef; background: #293649; border-color: #415674; }
-[data-base='dark'] .plan-business { color: #b3c9df; background: #2b3742; border-color: #465766; }
-[data-base='dark'] .plan-enterprise { color: #c1cadc; background: #333944; border-color: #515d70; }
-[data-base='dark'] .plan-edu { color: #e4b0c8; background: #422f38; border-color: #654656; }
+.plan-pro-lite,
+.plan-pro,
+.plan-pro-max { color: var(--text-brand); background: var(--accent-soft); }
 </style>

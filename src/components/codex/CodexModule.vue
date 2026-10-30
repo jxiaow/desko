@@ -74,11 +74,8 @@ import CodexEditDialog from './CodexEditDialog.vue'
 import CodexSessionsPanel from './CodexSessionsPanel.vue'
 import CodexTrashPanel from './CodexTrashPanel.vue'
 import CodexUsagePanel from './CodexUsagePanel.vue'
-import { isWebRuntime, isCodexWebRuntime } from '../../services/runtime'
-import { CODEX_DIALOG_ENABLED } from '../../services/featureFlags'
 import CodexSwitchDialog from './CodexSwitchDialog.vue'
 import CodexWslAssignDialog from './CodexWslAssignDialog.vue'
-import CodexWebEntry from './CodexWebEntry.vue'
 import CodexPlanBadge from './CodexPlanBadge.vue'
 import CodexQuotaPanel from './CodexQuotaPanel.vue'
 import ResetCreditDialog from './ResetCreditDialog.vue'
@@ -90,7 +87,6 @@ import { codexPlan } from '../../utils/codexPlan'
 import { usagePosterData, type UsagePosterData } from '../../utils/codexUsagePoster'
 
 const CodexUsageShareDialog = defineAsyncComponent(() => import('./CodexUsageShareDialog.vue'))
-const CodexDialogPanel = defineAsyncComponent(() => import('./CodexDialogPanel.vue'))
 
 const pageActive = usePageActive()
 const workspaceLayout = useWorkspaceLayout()
@@ -98,8 +94,7 @@ const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
 
 /** 同一份官方数据的四档视图：账号（desko 的档案）、会话（官方目录）、回收站（desko 留底）、用量（现扫官方 rollout） */
-const codexWeb = isCodexWebRuntime()
-const view = ref<'accounts' | 'sessions' | 'usage' | 'trash' | 'dialog'>(codexWeb ? 'dialog' : 'accounts')
+const view = ref<'accounts' | 'sessions' | 'usage' | 'trash'>('accounts')
 const poster = shallowRef<UsagePosterData | null>(null)
 const canShareUsage = computed(() => !!usageReport.value && usageUpdatedAt.value != null && usageReportRange.value === usageRange.value)
 function shareUsage() {
@@ -410,7 +405,6 @@ let unlisten: UnlistenFn[] = []
 let active = true
 
 async function refreshOnEnter() {
-  if (codexWeb) return
   // 自动刷新的间隔与阈值先落进 state，定时器才能按上一次的选择起
   await loadQuotaSettings()
   if (!active || !pageActive.value) return
@@ -425,14 +419,13 @@ async function refreshOnEnter() {
 
 usePageAutoRefresh(async () => {
   await Promise.all([refreshAccounts({ silent: true }), loadWslAssignment()])
-}, () => codexWeb || view.value !== 'accounts' || accountsBusy.value || !!busyId.value)
+}, () => view.value !== 'accounts' || accountsBusy.value || !!busyId.value)
 
 function refreshOnResume() {
   if (document.visibilityState !== 'hidden' && pageActive.value) void refreshOnEnter()
 }
 
 onMounted(async () => {
-  if (codexWeb) return
   window.addEventListener('focus', refreshOnResume)
   document.addEventListener('visibilitychange', refreshOnResume)
   await refreshOnEnter()
@@ -449,7 +442,6 @@ watch(pageActive, visible => {
 watch(view, value => { if (value === 'accounts' && pageActive.value) void refreshOnEnter() })
 
 watch(codexAccountsViewRequests, () => {
-  if (codexWeb) return
   view.value = 'accounts'
 })
 
@@ -470,8 +462,6 @@ watchEffect(() => {
     pageHead.setHead('Codex 会话', `${sessions.value.length} 条`, '', true)
   } else if (view.value === 'usage') {
     pageHead.setHead('Codex 用量', `${usageReport.value?.totals.requestCount ?? 0} 次请求`, '', true)
-  } else if (view.value === 'dialog') {
-    pageHead.setHead('Codex 对话', '', codexWeb || !isWebRuntime() ? '工作区改动' : '', true)
   } else {
     pageHead.setHead('Codex 回收站', `${recycledAccounts.value.length} 个账号 · ${trashSessions.value.length} 条会话`)
   }
@@ -479,9 +469,8 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div class="content-inner" :class="{ 'codex-dialog-view': codexWeb || (loaded && view === 'dialog' && !isWebRuntime()) }">
-    <CodexDialogPanel v-if="codexWeb" />
-    <div v-else-if="!loaded" class="rcard-list" aria-hidden="true">
+  <div class="content-inner">
+    <div v-if="!loaded" class="rcard-list" aria-hidden="true">
       <div class="rcard rcard-row acc-sk" v-for="n in 3" :key="n">
         <span class="skeleton-block"></span>
         <span class="skeleton-line w40"></span>
@@ -504,7 +493,6 @@ watchEffect(() => {
           <button class="cx-tab" :class="{ active: view === 'trash' }" :aria-pressed="view === 'trash'" type="button" @click="view = 'trash'">
             回收站
           </button>
-          <button v-if="CODEX_DIALOG_ENABLED" class="cx-tab" :class="{ active: view === 'dialog' }" :aria-pressed="view === 'dialog'" type="button" @click="view = 'dialog'">对话</button>
           <span v-if="workspaceLayout" class="cx-view-count" :title="pageHead.count">{{ pageHead.count }}</span>
         </nav>
         </Teleport>
@@ -525,7 +513,7 @@ watchEffect(() => {
         </div>
 
         <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-        <div v-if="view !== 'dialog'" class="cx-band-controls">
+        <div class="cx-band-controls">
         <template v-if="view === 'accounts'">
           <Teleport v-if="showAccountFilters" to="#codex-view-filters" :disabled="!workspaceLayout || !pageActive" defer>
           <div class="search-box">
@@ -614,10 +602,6 @@ watchEffect(() => {
       <CodexSessionsPanel v-if="view === 'sessions'" :locate-session-id="locateSessionId" @located="locateSessionId = ''" />
       <CodexUsagePanel v-else-if="view === 'usage'" @open-session="openUsageSession" />
       <CodexTrashPanel v-else-if="view === 'trash'" />
-      <template v-else-if="view === 'dialog'">
-        <CodexDialogPanel v-if="!isWebRuntime()" />
-        <CodexWebEntry v-else />
-      </template>
 
       <p v-if="view === 'accounts' && switchStep" class="switch-line">
         <AppIcon name="refresh" :size="12" />
@@ -653,7 +637,7 @@ watchEffect(() => {
         <button v-if="accountsError" class="action-btn" type="button" @click="refreshAccounts()">重试</button>
       </div>
 
-      <div v-else-if="view === 'accounts' && !visibleAccounts.length" class="empty-state">
+      <div v-else-if="view === 'accounts' && !visibleAccounts.length" class="empty-state" :class="{ 'is-filter': accountFiltersActive }">
         <div class="empty-icon"><AppIcon name="searchEmpty" :size="24" /></div>
         <div class="empty-title">没有匹配的账号</div>
         <button class="action-btn" type="button" @click="clearAccountFilters">清除筛选</button>
@@ -934,18 +918,19 @@ watchEffect(() => {
   color: var(--accent);
 }
 
-/* 身份、周期额度各占一列；使用记录与标签在独立页脚。 */
+/* 身份、周期额度各占一列；使用记录与标签在独立页脚。
+   高度跟着内容走：138 是旧排版（三行事实 + 松标题）的高度，收紧后 128 已经不挤。 */
 .acc-row {
   display: grid;
   grid-template-columns: 34px minmax(0, .85fr) minmax(0, 1.15fr) 78px;
   align-items: start;
   gap: var(--space-3);
-  min-height: 138px;
+  min-height: 128px;
   padding: 14px 16px;
   cursor: default;
 }
 .acc-row:has(.pick-box) { grid-template-columns: 18px 34px minmax(0, .85fr) minmax(0, 1.15fr) 78px; }
-.rcard.acc-sk { min-height: 138px }
+.rcard.acc-sk { min-height: 128px }
 .acc-row.picked { background: var(--fill) }
 
 .pick-box {
@@ -959,7 +944,9 @@ watchEffect(() => {
 .pick-box.on { background: var(--accent); border-color: var(--accent) }
 
 .acc-ico { margin-top: 2px; }
-.acc-ico.on { background: var(--accent); color: var(--accent-on) }
+/* 当前账号的档面走淡染，不铺实心 accent：左边已经有「当前」胸章，实心块是第二份重复信号，
+   而且它和收藏卡的身份档（同一张 34px 中性淡染片）在同一屏里是两张脸。 */
+.acc-ico.on { background: var(--accent-soft); color: var(--text-brand) }
 .acc-main { min-width: 0 }
 .acc-quota { grid-column: 3 / -1; grid-row: 1; }
 .acc-row:has(.pick-box) .acc-quota { grid-column: 4 / -1; }
@@ -983,7 +970,8 @@ watchEffect(() => {
   white-space: nowrap;
 }
 .acc-l2 { display: grid; gap: 4px; margin-top: 9px; min-width: 0; font-size: var(--text-xs); line-height: 1.5; color: var(--text-secondary); }
-.acc-fact, .acc-endpoint { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 3px; min-width: 0; }
+/* 标签列 74px：容得下最长的「Base URL：」，又不把值推到列末才起笔。 */
+.acc-fact, .acc-endpoint { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 3px; min-width: 0; }
 .acc-fact > span, .acc-fact b, .acc-endpoint b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fact-label { color: var(--text-muted); }
 .acc-l2 b { font-weight: 400; }

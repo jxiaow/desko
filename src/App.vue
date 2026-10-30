@@ -32,7 +32,7 @@ import WebModuleDrawer from './components/layout/WebModuleDrawer.vue'
 import SetupPage from './components/auth/SetupPage.vue'
 import UnlockPage from './components/auth/UnlockPage.vue'
 import { authApi } from './services/api/auth'
-import { isWebRuntime, isCodexWebRuntime } from './services/runtime'
+import { isWebRuntime } from './services/runtime'
 import { sidebarCollapsed } from './services/sidebar'
 import WebSettingsDialog from './components/settings/WebSettingsDialog.vue'
 import SettingsDialog from './components/settings/SettingsDialog.vue'
@@ -220,7 +220,7 @@ function onGlobalKey(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="app-root codex-layout" :class="{ 'locked-bg': appState === 'locked', 'sidebar-collapsed': sidebarIsCompact, 'web-runtime': isWebRuntime(), 'codex-web-runtime': isCodexWebRuntime() }" :style="{ '--toast-side': 'var(--sidebar-rail-w)', '--toast-right': toastRight }">
+  <div class="app-root codex-layout" :class="{ 'locked-bg': appState === 'locked', 'sidebar-collapsed': sidebarIsCompact, 'web-runtime': isWebRuntime() }" :style="{ '--toast-side': 'var(--sidebar-rail-w)', '--toast-right': toastRight }">
     <!-- 锁定/初始化态：顶栏浮在页面上；解锁态：顶栏横跨工作区。 -->
     <TitleBar
       v-if="appState !== 'unlocked'"

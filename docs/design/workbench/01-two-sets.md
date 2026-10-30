@@ -114,10 +114,10 @@ App（共享：锁/初始化、设置、Toast/Confirm/Quit、HUD 桥、hover gua
 
 ### 5.2 Codex
 
-- **B 表面**：额度对照板（账号主视图）+ 会话/用量/回收站/对话四个现有视图；页签住在 surface-head。
-- **必守**：五视图切换；刷新额度；切号（含 WSL 预览与重启设置）；添加（浏览器 OAuth/设备码/API Key/导入）；编辑；复制邮箱；单条/批量导出 JSON；重登；强刷令牌；重置 5h 额度；WSL 使用；删除（回收站/异步批删）；会话搜索、打开位置/文件、移入回收站；用量四区间与分享海报；对话发送/停止/审批/历史/项目/文件改动；60s 门；批量停靠栏与隐藏选中；删除任务跨弹窗续跑；配额失败保留旧值；stale/error 态；3s 轮询与 pageActive。
-- **复用**：Auth/Import/Switch/WslAssign/Edit/ResetCredit/BatchDelete/UsageShare/AccountConfirm 九个弹窗，Quota/Sessions/Usage/Trash/Dialog 五个面板，`codexState`。
-- **风险**：账号板不能把批量、筛选、排序、WSL 入口挤掉；对话“工作区改动”依赖目录与 `pageHead.directoryLabel`；轮询只能挂一次。
+- **B 表面**：额度对照板（账号主视图）+ 会话/用量/回收站三个现有视图；页签住在 surface-head。
+- **必守**：三视图切换；刷新额度；切号（含 WSL 预览与重启设置）；添加（浏览器 OAuth/设备码/API Key/导入）；编辑；复制邮箱；单条/批量导出 JSON；重登；强刷令牌；重置 5h 额度；WSL 使用；删除（回收站/异步批删）；会话搜索、打开位置/文件、移入回收站；用量四区间与分享海报；60s 门；批量停靠栏与隐藏选中；删除任务跨弹窗续跑；配额失败保留旧值；stale/error 态；3s 轮询与 pageActive。
+- **复用**：Auth/Import/Switch/WslAssign/Edit/ResetCredit/BatchDelete/UsageShare/AccountConfirm 九个弹窗，Quota/Sessions/Usage/Trash 四个面板，`codexState`。
+- **风险**：账号板不能把批量、筛选、排序、WSL 入口挤掉；轮询只能挂一次。
 
 ### 5.3 小记
 

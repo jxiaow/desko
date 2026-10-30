@@ -127,7 +127,7 @@ for (const theme of ['paper', 'ink']) {
   await shot(page, theme === 'paper' ? 'codex-list.png' : 'codex-list-ink.png')
   if (theme === 'paper') {
     // 3 批量态：dock 里含「导出所选 JSON」
-    await page.locator('.page-bar .bar-btn', { hasText: '选择' }).click()
+    await page.locator('.page-actions .bar-btn', { hasText: '选择' }).click()
     await page.locator('.acc-row').nth(0).locator('.acc-main').click()
     await page.locator('.acc-row').nth(1).locator('.acc-main').click()
     await shot(page, 'codex-batch.png')
@@ -135,7 +135,7 @@ for (const theme of ['paper', 'ink']) {
     // 4/5 删除作业：逐条推进那一拍（进度条 + 已处理 X / N）与失败明细那一拍
     const jobCfg = (extra) => ({ ...config('paper'), codex: { ...config('paper').codex, ...extra } })
     const pickAll = async (p, n) => {
-      await p.locator('.page-bar .bar-btn', { hasText: '选择' }).click()
+      await p.locator('.page-actions .bar-btn', { hasText: '选择' }).click()
       for (let i = 0; i < n; i++) await p.locator('.acc-row').nth(i).locator('.acc-main').click()
       await p.locator('.batch-dock .dock-btn', { hasText: '删除选中' }).click()
       await p.locator('.confirm-dialog .dialog-footer button', { hasText: '确定' }).click()
@@ -156,7 +156,7 @@ for (const theme of ['paper', 'ink']) {
     await failPage.close()
 
     // 4 重置 5 小时额度：弹窗里先摆可用次数与明细（只有还有次数的号才出这一项）
-    await page.locator('.page-bar .bar-btn', { hasText: '退出选择' }).click()
+    await page.locator('.page-actions .bar-btn', { hasText: '退出选择' }).click()
     await page.locator('.acc-row[data-email="back@e2e.dev"] .acc-more').click()
     await page.locator('.popover .pop-item', { hasText: '重置 5 小时额度' }).click()
     const reset = page.locator('.reset-credit-dialog')

@@ -17,7 +17,8 @@ for (const route of ['notes', 'entries', 'files']) {
     await expect(page.locator('#workspace-directory-toggle')).toHaveCount(0)
     await expect(page.locator('.workspace-directory')).toBeHidden()
     const main = (await page.locator('.workspace-main').boundingBox())!
-    expect(main.x + main.width).toBe(page.viewportSize()!.width)
+    // 浮片右侧留 10px 窗框，除此之外内容面通栏。
+    expect(page.viewportSize()!.width - (main.x + main.width)).toBe(10)
   })
 
   test(`${route} 搜索无结果时仍能清除条件找回内容`, async ({ page }) => {

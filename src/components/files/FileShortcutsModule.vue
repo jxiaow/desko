@@ -445,7 +445,7 @@ watchEffect(() => {
       <button class="btn-secondary retry-btn" @click="emit('retryLoad')">重试</button>
     </div>
 
-    <div v-else class="empty-state">
+    <div v-else class="empty-state" :class="{ 'is-filter': !!searchKeyword }">
       <div class="empty-icon">
         <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navFiles'" :size="24" />
       </div>
