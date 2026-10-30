@@ -22,7 +22,7 @@ function onDirectoryClick(event: MouseEvent) {
 </script>
 
 <template>
-  <div id="workspace-surface" class="workspace-surface" :class="{ 'directory-docked': directoryVisible, 'workspace-notes': route.name === 'notes', 'workspace-codex': route.name === 'codex' }">
+  <div id="workspace-surface" class="workspace-surface" :class="{ 'directory-docked': directoryVisible }">
     <main class="main-area workspace-main">
       <div class="workspace-body">
         <div class="main-content"><slot /></div>
@@ -77,12 +77,8 @@ function onDirectoryClick(event: MouseEvent) {
 @media (max-width: 899px) {
   .app-root.codex-layout:not(.web-runtime) { --sidebar-rail-w: 60px; }
 }
-/* 阅读列分模块取宽：小记与 Codex 共用一条 940 的列（两者同一外壳、同一工作栏，
-   列宽不同的话切页时正文会横跳一格），其余模块沿用 1120 的表格面。
-   小记早先取 720，是照原型里「720 含 28px 内距」的写法读成了卡面宽，实际排出来
-   比原型宽 56px 却又比同壳的 Codex 窄 220px，两侧空得最多——按"同壳同列"收进 940。 */
-.app-root.codex-layout:has(.workspace-surface.workspace-notes) { --workspace-content-max: 940px; --stream-max: 940px; }
-.app-root.codex-layout:has(.workspace-surface.workspace-codex) { --workspace-content-max: 940px; }
+/* 阅读列不再分模块取宽：小记与 Codex 曾经各锁 940，其余模块 1120，
+   最大化时同一外壳里差出 180px，换页正文整列横跳 90px。全模块同用一条 1120 的列。 */
 .app-root.codex-layout:has(.workspace-surface.directory-docked) { --workspace-directory-offset: var(--workspace-directory-width); }
 .app-root.codex-layout:not(.locked-bg) { background: var(--bg-workspace); background-attachment: fixed; }
 /* 导轨氛围光交给整窗那一层（.app-root 的 --bg-workspace）：品牌格与侧栏透明，

@@ -857,13 +857,14 @@ watchEffect(() => {
   scroll-behavior: smooth;
   /* 拆面轮：微光画布已上移到 .app-root，本页不再自铺 */
 }
-/* 一行一张：正常窗口铺满，宽窗把正文收在 --stream-max 内。
+/* 一行一张：正常窗口铺满，宽窗跟壳层同一条阅读列（--workspace-content-max），
+   非工作台布局（Web / 手机）退回 --stream-max。
    顶部不留内边距：首行是吸顶的 .page-bar，呼吸在它自己栏内出。
    工具栏、书写框与小记共用居中阅读列，窄窗口保留最小内距。 */
 .stream-inner {
   width: 100%;
   padding: 0 var(--page-gutter) 22px;
-  padding-inline: max(var(--page-gutter), calc((100% - var(--stream-max)) / 2));
+  padding-inline: max(var(--page-gutter), calc((100% - var(--workspace-content-max, var(--stream-max))) / 2));
 }
 /* 96px 净空只服务批选底栏；没开批选时不留死白 */
 .notes-page:has(.batch-dock) .stream-inner { padding-bottom: var(--dock-clearance); }

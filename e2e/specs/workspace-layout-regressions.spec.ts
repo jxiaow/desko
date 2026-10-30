@@ -71,7 +71,7 @@ for (const width of [800, 1040, 1920]) {
       expect(actions.y + actions.height).toBeLessThanOrEqual(48)
       if (route !== 'mfa') {
         const search = await bounds((route === 'codex' ? page.locator('#codex-view-filters') : toolbar).locator('.search-box'))
-        // 各页阅读列宽度不同（小记与 Codex 940、其余 1120），比较的是搜索框在列内的起始偏移。
+        // 全模块共用同一条阅读列，比较的是搜索框在列内的起始偏移。
         const offset = search.x - content.x
         if (searchOffset === undefined) searchOffset = offset
         if (route === 'codex') {
