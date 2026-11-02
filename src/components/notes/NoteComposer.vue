@@ -77,24 +77,29 @@ const discard = () => {
 </template>
 
 <style scoped>
-/* 便签条：空且失焦时收成一行，聚焦或有内容时才是三行书写面。 */
+/* 便签条：空且失焦时收成一行，聚焦或有内容时才是三行书写面。
+   质感与小记卡同一档（落地档，docs/design/notes/13-slip-landed.md §3）：
+   它就是同一叠纸里最上面那张空的，不该长得像一个输入框。 */
 .composer {
   position: relative;
   background: var(--bg-surface);
-  border: 1px solid var(--border-composer);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-slip);
+  box-shadow: none;
+  container-type: inline-size;
+  container-name: slip;
   transition: background-color var(--transition), border-color var(--transition), box-shadow var(--transition);
   margin-bottom: 0;
 }
+.composer:hover { border-color: var(--slip-line-hover); }
 /* 焦点态：容器描边转主色 + 3px 光圈，指明当前唯一的书写面 */
-.composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-sm); }
+.composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
 
 /* 空白便签条右端一枚淡加号：不接指针（点它等于点书写条） */
 .composer-plus {
   position: absolute;
   top: 11px;
-  right: 14px;
+  right: var(--space-4);
   width: 24px;
   height: 24px;
   display: flex;
@@ -110,7 +115,7 @@ const discard = () => {
 .composer.is-empty.is-collapsed :deep(.ProseMirror) {
   min-height: 46px;
   max-height: 46px;
-  padding: 11px 44px 11px var(--space-4);
+  padding: 11px 44px 11px var(--space-6);
   overflow: hidden;
 }
 .composer.is-empty.is-collapsed .composer-bar { display: none; }
@@ -132,5 +137,12 @@ const discard = () => {
   background: none;
   line-height: inherit;
   color: var(--text-muted);
+}
+
+/* 宽窗：书写列与小记卡正文同宽（同一张纸的读写两态，列不该错位）。
+   阈值与 NoteCard 同一推导，默认 1040 窗口下不激活。 */
+@container slip (min-width: 960px) {
+  .composer > :deep(.note-editor),
+  .composer-bar { max-width: 720px; }
 }
 </style>

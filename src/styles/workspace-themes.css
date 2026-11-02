@@ -31,6 +31,14 @@
   --border-card-hover: var(--card-line-strong, var(--border-hover));
   --shadow-card-rest: 0 1px 2px rgb(15 23 42 / 4%), 0 10px 24px -12px rgb(15 23 42 / 11%);
   --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 5%), 0 16px 30px -12px rgb(15 23 42 / 15%);
+  /* 落地档（docs/design/notes/13-slip-landed.md §3）：小记卡影归零，边界只交给一条发丝边。
+     静息直接复用全局 --border-card（与其它卡面同一条线），只补一档 hover 用的强线：
+     别的卡 hover 是「线加深 + 影变大」两件事一起做，这里只剩线，12% 撑不出变化。 */
+  --radius-slip: 14px;
+  --slip-line-hover: color-mix(in srgb, var(--text) 22%, transparent);
+  /* 卡面上的 meta 档（时间 / 标签）：--text-muted 纸底对白卡面只有 4.49:1，
+     低于本仓小字 ≥5.8 的底线；墨底 muted 实测 6.51:1 达标，所以只提纸底一档。 */
+  --text-meta: var(--text-muted);
   --weight-card-title: 500;
   /* 分类徽章不再画盒子：淡底 + 文字已经够分，多一根描边就多一层边框噪声。 */
   --badge-cat-border: transparent;
@@ -59,6 +67,9 @@
   --text: #1f2023;
   --text-secondary: #55585d;
   --text-muted: #74777c;
+  /* meta 档要压住 5.8：#74777c 在白卡面只有 4.49，退深到 #63666b 是 5.76，
+     仍是同一支中性灰，不引入冷调。 */
+  --text-meta: #63666b;
   --text-faint: #8c8f94;
   --text-url: var(--text-secondary);
   --badge-cat-bg: #f3f3f3;

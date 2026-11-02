@@ -37,7 +37,6 @@
     var(--material-field), var(--bg);
   --border-navigation: color-mix(in srgb, var(--text) 3%, transparent);
   --border-search: var(--border);
-  --border-composer: var(--border);
 
   --bg-app: var(--material-field), var(--sunken);
   --bg-toolbar: var(--bg-app);

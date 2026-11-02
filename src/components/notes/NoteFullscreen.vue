@@ -136,35 +136,28 @@ function trapFocus(event: KeyboardEvent) {
   <section ref="surfaceRef" class="fs" role="dialog" aria-modal="true" tabindex="-1" :aria-owns="headerInTitlebar ? 'note-fullscreen-toolbar' : undefined" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'" @keydown.tab="trapFocus">
     <Teleport :to="workspaceToolbarTarget" :disabled="!headerInTitlebar" defer>
     <header id="note-fullscreen-toolbar" ref="headerRef" class="fs-head" data-workspace-heading="replace" data-workspace-toolbar="exclusive" :class="{ 'workspace-fs-head': headerInTitlebar, 'fs-reading-head': viewMode }" @mousedown="startDrag" @keydown.tab.stop="trapFocus">
-      <button class="fs-exit" type="button" @click="emit('close')">
+      <button class="fs-exit" type="button" title="退出全屏 (Esc)" @click="emit('close')">
         <AppIcon name="min" :size="13" />
         退出全屏
-        <span class="kbd">Esc</span>
       </button>
-      <span class="save-hint" :class="props.saveState">
-        {{ viewMode ? '只读浏览' : saveText[props.saveState] || (props.note ? '自动保存' : '未保存') }}<template v-if="props.note && !viewMode"> · {{ wordCount(text) }} 字</template>
+      <span v-if="!viewMode" class="save-hint" :class="props.saveState">
+        {{ saveText[props.saveState] || (props.note ? '自动保存' : '未保存') }}<template v-if="props.note"> · {{ wordCount(text) }} 字</template>
       </span>
 
       <!-- 小记级动作只有首栏这一个住址：读写两态同一组按钮，主按钮只换字 -->
       <template v-if="props.note">
         <button
-          class="bar-btn"
+          class="bar-btn bar-icon"
           type="button"
           :class="{ on: props.note.pinned }"
           :title="props.note.pinned ? '取消置顶' : '置顶'"
           :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
           @click="emit('togglePin')"
         >
-          <AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="13" />{{ props.note.pinned ? '取消置顶' : '置顶' }}
+          <AppIcon :name="props.note.pinned ? 'unpin' : 'pin'" :size="13" />
         </button>
-        <button v-if="viewMode" class="bar-btn primary" type="button" title="进入全屏编辑" aria-label="编辑" @click="emit('edit')">
-          <AppIcon name="edit" :size="13" />编辑
-        </button>
-        <button v-else class="bar-btn primary" type="button" title="完成编辑（自动保存）" aria-label="完成" @click="onPrimary">
-          <AppIcon name="check" :size="13" />完成
-        </button>
-        <button class="bar-btn" type="button" title="复制正文" aria-label="复制正文" @click="emit('copy')">
-          <AppIcon name="copy" :size="13" />复制
+        <button class="bar-btn bar-icon" type="button" title="复制正文" aria-label="复制正文" @click="emit('copy')">
+          <AppIcon name="copy" :size="13" />
         </button>
         <NoteMoreMenu
           variant="bar"
@@ -177,6 +170,12 @@ function trapFocus(event: KeyboardEvent) {
           @remove-lock="emit('removeLock')"
           @delete="emit('delete')"
         />
+        <button v-if="viewMode" class="bar-btn primary" type="button" title="进入全屏编辑" aria-label="编辑" @click="emit('edit')">
+          <AppIcon name="edit" :size="13" />编辑
+        </button>
+        <button v-else class="bar-btn primary" type="button" title="完成编辑（自动保存）" aria-label="完成" @click="onPrimary">
+          <AppIcon name="check" :size="13" />完成
+        </button>
       </template>
       <!-- 新小记还没有可操作的小记对象：首栏只放提交，底栏只放写作工具 -->
       <template v-else-if="!viewMode">
@@ -230,27 +229,29 @@ function trapFocus(event: KeyboardEvent) {
       <NoteScrollTop :target="scrollRef" />
     </div>
     <footer v-if="!viewMode" class="fs-foot">
-      <NoteToolbar
-        :note="props.note"
-        :save-state="props.saveState"
-        :show-fullscreen="false"
-        :show-state-actions="false"
-        :show-primary="false"
-        show-history
-        :can-undo="canUndo"
-        :can-redo="canRedo"
-        @add-image="emit('addImage')"
-        @insert-tag="insertTag"
-        @undo="editorRef?.undo()"
-        @redo="editorRef?.redo()"
-      >
-        <template #hint>
-          <span
-            class="fs-hint"
-            :title="`完整快捷语法：# / ## / ### 空格 标题\n- 或 + 空格 无序列表 · 1. 空格 有序列表\n&gt; 空格 引用 · \`\`\` 空格 代码块\n[] 或 [x] 空格 任务 · --- 分割线\n**粗** *斜* ~~删~~ \`码\``"
-          ><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span></span>
-        </template>
-      </NoteToolbar>
+      <div class="fs-foot-inner">
+        <NoteToolbar
+          :note="props.note"
+          :save-state="props.saveState"
+          :show-fullscreen="false"
+          :show-state-actions="false"
+          :show-primary="false"
+          show-history
+          :can-undo="canUndo"
+          :can-redo="canRedo"
+          @add-image="emit('addImage')"
+          @insert-tag="insertTag"
+          @undo="editorRef?.undo()"
+          @redo="editorRef?.redo()"
+        >
+          <template #hint>
+            <span
+              class="fs-hint"
+              :title="`完整快捷语法：# / ## / ### 空格 标题\n- 或 + 空格 无序列表 · 1. 空格 有序列表\n&gt; 空格 引用 · \`\`\` 空格 代码块\n[] 或 [x] 空格 任务 · --- 分割线\n**粗** *斜* ~~删~~ \`码\``"
+            ><span class="kbd">/</span> 命令 · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span></span>
+          </template>
+        </NoteToolbar>
+      </div>
     </footer>
   </section>
 </template>
@@ -262,13 +263,15 @@ function trapFocus(event: KeyboardEvent) {
   z-index: 150;
   display: flex;
   flex-direction: column;
+  /* 阅读与书写共用一条列宽：窗口只改左右留白，不改行长 */
+  --note-measure: 680px;
   /* 阅读与书写都落在浮片上：实底、不吃窗框的柔光。 */
   background: var(--bg-sheet, var(--bg-editor));
 }
 .fs-col {
   width: 100%;
   /* 与阅读列同一个公式：书写看到多少字一行，提交后就是多少字一行 */
-  max-width: clamp(800px, 80%, var(--fs-max));
+  max-width: var(--note-measure);
   margin: 0 auto;
   padding-inline: 0;
 }
@@ -301,40 +304,43 @@ function trapFocus(event: KeyboardEvent) {
   flex-shrink: 0;
 }
 .fs-exit:hover { color: var(--text); background: var(--hover-chrome); }
-.fs-exit .kbd { background: transparent; border-bottom-width: 1px; }
 /* 状态字跟着退出钮走左组，原先孤悬右端像另一条栏 */
 .fs-head .save-hint { margin-right: auto; padding-left: var(--space-1); }
+/* 阅读态没有可保存的东西，不再报「只读浏览」：省下的 auto 外边距交给退出钮，
+   动作组照旧贴右缘 */
+.fs-reading-head .fs-exit { margin-right: auto; }
 
 .fs-title {
-  margin-bottom: 8px;
-  font-size: var(--text-xl);
-  line-height: 26px;
+  margin-bottom: 10px;
+  font-size: 24px;
+  line-height: 34px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
   color: var(--text);
   overflow-wrap: anywhere;
 }
 .fs-meta {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 10px;
   font-size: var(--text-xs);
-  color: var(--text-canvas-meta);
-  margin-bottom: 8px;
+  line-height: 18px;
+  color: var(--text-secondary);
+  margin-bottom: 22px;
 }
-.fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+.fs-meta .dotsep { width: 2px; height: 2px; border-radius: 50%; background: currentColor; opacity: 0.38; }
 
-/* 水平留白两态一致：阅读与书写之间只换内容，不换列位，否则切一次眼就得重找行首。 */
-.fs-scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable; min-height: 0; padding-inline: var(--workspace-gutter, var(--space-5)); }
+/* 水平留白两态一致：阅读与书写之间只换内容，不换列位，否则切一次眼就得重找行首。
+   both-edges 让滚动条槽两侧对称，居中列和底栏共用同一条中线。 */
+.fs-scroll { flex: 1; overflow-y: auto; scrollbar-gutter: stable both-edges; min-height: 0; padding-inline: var(--workspace-gutter, var(--space-5)); }
 .fs-scroll-actions { position: relative; flex-shrink: 0; }
-.fs-inner { padding-block: 12px 20px; }
+.fs-inner { padding-block: 36px; }
 
-/* 阅读列直接落在工作区画布上，用行长和留白组织内容。 */
+/* 阅读列直接落在工作区画布上，用行长和留白组织内容；上下留白沿用 .fs-inner */
 .fs-doc {
   width: 100%;
-  max-width: clamp(800px, 80%, var(--fs-max));
-  margin: var(--space-8) auto var(--space-8);
-  padding: 0;
+  max-width: var(--note-measure);
+  margin: 0 auto;
 }
 
 .fs-atts { margin-top: var(--space-5); }
@@ -365,13 +371,32 @@ function trapFocus(event: KeyboardEvent) {
 .fs-foot {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-5);
+  /* 不滚动，但要和正文列共用同一条滚动条槽：槽只从滚动容器里让位，
+     底栏不占这份空间时窄窗下会比正文向左多出一截 */
+  overflow: hidden;
+  scrollbar-gutter: stable both-edges;
+  /* 水平留白照抄 .fs-scroll：列没顶到 680 时，两处的内边距就是行首的唯一定位 */
+  padding: 10px var(--workspace-gutter, var(--space-5)) 18px;
 }
+/* 工具列与正文同宽同中线：按钮左缘就是正文左缘 */
+.fs-foot-inner {
+  width: 100%;
+  max-width: var(--note-measure);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+}
+.fs-foot :deep(.note-toolbar) { gap: 6px; }
+.fs-foot :deep(.ib) { width: 28px; height: 28px; }
+.fs-foot :deep(.eb) { height: 28px; padding: 0 10px; }
 
 /* 编辑沿用标题栏主操作的淡染，次级操作保持无底。 */
 .fs-head .bar-btn { height: 32px; }
+/* 副动作只留图标：28px 方块与卡片动作排同档；图标间多留 6px，
+   让一排小钮不断成一块，主钮仍收在这一组的最右端 */
+.fs-head .bar-btn.bar-icon,
+.fs-head :deep(.bar-btn.more) { width: 28px; height: 28px; min-width: 28px; padding: 0; margin-inline: 3px; }
+.fs-head .bar-btn.primary { margin-left: 3px; }
 /* 置顶是状态不是主操作：只染字色，页头那一颗实心留给「编辑」；
    字色走 --text-brand，与目录选中态、主操作同一档可读色 */
 .fs-head .bar-btn.on { background: transparent; color: var(--text-brand); font-weight: 500; }
@@ -381,13 +406,13 @@ function trapFocus(event: KeyboardEvent) {
 /* 窄栏（800px 窗再带 Web/云徽标时首栏只剩 ~416px）放不下状态字：
    读写两态都让状态让位给动作，退出钮吃掉省下的 auto 外边距 */
 @container workspace-toolbar (max-width: 520px) {
-  .workspace-fs-head .save-hint, .workspace-fs-head .fs-exit .kbd { display: none; }
+  .workspace-fs-head .save-hint { display: none; }
   .workspace-fs-head .fs-exit { margin-right: auto; }
 }
 /* 页内首栏没有 workspace-toolbar 容器，同样在窄屏收掉状态字 */
 @media (max-width: 640px) {
   .fs-head { gap: var(--space-1); }
-  .fs-head .save-hint, .fs-head .fs-exit .kbd { display: none; }
+  .fs-head .save-hint { display: none; }
   .fs-head .fs-exit { margin-right: auto; }
 }
 

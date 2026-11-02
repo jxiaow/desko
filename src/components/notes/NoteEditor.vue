@@ -641,9 +641,9 @@ const onLangChange = (lang: string) => {
  * 浮层沿用斜杠菜单那一套（Teleport + fixed + 按钮 mousedown.prevent）：
  * 不引第二个浮层库，也免得焦点先跳到按钮上把选区吞掉。
  */
-const BAR_H = 30
+const BAR_H = 36
 /** 只用于右缘夹取，条的真实宽度交给内容 */
-const BAR_W_MAX = 268
+const BAR_W_MAX = 300
 
 const showFormatBar = ref(false)
 const formatBarEl = ref<HTMLElement | null>(null)
@@ -747,6 +747,18 @@ const updateFormatBar = (ed: any) => {
 
 const toggleInlineCode = () => {
   editor.value?.chain().focus().toggleCode().run()
+}
+
+const toggleBold = () => {
+  editor.value?.chain().focus().toggleBold().run()
+}
+
+const toggleItalic = () => {
+  editor.value?.chain().focus().toggleItalic().run()
+}
+
+const toggleStrike = () => {
+  editor.value?.chain().focus().toggleStrike().run()
 }
 
 const startLinkEdit = () => {
@@ -925,6 +937,37 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
       <div v-if="showFormatBar" ref="formatBarEl" class="fmt-bar" :style="formatBarStyle">
         <template v-if="!linkEditing">
           <button
+            class="fmt-btn fmt-glyph"
+            :class="{ on: editor?.isActive('bold') }"
+            type="button"
+            title="加粗 (Ctrl+B)"
+            aria-label="加粗"
+            :aria-pressed="editor?.isActive('bold') ?? false"
+            @mousedown.prevent
+            @click="toggleBold"
+          >B</button>
+          <button
+            class="fmt-btn fmt-glyph i"
+            :class="{ on: editor?.isActive('italic') }"
+            type="button"
+            title="斜体 (Ctrl+I)"
+            aria-label="斜体"
+            :aria-pressed="editor?.isActive('italic') ?? false"
+            @mousedown.prevent
+            @click="toggleItalic"
+          >I</button>
+          <button
+            class="fmt-btn fmt-glyph s"
+            :class="{ on: editor?.isActive('strike') }"
+            type="button"
+            title="删除线 (Ctrl+Shift+S)"
+            aria-label="删除线"
+            :aria-pressed="editor?.isActive('strike') ?? false"
+            @mousedown.prevent
+            @click="toggleStrike"
+          >S</button>
+          <span class="fmt-divider" aria-hidden="true"></span>
+          <button
             class="fmt-btn"
             :class="{ on: editor?.isActive('code') }"
             type="button"
@@ -1018,10 +1061,10 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
    三行是有意的：一行段距 8px，两行只够写一句半，第三条一落笔就撑高，
    「默认高度」反而成了逐键跳动的起点。 */
 .note-editor.v-composer :deep(.ProseMirror) {
-  padding: var(--space-3) var(--space-4) var(--space-2);
+  padding: var(--space-3) var(--space-5) var(--space-2) var(--space-6);
   font-size: var(--text-base);
-  line-height: 24px;
-  min-height: 94px;
+  line-height: 22px;
+  min-height: 86px;
   max-height: 46vh;
   scrollbar-gutter: stable;
   overflow-y: auto;
@@ -1048,6 +1091,15 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   letter-spacing: normal;
   min-height: 40vh;
   caret-color: var(--accent);
+}
+/* 首块是标题时按阅读标题的尺度排：点「编辑」标题不缩水 */
+.note-editor.v-full :deep(.ProseMirror > h1:first-child),
+.note-editor.v-full :deep(.ProseMirror > h2:first-child),
+.note-editor.v-full :deep(.ProseMirror > h3:first-child) {
+  font-size: 24px;
+  line-height: 34px;
+  font-weight: 600;
+  margin-bottom: 22px;
 }
 
 .note-editor :deep(.ProseMirror p.is-editor-empty:first-child::before) {
@@ -1141,18 +1193,19 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 .slash-item.active .sm-icon, .slash-item.active .sm-badge { color: var(--accent-active); }
 .slash-item.active .sm-hint { color: var(--accent-active); opacity: 0.6; }
 
-/* 选中浮动条：与 .slash-menu 同一档浮层语言，26px 控件跟着卡面动作排那条轴 */
+/* 选中浮动条：与 .slash-menu 同一档浮层语言，28px 控件跟着卡面动作排那条轴 */
 .fmt-bar {
   position: fixed;
   z-index: 300;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   width: max-content;
-  padding: 2px;
+  min-height: 36px;
+  padding: 3px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-ib);
+  border-radius: 10px;
   box-shadow: var(--shadow-pop);
 }
 
@@ -1160,16 +1213,27 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 7px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: background var(--transition-fast);
 }
+
+/* B / I / S 用字面形，不为一枚字母新增图标 */
+.fmt-glyph {
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+.fmt-glyph.i { font-style: italic; font-weight: 600; }
+.fmt-glyph.s { text-decoration: line-through; }
+.fmt-divider { width: 1px; height: 16px; margin: 0 4px; background: var(--border); flex-shrink: 0; }
 
 .fmt-btn:hover { background: var(--hover-chrome); color: var(--text); }
 .fmt-btn.on { background: var(--accent-soft); color: var(--accent-active); }

@@ -33,7 +33,10 @@ test('切回小记保留列表滚动位置：卡片是摘要，读全文去阅�
   await bootUnlocked(page, {
     notes: Array.from({ length: 30 }, (_, i) => ({
       title: `记录 ${i}`,
-      content_html: Array.from({ length: 15 }, (_, line) => `<p>记录 ${i} 第 ${line} 行</p>`).join(''),
+      content_html:
+        i === 0
+          ? '<p>只有一行</p>'
+          : Array.from({ length: 15 }, (_, line) => `<p>记录 ${i} 第 ${line} 行</p>`).join(''),
     })),
   })
   const first = page.locator('.memo').first()
@@ -41,6 +44,10 @@ test('切回小记保留列表滚动位置：卡片是摘要，读全文去阅�
   // 长正文按预算整块收行，卡上不再就地展开
   await expect(first.locator('.memo-unfold')).toHaveCount(0)
   await expect.poll(() => body.evaluate(el => el.style.maxHeight)).not.toBe('')
+  // 截断卡才带渐隐标记：读完就收口的短卡不淡
+  await expect(body).toHaveAttribute('data-clamped', '')
+  await expect(page.locator('.memo-body[data-clamped]')).toHaveCount(29)
+  await expect(body).toHaveCSS('mask-image', /linear-gradient/)
   const clamped = await body.evaluate(el => el.getBoundingClientRect().height)
   const stream = page.locator('.stream')
   await stream.evaluate(el => { el.scrollTop = 600 })

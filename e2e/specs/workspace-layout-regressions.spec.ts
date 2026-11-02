@@ -94,8 +94,16 @@ for (const width of [800, 1040, 1920]) {
         await expect(page.locator('#workspace-directory-toggle')).toHaveCount(0)
       }
       const card = page.locator('.memo, .entry-card, .shortcut-row, .mfa-card:not(.skeleton), .acc-row').first()
-      const border = await card.evaluate(el => getComputedStyle(el).borderTopColor)
-      expect(border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+      const face = await card.evaluate(el => {
+        const cs = getComputedStyle(el)
+        return { border: cs.borderTopColor, shadow: cs.boxShadow, radius: cs.borderTopLeftRadius }
+      })
+      if (route === 'notes') {
+        // 落地档：小记卡影归零，分离只交给一条发丝边 + 圆角 14（docs/design/notes/13-slip-landed.md §3）。
+        expect(face.border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+        expect(face.radius).toBe('14px')
+        expect(face.shadow).toBe('none')
+      } else expect(face.border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
       expect(await page.locator('.workspace-main').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     }
     // 小记与 Codex 同一个外壳、同一条页头，列宽必须一致：小记早先单走 720，
@@ -108,14 +116,24 @@ for (const theme of ['paper', 'ink']) {
   test(`${theme} 卡面有安静边界，悬停、选中与键盘焦点仍有清楚反馈`, async ({ page }) => {
     await bootUnlocked(page, { ...seed, settings: { ...seed.settings, theme, fileshare_enabled: 'true' }, fileshare: { running: true, shareDirs: ['C:/demo/share'] } })
     const memo = page.locator('.memo').first()
-    const border = await memo.evaluate(el => getComputedStyle(el).borderTopColor)
-    const canvas = await page.locator('.workspace-main').evaluate(el => getComputedStyle(el).backgroundColor)
-    expect(border).not.toBe(canvas)
-    expect(border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+    const faceOf = (element: typeof memo) => element.evaluate(el => {
+      const cs = getComputedStyle(el)
+      return { border: cs.borderTopColor, shadow: cs.boxShadow, bg: cs.backgroundColor }
+    })
+    const rest = await faceOf(memo)
+    const canvas = await page.locator('.workspace-surface').evaluate(el => getComputedStyle(el).backgroundColor)
+    // 落地档：影全部退场，卡面与浮片之间那一档分离只交给一条发丝边。
+    expect(rest.border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+    expect(rest.shadow).toBe('none')
+    expect(rest.bg).not.toBe(canvas)
     await memo.hover()
+    // 悬停既不洗底也不抬影，只把线压深一档。
+    expect((await faceOf(memo)).bg).toBe(rest.bg)
+    expect((await faceOf(memo)).shadow).toBe('none')
+    await expect.poll(() => memo.evaluate(el => getComputedStyle(el).borderTopColor)).not.toBe(rest.border)
     await memo.locator('.memo-check').click()
     const selectedMemo = page.locator('.memo.is-sel')
-    await expect(selectedMemo).not.toHaveCSS('border-top-color', border)
+    await expect(selectedMemo).not.toHaveCSS('border-top-color', rest.border)
     await page.mouse.move(0, 0)
     await selectedMemo.hover()
     await expect(selectedMemo).toHaveCSS('border-top-color', /rgb\(|color\(|oklab\(|oklch\(/)

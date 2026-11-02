@@ -1,4 +1,6 @@
 const HEADINGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6'])
+/** 真机里绝大多数小记没有格式标题，首块就是这张纸片的标题；超过一行就不再是「标题」。 */
+const VOICE_MAX_CHARS = 40
 
 /** 传入已清理标签的展示 HTML；保留首块节点，任务勾选仍按原顺序对位。 */
 export function noteDisplay(html: string) {
@@ -9,8 +11,12 @@ export function noteDisplay(html: string) {
   // 混排图片或任务的块仍是正文，不能为提升文字标题把其中的内容一并藏掉。
   const hasStructure = !!first?.querySelector('img, input, ul, ol, pre')
   const hideFirstBlock = !!first && HEADINGS.has(first.tagName) && !!firstText && !hasStructure
+  const voiceFirst = !hideFirstBlock && !!first && !hasStructure
+    && (first.tagName === 'P' || HEADINGS.has(first.tagName))
+    && firstText.length > 0 && firstText.length <= VOICE_MAX_CHARS
   return {
     title: hideFirstBlock ? firstText : '',
     hideFirstBlock,
+    voiceFirst,
   }
 }

@@ -60,7 +60,9 @@ const pageEl = ref<HTMLElement | null>(null)
 const railEl = ref<HTMLElement | null>(null)
 const railToggleEl = ref<HTMLButtonElement | null>(null)
 const searchEl = ref<HTMLInputElement | null>(null)
-const viewportWidth = ref(window.innerWidth)
+const workbarEl = ref<HTMLElement | null>(null)
+const tabsEl = ref<HTMLElement | null>(null)
+const tagsEl = ref<HTMLElement | null>(null)
 const moreTagsOpen = ref(false)
 const moreTagsAnchor = ref<HTMLElement | null>(null)
 const tagQuery = ref('')
@@ -171,16 +173,33 @@ const draftText = computed(() => htmlToText(draftHtml.value))
 const draftEmpty = computed(() => !draftText.value.trim() && !collectAttachmentNames(draftHtml.value).length)
 /** 归档视图只读不回书写面：书写框收掉，页栏搜索改口径 */
 const isArchivedView = computed(() => noteView.value === 'archived')
-const tagLimit = computed(() => viewportWidth.value <= 1100 ? 4 : viewportWidth.value <= 1400 ? 5 : 6)
-/** 已选标签优先占位，其余按使用频次补满；超出的进「更多标签」。 */
-const visibleTagCounts = computed<[string, number][]>(() => {
-  if (tagCounts.value.length <= tagLimit.value) return tagCounts.value
-  const selected = tagCounts.value.filter(([tag]) => activeTags.value.has(tag))
-  const rest = tagCounts.value.filter(([tag]) => !activeTags.value.has(tag))
-  const visible = new Set([...selected, ...rest].slice(0, tagLimit.value).map(([tag]) => tag))
-  return tagCounts.value.filter(([tag]) => visible.has(tag))
-})
-const hiddenTagCounts = computed(() => tagCounts.value.filter(([tag]) => !visibleTagCounts.value.some(([visible]) => visible === tag)))
+/** 分类栏标签「全显或全收」：整组放得下就全显，放不下就整组收成一枚入口。
+ *  判据是实测宽度，不按视口档位猜个数——半截列表会让人以为标签只有这几个。 */
+const tagsFit = ref(true)
+let tagsFullWidth = 0
+/** 展开态量一次整组宽，收起态复用这个值：收起后 DOM 里只剩已选，当场再量会越量越窄 */
+async function remeasureTags() {
+  tagsFit.value = true
+  await nextTick()
+  const strip = tagsEl.value
+  if (strip) tagsFullWidth = strip.scrollWidth
+  decideTags()
+}
+function decideTags() {
+  const bar = workbarEl.value
+  const tabs = tabsEl.value
+  if (!bar || !tabs || !tagsFullWidth) return
+  // 分类栏 gap 20px 两段 + 1px 分隔符
+  const avail = bar.clientWidth - tabs.getBoundingClientRect().width - 41
+  tagsFit.value = tagsFullWidth <= avail
+}
+const visibleTagCounts = computed<[string, number][]>(() => tagsFit.value
+  ? tagCounts.value
+  : tagCounts.value.filter(([tag]) => activeTags.value.has(tag)))
+const hiddenTagCounts = computed(() => tagCounts.value.filter(([tag]) => !visibleTagCounts.value.some(([shown]) => shown === tag)))
+/* 标签名换了才作废重量：只改计数不重测，否则收起态下编辑一条小记
+   会让整组列表闪回一帧（remeasure 必须先摊开才量得到）。 */
+watch(() => tagCounts.value.map(([tag]) => tag).join('\n'), () => { void remeasureTags() })
 const filteredMoreTags = computed(() => {
   const query = tagQuery.value.trim().toLowerCase()
   return query ? hiddenTagCounts.value.filter(([tag]) => tag.toLowerCase().includes(query)) : hiddenTagCounts.value
@@ -407,11 +426,10 @@ watch(notes, () => {
 })
 
 let observer: ResizeObserver | null = null
+let workbarObserver: ResizeObserver | null = null
 let unlistenDrag: (() => void) | undefined
-const onResize = () => { viewportWidth.value = window.innerWidth }
 onMounted(() => {
   document.addEventListener('keydown', onKeyDown)
-  window.addEventListener('resize', onResize)
   if (!workspaceLayout) document.addEventListener('click', onRailOutsideClick, true)
   if (!isWebRuntime()) {
     // 桌面侧拖进来的文件只有原生层知道路径，与局域网传输吃同一窗口级事件；
@@ -423,6 +441,15 @@ onMounted(() => {
       if (active) unlistenDrag = unlisten
       else unlisten()
     })
+  }
+  // 分类栏：整组标签的宽力量一次，之后只按可用宽重算取舍，不再重排 DOM 重测
+  if (workspaceLayout) {
+    void remeasureTags()
+    const bar = workbarEl.value
+    if (bar) {
+      workbarObserver = new ResizeObserver(() => decideTags())
+      workbarObserver.observe(bar)
+    }
   }
   const root = pageEl.value
   if (!root || workspaceLayout) return
@@ -442,11 +469,12 @@ onBeforeUnmount(() => {
   active = false
   void flushNoteSave().catch(() => {})
   document.removeEventListener('keydown', onKeyDown)
-  window.removeEventListener('resize', onResize)
   document.removeEventListener('click', onRailOutsideClick, true)
   unlistenDrag?.()
   observer?.disconnect()
   observer = null
+  workbarObserver?.disconnect()
+  workbarObserver = null
 })
 
 const pageHead = usePageHeadStore()
@@ -534,8 +562,8 @@ watchEffect(() => {
         </div>
         </Teleport>
 
-        <div v-if="workspaceLayout && !isWebRuntime() && showFilters" class="workspace-workbar notes-workbar">
-          <nav class="workspace-workbar-tabs" aria-label="小记视图">
+        <div v-if="workspaceLayout && !isWebRuntime() && showFilters" ref="workbarEl" class="workspace-workbar notes-workbar">
+          <nav ref="tabsEl" class="workspace-workbar-tabs" aria-label="小记视图">
             <button
               v-for="v in VIEWS"
               :key="v.key"
@@ -551,11 +579,11 @@ watchEffect(() => {
           </nav>
           <template v-if="!isArchivedView && tagCounts.length">
             <span class="wb-divider" aria-hidden="true"></span>
-            <div class="wb-tags" aria-label="小记标签">
+            <div ref="tagsEl" class="wb-tags" :class="{ 'is-collapsed': !tagsFit }" aria-label="小记标签">
               <button
                 v-for="[tag, count] in visibleTagCounts"
                 :key="tag"
-                class="wb-tab"
+                class="wb-tab wb-tag"
                 :class="{ active: activeTags.has(tag) }"
                 type="button"
                 :aria-pressed="activeTags.has(tag)"
@@ -568,10 +596,10 @@ watchEffect(() => {
                 v-if="hiddenTagCounts.length"
                 class="wb-tab wb-more"
                 type="button"
-                :aria-label="`更多标签，已收起 ${hiddenTagCounts.length} 项`"
+                :aria-label="`标签筛选，共 ${tagCounts.length} 个标签`"
                 :aria-expanded="moreTagsOpen"
                 @click="toggleMoreTags($event.currentTarget as HTMLElement)"
-              >更多 <span class="wb-count">{{ hiddenTagCounts.length }}</span> <AppIcon name="chevDown" :size="13" /></button>
+              >标签 <span class="wb-count">{{ tagCounts.length }}</span> <AppIcon name="chevDown" :size="13" /></button>
             </div>
           </template>
         </div>
@@ -842,8 +870,8 @@ watchEffect(() => {
   min-height: 0;
   overflow: hidden;
   position: relative;
-  /* 便签流：卡面只留三行给扫读，读全文去阅读层 */
-  --memo-max-h: 72px;
+  /* 便签流：卡面只留三行给扫读，读全文去阅读层（3 × 22px 正文行高） */
+  --memo-max-h: 66px;
 }
 .rail-heading { display: flex; align-items: center; justify-content: space-between; }
 .rail-heading-actions { display: flex; align-items: center; gap: var(--space-1); }
@@ -876,7 +904,28 @@ watchEffect(() => {
   .notes-create { display: none; }
 }
 
-/* 「更多标签」面板：保持打开以支持连续多选，搜索与选中状态都在面板内完成。 */
+/* ---------- 分类栏里的标签：与视图页签分身份 ----------
+   下划线说的是「你现在在哪个视图」，标签说的是「筛掉了什么」，同一个记号不能兼两义。
+   所以标签一律走 26px 药丸档（与弹层里的 .pop-item.on 同档淡主色），并且不吃那条下划线。
+   flex 让位给「标签 N ▾」入口：窗口再窄也只是药丸出省略号，入口不能被挤丢。 */
+.notes-workbar .wb-tags .wb-tag {
+  flex: 0 0 auto;
+  align-self: center;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+}
+/* 收起态只剩已选 + 入口：这时才允许药丸自己缩，保证「标签 N ▾」永远点得到。
+   展开态必须一颗都不缩，否则量出来的整组宽度是假的，永远判成「放得下」。 */
+.notes-workbar .wb-tags.is-collapsed .wb-tag { flex: 0 1 auto; }
+.notes-workbar .wb-tags .wb-tag > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.notes-workbar .wb-tags .wb-tag.active { background: var(--accent-soft); color: var(--text-brand); font-weight: 500; }
+.notes-workbar .wb-tags .wb-tag.active::after { display: none; }
+.notes-workbar .wb-tags .wb-more { flex: none; }
+
+/* 「标签」面板：保持打开以支持连续多选，搜索与选中状态都在面板内完成。
+   收起态下列出的是所有未选标签——已选的常驻在分类栏上，点一下即取消。 */
 .tag-pop { width: 224px; display: flex; flex-direction: column; gap: var(--space-1); }
 .tag-pop-search { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; }
 .tag-pop-search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; outline: none; font: inherit; font-size: var(--text-sm); color: var(--text); }

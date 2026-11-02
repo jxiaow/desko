@@ -105,10 +105,11 @@ test('首段混排图片和任务时，阅读标题不隐藏正文中的媒体�
   await expect(page.locator('.fs-view input[type="checkbox"]')).toBeVisible()
 })
 
-test('普通首段、引用和自动摘要保持正文，只有标题格式生成标题行', async ({ page }) => {
+test('卡面首段取标题声部但不生成标题行，阅读层与编辑器仍是正文', async ({ page }) => {
   await bootUnlocked(page, {
     notes: [
       { title: '自动生成的摘要', content_html: '<p>普通首段</p><p>第二段正文</p>' },
+      { title: '超长首段', content_html: '<p>这一条的首块故意写得很长，用来验证超过四十字不升标题声部的护栏是否真的生效，不该整段抢戏。</p><p>第二段正文</p>' },
       { title: '引用摘要', content_html: '<blockquote><p>引用首段</p></blockquote><p>后续正文</p>' },
       { title: '真正的标题', content_html: '<h2>真正的标题</h2><p>标题下的正文</p>' },
     ],
@@ -116,7 +117,11 @@ test('普通首段、引用和自动摘要保持正文，只有标题格式生�
   await expect(page.locator('.memo-title')).toHaveText(['真正的标题'])
   const plain = page.locator('.memo').filter({ hasText: '普通首段' })
   await expect(plain.locator('.memo-body > p').first()).toBeVisible()
-  await expect(plain.locator('.memo-body > p').first()).toHaveCSS('font-weight', '400')
+  await expect(plain.locator('.memo-body > p').first()).toHaveCSS('font-weight', '600')
+  const long = page.locator('.memo').filter({ hasText: '护栏' })
+  await expect(long.locator('.memo-body > p').first()).toHaveCSS('font-weight', '400')
+  const quote = page.locator('.memo').filter({ hasText: '引用首段' })
+  await expect(quote.locator('.memo-body blockquote > p').first()).toHaveCSS('font-weight', '400')
   await plain.hover()
   await openNoteRead(plain)
   await expect(page.locator('.fs-title')).toHaveCount(0)
@@ -129,7 +134,6 @@ test('普通首段、引用和自动摘要保持正文，只有标题格式生�
   await plain.getByRole('button', { name: '编辑', exact: true }).click()
   await expect(page.locator('.memo.editing .ProseMirror > p').first()).toHaveCSS('font-weight', '400')
   await page.keyboard.press('Escape')
-  const quote = page.locator('.memo').filter({ hasText: '引用首段' })
   await quote.hover()
   await openNoteRead(quote)
   await expect(page.locator('.fs-title')).toHaveCount(0)

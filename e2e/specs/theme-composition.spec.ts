@@ -142,19 +142,19 @@ for (const theme of THEMES) {
         expect(contrast(glow.titleText, glow.card), `${label} 标题保持可读`).toBeGreaterThanOrEqual(4.5)
         expect(contrast(glow.titleText, glow.card), `${label} 标题避免过亮`).toBeLessThan(15)
         expect(contrast(glow.secondaryText, glow.card), `${label} 辅助文字可读`).toBeGreaterThanOrEqual(4.5)
-        expect(lab(glow.text).L - lab(glow.secondaryText).L, `${label} 正文与辅助文字字阶分明`).toBeGreaterThan(12)
+        // 卡面两档声部：标题走 --text、正文走 --text-secondary（纸片档，见 docs/design/notes/12-slip-face.md）
+        expect(lab(glow.titleText).L - lab(glow.text).L, `${label} 标题与正文字阶分明`).toBeGreaterThan(12)
         expect(lab(glow.secondaryText).L - lab(glow.mutedText).L, `${label} 辅助与弱文字不挤在同一字阶`).toBeGreaterThan(6)
         for (const rgb of [glow.sheet, glow.card]) {
           expect(chromatic(rgb), `${label} 浮片与卡片保持中性`).toBeLessThanOrEqual(10)
         }
       }
 
-      // 6. 悬停只做轻量色阶变化，卡片仍然浮在浮片上。
+      // 6. 悬停不洗底：卡面是实底，抬的只有影，绝不跟光场抢色。
       await page.locator('.memo').hover()
       const hover = await renderedSurfaces(page)
       expect(distance(hover.card, hover.sheet), `${label} 悬停后卡片仍与浮片分层`).toBeGreaterThan(1.2)
-      expect(distance(hover.card, glow.card), `${label} 悬停有清楚的色阶差异`).toBeGreaterThan(2.5)
-      expect(distance(hover.card, glow.card), `${label} 悬停明暗变化保持柔和`).toBeLessThan(8)
+      expect(distance(hover.card, glow.card), `${label} 悬停不改卡面实底`).toBeLessThan(1)
       await page.mouse.move(0, 0)
 
       measurements.push({ accent, upper: Math.round(upper * 10) / 10, lower: Math.round(lower * 10) / 10, sheet: distance(glow.sheet, flat.sheet) })

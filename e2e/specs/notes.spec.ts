@@ -1003,7 +1003,10 @@ test.describe('Notes 小记', () => {
     await expect(fs.locator('.fs-view > p').first()).toHaveText('第一条小记：周会纪要与待办')
     // 只读层没有编辑器，动作住在首栏右侧，底栏不再出现
     await expect(fs.locator('.ProseMirror')).toHaveCount(0)
-    await expect(page.locator('.fs-head .save-hint')).toHaveText('只读浏览')
+    // 阅读态没有可保存的东西，不再挂状态字；Esc 收进退出钮的提示里
+    await expect(page.locator('.fs-head .save-hint')).toHaveCount(0)
+    await expect(page.locator('.fs-head .fs-exit .kbd')).toHaveCount(0)
+    await expect(page.locator('.fs-head .fs-exit')).toHaveAttribute('title', '退出全屏 (Esc)')
     await expect(fs.locator('.fs-hint')).toHaveCount(0)
     await expect(fs.locator('.fs-foot')).toHaveCount(0)
     // 首栏读写共用一组小记级动作，阅读态主按钮是「编辑」
@@ -1012,6 +1015,13 @@ test.describe('Notes 小记', () => {
     await expect(head.getByRole('button', { name: '编辑', exact: true })).toHaveCount(1)
     await expect(head.getByRole('button', { name: '复制正文', exact: true })).toHaveCount(1)
     await expect(head.getByRole('button', { name: '更多操作', exact: true })).toHaveCount(1)
+    // 置顶/复制只留 28px 图标，可读名字靠 aria-label；主按钮收在这一排最右端
+    await expect(head.locator('.bar-btn.bar-icon').first()).toHaveText('')
+    await expect.poll(async () => {
+      const box = await head.getByRole('button', { name: /置顶/ }).boundingBox()
+      return box && `${Math.round(box.width)}×${Math.round(box.height)}`
+    }).toBe('28×28')
+    await expect(head.locator('.bar-btn.primary:last-child')).toHaveCount(1)
 
     // 查看转编辑：书写面接管同一条正文
     await page.locator('.fs-head .bar-btn.primary').click()
@@ -1585,5 +1595,42 @@ test.describe('Notes 小记', () => {
     await expect(pill).toHaveClass(/on/)
     await pill.click()
     await expect(page.locator('.titlebar-count')).toHaveText('3 条')
+  })
+
+  test('收起侧栏只改容器宽度，卡片的整行截断要跟着重算', async ({ page }) => {
+    // 侧栏折叠不动 window 尺寸，resize 事件一声不响：
+    // 旧的截断值原样留着，在新宽度下不再落在块边界上，最后一行就被切掉半截。
+    await page.setViewportSize({ width: 900, height: 860 })
+    // 两段各三十二字：窄列（侧栏展开）首段两行装不进预算，宽列（侧栏收起）两段各一行正好 56px 装得下
+    const para = '这是一段用来测试截断重算的中文内容字数固定为三十二个左右不要多也不要少'.slice(0, 32)
+    await bootUnlocked(page, {
+      notes: [{ title: '', content_html: `<p>${para}</p><p>${para}</p>` }],
+    }, '/notes')
+    await expect(page.locator('.notes-page')).toBeVisible()
+
+    const body = page.locator('.memo-body').first()
+    const snap = async () => body.evaluate((b: HTMLElement) => {
+      const top = b.getBoundingClientRect().top
+      return {
+        w: Math.round(b.getBoundingClientRect().width),
+        scroll: b.scrollHeight,
+        client: b.clientHeight,
+        inline: b.style.maxHeight,
+        bottoms: Array.from(b.children).map(k => Math.round(k.getBoundingClientRect().bottom - top)),
+      }
+    })
+
+    const open = await snap()
+    expect(open.inline).not.toBe('') // 前提：窄列时确实被截断，否则这条用例是空跑
+
+    await page.locator('.sidebar-toggle').click()
+    await expect.poll(async () => (await snap()).w).toBeGreaterThan(open.w + 40)
+
+    // 重算后：装得下就整块显示（旧值残留会吃掉一整段），装不下也必须收在块边界上，不能停在半行
+    const shut = await snap()
+    expect(shut.scroll).toBeLessThanOrEqual(72)
+    expect(shut.inline).toBe('')
+    expect(shut.client).toBe(shut.scroll)
+    expect(shut.bottoms).toContain(shut.client)
   })
 })

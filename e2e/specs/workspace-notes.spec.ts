@@ -129,6 +129,9 @@ test('全屏正反向 Tab 保持在书写面内，退出后回到原来的卡片
   await expect(exit).toBeFocused()
   await header.getByRole('button', { name: '更多操作', exact: true }).focus()
   await page.keyboard.press('Tab')
+  // 主按钮收在动作排末位：⋯ 之后先到「编辑」，再由它走到正文里的标签
+  await expect(header.getByRole('button', { name: '编辑', exact: true })).toBeFocused()
+  await page.keyboard.press('Tab')
   await expect(tag).toBeFocused()
   for (let i = 0; i < 12; i++) {
     await page.keyboard.press('Tab')

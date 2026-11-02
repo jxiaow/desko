@@ -418,7 +418,6 @@
 | `:root, .theme-scope` | `--material-editor-field` | linear-gradient(color-mix(in srgb, var(--bg) 65%, transparent), color-mix(in srgb, var(--bg) 65%, transparent)), var(--material-field), var(--bg) |
 | `:root, .theme-scope` | `--border-navigation` | color-mix(in srgb, var(--text) 3%, transparent) |
 | `:root, .theme-scope` | `--border-search` | var(--border) |
-| `:root, .theme-scope` | `--border-composer` | var(--border) |
 | `:root, .theme-scope` | `--bg-app` | var(--material-field), var(--sunken) |
 | `:root, .theme-scope` | `--bg-toolbar` | var(--bg-app) |
 | `:root, .theme-scope` | `--bg-sidebar` | var(--sidebar-bg) |

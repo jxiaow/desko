@@ -171,12 +171,24 @@ function onDirectoryClick(event: MouseEvent) {
   margin: 6px 0 14px;
   border-bottom: 0;
 }
-.workspace-workbar-tabs,
+/* 两段都按内容宽排：谁也不撑满，标签才紧贴在视图页签后面。
+   页签一律不可收缩（视图只有四枚，裁掉任何一枚都是丢功能）；标签条留一份可收缩
+   只当保险丝——真正的放不下由 NotesModule 整组收起处理，不允许在这里裁出半截列表。
+   注意：标签条可收缩不等于里面的按钮可收缩，收起判据量的就是它的 scrollWidth，
+   按钮要是跟着一起缩，整组就永远「放得下」。 */
+.workspace-workbar-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+}
 .workspace-workbar .wb-tags {
   display: flex;
   align-items: stretch;
   gap: 20px;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
 }
@@ -226,11 +238,13 @@ function onDirectoryClick(event: MouseEvent) {
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
+/* 标签搬过来之后，这根线是「视图」和「标签」唯一的分组线索。
+   --border（纸底 #e6e6e6 对 #fafafa 约 1.18:1）等于不存在，按 --text 混一档。 */
 .workspace-workbar .wb-divider {
   flex: none;
   width: 1px;
-  height: 15px;
-  background: var(--border);
+  height: 16px;
+  background: color-mix(in srgb, var(--text) 16%, transparent);
 }
 .workspace-workbar .wb-more { color: var(--text-muted); }
 .workspace-workbar .wb-more.active { color: var(--text-brand); }
@@ -307,13 +321,20 @@ function onDirectoryClick(event: MouseEvent) {
 /* 卡面浮在片色上：白卡 + 柔影，描边只留一丝；悬停加深影子，不换线。
    卡面本地改绑 --bg-surface：组件自己的 `background: var(--bg-surface)` 与悬停
    `--bg-surface-hover` 都不必逐页改，弹窗与输入框仍读全局那一档。 */
-.app-root.codex-layout .workspace-main :is(.memo, .composer, .grid-card, .mfa-card, .rcard, .tn-card, .clean-group-card, .drop-card, .rowlist):where(:not(.editing):not(.selected):not(.is-sel):not(:focus-visible)) {
+.app-root.codex-layout .workspace-main :is(.grid-card, .mfa-card, .rcard, .tn-card, .clean-group-card, .drop-card, .rowlist):where(:not(.editing):not(.selected):not(.is-sel):not(:focus-visible)) {
   --bg-surface: var(--bg-card);
   --bg-surface-hover: color-mix(in srgb, var(--text) 7%, var(--bg-card));
   border-color: var(--border-card);
   box-shadow: var(--shadow-card-rest);
   /* 卡比片小一号圆角：同值嵌套会让边角叠成一圈厚弧，读起来像两层硬壳。 */
   border-radius: 10px;
+}
+/* 小记的落地档自带卡面（发丝边 + 零影 + 圆角 14，docs/design/notes/13-slip-landed.md §3），
+   这里只把表面令牌交给它，不再统一画框——一排短记卡同时吃「发丝线 + 大扩散影」
+   会把每张都说成浮岛。 */
+.app-root.codex-layout .workspace-main :is(.memo, .composer):where(:not(.editing):not(.selected):not(.is-sel):not(:focus-visible)) {
+  --bg-surface: var(--bg-card);
+  --bg-surface-hover: color-mix(in srgb, var(--text) 7%, var(--bg-card));
 }
 /* 对象卡的两行内容留出清晰间隔，网格与工具栏继续共用阅读列。 */
 .codex-layout .workspace-main .grid-card { min-height: 88px; padding-block: 14px; padding-right: 16px; gap: 10px; }
@@ -355,7 +376,7 @@ function onDirectoryClick(event: MouseEvent) {
 }
 .codex-layout .workspace-main .bp-probe .probe-box { height: 100%; border: 0; background: transparent; }
 .codex-layout .workspace-main .bp-probe .btn-primary { height: 40px; }
-.codex-layout .workspace-main :is(.memo, .grid-card, .mfa-card, .rcard):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(:focus-visible)):not(.empty-state) {
+.codex-layout .workspace-main :is(.grid-card, .mfa-card, .rcard):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(:focus-visible)):not(.empty-state) {
   border-color: var(--border-card-hover);
   box-shadow: var(--shadow-card-hover);
   transform: none;
@@ -364,7 +385,7 @@ function onDirectoryClick(event: MouseEvent) {
 .codex-layout .workspace-main :is(.acc-row, .grp-head, .sess-row, .thr-row, .usg-model-row, .rcard-row, .url-row, .dir-row, .svc-row, .tn-add) {
   transition: background-color var(--transition-fast);
 }
-.app-root.codex-layout .workspace-main :is(.memo, .grid-card, .mfa-card, .acc-row, .grp-head, .sess-row, .thr-row, .usg-model-row, .rcard-row, .url-row, .dir-row, .svc-row, .tn-add):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(.skeleton):not(.acc-sk):not(:disabled):not([aria-disabled="true"])) {
+.app-root.codex-layout .workspace-main :is(.grid-card, .mfa-card, .acc-row, .grp-head, .sess-row, .thr-row, .usg-model-row, .rcard-row, .url-row, .dir-row, .svc-row, .tn-add):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(.skeleton):not(.acc-sk):not(:disabled):not([aria-disabled="true"])) {
   background-color: var(--bg-surface-hover);
 }
 .codex-layout .workspace-main .grid-acts { background: inherit; box-shadow: none; }
