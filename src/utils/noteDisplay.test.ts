@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { noteDisplay } from './noteDisplay'
+import { noteDisplay, markNoteRhythm } from './noteDisplay'
 import { stripTagsFromHtml } from './format'
 
 describe('noteDisplay', () => {
@@ -32,5 +32,18 @@ describe('noteDisplay', () => {
   it('does not invent a title or skip past a normal paragraph to find a later heading', () => {
     expect(noteDisplay('')).toEqual({ title: '', hideFirstBlock: false, voiceFirst: false })
     expect(noteDisplay('<p>首段正文</p><h2>正文小标题</h2>').hideFirstBlock).toBe(false)
+  })
+})
+
+describe('markNoteRhythm', () => {
+  it('marks empty top-level paragraphs and hand-written list lines', () => {
+    const html = '<p>甲</p><p></p><p>1. 第一条</p><p>- 第二条</p><p>2026. 年份</p><p><img src="a.png"></p>'
+    expect(markNoteRhythm(html)).toBe(
+      '<p>甲</p><p class="tp-blank"></p><p class="tp-hang">1. 第一条</p><p class="tp-hang">- 第二条</p><p>2026. 年份</p><p><img src="a.png"></p>',
+    )
+  })
+  it('leaves nested, quoted and code content alone', () => {
+    const html = '<blockquote><p></p><p>- 引用</p></blockquote><pre>- 代码</pre><ul><li>1. 列表</li></ul>'
+    expect(markNoteRhythm(html)).toBe(html)
   })
 })

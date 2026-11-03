@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref } from 'vue'
 import NoteEditor from './NoteEditor.vue'
 import NoteToolbar from './NoteToolbar.vue'
-import AppIcon from '../shared/AppIcon.vue'
 import type { SaveImage } from '../../services/attachmentSrc'
 
 const props = defineProps<{
@@ -23,14 +22,6 @@ const editorRef = ref<InstanceType<typeof NoteEditor> | null>(null)
 /** 这条面永远写草稿，落盘时 noteId 给空（文件只暂存，发布才补附件记录） */
 const saveImageToDraft = async (source: File | string) => (await props.saveImage?.(source, null)) ?? null
 
-/**
- * 收起只认「这一轮还没落笔」：指针按下或第一次改动算落笔，正文清空（发布 / 放弃 / 删干净）重新收。
- * 焦点不参与——失焦当场收高度，会把同一颗点击的 mouseup 从钮底下抽走（卡排就在这种点击里点不中）。
- */
-const touched = ref(false)
-const collapsed = computed(() => props.empty && !touched.value)
-watch(() => props.empty, empty => { if (empty) touched.value = false })
-
 const focus = () => editorRef.value?.focusEnd()
 const insertImage = (src: string) => editorRef.value?.insertImage(src)
 
@@ -44,7 +35,7 @@ const discard = () => {
 </script>
 
 <template>
-  <section class="composer" :class="{ 'is-empty': props.empty, 'is-collapsed': collapsed }" @pointerdown="touched = true">
+  <section class="composer">
     <NoteEditor
       ref="editorRef"
       variant="composer"
@@ -54,8 +45,6 @@ const discard = () => {
       @update="emit('update', $event)"
       @submit="emit('publish')"
     />
-    <!-- 空白便签条右端一枚淡加号：说明这是入口，不是一条空小记；点它等于点书写条 -->
-    <span v-if="collapsed" class="composer-plus" aria-hidden="true"><AppIcon name="plus" :size="15" /></span>
     <div class="composer-bar">
       <NoteToolbar
         plain
@@ -77,7 +66,7 @@ const discard = () => {
 </template>
 
 <style scoped>
-/* 便签条：空且失焦时收成一行，聚焦或有内容时才是三行书写面。
+/* 便签条：默认就是三行书写面 + 工具栏，空着、失焦、清空都不再收起。
    质感与小记卡同一档（落地档，docs/design/notes/13-slip-landed.md §3）：
    它就是同一叠纸里最上面那张空的，不该长得像一个输入框。 */
 .composer {
@@ -91,34 +80,9 @@ const discard = () => {
   transition: background-color var(--transition), border-color var(--transition), box-shadow var(--transition);
   margin-bottom: 0;
 }
-.composer:hover { border-color: var(--slip-line-hover); }
+.composer:hover { border-color: var(--card-line-hover); }
 /* 焦点态：容器描边转主色 + 3px 光圈，指明当前唯一的书写面 */
 .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-
-/* 空白便签条右端一枚淡加号：不接指针（点它等于点书写条） */
-.composer-plus {
-  position: absolute;
-  top: 11px;
-  right: var(--space-4);
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  color: var(--text-faint);
-  pointer-events: none;
-}
-.composer:focus-within .composer-plus { display: none; }
-/* 收起态（本轮未落笔）：46px 一行，工具栏一起收起；右内距给加号留位。
-   带 .is-empty 是为了压过 NoteEditor 里 v-composer 的三行地板。 */
-.composer.is-empty.is-collapsed :deep(.ProseMirror) {
-  min-height: 46px;
-  max-height: 46px;
-  padding: 11px 44px 11px var(--space-6);
-  overflow: hidden;
-}
-.composer.is-empty.is-collapsed .composer-bar { display: none; }
 
 /* 工具栏不画分隔线：书写面本身就是一张卡，卡里再切一刀会把它读成两个控件。 */
 .composer-bar {

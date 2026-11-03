@@ -14,6 +14,19 @@ const READ_HTML =
 
 const SEED = { notes: [{ title: '设计稿评审', content_html: READ_HTML }] }
 
+const RHYTHM_HTML =
+  '<p>第一段。</p>' +
+  '<p></p>' +
+  '<p>第二段。</p>' +
+  '<p></p>' +
+  '<p>1. 第一条手写列表项，写长一点让它回行，用来量同组距离与悬挂缩进是否真的生效。</p>' +
+  '<p></p>' +
+  '<p>2. 第二条。</p>' +
+  '<p></p>' +
+  '<p>收尾段。</p>'
+
+const RHYTHM_SEED = { notes: [{ title: '节奏', content_html: RHYTHM_HTML }] }
+
 async function openRead(page: Page, width = 1440, height = 900) {
   await page.setViewportSize({ width, height })
   await bootUnlocked(page, SEED, '/notes')
@@ -41,11 +54,11 @@ function columnGeometry(page: Page) {
 }
 
 test.describe('Notes 排版尺度', () => {
-  test('阅读层：16/28 正文、680 列、24 标题、12 元信息', async ({ page }) => {
+  test('阅读层：14/24 正文、680 列、24 标题、12 元信息', async ({ page }) => {
     await openRead(page)
     const view = page.locator('.fs-view')
-    await expect(view).toHaveCSS('font-size', '16px')
-    await expect(view).toHaveCSS('line-height', '28px')
+    await expect(view).toHaveCSS('font-size', '14px')
+    await expect(view).toHaveCSS('line-height', '24px')
     await expect(page.locator('.fs-title')).toHaveCSS('font-size', '24px')
     await expect(page.locator('.fs-title')).toHaveCSS('line-height', '34px')
     await expect(page.locator('.fs-meta')).toHaveCSS('font-size', '12px')
@@ -155,5 +168,40 @@ test.describe('Notes 排版尺度', () => {
       const g = await columnGeometry(page)
       expect(g.buttonHeight).toBe(28)
     }
+  })
+
+  test('排版结构：阅读收起空段、手写列表悬挂，书写空段折一行', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await bootUnlocked(page, RHYTHM_SEED, '/notes')
+    await openNoteRead(page.locator('.memo').first())
+    const view = page.locator('.fs-view')
+    await expect(view).toBeVisible()
+
+    const blanks = view.locator(':scope > p.tp-blank')
+    await expect(blanks).toHaveCount(4)
+    await expect(blanks.first()).toHaveCSS('display', 'none')
+
+    const hangs = view.locator(':scope > p.tp-hang')
+    await expect(hangs).toHaveCount(2)
+    await expect(hangs.first()).toHaveCSS('padding-left', '24.5px')
+    await expect(hangs.first()).toHaveCSS('text-indent', '-24.5px')
+
+    // 段距 12；手写列表同组 6、组后回正文 20
+    const ps = view.locator(':scope > p')
+    await expect(ps.nth(2)).toHaveCSS('margin-top', '12px')
+    await expect(hangs.nth(1)).toHaveCSS('margin-top', '6px')
+    await expect(ps.last()).toHaveCSS('margin-top', '20px')
+
+    await page
+      .locator('#note-fullscreen-toolbar')
+      .getByRole('button', { name: '编辑', exact: true })
+      .click()
+    const pm = page.locator('.fs .ProseMirror')
+    await expect(pm).toBeVisible()
+    const folded = pm.locator(':scope > p.tp-blank').first()
+    await expect(folded).toHaveCSS('margin-top', '0px')
+    await expect(folded).toHaveCSS('min-height', '24px')
+    expect(await folded.evaluate(el => getComputedStyle(el.nextElementSibling!).marginTop)).toBe('0px')
+    await expect(pm.locator(':scope > p.tp-hang').first()).toHaveCSS('padding-left', '24.5px')
   })
 })

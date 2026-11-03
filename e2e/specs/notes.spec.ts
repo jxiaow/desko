@@ -298,28 +298,23 @@ test.describe('Notes 小记', () => {
     await expect(page.locator('.composer .ProseMirror')).toHaveText('')
   })
 
-  test('composer 空态收成一行，落笔展开三行，有内容后随内容增高', async ({ page }) => {
+  test('composer 默认展开三行，有内容后随内容增高，清空不收回', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')
     const composer = page.locator('.composer')
-    // scrollHeight 取整、行高 24.65，比对留 2px 余量
+    // scrollHeight 取整、行高 22，比对留 2px 余量
     const height = () => pm.evaluate((el) => el.getBoundingClientRect().height)
     const line = () => pm.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))
     const over = async (base: number) => (await height()) - base
 
-    // 本轮未落笔：46px 单行便签条，工具栏不出现
-    const idle = await height()
-    await expect(composer).toHaveClass(/is-empty/)
-    await expect(page.locator('.composer-bar')).toBeHidden()
-    expect(idle).toBeGreaterThan(44)
-    expect(idle).toBeLessThan(50)
-
-    await pm.click()
+    // 默认态就是三行书写面 + 工具栏，不再收成一条单行
     const floor = await height()
     const lh = await line()
-    // 聚焦后展开三行：三行才装得下两条带段距的段落
     expect(floor).toBeGreaterThanOrEqual(3 * lh)
+    await expect(composer).toBeVisible()
     await expect(page.locator('.composer-bar')).toBeVisible()
+
+    await pm.click()
 
     // 地板吃得下前两行，不再逐键跳动
     await page.keyboard.type('第一行')
@@ -343,30 +338,28 @@ test.describe('Notes 小记', () => {
     expect(await over(floor)).toBeGreaterThan(2 * lh - 6)
     await expect(page.locator('.composer-bar')).toBeVisible()
 
-    // 删干净再失焦：回到 46px 一行，工具栏一起收起
+    // 删干净再失焦：回到三行地板，工具栏不收起
     await pm.click()
     await page.keyboard.press('Control+a')
     await page.keyboard.press('Backspace')
     await expect.poll(async () => await over(floor), { timeout: 3000 }).toBeLessThan(2)
     await pm.evaluate((el: HTMLElement) => el.blur())
-    await expect.poll(async () => await height(), { timeout: 3000 }).toBeLessThan(50)
-    await expect(page.locator('.composer-bar')).toBeHidden()
+    await expect.poll(async () => await height(), { timeout: 3000 }).toBeGreaterThanOrEqual(3 * lh)
+    await expect(page.locator('.composer-bar')).toBeVisible()
   })
 
-  test('composer 工具栏随落笔和内容显隐，失焦不收回', async ({ page }) => {
+  test('composer 工具栏常驻，发布清空后不收起', async ({ page }) => {
     await gotoNotes(page)
     const pm = page.locator('.composer .ProseMirror')
     const bar = page.locator('.composer-bar')
+    const height = () => pm.evaluate((el) => el.getBoundingClientRect().height)
 
-    await expect(bar).toBeHidden()
-
-    // 指针按下即算落笔：三行地板和工具栏一起长出来
-    await pm.click()
+    // 默认就带工具栏，空着失焦也不收
     await expect(bar).toBeVisible()
-
-    // 空着失焦不收回：当场收高度会把同一颗点击的 mouseup 从卡排底下抽走
+    const floor = await height()
     await pm.evaluate((el: HTMLElement) => el.blur())
     await expect(bar).toBeVisible()
+    expect(await height()).toBeGreaterThanOrEqual(floor)
 
     // 有内容：失焦也保持工具条
     await pm.click()
@@ -374,10 +367,11 @@ test.describe('Notes 小记', () => {
     await pm.evaluate((el: HTMLElement) => el.blur())
     await expect(bar).toBeVisible()
 
-    // 发布清空：这一轮写完，回到 46px 一行，工具栏一起收起
+    // 发布清空：这一轮写完，书写面与工具栏都不收
     await page.locator('.composer button.btn-primary').click()
-    await expect(bar).toBeHidden()
-    await expect(pm.evaluate((el: HTMLElement) => el.getBoundingClientRect().height)).resolves.toBeLessThan(50)
+    await expect(pm).toHaveText('')
+    await expect(bar).toBeVisible()
+    await expect.poll(height).toBeGreaterThanOrEqual(floor)
   })
 
   test('就地编辑：悬停按钮进入、自动保存、退出编辑', async ({ page }) => {
@@ -840,8 +834,8 @@ test.describe('Notes 小记', () => {
     await memo(page, '第二条小记').click()
     await expect(page.locator('.dock-count')).toHaveText('已选 2 条')
     await expect(memo(page, '第一条小记')).toHaveClass(/is-sel/)
-    // 选中后可见的 1px 环随当前强调色变化。
-    await expect.poll(() => memo(page, '第一条小记').evaluate(el => getComputedStyle(el).boxShadow)).toContain('0px 0px 0px 1px')
+    // 选中只换线 + 淡底（内容卡统一方言）：不再叠 1px 环，也不抬影。
+    await expect(memo(page, '第一条小记')).toHaveCSS('box-shadow', 'none')
     // 上下键换焦点，微环跟着走
     await page.locator('.memo').first().focus()
     await page.keyboard.press('ArrowDown')
@@ -1062,7 +1056,7 @@ test.describe('Notes 小记', () => {
     await expect(pm.locator('ul ul li')).toHaveCount(0)
   })
 
-  test('阅读面与书写面共用一套正文排版：空段留行、行首空格不塌', async ({ page }) => {
+  test('阅读面收起空段、书写面空段折一行，行首空格不塌', async ({ page }) => {
     await bootUnlocked(page, {
       notes: [{ title: '排版', content_html: '<p>甲</p><p></p><p>  乙</p>' }],
     }, '/notes')
@@ -1085,21 +1079,25 @@ test.describe('Notes 小记', () => {
         ws: getComputedStyle(el).whiteSpace,
         lineH: getComputedStyle(el).lineHeight,
         emptyH: ps[1]?.getBoundingClientRect().height ?? 0,
+        emptyDisplay: ps[1] ? getComputedStyle(ps[1]).display : '',
         gap: parseFloat(getComputedStyle(ps[2]).marginTop),
         leadWidth,
       }
     }
     const read = await fs.locator('.fs-view').evaluate(measure)
-    // 空段在阅读面同样占一行，行首两个空格有宽度
-    expect(read.emptyH).toBeGreaterThan(20)
+    // 阅读面把空段当段落分隔，不占行；行首两个空格仍有宽度
+    expect(read.emptyDisplay).toBe('none')
+    expect(read.emptyH).toBe(0)
+    expect(read.gap).toBe(12)
     expect(read.leadWidth).toBeGreaterThan(2)
 
     await page.locator('.fs-head .bar-btn.primary').click()
     const edit = await fs.locator('.ProseMirror').evaluate(measure)
     expect(edit.ws).toBe(read.ws)
     expect(edit.lineH).toBe(read.lineH)
-    expect(Math.round(edit.emptyH)).toBe(Math.round(read.emptyH))
-    expect(edit.gap).toBe(read.gap)
+    // 书写面保留空行给光标，只占一行，不再叠两段外边距
+    expect(Math.round(edit.emptyH)).toBe(Math.round(parseFloat(edit.lineH)))
+    expect(edit.gap).toBe(0)
     expect(Math.abs(edit.leadWidth - read.leadWidth)).toBeLessThan(1)
   })
 

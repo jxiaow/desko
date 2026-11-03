@@ -10,7 +10,7 @@ import NoteMoreMenu from './NoteMoreMenu.vue'
 import NoteScrollTop from './NoteScrollTop.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatAbsTime, stripTagsFromHtml, htmlToText, wordCount } from '../../utils/format'
-import { noteDisplay } from '../../utils/noteDisplay'
+import { noteDisplay, markNoteRhythm } from '../../utils/noteDisplay'
 import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { collectAttachmentNames, resolveAssetHtml, unreferencedAttachments, type SaveImage } from '../../services/attachmentSrc'
 import type { NoteExportFormat } from '../../utils/noteExport'
@@ -68,7 +68,7 @@ const viewMode = computed(() => props.mode === 'view')
 /** 查看态直接跟库里的正文走，不走编辑草稿的本地快照 */
 const contentHtml = computed(() =>
   viewMode.value ? props.note?.content_html ?? '' : html.value)
-const displayHtml = computed(() => resolveAssetHtml(stripTagsFromHtml(sanitizeNoteHtml(contentHtml.value))))
+const displayHtml = computed(() => markNoteRhythm(resolveAssetHtml(stripTagsFromHtml(sanitizeNoteHtml(contentHtml.value)))))
 const display = computed(() => noteDisplay(displayHtml.value))
 const noteTags = computed(() => noteMeta(contentHtml.value).tags)
 const edited = computed(() => !!props.note && props.note.updated_at - props.note.created_at > 60_000)

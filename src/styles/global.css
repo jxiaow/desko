@@ -2367,7 +2367,7 @@ button, input, select, textarea {
   background: var(--bg-surface);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card-rest);
+  box-shadow: none;
   overflow: hidden;
 }
 .rowlist > * + * { border-top: 1px solid var(--border); }
@@ -2389,7 +2389,7 @@ button, input, select, textarea {
   background: var(--bg-surface);
   border: 1px solid var(--border-card);
   border-radius: 12px;
-  box-shadow: var(--shadow-card-rest);
+  box-shadow: none;
   margin-bottom: var(--space-3);
   overflow: hidden;
 }
@@ -2490,19 +2490,17 @@ button, input, select, textarea {
   background: var(--bg-surface);
   border: 1px solid var(--border-card);
   border-radius: 12px;
-  box-shadow: var(--shadow-card-rest);
+  box-shadow: none;
   margin-bottom: 10px;
   overflow: hidden;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  transition: border-color var(--transition);
 }
-.rcard:hover:not(.empty-state) { border-color: var(--border-card-hover); box-shadow: var(--shadow-card-hover) }
-/* 空态那颗借同一层描边，但里面没有可点的东西，所以不抬影 */
-.rcard.empty-state { box-shadow: none }
+.rcard:hover:not(.empty-state) { border-color: var(--card-line-hover) }
 .rcard-list {
   display: flex;
   flex-direction: column;
   margin-top: var(--space-3);
-  /* 顶部留 2px：抬起来的描边不被内容区上缘裁掉 */
+  /* 顶部留 2px：卡面边与焦点环不被内容区上缘裁掉 */
   padding-top: 2px;
 }
 .rcard-row {
@@ -2559,7 +2557,7 @@ button, input, select, textarea {
      一排卡会读成"贴在一起、但每张里面很空"。 */
   gap: 14px;
   margin-top: var(--space-3);
-  /* 顶部留 2px：hover 抬影的 -1px 与 3px 焦点环不被内容区上缘裁掉 */
+  /* 顶部留 2px：3px 焦点环不被内容区上缘裁掉 */
   padding-top: 2px;
 }
 /* 72px 双行浮岛卡（Things 参照）：一行身份、一行等宽副址，
@@ -2578,28 +2576,20 @@ button, input, select, textarea {
   background: var(--bg-surface);
   border: 1px solid var(--border-card);
   border-radius: 12px;
-  box-shadow: var(--shadow-card-rest);
-  transition: transform var(--transition), background-color var(--transition),
+  box-shadow: none;
+  transition: background-color var(--transition),
     border-color var(--transition), box-shadow var(--transition), padding-left var(--transition);
 }
-/* hover 抬 1px，描边与阴影由卡片角色统一控制。
-   亮极性下卡面是整窗最亮的一档，hover 不洗底等于没换色，这里改吃 --sunken。 */
+/* 内容卡无影（layering/02）：悬停只把线压深一档，不位移、不洗底 */
 .grid-card:hover {
-  transform: translateY(-1px);
-  border-color: var(--border-card-hover);
-  box-shadow: var(--shadow-card-hover);
+  border-color: var(--card-line-hover);
 }
-[data-base="light"] .grid-card:hover:not(.selected) { background-color: var(--sunken); }
-[data-base="dark"] .grid-card:hover:not(.selected) { background-color: var(--hover); }
 .grid-card:focus-visible {
   outline: none;
-  transform: translateY(-1px);
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-pop);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .grid-card.selected { background-color: var(--accent-soft); border-color: var(--accent); }
-@media (prefers-reduced-motion: reduce) {
-  .grid-card:hover, .grid-card:focus-visible { transform: none; } }
 
 /* 通用双行壳：身份行（档面 + 名称 + 右对齐类型/分类），副址行缩进到名称起笔
    （22 档面 + 9 间距 = 31）。收藏 / 文件两页共用，skeleton 也走同一对行。 */
@@ -2718,7 +2708,7 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   border: 1.5px solid var(--border-strong);
   border-radius: 4px;
   background: var(--bg-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2749,7 +2739,7 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   border: 1px solid var(--border-card);
   border-radius: 12px;
   background: var(--bg-surface);
-  box-shadow: var(--shadow-card-rest);
+  box-shadow: none;
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 .skeleton-slot { width: 24px; height: 24px; border-radius: 7px; background: var(--fill); flex-shrink: 0; }
@@ -2765,7 +2755,7 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
   border: 1px solid var(--border-card);
   border-radius: var(--radius-card);
   background: var(--bg-surface);
-  box-shadow: var(--shadow-card-rest);
+  box-shadow: none;
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 .skeleton-block {
@@ -2960,19 +2950,30 @@ ul[data-type='taskList'] li[data-checked='true'] > div {
 
 /* 小记正文排版：全屏书写面与只读阅读面共用这一份。
    两边原先各写一套（行距 1.6 / 24、段距 8 / 10、空段 0 / 一行），预览一打开
-   排版就跟编辑时对不上；字号行距取阅读面的尺度，书写面照着它排，所见即所读。
-   16/28 是对 14/24 的修订：正文不再和界面控件同字号，读的时候有自己的声部。 */
+   排版就跟编辑时对不上；书写面照着阅读面排，所见即所读。
+   11-03 按用户要求编辑与预览各减 2 号：正文回到 14/24，行高随字号同比收。 */
 .note-doc {
-  font-size: 16px;
-  line-height: 28px;
+  font-size: 14px;
+  line-height: 24px;
   color: var(--text);
   word-break: break-word;
   /* 与 ProseMirror 的断行口径一致：行首空格、连续空格原样保留，缩进阅读时不塌 */
   white-space: break-spaces;
 }
-.note-doc > * + * { margin-top: 14px; }
-/* 空段是一行留白：编辑时看得见，阅读面不能塌成 0 */
+.note-doc > * + * { margin-top: 12px; }
+/* 空段是作者敲的空行：阅读面只作段落分隔，书写面折成一行留给光标 */
 .note-doc p:empty { min-height: 1lh; }
+/* 手写列表没有 ul/ol 结构，靠行首记号悬挂：回行与首行正文对齐 */
+.note-doc > p.tp-hang { padding-left: 1.75em; text-indent: -1.75em; }
+/* 阅读面：空段不占行；手写列表同组 6px、组后回正文 20px */
+.fs-view.note-doc > p.tp-blank { display: none; }
+.fs-view.note-doc > p.tp-hang + p.tp-hang,
+.fs-view.note-doc > p.tp-hang + p.tp-blank + p.tp-hang { margin-top: 6px; }
+.fs-view.note-doc > p.tp-hang + p:not(.tp-hang):not(.tp-blank),
+.fs-view.note-doc > p.tp-hang + p.tp-blank + p:not(.tp-hang):not(.tp-blank) { margin-top: 20px; }
+/* 书写面：空段只占一行，不再叠两段外边距 */
+.ProseMirror.note-doc > p.tp-blank { margin-top: 0; min-height: 1lh; }
+.ProseMirror.note-doc > p.tp-blank + * { margin-top: 0; }
 .note-doc * + h1 { margin-top: 32px; }
 .note-doc * + h2 { margin-top: 26px; }
 .note-doc * + h3 { margin-top: 22px; }

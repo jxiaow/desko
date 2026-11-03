@@ -428,24 +428,20 @@ watchEffect(() => {
   border: 1px solid var(--border-card);
   border-radius: 12px;
   background: var(--bg-surface);
-  box-shadow: var(--shadow-card-rest);
+  box-shadow: none;
   padding: 13px 15px;
   cursor: pointer;
-  transition: transform var(--transition), border-color var(--transition),
+  transition: border-color var(--transition),
     box-shadow var(--transition), background-color var(--transition);
 }
-/* 与收藏/文件卡片使用相同的悬停反馈。 */
+/* 与收藏/文件卡片使用相同的悬停反馈：只压深线，不位移、不洗底。 */
 .mfa-card:hover {
-  transform: translateY(-1px);
-  border-color: var(--border-card-hover);
-  box-shadow: var(--shadow-card-hover);
+  border-color: var(--card-line-hover);
 }
-[data-base="light"] .mfa-card:hover { background: var(--sunken); }
-[data-base="dark"] .mfa-card:hover { background: var(--hover); }
 .mfa-card:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-pop);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 /* 身份行：24px 档 + 发行方 + 账号淡字同行 + 右缘删除 */
@@ -520,7 +516,7 @@ html.hover-suppressed .mfa-card:hover .card-del { opacity: 0; }
   cursor: default;
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
-.mfa-card.skeleton:hover { transform: none; border-color: var(--border-card); background: var(--bg-surface); box-shadow: var(--shadow-card-rest); }
+.mfa-card.skeleton:hover { border-color: var(--border-card); background: var(--bg-surface); }
 .skeleton-line { height: 12px; border-radius: 5px; }
 .skeleton-line.tall { height: 26px; width: 120px; }
 

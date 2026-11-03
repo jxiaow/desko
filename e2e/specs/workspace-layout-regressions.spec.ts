@@ -98,12 +98,10 @@ for (const width of [800, 1040, 1920]) {
         const cs = getComputedStyle(el)
         return { border: cs.borderTopColor, shadow: cs.boxShadow, radius: cs.borderTopLeftRadius }
       })
-      if (route === 'notes') {
-        // 落地档：小记卡影归零，分离只交给一条发丝边 + 圆角 14（docs/design/notes/13-slip-landed.md §3）。
-        expect(face.border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
-        expect(face.radius).toBe('14px')
-        expect(face.shadow).toBe('none')
-      } else expect(face.border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+      if (route === 'notes') expect(face.radius).toBe('14px')
+      // 内容区一律无影（docs/design/layering/02-content-shadow-retire.md）：五页共用一条发丝边。
+      expect(face.border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+      expect(face.shadow).toBe('none')
       expect(await page.locator('.workspace-main').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     }
     // 小记与 Codex 同一个外壳、同一条页头，列宽必须一致：小记早先单走 720，
@@ -134,6 +132,12 @@ for (const theme of ['paper', 'ink']) {
     await memo.locator('.memo-check').click()
     const selectedMemo = page.locator('.memo.is-sel')
     await expect(selectedMemo).not.toHaveCSS('border-top-color', rest.border)
+    // 选中态也只换线 + 淡底：不再叠实环、抬影、上移。
+    const selectedFace = await selectedMemo.evaluate(el => ({
+      shadow: getComputedStyle(el).boxShadow,
+      transform: getComputedStyle(el).transform,
+    }))
+    expect(selectedFace).toEqual({ shadow: 'none', transform: 'none' })
     await page.mouse.move(0, 0)
     await selectedMemo.hover()
     await expect(selectedMemo).toHaveCSS('border-top-color', /rgb\(|color\(|oklab\(|oklch\(/)
@@ -151,6 +155,19 @@ for (const theme of ['paper', 'ink']) {
     for (const [route, selector] of [['entries', '.entry-card'], ['mfa', '.mfa-card']]) {
       await page.locator(`a.nav-item[href="/${route}"]`).click()
       const card = page.locator(selector).first()
+      const before = await card.evaluate(el => {
+        const cs = getComputedStyle(el)
+        return { border: cs.borderTopColor, shadow: cs.boxShadow, bg: cs.backgroundColor }
+      })
+      await card.hover()
+      // 非小记卡同一套方言：悬停只把线压深，不洗底、不抬影。
+      await expect.poll(() => card.evaluate(el => getComputedStyle(el).borderTopColor)).not.toBe(before.border)
+      const hovered = await card.evaluate(el => {
+        const cs = getComputedStyle(el)
+        return { shadow: cs.boxShadow, bg: cs.backgroundColor }
+      })
+      expect(hovered.shadow).toBe('none')
+      expect(hovered.bg).toBe(before.bg)
       await page.keyboard.press('Tab')
       await card.focus()
       await expect.poll(() => card.evaluate(hasRing)).toBe(true)
@@ -160,8 +177,8 @@ for (const theme of ['paper', 'ink']) {
     }
     await page.locator('a.nav-item[href="/fileshare"]').click()
     await expect(page.locator('.send-panel')).toHaveCSS('box-shadow', 'none')
-    // 卡面改为柔影分层（描边只留一丝），仍是一层短软影，不是抬起的浮层。
-    await expect(page.locator('.drop-card')).toHaveCSS('box-shadow', /0px 1px 2px/)
+    // 内容区无影：局域网卡也只剩一条发丝边（layering/02）。
+    await expect(page.locator('.drop-card')).toHaveCSS('box-shadow', 'none')
   })
 }
 

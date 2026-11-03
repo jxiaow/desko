@@ -184,8 +184,8 @@ export function stripTagsFromHtml(html: string): string {
       }
     }
   }
-  // 阅读面给空段落留了行高（作者敲的空行得看得见），所以被标签洗空的块要一起收掉，
-  // 否则标签消失后会多出一行空白。只动本次删字波及的块，原本就空的段落不碰。
+  // 被标签洗空的块一起收掉：它们只剩空壳，留着会顶掉首块标题/首行声部的判断。
+  // 只动本次删字波及的块，原本就空的段落不碰。
   const depth = (el: Element) => {
     let d = 0
     for (let n = el.parentElement; n && n !== div; n = n.parentElement) d++

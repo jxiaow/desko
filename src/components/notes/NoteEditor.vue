@@ -11,8 +11,9 @@ import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Extension, mergeAttributes, Node } from '@tiptap/core'
-import { Plugin, TextSelection, type EditorState } from '@tiptap/pm/state'
+import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state'
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
+import type { Node as PMNode } from '@tiptap/pm/model'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { createLowlight } from 'lowlight'
 import ts from 'highlight.js/lib/languages/typescript'
@@ -36,6 +37,39 @@ const pageActive = usePageActive()
 const notesStore = useNotesStore()
 const lowlight = createLowlight({
   typescript: ts, javascript: js, python, rust, css, html: xml, xml, json, bash, shell: bash, sql, java, go, cpp, c: cpp,
+})
+
+/** 手写列表在正文里没有 ul/ol 结构，书写面只能按行首记号给与阅读面相同的悬挂缩进。 */
+const HANG_RE = /^\s*(?:[-–—•·]|\d{1,2}[.、)])\s+/
+
+function rhythmDecorations(doc: PMNode) {
+  const decos: Decoration[] = []
+  doc.forEach((node, offset) => {
+    if (node.type.name !== 'paragraph') return
+    const cls = node.content.size
+      ? (HANG_RE.test(node.textContent) ? 'tp-hang' : '')
+      : 'tp-blank'
+    if (cls) decos.push(Decoration.node(offset, offset + node.nodeSize, { class: cls }))
+  })
+  return DecorationSet.create(doc, decos)
+}
+
+const NoteRhythm = Extension.create({
+  name: 'noteRhythm',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('noteRhythm'),
+        state: {
+          init: (_, { doc }) => rhythmDecorations(doc),
+          apply: (tr, value) => (tr.docChanged ? rhythmDecorations(tr.doc) : value),
+        },
+        props: {
+          decorations(state) { return this.getState(state) },
+        },
+      }),
+    ]
+  },
 })
 
 const props = withDefaults(defineProps<{
@@ -429,6 +463,7 @@ const editor = useEditor({
     TagHighlightExtension,
     SlashCommandExtension,
     NoteImage,
+    NoteRhythm,
   ],
   onCreate: ({ editor }) => {
     // 初次聚焦同步完成，避免延迟一帧后覆盖用户刚设置的选区。

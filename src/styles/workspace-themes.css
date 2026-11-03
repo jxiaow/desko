@@ -24,18 +24,16 @@
   --workspace-frame: #efefee;
   --workspace-light: #ffffff;
 
-  /* 卡片的分层由「发丝线 + 短影」一起承担，两者不能同时削弱：
-     线负责说清边界在哪，影负责说清它浮在上一层；任何一边归零，卡片就会糊进背景。
-     影要短：扩散收到 ~12px 净值和一张卡的尺寸同量级，既浮起又不会在并排时连成灰带。 */
+  /* 内容卡只剩「一条线」一种分层语言（docs/design/layering/02-content-shadow-retire.md）：
+     静息 --border-card 发丝线，悬停 --card-line-hover 压深一档，静息/悬停/焦点/选中四态一律无影。
+     纸底卡面与画布只差一档，边界全靠这条线——线不够时只许提线，不许把影加回来。 */
   --border-card: var(--card-line-soft, var(--border));
   --border-card-hover: var(--card-line-strong, var(--border-hover));
-  --shadow-card-rest: 0 1px 2px rgb(15 23 42 / 4%), 0 10px 24px -12px rgb(15 23 42 / 11%);
-  --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 5%), 0 16px 30px -12px rgb(15 23 42 / 15%);
-  /* 落地档（docs/design/notes/13-slip-landed.md §3）：小记卡影归零，边界只交给一条发丝边。
-     静息直接复用全局 --border-card（与其它卡面同一条线），只补一档 hover 用的强线：
-     别的卡 hover 是「线加深 + 影变大」两件事一起做，这里只剩线，12% 撑不出变化。 */
+  --shadow-card-rest: none;
+  --shadow-card-hover: none;
+  --card-line-hover: color-mix(in srgb, var(--text) 22%, transparent);
+  /* 小记的便签圆角比其它卡面大一档；卡影已随内容区统一归零。 */
   --radius-slip: 14px;
-  --slip-line-hover: color-mix(in srgb, var(--text) 22%, transparent);
   /* 卡面上的 meta 档（时间 / 标签）：--text-muted 纸底对白卡面只有 4.49:1，
      低于本仓小字 ≥5.8 的底线；墨底 muted 实测 6.51:1 达标，所以只提纸底一档。 */
   --text-meta: var(--text-muted);
@@ -115,8 +113,6 @@
   --border-hover: #5c626e;
   --card-line-soft: rgb(255 255 255 / 8%);
   --card-line-strong: rgb(255 255 255 / 14%);
-  --shadow-card-rest: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 24px -12px rgb(0 0 0 / 42%);
-  --shadow-card-hover: 0 2px 4px rgb(0 0 0 / 34%), 0 16px 30px -12px rgb(0 0 0 / 50%);
   --shadow-xs: none;
   --shadow-card: none;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 18%);

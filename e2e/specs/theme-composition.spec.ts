@@ -132,6 +132,9 @@ for (const theme of THEMES) {
         expect(chromatic(glow.railTop.map((v, i) => v - flat.railTop[i]) as RGB), `${label} 中性分支不引入彩色`).toBeLessThanOrEqual(5)
       }
 
+      // 左下角池：纸/墨都在导轨底部补一束光，托住设置行；关灯时的纯色已由第 1 条锁住。
+      expect(distance(glow.railLeftBottom, flat.railLeftBottom), `${label} 左下角池可见`).toBeGreaterThan(1.5)
+
       // 5. 正文与控件仍然可读，且与浮片无关。
       expect(contrast(glow.text, glow.card), `${label} 正文文字`).toBeGreaterThanOrEqual(4.5)
       expect(contrast(glow.inputText, glow.inputBg), `${label} 搜索文字`).toBeGreaterThanOrEqual(4.5)

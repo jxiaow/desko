@@ -446,13 +446,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   /* 正文列宽跟容器宽走，不跟视口走：侧栏收起/开合目录只改容器宽 */
   container-type: inline-size;
   container-name: slip;
-  transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition), transform var(--transition);
+  transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition);
   /* 点正文就是打开阅读：卡是摘要，读全文去阅读层 */
   cursor: pointer;
 }
 /* hover 只把线压深、不抬影也不洗底：摘掉影之后线是唯一的反馈，
-   --border-card-hover（12%）撑不出「变了」，所以要 22% 这一档 */
-.memo:hover { border-color: var(--slip-line-hover); }
+   12% 一档撑不出「变了」，所以内容卡统一用 22%（--card-line-hover）。 */
+.memo:hover { border-color: var(--card-line-hover); }
 /* 置顶不再给卡面描一道强调色边：置顶已经有「置顶」分组标题说，同一列里两张不同的
    边框色只会让人以为"这张是选中的"。而且它的权重压过了 hover（两者同权、它在后），
    置顶卡反而少了悬停反馈。 */
@@ -660,11 +660,9 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-check:hover { border-color: var(--accent); }
 .memo-check.checked { background: var(--accent); border-color: var(--accent); }
 .memo.is-sel {
-  /* 浸润底 + 1px 实环把整张卡包一圈，和 .entry-card.selected 同一套选中语言 */
+  /* 选中只换线 + 淡底，和 .grid-card.selected 同一套语言：不叠实环、不抬影、不上移 */
   border-color: var(--accent);
   background: var(--accent-soft);
-  box-shadow: 0 0 0 1px var(--accent), var(--shadow-sm);
-  transform: translateY(-1px);
 }
 /* 小记标题在独立标题行，选中时跟着上主色 */
 .memo.is-sel .memo-title { color: var(--text-brand); }

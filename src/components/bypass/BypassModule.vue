@@ -813,7 +813,7 @@ watchEffect(() => {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-card-rest);
 }
 .hero-num { min-width: 0; }
 .big { display: flex; align-items: baseline; gap: 6px; }
@@ -856,7 +856,7 @@ watchEffect(() => {
 /* ---------- 需要处理：一行一颗浮岛，64px 档 ---------- */
 .bp-card.on,
 .bp-card.probing { border-color: var(--border-hover); }
-.bp-card.probing { box-shadow: var(--shadow-card), inset 2px 0 0 var(--accent); }
+.bp-card.probing { box-shadow: inset 2px 0 0 var(--accent); }
 .card-main {
   flex: 1;
   min-width: 0;

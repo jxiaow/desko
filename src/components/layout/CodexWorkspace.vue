@@ -318,20 +318,17 @@ function onDirectoryClick(event: MouseEvent) {
   #workspace-page-toolbar .search-kbd { display: none; }
 }
 
-/* 卡面浮在片色上：白卡 + 柔影，描边只留一丝；悬停加深影子，不换线。
+/* 卡面浮在片色上：白卡 + 一条发丝线，内容区一律无影（docs/design/layering/02-content-shadow-retire.md）。
    卡面本地改绑 --bg-surface：组件自己的 `background: var(--bg-surface)` 与悬停
    `--bg-surface-hover` 都不必逐页改，弹窗与输入框仍读全局那一档。 */
 .app-root.codex-layout .workspace-main :is(.grid-card, .mfa-card, .rcard, .tn-card, .clean-group-card, .drop-card, .rowlist):where(:not(.editing):not(.selected):not(.is-sel):not(:focus-visible)) {
   --bg-surface: var(--bg-card);
   --bg-surface-hover: color-mix(in srgb, var(--text) 7%, var(--bg-card));
   border-color: var(--border-card);
-  box-shadow: var(--shadow-card-rest);
   /* 卡比片小一号圆角：同值嵌套会让边角叠成一圈厚弧，读起来像两层硬壳。 */
   border-radius: 10px;
 }
-/* 小记的落地档自带卡面（发丝边 + 零影 + 圆角 14，docs/design/notes/13-slip-landed.md §3），
-   这里只把表面令牌交给它，不再统一画框——一排短记卡同时吃「发丝线 + 大扩散影」
-   会把每张都说成浮岛。 */
+/* 小记的卡面自带圆角 14（docs/design/notes/13-slip-landed.md §3），这里只把表面令牌交给它。 */
 .app-root.codex-layout .workspace-main :is(.memo, .composer):where(:not(.editing):not(.selected):not(.is-sel):not(:focus-visible)) {
   --bg-surface: var(--bg-card);
   --bg-surface-hover: color-mix(in srgb, var(--text) 7%, var(--bg-card));
@@ -377,15 +374,13 @@ function onDirectoryClick(event: MouseEvent) {
 .codex-layout .workspace-main .bp-probe .probe-box { height: 100%; border: 0; background: transparent; }
 .codex-layout .workspace-main .bp-probe .btn-primary { height: 40px; }
 .codex-layout .workspace-main :is(.grid-card, .mfa-card, .rcard):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(:focus-visible)):not(.empty-state) {
-  border-color: var(--border-card-hover);
-  box-shadow: var(--shadow-card-hover);
-  transform: none;
+  border-color: var(--card-line-hover);
 }
 /* 各模块的列表统一中性悬停，分组列表只反馈指针所在的行。 */
 .codex-layout .workspace-main :is(.acc-row, .grp-head, .sess-row, .thr-row, .usg-model-row, .rcard-row, .url-row, .dir-row, .svc-row, .tn-add) {
   transition: background-color var(--transition-fast);
 }
-.app-root.codex-layout .workspace-main :is(.grid-card, .mfa-card, .acc-row, .grp-head, .sess-row, .thr-row, .usg-model-row, .rcard-row, .url-row, .dir-row, .svc-row, .tn-add):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(.skeleton):not(.acc-sk):not(:disabled):not([aria-disabled="true"])) {
+.app-root.codex-layout .workspace-main :is(.acc-row, .grp-head, .sess-row, .thr-row, .usg-model-row, .rcard-row, .url-row, .dir-row, .svc-row, .tn-add):hover:where(:not(.selected):not(.is-sel):not(.picked):not(.editing):not(.skeleton):not(.acc-sk):not(:disabled):not([aria-disabled="true"])) {
   background-color: var(--bg-surface-hover);
 }
 .codex-layout .workspace-main .grid-acts { background: inherit; box-shadow: none; }

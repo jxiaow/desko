@@ -259,6 +259,10 @@
       color-mix(in srgb, var(--glow-comp) 10%, transparent) 0%, transparent 62%),
     radial-gradient(ellipse 95% 80% at 110% 114%,
       color-mix(in srgb, var(--glow-fill) 8%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 58% 42% at 2% 116%,
+      color-mix(in srgb, var(--glow-fill) 20%, transparent) 0%,
+      color-mix(in srgb, var(--glow-fill) 8%, transparent) 44%,
+      transparent 82%),
     radial-gradient(ellipse 85% 70% at 112% 118%, rgb(0 0 0 / 30%) 0%, transparent 66%);
   /* 墨底弹窗沿用提亮档；画布光已改成近白混色，弹窗仍需要独立的提亮 key。 */
   --material-dialog-key: oklch(from var(--accent) 0.54 calc(c * 0.7) h);
@@ -281,6 +285,10 @@
     radial-gradient(ellipse 74% 120% at 102% 78%,
       color-mix(in srgb, var(--glow-comp) 26%, transparent) 0%,
       transparent 80%),
+    radial-gradient(ellipse 58% 42% at 2% 116%,
+      color-mix(in oklab, var(--glow-fill) 34%, #ffffff) 0%,
+      color-mix(in oklab, var(--glow-fill) 16%, #ffffff) 44%,
+      transparent 82%),
     linear-gradient(180deg, #f1f3f4 0%, #e9edef 100%);
 }
 /* 顶带单独补一层横向色光：否则窗框只有左轨够宽，整窗看着像左上角一块染色。

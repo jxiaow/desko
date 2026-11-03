@@ -51,7 +51,7 @@ const broken = reactive(new Set<string>())
   overflow: hidden;
   transition: all var(--transition);
 }
-.att:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+.att:hover { border-color: var(--border-strong); }
 .att-thumb {
   height: 56px;
   display: flex;
