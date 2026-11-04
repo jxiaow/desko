@@ -277,7 +277,7 @@ watchEffect(() => {
     <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
     <div class="page-bar">
       <div class="page-actions">
-        <CreateAction label="新增验证码" @click="openAdd" />
+        <CreateAction v-if="loading || codes.length" label="新增验证码" @click="openAdd" />
       </div>
     </div>
     </Teleport>
@@ -303,14 +303,16 @@ watchEffect(() => {
         :aria-label="`复制 ${c.issuer || c.label} 的验证码`"
         title="点击复制验证码"
         @click="copyCode(c)"
-        @keydown.enter.prevent="copyCode(c)"
-        @keydown.space.prevent="copyCode(c)"
+        @keydown.enter.self.prevent="copyCode(c)"
+        @keydown.space.self.prevent="copyCode(c)"
       >
-        <!-- 身份行：24px 档 + 发行方 + 账号（同行淡字）+ 右缘删除（hover 显形） -->
+        <!-- 服务和账号分行，长账号不挤占服务名称。 -->
         <div class="card-top">
           <span class="mfa-tile grid-slot" aria-hidden="true">{{ avatarLetter(c.issuer || c.label) }}</span>
+          <span class="card-identity">
           <span class="card-issuer" :title="c.issuer || c.label">{{ c.issuer || c.label }}</span>
           <span v-if="c.issuer && c.label" class="card-label" :title="c.label">{{ c.label }}</span>
+          </span>
           <button class="ib danger card-del" type="button" title="删除" @click.stop="confirmDelete(c)">
             <AppIcon name="trash" :size="14" />
           </button>
@@ -340,10 +342,12 @@ watchEffect(() => {
       </div>
     </div>
 
-    <div v-else class="empty-state">
+    <div v-else class="empty-state mfa-empty-state module-empty-state">
       <div class="empty-icon"><AppIcon name="navMfa" :size="24" /></div>
       <div class="empty-title">暂无验证码</div>
-      <div class="empty-desc">添加 otpauth 链接、密钥或二维码</div>
+      <p class="empty-desc">集中查看动态验证码，点击卡片即可复制。</p>
+      <div class="empty-actions"><button class="btn-primary" type="button" @click="openAdd"><AppIcon name="plus" :size="14" />添加第一个验证码</button></div>
+      <p class="empty-note">支持 otpauth 链接、密钥和二维码图片</p>
     </div>
 
     <!-- Add Dialog -->
@@ -416,20 +420,21 @@ watchEffect(() => {
 .qr-file-input { display: none; }
 /* .content-inner / .page-bar / 主按钮走 global.css 的页面骨架；本页计数顶左、动作钮顶右 */
 
-/* 96px 双行令牌卡（mock .otp）：身份行 + 码行（右下圆环倒计时），网格壳走全局 .card-grid */
+/* 身份与验证码分区，卡片高度不随复制反馈变化。 */
+.card-grid { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); margin-top: 4px; }
 .mfa-card {
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 10px;
-  min-height: 96px;
+  gap: 20px;
+  min-height: 146px;
   overflow: hidden;
   border: 1px solid var(--border-card);
   border-radius: 12px;
   background: var(--bg-surface);
   box-shadow: none;
-  padding: 13px 15px;
+  padding: 18px 20px;
   cursor: pointer;
   transition: border-color var(--transition),
     box-shadow var(--transition), background-color var(--transition);
@@ -444,17 +449,17 @@ watchEffect(() => {
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
-/* 身份行：24px 档 + 发行方 + 账号淡字同行 + 右缘删除 */
-.card-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
-/* 档面收进 24px（与浮岛卡同一档），基座 .grid-slot 是 34px */
-.mfa-card .grid-slot { width: 24px; height: 24px; border-radius: 6px; font-size: var(--text-2xs) }
+/* 服务名称在上，账号在下；头像、文字与删除按钮各占独立位置。 */
+.card-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+ .card-identity { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.mfa-card .grid-slot { width: 32px; height: 32px; flex-shrink: 0; border-radius: 8px; font-size: var(--text-sm); }
 .mfa-tile { font-weight: 600; letter-spacing: 0.02em; }
 .card-issuer {
   flex: 0 1 auto;
   min-width: 0;
   font-size: var(--text-base);
-  font-weight: var(--weight-card-title);
-  color: var(--text);
+  font-weight: 500;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -473,13 +478,16 @@ watchEffect(() => {
 html.hover-suppressed .mfa-card:hover .card-del { opacity: 0; }
 
 /* 码行：大号等宽码 + 右下圆环 */
-.card-code-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.card-code-row { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 36px; }
 .card-code {
   font-family: var(--font-mono);
-  font-size: var(--text-2xl);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--text);
+  font-size: 26px;
+  line-height: 36px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
   border-radius: var(--radius-sm);
 }
 /* 复制反馈：码区整块翻成「已复制」，1.2s 后转回——回执落在结果本身上 */

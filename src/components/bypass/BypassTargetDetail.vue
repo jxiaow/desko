@@ -50,7 +50,7 @@ const egressOf = (t: BypassTarget) => t.interfaceName || '未查询到出口接�
         探测并保存修改
       </button>
     </div>
-    <p v-if="target.applyBatch" class="row-note">修改或移出清单不会撤销系统配置，请先手动撤销。</p>
+    <p v-if="target.applyBatch" class="row-note">移出清单会清理该目标由本功能创建且未共用的配置，需要时将请求管理员授权。</p>
   </div>
 </template>
 

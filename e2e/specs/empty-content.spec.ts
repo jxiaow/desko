@@ -17,8 +17,8 @@ for (const route of ['notes', 'entries', 'files']) {
     await expect(page.locator('#workspace-directory-toggle')).toHaveCount(0)
     await expect(page.locator('.workspace-directory')).toBeHidden()
     const main = (await page.locator('.workspace-main').boundingBox())!
-    // 浮片右侧留 10px 窗框，除此之外内容面通栏。
-    expect(page.viewportSize()!.width - (main.x + main.width)).toBe(10)
+    // 浮片退役：内容面通栏顶到窗口右缘，不再预留窗框内距。
+    expect(page.viewportSize()!.width - (main.x + main.width)).toBe(0)
   })
 
   test(`${route} 搜索无结果时仍能清除条件找回内容`, async ({ page }) => {
@@ -106,3 +106,27 @@ test('空回收站仅首次扫描显示骨架，再次刷新始终保留空态',
   await expect(page.getByRole('button', { name: '刷新', exact: true })).toBeEnabled()
   await expect(page.locator('.empty-title')).toHaveText('回收站是空的')
 })
+
+for (const theme of ['paper', 'ink']) {
+  test(`${theme} 小记从空列表到首条记录保持相同背景`, async ({ page }) => {
+    await bootUnlocked(page, { settings: { theme, background_atmosphere: 'true' } }, '/notes')
+    await expect(page.locator('.notes-empty-state')).toBeVisible()
+    const paint = () => page.evaluate(() => ['.app-root', '.sidebar', '.workspace-surface'].map(selector => {
+      const style = getComputedStyle(document.querySelector(selector)!)
+      return { color: style.backgroundColor, image: style.backgroundImage }
+    }))
+    const empty = await paint()
+    expect(empty[2].color).not.toBe('rgba(0, 0, 0, 0)')
+    expect(empty[2].image).toContain('radial-gradient')
+    await page.locator('.composer .ProseMirror').fill('背景连续性检查')
+    await page.locator('.composer .ProseMirror').press('Control+Enter')
+    await expect(page.locator('.memo')).toHaveCount(1)
+    expect(await paint()).toEqual(empty)
+    await page.locator('.memo').hover()
+    await tipButton(page.locator('.memo'), '更多操作').click()
+    await page.locator('.popover .pop-item').filter({ hasText: '删除' }).click()
+    await page.locator('.confirm-dialog .btn-danger').click()
+    await expect(page.locator('.notes-empty-state')).toBeVisible()
+    expect(await paint()).toEqual(empty)
+  })
+}

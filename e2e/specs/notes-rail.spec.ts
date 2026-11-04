@@ -28,7 +28,7 @@ for (const width of [1280, 800]) {
   })
 }
 
-test('标签放不下时整组收成一个入口，收起态仍可搜索连续多选', async ({ page }) => {
+test('标签筛选常驻一枚下拉入口，面板内可搜索连续多选', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   const many = Array.from({ length: 16 }, (_, i) => `标签${i}`)
   await bootUnlocked(page, {
@@ -42,41 +42,85 @@ test('标签放不下时整组收成一个入口，收起态仍可搜索连续�
   const entry = workbar.getByRole('button', { name: /标签筛选/ })
   await expect(entry).toBeVisible()
   await expect(entry).toContainText('16')
-  // 全显或全收：收起态条上只留已选，绝不出现「挑几个 + 更多 N」的半截列表
-  await expect(workbar.locator('.wb-tags .wb-tag')).toHaveCount(0)
-  // 页签是功能入口，收起标签不能把它裁掉
+  // 标签不再以 chip 形式摊在视图页签后面，条上只有这一枚入口
+  await expect(workbar.locator('.wb-tag')).toHaveCount(0)
   await expect(workbar.locator('.workspace-workbar-tabs .wb-tab')).toHaveCount(4)
   await entry.click()
   const panel = page.locator('.tag-pop')
   await expect(panel).toBeVisible()
-  await expect(panel.getByRole('textbox', { name: '搜索标签' })).toBeVisible()
+  await expect(entry).toHaveAttribute('aria-expanded', 'true')
+  const search = panel.getByRole('textbox', { name: '搜索标签' })
+  await expect(search).toBeVisible()
   const tags = panel.locator('.pop-item')
-  const firstTag = (await tags.first().locator('.tag-pop-name').innerText()).replace('#', '')
-  await tags.first().click()
-  await expect(workbar.getByRole('button', { name: new RegExp(firstTag) })).toHaveAttribute('aria-pressed', 'true')
+  await expect(tags).toHaveCount(16)
+  await tags.nth(0).click()
+  await expect(tags.nth(0)).toHaveClass(/\bon\b/)
   await expect(panel).toBeVisible()
-  const secondTag = (await tags.first().locator('.tag-pop-name').innerText()).replace('#', '')
-  await tags.first().click()
-  await expect(workbar.getByRole('button', { name: new RegExp(secondTag) })).toHaveAttribute('aria-pressed', 'true')
-  // 已选的两枚常驻条上，且不带视图页签那条下划线
-  await expect(workbar.locator('.wb-tags .wb-tag.active')).toHaveCount(2)
+  await tags.nth(1).click()
+  await expect(tags.nth(1)).toHaveClass(/\bon\b/)
+  // 入口计数改为「已选数」，面板不因选中而关闭
+  await expect(entry).toContainText('2')
+  // 搜索只筛列表，不动已选
+  await search.fill('不存在标签')
+  await expect(panel.locator('.pop-item')).toHaveCount(0)
+  await expect(panel.locator('.tag-pop-empty')).toBeVisible()
+  await expect(entry).toContainText('2')
+  await search.fill('')
+  await expect(tags).toHaveCount(16)
+  await expect(panel.locator('.pop-item.on')).toHaveCount(2)
   await page.keyboard.press('Escape')
   await expect(panel).toHaveCount(0)
+  await expect(entry).toContainText('2')
 
+  // 归档视图没有标签组；切回「全部」时旧选中已清空
   await workbar.getByRole('button', { name: /^归档/ }).click()
-  await expect(workbar.locator('.wb-tags')).toHaveCount(0)
+  await expect(workbar.getByRole('button', { name: /标签筛选/ })).toHaveCount(0)
   await workbar.getByRole('button', { name: /^全部/ }).click()
-  // 收起态下未选标签根本不上条，所以判据是「已选清空」而不是「那枚标签变未选中」
-  await expect(workbar.locator('.wb-tag.active')).toHaveCount(0)
+  await expect(entry).toContainText('16')
 })
 
-test('标签放得下时整组摊开，不出现收起入口', async ({ page }) => {
+test('宽窗下标签也只用一枚下拉入口，页头不横向溢出', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await bootUnlocked(page, {
     notes: [{ title: '三枚标签', content_html: '<p>#工作 #家庭 #阅读</p>' }],
   }, '/notes')
   const workbar = page.locator('.workspace-workbar')
-  await expect(workbar.locator('.wb-tags .wb-tag')).toHaveCount(3)
-  await expect(workbar.locator('.wb-more')).toHaveCount(0)
+  const entry = workbar.getByRole('button', { name: /标签筛选/ })
+  await expect(entry).toBeVisible()
+  await expect(entry).toContainText('3')
+  await expect(workbar.locator('.wb-tag')).toHaveCount(0)
+  await entry.click()
+  await expect(page.locator('.tag-pop .pop-item')).toHaveCount(3)
+  await page.keyboard.press('Escape')
   expect(await workbar.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(false)
 })
+
+for (const theme of ['paper', 'ink']) {
+  test(`${theme} 标签筛选的搜索框和列表均位于弹层内部`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 800, height: 670 })
+    await bootUnlocked(page, {
+      settings: { theme, background_atmosphere: 'true' },
+      notes: [{ title: '标签布局', content_html: `<p>${Array.from({ length: 16 }, (_, i) => `#项目进度与工作安排${i}`).join(' ')}</p>` }],
+    }, '/notes')
+    await page.getByRole('button', { name: /标签筛选/ }).click()
+    const panel = page.locator('.popover:has(.tag-pop)')
+    await expect(panel).toBeVisible()
+    await page.locator('.tag-pop .pop-item').first().click()
+    await page.screenshot({ path: testInfo.outputPath('tag-filter.png') })
+    const bounds = await panel.evaluate(el => {
+      const outer = el.getBoundingClientRect()
+      return {
+        overflow: el.scrollWidth > el.clientWidth,
+        children: [...el.querySelectorAll('.tag-pop-search, .tag-pop-list, .pop-item')].map(child => {
+          const r = child.getBoundingClientRect()
+          return { left: r.left - outer.left, right: outer.right - r.right }
+        }),
+      }
+    })
+    expect(bounds.overflow).toBe(false)
+    for (const child of bounds.children) {
+      expect(child.left).toBeGreaterThanOrEqual(5)
+      expect(child.right).toBeGreaterThanOrEqual(5)
+    }
+  })
+}

@@ -18,7 +18,7 @@ const probeLabel = (kind: ProbeJob['kind']) => ({ probe: '正在探测', row: '�
 
 <template>
   <section class="bp-probe" aria-label="目标探测">
-    <div class="probe-heading">目标探测<span>确认网络状态后，再加入直连清单</span></div>
+    <div class="probe-heading">目标探测<span>探测域名与网段，选择访问所用的网卡</span></div>
     <form class="page-bar" @submit.prevent="emit('probe')">
       <label class="search-box lg probe-box">
         <span class="search-icon"><AppIcon name="link" :size="16" /></span>

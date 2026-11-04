@@ -162,9 +162,8 @@ export function clearCodexSession(): void {
   sessionTokensLoaded.value = new Set()
   sessionTokensPending.value = new Set()
   sessionTokensError.value = ''
-  sessionOpenGroups.value = new Set()
-  sessionGroupsInitialized = false
   sessionOpenId.value = ''
+  sessionDirectoryFilter.value = null
   rescanQueued = false
   trashSessions.value = []
   trashLoaded.value = false
@@ -468,15 +467,14 @@ export const sessionTokens = ref<Record<string, CodexSessionTokenStats>>({})
 export const sessionTokensLoaded = ref<Set<string>>(new Set())
 export const sessionTokensPending = ref<Set<string>>(new Set())
 export const sessionTokensError = ref('')
-/** 组展开态住在这一档而不是面板里：组件被 v-if 卸挂不该把用户翻开的组一起带走 */
-export const sessionOpenGroups = ref<Set<string>>(new Set())
+/** 保留选中的会话与目录筛选，切换页签后恢复 */
 export const sessionOpenId = ref('')
+export const sessionDirectoryFilter = ref<string | null>(null)
 
 /** 全扫期间又来一次（边扫边改搜索词）：先记下，本轮结束立刻补一次，别让新词被吞掉 */
 let rescanQueued = false
 let sessionTokensVersion = 0
 let sessionSourcesVersion = 0
-let sessionGroupsInitialized = false
 
 export async function loadSessions({ background = false }: { background?: boolean } = {}): Promise<void> {
   if (sessionsBusy.value) {
@@ -499,11 +497,6 @@ export async function loadSessions({ background = false }: { background?: boolea
       rescanQueued = true
     } else {
       sessions.value = list
-      if (!query && list.length && !sessionGroupsInitialized) {
-        const recent = list.reduce((latest, session) => (session.updatedAt ?? 0) > (latest.updatedAt ?? 0) ? session : latest)
-        if (!sessionOpenGroups.value.size) sessionOpenGroups.value = new Set([recent.cwd.trim() || '∅'])
-        sessionGroupsInitialized = true
-      }
       if (!query) sessionTotalCount.value = list.length
       sessionsLoaded.value = true
       refreshed = true
@@ -601,6 +594,25 @@ export async function loadTrash(): Promise<void> {
   } finally {
     if (epoch === accountEpoch) trashBusy.value = false
   }
+}
+
+/** 目录批量操作后重新核对列表，兼容部分文件已不存在等情况。 */
+export async function moveSessionsToTrash(sessionIds: string[]): Promise<string> {
+  if (!sessionIds.length) return ''
+  const epoch = accountEpoch
+  const summary = await codexApi.moveToTrash([...new Set(sessionIds)])
+  if (epoch !== accountEpoch) return ''
+  sessionTotalCount.value = Math.max(0, sessionTotalCount.value - summary.trashedSessionCount)
+  sessionSourcesVersion++
+  sessionTokensVersion++
+  sessionTokensPending.value = new Set()
+  sessionTokensLoaded.value = new Set()
+  sessionTokens.value = {}
+  trashSourcesVersion++
+  trashLoaded.value = false
+  invalidateUsage()
+  await reloadSessions()
+  return summary.message
 }
 
 /** 移进回收站。成功后立刻把这条从列表与 token 缓存里摘掉：合计量不能拿着已删的数 */
@@ -1082,6 +1094,7 @@ export async function loadTodayUsage(): Promise<void> {
       if (epoch !== accountEpoch || sourcesVersion !== usageSourcesVersion) return
       if (localDayKey(new Date(queryAt)) !== localDayKey(new Date())
         || fromTimestamp !== usageWindowFrom('today')) return
+      usageWindowCache.set('today', { report, updatedAt: queryAt, fromTimestamp })
       publishToday(report, queryAt)
     } catch {
       // 今日用量只是挂件的第二行；失败保留同一天的旧值，不弹 toast。
@@ -1093,14 +1106,18 @@ export async function loadTodayUsage(): Promise<void> {
   }
 }
 
-export async function loadUsage(): Promise<void> {
+export async function loadUsage({ preferCache = false }: { preferCache?: boolean } = {}): Promise<void> {
   if (usageBusy.value) return
   usageBusy.value = true
   usageError.value = ''
+  showCachedUsage(usageRange.value)
   const epoch = accountEpoch
   try {
     // 挂件先发起的扫描也要等待，避免同时争抢磁盘与 WSL 通道。
     if (usageTodayRequest) await usageTodayRequest
+    if (epoch !== accountEpoch) return
+    const hasSnapshot = showCachedUsage(usageRange.value)
+    if (preferCache && hasSnapshot && Date.now() - (usageUpdatedAt.value ?? 0) < USAGE_REFRESH_MS) return
     // 一次扫描产出四个范围；扫描期间可继续切换，完成后只展示当前选择。
     while (epoch === accountEpoch) {
       const range = usageRange.value

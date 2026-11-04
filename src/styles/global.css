@@ -2150,6 +2150,45 @@ button, input, select, textarea {
    收到 .06em、色提一档到 muted，读得出「这是一句话」但仍退在正文之后。 */
 .empty-motto .w { font-size: var(--text-2xs); color: var(--text-muted); letter-spacing: 0.06em; }
 
+/* 模块空页沿用正常背景，入口与说明集中在一个阅读区。 */
+.empty-state.module-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(280px, 52vh, 440px);
+  padding: 40px 24px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.module-empty-state .empty-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 20px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border-card));
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-surface));
+  color: var(--text-brand);
+  opacity: 1;
+}
+.module-empty-state .empty-icon svg { width: 28px; height: 28px; }
+.module-empty-state .empty-title { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.5; color: var(--text-secondary); }
+.module-empty-state .empty-desc { max-width: 380px; margin: 10px 0 0; line-height: 1.8; text-wrap: pretty; }
+.module-empty-state .empty-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.module-empty-state > .action-btn { margin-top: 24px; }
+.module-empty-state .empty-actions > button { min-height: 36px; padding-inline: 16px; }
+.module-empty-state .empty-note { margin: 14px 0 0; font-size: var(--text-xs); line-height: 1.7; color: var(--text-muted); }
+.module-empty-state.compact-empty-state { min-height: 250px; }
+.codex-content:has(> :is(.sess-view, .thr-view) > .module-empty-state),
+.codex-content > :is(.sess-view, .thr-view):has(> .module-empty-state) { display: flex; flex-direction: column; flex: 1; }
+.codex-content > :is(.sess-view, .thr-view) > .module-empty-state { flex: 1; }
+@media (max-width: 600px) {
+  .empty-state.module-empty-state { min-height: 320px; padding: 32px 16px; }
+  .module-empty-state .empty-actions > button { min-height: 40px; }
+}
+
 /* 滚动条：轨道透明，thumb 是浮在 9px 槽中的一根 3px 细胶囊（3px 透明内衬 + padding-box 裁切），
    hover 只变亮不变粗。贴边的方条和浮岛卡+发丝描边不是同一只手 */
 ::-webkit-scrollbar { width: var(--scrollbar-track); height: var(--scrollbar-track); }
@@ -2295,6 +2334,16 @@ button, input, select, textarea {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+/* 页头左轴那一组：本页的主动作在前，视图页签紧跟其后。
+   在 Web 的吸顶栏里只是普通一项（宽度按内容），动作组仍靠 auto 外边距收向右；
+   在页头里它撑满剩下的宽度，具体见 CodexWorkspace 的 #workspace-page-toolbar 段。
+   组内间距交给成员自己的外边距，避免给状态 chip 这类自带间距的成员再叠一档。 */
+.page-bar > .page-lead {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 /* 搜索与筛选留在左侧；页面操作整组靠右，窄窗换行时保持组内顺序与间距。 */
 .page-actions {

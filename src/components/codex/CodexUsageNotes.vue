@@ -18,7 +18,7 @@ withDefaults(defineProps<{ scope?: 'sessions' | 'usage' }>(), { scope: 'usage' }
 </template>
 
 <style scoped>
-.usage-notes { min-width: 0; max-width: 100%; font-size: var(--text-description); color: var(--text-secondary); }
+.usage-notes { padding: 12px 20px; box-sizing: border-box; min-width: 0; max-width: 100%; font-size: var(--text-description); color: var(--text-secondary); }
 summary { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; padding: 4px 0; font-weight: var(--weight-medium); line-height: var(--leading-ui); cursor: pointer; list-style: none; border-radius: 4px; }
 summary::-webkit-details-marker { display: none; }
 summary:hover { color: var(--text); }
@@ -26,6 +26,6 @@ summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 summary svg { flex-shrink: 0; }
 .notes-caret { transition: transform var(--transition); }
 .usage-notes[open] .notes-caret { transform: rotate(180deg); }
-.notes-body { display: grid; gap: 6px; min-width: 0; max-width: 56em; padding: 8px 0 4px; line-height: var(--leading-copy); overflow-wrap: anywhere; }
+.notes-body { display: grid; gap: 6px; min-width: 0; max-width: 56em; padding: 8px 0 4px 19px; line-height: var(--leading-copy); overflow-wrap: anywhere; }
 p { margin: 0; }
 </style>

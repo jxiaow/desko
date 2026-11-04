@@ -13,15 +13,23 @@ async function expectFullscreen(page: Page) {
   await expect(page.locator('#workspace-page-toolbar .search-box')).toBeHidden()
   await expect(page.locator('#workspace-directory-toggle')).toBeHidden()
   await expect(page.locator('.workspace-directory')).toBeHidden()
-  const header = page.locator('#workspace-page-toolbar > .fs-head')
-  await expect(header).toBeVisible()
+  const header = page.locator('#workspace-fs-slot > .fs-head')
   await expect(dialog.locator('.fs-head')).toHaveCount(0)
   await expect(dialog).toHaveAttribute('aria-owns', 'note-fullscreen-toolbar')
-  const controls = (await page.locator('.titlebar-buttons').boundingBox())!
+  await expect(header).toBeVisible()
   const toolbar = (await header.boundingBox())!
+  const controls = (await page.locator('.titlebar-buttons').boundingBox())!
   expect(toolbar.y).toBe(0)
-  expect(toolbar.height).toBe(48)
   expect(toolbar.x + toolbar.width).toBeLessThanOrEqual(controls.x - 11)
+  expect(toolbar.height).toBe(48)
+  const button = (await header.locator('.fs-exit').boundingBox())!
+  expect(button.y - toolbar.y).toBe(8)
+  const aligned = await header.locator('button:has(> span)').evaluateAll(buttons => buttons.every(button => {
+    const icon = button.querySelector('svg')!.getBoundingClientRect()
+    const label = button.querySelector('span')!.getBoundingClientRect()
+    return Math.abs(icon.y + icon.height / 2 - label.y - label.height / 2) < 1
+  }))
+  expect(aligned).toBe(true)
   const surface = (await page.locator('.workspace-surface').boundingBox())!
   const full = (await dialog.boundingBox())!
   expect(full).toEqual(surface)
@@ -71,13 +79,14 @@ for (const width of [800, 1280]) {
     await expect(page.locator('.workspace-workbar')).toBeVisible()
   })
 
-  test(`${width}px 已有小记全屏阅读切换编辑覆盖整个内容面并保存`, async ({ page }) => {
+  test(`${width}px 已有小记全屏阅读切换编辑覆盖整个内容面并保存`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 720 })
     await bootUnlocked(page, { notes: [notes[0]] }, '/notes')
     await openNoteRead(page.locator('.memo'))
     await expectFullscreen(page)
     await page.locator('.fs-head').getByRole('button', { name: '编辑', exact: true }).click()
     await expectFullscreen(page)
+    await page.screenshot({ path: testInfo.outputPath('note-editor.png') })
     await page.locator('.fs .ProseMirror').fill('全屏修改后保存')
     await page.keyboard.press('Escape')
     await expect(page.locator('.fs')).toHaveCount(0)
@@ -190,4 +199,35 @@ test('全屏叠加删除确认时 Escape 只取消删除，再次 Escape 才退�
   expect((await e2e.snapshot(page)).notes).toHaveLength(1)
   await page.keyboard.press('Escape')
   await expect(page.locator('.fs')).toHaveCount(0)
+})
+
+for (const target of ['正文', '标题', '编辑']) {
+  test(`鼠标点击小记${target}打开对应页面`, async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await bootUnlocked(page, { notes: [{ title: '点击检查', content_html: '<h2>点击检查</h2><p>点击正文进入阅读页面。</p>' }] }, '/notes')
+    const card = page.locator('.memo')
+    if (target === '编辑') {
+      await card.hover()
+      await card.getByRole('button', { name: '编辑', exact: true }).click()
+      await expect(page.locator('.memo.editing .ProseMirror')).toBeVisible()
+    } else {
+      await card.locator(target === '正文' ? '.memo-body' : '.memo-title').click()
+      await expect(page.getByRole('dialog', { name: '全屏查看小记', exact: true })).toBeVisible()
+    }
+    expect(errors).toEqual([])
+  })
+}
+
+test('从其他模块点击小记导航后可打开卡片和编辑器', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await bootUnlocked(page, { notes: [{ title: '导航检查', content_html: '<h2>导航检查</h2><p>正文内容</p>' }] }, '/entries')
+  await page.locator('a.nav-item[href="/notes"]').click()
+  await expect(page.locator('.composer .ProseMirror')).toBeVisible()
+  await page.locator('.memo-body').click()
+  await expect(page.getByRole('dialog', { name: '全屏查看小记', exact: true })).toBeVisible()
+  await page.locator('.fs-head').getByRole('button', { name: '编辑', exact: true }).click()
+  await expect(page.locator('.fs .ProseMirror')).toBeVisible()
+  expect(errors).toEqual([])
 })

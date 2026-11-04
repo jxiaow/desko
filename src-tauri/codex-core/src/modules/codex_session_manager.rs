@@ -674,12 +674,11 @@ fn usage_rollout_files_in_dirs(data_dirs: &[PathBuf]) -> Result<Vec<PathBuf>, St
             if !seen_roots.insert(modules::codex_session_wsl::path_key(&canonical_root)) {
                 continue;
             }
-            for path in list_rollout_files(&root)? {
-                let canonical = fs::canonicalize(&path)
-                    .map_err(|error| format!("无法访问会话文件 ({}): {}", path.display(), error))?;
-                if seen_files.insert(modules::codex_session_wsl::path_key(&canonical)) {
-                    // 使用同一规范路径共享缓存，外层合并不再逐文件重复访问文件系统。
-                    files.push(canonical);
+            // 根目录只规范化一次。遍历不跟随符号链接，子路径已经位于真实根下，
+            // 无需为每份日志再次跨 WSL 查询 canonicalize。
+            for path in list_rollout_files(&canonical_root)? {
+                if seen_files.insert(modules::codex_session_wsl::path_key(&path)) {
+                    files.push(path);
                 }
             }
         }
@@ -690,18 +689,19 @@ fn usage_rollout_files_in_dirs(data_dirs: &[PathBuf]) -> Result<Vec<PathBuf>, St
 
 
 fn load_usage_events(rollout_path: &Path) -> Result<Arc<UsageFileEntry>, String> {
-    let mut cache = USAGE_SCAN_CACHE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let metadata = fs::metadata(rollout_path)
         .map_err(|error| format!("读取会话文件信息失败 ({}): {}", rollout_path.display(), error))?;
     let file_len = metadata.len();
     let modified_at = metadata.modified().ok();
-    if let Some(entry) = cache.get(rollout_path) {
-        if entry.file_len == file_len && modified_at.is_some() && entry.modified_at == modified_at {
-            return Ok(Arc::clone(entry));
+    {
+        let cache = USAGE_SCAN_CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(entry) = cache.get(rollout_path) {
+            if entry.file_len == file_len && modified_at.is_some() && entry.modified_at == modified_at {
+                return Ok(Arc::clone(entry));
+            }
         }
     }
+    // 磁盘与网络文件读取不持有全局缓存锁。
     let entry = if let Some(entry) = usage_cache::read(rollout_path, file_len, modified_at) {
         Arc::new(entry)
     } else {
@@ -709,8 +709,35 @@ fn load_usage_events(rollout_path: &Path) -> Result<Arc<UsageFileEntry>, String>
         usage_cache::write(rollout_path, &entry);
         Arc::new(entry)
     };
-    cache.insert(rollout_path.to_path_buf(), Arc::clone(&entry));
+    USAGE_SCAN_CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(rollout_path.to_path_buf(), Arc::clone(&entry));
     Ok(entry)
+}
+
+/// 最多四个读取线程；输出仍按路径原序排列，聚合与副本去重不受完成顺序影响。
+fn load_usage_entries(paths: &[PathBuf]) -> Result<Vec<Arc<UsageFileEntry>>, String> {
+    let workers = std::thread::available_parallelism().map_or(1, usize::from).min(4).min(paths.len());
+    if workers <= 1 {
+        return paths.iter().map(|path| load_usage_events(path)).collect();
+    }
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..workers).map(|worker| {
+            scope.spawn(move || paths.iter().enumerate().skip(worker).step_by(workers)
+                .map(|(index, path)| (index, load_usage_events(path))).collect::<Vec<_>>())
+        }).collect();
+        let mut results = Vec::with_capacity(paths.len());
+        // 全部 join 后再返回错误，确保不会有脱离请求的读盘任务。
+        let mut panicked = false;
+        for handle in handles {
+            match handle.join() {
+                Ok(rows) => results.extend(rows),
+                Err(_) => panicked = true,
+            }
+        }
+        if panicked { return Err("读取会话用量后台任务失败".to_string()); }
+        results.sort_unstable_by_key(|(index, _)| *index);
+        results.into_iter().map(|(_, result)| result).collect()
+    })
 }
 
 /// 顺序读满整份 rollout：模型跟着 `session_meta`/`turn_context` 走，
@@ -982,8 +1009,10 @@ fn query_session_usage_windows_with_config(
 
     let mut seen_events = HashMap::new();
     let mut missing_price = false;
-    for path in usage_rollout_files(config)? {
-        let entry = unique_usage_events(load_usage_events(&path)?, &mut seen_events);
+    let paths = usage_rollout_files(config)?;
+    let entries = load_usage_entries(&paths)?;
+    for (path, entry) in paths.into_iter().zip(entries) {
+        let entry = unique_usage_events(entry, &mut seen_events);
         missing_price |= entry.models.iter().any(|model| !pricing.contains_key(model));
         for accumulator in accumulators.values_mut() {
             let UsageWindowAccumulator {
@@ -2552,6 +2581,32 @@ mod tests {
     }
 
     #[test]
+    fn usage_parallel_load_preserves_order_contents_and_errors() {
+        let dir = make_temp_dir("usage-parallel");
+        let mut paths = Vec::new();
+        for i in 0..12 {
+            let path = dir.join(format!("rollout-{i}.jsonl"));
+            let header = json!({"type":"session_meta","payload":{"id":format!("session-{i}"),"model":"gpt-5.4"}}).to_string();
+            fs::write(&path, format!("{}\n{}\n", header,
+                usage_snapshot_line("2026-10-11T02:00:00Z", 100 + i, 80, 10))).unwrap();
+            paths.push(path);
+        }
+        paths.reverse();
+        let loaded = load_usage_entries(&paths).unwrap();
+        assert_eq!(loaded.len(), paths.len());
+        for (entry, path) in loaded.iter().zip(&paths) {
+            let metadata = fs::metadata(path).unwrap();
+            let serial = scan_usage_events(path, metadata.len(), metadata.modified().ok()).unwrap();
+            assert_eq!(serde_json::to_value(entry.as_ref()).unwrap(), serde_json::to_value(serial).unwrap());
+        }
+        assert!(load_usage_entries(&[]).unwrap().is_empty());
+        assert_eq!(load_usage_entries(&paths[..1]).unwrap().len(), 1);
+        paths.push(dir.join("missing.jsonl"));
+        assert!(load_usage_entries(&paths).unwrap_err().contains("missing.jsonl"));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn usage_counter_reset_uses_valid_last_usage_without_charging_history() {
         let dir = make_temp_dir("usage-reset-last");
         let first = usage_snapshot_line("2026-10-11T02:00:00Z", 100, 80, 10);
@@ -2584,7 +2639,10 @@ mod tests {
     #[ignore = "只读本机日志，仅输出聚合数与耗时，不输出内容"]
     fn live_usage_audit_and_timing() {
         let config = modules::config::get_user_config();
+        let discovery_started = Instant::now();
         let files = usage_rollout_files(&config).unwrap();
+        let discovery_ms = discovery_started.elapsed().as_millis();
+        println!("usage discovery: files={} discovery_ms={}", files.len(), discovery_ms);
         let bytes: u64 = files.iter().map(|path| fs::metadata(path).unwrap().len()).sum();
         USAGE_SCAN_CACHE.lock().unwrap().clear();
         let started = Instant::now();

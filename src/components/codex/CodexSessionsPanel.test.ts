@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { codexApi, type CodexSessionRecord, type CodexSessionTokenStats } from '../../services/api/codex'
-import { clearCodexSession, sessions, sessionsLoaded, sessionOpenGroups } from '../../services/codexState'
+import { clearCodexSession, sessions, sessionsLoaded, sessionDirectoryFilter, sessionTotalCount, sessionQuery, sessionSearchMode } from '../../services/codexState'
 import { useConfirmStore } from '../../stores/confirm'
 import CodexSessionsPanel from './CodexSessionsPanel.vue'
 
@@ -29,7 +29,7 @@ describe('会话分组与重要操作生命周期', () => {
     sessions.value = []
     sessionsLoaded.value = false
     vi.mocked(codexApi.listSessions).mockImplementationOnce(() => new Promise(() => {}))
-    const wrapper = mount(CodexSessionsPanel)
+    const wrapper = mount(CodexSessionsPanel, { global: { stubs: { teleport: true, PopoverMenu: { template: '<div><slot /></div>' } } } })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.codex-skeleton').exists()).toBe(true)
     expect(wrapper.findAll('.skeleton-project')).toHaveLength(3)
@@ -40,7 +40,7 @@ describe('会话分组与重要操作生命周期', () => {
   it('统计加载、失败、无用量三种状态分开显示，失败可以重试', async () => {
     let reject!: (error: unknown) => void
     vi.mocked(codexApi.sessionTokenStats).mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
-    const wrapper = mount(CodexSessionsPanel)
+    const wrapper = mount(CodexSessionsPanel, { global: { stubs: { teleport: true, PopoverMenu: { template: '<div><slot /></div>' } } } })
     await flushPromises()
     await wrapper.get('.sess-row').trigger('click')
     expect(codexApi.sessionTokenStats).toHaveBeenCalledTimes(1)
@@ -65,7 +65,7 @@ describe('会话分组与重要操作生命周期', () => {
     let finish!: (result: CodexSessionRecord[]) => void
     vi.mocked(codexApi.listSessions).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
     vi.mocked(codexApi.sessionTokenStats).mockResolvedValue([])
-    const wrapper = mount(CodexSessionsPanel)
+    const wrapper = mount(CodexSessionsPanel, { global: { stubs: { teleport: true, PopoverMenu: { template: '<div><slot /></div>' } } } })
     try {
       await vi.advanceTimersByTimeAsync(30_000)
       expect(codexApi.listSessions).toHaveBeenCalledTimes(1)
@@ -89,31 +89,28 @@ describe('会话分组与重要操作生命周期', () => {
     }
   })
 
-  it('首次展开最近项目，手动收起后迟到统计与重新进入都不重新展开', async () => {
+  it('首次直接展示会话，不自动打开详情，迟到统计和重新进入不改变布局', async () => {
     let finish!: (value: CodexSessionTokenStats[]) => void
     vi.mocked(codexApi.sessionTokenStats).mockImplementation(() => new Promise(resolve => { finish = resolve }))
-    const wrapper = mount(CodexSessionsPanel)
+    const wrapper = mount(CodexSessionsPanel, { global: { stubs: { teleport: true, PopoverMenu: { template: '<div><slot /></div>' } } } })
     await flushPromises()
-    const group = wrapper.get('.grp-head')
-    expect(group.attributes('aria-expanded')).toBe('true')
-    expect(wrapper.find('.sess-row').exists()).toBe(true)
-    await group.trigger('click')
-    expect(group.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.findAll('.sess-row')).toHaveLength(1)
+    expect(wrapper.find('.sess-detail').exists()).toBe(false)
     finish([])
     await flushPromises()
-    expect(sessionOpenGroups.value.size).toBe(0)
-    expect(group.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.sess-detail').exists()).toBe(false)
     wrapper.unmount()
     vi.mocked(codexApi.sessionTokenStats).mockResolvedValue([])
-    const again = mount(CodexSessionsPanel)
+    const again = mount(CodexSessionsPanel, { global: { stubs: { teleport: true, PopoverMenu: { template: '<div><slot /></div>' } } } })
     await flushPromises()
-    expect(again.get('.grp-head').attributes('aria-expanded')).toBe('false')
+    expect(again.findAll('.sess-row')).toHaveLength(1)
+    expect(again.find('.sess-detail').exists()).toBe(false)
     again.unmount()
   })
 
   it('会话删除确认打开后锁屏卸载，旧回调不能移动会话', async () => {
     vi.mocked(codexApi.sessionTokenStats).mockResolvedValue([])
-    const wrapper = mount(CodexSessionsPanel)
+    const wrapper = mount(CodexSessionsPanel, { global: { stubs: { teleport: true, PopoverMenu: { template: '<div><slot /></div>' } } } })
     await flushPromises()
     await wrapper.get('.sess-row').trigger('click')
     await wrapper.get('.trash-btn').trigger('click')
@@ -124,4 +121,60 @@ describe('会话分组与重要操作生命周期', () => {
     await flushPromises()
     expect(codexApi.moveToTrash).not.toHaveBeenCalled()
   })
+  it('目录操作包含搜索隐藏的会话，确认前不移动，并在完成后核对列表', async () => {
+    vi.mocked(codexApi.sessionTokenStats).mockResolvedValue([])
+    const wrapper = mount(CodexSessionsPanel, { global: { stubs: { teleport: true, PopoverMenu: { template: '<div><slot /></div>' } } } })
+    await flushPromises()
+    sessionTotalCount.value = 3
+    sessionQuery.value = 'Synthetic'
+    const hidden = { ...session, sessionId: 'hidden' }
+    vi.mocked(codexApi.listSessions).mockResolvedValueOnce([session, hidden, { ...session, sessionId: 'other', cwd: 'D:/other' }])
+    sessionDirectoryFilter.value = session.cwd
+    await wrapper.vm.$nextTick()
+    await wrapper.get('.directory-menu-button').trigger('click')
+    await wrapper.get('.directory-trash').trigger('click')
+    await flushPromises()
+    expect(useConfirmStore().confirmDialog.message).toContain('2 条')
+    expect(codexApi.moveToTrash).not.toHaveBeenCalled()
+    vi.mocked(codexApi.moveToTrash).mockResolvedValue({ message: '已移动', requestedSessionCount: 2, trashedSessionCount: 2, trashedInstanceCount: 1, trashDirs: [] })
+    vi.mocked(codexApi.listSessions).mockResolvedValue([])
+    useConfirmStore().handleConfirm()
+    await flushPromises()
+    expect(codexApi.moveToTrash).toHaveBeenCalledWith(['synthetic-session', 'hidden'])
+    expect(sessions.value).toEqual([])
+    expect(sessionTotalCount.value).toBe(1)
+    wrapper.unmount()
+  })
+
+  it('空关键词切换搜索范围不请求；有效搜索和清空仍按最终范围刷新', async () => {
+    vi.useFakeTimers()
+    vi.mocked(codexApi.sessionTokenStats).mockResolvedValue([])
+    const wrapper = mount(CodexSessionsPanel, { global: { stubs: { teleport: true, PopoverMenu: { template: '<div><slot /></div>' } } } })
+    try {
+      await flushPromises()
+      const initial = vi.mocked(codexApi.listSessions).mock.calls.length
+      sessionSearchMode.value = 'content'
+      await vi.advanceTimersByTimeAsync(400)
+      sessionQuery.value = '   '
+      sessionSearchMode.value = 'title'
+      await vi.advanceTimersByTimeAsync(400)
+      expect(codexApi.listSessions).toHaveBeenCalledTimes(initial)
+      sessionQuery.value = 'needle'
+      await vi.advanceTimersByTimeAsync(400)
+      expect(codexApi.listSessions).toHaveBeenLastCalledWith('needle', undefined)
+      sessionSearchMode.value = 'content'
+      await vi.advanceTimersByTimeAsync(400)
+      expect(codexApi.listSessions).toHaveBeenLastCalledWith(undefined, 'needle')
+      sessionQuery.value = ''
+      await wrapper.vm.$nextTick()
+      sessionSearchMode.value = 'title'
+      await vi.advanceTimersByTimeAsync(400)
+      expect(codexApi.listSessions).toHaveBeenLastCalledWith('', undefined)
+      expect(codexApi.listSessions).toHaveBeenCalledTimes(initial + 3)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
 })

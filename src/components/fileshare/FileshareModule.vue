@@ -22,14 +22,12 @@ import AppIcon from '../shared/AppIcon.vue'
 import OptionSelect from '../shared/OptionSelect.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { usePageActive } from '../../composables/usePageActive'
-import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 import { isWebRuntime } from '../../services/runtime'
 import { uploadSharedFile } from '../../services/transport'
 import { writeClipboardText } from '../../utils/clipboard'
 
 const toastStore = useToastStore()
 const pageActive = usePageActive()
-const workspaceLayout = useWorkspaceLayout()
 const webRuntime = isWebRuntime()
 const fileInput = ref<HTMLInputElement | null>(null)
 let active = true
@@ -223,16 +221,6 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 
 <template>
   <div class="content-inner lan-page">
-    <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-      <div class="page-bar service-page-bar" data-workspace-heading="inline">
-        <span class="chip" :class="{ live: running }"><span class="dot" aria-hidden="true"></span>{{ !fsLoaded ? '读取中' : running ? '监听中' : '已停止' }}</span>
-        <div class="page-actions">
-          <button v-if="fsLoaded && fsConfig && status" class="bar-btn service-toggle" :class="running ? 'btn-primary ghost-danger' : 'btn-primary'" type="button" :disabled="fsBusy || dropping" @click="toggle"><AppIcon v-if="running" name="x" :size="13" />{{ serviceAction === 'stop' ? '正在停止…' : serviceAction === 'start' ? '正在启动…' : running ? '停止服务' : '启动服务' }}</button>
-          <button class="btn-secondary bar-btn manage-btn" type="button" aria-label="管理共享" title="管理共享" @click="requestOpenSettingsTab('fileshare')"><AppIcon name="gear" :size="16" /></button>
-        </div>
-      </div>
-    </Teleport>
-
     <div v-if="!fsLoaded" class="lan-loading-state" role="status" aria-label="正在读取共享配置">
       <div class="rcard loading-connection" aria-hidden="true"><div class="loading-line"></div><div class="loading-line"></div><div class="loading-line"></div></div>
       <div class="loading-heading" aria-hidden="true"></div><div class="rcard loading-send" aria-hidden="true"><div class="loading-line"></div><div class="loading-well"></div></div>
@@ -243,10 +231,19 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 
     <div v-else class="lan-content">
       <section class="connection-panel rcard" aria-labelledby="lan-connect-title">
-        <div class="connection-body">
-          <AppIcon class="connection-icon" name="navLan" :size="20" />
-          <div class="connection-info">
+        <header class="connection-heading">
+          <div class="connection-heading-title">
+            <AppIcon class="connection-icon" name="navLan" :size="20" />
             <h2 id="lan-connect-title">连接设备</h2>
+            <span class="chip" :class="{ live: running }" role="status"><span class="dot" aria-hidden="true"></span>{{ running ? '监听中' : '已停止' }}</span>
+          </div>
+          <div class="connection-actions">
+            <button class="bar-btn service-toggle" :class="{ 'btn-primary': !running }" type="button" :disabled="fsBusy || dropping" @click="toggle">{{ serviceAction === 'stop' ? '正在停止…' : serviceAction === 'start' ? '正在启动…' : running ? '停止服务' : '启动服务' }}</button>
+            <button class="bar-btn manage-btn" type="button" aria-label="共享设置" title="共享设置" @click="requestOpenSettingsTab('fileshare')"><AppIcon name="gear" :size="16" /></button>
+          </div>
+        </header>
+        <div class="connection-body">
+          <div class="connection-info">
             <div v-if="running" class="fs-banner">
               <p class="banner-title">{{ exposure }}</p>
               <div class="address-box"><span class="banner-url" :title="bannerUrl">{{ bannerUrl }}</span><button class="ib copy-address" type="button" aria-label="复制访问地址" title="复制访问地址" @click="copyUrl(bannerUrl)"><AppIcon name="copy" :size="14" /></button></div>
@@ -296,22 +293,19 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .lan-page .rcard { margin-bottom: 0; }
 .manage-btn { width: 32px; padding-inline: 0; }
 .service-toggle { min-width: 76px; }
-/* 停止与「停止隧道」同形：淡红底 + 红字 + ×，不再是一行裸文字 */
-.service-toggle.ghost-danger:not(:disabled) {
-  background: var(--danger-soft);
-  color: var(--danger);
-  box-shadow: none;
-}
-.service-toggle.ghost-danger:hover:not(:disabled) {
-  background: var(--danger-soft);
-  color: var(--danger-hover);
-}
+/* 启动是主操作；运行后停止与设置退为低强调的卡片操作。 */
+.connection-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 16px 20px 12px; }
+.connection-heading-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.connection-heading-title h2 { white-space: nowrap; }
+.connection-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.connection-actions .bar-btn { height: 32px; }
+.service-toggle:not(.btn-primary):hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); }
 .lan-text-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 0; background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--text-xs); white-space: nowrap; }
 .lan-text-button:hover:not(:disabled) { color: var(--text); }
 .lan-page button:disabled { cursor: not-allowed; }
 .lan-page .action-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; border-radius: var(--radius-ib); font-size: var(--text-xs); }
 .lan-content { display: flex; flex-direction: column; gap: 22px; }
-.connection-body { display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px; }
+.connection-body { display: flex; align-items: flex-start; gap: 16px; padding: 0 20px 18px; }
 .connection-icon { flex: none; margin-top: 1px; color: var(--text-muted); }
 .connection-info { flex: 1; min-width: 0; }
 .banner-title { margin-top: 4px !important; color: var(--text-muted); font-size: var(--text-xs); line-height: 20px; }
@@ -332,7 +326,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .connection-code { display: flex; flex: none; flex-direction: column; align-items: center; gap: 4px; color: var(--text-muted); font-size: 11px; line-height: 20px; }
 .connection-qr { display: block; width: 80px; height: 80px; border-radius: var(--radius-sm); background: #fff; }
 .connection-local { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; width: 80px; height: 80px; color: var(--text-muted); border-radius: var(--radius-sm); background: var(--bg-canvas-input); }
-.fs-idle { margin-top: 8px; }
+.fs-idle { margin-top: 0; }
 .fs-idle-title { font-weight: 500 !important; color: var(--text-secondary); }
 .fs-idle-desc { margin-top: 4px !important; color: var(--text-muted); font-size: var(--text-xs); line-height: 20px; }
 .fs-idle-config { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 10px 0 0; padding: 0; font-size: var(--text-xs); line-height: 20px; }
@@ -381,7 +375,8 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
 .fs-drop-hint b { padding: 16px 24px; border-radius: var(--radius-ib); background: var(--bg-surface); color: var(--text); font-size: var(--text-lg); font-weight: 500; }
 @media (max-width: 900px) {
   .lan-content { gap: 18px; }
-  .connection-body { padding: 16px; }
+  .connection-heading { padding: 14px 16px 12px; }
+  .connection-body { padding: 0 16px 16px; }
   .connection-meta { gap: 4px 12px; }
   .target-field { padding-inline: 16px; }
   .target-field .select { width: 170px; }
@@ -390,7 +385,8 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('局域网传输') })
   .session-files { gap: 12px; margin-inline: 16px; }
 }
 @media (max-width: 600px) {
-  .connection-body { gap: 10px; padding: 14px; }
+  .connection-heading { padding: 12px 14px; }
+  .connection-body { gap: 10px; padding: 0 14px 14px; }
   .connection-icon { display: none; }
   .connection-code { font-size: 10px; }
   .connection-qr, .connection-local { width: 64px; height: 64px; }

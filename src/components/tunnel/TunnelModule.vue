@@ -27,16 +27,12 @@ import TunnelServicesCard from './TunnelServicesCard.vue'
 import TunnelServiceDialog from './TunnelServiceDialog.vue'
 import { usePageHeadStore } from '../../stores/pageHead'
 import { usePageActive } from '../../composables/usePageActive'
-import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 
 const toastStore = useToastStore()
 const pageActive = usePageActive()
-const workspaceLayout = useWorkspaceLayout()
 
 const busy = ref(false)
-const compactMedia = window.matchMedia('(max-width: 700px)')
-const compact = ref(compactMedia.matches)
-function updateCompact() { compact.value = compactMedia.matches }
+const setupRef = ref<InstanceType<typeof TunnelSetupCard> | null>(null)
 
 const showDetail = ref(false)
 const report = ref<TunnelSplitReport | null>(null)
@@ -57,7 +53,6 @@ const state = computed(() => {
 const running = computed(() => status.value?.running ?? false)
 const bound = computed(() => (status.value?.bound ?? false) && services.value.length > 0)
 const canToggle = computed(() => Boolean(status.value?.alive) || bound.value)
-const unrouted = computed(() => services.value.filter((s) => !s.routed).length)
 const binaryState = computed(() => {
   const b = binary.value
   if (!b || !b.installed) return '未获取'
@@ -124,7 +119,6 @@ function refreshOnVisible() {
 }
 
 onMounted(() => {
-  compactMedia.addEventListener('change', updateCompact)
   void refreshNow()
   timer = window.setInterval(() => {
     if (pageActive.value && !busy.value) void refresh().catch(() => undefined)
@@ -147,7 +141,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  compactMedia.removeEventListener('change', updateCompact)
   disposed = true
   if (timer) window.clearInterval(timer)
   window.removeEventListener('focus', refreshOnFocus)
@@ -170,44 +163,35 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
     </div>
 
     <template v-else>
-      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive || compact" defer>
-      <div class="page-bar service-page-bar tunnel-page-bar" data-workspace-heading="inline">
-        <span class="chip" :class="{ live: running, connecting: status?.alive && !running }" role="status">
-          <span class="dot" aria-hidden="true"></span>
-          {{ state }}
-        </span>
-        <span class="chip tunnel-services" :title="`${services.length} 项服务${unrouted ? ` · ${unrouted} 条未应用` : ''}`">
-          <span class="dot" aria-hidden="true"></span>
-          <span class="tunnel-services-label">{{ services.length }} 项服务<span v-if="unrouted" class="chip-warn-text"> · {{ unrouted }} 条未应用</span></span>
-        </span>
-        <div class="page-actions">
-          <button
-            class="btn-primary toggle-btn"
-            :class="{ 'ghost-danger': status?.alive }"
-            :disabled="busy || !canToggle"
-            :title="canToggle ? '' : (services.length ? '请先创建隧道' : '请先添加本地服务')"
-            @click="toggle"
-            :aria-busy="busy"
-          >
-            <AppIcon :name="status?.alive ? 'x' : 'external'" :size="13" />
-            {{ busy ? '处理中…' : status?.alive ? '停止隧道' : '启动隧道' }}
-          </button>
-        </div>
-      </div>
-      </Teleport>
-
-      <!-- 准备流：缺东西时才摊开，齐了收成一行摘要 -->
-      <TunnelSetupCard
-        :provision="provision"
-        :login="login"
-        :binary="binary"
-        :busy="busy"
-        :domain="domain"
-        :domain-loading="domainLoading"
-        :domain-error="domainError"
-        @refresh="refreshNow"
-        @retry-domain="loadDomain(true)"
-      />
+      <section class="tn-card tunnel-connection" aria-labelledby="tunnel-connection-title">
+        <header class="connection-heading">
+          <div class="connection-title">
+            <h2 id="tunnel-connection-title">隧道连接</h2>
+            <span class="chip" :class="{ live: running, connecting: status?.alive && !running }" role="status"><span class="dot" aria-hidden="true"></span>{{ state }}</span>
+          </div>
+          <div class="connection-actions">
+            <button class="bar-btn btn-primary toggle-btn" :class="{ 'ghost-danger': status?.alive }" :disabled="busy || !canToggle" :title="canToggle ? '' : (services.length ? '请先创建隧道' : '请先添加本地服务')" @click="toggle" :aria-busy="busy">
+              <AppIcon :name="status?.alive ? 'x' : 'external'" :size="13" />
+              {{ busy ? '处理中…' : status?.alive ? '停止隧道' : '启动隧道' }}
+            </button>
+            <button class="bar-btn configure-btn" type="button" aria-label="隧道配置" title="隧道配置" @click="setupRef?.open()"><AppIcon name="gear" :size="16" /></button>
+          </div>
+        </header>
+        <!-- 准备流：缺东西时才摊开，齐了收成一行摘要 -->
+        <TunnelSetupCard
+          ref="setupRef"
+          embedded
+          :provision="provision"
+          :login="login"
+          :binary="binary"
+          :busy="busy"
+          :domain="domain"
+          :domain-loading="domainLoading"
+          :domain-error="domainError"
+          @refresh="refreshNow"
+          @retry-domain="loadDomain(true)"
+        />
+      </section>
 
       <div v-if="pollError" class="poll-err" role="alert">
         <AppIcon name="alert" :size="14" />
@@ -226,9 +210,9 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
       />
 
       <!-- 程序与进程：默认只给一行摘要，点开再看完整事实 -->
-      <section class="tn-card tn-foot" :class="{ expanded: showDetail }">
+      <section class="tn-card tn-foot" :class="{ expanded: showDetail, attention: pollError || report?.conflict || status?.note }">
         <div class="tn-head">
-          <h2>程序与进程</h2>
+          <h2>连接诊断</h2>
           <span class="diag-summary">{{ summary }}</span>
           <button class="foot-btn" type="button" :aria-expanded="showDetail" aria-controls="tunnel-diagnostics" @click="showDetail = !showDetail">
             <AppIcon :name="showDetail ? 'chevDown' : 'chevRight'" :size="12" />
@@ -290,25 +274,18 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
 .tn-foot h2 { margin: 0; font-size: var(--text-base); font-weight: 600; line-height: 22px; }
 .tunnel-page :deep(.tn-row) { height: auto; min-height: 48px; }
 .tunnel-page :deep(.tn-note) { line-height: 1.6; color: var(--text-secondary); }
-.tunnel-page :deep(button:focus-visible), .tunnel-page-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.tunnel-services { flex-shrink: 1; min-width: 0; }
-.tunnel-services-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* 地址和程序信息沿用界面字体，用 tabular-nums 保持数字稳定。 */
-.tunnel-page-bar .chip { background: transparent; padding-inline: 0; color: var(--text-secondary); }
-.tunnel-page-bar .chip + .chip { margin-left: 12px; }
-.tunnel-page-bar .connecting .dot { background: var(--warning); }
-.toggle-btn { border-radius: var(--radius-ib); }
-.toggle-btn.ghost-danger:not(:disabled) {
-  background: var(--danger-soft);
-  color: var(--danger);
-  box-shadow: none;
-}
-.toggle-btn.ghost-danger:hover:not(:disabled) {
-  background: var(--danger-soft);
-  color: var(--danger-hover);
-}
-.chip-warn-text { color: var(--text-secondary) }
+.tunnel-page :deep(button:focus-visible), .connection-heading button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.connection-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 16px 20px 12px; }
+.connection-title, .connection-actions { display: flex; align-items: center; gap: 10px; }
+.connection-title h2 { margin: 0; font-size: var(--text-sm); font-weight: 600; }
+.connection-actions { margin-left: auto; gap: 6px; }
+.connection-actions .bar-btn { height: 32px; }
+.configure-btn { width: 32px; min-width: 32px; padding: 0; }
+.connection-heading .connecting .dot { background: var(--warning); }
+.toggle-btn.ghost-danger:not(:disabled) { color: var(--danger); background: var(--danger-soft); box-shadow: none; }
+.toggle-btn.ghost-danger:hover:not(:disabled) { color: var(--danger-hover); background: var(--danger-soft); }
+.tunnel-connection :deep(.setup.embedded) { margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.tunnel-page .tn-foot.attention { border-color: var(--warning); }
 /* 回读失败只说明"这一格这次没读到"，坏消息吃 warn 档，不抢主色的注意 */
 .poll-err {
   display: flex;
@@ -355,9 +332,8 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
 .tn-detail .tn-label { line-height: 20px; }
 @media (max-width: 700px) {
   :global(.codex-layout .workspace-main .tunnel-page.content-inner) { padding-inline: 16px; }
-  .tunnel-page .tunnel-page-bar { position: static; min-height: 56px; padding: 0 0 16px; background: transparent; }
-  .tunnel-page-bar .tunnel-services { display: none; }
-  .tunnel-page-bar .toggle-btn { min-height: 40px; font-size: var(--text-sm); }
+  .connection-heading { padding: 14px 16px 10px; }
+  .connection-actions .bar-btn { min-height: 40px; }
   .tn-foot .tn-head { padding: 14px 16px; gap: 8px; }
   .diag-summary { order: 3; flex-basis: 100%; margin-left: 0; line-height: 20px; }
   .foot-btn { margin-left: auto; min-height: 32px; }

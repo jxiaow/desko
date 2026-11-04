@@ -25,7 +25,7 @@ for (const width of [1040, 1920]) {
     await expect(toggle).toHaveAttribute('aria-expanded', 'true')
     const before = await bounds(toggle)
     const expanded = (await bounds(page.locator('.workspace-main'))).width
-    expect(before.x).toBeGreaterThanOrEqual(208)
+    expect(before.x).toBeGreaterThanOrEqual(176)
     await toggle.click()
     const collapsedButton = page.getByRole('button', { name: '展开侧栏', exact: true })
     await expect(collapsedButton).toHaveAttribute('aria-expanded', 'false')
@@ -45,8 +45,8 @@ for (const width of [800, 1040, 1920]) {
     await page.setViewportSize({ width, height: 720 })
     await bootUnlocked(page, seed)
     const toolbar = page.locator('#workspace-page-toolbar')
-    await expect(page.locator('.titlebar-outer #workspace-page-toolbar')).toBeVisible()
-    expect((await bounds(page.locator('.titlebar-outer'))).height).toBe(48)
+    await expect(page.locator('.workspace-main #workspace-page-toolbar')).toBeVisible()
+    expect((await bounds(page.locator('.titlebar-outer'))).height).toBe(34)
     let searchOffset: number | undefined
     const columns: Record<string, { x: number; width: number }> = {}
     for (const [route, columnSelector] of [
@@ -59,37 +59,60 @@ for (const width of [800, 1040, 1920]) {
       const main = await bounds(page.locator('.workspace-main'))
       const content = await bounds(column)
       columns[route] = { x: content.x, width: content.width }
-      expect(content.width).toBeLessThanOrEqual(1120.5)
+      expect(content.width).toBeLessThanOrEqual(1200.5)
       expect(content.x).toBeGreaterThanOrEqual(main.x + 32)
       expect(content.x + content.width).toBeLessThanOrEqual(main.x + main.width - 32)
-      const heading = await bounds(page.locator(route === 'codex' ? '.cx-header-tabs' : '.titlebar-left'))
-      expect(Math.abs(heading.x - content.x)).toBeLessThanOrEqual(1)
+      // 页名与条数住在 34px 标题栏，左缘压在正文那条列上；页级动作仍住内容区页头。
+      const crumb = await bounds(page.locator('.titlebar-crumb'))
+      expect(Math.abs(crumb.x - content.x)).toBeLessThanOrEqual(1)
+      expect(crumb.y + crumb.height).toBeLessThanOrEqual(34)
+      const heading = await bounds(page.locator(route === 'codex' ? '.cx-header-tabs' : '#workspace-page-toolbar'))
+      expect(heading.y).toBeGreaterThanOrEqual(34)
       const actions = await bounds(toolbar.locator('.page-actions'))
-      expect(actions.x + actions.width).toBeLessThanOrEqual(content.x + content.width + 1)
-      expect(actions.x + actions.width).toBeLessThanOrEqual((await bounds(page.locator('.titlebar-buttons'))).x - 11)
-      expect((await bounds(toolbar)).y).toBe(0)
-      expect(actions.y + actions.height).toBeLessThanOrEqual(48)
+      // 页头比正文多留一档滚动条（--scrollbar-track），右侧允许 9px 余量。
+      expect(actions.x + actions.width).toBeLessThanOrEqual(content.x + content.width + 9)
+      // 页级动作住在内容区页头，窗口按钮在 34px 标题栏，两者不再共用一条带子。
+      expect((await bounds(toolbar)).y).toBeGreaterThanOrEqual(34)
+      expect(actions.y).toBeGreaterThanOrEqual(34)
       if (route !== 'mfa') {
         const search = await bounds((route === 'codex' ? page.locator('#codex-view-filters') : toolbar).locator('.search-box'))
-        // 全模块共用同一条阅读列，比较的是搜索框在列内的起始偏移。
-        const offset = search.x - content.x
-        if (searchOffset === undefined) searchOffset = offset
         if (route === 'codex') {
+          // 搜索与筛选搬进页头当第二排：左缘仍与正文同一条列，纵向落在页签那一排之下。
           expect(search.x).toBe(content.x)
-          expect(search.y).toBeGreaterThanOrEqual(48)
-          await expect(toolbar.locator('.search-box')).toHaveCount(0)
-        } else expect(Math.abs(offset - searchOffset)).toBeLessThanOrEqual(1)
+          expect(search.y).toBeGreaterThanOrEqual(heading.y + heading.height)
+          await expect(toolbar.locator('#codex-view-filters .search-box')).toHaveCount(1)
+        } else {
+          // 一排两端都有落点：本页主动作在左轴，搜索与工具钮收到右缘。
+          // 谁在左谁在右由各页自己决定（文件快捷与验证码把动作组放在左轴），
+          // 所以判据只量「互不压住」，不再量谁在谁的右边。
+          expect(search.y).toBeGreaterThanOrEqual(34)
+          const crowded = await toolbar.evaluate((el) => {
+            const box = el.querySelector('.search-box')!.getBoundingClientRect()
+            return Array.from(el.querySelectorAll('.page-bar > *'))
+              .filter((other) => !other.classList.contains('search-box'))
+              .some((other) => {
+                const r = other.getBoundingClientRect()
+                return r.width > 0 && box.x < r.right - 1 && box.right > r.x + 1
+              })
+          })
+          expect(crowded, `${route} 搜索与同排控件压在一起`).toBe(false)
+        }
         // 工具条档搜索框 flex: 1 1 120px、max-width: 360px（CodexWorkspace 顶栏改版后的档位）。
         expect(search.width).toBeLessThanOrEqual(360.5)
         expect(search.width).toBeGreaterThanOrEqual(120)
       }
       if (route === 'notes' || route === 'entries') {
-        const workbar = page.locator('.workspace-workbar')
+        // 视图页签整条搬进页头：与本页主动作同一排，正文前不再另起一条 42px 工作栏。
+        const workbar = page.locator('#workspace-page-toolbar .workspace-workbar')
         const bar = await bounds(workbar)
-        expect(bar.height).toBe(42)
-        expect(bar.x).toBe(content.x)
-        expect(bar.width).toBe(content.width)
+        const lead = await bounds(page.locator('#workspace-page-toolbar .page-lead'))
+        expect(bar.height).toBe(32)
+        expect(lead.x).toBe(content.x)
+        // 「写小记」在窄档让位给标签入口（NotesModule 的 860 档），那时工作栏就是左轴第一件。
+        expect(bar.x).toBeGreaterThanOrEqual(lead.x)
+        expect(bar.x + bar.width).toBeLessThanOrEqual(content.x + content.width + 9)
         expect(await workbar.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(false)
+        await expect(page.locator('.workspace-workbar')).toHaveCount(1)
         await expect(page.locator('.workspace-directory')).toBeHidden()
         await expect(page.locator('#workspace-directory-toggle')).toHaveCount(0)
       }
@@ -209,8 +232,9 @@ test('800px Codex 长标签和排序不会溢出，筛选与账号操作仍可�
   await expect(page.locator('.web-running')).toBeVisible()
   await expect.poll(async () => {
     const actions = await bounds(page.locator('#workspace-page-toolbar .page-actions'))
-    const controls = await bounds(page.locator('.titlebar-buttons'))
-    return actions.x + actions.width <= controls.x - 11 && actions.y + actions.height <= 48
+    // 页级动作住在内容区页头，不再和标题栏的窗口按钮抢同一条带子；
+    // 越界只可能发生在内容面里，所以量的是「不出内容面」而不是「不压窗口按钮」。
+    return actions.x + actions.width <= pane.x + pane.width - 16 && actions.y >= 34
   }).toBe(true)
   await page.getByRole('button', { name: '添加账号', exact: true }).click()
   await expect(page.locator('.dialog:visible h3')).toContainText('添加 Codex 账号')

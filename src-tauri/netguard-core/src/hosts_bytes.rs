@@ -1,4 +1,5 @@
-use crate::{apply_pins, parse_managed, Pin, HOSTS_BEGIN, HOSTS_END};
+use crate::{apply_pins, parse_managed, Pin, TaskItem, HOSTS_BEGIN, HOSTS_END};
+use std::collections::BTreeMap;
 use std::ops::Range;
 
 // 标记与记录都是 ASCII；按原始字节定位，不能用 lossy 文本的偏移切 GBK 文件。
@@ -55,11 +56,71 @@ pub fn restore_managed_bytes(current: &[u8], backup: &[u8]) -> Result<Vec<u8>, S
     replace_block(current, block)
 }
 
+/// 只更新指定的托管域名；清理历史备份时也使用同一套规则，避免日后撤销复活已移除目标。
+pub fn replace_managed_hosts_bytes(bytes: &[u8], replacements: &BTreeMap<String, Option<String>>) -> Result<Vec<u8>, String> {
+    let mut entries = parse_managed(&String::from_utf8_lossy(bytes))?;
+    let before = entries.clone();
+    for (host, address) in replacements {
+        entries.remove(&host.to_lowercase());
+        if let Some(address) = address {
+            // 沿用写入校验，禁止原记录或任务书注入额外 hosts 行。
+            apply_pins("", &[Pin { host: host.clone(), address: address.clone() }])?;
+            entries.insert(host.to_lowercase(), address.clone());
+        }
+    }
+    if entries == before { return Ok(bytes.to_vec()); }
+    let eol = if bytes.windows(2).any(|w| w == b"\r\n") { "\r\n" } else { "\n" };
+    let block = if entries.is_empty() { String::new() } else {
+        format!("{HOSTS_BEGIN}{eol}{}{HOSTS_END}{eol}", entries.iter().map(|(host, ip)| format!("{ip} {host}{eol}")).collect::<String>())
+    };
+    replace_block(bytes, block.as_bytes())
+}
+
+pub fn cleanup_hosts_bytes(bytes: &[u8], items: &[TaskItem]) -> Result<Vec<u8>, String> {
+    let entries = parse_managed(&String::from_utf8_lossy(bytes))?;
+    let mut replacements = BTreeMap::new();
+    for item in items {
+        if let TaskItem::CleanupHost { host, address, original, .. } = item {
+            let current = entries.get(&host.to_lowercase());
+            if current == original.as_ref() { continue; } // 已完成的清理可安全重试。
+            if current != Some(address) { return Err(format!("{host} 的 hosts 配置已变化，尚未移除，请重新检查")); }
+            replacements.insert(host.to_lowercase(), original.clone());
+        }
+    }
+    replace_managed_hosts_bytes(bytes, &replacements)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn pin() -> Pin { Pin { host: "a.example.com".into(), address: "10.0.0.2".into() } }
+
+    #[test]
+    fn cleanup_removes_only_the_selected_managed_host_and_preserves_raw_bytes() {
+        let bytes = [b"# header: \xff\r\n127.0.0.1 localhost\n".as_slice(), format!("{HOSTS_BEGIN}\r\n10.0.0.2 a.example.com\r\n10.0.0.3 b.example.com\r\n{HOSTS_END}\r\n").as_bytes(), b"10.0.0.9 outside.example.com\n"].concat();
+        let item = TaskItem::CleanupHost { id: "a".into(), host: "a.example.com".into(), address: "10.0.0.2".into(), original: None };
+        let result = cleanup_hosts_bytes(&bytes, &[item.clone()]).unwrap();
+        assert!(result.starts_with(b"# header: \xff\r\n127.0.0.1 localhost\n"));
+        assert!(result.ends_with(b"10.0.0.9 outside.example.com\n"));
+        let entries = parse_managed(&String::from_utf8_lossy(&result)).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries.get("b.example.com").unwrap(), "10.0.0.3");
+        assert_eq!(cleanup_hosts_bytes(&result, &[item]).unwrap(), result);
+    }
+
+    #[test]
+    fn cleanup_restores_the_original_pin_and_refuses_to_overwrite_external_changes() {
+        let bytes = format!("{HOSTS_BEGIN}\n10.0.0.2 a.example.com\n{HOSTS_END}\n");
+        let item = TaskItem::CleanupHost { id: "a".into(), host: "a.example.com".into(), address: "10.0.0.2".into(), original: Some("10.0.0.1".into()) };
+        let result = cleanup_hosts_bytes(bytes.as_bytes(), &[item.clone()]).unwrap();
+        assert_eq!(parse_managed(&String::from_utf8_lossy(&result)).unwrap()["a.example.com"], "10.0.0.1");
+        assert_eq!(cleanup_hosts_bytes(&result, &[item.clone()]).unwrap(), result);
+        let changed = bytes.replace("10.0.0.2", "10.0.0.99");
+        assert!(cleanup_hosts_bytes(changed.as_bytes(), &[item]).is_err());
+        let result = replace_managed_hosts_bytes(bytes.as_bytes(), &BTreeMap::from([("a.example.com".into(), None)])).unwrap();
+        assert!(result.is_empty());
+    }
 
     #[test]
     fn writing_preserves_non_utf8_comments_and_mixed_line_endings() {

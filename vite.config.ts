@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
   const isE2E = mode === 'e2e'
   return {
     plugins: [vue()],
+    // 开发窗口与 e2e 服务同时运行，分别保存预编译缓存，避免互相替换依赖文件。
+    cacheDir: `node_modules/.vite/${mode}`,
+    optimizeDeps: { include: ['@tiptap/pm/history'] },
     clearScreen: false,
     resolve: {
       alias: isE2E

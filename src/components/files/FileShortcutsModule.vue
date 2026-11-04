@@ -360,7 +360,7 @@ watchEffect(() => {
         </button>
       </div>
       <div v-if="!webRuntime" class="page-actions">
-        <CreateAction label="添加快捷方式" @click="showAddDialog = true" />
+        <CreateAction v-if="loading || loadError || totalShortcuts > 0 || searchKeyword" label="添加快捷方式" @click="showAddDialog = true" />
       </div>
     </div>
     </Teleport>
@@ -445,12 +445,15 @@ watchEffect(() => {
       <button class="btn-secondary retry-btn" @click="emit('retryLoad')">重试</button>
     </div>
 
-    <div v-else class="empty-state" :class="{ 'is-filter': !!searchKeyword }">
-      <div class="empty-icon">
-        <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navFiles'" :size="24" />
+    <div v-else class="empty-state module-empty-state" :class="{ 'is-filter': !!searchKeyword }">
+      <div class="empty-icon"><AppIcon :name="searchKeyword ? 'searchEmpty' : 'navFiles'" :size="24" /></div>
+      <h2 class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无快捷方式' }}</h2>
+      <p class="empty-desc">{{ searchKeyword ? '换个关键词，或查看全部快捷方式。' : webRuntime ? '请在桌面端添加文件快捷方式，之后可在这里访问。' : '固定常用文件和文件夹，省去逐层查找。' }}</p>
+      <div v-if="searchKeyword || !webRuntime" class="empty-actions">
+        <button v-if="searchKeyword" class="btn-secondary" type="button" @click="emit('update:searchKeyword', '')">查看全部快捷方式</button>
+        <button v-else class="btn-primary" type="button" @click="showAddDialog = true"><AppIcon name="plus" :size="14" />添加第一个快捷方式</button>
       </div>
-      <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无快捷方式' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : webRuntime ? '请在桌面端添加文件快捷方式' : '点击「添加快捷方式」开始' }}</div>
+      <p v-if="!searchKeyword && !webRuntime" class="empty-note">仅保存路径，不移动原文件</p>
     </div>
 
     <!-- Add/Edit Dialog：与收藏表单弹窗同一套骨架（居中悬浮 + 42px 头 + 32px 字段轴 + 46px 底栏带快捷键徽标） -->

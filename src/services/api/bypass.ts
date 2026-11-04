@@ -144,11 +144,12 @@ export const bypassApi = {
   recheck: (id: string, requestId?: string): Promise<ProbeReport> => invoke('bypass_recheck', { id, requestId }),
   /** 改这条的原文，按新原文重探并覆盖回原行 */
   edit: (id: string, input: string, requestId?: string): Promise<ProbeReport> => invoke('bypass_edit', { id, input, requestId }),
-  remove: (id: string): Promise<void> => invoke('bypass_delete', { id }),
+  /** 清理自建且未共用的配置后删除记录；false 表示取消管理员授权。 */
+  remove: (id: string): Promise<boolean> => invoke('bypass_delete', { id }),
   /** 落盘计划：逐条列出要往系统里写什么，只读路由表，不提权。allowCdn = 用户坚持要钉的 CDN 条目 */
-  plan: (allowCdn: string[], routeOverrides: RouteOverride[] = []): Promise<ApplyPlan> => invoke('bypass_plan', { allowCdn, routeOverrides }),
+  plan: (allowCdn: string[], routeOverrides: RouteOverride[] = [], targetId?: string): Promise<ApplyPlan> => invoke('bypass_plan', { allowCdn, routeOverrides, targetId }),
   /** 一批落盘：一批共用一次 UAC */
-  apply: (allowCdn: string[], routeOverrides: RouteOverride[], expectedPlanKey: string): Promise<ApplyOutcome> => invoke('bypass_apply', { allowCdn, routeOverrides, expectedPlanKey }),
+  apply: (allowCdn: string[], routeOverrides: RouteOverride[], expectedPlanKey: string, targetId?: string): Promise<ApplyOutcome> => invoke('bypass_apply', { allowCdn, routeOverrides, expectedPlanKey, targetId }),
   /** 按回滚点撤销一批 */
   revert: (batch: string): Promise<ApplyOutcome> => invoke('bypass_revert', { batch }),
   /** 有回滚点时回批次 id，没有回空串 */

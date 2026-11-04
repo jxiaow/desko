@@ -39,7 +39,7 @@ function scheduleDayRefresh() {
   }, next.getTime() - now.getTime() + 100)
 }
 onUnmounted(() => clearTimeout(dayTimer))
-usePageAutoRefresh(loadUsage, () => usageBusy.value, { immediate: true })
+usePageAutoRefresh(() => loadUsage({ preferCache: true }), () => usageBusy.value, { immediate: true })
 
 const num = (v: number) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 const days = computed(() => usageReport.value?.byDay.slice(-30) ?? [])
@@ -84,7 +84,7 @@ function pct(part: number, whole: number): number {
 
 <template>
   <div class="usg-view" :aria-busy="usageBusy">
-    <div v-if="usageError && !totals" class="rcard empty-state">
+    <div v-if="usageError && !totals" class="empty-state module-empty-state">
       <div class="empty-icon"><AppIcon name="alert" :size="24" /></div>
       <h1 class="empty-title">读不到用量</h1>
       <div class="empty-desc" :title="usageError">{{ usageError }}</div>
@@ -125,7 +125,7 @@ function pct(part: number, whole: number): number {
       </section>
 
       <!-- 今日的空态由下面那张图表自己说，不再叠一块同样的白板。 -->
-      <div v-if="!days.length && usageReportRange !== 'today'" class="rcard empty-state">
+      <div v-if="!days.length && usageReportRange !== 'today'" class="empty-state module-empty-state compact-empty-state">
         <div class="empty-icon"><AppIcon name="clock" :size="24" /></div>
         <div class="empty-title">这段时间没有用量记录</div>
         <div class="empty-desc">切换时间范围查看其他日期。</div>

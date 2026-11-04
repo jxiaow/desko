@@ -600,7 +600,7 @@ describe('codexState 会话档', () => {
     expect(s.sessionTotalCount.value).toBe(1)
   })
 
-  it('首次按更新时间展开最近项目，手动收起后刷新保留，锁屏后重新选择最近项目', async () => {
+  it('首次显示全部目录，刷新保留筛选，锁屏清除筛选', async () => {
     const s = await loadState()
     const list = [
       { ...sessionRec('old-a'), cwd: 'C:\\a', updatedAt: 1 },
@@ -609,31 +609,31 @@ describe('codexState 会话档', () => {
     ]
     mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? list : [])
     await s.loadSessions()
-    expect([...s.sessionOpenGroups.value]).toEqual(['C:\\b'])
-    s.sessionOpenGroups.value = new Set()
+    expect(s.sessionDirectoryFilter.value).toBeNull()
+    s.sessionDirectoryFilter.value = 'C:\\a'
     await s.loadSessions({ background: true })
-    expect(s.sessionOpenGroups.value.size).toBe(0)
+    expect(s.sessionDirectoryFilter.value).toBe('C:\\a')
     s.clearCodexSession()
     await s.loadSessions()
-    expect([...s.sessionOpenGroups.value]).toEqual(['C:\\b'])
+    expect(s.sessionDirectoryFilter.value).toBeNull()
   })
 
-  it('空列表或读取失败后恢复目录，首次展开最近的未知目录组', async () => {
+  it('空列表或读取失败恢复后不自动筛选目录', async () => {
     const s = await loadState()
     mockInvoke.mockResolvedValueOnce([])
     await s.loadSessions()
     mockInvoke.mockRejectedValueOnce('目录暂不可读')
     await s.loadSessions()
-    expect(s.sessionOpenGroups.value.size).toBe(0)
+    expect(s.sessionDirectoryFilter.value).toBeNull()
     mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [
       { ...sessionRec('older'), cwd: 'C:\\older', updatedAt: 1 },
       { ...sessionRec('newer'), cwd: '  ', updatedAt: 2 },
     ] : [])
     await s.loadSessions()
-    expect([...s.sessionOpenGroups.value]).toEqual(['∅'])
+    expect(s.sessionDirectoryFilter.value).toBeNull()
   })
 
-  it('搜索和迟到的搜索结果不初始化展开态，清空后按全量目录选择最近项目', async () => {
+  it('搜索和迟到的搜索结果不自动选择目录', async () => {
     const s = await loadState()
     s.sessionQuery.value = '命中'
     let finish!: (value: unknown) => void
@@ -643,13 +643,13 @@ describe('codexState 会话档', () => {
     mockInvoke.mockResolvedValue([])
     finish([{ ...sessionRec('matched'), cwd: 'C:\\matched' }])
     await request
-    expect(s.sessionOpenGroups.value.size).toBe(0)
+    expect(s.sessionDirectoryFilter.value).toBeNull()
     mockInvoke.mockImplementation(async cmd => cmd === LIST_CMD ? [
       { ...sessionRec('recent'), cwd: 'C:\\recent', updatedAt: 2 },
       { ...sessionRec('matched'), cwd: 'C:\\matched' },
     ] : [])
     await s.loadSessions()
-    expect([...s.sessionOpenGroups.value]).toEqual(['C:\\recent'])
+    expect(s.sessionDirectoryFilter.value).toBeNull()
   })
 
   it('后台刷新保留旧读数直到新统计到手，目录暂不可读也不清空现有会话', async () => {
@@ -1029,6 +1029,31 @@ describe('codexState 用量档', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+  })
+
+  it('自动加载命中新鲜今日缓存时不重复扫描，手动刷新仍重新查询', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args))
+    await s.loadTodayUsage()
+    await s.loadUsage({ preferCache: true })
+    expect(callsOf(USAGE_CMD)).toHaveLength(1)
+    expect(s.usageReport.value?.totals.totalTokens).toBe(1000)
+    await s.loadUsage()
+    expect(callsOf(USAGE_CMD)).toHaveLength(2)
+  })
+
+  it('挂件已扫描的完整今日报告立即呈现，不等待后台全范围扫描', async () => {
+    const s = await loadState()
+    mockInvoke.mockImplementation(async (_cmd, args) => usageBatchFixture(args))
+    await s.loadTodayUsage()
+    let finish!: (value: any) => void
+    mockInvoke.mockImplementation((_cmd, args) => new Promise(resolve => { finish = () => resolve(usageBatchFixture(args)) }))
+    const pending = s.loadUsage()
+    expect(s.usageBusy.value).toBe(true)
+    expect(s.usageReport.value?.totals.totalTokens).toBe(1000)
+    finish(null)
+    await pending
+    expect(s.usageBusy.value).toBe(false)
   })
 
   it('今日用量直接借用用量页刚扫过的今日窗口，不再单独扫盘', async () => {

@@ -19,7 +19,7 @@ test.describe('导航与布局', () => {
     for (const [path, title] of [['entries', '网址收藏'], ['files', '文件快捷'], ['notes', '小记']]) {
       await page.locator(`a.nav-item[href="/${path}"]`).click()
       await expect(page).toHaveURL(new RegExp(`/${path}$`))
-      await expect(page.locator('.titlebar-outer .titlebar-brand')).toContainText(title)
+      await expect(page.locator('.titlebar-outer .titlebar-crumb')).toContainText(title)
       await expect(page.locator('.sidebar')).toBeVisible()
       if (path === 'files') await expect(page.locator('.empty-title')).toHaveText('暂无快捷方式')
     }
@@ -52,7 +52,7 @@ test.describe('导航与布局', () => {
     await bootUnlocked(page, { notes: [{ title: '目录快捷键', content_html: '<p>目录快捷键 #工作</p>' }] })
     await expect(page.locator('.workspace-directory')).toBeHidden()
     await expect(page.locator('.workspace-workbar')).toBeVisible()
-    await page.locator('.titlebar-brand').click()
+    await page.locator('.titlebar-drag').click()
     await page.keyboard.press('Control+b')
     await expect(page.locator('.workspace-directory')).toBeHidden()
     await page.locator('a.nav-item[href="/files"]').click()

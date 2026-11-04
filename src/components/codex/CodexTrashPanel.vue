@@ -164,14 +164,14 @@ function projectName(s: CodexTrashedSessionRecord): string {
       </div>
     </div>
 
-    <div v-else-if="failed" class="rcard empty-state">
+    <div v-else-if="failed" class="empty-state module-empty-state">
       <div class="empty-icon"><AppIcon name="alert" :size="24" /></div>
       <div class="empty-title">读不到回收站清单</div>
       <div class="empty-desc" :title="errorText">{{ errorText }}</div>
       <button class="action-btn primary" type="button" @click="reloadBoth">重试</button>
     </div>
 
-    <div v-else-if="!rows" class="rcard empty-state">
+    <div v-else-if="!rows" class="empty-state module-empty-state">
       <div class="empty-icon"><AppIcon name="trash" :size="24" /></div>
       <div class="empty-title">回收站是空的</div>
       <div class="empty-desc">已删除的账号和会话会显示在这里，可恢复或彻底删除。</div>

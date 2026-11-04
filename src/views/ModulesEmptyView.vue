@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive } from 'vue'
+import { computed, reactive } from 'vue'
 import AppIcon from '../components/shared/AppIcon.vue'
 import { usePageHeadStore } from '../stores/pageHead'
 import { useToastStore } from '../stores/toast'
 import { isWebRuntime } from '../services/runtime'
 import { MODULES, type ModuleId } from '../modules/registry'
 import { landingPath, moduleFlags } from '../modules/state'
-import { holdModuleLanding, toggleModule } from '../modules/runtime'
+import { toggleModule } from '../modules/runtime'
 import router, { EMPTY_PATH } from '../router'
 
 /** 零模块态：桌面是模块选择器，浏览器保留原空态 */
@@ -37,11 +37,9 @@ const toggle = async (id: ModuleId) => {
 }
 
 const enterWorkspace = () => {
-  if (enabledCount.value > 0) void router.replace(landingPath() ?? EMPTY_PATH)
+  if (enabledCount.value > 0 && pending.size === 0) void router.replace(landingPath() ?? EMPTY_PATH)
 }
 
-onMounted(() => { if (!webRuntime) holdModuleLanding(true) })
-onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
 </script>
 
 <template>
@@ -88,7 +86,7 @@ onUnmounted(() => { if (!webRuntime) holdModuleLanding(false) })
 
       <footer class="onb-footer">
         <span class="onb-count" aria-live="polite">{{ countText }}</span>
-        <button class="btn-primary onb-cta" type="button" :disabled="enabledCount === 0" @click="enterWorkspace">
+        <button class="btn-primary onb-cta" type="button" :disabled="enabledCount === 0 || pending.size > 0" @click="enterWorkspace">
           进入工作台
           <AppIcon name="arrowRight" :size="13" />
         </button>

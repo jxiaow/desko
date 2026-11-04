@@ -19,7 +19,8 @@ for (const width of [1100, 1440, 1920]) {
     await expect(page.locator('.titlebar-wordmark')).toBeVisible()
     await expect(page.locator('.titlebar-outer')).toHaveCSS('height', '64px')
     await expect(sidebar.locator('[aria-current="page"]')).toHaveAccessibleName('小记')
-    const heading = await page.locator('.titlebar-left').boundingBox()
+    // 页名在标题栏那一行，仍要与正文落在同一条阅读列左缘。
+    const heading = await page.locator('.titlebar-crumb').boundingBox()
     const composer = await page.locator('.composer').boundingBox()
     expect(Math.abs(heading!.x - composer!.x)).toBeLessThanOrEqual(1)
     await page.getByRole('button', { name: 'Desko 菜单', exact: true }).click()

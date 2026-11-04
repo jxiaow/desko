@@ -9,14 +9,10 @@ import { useAuthStore } from '../stores/auth'
 let stopSync: (() => void) | null = null
 let syncGeneration = 0
 let initialWebPath: string | null = isWebRuntime() ? window.location.pathname : null
-let landingHeld = false
 export function stopModuleSync(): void { syncGeneration++; stopSync?.(); stopSync = null }
 
-/** 首个模块选择页打开期间，启用模块不得把页面自动带走 */
-export function holdModuleLanding(hold: boolean): void { landingHeld = hold }
-
 const shouldAutoLand = (enabled: boolean, currentPath: string) =>
-  enabled && currentPath === EMPTY_PATH && !landingHeld
+  isWebRuntime() && enabled && currentPath === EMPTY_PATH
 export async function startModuleSync(): Promise<void> {
   if (stopSync) return
   const generation = ++syncGeneration

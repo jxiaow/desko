@@ -433,6 +433,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 
 <style scoped>
 .memo {
+  --memo-title-color: var(--text);
   position: relative;
   background: var(--bg-surface);
   /* 落地档：影归零，边界只交给一条发丝线（docs/design/notes/13-slip-landed.md §3）。
@@ -449,6 +450,10 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition);
   /* 点正文就是打开阅读：卡是摘要，读全文去阅读层 */
   cursor: pointer;
+}
+/* 浅色卡片标题用柔和深灰，层次仍由字号与字重承担。 */
+:global(:root[data-base="light"]) .memo {
+  --memo-title-color: color-mix(in srgb, var(--text) 35%, var(--text-secondary));
 }
 /* hover 只把线压深、不抬影也不洗底：摘掉影之后线是唯一的反馈，
    12% 一档撑不出「变了」，所以内容卡统一用 22%（--card-line-hover）。 */
@@ -473,10 +478,10 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 }
 /* 截断卡：末行往下压一档渐隐，说「下面还有内容」。
    遮罩作用在文字本身（mask 而非叠一层底色渐变），纸墨两底与任何卡面令牌都不用配色；
-   留 25% 底不遮到全透明，墨底末行才不至于整行消失。 */
+   末端降到 8% 不透明度，让截断处更明显地淡出；只影响最后 20px 的正文。 */
 .memo-body[data-clamped] {
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), rgba(0, 0, 0, 0.25) 100%);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), rgba(0, 0, 0, 0.25) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), rgba(0, 0, 0, 0.08) 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), rgba(0, 0, 0, 0.08) 100%);
 }
 /* 首块已提升为标题行：正文里藏掉它避免重复。用 display:none 而非删节点，
    保住 toggleTask「渲染序 == 库序」的 checkbox 对位 */
@@ -485,13 +490,13 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-body.promoted :deep(> :first-child + *) { margin-top: 0; }
 /* 没有真标题的卡（真机里的绝大多数）：首块就是这张纸片的标题。
    升不升由 noteDisplay 判（纯文字段落/标题、≤40 字、不含图片任务），
-   这里只负责落字——15/22 · 600 · --text，与 14/22 · 400 · --text-secondary 的正文差三档。 */
+   标题用 15/22 · 600，浅底降低颜色强度，仍与 14/22 · 400 的正文拉开层次。 */
 .memo-body.voice-first :deep(> :first-child) {
   font-size: 15px;
   line-height: 22px;
   font-weight: var(--weight-semibold);
   letter-spacing: -0.005em;
-  color: var(--text);
+  color: var(--memo-title-color);
 }
 
 /* 加密锁标识：整张卡退化成一条封条——锁徽 + 标题/提示 + 时间，一行读完。
@@ -522,7 +527,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 /* 标题与提示纵向成一段，和普通卡「标题行 + 正文首行」同一节奏 */
 .lock-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
 /* 锁着也认得出是哪条：只有真标题（h1–h3）会留明文，其余只剩提示语 */
-.locked-title { color: var(--text); font-size: var(--text-md); font-weight: 600; line-height: 24px; letter-spacing: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.locked-title { color: var(--memo-title-color); font-size: var(--text-md); font-weight: 600; line-height: 24px; letter-spacing: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .locked-hint { font-size: var(--text-sm); line-height: 19px; color: var(--text-muted); }
 /* 没有明文标题的老条目只剩这一句，它是整张卡唯一的字，不该按副标题的 13px 排 */
 .memo-locked:not(.has-title) .locked-hint { font-size: var(--text-base); color: var(--text-secondary); }
@@ -572,7 +577,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   line-height: 22px;
   font-weight: var(--weight-semibold);
   letter-spacing: -0.005em;
-  color: var(--text);
+  color: var(--memo-title-color);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

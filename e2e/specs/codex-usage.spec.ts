@@ -80,7 +80,6 @@ for (const width of [800, 1235]) {
     await expect(page.locator('.sess-billing dd')).toHaveText(['$2.53', '5'])
     await expect(page.locator('.grp-tok')).toContainText('请求 5 次')
     await expect(page.locator('.grp-tok')).toContainText('估算 $2.53')
-    if (await page.locator('.grp-head').getAttribute('aria-expanded') === 'false') await page.locator('.grp-head').click()
     await page.locator('.sess-row[data-sid="priced-today"]').click()
     const facts = page.locator('.sess-facts')
     await expect(facts.locator('div').filter({ has: page.getByText('请求数', { exact: true }) }).locator('dd')).toHaveText('3')

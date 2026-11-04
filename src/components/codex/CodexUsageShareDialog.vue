@@ -34,7 +34,7 @@ async function generate() {
   rendering.value = true
   error.value = ''
   try {
-    const blob = await renderUsagePoster(props.data, theme.value, showCost.value)
+    const blob = await renderUsagePoster(props.data, theme.value, showCost.value, getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())
     if (!active || current !== generation) return
     if (preview.value) URL.revokeObjectURL(preview.value)
     image.value = blob
@@ -140,7 +140,7 @@ async function copyImage() {
 <style scoped>
 .usage-share-dialog { width:min(740px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); }
 .usage-share-body { display:grid; grid-template-columns:minmax(0,1fr) 190px; gap:24px; min-height:0; overflow:auto; }
-.poster-preview { position:relative; display:flex; align-items:center; justify-content:center; min-width:0; aspect-ratio:3 / 4; background:var(--sunken); border-radius:var(--radius-sm); overflow:hidden; }
+.poster-preview { position:relative; display:flex; align-items:center; justify-content:center; min-width:0; aspect-ratio:9 / 10; background:var(--sunken); border-radius:var(--radius-sm); overflow:hidden; }
 .poster-preview img { display:block; width:100%; height:auto; }
 .poster-generating { position:absolute; inset:0; display:grid; place-items:center; background:color-mix(in srgb,var(--bg-surface) 75%,transparent); color:var(--text-secondary); font-size:var(--text-sm); }
 .poster-message { padding:20px; text-align:center; font-size:var(--text-sm); color:var(--text-secondary); }

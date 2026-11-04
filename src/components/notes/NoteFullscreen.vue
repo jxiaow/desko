@@ -18,7 +18,7 @@ import type { Note, Attachment } from '../../types'
 import { noteMeta, type NoteSaveState } from '../../stores/notes'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import { usePageActive } from '../../composables/usePageActive'
-import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
+import { useWorkspaceLayout, workspaceFsTarget } from '../layout/workspaceLayout'
 
 const props = withDefaults(defineProps<{
   /** null 表示这是一条还没发布的小记（从胶囊输入进入全屏） */
@@ -117,7 +117,6 @@ onMounted(() => {
 
 function trapFocus(event: KeyboardEvent) {
   if (event.defaultPrevented) return
-  // 标题栏中的操作与正文同属这个阅读面，Tab 顺序也要一起收拢。
   const roots = headerInTitlebar.value ? [headerRef.value!, surfaceRef.value!] : [surfaceRef.value!]
   const controls = roots.flatMap(root => Array.from(root.querySelectorAll<HTMLElement>(
     'button, a[href], input, textarea, select, [tabindex], [contenteditable="true"]',
@@ -134,11 +133,11 @@ function trapFocus(event: KeyboardEvent) {
 
 <template>
   <section ref="surfaceRef" class="fs" role="dialog" aria-modal="true" tabindex="-1" :aria-owns="headerInTitlebar ? 'note-fullscreen-toolbar' : undefined" :aria-label="viewMode ? '全屏查看小记' : props.note ? '全屏编辑小记' : '写一条小记'" @keydown.tab="trapFocus">
-    <Teleport :to="workspaceToolbarTarget" :disabled="!headerInTitlebar" defer>
-    <header id="note-fullscreen-toolbar" ref="headerRef" class="fs-head" data-workspace-heading="replace" data-workspace-toolbar="exclusive" :class="{ 'workspace-fs-head': headerInTitlebar, 'fs-reading-head': viewMode }" @mousedown="startDrag" @keydown.tab.stop="trapFocus">
+    <Teleport :to="workspaceFsTarget" :disabled="!headerInTitlebar" defer>
+    <header id="note-fullscreen-toolbar" ref="headerRef" class="fs-head" :class="{ 'workspace-fs-head': headerInTitlebar, 'fs-reading-head': viewMode }" @mousedown="startDrag" @keydown.tab.stop="trapFocus">
       <button class="fs-exit" type="button" title="退出全屏 (Esc)" @click="emit('close')">
         <AppIcon name="min" :size="13" />
-        退出全屏
+        <span>退出全屏</span>
       </button>
       <span v-if="!viewMode" class="save-hint" :class="props.saveState">
         {{ saveText[props.saveState] || (props.note ? '自动保存' : '未保存') }}<template v-if="props.note"> · {{ wordCount(text) }} 字</template>
@@ -171,19 +170,19 @@ function trapFocus(event: KeyboardEvent) {
           @delete="emit('delete')"
         />
         <button v-if="viewMode" class="bar-btn primary" type="button" title="进入全屏编辑" aria-label="编辑" @click="emit('edit')">
-          <AppIcon name="edit" :size="13" />编辑
+          <AppIcon name="edit" :size="13" /><span>编辑</span>
         </button>
         <button v-else class="bar-btn primary" type="button" title="完成编辑（自动保存）" aria-label="完成" @click="onPrimary">
-          <AppIcon name="check" :size="13" />完成
+          <AppIcon name="check" :size="13" /><span>完成</span>
         </button>
       </template>
       <!-- 新小记还没有可操作的小记对象：首栏只放提交，底栏只放写作工具 -->
       <template v-else-if="!viewMode">
         <button v-if="!empty" class="bar-btn" type="button" title="放弃这条小记" aria-label="放弃" @click="emit('discard')">
-          <AppIcon name="x" :size="13" />放弃
+          <AppIcon name="x" :size="13" /><span>放弃</span>
         </button>
         <button class="bar-btn primary" type="button" title="保存这条小记" aria-label="保存" :disabled="empty" @click="onPrimary">
-          <AppIcon name="check" :size="13" />保存
+          <AppIcon name="check" :size="13" /><span>保存</span>
         </button>
       </template>
     </header>
@@ -275,17 +274,21 @@ function trapFocus(event: KeyboardEvent) {
   margin: 0 auto;
   padding-inline: 0;
 }
-/* 桌面操作并入 48px 通栏顶栏；浏览器内保留同档的页内操作行。 */
+/* 非工作区布局保留页内操作行。 */
 .fs-head {
-  height: 48px;
+  min-height: 56px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding-inline: var(--space-5);
+  padding: 12px var(--workspace-gutter, var(--space-5));
 }
-.workspace-fs-head { flex: 1; min-width: 0; padding: 0; }
+/* 工作区操作仍在标题栏，48px 的栏高为 32px 按钮留出上下各 8px。 */
+.workspace-fs-head { flex: 1; min-width: 0; min-height: 0; height: 100%; padding: 0; }
 .workspace-fs-head :deep(button), .workspace-fs-head .save-hint { pointer-events: auto; }
+.fs-head :deep(button) { line-height: 1; }
+.fs-head :deep(button > svg) { display: block; flex-shrink: 0; }
+.fs-head button > span { display: block; line-height: 1; }
 /* 退出与阅读动作使用当前顶栏的 32px 控件档。 */
 .fs-exit {
   height: 32px;
@@ -395,7 +398,7 @@ function trapFocus(event: KeyboardEvent) {
 /* 副动作只留图标：28px 方块与卡片动作排同档；图标间多留 6px，
    让一排小钮不断成一块，主钮仍收在这一组的最右端 */
 .fs-head .bar-btn.bar-icon,
-.fs-head :deep(.bar-btn.more) { width: 28px; height: 28px; min-width: 28px; padding: 0; margin-inline: 3px; }
+.fs-head :deep(.bar-btn.more) { width: 32px; height: 32px; min-width: 32px; padding: 0; margin-inline: 3px; }
 .fs-head .bar-btn.primary { margin-left: 3px; }
 /* 置顶是状态不是主操作：只染字色，页头那一颗实心留给「编辑」；
    字色走 --text-brand，与目录选中态、主操作同一档可读色 */
@@ -403,13 +406,12 @@ function trapFocus(event: KeyboardEvent) {
 .fs-head .bar-btn.on:hover:not(:disabled) { background: var(--hover-chrome); color: var(--text-brand); }
 .fs-head .bar-btn.primary { background: var(--accent-soft); color: var(--text-brand); font-weight: 600; padding: 0 12px; }
 .fs-head .bar-btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text-brand); }
-/* 窄栏（800px 窗再带 Web/云徽标时首栏只剩 ~416px）放不下状态字：
+/* 窄屏首栏放不下状态字时：
    读写两态都让状态让位给动作，退出钮吃掉省下的 auto 外边距 */
 @container workspace-toolbar (max-width: 520px) {
   .workspace-fs-head .save-hint { display: none; }
   .workspace-fs-head .fs-exit { margin-right: auto; }
 }
-/* 页内首栏没有 workspace-toolbar 容器，同样在窄屏收掉状态字 */
 @media (max-width: 640px) {
   .fs-head { gap: var(--space-1); }
   .fs-head .save-hint { display: none; }

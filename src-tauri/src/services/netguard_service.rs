@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use netguard_core::{in_fake_ip, net, usable_v4, Mode, ReceiptFile, TaskFile, TaskItem, APPLY_BUDGET_MS};
+use netguard_core::{in_fake_ip, net, usable_v4, Mode, ReceiptFile, RouteBinding, TaskFile, TaskItem, APPLY_BUDGET_MS};
 
 use crate::db::BypassTarget;
 use crate::error::AppError;
@@ -19,6 +19,10 @@ pub fn plan_key(items: &[TaskItem]) -> Result<String, AppError> {
         TaskItem::Pin { id, host, address } => serde_json::json!(["pin", id, host.to_ascii_lowercase(), address]),
         TaskItem::Route { id, prefix, prefix_len, gateway, interface_index, .. } =>
             serde_json::json!(["route", id, prefix, prefix_len, gateway, interface_index]),
+        TaskItem::SwapRoute { id, desired, previous, desired_existed } =>
+            serde_json::json!(["swapRoute", id, desired, previous, desired_existed]),
+        TaskItem::CleanupHost { id, host, address, original } =>
+            serde_json::json!(["cleanupHost", id, host, address, original]),
     }.to_string()).collect();
     let bytes = serde_json::to_vec(&canonical).map_err(|e| AppError::Bypass(format!("配置方案无法校验：{e}")))?;
     Ok(Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect())
@@ -32,7 +36,7 @@ fn require_confirmed_plan(items: &[TaskItem], expected_key: &str) -> Result<(), 
 }
 
 /// 回滚点：一份 mode=revert 的任务书，撤销时原样再交给 helper
-fn batch_dir() -> PathBuf {
+pub(super) fn batch_dir() -> PathBuf {
     crate::paths::profile_root()
 }
 
@@ -138,7 +142,7 @@ pub fn cdn_gated(t: &BypassTarget, allow_cdn: &[String]) -> bool {
 }
 
 /// 条目 → (前缀, 掩码长度)。域名取其真址 /32，网段保留原掩码。
-fn route_prefix_of(t: &BypassTarget) -> Option<(String, u8)> {
+pub(super) fn route_prefix_of(t: &BypassTarget) -> Option<(String, u8)> {
     match t.kind.as_str() {
         "cidr" => {
             let (net, len) = t.host.split_once('/')?;
@@ -164,22 +168,24 @@ fn requires_route(verdict: &str, is_domain: bool, current_taker: Option<u32>) ->
 }
 
 /// 把「待写入」条目摊成落盘计划。只读路由表，不提权。
-pub fn plan(targets: &[BypassTarget], allow_cdn: &[String], route_overrides: &[RouteOverride]) -> (Vec<TaskItem>, Vec<PlannedRow>) {
-    plan_with_egress(targets, allow_cdn, route_overrides, taker_interface)
+pub fn plan(targets: &[BypassTarget], allow_cdn: &[String], route_overrides: &[RouteOverride], target_id: Option<&str>) -> (Vec<TaskItem>, Vec<PlannedRow>) {
+    plan_with_egress(targets, allow_cdn, route_overrides, target_id, taker_interface)
 }
 
 fn plan_with_egress(
     targets: &[BypassTarget], allow_cdn: &[String], route_overrides: &[RouteOverride],
+    target_id: Option<&str>,
     current_taker: impl Fn(&str) -> Option<u32>,
 ) -> (Vec<TaskItem>, Vec<PlannedRow>) {
     let mut items = Vec::new();
     let mut rows = Vec::new();
     for t in targets {
         let needs_pin = t.verdict == "hostsOnly" || t.verdict == "needRoute";
-        if !needs_pin {
+        let changing_route = target_id == Some(t.id.as_str());
+        if !needs_pin && !changing_route {
             continue;
         }
-        if cdn_gated(t, allow_cdn) {
+        if needs_pin && cdn_gated(t, allow_cdn) {
             rows.push(PlannedRow {
                 id: t.id.clone(),
                 label: t.host.clone(),
@@ -201,15 +207,17 @@ fn plan_with_egress(
                 });
                 continue;
             }
-            rows.push(PlannedRow {
-                id: t.id.clone(),
-                label: t.host.clone(),
-                action: format!("hosts 固定 {} → {}", t.host, t.address),
-                blocked: String::new(),
-                blocked_reason: None,
-                route_options: Vec::new(),
-            });
-            items.push(TaskItem::Pin { id: t.id.clone(), host: t.host.clone(), address: t.address.clone() });
+            if needs_pin {
+                rows.push(PlannedRow {
+                    id: t.id.clone(),
+                    label: t.host.clone(),
+                    action: format!("hosts 固定 {} → {}", t.host, t.address),
+                    blocked: String::new(),
+                    blocked_reason: None,
+                    route_options: Vec::new(),
+                });
+                items.push(TaskItem::Pin { id: t.id.clone(), host: t.host.clone(), address: t.address.clone() });
+            }
         }
         let Some((prefix, len)) = route_prefix_of(t) else {
             if !is_domain {
@@ -226,7 +234,7 @@ fn plan_with_egress(
         };
         // 网络可能在探测后变化。hostsOnly 也要读取当前出口，不能沿用过期结论漏配路由。
         let taker = current_taker(&prefix);
-        if !requires_route(t.verdict.as_str(), is_domain, taker) { continue; }
+        if !changing_route && !requires_route(t.verdict.as_str(), is_domain, taker) { continue; }
         let (automatic, route_options) = net::route_choices_for(
             prefix.parse().unwrap_or(std::net::Ipv4Addr::UNSPECIFIED), len, taker,
         );
@@ -274,14 +282,19 @@ fn plan_with_egress(
             blocked_reason: None,
             route_options,
         });
-        items.push(TaskItem::Route {
+        let route = TaskItem::Route {
             id: t.id.clone(),
             prefix,
             prefix_len: len,
             gateway: plan.gateway.to_string(),
             interface_index: plan.interface_index,
             interface_alias: plan.interface_alias,
-        });
+        };
+        let route = if changing_route { replacement_route(route) } else { route };
+        if let TaskItem::SwapRoute { previous, .. } = &route {
+            rows.last_mut().unwrap().action.push_str(&format!("；替换本功能原有的 {} 条同目标路由", previous.len()));
+        }
+        items.push(route);
     }
     filter_blocked_items(&mut items, &rows);
     let blocked_ids: std::collections::HashSet<String> = rows.iter().filter(|r| !r.blocked.is_empty()).map(|r| r.id.clone()).collect();
@@ -294,7 +307,45 @@ fn filter_blocked_items(items: &mut Vec<TaskItem>, rows: &[PlannedRow]) {
     items.retain(|item| !rows.iter().any(|r| r.id == item.id() && !r.blocked.is_empty()));
 }
 
-fn write_json(path: &Path, value: &impl serde::Serialize) -> Result<(), AppError> {
+pub(super) fn route_exists(route: &RouteBinding) -> bool {
+    match (route.prefix.parse(), route.gateway.parse()) {
+        (Ok(prefix), Ok(gateway)) => net::forward_exists(prefix, route.prefix_len, gateway, route.interface_index),
+        _ => false,
+    }
+}
+
+/// 按目标前缀从回滚点找已托管的路由，不依赖清单 id（移除后重新加入会换 id）。
+fn managed_routes_in(dir: &Path, desired: &RouteBinding, exists: impl Fn(&RouteBinding) -> bool) -> Vec<RouteBinding> {
+    let mut routes = std::collections::BTreeSet::new();
+    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        if !entry.file_name().to_string_lossy().starts_with("netguard-rollback-") { continue; }
+        let Some(task) = std::fs::read(entry.path()).ok().and_then(|bytes| serde_json::from_slice::<TaskFile>(&bytes).ok()) else { continue; };
+        for item in task.items {
+            let route = match item {
+                TaskItem::Route { prefix, prefix_len, gateway, interface_index, .. } => RouteBinding { prefix, prefix_len, gateway, interface_index },
+                TaskItem::SwapRoute { desired, desired_existed: false, .. } => desired,
+                _ => continue,
+            };
+            if route.prefix == desired.prefix && route.prefix_len == desired.prefix_len && route != *desired && exists(&route) {
+                routes.insert(route);
+            }
+        }
+    }
+    routes.into_iter().collect()
+}
+
+fn replacement_route(item: TaskItem) -> TaskItem {
+    let TaskItem::Route { id, prefix, prefix_len, gateway, interface_index, interface_alias } = item else { return item; };
+    let desired = RouteBinding { prefix, prefix_len, gateway, interface_index };
+    let previous = managed_routes_in(&batch_dir(), &desired, route_exists);
+    if previous.is_empty() {
+        TaskItem::Route { id, prefix: desired.prefix, prefix_len, gateway: desired.gateway, interface_index, interface_alias }
+    } else {
+        TaskItem::SwapRoute { id, desired_existed: route_exists(&desired), desired, previous }
+    }
+}
+
+pub(super) fn write_json(path: &Path, value: &impl serde::Serialize) -> Result<(), AppError> {
     let bytes = serde_json::to_vec_pretty(value)
         .map_err(|e| AppError::Bypass(format!("任务书序列化失败：{e}")))?;
     let tmp = path.with_extension("tmp");
@@ -309,7 +360,7 @@ fn read_receipt(path: &Path) -> Option<ReceiptFile> {
 
 /// 提权跑一批。阻塞到 helper 退出或超预算，调用方必须在 spawn_blocking 里跑，
 /// 且不得持着数据库锁——等 UAC 可以是分钟级。
-fn run_batch(items: Vec<TaskItem>, mode: Mode, batch: &str) -> Result<ApplyOutcome, AppError> {
+pub(super) fn run_batch(items: Vec<TaskItem>, mode: Mode, batch: &str) -> Result<ApplyOutcome, AppError> {
     let hosts = netguard_core::hosts_path();
     let task = TaskFile {
         batch_id: batch.to_string(),
@@ -333,6 +384,7 @@ fn run_batch(items: Vec<TaskItem>, mode: Mode, batch: &str) -> Result<ApplyOutco
                     let via = gateway.parse().ok();
                     !matches!((dest, via), (Some(dest), Some(via)) if net::forward_exists(dest, *prefix_len, via, *interface_index))
                 }
+                TaskItem::SwapRoute { .. } => true,
                 _ => false,
             }).cloned().collect(),
             ..task.clone()
@@ -500,8 +552,8 @@ fn wait_and_collect(_handle: isize, _receipt: &Path) -> Result<Option<ReceiptFil
 }
 
 /// 写入一批：任务书 = hosts 固定 + 路由绑定，一次 UAC 落完
-pub fn apply(targets: &[BypassTarget], allow_cdn: &[String], route_overrides: &[RouteOverride], batch: &str, expected_plan_key: &str) -> Result<ApplyOutcome, AppError> {
-    let (items, _) = plan(targets, allow_cdn, route_overrides);
+pub fn apply(targets: &[BypassTarget], allow_cdn: &[String], route_overrides: &[RouteOverride], batch: &str, expected_plan_key: &str, target_id: Option<&str>) -> Result<ApplyOutcome, AppError> {
+    let (items, _) = plan(targets, allow_cdn, route_overrides, target_id);
     require_confirmed_plan(&items, expected_plan_key)?;
     if items.is_empty() {
         return Ok(ApplyOutcome { batch_id: String::new(), cancelled: false, rolled_back: false, items: Vec::new(), error: String::new() });
@@ -584,7 +636,7 @@ fn rollback_task(task: &TaskFile, receipt: &ReceiptFile) -> TaskFile {
     TaskFile {
         mode: Mode::Revert,
         hosts_backup_path: if receipt.hosts_written && !receipt.hosts_restored { task.hosts_backup_path.clone() } else { String::new() },
-        items: task.items.iter().filter(|item| matches!(item, TaskItem::Route { .. })
+        items: task.items.iter().filter(|item| matches!(item, TaskItem::Route { .. } | TaskItem::SwapRoute { .. })
             && !receipt.reverted_routes.iter().any(|id| id == item.id())
             && receipt.items.iter().any(|r| r.id == item.id() && r.op == item.op_name() && r.changed)).cloned().collect(),
         ..task.clone()
@@ -692,6 +744,39 @@ mod tests {
     }
 
     #[test]
+    fn managed_route_discovery_survives_catalog_removal_and_ignores_other_prefixes_and_absent_routes() {
+        let dir = std::env::temp_dir().join(format!("desko-route-discovery-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let original = route("removed-catalog-id");
+        let mut checkpoint = task();
+        checkpoint.items = vec![original.clone(), original, pin("not-a-route")];
+        write_json(&dir.join("netguard-rollback-original.json"), &checkpoint).unwrap();
+        let desired = RouteBinding { prefix: "10.0.0.1".into(), prefix_len: 32, gateway: "192.168.2.1".into(), interface_index: 2 };
+        let previous = managed_routes_in(&dir, &desired, |_| true);
+        assert_eq!(previous.len(), 1);
+        assert_eq!(previous[0].interface_index, 1);
+        assert!(managed_routes_in(&dir, &desired, |_| false).is_empty());
+        assert!(managed_routes_in(&dir, &RouteBinding { prefix: "10.0.0.2".into(), ..desired.clone() }, |_| true).is_empty());
+        let swap = TaskItem::SwapRoute { id: "new-id".into(), desired: desired.clone(), previous, desired_existed: false };
+        let receipt = ReceiptFile { items: vec![netguard_core::ItemResult { id: "new-id".into(), op: "route".into(), ok: true, changed: true, error: String::new() }], ..Default::default() };
+        checkpoint.items = vec![swap.clone()];
+        let rollback = rollback_task(&checkpoint, &receipt);
+        assert_eq!(rollback.items, vec![swap.clone()]);
+        write_json(&dir.join("netguard-rollback-swap.json"), &rollback).unwrap();
+        let other = RouteBinding { gateway: "192.168.3.1".into(), interface_index: 3, ..desired.clone() };
+        assert_eq!(managed_routes_in(&dir, &other, |r| r == &desired), vec![desired.clone()]);
+        // 选中的新出口若原先由其他来源创建，替换历史不能把它变成本功能所有。
+        if let TaskItem::SwapRoute { desired_existed, .. } = &mut checkpoint.items[0] { *desired_existed = true; }
+        write_json(&dir.join("netguard-rollback-swap.json"), &checkpoint).unwrap();
+        assert!(managed_routes_in(&dir, &other, |r| r == &desired).is_empty());
+        let key = plan_key(&[swap.clone()]).unwrap();
+        let mut changed = swap;
+        if let TaskItem::SwapRoute { previous, .. } = &mut changed { previous.clear(); }
+        assert!(require_confirmed_plan(&[changed], &key).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn missing_and_fake_ip_addresses_are_blocked_before_elevation() {
         let t = BypassTarget {
             id: "x".into(), host: "a.example.com".into(), input: "a.example.com".into(), kind: "domain".into(),
@@ -701,15 +786,21 @@ mod tests {
             created_at: 0, updated_at: 0, checked_at: 0,
         };
         for address in ["", "198.18.0.2", "127.0.0.1", "not-an-ip"] {
-            let (items, rows) = plan_with_egress(&[BypassTarget { address: address.into(), ..t.clone() }], &[], &[], |_| None);
+            let (items, rows) = plan_with_egress(&[BypassTarget { address: address.into(), ..t.clone() }], &[], &[], None, |_| None);
             assert!(items.is_empty());
             assert_eq!(rows.len(), 1);
             assert!(!rows[0].blocked.is_empty());
         }
         let ready = BypassTarget { address: "10.0.0.1".into(), ..t };
-        let (items, rows) = plan_with_egress(&[ready], &[], &[], |_| None);
+        let (items, rows) = plan_with_egress(&[ready.clone()], &[], &[], None, |_| None);
         assert_eq!(items.len(), 1);
         assert!(rows[0].blocked.is_empty());
+        let direct = BypassTarget { verdict: "directOk".into(), apply_state: "applied".into(), ..ready };
+        let (items, rows) = plan_with_egress(&[direct.clone()], &[], &[], None, |_| None);
+        assert!(items.is_empty() && rows.is_empty());
+        let (items, rows) = plan_with_egress(&[direct], &[], &[], Some("x"), |_| None);
+        assert_eq!(rows.len(), 1, "explicit route changes must not skip direct targets");
+        assert!(items.iter().all(|item| item.op_name() == "route"), "a route change must not create a hosts pin");
     }
 
     #[test]

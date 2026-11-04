@@ -42,10 +42,13 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
           :data-tip="labelsVisible ? undefined : navLabel(m)"
         >
           <div class="nav-icon">
-            <AppIcon :name="m.icon" :size="20" />
+            <AppIcon :name="m.icon" :size="18" />
             <span v-if="m.live?.()" class="nav-live" aria-hidden="true"></span>
           </div>
-          <span v-if="labelsVisible" class="nav-text">{{ m.title }}</span>
+          <template v-if="labelsVisible">
+            <span class="nav-text">{{ m.title }}</span>
+            <span v-if="m.count?.()" class="nav-count" aria-hidden="true">{{ m.count() }}</span>
+          </template>
         </router-link>
       </div>
     </nav>
@@ -80,9 +83,12 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   flex-shrink: 0;
   position: relative;
 }
-/* 桌面端导轨光由 .app-root::before 整列一层提供（见 CodexWorkspace），
-   侧栏本体透明——fixed 附着层会从弹窗遮罩上穿出（WebView2）。 */
-.app-root:not(.web-runtime) .sidebar { background: transparent; }
+/* 桌面端侧栏是一块实底导轨：与正文同属一个应用，分层只由深一档的底色承担。
+   右缘原先还有一根比导轨本身更深的 1px 竖线，接触处叠成三刀，已撤。
+   不再透窗框光场——那样侧栏和正文会读成两个独立面板拼在一起。 */
+.app-root:not(.web-runtime) .sidebar {
+  background: var(--bg-rail, var(--bg-sheet));
+}
 .sidebar-nav {
   flex: 1;
   min-height: 0;
@@ -111,12 +117,12 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 11px;
+  gap: 10px;
   width: 100%;
-  height: 34px;
-  flex: 0 0 34px;
-  padding: 0 10px;
-  border-radius: 9px;
+  height: 32px;
+  flex: 0 0 32px;
+  padding: 0 8px 0 12px;
+  border-radius: 8px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: background-color var(--transition), color var(--transition);
@@ -129,19 +135,40 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--text-sm);
-  font-weight: 450;
+  font-weight: 400;
+  line-height: 20px;
+}
+.nav-text { flex: 1 1 auto; }
+/* 计数挂在模块名右端：导航行同时说清「这是什么」和「里面有多少」。
+   等宽数字，不跟着条目数变化抖动。 */
+.nav-count {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
   line-height: 20px;
 }
 .nav-item:hover:not(.active), .foot-item:hover { background: var(--hover-chrome); color: var(--text); }
-/* 激活项做成与浮片同材质的白片：导航与内容读作同一套层级，
-   不再用强调色底洗——一屏只剩一处彩色，留给品牌与图标。
-   不带投影：导轨上只有一层空气，片一凸起就变成「按钮」，整列跟着发重。 */
+/* 激活项不再铺一片白底：白片会和主浮片抢「浮起」的语义，一列六行看下来
+   像六个按钮。改成左端一根 2px 竖条 + 字重抬一档，读作「目录里的当前位置」。 */
 .nav-item.active {
-  background: var(--bg-surface);
+  background: transparent;
   color: var(--text);
   box-shadow: none;
 }
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
 .nav-item.active .nav-text { font-weight: 600; }
+.nav-item.active .nav-count { color: var(--text-muted); }
 .nav-item.active .nav-icon { color: var(--text-brand); }
 .nav-item:focus-visible, .foot-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
 .nav-icon, .foot-icon {
@@ -149,14 +176,14 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: var(--text-muted);
   transition: color var(--transition);
 }
 .nav-icon { position: relative; }
 .nav-item:hover .nav-icon, .foot-item:hover .foot-icon { color: var(--text-secondary); }
-.nav-icon svg, .foot-icon svg { width: 20px; height: 20px; }
+.nav-icon svg, .foot-icon svg { width: 18px; height: 18px; }
 .nav-live {
   position: absolute;
   top: 0;

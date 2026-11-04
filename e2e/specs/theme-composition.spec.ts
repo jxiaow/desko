@@ -2,10 +2,10 @@ import { test, expect, type Page } from '@playwright/test'
 import { bootUnlocked } from '../helpers'
 import { contrast, lab } from '../../scripts/lib/theme-tokens.mjs'
 
-/* 骨架契约（框 + 浮片）：
-   1. 柔光只染窗框——窗框是唯一的「光场」，浮片与卡片是实底，不随采光变化；
-   2. 三层明度各差一档：框（有色/更深） < 浮片 < 卡片；
-   3. 关掉柔光后窗框回到纯色，浮片与卡片纹丝不动。 */
+/* 骨架契约（导轨 + 通栏内容面）：
+   1. 导轨与内容面共享柔光，卡片保持实底；
+   2. 三层明度各差一档：导轨（比内容面降一档） < 内容面 < 卡片；
+   3. 关掉柔光后导轨与内容面回到纯色，卡片不变。 */
 const THEMES = ['paper', 'ink'] as const
 const ACCENTS = ['ink', 'indigo', 'plum', 'rose', 'brick', 'clay', 'amber', 'olive', 'celadon', 'teal', 'graphite', 'sand'] as const
 type RGB = [number, number, number]
@@ -48,16 +48,18 @@ async function renderedSurfaces(page: Page) {
     }
     return {
       // 窗框：左轨上/中段、标题栏带、浮片下沿与右沿
-      railTop: pixel(rail.right - 4, rail.y + 10),
+      railTop: meanPixel(rail.right - 4, rail.y + 10),
       railMid: pixel(rail.right - 4, rail.y + rail.height * .62),
       // 关灯后的「纯色」检查点取左轨内侧留白：浮片投影够不到这里。
-      railLeftTop: pixel(rail.x + 6, rail.y + rail.height * .2),
-      railLeftBottom: pixel(rail.x + 6, rail.y + rail.height * .9),
+      railLeftTop: meanPixel(rail.x + 6, rail.y + rail.height * .2),
+      railLeftBottom: meanPixel(rail.x + 6, rail.y + rail.height * .9),
       topStrip: pixel(surface.x + surface.width * .55, 12),
-      // 补光锚在右下角，取样贴住那个角，别取到中段的无光区。
-      bottomStrip: pixel(surface.right + 4, surface.bottom + 5),
-      rightStrip: pixel(surface.right + 5, surface.y + surface.height * .5),
-      // 浮片与卡片（都取中部平坦区）
+      // 内容面右下与侧栏共享同一个窗口坐标系的柔光。
+      bottomStrip: pixel(surface.right - 3, surface.bottom - 3),
+      rightStrip: pixel(surface.right - 3, surface.y + surface.height * .5),
+      seamRail: meanPixel(rail.right - 4, rail.y + rail.height * .62),
+      seamSheet: meanPixel(surface.x + 4, rail.y + rail.height * .62),
+      // 内容面与卡片（都取中部平坦区）
       sheet: meanPixel(main.x + main.width * .5, main.bottom - 60),
       card: pixel(card.right - 14, card.bottom - 14),
       composerBg: pixel(composer.x + 8, composer.y + composer.height / 2),
@@ -74,7 +76,7 @@ async function renderedSurfaces(page: Page) {
 }
 
 for (const theme of THEMES) {
-  test(`${theme}：柔光只染窗框，浮片与卡片实底不随采光变化`, async ({ page }, testInfo) => {
+  test(`${theme}：柔光跨越接缝，导轨与内容面自然分层、卡片保持实底`, async ({ page }, testInfo) => {
     test.setTimeout(90_000)
     await page.setViewportSize({ width: 1280, height: 760 })
     await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -107,10 +109,10 @@ for (const theme of THEMES) {
       // 1. 关掉柔光后窗框是一块纯色：左轨上下两端没有可见差异。
       expect(distance(flat.railLeftTop, flat.railLeftBottom), `${label} 关闭柔光后窗框同色`).toBeLessThan(1)
 
-      // 2. 浮片与卡片是实底：采光开关、换强调色都不改变它们。
-      if (sheetPaint) expect(distance(glow.sheet, sheetPaint), `${label} 浮片底色不随强调色变化`).toBeLessThan(1.2)
+      // 2. 内容面只接收轻微色光，卡片仍保持实底。
+      if (sheetPaint) expect(distance(glow.sheet, sheetPaint), `${label} 内容面染色克制`).toBeLessThan(4)
       else sheetPaint = glow.sheet
-      expect(distance(glow.sheet, flat.sheet), `${label} 浮片不吃窗框的柔光`).toBeLessThan(.8)
+      expect(distance(glow.sheet, flat.sheet), `${label} 内容面柔光不过量`).toBeLessThan(4)
       if (cardPaint) expect(distance(glow.card, cardPaint), `${label} 卡片底色不随强调色变化`).toBeLessThan(1.2)
       else cardPaint = glow.card
       expect(distance(glow.card, flat.card), `${label} 卡片不吃窗框的柔光`).toBeLessThan(.8)
@@ -120,20 +122,26 @@ for (const theme of THEMES) {
       expect(distance(glow.card, glow.sheet), `${label} 卡片浮在浮片上`).toBeGreaterThan(1)
       expect(lab(glow.card).L, `${label} 卡片比浮片亮`).toBeGreaterThan(lab(glow.sheet).L)
 
-      // 4. 采光只在窗框上发生，且有方向。
+      // 接缝只保留一档明度差，不能出现反向提亮或突兀色带。
+      expect(lab(glow.seamSheet).L - lab(glow.seamRail).L, `${label} 导轨比正文深`).toBeGreaterThan(.5)
+      expect(distance(glow.seamRail, glow.seamSheet), `${label} 接缝色差克制`).toBeLessThan(6)
+      expect(distance(glow.sheet, flat.sheet), `${label} 柔光延续到正文`).toBeGreaterThan(.2)
+
+      // 4. 降低柔光强度后仍可见，且保持色相。
       const upper = distance(glow.railTop, flat.railTop)
       const lower = distance(glow.bottomStrip, flat.bottomStrip)
       if (!neutral) {
-        expect(upper, `${label} 左上迎光端可见`).toBeGreaterThan(1.5)
-        expect(chromatic(glow.railTop.map((v, i) => v - flat.railTop[i]) as RGB), `${label} 迎光端是色光不是灰雾`).toBeGreaterThanOrEqual(2)
-        if (theme === 'paper') expect(lower, `${label} 右下补光可见`).toBeGreaterThan(1)
-        else expect(lab(glow.railTop).L - lab(glow.bottomStrip).L, `${label} 光轴自左上落向右下`).toBeGreaterThan(1.5)
+        expect(upper, `${label} 左上迎光端可见`).toBeGreaterThan(.5)
+        expect(chromatic(glow.railTop.map((v, i) => v - flat.railTop[i]) as RGB), `${label} 迎光端保留色光`).toBeGreaterThan(.3)
+        if (theme === 'paper') expect(lower, `${label} 右下补光可见`).toBeGreaterThan(.5)
+        // 浮片退役后窗框只剩左轨与顶带，右下没有一圈留白可当光轴的落点；
+        // 方向改在同一条导轨上量：迎光的顶端要比落进的底端更亮。
+        else expect(lab(glow.railTop).L - lab(glow.railLeftBottom).L, `${label} 光轴自上落向导轨底`).toBeGreaterThan(.5)
       } else {
         expect(chromatic(glow.railTop.map((v, i) => v - flat.railTop[i]) as RGB), `${label} 中性分支不引入彩色`).toBeLessThanOrEqual(5)
       }
 
-      // 左下角池：纸/墨都在导轨底部补一束光，托住设置行；关灯时的纯色已由第 1 条锁住。
-      expect(distance(glow.railLeftBottom, flat.railLeftBottom), `${label} 左下角池可见`).toBeGreaterThan(1.5)
+      expect(distance(glow.railLeftBottom, flat.railLeftBottom), `${label} 左下柔光可见`).toBeGreaterThan(.4)
 
       // 5. 正文与控件仍然可读，且与浮片无关。
       expect(contrast(glow.text, glow.card), `${label} 正文文字`).toBeGreaterThanOrEqual(4.5)
@@ -160,6 +168,7 @@ for (const theme of THEMES) {
       expect(distance(hover.card, glow.card), `${label} 悬停不改卡面实底`).toBeLessThan(1)
       await page.mouse.move(0, 0)
 
+      if (accent === 'indigo') await testInfo.attach(`${theme}-softlight`, { body: await page.screenshot({ path: testInfo.outputPath(`${theme}-softlight.png`) }), contentType: 'image/png' })
       measurements.push({ accent, upper: Math.round(upper * 10) / 10, lower: Math.round(lower * 10) / 10, sheet: distance(glow.sheet, flat.sheet) })
     }
     await testInfo.attach('frame-glow', { body: JSON.stringify(measurements), contentType: 'application/json' })
@@ -175,9 +184,9 @@ for (const width of [800, 1920]) {
     expect(await main.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(false)
     const surface = await page.locator('.workspace-surface').boundingBox()
     const rail = await page.locator('.sidebar').boundingBox()
-    // 浮片左沿与导航轨之间、右沿与窗口之间各留一圈窗框，右侧固定 10px。
-    expect(Math.round(surface!.x - (rail!.x + rail!.width))).toBe(8)
-    expect(Math.round(width - surface!.x - surface!.width)).toBe(10)
+    // 浮片退役：内容面与导轨边到边相接，四周不再有窗框留白；分界只由导轨那一档更深的底色交代。
+    expect(Math.round(surface!.x - (rail!.x + rail!.width))).toBe(0)
+    expect(Math.round(width - surface!.x - surface!.width)).toBe(0)
     await expect(page.locator('.search-box')).toBeInViewport()
     await expect(page.locator('.acc-row').first()).toBeInViewport()
     await expect(page.locator('.acc-row').last()).toBeInViewport()

@@ -146,7 +146,10 @@ const accountTag = ref('')
 const accountSort = ref<CodexAccountSort>('default')
 const showAccountFilters = computed(() => accounts.value.length > 1)
 const showSessionFilters = computed(() => sessionTotalCount.value > 1)
-const showUsageFilters = computed(() => !!usageReport.value?.totals.fileCount || !!usageError.value || usageRange.value !== 'today')
+/** 空用量不摆统计窗口；已经换了档或有错要复核时留着。 */
+const showUsageRanges = computed(() => !!usageReport.value?.totals.fileCount || !!usageError.value || usageRange.value !== 'today')
+/** 账号筛选占第二排；会话搜索和用量时间切换均与页签同排。 */
+const showFilterBand = computed(() => view.value === 'accounts' && showAccountFilters.value)
 const visibleAccounts = computed(() => filterCodexAccounts(accounts.value, {
   query: accountQuery.value, auth: accountAuth.value, status: accountStatus.value,
   tag: accountTag.value, sort: accountSort.value,
@@ -459,9 +462,9 @@ watchEffect(() => {
   if (view.value === 'accounts') {
     pageHead.setHead('Codex', `${accounts.value.length} 个`)
   } else if (view.value === 'sessions') {
-    pageHead.setHead('Codex 会话', `${sessions.value.length} 条`, '', true)
+    pageHead.setHead('Codex 会话', `${sessions.value.length} 条`)
   } else if (view.value === 'usage') {
-    pageHead.setHead('Codex 用量', `${usageReport.value?.totals.requestCount ?? 0} 次请求`, '', true)
+    pageHead.setHead('Codex 用量', `${usageReport.value?.totals.requestCount ?? 0} 次请求`)
   } else {
     pageHead.setHead('Codex 回收站', `${recycledAccounts.value.length} 个账号 · ${trashSessions.value.length} 条会话`)
   }
@@ -469,7 +472,7 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div class="content-inner">
+  <div class="content-inner codex-content">
     <div v-if="!loaded" class="rcard-list" aria-hidden="true">
       <div class="rcard rcard-row acc-sk" v-for="n in 3" :key="n">
         <span class="skeleton-block"></span>
@@ -478,90 +481,93 @@ watchEffect(() => {
     </div>
 
     <template v-else>
-      <div :id="workspaceLayout ? 'codex-view-filters' : undefined" class="page-bar" :class="{ 'cx-tabs-row': workspaceLayout }">
-        <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-        <nav class="cx-tabs" data-workspace-heading="replace" :class="{ 'cx-header-tabs': workspaceLayout }" aria-label="Codex 视图">
-          <button class="cx-tab" :class="{ active: view === 'accounts' }" :aria-pressed="view === 'accounts'" type="button" @click="view = 'accounts'">
-            账号
-          </button>
-          <button class="cx-tab" :class="{ active: view === 'sessions' }" :aria-pressed="view === 'sessions'" type="button" @click="view = 'sessions'">
-            会话
-          </button>
-          <button class="cx-tab" :class="{ active: view === 'usage' }" :aria-pressed="view === 'usage'" type="button" @click="view = 'usage'">
-            用量
-          </button>
-          <button class="cx-tab" :class="{ active: view === 'trash' }" :aria-pressed="view === 'trash'" type="button" @click="view = 'trash'">
-            回收站
-          </button>
-          <span v-if="workspaceLayout" class="cx-view-count" :title="pageHead.count">{{ pageHead.count }}</span>
-        </nav>
-        </Teleport>
+      <!-- 页头只有一条带子：第一排是视图页签与页级动作（用量页再带上统计窗口切换件），
+           账号搜索、筛选位于第二排，会话搜索与用量时间切换位于第一排。正文上方不再另起一行页栏——
+           那一行连同它上下 12px 的呼吸一起搬了进来。 -->
+      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
+      <nav class="cx-tabs" :class="{ 'cx-header-tabs': workspaceLayout }" aria-label="Codex 视图">
+        <button class="cx-tab" :class="{ active: view === 'accounts' }" :aria-pressed="view === 'accounts'" type="button" @click="view = 'accounts'">
+          账号
+        </button>
+        <button class="cx-tab" :class="{ active: view === 'sessions' }" :aria-pressed="view === 'sessions'" type="button" @click="view = 'sessions'">
+          会话
+        </button>
+        <button class="cx-tab" :class="{ active: view === 'usage' }" :aria-pressed="view === 'usage'" type="button" @click="view = 'usage'">
+          用量
+        </button>
+        <button class="cx-tab" :class="{ active: view === 'trash' }" :aria-pressed="view === 'trash'" type="button" @click="view = 'trash'">
+          回收站
+        </button>
+      </nav>
+      </Teleport>
 
-        <div v-if="workspaceLayout && view === 'accounts' && showAccountFilters" class="account-filters cx-tabs-filters">
-          <OptionSelect :model-value="accountAuth" aria-label="账号类型" :options="[
-            { value: 'all', label: '全部类型' }, { value: 'oauth', label: 'OAuth' }, { value: 'apikey', label: 'API Key' },
-          ]" @update:model-value="accountAuth = String($event) as CodexAccountAuthFilter" />
-          <OptionSelect :model-value="accountStatus" aria-label="账号状态" :options="[
-            { value: 'all', label: '全部状态' }, { value: 'attention', label: '需处理' },
-            { value: 'low', label: '低配额 ≤20%' }, { value: 'expired', label: '订阅已过期' },
-          ]" @update:model-value="accountStatus = String($event) as CodexAccountStatusFilter" />
-          <OptionSelect v-if="accountTags.length" :model-value="accountTag" aria-label="账号标签" :options="tagOptions" @update:model-value="accountTag = String($event)" />
-          <OptionSelect :model-value="accountSort" aria-label="账号排序" :options="[
-            { value: 'default', label: '默认排序' }, { value: 'quota', label: '可用配额优先' },
-            { value: 'recent', label: '最近使用优先' }, { value: 'name', label: '按名称排序' },
-          ]" @update:model-value="accountSort = String($event) as CodexAccountSort" />
-        </div>
-
-        <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-        <div class="cx-band-controls">
+      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
+      <div v-if="showFilterBand" :id="workspaceLayout ? 'codex-view-filters' : undefined" class="page-bar cx-tabs-row">
         <template v-if="view === 'accounts'">
-          <Teleport v-if="showAccountFilters" to="#codex-view-filters" :disabled="!workspaceLayout || !pageActive" defer>
           <div class="search-box">
             <span class="search-icon"><AppIcon name="search" :size="15" /></span>
             <input v-model="accountQuery" type="text" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
             <button v-if="accountQuery" class="search-clear" type="button" aria-label="清除账号搜索" @click="accountQuery = ''"><AppIcon name="x" :size="13" /></button>
           </div>
-          </Teleport>
-          <div class="page-actions">
-            <button class="btn-secondary bar-btn cx-compact-action" type="button" title="刷新配额" aria-label="刷新配额" :disabled="!accounts.length" @click="refreshQuotas(accounts.map((a) => a.id))">
-              <AppIcon name="refresh" :size="13" />
-              <span class="cx-action-label">刷新配额</span>
-            </button>
-            <button class="btn-secondary bar-btn cx-compact-action" type="button" :title="isBatchMode ? '退出选择' : '选择'" :aria-label="isBatchMode ? '退出选择' : '选择'" :disabled="!accounts.length" @click="togglePick">
-              <AppIcon :name="isBatchMode ? 'check' : 'checkall'" :size="13" />
-              <span class="cx-action-label">{{ isBatchMode ? '退出选择' : '选择' }}</span>
-            </button>
-            <CreateAction class="add-btn" label="添加账号" @click="openAddAuth" />
+          <div v-if="workspaceLayout" class="account-filters cx-tabs-filters">
+            <OptionSelect :model-value="accountAuth" aria-label="账号类型" :options="[
+              { value: 'all', label: '全部类型' }, { value: 'oauth', label: 'OAuth' }, { value: 'apikey', label: 'API Key' },
+            ]" @update:model-value="accountAuth = String($event) as CodexAccountAuthFilter" />
+            <OptionSelect :model-value="accountStatus" aria-label="账号状态" :options="[
+              { value: 'all', label: '全部状态' }, { value: 'attention', label: '需处理' },
+              { value: 'low', label: '低配额 ≤20%' }, { value: 'expired', label: '订阅已过期' },
+            ]" @update:model-value="accountStatus = String($event) as CodexAccountStatusFilter" />
+            <OptionSelect v-if="accountTags.length" :model-value="accountTag" aria-label="账号标签" :options="tagOptions" @update:model-value="accountTag = String($event)" />
+            <OptionSelect :model-value="accountSort" aria-label="账号排序" :options="[
+              { value: 'default', label: '默认排序' }, { value: 'quota', label: '可用配额优先' },
+              { value: 'recent', label: '最近使用优先' }, { value: 'name', label: '按名称排序' },
+            ]" @update:model-value="accountSort = String($event) as CodexAccountSort" />
           </div>
         </template>
 
+
+      </div>
+      </Teleport>
+
+      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
+      <div class="cx-band-controls">
+        <div v-if="view === 'accounts'" class="page-actions">
+          <button class="btn-secondary bar-btn cx-compact-action" type="button" title="刷新配额" aria-label="刷新配额" :disabled="!accounts.length" @click="refreshQuotas(accounts.map((a) => a.id))">
+            <AppIcon name="refresh" :size="13" />
+            <span class="cx-action-label">刷新配额</span>
+          </button>
+          <button class="btn-secondary bar-btn cx-compact-action" type="button" :title="isBatchMode ? '退出选择' : '选择'" :aria-label="isBatchMode ? '退出选择' : '选择'" :disabled="!accounts.length" @click="togglePick">
+            <AppIcon :name="isBatchMode ? 'check' : 'checkall'" :size="13" />
+            <span class="cx-action-label">{{ isBatchMode ? '退出选择' : '选择' }}</span>
+          </button>
+          <CreateAction v-if="accounts.length || accountsError" class="add-btn" label="添加账号" @click="openAddAuth" />
+        </div>
+
         <template v-else-if="view === 'sessions'">
-          <Teleport v-if="showSessionFilters" to="#codex-view-filters" :disabled="!workspaceLayout || !pageActive" defer>
-          <div class="session-search-mode seg" role="group" aria-label="会话搜索范围">
+          <div v-if="showSessionFilters" class="search-box session-search-box">
+            <div class="session-search-mode seg" role="group" aria-label="会话搜索范围">
             <button class="seg-btn" :class="{ on: sessionSearchMode === 'title' }" type="button" :aria-pressed="sessionSearchMode === 'title'" @click="sessionSearchMode = 'title'">标题</button>
             <button class="seg-btn" :class="{ on: sessionSearchMode === 'content' }" type="button" :aria-pressed="sessionSearchMode === 'content'" @click="sessionSearchMode = 'content'">正文</button>
           </div>
-          <div class="search-box">
             <span class="search-icon">
               <AppIcon name="search" :size="15" />
             </span>
-            <input v-model="sessionQuery" type="text" :placeholder="sessionSearchMode === 'title' ? '搜索会话标题…' : '搜索会话正文…'" :aria-label="sessionSearchMode === 'title' ? '搜索会话标题' : '搜索会话正文'" />
+            <input v-model="sessionQuery" type="text" :placeholder="sessionSearchMode === 'title' ? '搜索会话标题' : '搜索会话正文'" :aria-label="sessionSearchMode === 'title' ? '搜索会话标题' : '搜索会话正文'" />
             <button v-if="sessionQuery" class="search-clear" type="button" title="清除搜索" @click="sessionQuery = ''">
               <AppIcon name="x" :size="13" />
             </button>
           </div>
-          </Teleport>
-          <div class="page-actions">
-            <button class="btn-secondary bar-btn cx-refresh" type="button" aria-label="刷新" title="每 30 秒自动刷新" :disabled="sessionsBusy" @click="reloadSessions()">
-              <AppIcon name="refresh" :size="13" />
-              <span class="cx-action-label">刷新</span>
-            </button>
-          </div>
+        <div class="page-actions">
+          <button class="btn-secondary bar-btn cx-refresh" type="button" aria-label="刷新" title="每 30 秒自动刷新" :disabled="sessionsBusy" @click="reloadSessions()">
+            <AppIcon name="refresh" :size="13" />
+            <span class="cx-action-label">刷新</span>
+          </button>
+        </div>
         </template>
 
+        <!-- 统计窗口只有四颗切换件，与页签同排；不为它单独起第二排。 -->
         <template v-else-if="view === 'usage'">
-          <Teleport v-if="showUsageFilters" to="#codex-view-filters" :disabled="!workspaceLayout || !pageActive" defer>
-          <nav class="usage-ranges seg" aria-label="统计窗口" :style="{ '--range-index': USAGE_RANGES.findIndex(option => option.key === usageRange) }">
+          <nav v-if="showUsageRanges" class="usage-ranges seg" aria-label="统计窗口" :style="{ '--range-index': USAGE_RANGES.findIndex(option => option.key === usageRange) }">
             <span class="usage-range-thumb" aria-hidden="true" />
             <button
               v-for="option in USAGE_RANGES"
@@ -575,8 +581,7 @@ watchEffect(() => {
               {{ option.label }}
             </button>
           </nav>
-          </Teleport>
-          <div class="page-actions">
+          <div class="page-actions usage-actions">
             <button class="btn-secondary bar-btn" type="button" title="分享" aria-label="分享" :disabled="!canShareUsage" @click="shareUsage">
               <AppIcon name="image" :size="13" /><span class="cx-action-label">分享</span>
             </button>
@@ -587,17 +592,14 @@ watchEffect(() => {
           </div>
         </template>
 
-        <template v-else-if="view === 'trash'">
-          <div class="page-actions">
-            <button class="btn-secondary bar-btn cx-refresh" type="button" :disabled="trashBusy || recycledBusy" @click="reloadTrashBin">
-              <AppIcon name="refresh" :size="13" />
-              刷新
-            </button>
-          </div>
-        </template>
+        <div v-else class="page-actions">
+          <button class="btn-secondary bar-btn cx-refresh" type="button" :disabled="trashBusy || recycledBusy" @click="reloadTrashBin">
+            <AppIcon name="refresh" :size="13" />
+            刷新
+          </button>
         </div>
-        </Teleport>
       </div>
+      </Teleport>
 
       <CodexSessionsPanel v-if="view === 'sessions'" :locate-session-id="locateSessionId" @located="locateSessionId = ''" />
       <CodexUsagePanel v-else-if="view === 'usage'" @open-session="openUsageSession" />
@@ -630,16 +632,20 @@ watchEffect(() => {
         </p>
       </div>
 
-      <div v-if="view === 'accounts' && !accounts.length" class="rcard empty-state">
+      <div v-if="view === 'accounts' && !accounts.length" class="empty-state module-empty-state">
         <div class="empty-icon"><AppIcon name="navCodex" :size="24" /></div>
         <div class="empty-title">{{ accountsError ? '无法加载 Codex 账号' : '还没有 Codex 账号' }}</div>
-        <div class="empty-desc">{{ accountsError || '添加账号登录，或导入已有凭据' }}</div>
-        <button v-if="accountsError" class="action-btn" type="button" @click="refreshAccounts()">重试</button>
+        <div class="empty-desc">{{ accountsError || '登录或导入已有凭据，集中管理账号与配额。' }}</div>
+        <div class="empty-actions">
+          <button v-if="accountsError" class="btn-secondary" type="button" @click="refreshAccounts()">重试</button>
+          <button v-else class="btn-primary" type="button" @click="openAddAuth"><AppIcon name="plus" :size="14" />添加第一个账号</button>
+        </div>
       </div>
 
-      <div v-else-if="view === 'accounts' && !visibleAccounts.length" class="empty-state" :class="{ 'is-filter': accountFiltersActive }">
+      <div v-else-if="view === 'accounts' && !visibleAccounts.length" class="empty-state module-empty-state" :class="{ 'is-filter': accountFiltersActive }">
         <div class="empty-icon"><AppIcon name="searchEmpty" :size="24" /></div>
         <div class="empty-title">没有匹配的账号</div>
+        <p class="empty-desc">调整搜索或筛选条件，查看其他账号。</p>
         <button class="action-btn" type="button" @click="clearAccountFilters">清除筛选</button>
       </div>
 
@@ -828,6 +834,9 @@ watchEffect(() => {
 .session-search-mode > button:hover:not(.on), .usage-ranges > button:hover:not(.on) { color: var(--text-secondary); }
 .session-search-mode > button.on, .usage-ranges > button.on { background: var(--hover-chrome); color: var(--text); font-weight: 600; }
 .usage-ranges > button { justify-content:center; min-width:60px; padding:0 8px; font-size:var(--text-xs); }
+/* 切换件原先住在 56px 的筛选行，30＋2×2 的 34px 身高没问题；搬进 32px 的页头第一排
+   就上下各戳出 1px。收到 28 档，与页签、动作钮落在同一条等高线上。 */
+.cx-band-controls .usage-ranges > button { height: 28px; }
 .usage-ranges > button.on { background:transparent; font-weight:500; }
 @media (prefers-reduced-motion: reduce) { .usage-range-thumb { transition:none; } }
 /* 搜索框随工具栏伸缩，桌面使用共享上限，浏览器保留原有宽度。控制带行与页栏同族，一起认领。 */
@@ -842,16 +851,21 @@ watchEffect(() => {
   padding: 2px 0;
   margin-right: var(--space-2);
 }
-/* 工作区顶栏承载视图切换与操作，搜索和周期回到当前内容的筛选区。 */
+/* 工作区页头第一排：视图页签在左、页级动作在右；第二排是当前视图的搜索与筛选。 */
 .cx-band-controls { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; }
-.page-bar > .cx-band-controls { display: contents; }
-.account-filters.cx-tabs-filters { order: 1; flex: 0 0 auto; max-width: 100%; margin: 0; padding: 0; }
-.cx-band-controls > .usage-ranges { margin-left: 0; }
+.account-filters.cx-tabs-filters { flex: 0 0 auto; max-width: 100%; margin: 0; padding: 0; }
 @container codex-controls (max-width: 300px) {
   .cx-compact-action { --toolbar-action-padding: 0px; width: 32px; justify-content: center; }
   .cx-compact-action .cx-action-label { display: none; }
   #workspace-page-toolbar .page-actions { gap: 4px; }
   #workspace-page-toolbar .create-action { padding-inline: 10px; gap: 6px; }
+}
+/* 用量页的第一排比别的视图多一枚统计窗口切换件（246）：800 窗口里带子只剩 407，
+   页签＋切换件＋带标签的两颗动作钮要 657，切换件会被顶到页签底下互相盖住。
+   窄档先把动作收成图标（标题与可达名都在），把宽度还给切换件。 */
+@container codex-controls (max-width: 460px) {
+  .usage-actions .bar-btn { --toolbar-action-padding: 0px; width: 32px; justify-content: center; }
+  .usage-actions .cx-action-label { display: none; }
 }
 .account-summary-only { margin-bottom: var(--space-2); }
 .cx-tab {
@@ -883,12 +897,10 @@ watchEffect(() => {
   background: var(--accent);
 }
 
-/* 内容区只承载当前视图的筛选条件，搜索与账号筛选同行，空间不足时换行。 */
-.cx-tabs-row { position: static; min-height: 56px; padding: 12px 0; margin: 0; flex-wrap: wrap; justify-content: flex-start; gap: 8px; background: transparent; }
-.cx-tabs-row:empty { display: none; }
-.cx-tabs-row > .search-box { flex: 1 1 180px; min-width: 180px; max-width: var(--page-search-max); margin: 0; }
-.cx-tabs-row > .usage-ranges { margin-left: 0; }
-.cx-tabs-row:not(:empty) + :is(.rcard-list, .empty-state, .usg-view, .sess-view, .thr-view) { margin-top: var(--space-3); }
+/* 页头第二排：当前视图的搜索与筛选，控件与第一排同档（32px），
+   排与排之间的呼吸交给页头的 row-gap；窄窗放不下时这一排自己换行。 */
+.cx-tabs-row { position: static; margin: 0; padding: 0; gap: 8px; flex-wrap: wrap; background: transparent; }
+.cx-band-controls > .usage-ranges { margin-left: 0; }
 
 /* 页签统一点击区域与字距，保留下划线选中态，与顶栏的 32px 控件同高。 */
 #workspace-page-toolbar > .cx-header-tabs { height: 100%; gap: 4px; padding: 0; margin: 0 16px 0 0; pointer-events: none; }
@@ -1003,5 +1015,19 @@ watchEffect(() => {
   .acc-row:has(.pick-box) .acc-main { grid-column: 3; }
   .acc-row:has(.pick-box) .acc-acts { grid-column: 4; }
   .acc-row:has(.pick-box) .acc-quota { grid-column: 3 / -1; }
+}
+
+.codex-content > .rcard-list { margin-top: 0; }
+.session-search-box .session-search-mode { flex-shrink: 0; padding: 0 6px 0 0; margin-right: 4px; border-radius: 0; border-right: 1px solid var(--border); background: transparent; }
+.session-search-box .session-search-mode > button { height: 24px; padding: 0 7px; font-size: var(--text-xs); border-radius: 4px; }
+.session-search-box .search-icon { display: none; }
+.session-search-box input { min-width: 0; text-overflow: ellipsis; }
+.session-search-box input:focus { text-overflow: clip; }
+#workspace-page-toolbar .cx-band-controls > .session-search-box {
+  flex: 0 1 300px;
+  width: 300px;
+  min-width: 220px;
+  max-width: 300px;
+  margin-right: 0;
 }
 </style>

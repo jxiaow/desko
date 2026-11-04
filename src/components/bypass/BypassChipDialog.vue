@@ -10,7 +10,7 @@ defineProps<{
   note: string
   busy: boolean
 }>()
-const emit = defineEmits<{ close: []; edit: [value: string]; recheck: []; remove: [] }>()
+const emit = defineEmits<{ close: []; edit: [value: string]; recheck: []; remove: []; configure: [] }>()
 useEscapeClose(() => emit('close'))
 </script>
 
@@ -39,6 +39,7 @@ useEscapeClose(() => emit('close'))
           <AppIcon name="trash" :size="13" />
           移出清单
         </button>
+        <button class="btn-secondary" type="button" :disabled="busy" @click="emit('configure')">更换直连出口</button>
         <button class="btn-primary" type="button" :disabled="busy" @click="emit('recheck')">
           <AppIcon name="refresh" :size="13" />
           重新探测

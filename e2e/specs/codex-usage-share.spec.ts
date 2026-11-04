@@ -32,7 +32,7 @@ async function png(page: Page) {
     const canvas = document.createElement('canvas')
     canvas.width = 1; canvas.height = 1
     const ctx = canvas.getContext('2d')!
-    ctx.drawImage(bitmap, 0, 0)
+    ctx.drawImage(bitmap, 0, -20)
     const result = { width: bitmap.width, height: bitmap.height, bytes: bytes.length, signature: [...bytes.slice(0, 8)], background: [...ctx.getImageData(0, 0, 1, 1).data] }
     bitmap.close()
     return result
@@ -51,7 +51,7 @@ test('四种范围均能生成当前统计的 PNG，分享不重复查询用量'
     await page.getByRole('button', { name: range, exact: true }).click()
     const dialog = await openPoster(page)
     await expect(dialog.locator('.poster-summary')).toContainText(summary)
-    expect(await png(page)).toMatchObject({ width: 1080, height: 1440, signature: [137, 80, 78, 71, 13, 10, 26, 10] })
+    expect(await png(page)).toMatchObject({ width: 1080, height: 1200, signature: [137, 80, 78, 71, 13, 10, 26, 10] })
     await expect(dialog).not.toContainText('private@example.com')
     await expect(dialog).not.toContainText('不应公开的会话标题')
     await expect(dialog).not.toContainText('private-project')
@@ -177,4 +177,25 @@ test('锁定会关闭图片并释放预览图片', async ({ page }) => {
   await expect(dialog).toHaveCount(0)
   expect(await page.evaluate(async url => { try { await fetch(url!); return false } catch { return true } }, url)).toBe(true)
   await expect(page.locator('.poster-preview img')).toHaveCount(0)
+})
+
+test('海报使用当前强调色，切换强调色后重新生成', async ({ page }) => {
+  await boot(page)
+  const pixel = async () => page.locator('.poster-preview img').evaluate(async (image: HTMLImageElement) => {
+    const bitmap = await createImageBitmap(await (await fetch(image.src)).blob())
+    const canvas = document.createElement('canvas')
+    canvas.width = 1; canvas.height = 1
+    const ctx = canvas.getContext('2d')!
+    ctx.drawImage(bitmap, 0, 0)
+    const result = [...ctx.getImageData(0, 0, 1, 1).data]
+    bitmap.close()
+    return result
+  })
+  await page.evaluate(() => document.documentElement.style.setProperty('--accent', '#b04080'))
+  let dialog = await openPoster(page)
+  expect(await pixel()).toEqual([148, 54, 108, 255])
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.evaluate(() => document.documentElement.style.setProperty('--accent', '#208040'))
+  dialog = await openPoster(page)
+  expect(await pixel()).toEqual([27, 108, 54, 255])
 })

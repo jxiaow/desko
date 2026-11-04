@@ -9,14 +9,12 @@ export const usePageHeadStore = defineStore('pageHead', () => {
   const label = ref('')
   const count = ref('')
   const directoryLabel = ref('')
-  const headingInContent = ref(false)
 
-  const setHead = (nextLabel: string, nextCount = '', nextDirectoryLabel = '', nextHeadingInContent = false) => {
+  const setHead = (nextLabel: string, nextCount = '', nextDirectoryLabel = '') => {
     label.value = nextLabel
     count.value = nextCount
     directoryLabel.value = nextDirectoryLabel
-    headingInContent.value = nextHeadingInContent
   }
 
-  return { label, count, directoryLabel, headingInContent, setHead }
+  return { label, count, directoryLabel, setHead }
 })

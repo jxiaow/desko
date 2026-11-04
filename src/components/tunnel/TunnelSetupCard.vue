@@ -9,6 +9,7 @@ import AppIcon from '../shared/AppIcon.vue'
 import { openExternal } from '../../utils/openExternal'
 
 const props = defineProps<{
+  embedded?: boolean
   provision: TunnelProvision | null
   login: TunnelLogin
   binary: TunnelBinary | null
@@ -28,6 +29,7 @@ const acting = ref(false)
 const nameTakenText = ref('')
 /** 三步做完整卡收成一行；「调整」把它再摊开，改名字或重新授权用得着 */
 const expanded = ref(false)
+defineExpose({ open: () => { expanded.value = true } })
 
 /** 本机已记的值要在首帧就落在输入框里：空框会让人以为那一格还没做，然后写重复值 */
 const nameTouched = ref(false)
@@ -126,7 +128,7 @@ function revokeAuth() {
 </script>
 
 <template>
-  <section class="tn-card setup">
+  <section class="tn-card setup" :class="{ embedded }">
     <!-- 三步齐了只留一行：这一页的主角是服务列表，不是已经做完的准备 -->
     <div v-if="collapsed" class="tn-row">
       <span class="step-dot done"><AppIcon name="check" :size="11" /></span>
@@ -135,7 +137,7 @@ function revokeAuth() {
         {{ provision?.tunnelName }}<span v-if="shortId" class="tn-dim setup-id"> · {{ shortId }}… 本机持有</span>
         <span v-if="domain" class="tn-dim"> · {{ domain.name }}</span>
       </span>
-      <button class="btn-secondary row-btn" type="button" @click="expanded = true">
+      <button v-if="!embedded" class="btn-secondary row-btn" type="button" @click="expanded = true">
         <AppIcon name="adjustments" :size="12" />
         调整
       </button>
@@ -145,6 +147,7 @@ function revokeAuth() {
       <div class="tn-head">
         <h2>接入准备</h2>
         <span class="head-cnt">{{ reached }} / 3 已完成</span>
+        <button v-if="tunnelDone" class="btn-secondary row-btn tn-fold" type="button" @click="expanded = false"><AppIcon name="chevDown" class="fold-chevron" :size="14" /><span>收起</span></button>
       </div>
 
       <!-- 一：穿透程序。按固定版本拉、校验哈希，不随安装包分发 -->
@@ -258,7 +261,6 @@ function revokeAuth() {
 
       <div v-if="stepHint && !collapsed" class="tn-note">{{ stepHint }}</div>
 
-      <button v-if="tunnelDone" class="tn-fold" type="button" @click="expanded = false">收起</button>
     </template>
     <div v-if="domainError || (domain && domain.status !== 'active')" class="tn-note chip-warn">
       <AppIcon name="alert" :size="12" />
@@ -292,8 +294,8 @@ function revokeAuth() {
 .tn-input { width: min(100%, 260px); min-width: 0; height: 32px; padding: 0 10px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: var(--text-sm); font-family: var(--font-ui); transition: border-color var(--transition); }
 .tn-input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tn-input:disabled { color: var(--text-muted); background: var(--bg); }
-.tn-fold { align-self: flex-start; padding: 10px 20px 14px; background: none; border: none; color: var(--text-secondary); font-size: var(--text-xs); cursor: pointer; }
-.tn-fold:hover { color: var(--accent); }
+.tn-fold { display: inline-flex; align-items: center; justify-content: center; gap: 5px; margin-left: 12px; padding: 0 12px; }
+.fold-chevron { transform: rotate(180deg); }
 @media (max-width: 700px) {
   .setup .tn-head { padding-inline: 16px; }
   .setup .tn-row { padding: 14px 16px; flex-wrap: wrap; gap: 10px; }

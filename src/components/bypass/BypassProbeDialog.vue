@@ -175,7 +175,7 @@ async function copyConclusion() {
             {{ existing ? '更新清单' : '加入清单' }}
           </button>
           <button v-else-if="canConfigure" class="btn-primary" type="button" :disabled="busy" @click="emit('configure')">
-            配置直连{{ configureCount > 1 ? ` ${configureCount}` : '' }}
+            {{ report.verdict === 'directOk' ? '更换直连出口' : `配置直连${configureCount > 1 ? ` ${configureCount}` : ''}` }}
           </button>
         </div>
       </div>

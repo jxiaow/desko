@@ -9,18 +9,15 @@ const config = {
   codex: { sessions: [{ sessionId: 'first', title: '第一条会话', cwd: 'C:\\demo', input: 1000, output: 100, daysAgo: 0 }] },
 }
 
-test('会话首次展开最近项目，手动收起后自动刷新不展开，再次展开的详情随刷新保留', async ({ page }) => {
+test('会话默认平铺，自动刷新不打开详情，已选详情随刷新保留', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-13T04:00:00Z') })
   await bootUnlocked(page, config, '/codex')
   await page.getByRole('button', { name: '会话', exact: true }).click()
   await expect(page.locator('.hero-num')).toHaveText('1,100')
-  await expect(page.locator('.grp-head')).toHaveAttribute('aria-expanded', 'true')
-  await page.locator('.grp-head').click()
-  await expect(page.locator('.sess-row')).toHaveCount(0)
+  await expect(page.locator('.sess-detail')).toHaveCount(0)
   await page.clock.fastForward(30_000)
   expect(await e2e.count(page, LIST)).toBe(2)
-  await expect(page.locator('.grp-head')).toHaveAttribute('aria-expanded', 'false')
-  await page.locator('.grp-head').click()
+  await expect(page.locator('.sess-detail')).toHaveCount(0)
   await page.locator('.sess-row').click()
   await page.evaluate(config => window.__E2E__!.seed({ ...config, codex: { sessions: [
     { sessionId: 'first', title: '第一条会话已更新', cwd: 'C:\\demo', input: 2000, output: 200, daysAgo: 0 },
@@ -28,7 +25,6 @@ test('会话首次展开最近项目，手动收起后自动刷新不展开，�
   ] } }), config)
   await page.clock.fastForward(30_000)
   await expect(page.locator('.hero-num')).toHaveText('5,500')
-  await expect(page.locator('.grp-head')).toHaveAttribute('aria-expanded', 'true')
   await expect(page.locator('.sess-row[data-sid="first"]')).toHaveAttribute('aria-expanded', 'true')
   await expect(page.locator('.sess-row')).toHaveCount(2)
   await expect(page.locator('.sess-row[data-sid="first"]')).toContainText('第一条会话已更新')

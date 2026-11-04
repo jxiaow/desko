@@ -14,7 +14,6 @@ import NoteLockDialog from './NoteLockDialog.vue'
 import NoteExportController from './NoteExportController.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import PopoverMenu from '../shared/PopoverMenu.vue'
-import CreateAction from '../shared/CreateAction.vue'
 import { htmlToLinkText, htmlToText } from '../../utils/format'
 import { isPageShortcutBlocked } from '../../utils/pageShortcuts'
 import { attachmentSrc, collectAttachmentNames, type SaveImage } from '../../services/attachmentSrc'
@@ -60,9 +59,6 @@ const pageEl = ref<HTMLElement | null>(null)
 const railEl = ref<HTMLElement | null>(null)
 const railToggleEl = ref<HTMLButtonElement | null>(null)
 const searchEl = ref<HTMLInputElement | null>(null)
-const workbarEl = ref<HTMLElement | null>(null)
-const tabsEl = ref<HTMLElement | null>(null)
-const tagsEl = ref<HTMLElement | null>(null)
 const moreTagsOpen = ref(false)
 const moreTagsAnchor = ref<HTMLElement | null>(null)
 const tagQuery = ref('')
@@ -173,42 +169,23 @@ const draftText = computed(() => htmlToText(draftHtml.value))
 const draftEmpty = computed(() => !draftText.value.trim() && !collectAttachmentNames(draftHtml.value).length)
 /** 归档视图只读不回书写面：书写框收掉，页栏搜索改口径 */
 const isArchivedView = computed(() => noteView.value === 'archived')
-/** 分类栏标签「全显或全收」：整组放得下就全显，放不下就整组收成一枚入口。
- *  判据是实测宽度，不按视口档位猜个数——半截列表会让人以为标签只有这几个。 */
-const tagsFit = ref(true)
-let tagsFullWidth = 0
-/** 展开态量一次整组宽，收起态复用这个值：收起后 DOM 里只剩已选，当场再量会越量越窄 */
-async function remeasureTags() {
-  tagsFit.value = true
-  await nextTick()
-  const strip = tagsEl.value
-  if (strip) tagsFullWidth = strip.scrollWidth
-  decideTags()
-}
-function decideTags() {
-  const bar = workbarEl.value
-  const tabs = tabsEl.value
-  if (!bar || !tabs || !tagsFullWidth) return
-  // 分类栏 gap 20px 两段 + 1px 分隔符
-  const avail = bar.clientWidth - tabs.getBoundingClientRect().width - 41
-  tagsFit.value = tagsFullWidth <= avail
-}
-const visibleTagCounts = computed<[string, number][]>(() => tagsFit.value
-  ? tagCounts.value
-  : tagCounts.value.filter(([tag]) => activeTags.value.has(tag)))
-const hiddenTagCounts = computed(() => tagCounts.value.filter(([tag]) => !visibleTagCounts.value.some(([shown]) => shown === tag)))
-/* 标签名换了才作废重量：只改计数不重测，否则收起态下编辑一条小记
-   会让整组列表闪回一帧（remeasure 必须先摊开才量得到）。 */
-watch(() => tagCounts.value.map(([tag]) => tag).join('\n'), () => { void remeasureTags() })
-const filteredMoreTags = computed(() => {
+/** 标签筛选固定收成页头一枚下拉入口：这一排还要装四枚视图页签、搜索和工具钮，
+ *  摊开的标签条在默认 1040 窗只剩十几像素，永远只能露出半枚 chip——半截列表比下拉更糟。
+ *  入口计数写已选枚数（没选时写总数），谁在筛一眼可见；挑哪几枚在面板里勾。 */
+const tagsGroupShown = computed(() => !isArchivedView.value && tagCounts.value.length > 0)
+const tagEntryCount = computed(() => activeTags.value.size || tagCounts.value.length)
+const filteredTagCounts = computed(() => {
   const query = tagQuery.value.trim().toLowerCase()
-  return query ? hiddenTagCounts.value.filter(([tag]) => tag.toLowerCase().includes(query)) : hiddenTagCounts.value
+  return query ? tagCounts.value.filter(([tag]) => tag.toLowerCase().includes(query)) : tagCounts.value
 })
 const toggleMoreTags = (el: HTMLElement) => {
-  if (moreTagsOpen.value) { moreTagsOpen.value = false; return }
+  if (moreTagsOpen.value) { closeMoreTags(); return }
   moreTagsAnchor.value = el
   tagQuery.value = ''
   moreTagsOpen.value = true
+}
+function closeMoreTags() {
+  moreTagsOpen.value = false
 }
 /** 顶栏那个总数跟着视图走：归档行不该计进「全部」的条数里 */
 const headTotal = computed(() => (isArchivedView.value ? viewCounts.value.archived : viewCounts.value.all))
@@ -240,9 +217,6 @@ const afterPublish = async () => {
   await nextTick()
   composerRef.value?.focus()
 }
-
-/** 页头主钮：长列表滚下去后一键回到书写面（聚焦本身会把它带回视口） */
-const startWriting = () => composerRef.value?.focus()
 
 const publishDraft = async () => {
   const note = await publishNote(draftHtml.value)
@@ -426,7 +400,6 @@ watch(notes, () => {
 })
 
 let observer: ResizeObserver | null = null
-let workbarObserver: ResizeObserver | null = null
 let unlistenDrag: (() => void) | undefined
 onMounted(() => {
   document.addEventListener('keydown', onKeyDown)
@@ -441,15 +414,6 @@ onMounted(() => {
       if (active) unlistenDrag = unlisten
       else unlisten()
     })
-  }
-  // 分类栏：整组标签的宽力量一次，之后只按可用宽重算取舍，不再重排 DOM 重测
-  if (workspaceLayout) {
-    void remeasureTags()
-    const bar = workbarEl.value
-    if (bar) {
-      workbarObserver = new ResizeObserver(() => decideTags())
-      workbarObserver.observe(bar)
-    }
   }
   const root = pageEl.value
   if (!root || workspaceLayout) return
@@ -473,8 +437,6 @@ onBeforeUnmount(() => {
   unlistenDrag?.()
   observer?.disconnect()
   observer = null
-  workbarObserver?.disconnect()
-  workbarObserver = null
 })
 
 const pageHead = usePageHeadStore()
@@ -494,6 +456,35 @@ watchEffect(() => {
       <div class="stream-inner" @keydown="onStreamKeydown">
         <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
         <div class="page-bar">
+          <div class="page-lead">
+            <div v-if="workspaceLayout && !isWebRuntime() && showFilters" class="workspace-workbar notes-workbar">
+              <nav class="workspace-workbar-tabs" aria-label="小记视图">
+                <button
+                  v-for="v in VIEWS"
+                  :key="v.key"
+                  class="wb-tab"
+                  :class="{ active: noteView === v.key }"
+                  type="button"
+                  :aria-pressed="noteView === v.key"
+                  @click="selectView(v.key)"
+                >
+                  <span>{{ v.label }}</span>
+                  <span class="wb-count">{{ viewCounts[v.key] }}</span>
+                </button>
+              </nav>
+              <template v-if="tagsGroupShown">
+                <span class="wb-divider" aria-hidden="true"></span>
+                <button
+                  class="wb-tab wb-more"
+                  :class="{ active: activeTags.size > 0 }"
+                  type="button"
+                  :aria-label="`标签筛选，共 ${tagCounts.length} 个标签`"
+                  :aria-expanded="moreTagsOpen"
+                  @click="toggleMoreTags($event.currentTarget as HTMLElement)"
+                >标签 <span class="wb-count">{{ tagEntryCount }}</span> <AppIcon name="chevDown" :size="13" /></button>
+              </template>
+            </div>
+          </div>
           <div v-if="showFilters" class="search-box">
             <span class="search-icon"><AppIcon name="search" :size="16" /></span>
             <input
@@ -557,53 +548,11 @@ watchEffect(() => {
               <AppIcon name="panel" :size="16" />
             </button>
             <WorkspaceDirectoryToggle v-if="isWebRuntime() && showFilters" />
-            <CreateAction v-if="showFilters" class="notes-create" label="写小记" @click="startWriting" />
           </div>
         </div>
         </Teleport>
 
-        <div v-if="workspaceLayout && !isWebRuntime() && showFilters" ref="workbarEl" class="workspace-workbar notes-workbar">
-          <nav ref="tabsEl" class="workspace-workbar-tabs" aria-label="小记视图">
-            <button
-              v-for="v in VIEWS"
-              :key="v.key"
-              class="wb-tab"
-              :class="{ active: noteView === v.key }"
-              type="button"
-              :aria-pressed="noteView === v.key"
-              @click="selectView(v.key)"
-            >
-              <span>{{ v.label }}</span>
-              <span class="wb-count">{{ viewCounts[v.key] }}</span>
-            </button>
-          </nav>
-          <template v-if="!isArchivedView && tagCounts.length">
-            <span class="wb-divider" aria-hidden="true"></span>
-            <div ref="tagsEl" class="wb-tags" :class="{ 'is-collapsed': !tagsFit }" aria-label="小记标签">
-              <button
-                v-for="[tag, count] in visibleTagCounts"
-                :key="tag"
-                class="wb-tab wb-tag"
-                :class="{ active: activeTags.has(tag) }"
-                type="button"
-                :aria-pressed="activeTags.has(tag)"
-                @click="toggleTagFilter(tag)"
-              >
-                <span>#{{ tag }}</span>
-                <span class="wb-count">{{ count }}</span>
-              </button>
-              <button
-                v-if="hiddenTagCounts.length"
-                class="wb-tab wb-more"
-                type="button"
-                :aria-label="`标签筛选，共 ${tagCounts.length} 个标签`"
-                :aria-expanded="moreTagsOpen"
-                @click="toggleMoreTags($event.currentTarget as HTMLElement)"
-              >标签 <span class="wb-count">{{ tagCounts.length }}</span> <AppIcon name="chevDown" :size="13" /></button>
-            </div>
-          </template>
-        </div>
-        <PopoverMenu v-if="moreTagsOpen && moreTagsAnchor" :anchor="moreTagsAnchor" align="start" :width="224" @close="moreTagsOpen = false">
+        <PopoverMenu v-if="moreTagsOpen && moreTagsAnchor" :anchor="moreTagsAnchor" align="start" :width="224" @close="closeMoreTags">
           <div class="tag-pop">
             <div class="search-box flat tag-pop-search">
               <AppIcon name="search" :size="13" />
@@ -611,7 +560,7 @@ watchEffect(() => {
             </div>
             <div class="tag-pop-list">
               <button
-                v-for="[tag, count] in filteredMoreTags"
+                v-for="[tag, count] in filteredTagCounts"
                 :key="tag"
                 class="pop-item"
                 :class="{ on: activeTags.has(tag) }"
@@ -623,7 +572,7 @@ watchEffect(() => {
                 <span class="tag-pop-count">{{ count }}</span>
                 <AppIcon v-if="activeTags.has(tag)" name="check" :size="14" />
               </button>
-              <div v-if="!filteredMoreTags.length" class="tag-pop-empty">无匹配标签</div>
+              <div v-if="!filteredTagCounts.length" class="tag-pop-empty">无匹配标签</div>
             </div>
           </div>
         </PopoverMenu>
@@ -709,7 +658,7 @@ watchEffect(() => {
             <button class="btn-secondary retry-btn" @click="fetchNotes()">重试</button>
           </div>
 
-          <div v-else-if="!filteredNotes.length" class="empty-state" :class="{ 'is-filter': hasQueryFilter }">
+          <div v-else-if="!filteredNotes.length" class="empty-state notes-empty-state" :class="{ 'is-filter': hasQueryFilter }">
             <div class="empty-icon">
               <AppIcon :name="emptyState.icon" :size="24" />
             </div>
@@ -898,42 +847,20 @@ watchEffect(() => {
 .notes-page:has(.batch-dock) .stream-inner { padding-bottom: var(--dock-clearance); }
 /* 书写框与吸顶栏拉开一档间距（列表页首行同款） */
 .stream-inner .composer { margin-top: var(--space-2); }
-.notes-workbar + .composer { margin-top: 0; }
-/* 最小桌面窗让位给搜索：书写面就在首屏，页头不必再放一颗「写小记」。 */
-@media (max-width: 899px) {
-  .notes-create { display: none; }
-}
+/* 工作台布局里首行不再是吸顶栏，视图页签已经并进页头，正文上面只剩页头那 12px 呼吸；
+   再叠一档就成了第二条空带，所以这一档让给页头。 */
+.workspace-main .stream-inner .composer { margin-top: 0; }
 
-/* ---------- 分类栏里的标签：与视图页签分身份 ----------
-   下划线说的是「你现在在哪个视图」，标签说的是「筛掉了什么」，同一个记号不能兼两义。
-   所以标签一律走 26px 药丸档（与弹层里的 .pop-item.on 同档淡主色），并且不吃那条下划线。
-   flex 让位给「标签 N ▾」入口：窗口再窄也只是药丸出省略号，入口不能被挤丢。 */
-.notes-workbar .wb-tags .wb-tag {
-  flex: 0 0 auto;
-  align-self: center;
-  min-width: 0;
-  height: 26px;
-  padding: 0 8px;
-  border-radius: 7px;
-}
-/* 收起态只剩已选 + 入口：这时才允许药丸自己缩，保证「标签 N ▾」永远点得到。
-   展开态必须一颗都不缩，否则量出来的整组宽度是假的，永远判成「放得下」。 */
-.notes-workbar .wb-tags.is-collapsed .wb-tag { flex: 0 1 auto; }
-.notes-workbar .wb-tags .wb-tag > span:first-child { overflow: hidden; text-overflow: ellipsis; }
-.notes-workbar .wb-tags .wb-tag.active { background: var(--accent-soft); color: var(--text-brand); font-weight: 500; }
-.notes-workbar .wb-tags .wb-tag.active::after { display: none; }
-.notes-workbar .wb-tags .wb-more { flex: none; }
-
-/* 「标签」面板：保持打开以支持连续多选，搜索与选中状态都在面板内完成。
-   收起态下列出的是所有未选标签——已选的常驻在分类栏上，点一下即取消。 */
-.tag-pop { width: 224px; display: flex; flex-direction: column; gap: var(--space-1); }
+/* 「标签」面板：保持打开以支持连续多选，搜索与选中状态都在面板内完成。 */
+.tag-pop { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .tag-pop-search { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; }
 .tag-pop-search input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; outline: none; font: inherit; font-size: var(--text-sm); color: var(--text); }
 .tag-pop-list { max-height: 220px; overflow-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
 .tag-pop-list .pop-item { display: flex; align-items: center; gap: 8px; }
+.tag-pop-list .pop-item :deep(svg) { flex-shrink: 0; }
 .tag-pop-list .pop-item.on { background: var(--accent-soft); color: var(--text-brand); font-weight: 600; }
 .tag-pop-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag-pop-count { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tag-pop-count { flex-shrink: 0; color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .tag-pop-empty { padding: var(--space-2) 8px; color: var(--text-muted); font-size: var(--text-sm); text-align: center; }
 
 /* ---------- 顶部工具条：吃 global.css 的 .page-bar 骨架（64px 吸顶画布），
@@ -1005,7 +932,7 @@ watchEffect(() => {
 }
 .slip-label :deep(svg) { color: var(--text-muted); flex: 0 0 auto; }
 .slip-label-count { font-weight: 400; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-left: -2px; }
-/* 空态里的动作：比页头主钮小一档，和说明句同一条中轴，不抢「写小记」的位置 */
+/* 空态里的动作：比书写条主钮小一档，和说明句同一条中轴 */
 .empty-action {
   height: 30px;
   margin-top: var(--space-4);

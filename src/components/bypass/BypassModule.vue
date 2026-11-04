@@ -131,8 +131,8 @@ const canRecord = computed(
     probedInput.value === input.value.trim(),
 )
 const canConfigureReport = computed(() => recorded.value && !!existingTarget.value
-  && !!report.value && ['hostsOnly', 'needRoute'].includes(report.value.verdict)
-  && needsApply(existingTarget.value))
+  && !!report.value && (report.value.verdict === 'directOk'
+    || (['hostsOnly', 'needRoute'].includes(report.value.verdict) && needsApply(existingTarget.value))))
 
 function closeReport() {
   if (busyProbe.value || busyPlan.value) return
@@ -287,6 +287,8 @@ const rollbackBatch = ref('')
 /** 用户在确认弹窗里坚持要钉的 CDN 条目；改了要向后端重算一次账 */
 const allowCdn = ref<string[]>([])
 const routeOverrides = ref<RouteOverride[]>([])
+/** 单目标更换出口不受「待配置」数量限制，也不带入其他目标。 */
+const configureTargetId = ref<string | undefined>()
 
 const pendingCount = computed(() => targets.value.filter(needsApply).length)
 
@@ -297,6 +299,7 @@ function closePlan() {
   plan.value = null
   allowCdn.value = []
   routeOverrides.value = []
+  configureTargetId.value = undefined
 }
 
 async function loadRollback() {
@@ -307,14 +310,15 @@ async function loadRollback() {
   }
 }
 
-async function openApplyPlan() {
-  if (operationBusy.value || !pendingCount.value) return
+async function openApplyPlan(targetId?: string) {
+  if (operationBusy.value || (!targetId && !pendingCount.value)) return
+  configureTargetId.value = targetId
   allowCdn.value = []
   routeOverrides.value = []
   const request = ++planRequest
   busyPlan.value = true
   try {
-    const next = await bypassApi.plan([], [])
+    const next = await requestPlan([], [])
     if (request !== planRequest || !mounted) return
     plan.value = next
     planOpen.value = true
@@ -327,8 +331,19 @@ async function openApplyPlan() {
 
 async function configureFromReport() {
   if (!canConfigureReport.value || operationBusy.value) return
-  await openApplyPlan()
+  await openApplyPlan(report.value?.verdict === 'directOk' ? existingTarget.value?.id : undefined)
   if (planOpen.value) closeReport()
+}
+
+async function configureFromDetail(t: BypassTarget) {
+  await openApplyPlan(t.id)
+  if (planOpen.value) closeDetail()
+}
+
+function requestPlan(allow: string[], routes: RouteOverride[]) {
+  return configureTargetId.value
+    ? bypassApi.plan(allow, routes, configureTargetId.value)
+    : bypassApi.plan(allow, routes)
 }
 
 function retryReport() {
@@ -349,7 +364,7 @@ async function updatePlan(nextAllow: string[], nextRoutes: RouteOverride[]) {
   routeOverrides.value = nextRoutes
   busyPlan.value = true
   try {
-    const next = await bypassApi.plan(nextAllow, nextRoutes)
+    const next = await requestPlan(nextAllow, nextRoutes)
     if (request !== planRequest || !mounted) return
     allowCdn.value = nextAllow
     routeOverrides.value = nextRoutes
@@ -387,7 +402,10 @@ async function runApply() {
   let written: string[] = []
   let verifySuccessfulBatch = false
   try {
-    const outcome = await bypassApi.apply(allowCdn.value, routeOverrides.value, plan.value.planKey)
+    const args = [allowCdn.value, routeOverrides.value, plan.value.planKey] as const
+    const outcome = await (configureTargetId.value
+      ? bypassApi.apply(...args, configureTargetId.value)
+      : bypassApi.apply(...args))
     written = outcome.cancelled ? [] : [...new Set(outcome.items.map((i) => i.id))]
     if (outcome.cancelled) {
       toastStore.showToast('已取消授权，系统未改动')
@@ -412,6 +430,7 @@ async function runApply() {
     plan.value = null
     allowCdn.value = []
     routeOverrides.value = []
+    configureTargetId.value = undefined
     await Promise.all([loadTargets(), loadStatus(), loadRollback()])
     // 写完不靠回执自证：这一批逐条重探一遍，判定变了才算真落定
     if (written.length) {
@@ -460,7 +479,7 @@ const askRevert = () => {
   if (!batch || operationBusy.value) return
   confirmStore.showConfirm(
     '撤销上次配置',
-    '将恢复本功能管理的 hosts 记录，移除本次新增的持久路由。需管理员授权。',
+    '将恢复本功能管理的 hosts 记录，移除本次新增的持久路由，并恢复本次替换的原有路由。需管理员授权。',
     () => runRevert(batch),
   )
 }
@@ -521,12 +540,16 @@ const revalidateAll = () => {
 
 const askDelete = (t: BypassTarget) => {
   if (operationBusy.value) return
-  const detail = '此操作只移除清单记录，已配置的 hosts 和路由会保留。' + (t.applyBatch ? '需要清理时，请先撤销相关配置。' : '')
-  confirmStore.showConfirm('移出清单', `「${hostOf(t)}」将从网络直连清单移除。${detail}`, async () => {
+  const detail = '将同时清理本功能为该目标创建、且未被其他清单项共用的 hosts 和路由。原有系统配置会保留；需要时将请求管理员授权。'
+  confirmStore.showConfirm('移出清单', `「${hostOf(t)}」将从网络选路清单移除。${detail}`, async () => {
     if (operationBusy.value) return
     busyDelete.value = true
     try {
-      await bypassApi.remove(t.id)
+      const removed = await bypassApi.remove(t.id)
+      if (!removed) {
+        toastStore.showToast('已取消授权，目标仍在清单中')
+        return
+      }
       if (openRowId.value === t.id) openRowId.value = null
       await Promise.all([loadTargets(), loadStatus(), loadRollback()])
       toastStore.showToast('已移出清单')
@@ -576,7 +599,7 @@ function deleteFromMenu() {
 
 const pageHead = usePageHeadStore()
 watchEffect(() => {
-  if (pageActive.value) pageHead.setHead('网络直连', targets.value.length ? `${targets.value.length} 项` : '')
+  if (pageActive.value) pageHead.setHead('网络选路', targets.value.length ? `${targets.value.length} 项` : '')
 })
 </script>
 
@@ -618,7 +641,7 @@ watchEffect(() => {
           </div>
         </div>
         <div class="hero-acts">
-          <button v-if="pendingCount" class="btn-primary" type="button" :disabled="operationBusy" @click="openApplyPlan">
+          <button v-if="pendingCount" class="btn-primary" type="button" :disabled="operationBusy" @click="openApplyPlan()">
             <AppIcon name="download" :size="14" />
             {{ awaitingAuth ? '正在配置' : busyPlan ? '正在准备' : `配置直连 ${pendingCount}` }}
           </button>
@@ -725,10 +748,11 @@ watchEffect(() => {
       <div v-if="!targets.length" class="rcard empty-state">
         <div class="empty-icon"><AppIcon name="navBypass" :size="24" /></div>
         <div class="empty-title">清单为空</div>
-        <div class="empty-desc bypass-empty-desc">先探测并加入清单，再配置直连。探测和加入清单不修改系统。</div>
+        <div class="empty-desc bypass-empty-desc">先探测并加入清单，再选择网卡并应用配置。探测和加入清单不修改系统。</div>
       </div>
     </template>
 
+    <p v-if="busyDelete" class="page-note" role="status">正在移除目标并清理配置，请完成可能出现的管理员授权…</p>
     <p v-if="!loading && targets.length" class="page-note">
       <AppIcon name="info" :size="13" />
       清单显示上次探测结果。网络变化后请重新检查；使用代理时，还需将目标同步到其直连规则。
@@ -742,7 +766,7 @@ watchEffect(() => {
       :busy="busyProbe || busyPlan"
       :existing="!!existingTarget"
       :can-configure="canConfigureReport"
-      :configure-count="pendingCount"
+      :configure-count="report.verdict === 'directOk' ? 1 : pendingCount"
       @close="closeReport"
       @record="recordCurrent"
       @configure="configureFromReport"
@@ -758,6 +782,7 @@ watchEffect(() => {
       @edit="applyEdit(detailTarget, $event)"
       @recheck="recheckFromDetail(detailTarget)"
       @remove="removeFromDetail(detailTarget)"
+      @configure="configureFromDetail(detailTarget)"
     />
 
     <BypassApplyDialogs
@@ -801,7 +826,8 @@ watchEffect(() => {
 <style scoped>
 .bypass-empty-desc { max-width: 560px; margin-inline: auto; line-height: 1.7; text-wrap: pretty; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: normal; }
-.page-note { font-size: var(--text-xs); }
+.page-note { margin-top: var(--space-4); font-size: var(--text-xs); line-height: 1.6; align-items: flex-start; }
+.page-note :deep(svg) { margin-top: 3px; }
 
 /* ---------- 概览 ---------- */
 .hero {

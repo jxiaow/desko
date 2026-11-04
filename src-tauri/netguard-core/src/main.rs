@@ -128,24 +128,89 @@ struct Outcome {
     error: String,
 }
 
-/// 每条路由的回滚钥匙：只有真加过的才需要删
+/// 保留每条路由的写入与替换信息，失败时按原操作恢复。
 struct RouteAttempt {
-    id: String,
+    item: TaskItem,
     outcome: Outcome,
-    prefix: String,
-    prefix_len: u8,
-    gateway: String,
-    interface_index: u32,
 }
 
 fn apply(task: &TaskFile) -> ReceiptFile {
     match task.mode {
         Mode::Apply => write_batch(task),
         Mode::Revert => revert_batch(task),
+        Mode::Cleanup => cleanup_batch(task),
     }
 }
 
-/// 撤销：hosts 整块还原到备份，路由逐条删。撤销不再触发回滚，它本身就是回滚。
+fn binding_exists(route: &RouteBinding) -> bool {
+    match (route.prefix.parse(), route.gateway.parse()) {
+        (Ok(prefix), Ok(gateway)) => net::forward_exists(prefix, route.prefix_len, gateway, route.interface_index),
+        _ => false,
+    }
+}
+
+fn cleanup_batch(task: &TaskFile) -> ReceiptFile {
+    let receipt = cleanup_batch_with_routes(task, binding_exists, delete_binding, add_binding);
+    if receipt.hosts_written {
+        let _ = run_hidden(&system32().join("ipconfig.exe"), &["/flushdns".to_string()]);
+    }
+    receipt
+}
+
+/// 定向移除与普通批次撤销分开：只改任务书列出的资源，任一步失败恢复本次清理前的状态。
+fn cleanup_batch_with_routes(
+    task: &TaskFile,
+    exists: impl Fn(&RouteBinding) -> bool,
+    mut remove: impl FnMut(&RouteBinding) -> Result<(), String>,
+    mut add: impl FnMut(&RouteBinding) -> Outcome,
+) -> ReceiptFile {
+    let mut receipt = ReceiptFile { batch_id: task.batch_id.clone(), started_at: now_ms(), ..Default::default() };
+    let hosts_path = PathBuf::from(&task.hosts_path);
+    let hosts: Vec<_> = task.items.iter().filter(|i| matches!(i, TaskItem::CleanupHost { .. })).collect();
+    if !hosts.is_empty() {
+        let result = read_hosts(&hosts_path).and_then(|before| {
+            let after = cleanup_hosts_bytes(&before, &task.items)?;
+            if before != after {
+                write_atomic(Path::new(&task.hosts_backup_path), &before)?;
+                write_atomic(&hosts_path, &after)?;
+                receipt.hosts_written = true;
+                if read_hosts(&hosts_path)? != after { return Err("清理后 hosts 校验失败".into()); }
+            }
+            Ok(())
+        });
+        for item in hosts {
+            receipt.items.push(item_result(item, &Outcome { ok: result.is_ok(), changed: receipt.hosts_written, error: result.as_ref().err().cloned().unwrap_or_default() }));
+        }
+    }
+    let mut removed = Vec::new();
+    if receipt.items.iter().all(|i| i.ok) {
+        for item in task.items.iter().filter(|i| matches!(i, TaskItem::Route { .. })) {
+            let binding = route_binding(item);
+            let changed = exists(&binding);
+            if changed { removed.push(binding.clone()); }
+            let result = if changed { remove(&binding) } else { Ok(()) };
+            receipt.items.push(item_result(item, &Outcome { ok: result.is_ok(), changed, error: result.err().unwrap_or_default() }));
+            if receipt.items.last().is_some_and(|i| !i.ok) { break; }
+        }
+    }
+    if receipt.items.iter().any(|i| !i.ok) {
+        let mut errors = Vec::new();
+        for route in removed.iter().rev() {
+            let result = add(route);
+            if !result.ok { errors.push(result.error); }
+        }
+        if receipt.hosts_written {
+            if let Err(error) = restore_cleanup_hosts(task, &hosts_path) { errors.push(error); }
+            else { receipt.hosts_restored = true; }
+        }
+        receipt.rolled_back = true;
+        receipt.rollback_error = errors.join("；");
+    }
+    receipt.finished_at = now_ms();
+    receipt
+}
+
+/// 撤销：恢复 hosts 托管区，删除新增路由并恢复被替换的路由。
 fn revert_batch(task: &TaskFile) -> ReceiptFile {
     let mut receipt = ReceiptFile {
         batch_id: task.batch_id.clone(),
@@ -166,16 +231,10 @@ fn revert_batch(task: &TaskFile) -> ReceiptFile {
             receipt.rollback_error = "hosts 备份不存在，无法还原，请保留回滚点后重试".to_string();
         }
     }
-    for item in task.items.iter().filter(|i| matches!(i, TaskItem::Route { .. })) {
-        let TaskItem::Route { prefix, prefix_len, gateway, interface_index, .. } = item else {
-            continue;
-        };
-        let outcome = match run_hidden(
-            &system32().join("route.exe"),
-            &route_delete_args(prefix, *prefix_len, gateway, *interface_index),
-        ) {
+    for item in task.items.iter().filter(|i| i.op_name() == "route") {
+        let outcome = match restore_route_item(item, add_binding, delete_binding) {
             Ok(()) => Outcome { ok: true, changed: true, error: String::new() },
-            Err(e) => Outcome { ok: false, changed: false, error: format!("删除路由失败：{e}") },
+            Err(e) => Outcome { ok: false, changed: false, error: format!("撤销路由失败：{e}") },
         };
         receipt.items.push(item_result(item, &outcome));
     }
@@ -209,19 +268,12 @@ fn write_batch(task: &TaskFile) -> ReceiptFile {
 
     // 2) 路由：逐条加，加完立刻查表
     let mut attempts: Vec<RouteAttempt> = Vec::new();
-    for item in task.items.iter().filter(|i| matches!(i, TaskItem::Route { .. })) {
-        let TaskItem::Route { prefix, prefix_len, gateway, interface_index, .. } = item else {
-            unreachable!()
-        };
-        let outcome = apply_route(prefix, *prefix_len, gateway, *interface_index);
+    for item in task.items.iter().filter(|i| i.op_name() == "route") {
+        let outcome = apply_route_item(item, add_binding, delete_binding);
         receipt.items.push(item_result(item, &outcome));
         attempts.push(RouteAttempt {
-            id: item.id().to_string(),
+            item: item.clone(),
             outcome,
-            prefix: prefix.clone(),
-            prefix_len: *prefix_len,
-            gateway: gateway.clone(),
-            interface_index: *interface_index,
         });
     }
 
@@ -241,13 +293,10 @@ fn write_batch(task: &TaskFile) -> ReceiptFile {
             }
         }
         for attempt in attempts.iter().filter(|a| a.outcome.changed) {
-            if let Err(e) = run_hidden(
-                &system32().join("route.exe"),
-                &route_delete_args(&attempt.prefix, attempt.prefix_len, &attempt.gateway, attempt.interface_index),
-            ) {
-                errs.push(format!("撤销路由 {} 失败：{e}", attempt.prefix));
+            if let Err(e) = restore_route_item(&attempt.item, add_binding, delete_binding) {
+                errs.push(format!("撤销路由 {} 失败：{e}", attempt.item.id()));
             } else {
-                receipt.reverted_routes.push(attempt.id.clone());
+                receipt.reverted_routes.push(attempt.item.id().to_string());
             }
         }
         receipt.rolled_back = true;
@@ -347,6 +396,22 @@ fn restore_hosts(task: &TaskFile, hosts_path: &Path) -> Result<(), String> {
     write_atomic(hosts_path, &restored)
 }
 
+fn restore_cleanup_hosts(task: &TaskFile, hosts_path: &Path) -> Result<(), String> {
+    let before = std::fs::read(&task.hosts_backup_path).map_err(|e| format!("读取 hosts 备份失败：{e}"))?;
+    let current = read_hosts(hosts_path)?;
+    let restored = if current == cleanup_hosts_bytes(&before, &task.items)? {
+        before // 清理期间没有外部修改时，连同托管区原位置和换行一起原样恢复。
+    } else {
+        let original = parse_managed(&String::from_utf8_lossy(&before))?;
+        let replacements = task.items.iter().filter_map(|item| match item {
+            TaskItem::CleanupHost { host, .. } => Some((host.to_lowercase(), original.get(&host.to_lowercase()).cloned())),
+            _ => None,
+        }).collect();
+        replace_managed_hosts_bytes(&current, &replacements)?
+    };
+    write_atomic(hosts_path, &restored)
+}
+
 fn apply_route(prefix: &str, prefix_len: u8, gateway: &str, interface_index: u32) -> Outcome {
     let bad = |error: String| Outcome { ok: false, changed: false, error };
     let Ok(prefix_ip) = prefix.parse::<Ipv4Addr>() else {
@@ -374,9 +439,154 @@ fn apply_route(prefix: &str, prefix_len: u8, gateway: &str, interface_index: u32
     }
 }
 
+fn add_binding(route: &RouteBinding) -> Outcome {
+    apply_route(&route.prefix, route.prefix_len, &route.gateway, route.interface_index)
+}
+
+/// 撤销重试可以遇到已经删除的路由；只删除精确匹配的绑定。
+fn delete_binding(route: &RouteBinding) -> Result<(), String> {
+    let prefix = route.prefix.parse().map_err(|_| "网段地址无法识别".to_string())?;
+    let gateway = route.gateway.parse().map_err(|_| "网关无法识别".to_string())?;
+    if !net::forward_exists(prefix, route.prefix_len, gateway, route.interface_index) { return Ok(()); }
+    run_hidden(&system32().join("route.exe"), &route_delete_args(&route.prefix, route.prefix_len, &route.gateway, route.interface_index))?;
+    if net::forward_exists(prefix, route.prefix_len, gateway, route.interface_index) {
+        return Err("删除命令已执行，但原路由仍存在".into());
+    }
+    Ok(())
+}
+
+fn route_binding(item: &TaskItem) -> RouteBinding {
+    let TaskItem::Route { prefix, prefix_len, gateway, interface_index, .. } = item else { unreachable!() };
+    RouteBinding { prefix: prefix.clone(), prefix_len: *prefix_len, gateway: gateway.clone(), interface_index: *interface_index }
+}
+
+fn apply_route_item(
+    item: &TaskItem,
+    mut add: impl FnMut(&RouteBinding) -> Outcome,
+    mut remove: impl FnMut(&RouteBinding) -> Result<(), String>,
+) -> Outcome {
+    let TaskItem::SwapRoute { desired, previous, .. } = item else { return add(&route_binding(item)); };
+    let mut outcome = add(desired);
+    if !outcome.ok { return outcome; }
+    for route in previous {
+        // 删除失败也可能已有系统改动，保留整条回滚信息供恢复和重试。
+        outcome.changed = true;
+        if let Err(error) = remove(route) {
+            outcome.ok = false;
+            outcome.error = format!("替换原出口失败：{error}");
+            break;
+        }
+    }
+    outcome
+}
+
+fn restore_route_item(
+    item: &TaskItem,
+    mut add: impl FnMut(&RouteBinding) -> Outcome,
+    mut remove: impl FnMut(&RouteBinding) -> Result<(), String>,
+) -> Result<(), String> {
+    let TaskItem::SwapRoute { desired, previous, desired_existed, .. } = item else { return remove(&route_binding(item)); };
+    for route in previous {
+        let outcome = add(route);
+        if !outcome.ok { return Err(format!("恢复原出口失败：{}", outcome.error)); }
+    }
+    if !desired_existed { remove(desired)?; }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn binding(index: u32) -> RouteBinding {
+        RouteBinding { prefix: "10.0.0.243".into(), prefix_len: 32, gateway: format!("192.168.{index}.1"), interface_index: index }
+    }
+
+    #[test]
+    fn cleanup_route_failure_restores_hosts_and_routes_then_allows_a_successful_retry() {
+        let dir = std::env::temp_dir().join(format!("desko-cleanup-helper-{}", now_ms()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let hosts = dir.join("hosts");
+        let original = format!("# original\n{HOSTS_BEGIN}\n10.0.0.2 a.example.com\n{HOSTS_END}\n");
+        std::fs::write(&hosts, &original).unwrap();
+        let route = binding(1);
+        let routes = std::cell::RefCell::new(std::collections::BTreeSet::from([route.clone()]));
+        let task = TaskFile {
+            batch_id: "cleanup-test".into(), mode: Mode::Cleanup, created_at: 1,
+            hosts_path: hosts.to_string_lossy().into_owned(), receipt_path: String::new(),
+            hosts_backup_path: dir.join("backup").to_string_lossy().into_owned(),
+            items: vec![TaskItem::CleanupHost { id: "a".into(), host: "a.example.com".into(), address: "10.0.0.2".into(), original: None },
+                TaskItem::Route { id: "a".into(), prefix: route.prefix.clone(), prefix_len: 32, gateway: route.gateway.clone(), interface_index: 1, interface_alias: String::new() }],
+        };
+        let failed = cleanup_batch_with_routes(&task, |r| routes.borrow().contains(r), |r| {
+            routes.borrow_mut().remove(r);
+            Err("failed after route deletion".into())
+        }, |r| added(&routes, r));
+        assert!(failed.rolled_back && failed.hosts_restored && failed.rollback_error.is_empty());
+        assert_eq!(std::fs::read_to_string(&hosts).unwrap(), original);
+        assert!(routes.borrow().contains(&route));
+        let success = cleanup_batch_with_routes(&task, |r| routes.borrow().contains(r), |r| { routes.borrow_mut().remove(r); Ok(()) }, |r| added(&routes, r));
+        assert!(!success.rolled_back && success.items.iter().all(|i| i.ok));
+        assert!(parse_managed(&std::fs::read_to_string(&hosts).unwrap()).unwrap().is_empty());
+        assert!(routes.borrow().is_empty());
+        let retry = cleanup_batch_with_routes(&task, |r| routes.borrow().contains(r), |_| panic!("route already removed"), |_| panic!("nothing to restore"));
+        assert!(retry.items.iter().all(|i| i.ok && !i.changed));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn swap(desired_existed: bool) -> TaskItem {
+        TaskItem::SwapRoute { id: "new-catalog-id".into(), desired: binding(2), previous: vec![binding(1)], desired_existed }
+    }
+
+    fn added(routes: &std::cell::RefCell<std::collections::BTreeSet<RouteBinding>>, route: &RouteBinding) -> Outcome {
+        Outcome { ok: true, changed: routes.borrow_mut().insert(route.clone()), error: String::new() }
+    }
+
+    #[test]
+    fn switching_removes_the_old_binding_and_revert_restores_it() {
+        let routes = std::cell::RefCell::new(std::collections::BTreeSet::from([binding(1)]));
+        let item = swap(false);
+        let outcome = apply_route_item(&item, |r| added(&routes, r), |r| { routes.borrow_mut().remove(r); Ok(()) });
+        assert!(outcome.ok && outcome.changed);
+        assert_eq!(*routes.borrow(), std::collections::BTreeSet::from([binding(2)]));
+        restore_route_item(&item, |r| added(&routes, r), |r| { routes.borrow_mut().remove(r); Ok(()) }).unwrap();
+        assert_eq!(*routes.borrow(), std::collections::BTreeSet::from([binding(1)]));
+    }
+
+    #[test]
+    fn failed_replacement_keeps_rollback_information_and_restores_the_original_route() {
+        let routes = std::cell::RefCell::new(std::collections::BTreeSet::from([binding(1)]));
+        let item = swap(false);
+        let outcome = apply_route_item(&item, |r| added(&routes, r), |r| {
+            routes.borrow_mut().remove(r);
+            Err("delete verification failed".into())
+        });
+        assert!(!outcome.ok && outcome.changed);
+        restore_route_item(&item, |r| added(&routes, r), |r| { routes.borrow_mut().remove(r); Ok(()) }).unwrap();
+        assert_eq!(*routes.borrow(), std::collections::BTreeSet::from([binding(1)]));
+    }
+
+    #[test]
+    fn reverting_a_swap_preserves_a_desired_route_that_already_existed() {
+        let routes = std::cell::RefCell::new(std::collections::BTreeSet::from([binding(1), binding(2)]));
+        let item = swap(true);
+        assert!(apply_route_item(&item, |r| added(&routes, r), |r| { routes.borrow_mut().remove(r); Ok(()) }).ok);
+        restore_route_item(&item, |r| added(&routes, r), |r| { routes.borrow_mut().remove(r); Ok(()) }).unwrap();
+        assert_eq!(*routes.borrow(), std::collections::BTreeSet::from([binding(1), binding(2)]));
+    }
+
+    #[test]
+    fn failed_restore_retains_the_new_route_until_retry_succeeds() {
+        let routes = std::cell::RefCell::new(std::collections::BTreeSet::from([binding(2)]));
+        let item = swap(false);
+        let result = restore_route_item(&item, |_| Outcome { ok: false, changed: false, error: "adapter offline".into() }, |_| panic!("must keep the new route"));
+        assert!(result.is_err());
+        restore_route_item(&item, |r| added(&routes, r), |r| { routes.borrow_mut().remove(r); Ok(()) }).unwrap();
+        assert_eq!(*routes.borrow(), std::collections::BTreeSet::from([binding(1)]));
+        // 重试整个撤销依然幂等。
+        restore_route_item(&item, |r| added(&routes, r), |r| { routes.borrow_mut().remove(r); Ok(()) }).unwrap();
+        assert_eq!(*routes.borrow(), std::collections::BTreeSet::from([binding(1)]));
+    }
 
     #[test]
     fn missing_hosts_backup_is_a_revert_failure() {

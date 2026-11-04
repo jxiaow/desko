@@ -433,8 +433,9 @@ test.describe('Entries 网址收藏', () => {
     await page.locator('.content-inner').evaluate(el => el.scrollTo({ top: 400, behavior: 'instant' }))
     await expect.poll(() => page.locator('.content-inner').evaluate(el => el.scrollTop)).toBeGreaterThan(0)
     expect(await bar.boundingBox()).toEqual(before)
+    const head = (await page.locator('.workspace-head').boundingBox())!
     const content = (await page.locator('.content-inner').boundingBox())!
-    expect(content.y).toBe(before!.y + before!.height)
+    expect(content.y).toBe(head.y + head.height)
     await page.locator('.search-box input').fill('条目 12')
     await expect(page.locator('.entry-card')).toHaveCount(1)
   })

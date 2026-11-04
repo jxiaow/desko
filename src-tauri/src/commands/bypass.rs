@@ -7,6 +7,7 @@ use crate::error::AppError;
 use crate::services::bypass_service::{self, ProbeReport};
 use crate::services::bypass_probe_job;
 use crate::services::netguard_service::{self, ApplyOutcome, PlannedRow, RouteOverride};
+use crate::services::netguard_cleanup;
 use crate::AppState;
 
 static MUTATING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -19,6 +20,12 @@ impl Drop for MutationGuard {
 /// The page can be closed during UAC. Serialize backend mutations independently
 /// of component state; cloned worker owners also survive command cancellation.
 fn mutation_guard() -> Result<std::sync::Arc<MutationGuard>, AppError> {
+    let guard = cleanup_mutation_guard()?;
+    netguard_cleanup::ensure_no_pending_cleanup()?;
+    Ok(guard)
+}
+
+fn cleanup_mutation_guard() -> Result<std::sync::Arc<MutationGuard>, AppError> {
     MUTATING.compare_exchange(false, true, std::sync::atomic::Ordering::Acquire, std::sync::atomic::Ordering::Relaxed)
         .map_err(|_| AppError::Bypass("另一项网络直连操作正在进行，请等待完成后重试".into()))?;
     Ok(std::sync::Arc::new(MutationGuard))
@@ -199,10 +206,23 @@ pub async fn bypass_edit(
 }
 
 #[tauri::command]
-pub fn bypass_delete(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
-    let _operation = mutation_guard()?;
+pub async fn bypass_delete(state: State<'_, AppState>, id: String) -> Result<bool, AppError> {
+    let operation = cleanup_mutation_guard()?;
+    let targets = {
+        let db = state.db.lock().map_err(|_| AppError::Database("lock error".into()))?;
+        db.list_bypass_targets()?
+    };
+    let target = targets.iter().find(|t| t.id == id).cloned()
+        .ok_or_else(|| AppError::Bypass("条目不存在，可能已被删除".into()))?;
+    let worker_operation = operation.clone();
+    let removed = tauri::async_runtime::spawn_blocking(move || {
+        let _operation = worker_operation;
+        netguard_cleanup::remove_target(&target, &targets)
+    }).await.map_err(|e| AppError::Bypass(format!("移除任务被中断：{e}")))??;
+    if !removed { return Ok(false); }
     let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-    db.delete_bypass_target(&id)
+    db.delete_bypass_target(&id)?;
+    Ok(true)
 }
 
 /// 页面顶部的小账：hosts 托管区有几条、清单几条、其中几条等写入、几条已失效
@@ -278,14 +298,28 @@ pub struct ApplyPlan {
 
 /// 落盘计划：确认弹窗与批次要念的是同一份账，两处不许各算各的。
 /// allowCdn 是用户在弹窗里显式坚持要钉的 CDN 条目，回一次账就重算一次。
+fn configuration_targets(targets: Vec<BypassTarget>, target_id: Option<&str>) -> Result<Vec<BypassTarget>, AppError> {
+    match target_id {
+        Some(id) => {
+            let target = targets.into_iter().find(|t| t.id == id)
+                .ok_or_else(|| AppError::Bypass("条目不存在，可能已被删除".into()))?;
+            if !matches!(target.verdict.as_str(), "directOk" | "hostsOnly" | "needRoute") {
+                return Err(AppError::Bypass("请重新探测，确认实际地址和出口后再配置".into()));
+            }
+            Ok(vec![target])
+        }
+        None => Ok(targets.into_iter().filter(needs_apply).collect()),
+    }
+}
+
 #[tauri::command]
-pub fn bypass_plan(state: State<'_, AppState>, allow_cdn: Vec<String>, route_overrides: Option<Vec<RouteOverride>>) -> Result<ApplyPlan, AppError> {
+pub fn bypass_plan(state: State<'_, AppState>, allow_cdn: Vec<String>, route_overrides: Option<Vec<RouteOverride>>, target_id: Option<String>) -> Result<ApplyPlan, AppError> {
     let targets = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
         db.list_bypass_targets()?
     };
-    let pending: Vec<BypassTarget> = targets.iter().filter(|t| needs_apply(t)).cloned().collect();
-    let (items, rows) = netguard_service::plan(&pending, &allow_cdn, &route_overrides.unwrap_or_default());
+    let pending = configuration_targets(targets, target_id.as_deref())?;
+    let (items, rows) = netguard_service::plan(&pending, &allow_cdn, &route_overrides.unwrap_or_default(), target_id.as_deref());
     let blocked = rows.iter().filter(|r| !r.blocked.is_empty()).map(|r| &r.id).collect::<std::collections::HashSet<_>>().len();
     let ready = items.iter().map(|i| i.id()).collect::<std::collections::HashSet<_>>().len();
     Ok(ApplyPlan { plan_key: netguard_service::plan_key(&items)?, rows, ready, blocked })
@@ -294,14 +328,11 @@ pub fn bypass_plan(state: State<'_, AppState>, allow_cdn: Vec<String>, route_ove
 /// 一批落盘：一次 UAC，把待写入的 hosts 固定与持久路由一起写完。
 /// 阻塞在提权进程上，所以数据库锁只在前后各拿一次，等授权期间不占锁。
 #[tauri::command]
-pub async fn bypass_apply(state: State<'_, AppState>, allow_cdn: Vec<String>, route_overrides: Option<Vec<RouteOverride>>, expected_plan_key: String) -> Result<ApplyOutcome, AppError> {
+pub async fn bypass_apply(state: State<'_, AppState>, allow_cdn: Vec<String>, route_overrides: Option<Vec<RouteOverride>>, expected_plan_key: String, target_id: Option<String>) -> Result<ApplyOutcome, AppError> {
     let operation = mutation_guard()?;
     let pending: Vec<BypassTarget> = {
         let db = state.db.lock().map_err(|_| AppError::Database("lock error".to_string()))?;
-        db.list_bypass_targets()?
-            .into_iter()
-            .filter(|t| in_apply_batch(t, &allow_cdn))
-            .collect()
+        configuration_targets(db.list_bypass_targets()?, target_id.as_deref())?
     };
     if pending.is_empty() {
         return Ok(ApplyOutcome {
@@ -317,7 +348,7 @@ pub async fn bypass_apply(state: State<'_, AppState>, allow_cdn: Vec<String>, ro
     let worker_operation = operation.clone();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         let _operation = worker_operation;
-        netguard_service::apply(&pending, &allow_cdn, &route_overrides.unwrap_or_default(), &batch, &expected_plan_key)
+        netguard_service::apply(&pending, &allow_cdn, &route_overrides.unwrap_or_default(), &batch, &expected_plan_key, target_id.as_deref())
     })
     .await
     .map_err(|e| AppError::Bypass(format!("写入任务被中断：{e}")))??;
@@ -437,6 +468,22 @@ mod tests {
         let error = report_for_save(&key).err().unwrap().to_string();
         assert!(error.contains("请重新探测"));
         probe_cache().lock().unwrap().remove(&key);
+    }
+
+    #[test]
+    fn explicit_configuration_includes_direct_targets_without_including_other_pending_targets() {
+        let direct = row("directOk", "applied");
+        let mut pending = row("needRoute", "none");
+        pending.id = "pending".into();
+        let targets = vec![direct, pending];
+        let ordinary = configuration_targets(targets.clone(), None).unwrap();
+        assert_eq!(ordinary.len(), 1);
+        assert_eq!(ordinary[0].id, "pending");
+        let explicit = configuration_targets(targets, Some("x")).unwrap();
+        assert_eq!(explicit.len(), 1);
+        assert_eq!(explicit[0].verdict, "directOk");
+        assert!(configuration_targets(vec![row("unreachable", "none")], Some("x")).is_err());
+        assert!(configuration_targets(vec![], Some("deleted")).is_err());
     }
 
     fn row(verdict: &str, apply_state: &str) -> BypassTarget {

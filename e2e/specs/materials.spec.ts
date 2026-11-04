@@ -76,14 +76,16 @@ test.describe('背景材质', () => {
     await expect(toggle).toBeChecked()
     // 纸底与对话框同一套材质：左上主光、右下补光，卡片和输入区域继续持各自实底。
     expect((await background('.app-root')).image).toContain('radial-gradient')
-    // 柔光整窗只画在 .app-root 一层：导轨与品牌格透明，坐在同一层光上。
-    expect((await background('.sidebar')).image).toBe('none')
-    expect((await background('.titlebar-brandcell')).image).toBe('none')
-    // 空页是品牌时刻：氛围开着时浮片化开，整窗就是光；关灯后浮片回到实底。
+    // 导轨与品牌格是自己的实底（比内容面降一档），接缝不画线；开着柔光时整窗那几层
+    // 光原样再压一遍在这块实底上（同一个 fixed 坐标系），光跨接缝连续、底色不跟着采光跳档。
+    expect((await background('.sidebar')).image).toContain('radial-gradient')
+    expect((await background('.titlebar-brandcell')).image).toContain('radial-gradient')
+    await expect(page.locator('.sidebar')).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect(page.locator('.titlebar-brandcell')).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    // 小记保留输入框与内容底色，空列表也沿用正常页面的柔光。
     const sheet = await background('.workspace-surface')
-    expect(sheet.image).toBe('none')
-    // 化开带 260ms 过渡，断言要能等到它落定。
-    await expect(page.locator('.workspace-surface')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    expect(sheet.image).toContain('radial-gradient')
+    await expect(page.locator('.workspace-surface')).toHaveCSS('background-color', 'rgb(247, 247, 245)')
     expect((await background('.settings-dialog')).image).toContain('radial-gradient')
     expect((await background('.settings-nav')).color).toMatch(/rgba|\/\s*0\./)
 
@@ -92,6 +94,9 @@ test.describe('背景材质', () => {
     expect((await e2e.snapshot(page)).settings.background_atmosphere).toBe('false')
     expect((await background('.app-root')).image).toBe('none')
     expect((await background('.settings-dialog')).image).toBe('none')
+    // 关灯后导轨与品牌格只留自己的实底，光层跟着撤走。
+    expect((await background('.sidebar')).image).toBe('none')
+    expect((await background('.titlebar-brandcell')).image).toBe('none')
     // 关闭氛围后窗框恢复纯色，浮片重新成为一块实底。
     await expect(page.locator('.workspace-surface')).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 

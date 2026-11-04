@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
+import { ref, shallowRef, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { usePageActive } from '../../composables/usePageActive'
 import { normalizeAssetHtml, resolveAssetHtml } from '../../services/attachmentSrc'
 import { sanitizeNoteHtml, safeLink, safeImage } from '../../utils/sanitizeNoteHtml'
@@ -13,7 +13,8 @@ import TaskItem from '@tiptap/extension-task-item'
 import { Extension, mergeAttributes, Node } from '@tiptap/core'
 import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state'
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
-import type { Node as PMNode } from '@tiptap/pm/model'
+import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model'
+import { closeHistory } from '@tiptap/pm/history'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { createLowlight } from 'lowlight'
 import ts from 'highlight.js/lib/languages/typescript'
@@ -376,7 +377,7 @@ const editor = useEditor({
   editorProps: {
     // 全屏面与阅读面共用一份正文排版（global.css 的 .note-doc），预览和编辑不再各排一套
     attributes: props.variant === 'full' ? { class: 'note-doc' } : {},
-    handlePaste: (view, event) => notesStore.notePasteCleanup ? pasteLinkAsUrl(view, event) : false,
+    handlePaste: (view, event, slice) => handleNotePaste(view, event, slice),
     transformPasted: (slice, view) => notesStore.notePasteCleanup
       ? normalizeNotePaste(slice, !!view.state.selection.$from.parent.type.spec.code)
       : slice,
@@ -402,6 +403,7 @@ const editor = useEditor({
         return false
       },
       keydown: (view, event) => {
+        plainPasteRequested = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v'
         if (!view.composing && /^(Arrow|Home$|End$|Page|Escape$)/.test(event.key)) compositionRange = null
         else if (!view.composing && compositionRange) finishPunctuation(view, compositionRange)
         return false
@@ -692,6 +694,54 @@ const linkInputEl = ref<HTMLInputElement | null>(null)
 const pastedLink = ref<{ from: number; to: number; url: string; title: string } | null>(null)
 const pastedLinkPos = ref({ top: 0, left: 0 })
 
+// 原文档只保留到下一次编辑/移动光标，转换时不会碰到后续输入。
+const pastedText = shallowRef<{ before: EditorState; after: PMNode; text: string } | null>(null)
+const pastedTextPos = ref({ top: 0, left: 0 })
+let plainPasteRequested = false
+
+function positionPastedText(view: EditorView) {
+  const caret = view.coordsAtPos(view.state.selection.to)
+  pastedTextPos.value = {
+    top: caret.bottom + GAP + 38 < window.innerHeight ? caret.bottom + GAP : Math.max(MARGIN, caret.top - GAP - 38),
+    left: Math.max(MARGIN, Math.min(caret.left, window.innerWidth - 240 - MARGIN)),
+  }
+}
+
+function handleNotePaste(view: EditorView, event: ClipboardEvent, slice: Slice) {
+  pastedText.value = null
+  const plain = plainPasteRequested
+  plainPasteRequested = false
+  const before = view.state
+  const data = event.clipboardData
+  const offer = !plain && !before.selection.$from.parent.type.spec.code
+    && !!data?.getData('text/html') && !data?.files.length
+  const text = data?.getData('text/plain') || slice.content.textBetween(0, slice.content.size, '\n', node => node.type.name === 'hardBreak' ? '\n' : '')
+  if (offer && text) queueMicrotask(() => {
+    if (view.isDestroyed || view.state.doc.eq(before.doc)) return
+    pastedText.value = { before, after: view.state.doc, text }
+    positionPastedText(view)
+  })
+  return !plain && notesStore.notePasteCleanup ? pasteLinkAsUrl(view, event) : false
+}
+
+function pasteAsPlainText() {
+  const pending = pastedText.value
+  const ed = editor.value
+  pastedText.value = null
+  pastedLink.value = null
+  if (!ed || !pending || !ed.state.doc.eq(pending.after)) return
+  const { schema } = ed.state
+  const paragraphs = pending.text.replace(/\r\n?/g, '\n').split('\n').map(line =>
+    schema.nodes.paragraph.create(null, line ? schema.text(line) : undefined))
+  // 在同一笔撤销记录里恢复粘贴前的选区，再插入无标记的段落。
+  const tr = closeHistory(ed.state.tr).replaceWith(0, ed.state.doc.content.size, pending.before.doc.content)
+  tr.setSelection(pending.before.selection.getBookmark().resolve(tr.doc))
+  tr.replaceSelection(new Slice(Fragment.fromArray(paragraphs), 1, 1)).setStoredMarks([])
+  ed.view.dispatch(tr.scrollIntoView())
+  showSlashMenu.value = false
+  ed.view.focus()
+}
+
 /** 浏览器复制链接常同时给出 URL 和「网页标题」HTML；先保留 URL，标题由用户决定是否采用。 */
 const pasteLinkAsUrl = (view: import('@tiptap/pm/view').EditorView, event: ClipboardEvent) => {
   if (view.state.selection.$from.parent.type.spec.code) return false
@@ -849,6 +899,7 @@ watch(() => editor.value, (ed) => {
     updateFormatBar(e)
   })
   ed.on('transaction', ({ editor: e, transaction }) => {
+    if (transaction.docChanged || transaction.selectionSet) pastedText.value = null
     if (pastedLink.value && (transaction.docChanged || e.state.selection.from !== pastedLink.value.to
       || e.state.selection.to !== pastedLink.value.to)) {
       pastedLink.value = null
@@ -870,7 +921,10 @@ const handleClickOutside = (e: MouseEvent) => {
   if (showFormatBar.value && formatBarEl.value && !formatBarEl.value.contains(e.target as HTMLElement)) {
     closeFormatBar()
   }
-  if (pastedLink.value && !(e.target as HTMLElement).closest('.paste-link-prompt')) pastedLink.value = null
+  if (!(e.target as HTMLElement).closest('.paste-link-prompt')) {
+    pastedLink.value = null
+    pastedText.value = null
+  }
 }
 
 onMounted(() => {
@@ -888,6 +942,7 @@ onBeforeUnmount(() => {
 function repositionFormatBar() {
   if (showFormatBar.value) updateFormatBar(editor.value)
   if (pastedLink.value && editor.value) positionPastedLink(editor.value.view)
+  if (pastedText.value && editor.value) positionPastedText(editor.value.view)
 }
 
 const focusEnd = () => {
@@ -1052,7 +1107,14 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
       <div v-if="pastedLink" class="paste-link-prompt" :style="{ top: pastedLinkPos.top + 'px', left: pastedLinkPos.left + 'px' }" role="group" aria-label="链接粘贴选项">
         <span class="paste-link-title" :title="pastedLink.title">网页标题：{{ pastedLink.title }}</span>
         <button type="button" @mousedown.prevent @click="convertPastedLink">转换为标题</button>
-        <button type="button" aria-label="保留网址" title="保留网址" @mousedown.prevent @click="pastedLink = null"><AppIcon name="x" :size="14" /></button>
+        <button v-if="pastedText" type="button" @mousedown.prevent @click="pasteAsPlainText">只粘贴文本</button>
+        <button type="button" aria-label="保留网址" title="保留网址" @mousedown.prevent @click="pastedLink = null; pastedText = null"><AppIcon name="x" :size="14" /></button>
+      </div>
+    </Teleport>
+    <Teleport to="body" :disabled="!pageActive">
+      <div v-if="pastedText && !pastedLink" class="paste-link-prompt" :style="{ top: pastedTextPos.top + 'px', left: pastedTextPos.left + 'px' }" role="group" aria-label="粘贴选项">
+        <button type="button" @mousedown.prevent @click="pasteAsPlainText">只粘贴文本</button>
+        <button type="button" @mousedown.prevent @click="pastedText = null">保留当前格式</button>
       </div>
     </Teleport>
     <div v-if="showLangSelector" class="lang-selector" :style="{ top: langSelectorPos.top + 'px', right: langSelectorPos.right + 'px' }">

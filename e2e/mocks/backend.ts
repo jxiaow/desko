@@ -152,6 +152,7 @@ export interface E2EConfig {
     /** 配置后的复验结果覆盖，用来验证写入成功但目标仍不可达的场景。 */
     recheckVerdict?: 'directOk' | 'hostsOnly' | 'needRoute' | 'unreachable' | 'egressUnknown'
     revertFail?: string
+    cleanup?: { cancel?: boolean; fail?: string; delayMs?: number }
   }
   codex?: {
     accounts?: {
@@ -475,7 +476,7 @@ interface BackendState {
   }
   /** currentId 是显式指针，与后端 index.current_account_id 同构：导入/新增不动它，只有切号与登录落库才改 */
   codex: { accounts: CodexAccountRecord[]; portBusy: boolean; loginId: string; currentId: string; repairFail: boolean; repairDelayMs: number; repairRows: number; switchDelayMs: number; sessionsFail: boolean; statsFail: boolean; sessions: CodexSessionSeed[]; trash: CodexTrashSeed[]; trashFail: boolean; recycled: CodexRecycledSeed[]; recycledFail: boolean; openFail: boolean; usageFail: boolean; usageScanMillis: number; deleteStepMs: number; deleteFailEmails: string[]; deleteJobs: Record<string, CodexDeleteJob>; switchUx: SwitchUxState }
-  bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probeDelay: number; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string; applyDelay: number; applyCancel: boolean; applyLost: string; applyBlocked: string[]; routeOptions: Record<string, RouteOption[]>; applyFailed: string[]; applySkipped: string[]; applyRollbackFail: boolean; recheckDelay: number; recheckVerdict: string; revertFail: string; rollbackBatch: string }
+  bypass: { targets: BypassTargetRecord[]; verdict: string; probeFail: boolean; probeDelay: number; probe: E2EBypassProbeSeed | null; hostsManaged: number; hostsError: string; applyDelay: number; applyCancel: boolean; applyLost: string; applyBlocked: string[]; routeOptions: Record<string, RouteOption[]>; applyFailed: string[]; applySkipped: string[]; applyRollbackFail: boolean; recheckDelay: number; recheckVerdict: string; revertFail: string; rollbackBatch: string; cleanupCancel: boolean; cleanupFail: string; cleanupDelay: number }
   profiles: { activeId: string; list: ProfileRecord[] }
 }
 
@@ -832,6 +833,9 @@ class MockBackend {
         recheckDelay: config.bypass?.recheckDelayMs ?? 0,
         recheckVerdict: config.bypass?.recheckVerdict ?? '',
         revertFail: config.bypass?.revertFail ?? '',
+        cleanupCancel: config.bypass?.cleanup?.cancel ?? false,
+        cleanupFail: config.bypass?.cleanup?.fail ?? '',
+        cleanupDelay: config.bypass?.cleanup?.delayMs ?? 0,
         rollbackBatch: '',
       },
       codex: { accounts: [], portBusy: false, loginId: '', currentId: '', repairFail: false, repairDelayMs: 0, repairRows: 3, switchDelayMs: 0, sessionsFail: false, statsFail: false, sessions: [], trash: [], trashFail: false, recycled: [], recycledFail: false, openFail: false, usageFail: false, usageScanMillis: 0, deleteStepMs: 0, deleteFailEmails: [], deleteJobs: {}, switchUx: switchUxState() },
@@ -1611,11 +1615,14 @@ class MockBackend {
   }
 
   /** 与 netguard_service::plan 同形：一条域名可以出两行（hosts 固定 + 持久路由） */
-  private bypassPlanRows(allowCdn: string[] = [], routeOverrides: RouteOverride[] = []): PlannedRow[] {
+  private bypassPlanRows(allowCdn: string[] = [], routeOverrides: RouteOverride[] = [], targetId?: string): PlannedRow[] {
     const s = this.state.bypass
     const rows: PlannedRow[] = []
-    for (const t of this.bypassPending()) {
-      if (this.cdnGated(t, allowCdn)) {
+    const targets = targetId ? s.targets.filter((t) => t.id === targetId) : this.bypassPending()
+    if (targetId && !targets.length) throw '条目不存在，可能已被删除'
+    for (const t of targets) {
+      const needsPin = t.verdict === 'hostsOnly' || t.verdict === 'needRoute'
+      if (needsPin && this.cdnGated(t, allowCdn)) {
         rows.push({
           id: t.id,
           label: t.host,
@@ -1625,7 +1632,7 @@ class MockBackend {
         continue
       }
       const isDomain = t.kind === 'domain'
-      if (isDomain) {
+      if (isDomain && needsPin) {
         rows.push({
           id: t.id,
           label: t.host,
@@ -1633,7 +1640,7 @@ class MockBackend {
           blocked: '',
         })
       }
-      if (t.verdict !== 'needRoute') continue
+      if (t.verdict !== 'needRoute' && !targetId) continue
       const prefix = isDomain ? t.address : t.host
       if (!prefix) {
         if (!isDomain) {
@@ -1669,8 +1676,8 @@ class MockBackend {
   }
 
   /** 任务书里的那几笔：只有真有动作的行才落盘 */
-  private bypassWork(allowCdn: string[] = [], routeOverrides: RouteOverride[] = []): { id: string; host: string; op: string }[] {
-    const rows = this.bypassPlanRows(allowCdn, routeOverrides)
+  private bypassWork(allowCdn: string[] = [], routeOverrides: RouteOverride[] = [], targetId?: string): { id: string; host: string; op: string }[] {
+    const rows = this.bypassPlanRows(allowCdn, routeOverrides, targetId)
     return rows
       .filter((r) => !!r.action && !rows.some((other) => other.id === r.id && !!other.blocked))
       .map((r) => ({
@@ -3018,28 +3025,36 @@ class MockBackend {
       stale: this.state.bypass.targets.filter((t) => t.stale).length,
     }),
 
-    bypass_delete: ({ id }) => {
-      this.state.bypass.targets = this.state.bypass.targets.filter((t) => t.id !== id)
+    bypass_delete: async ({ id }) => {
+      const state = this.state.bypass
+      if (state.cleanupDelay) await new Promise((resolve) => setTimeout(resolve, state.cleanupDelay))
+      if (state.cleanupCancel) return false
+      if (state.cleanupFail) throw state.cleanupFail
+      const target = state.targets.find((t) => t.id === id)
+      state.targets = state.targets.filter((t) => t.id !== id)
+      if (target?.applyBatch && !state.targets.some((t) => t.applyBatch === target.applyBatch)) state.rollbackBatch = ''
+      if (target?.kind === 'domain' && target.applyState === 'applied') state.hostsManaged = Math.max(0, state.hostsManaged - 1)
+      return true
     },
 
     /** 与 Rust bypass_plan 同形：ready 按条目计，不是按动作计 */
-    bypass_plan: ({ allowCdn, routeOverrides = [] }: { allowCdn?: unknown; routeOverrides?: RouteOverride[] }) => {
+    bypass_plan: ({ allowCdn, routeOverrides = [], targetId }: { allowCdn?: unknown; routeOverrides?: RouteOverride[]; targetId?: string }) => {
       const allow = this.allowCdnOf(allowCdn)
-      const rows = this.bypassPlanRows(allow, routeOverrides)
+      const rows = this.bypassPlanRows(allow, routeOverrides, targetId)
       const blocked = new Set(rows.filter((r) => !!r.blocked).map((r) => r.id)).size
-      const ready = new Set(this.bypassWork(allow, routeOverrides).map((r) => r.id)).size
+      const ready = new Set(this.bypassWork(allow, routeOverrides, targetId).map((r) => r.id)).size
       const planKey = JSON.stringify(rows.filter((r) => r.action).map((r) => [r.id, r.action]).sort())
       return { rows, ready, blocked, planKey }
     },
 
     /** 与 Rust bypass_apply 同形：一次 UAC 落完一批，任一条失败则整批回滚 */
-    bypass_apply: async ({ allowCdn, routeOverrides = [], expectedPlanKey }: { allowCdn?: unknown; routeOverrides?: RouteOverride[]; expectedPlanKey?: string }) => {
+    bypass_apply: async ({ allowCdn, routeOverrides = [], expectedPlanKey, targetId }: { allowCdn?: unknown; routeOverrides?: RouteOverride[]; expectedPlanKey?: string; targetId?: string }) => {
       const s = this.state.bypass
       if (s.applyDelay > 0) await new Promise((r) => setTimeout(r, s.applyDelay))
-      const rows = this.bypassPlanRows(this.allowCdnOf(allowCdn), routeOverrides)
+      const rows = this.bypassPlanRows(this.allowCdnOf(allowCdn), routeOverrides, targetId)
       const currentKey = JSON.stringify(rows.filter((r) => r.action).map((r) => [r.id, r.action]).sort())
       if (!expectedPlanKey || currentKey !== expectedPlanKey) throw new Error('网络或清单已变化，尚未写入更改。请重新打开“配置直连”查看最新方案')
-      const work = this.bypassWork(this.allowCdnOf(allowCdn), routeOverrides)
+      const work = this.bypassWork(this.allowCdnOf(allowCdn), routeOverrides, targetId)
       if (!work.length) {
         return { batchId: '', cancelled: false, rolledBack: false, items: [], error: '' }
       }

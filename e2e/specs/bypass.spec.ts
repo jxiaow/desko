@@ -54,7 +54,7 @@ async function openHeroMenu(page: Page) {
   await expect(page.locator('.popover')).toBeVisible()
 }
 
-test.describe('网络直连', () => {
+test.describe('网络选路', () => {
   test('开关默认关：没有侧栏入口，直达 /bypass 被带回小记页', async ({ page }) => {
     await bootUnlocked(page, {}, '/bypass')
     await expect(page).toHaveURL(/\/notes$/)
@@ -67,10 +67,10 @@ test.describe('网络直连', () => {
     await expect(page.locator('a.nav-item[href="/bypass"]')).toHaveCount(0)
     const dialog = await openSettings(page, 'modules')
     await visiblePane(dialog)
-      .locator('.setting-item', { hasText: '网络直连' })
+      .locator('.setting-item', { hasText: '网络选路' })
       .locator('.switch-slider')
       .click()
-    await expectToast(page, '网络直连已开启')
+    await expectToast(page, '网络选路已开启')
     await dialog.locator('.dialog-close').click()
     await expect(page.locator('a.nav-item[href="/bypass"]')).toHaveCount(1)
     await page.locator('a.nav-item[href="/bypass"]').click()
@@ -192,6 +192,36 @@ test.describe('网络直连', () => {
       '以太网 · 源地址 192.168.1.23 · 网关 192.168.1.1',
     )
     await expect(page.locator('.concl-pending')).toHaveCount(0)
+  })
+
+  test('已配置目标移出后重新添加，可从结论和详情更换出口', async ({ page }) => {
+    const host = 'internal.example.com'
+    await page.setViewportSize({ width: 900, height: 760 })
+    await gotoBypass(page, scenario('directOk', {
+      targets: [{ host, input: host, verdict: 'directOk', applyState: 'applied', applyBatch: 'original' }],
+      apply: { routeOptions: { [host]: [{ interfaceIndex: 16, interfaceAlias: '内网 VPN', gateway: '26.0.48.1', gatewayIsOnLink: false }] } },
+    }))
+    await chip(page, host).click()
+    const detail = page.getByRole('dialog', { name: '直连详情' })
+    await expect(detail.getByRole('button', { name: '更换直连出口' })).toBeVisible()
+    await detail.screenshot({ path: '.tmp/bypass-change-route-detail.png' })
+    await detail.getByRole('button', { name: '移出清单' }).click()
+    await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
+    await expect(rows(page)).toHaveCount(0)
+    await probe(page, host)
+    await record(page)
+    await page.getByRole('dialog', { name: '探测结论' }).getByRole('button', { name: '更换直连出口' }).click()
+    const plan = page.getByRole('dialog', { name: '配置确认' })
+    await expect(plan.locator('.plan-list li')).toHaveCount(1)
+    await plan.locator('.plan-route select').selectOption('16|26.0.48.1')
+    await expect(plan.locator('.plan-action')).toContainText('内网 VPN')
+    await plan.screenshot({ path: '.tmp/bypass-change-route-plan.png' })
+    await plan.getByRole('button', { name: '确认并配置' }).click()
+    await expect.poll(() => e2e.count(page, 'bypass_recheck')).toBe(1)
+    await expect(chip(page, host)).toBeVisible()
+    await chip(page, host).click()
+    await detail.getByRole('button', { name: '更换直连出口' }).click()
+    await expect(plan.locator('.plan-route select')).toBeVisible()
   })
 
   test('过期结果不能保存或静默重探，保留输入供显式重试', async ({ page }) => {
@@ -316,7 +346,7 @@ test.describe('网络直连', () => {
     await page.locator('.popover .pop-item', { hasText: '移出清单' }).click()
     const confirm = page.locator('.confirm-dialog')
     await expect(confirm).toBeVisible()
-    await expect(confirm).toContainText('「internal.example.com」将从网络直连清单移除。')
+    await expect(confirm).toContainText('「internal.example.com」将从网络选路清单移除。')
     await confirm.locator('button', { hasText: '取消' }).click()
     expect(await e2e.count(page, 'bypass_delete')).toBe(0)
     await expect(rows(page)).toHaveCount(2)
@@ -769,7 +799,7 @@ test.describe('网络直连', () => {
     await expect(card(page, 'second.example.com')).toBeVisible()
   })
 
-  test('移除最后一条已配置记录后，仍能撤销系统配置', async ({ page }) => {
+  test('移除最后一条已配置记录会一并清理配置和撤销入口', async ({ page }) => {
     await gotoBypass(page, scenario('hostsOnly', { targets: [{ host: 'single.example.com', address: '10.20.0.1', verdict: 'hostsOnly' }] }))
     await writeBtn(page).click()
     await page.getByRole('dialog', { name: '配置确认' }).getByRole('button', { name: '确认并配置' }).click()
@@ -778,19 +808,28 @@ test.describe('网络直连', () => {
     await expect(chip(page, 'single.example.com')).toBeVisible()
     await chip(page, 'single.example.com').click()
     await page.locator('.detail-dialog').getByRole('button', { name: '移出清单' }).click()
-    await expect(page.locator('.confirm-dialog')).toContainText('已配置的 hosts 和路由会保留')
+    await expect(page.locator('.confirm-dialog')).toContainText('将同时清理本功能为该目标创建')
     await page.locator('.confirm-dialog .dialog-footer button', { hasText: '确定' }).click()
     await expect(rows(page)).toHaveCount(0)
-    // 清单空了但批次还在：概览只留 ⋯，撤销入口不丢
-    await expect(page.locator('.hero')).toBeVisible()
-    await expect(writeBtn(page)).toHaveCount(0)
-    await openHeroMenu(page)
-    await expect(page.locator('.popover .pop-item', { hasText: '复制直连清单' })).toHaveCount(0)
-    await page.locator('.popover .pop-item', { hasText: '撤销上次配置' }).click()
-    await page.locator('.confirm-dialog .dialog-footer button', { hasText: '确定' }).click()
-    await expectToast(page, '已撤销上次配置')
     await expect(page.locator('.hero')).toHaveCount(0)
+    await expect(writeBtn(page)).toHaveCount(0)
+    expect(await e2e.count(page, 'bypass_revert')).toBe(0)
   })
+
+  for (const cancelled of [true, false]) {
+    test(`移除时${cancelled ? '取消管理员授权' : '清理失败'}会保留原条目`, async ({ page }) => {
+      await gotoBypass(page, scenario('directOk', {
+        targets: [{ host: 'single.example.com', verdict: 'directOk', applyState: 'applied', applyBatch: 'batch' }],
+        cleanup: cancelled ? { cancel: true } : { fail: '路由清理失败，清单记录已保留' },
+      }))
+      await chip(page, 'single.example.com').click()
+      await page.locator('.detail-dialog').getByRole('button', { name: '移出清单' }).click()
+      await page.locator('.confirm-dialog').getByRole('button', { name: '确定', exact: true }).click()
+      await expectToast(page, cancelled ? '已取消授权' : '清理失败')
+      await expect(chip(page, 'single.example.com')).toBeVisible()
+      expect((await e2e.snapshot(page)).bypass.targets).toHaveLength(1)
+    })
+  }
 
   test('撤销失败保留批次和重试入口', async ({ page }) => {
     await gotoBypass(page, scenario('hostsOnly', { targets: [{ host: 'single.example.com', address: '10.20.0.1', verdict: 'hostsOnly' }], revertFail: '删除路由失败' }))

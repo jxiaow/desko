@@ -171,7 +171,7 @@ describe('module state', () => {
 })
 
 describe('Web 模块白名单', () => {
-  it('Web 登录前不开放模块，登录后读取七个共用开关，网络直连仍限桌面', async () => {
+  it('Web 登录前不开放模块，登录后读取七个共用开关，网络选路仍限桌面', async () => {
     const meta = document.createElement('meta')
     meta.name = 'desko-runtime'
     meta.content = 'web'

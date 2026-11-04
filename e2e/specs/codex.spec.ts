@@ -565,16 +565,10 @@ async function argOf(page: Page, cmd: string, key: string) {
   return calls[calls.length - 1]?.args[key]
 }
 
-/** 需要读取会话行时，确保目标项目已展开。 */
-async function expandGroup(page: Page, name: string) {
-  const head = page.locator('.grp-head', { hasText: name })
-  if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
-  await expect(head).toHaveAttribute('aria-expanded', 'true')
-}
 
 test.describe('Codex 会话档', () => {
-  /** 失败态下不会出现分组头，最后一等的东西由调用方给 */
-  async function gotoSessions(page: Page, config = SEED_SESSIONS, until = '.grp-head') {
+  /** 失败态下不会出现会话行，等待目标由调用方指定 */
+  async function gotoSessions(page: Page, config = SEED_SESSIONS, until = '.sess-row') {
     await bootUnlocked(page, config)
     await page.locator('a.nav-item[href="/codex"]').click()
     await expect(page.locator('.acc-row').first()).toBeVisible()
@@ -589,46 +583,33 @@ test.describe('Codex 会话档', () => {
     expect(await e2e.count(page, LIST_CMD)).toBe(0)
 
     await page.locator('.cx-tab', { hasText: '会话' }).click()
-    await expect(page.locator('.grp-head').first()).toBeVisible()
+    await expect(page.locator('.sess-row').first()).toBeVisible()
     expect(await e2e.count(page, LIST_CMD)).toBe(1)
 
     await page.locator('.cx-tab', { hasText: '账号' }).click()
     await expect(page.locator('.acc-row').first()).toBeVisible()
     await page.locator('.cx-tab', { hasText: '会话' }).click()
-    await expect(page.locator('.grp-head').first()).toBeVisible()
+    await expect(page.locator('.sess-row').first()).toBeVisible()
     expect(await e2e.count(page, LIST_CMD)).toBe(2)
   })
 
-  test('首屏展开最近项目，进档预取 token，重新展开不补取', async ({ page }) => {
+  test('首屏平铺所有会话，默认不打开详情，读取详情复用预取统计', async ({ page }) => {
     await gotoSessions(page)
-    await expect(page.locator('.grp-head')).toHaveCount(2)
-    // 首次展开最近项目，同时预取全部统计。
-    const notes = page.locator('.grp-head', { hasText: 'demo-notes' })
-    await expect(notes).toHaveAttribute('aria-expanded', 'true')
-    await expect(page.locator('.grp-head', { hasText: 'demo-icons' })).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.locator('.sess-row')).toHaveCount(3)
-    // 本机实测 67 个 rollout 全量尾扫 218 ms：等展开才取会让合计量沉在水下
+    await expect(page.locator('.sess-row')).toHaveCount(4)
+    await expect(page.locator('.sess-detail')).toHaveCount(0)
     await expect.poll(() => e2e.count(page, STATS_CMD)).toBe(1)
     expect((await argOf(page, STATS_CMD, 'sessionIds')).slice().sort()).toEqual([
-      'sess-a1b2c3d4e5',
-      'sess-f6g7h8i9j0',
-      'sess-k1l2m3n4o5',
-      'sess-p6q7r8s9t0',
+      'sess-a1b2c3d4e5', 'sess-f6g7h8i9j0', 'sess-k1l2m3n4o5', 'sess-p6q7r8s9t0',
     ])
-
-    await notes.click()
-    await expect(notes).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.locator('.sess-row')).toHaveCount(0)
-    await notes.click()
-    await expect(page.locator('.sess-row')).toHaveCount(3)
+    const row = page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')
+    await expect(row).not.toHaveAttribute('title')
+    await expect(row).toHaveAttribute('aria-label', '修全屏小记的排版，展开详情')
+    await row.click()
+    await expect(page.locator('.sess-detail')).toBeVisible()
+    await page.locator('.sess-row[aria-expanded="true"]').click()
     expect(await e2e.count(page, STATS_CMD)).toBe(1)
-    // 完整用量留在展开区，整行不再弹出多行统计遮住相邻会话。
-    await expect(page.locator('.sess-row').first()).not.toHaveAttribute('title')
-    await expect(page.locator('.sess-row').first()).toHaveAttribute('aria-label', '修全屏小记的排版，展开详情')
-    // 无标题那条：完整 ID 上屏，标题悬停只保留完整 ID。
-    const idRow = page.locator('.sess-row').last()
+    const idRow = page.locator('.sess-row[data-sid="sess-p6q7r8s9t0"]')
     await expect(idRow.locator('.sess-title')).toHaveText('sess-p6q7r8s9t0')
-    await expect(idRow.locator('.sess-title')).toHaveAttribute('title', 'sess-p6q7r8s9t0')
     await expect(idRow.locator('.badge')).toHaveText('子代理')
   })
 
@@ -650,43 +631,32 @@ test.describe('Codex 会话档', () => {
     }
   })
 
-  test('搜索命中即展开：折叠的组不把结果藏在水下，清空回到用户态', async ({ page }) => {
+  test('搜索结果直接可见，清空恢复全部会话', async ({ page }) => {
     await gotoSessions(page)
-    const icons = page.locator('.grp-head', { hasText: 'demo-icons' })
-    await expect(icons).toHaveAttribute('aria-expanded', 'false')
-
     await page.getByRole('textbox', { name: '搜索会话标题', exact: true }).fill('图标')
-    await expect(icons).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('.sess-row')).toHaveCount(1)
     await expect(page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]')).toBeVisible()
-
     await page.locator('.search-clear').click()
-    await expect(page.locator('.grp-head')).toHaveCount(2)
-    await expect(icons).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.locator('.sess-row')).toHaveCount(3)
+    await expect(page.locator('.sess-row')).toHaveCount(4)
   })
 
-  test('切到别的档再回来：翻开的组不丢', async ({ page }) => {
+  test('切换页签保留目录筛选', async ({ page }) => {
     await gotoSessions(page)
-    const icons = page.locator('.grp-head', { hasText: 'demo-icons' })
-    await icons.click()
-    await expect(page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]')).toBeVisible()
-
+    await page.getByRole('button', { name: '目录筛选', exact: true }).click()
+    await page.getByRole('menuitemradio', { name: /demo-icons/ }).click()
+    await expect(page.locator('.sess-row')).toHaveCount(1)
     await page.locator('.cx-tab', { hasText: '回收站' }).click()
     await page.locator('.cx-tab', { hasText: '会话' }).click()
-    await expect(page.locator('.grp-head')).toHaveCount(2)
-    await expect(icons).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.locator('.sess-row')).toHaveCount(1)
     await expect(page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]')).toBeVisible()
-    // 返回时重扫目录，但保留用户翻开的组。
     expect(await e2e.count(page, LIST_CMD)).toBe(2)
   })
 
-  test('合计量上屏：hero 一笔、组头一位，展开行给六个口径', async ({ page }) => {
+  test('合计量上屏，卡片内展示完整统计', async ({ page }) => {
     await gotoSessions(page)
     await expect(page.locator('.hero-num')).toHaveText('6.51万')
     await expect(page.locator('.hero-sub')).toHaveText('净输入 8,800 · 输出 5,020 · 缓存命中 5.13万')
-    await expect(page.locator('.grp-head').first().locator('.grp-tok > span')).toHaveText(['累计 1.69万 Token', '请求 3 次', '估算 $0.0185'])
 
-    await expandGroup(page, 'demo-notes')
     const row = page.locator('.sess-row').first()
     // 行上直接显示用量与时间；展开档再逐位铺开
     await expect(row.locator('.sess-time')).toBeVisible()
@@ -698,11 +668,11 @@ test.describe('Codex 会话档', () => {
 
   test('标题搜索走后端：只填 trim 后的 titleQuery，contentQuery 恒 null', async ({ page }) => {
     await gotoSessions(page)
-    await expect(page.locator('.grp-head')).toHaveCount(2)
+    await expect(page.locator('.sess-row')).toHaveCount(4)
 
     await page.getByRole('textbox', { name: '搜索会话标题', exact: true }).fill('  查配额  ')
-    await expect(page.locator('.grp-head')).toHaveCount(1)
-    await expect(page.locator('.grp-head', { hasText: 'demo-notes' })).toBeVisible()
+    await expect(page.locator('.sess-row')).toHaveCount(1)
+    await expect(page.locator('.sess-row', { hasText: 'demo-notes' })).toBeVisible()
     expect(await e2e.count(page, LIST_CMD)).toBe(2)
     expect(await argOf(page, LIST_CMD, 'titleQuery')).toBe('查配额')
     expect(await argOf(page, LIST_CMD, 'contentQuery')).toBeNull()
@@ -711,7 +681,7 @@ test.describe('Codex 会话档', () => {
     await expect(page.locator('.sess-title')).toHaveText('查配额刷新链路')
 
     await page.locator('.search-clear').click()
-    await expect(page.locator('.grp-head')).toHaveCount(2)
+    await expect(page.locator('.sess-row')).toHaveCount(4)
     expect(await argOf(page, LIST_CMD, 'titleQuery')).toBeNull()
   })
 
@@ -721,7 +691,7 @@ test.describe('Codex 会话档', () => {
       codex: { ...SEED_SESSIONS.codex, sessionsFail: true },
     }, '.empty-state')
     await expect(page.locator('.empty-title')).toHaveText('读不到官方会话目录')
-    await expect(page.locator('.grp-head')).toHaveCount(0)
+    await expect(page.locator('.sess-row')).toHaveCount(0)
     await expect(page.locator('.empty-desc')).toHaveAttribute('title', /官方会话目录不可读/)
     await page.locator('.empty-state .action-btn').click()
     expect(await e2e.count(page, LIST_CMD)).toBe(2)
@@ -765,8 +735,7 @@ test.describe('Codex 会话回收站', () => {
 
   test('移到回收站：先确认，官方列表与合计量同时收掉这条', async ({ page }) => {
     await bootUnlocked(page, SEED_SESSIONS)
-    await gotoTab(page, '会话', '.grp-head')
-    await expandGroup(page, 'demo-notes')
+    await gotoTab(page, '会话', '.sess-row')
     await expect(page.locator('.hero-num')).toHaveText('6.51万')
     await expect(page.locator('.hero-sub')).toHaveText('净输入 8,800 · 输出 5,020 · 缓存命中 5.13万')
 
@@ -808,7 +777,6 @@ test.describe('Codex 会话回收站', () => {
 
     await page.locator('.cx-tab', { hasText: '会话' }).click()
     await expect(page.locator('.titlebar-count')).toHaveText('4 条')
-    await expandGroup(page, 'demo-notes')
     await expect(page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]')).toBeVisible()
   })
 
@@ -850,20 +818,19 @@ test.describe('Codex 会话回收站', () => {
 
   test('进回收站档不扫官方目录，切回会话档才重扫', async ({ page }) => {
     await bootUnlocked(page, SEED_TRASH)
-    await gotoTab(page, '会话', '.grp-head')
+    await gotoTab(page, '会话', '.sess-row')
     expect(await e2e.count(page, LIST_CMD)).toBe(1)
     await page.locator('.cx-tab', { hasText: '回收站' }).click()
     await expect(page.locator('.thr-row')).toHaveCount(2)
     expect(await e2e.count(page, LIST_CMD)).toBe(1)
     await page.locator('.cx-tab', { hasText: '会话' }).click()
-    await expect(page.locator('.grp-head')).toHaveCount(2)
+    await expect(page.locator('.sess-row')).toHaveCount(2)
     expect(await e2e.count(page, LIST_CMD)).toBe(2)
   })
 
   test('打开位置与打开会话文件：按 sessionId 调用，成功不播 toast', async ({ page }) => {
     await bootUnlocked(page, SEED_SESSIONS)
-    await gotoTab(page, '会话', '.grp-head')
-    await expandGroup(page, 'demo-icons')
+    await gotoTab(page, '会话', '.sess-row')
     await page.locator('.sess-row[data-sid="sess-k1l2m3n4o5"]').click()
 
     await page.locator('.sess-acts').getByRole('button', { name: '打开位置', exact: true }).click()
@@ -879,12 +846,11 @@ test.describe('Codex 会话回收站', () => {
 
   test('系统程序打不开：一条红色 toast，列表一条不少', async ({ page }) => {
     await bootUnlocked(page, { ...SEED_TRASH, codex: { ...SEED_TRASH.codex, openFail: true } })
-    await gotoTab(page, '会话', '.grp-head')
-    await expandGroup(page, 'demo-notes')
+    await gotoTab(page, '会话', '.sess-row')
     await page.locator('.sess-row').first().click()
     await page.locator('.sess-acts').getByRole('button', { name: '打开位置', exact: true }).click()
     await expectToast(page, '打开系统程序失败（e2e）')
-    await expect(page.locator('.sess-row')).toHaveCount(1)
+    await expect(page.locator('.sess-row')).toHaveCount(2)
   })
 
   test('回收站读不到：整页错误块与重试，不读成「回收站是空的」', async ({ page }) => {
@@ -898,13 +864,12 @@ test.describe('Codex 会话回收站', () => {
 
   test('移到回收站失败：红色 toast，官方列表与留底都不动', async ({ page }) => {
     await bootUnlocked(page, { ...SEED_SESSIONS, codex: { ...SEED_SESSIONS.codex, trashFail: true } })
-    await gotoTab(page, '会话', '.grp-head')
-    await expandGroup(page, 'demo-notes')
+    await gotoTab(page, '会话', '.sess-row')
     await page.locator('.sess-row').first().click()
     await page.locator('.sess-card .trash-btn').click()
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
     await expectToast(page, '会话移入回收站失败（e2e）')
-    await expect(page.locator('.sess-row')).toHaveCount(3)
+    await expect(page.locator('.sess-row')).toHaveCount(4)
     expect(await e2e.count(page, TRASH_LIST_CMD)).toBe(0)
   })
 })
@@ -1219,7 +1184,7 @@ test.describe('Codex 用量图', () => {
     return Math.floor(d.getTime() / 1000)
   }
 
-  test('停在别的档不扫目录，进入与返回用量档都更新', async ({ page }) => {
+  test('停在别的档不扫目录，进入扫描、短时间返回复用缓存', async ({ page }) => {
     await bootUnlocked(page, SEED_SESSIONS)
     await page.locator('a.nav-item[href="/codex"]').click()
     await expect(page.locator('.acc-row').first()).toBeVisible()
@@ -1232,7 +1197,7 @@ test.describe('Codex 用量图', () => {
     await page.locator('.cx-tab', { hasText: '账号' }).click()
     await page.locator('.cx-tab', { hasText: '用量' }).click()
     await expect(page.locator('.usg-sum')).toBeVisible()
-    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
   })
 
   test('总量行与柱子同账：净输入拆开缓存、模型表按量降序、扫描耗时上屏', async ({ page }) => {
@@ -1339,7 +1304,6 @@ test.describe('Codex 用量图', () => {
     await expect(page.locator('.usg-num')).toHaveText('6.51万')
 
     await page.locator('.cx-tab', { hasText: '会话' }).click()
-    await expandGroup(page, 'demo-notes')
     await page.locator('.sess-row[data-sid="sess-a1b2c3d4e5"]').click()
     await page.locator('.sess-card .trash-btn').click()
     await page.locator(CONFIRM_OK, { hasText: '确定' }).click()
@@ -1353,7 +1317,7 @@ test.describe('Codex 用量图', () => {
     expect(await e2e.count(page, USAGE_CMD)).toBe(2)
   })
 
-  test('查看回收站不触发用量统计，返回用量档补刷新且总量不变', async ({ page }) => {
+  test('查看回收站不触发用量统计，返回用量档复用缓存且总量不变', async ({ page }) => {
     await gotoUsage(page)
     expect(await e2e.count(page, USAGE_CMD)).toBe(1)
     const total = await page.locator('.usg-num').textContent()
@@ -1365,6 +1329,6 @@ test.describe('Codex 用量图', () => {
     await page.locator('.cx-tab', { hasText: '用量' }).click()
     await expect(page.locator('.usg-sum')).toBeVisible()
     await expect(page.locator('.usg-num')).toHaveText(total!)
-    expect(await e2e.count(page, USAGE_CMD)).toBe(2)
+    expect(await e2e.count(page, USAGE_CMD)).toBe(1)
   })
 })

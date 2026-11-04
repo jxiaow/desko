@@ -274,9 +274,9 @@
 }
 
 /* 纸底试光：主光从左上落下来，伴光收在右缘与下缘，光沿窗框绕一圈。
-   浮片与正文仍是实底，色彩只在框上；不做纵向整屏压灰。 */
+   导轨与内容面按各自强度接收同一束光，卡片保持实底。 */
 :root[data-layout="workspace"][data-atmosphere="on"][data-base="light"] {
-  --bg-workspace:
+  --material-workspace-layers:
     radial-gradient(ellipse 28% 34% at 50% -8%, rgb(255 255 255 / 96%) 0%, transparent 78%),
     radial-gradient(ellipse 88% 108% at 38% -20%,
       color-mix(in srgb, var(--glow-key) 30%, transparent) 0%,
@@ -288,13 +288,13 @@
     radial-gradient(ellipse 58% 42% at 2% 116%,
       color-mix(in oklab, var(--glow-fill) 34%, #ffffff) 0%,
       color-mix(in oklab, var(--glow-fill) 16%, #ffffff) 44%,
-      transparent 82%),
-    linear-gradient(180deg, #f1f3f4 0%, #e9edef 100%);
+      transparent 82%);
+  --bg-workspace: var(--material-workspace-layers), linear-gradient(180deg, #f1f3f4 0%, #e9edef 100%);
 }
 /* 顶带单独补一层横向色光：否则窗框只有左轨够宽，整窗看着像左上角一块染色。
    顶光从窗口上沿落下，到标题栏下沿已经淡尽，侧栏接着同一个底色，不留接缝。
    空页整窗自有光域配方，这里不再叠一层。 */
-:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"]:not(:has(.empty-state:not(.rcard):not(.is-filter))) .titlebar::before {
+:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"]:not(:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state))) .titlebar::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -308,27 +308,6 @@
   -webkit-mask-image: linear-gradient(180deg, #000 0%, rgb(0 0 0 / 45%) 55%, transparent 100%);
   mask-image: linear-gradient(180deg, #000 0%, rgb(0 0 0 / 45%) 55%, transparent 100%);
 }
-:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"] .workspace-surface {
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 90%),
-    0 0 0 1px color-mix(in srgb, var(--glow-key) 22%, transparent),
-    0 1px 3px rgb(15 23 42 / 6%),
-    0 14px 32px -16px rgb(15 23 42 / 17%);
-}
-:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"]
-  .workspace-surface:not(:has(.empty-state:not(.rcard):not(.is-filter)))::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 26;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--glow-key) 11%, transparent) 0, transparent 26px),
-    linear-gradient(270deg, color-mix(in srgb, var(--glow-comp) 9%, transparent) 0, transparent 30px),
-    linear-gradient(0deg, color-mix(in srgb, var(--glow-comp) 8%, transparent) 0, transparent 26px);
-}
-
 /* 暗底的中性强调色只改变光的明暗，避免把大面积留白再刷成灰色。 */
 :root[data-layout="workspace"][data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]),
 .workspace-theme-prev[data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]) {
@@ -338,18 +317,21 @@
 :root[data-layout="workspace"][data-atmosphere="on"], .workspace-theme-prev[data-atmosphere="on"] {
   --bg-dialog: var(--material-dialog-field);
   --dialog-background-attachment: scroll;
-  --bg-workspace: var(--workspace-grain), var(--material-workspace-field), var(--frame-base);
+  /* 光的层与框的底色分开存：--bg-workspace 是整窗那一份，导轨还要把同一套光
+     压在自己的实底（--bg-rail）上，所以光必须能单独取到。 */
+  --material-workspace-layers: var(--workspace-grain), var(--material-workspace-field);
+  --bg-workspace: var(--material-workspace-layers), var(--frame-base);
 }
 
 /* 空态品牌时刻：整页只剩一句空态时，浮片化开，整窗落回「光域」——
    四层有机色光（白光从天顶落下来，主光/伴光/暖光三团色相相依），
    配方取自 r3 原型，比日常那两层浓一档：日常只有框能承载光，空页整窗都能。
-   卡片级的 .rcard.empty-state 与「搜不到」的 .is-filter 都不算，
+   卡片级空态、筛选空态和小记与验证码的空列表都不切换整窗背景，
    所以它只在「这一页确实什么都没有」时出现；关掉背景氛围就不触发。 */
 /* 注意：必须写在 :root 上。--bg-workspace 是在 :root 合成的，
    里面的 var(--material-workspace-field) 会先按根节点的值展开；
    覆盖写在 .app-root 上，合成早就完成了，等于白写（这条坑踩过一次）。 */
-:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"]:has(.empty-state:not(.rcard):not(.is-filter)) {
+:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"]:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state)) {
   /* 整窗当画布：底色压到 .912，光才有地方落。
      关键约定：色光必须比底色「亮」——用 glow 与白混出浅染色，
      直接叠 glow-key（L .85）会比底色暗，整片只会变灰，不叫光。 */
@@ -374,7 +356,7 @@
 
 /* 墨底同一套光，只是框要浅一档（.165 → .225）：浮片没了，整窗就是底，
    太深的底会让光全被吃掉。右下保留一团黑，暗底才有方向。 */
-:root[data-layout="workspace"][data-atmosphere="on"][data-base="dark"]:has(.empty-state:not(.rcard):not(.is-filter)) {
+:root[data-layout="workspace"][data-atmosphere="on"][data-base="dark"]:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state)) {
   --frame-base: oklch(from var(--accent) 0.225 calc(c * 0.1) h);
   --material-workspace-field:
     /* 暗底也要有一个「光源点」：近白核心收紧、提亮，左上角才读成发光体。
@@ -401,24 +383,24 @@
 /* 浮片在这时不该还在：留着一块实底面板，光就只能从四周漏进来，读起来是「面板染了色」。
    顶沿护边也一起收掉——那条 12px 的 --bg-sheet 正是标题栏下面那道横接缝。 */
 :root[data-layout="workspace"][data-atmosphere="on"]
-  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter)) {
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state)) {
   background: transparent;
   box-shadow: none;
   transition: background-color 260ms ease, box-shadow 260ms ease;
 }
 :root[data-layout="workspace"][data-atmosphere="on"]
-  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state))
   .workspace-main::before { display: none; }
 
 /* 空态本体跟着抬一档：图标坐到一枚真正的浮片上，标题回到页标题的字阶。 */
 :root[data-layout="workspace"][data-atmosphere="on"]
-  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
-  .empty-state:not(.rcard):not(.is-filter) {
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state))
+  .empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state) {
   animation: empty-moment-in 520ms cubic-bezier(.2, .7, .3, 1) backwards;
 }
 :root[data-layout="workspace"][data-atmosphere="on"]
-  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
-  .empty-state:not(.rcard):not(.is-filter) .empty-icon {
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state))
+  .empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state) .empty-icon {
   width: 64px;
   height: 64px;
   border-radius: 20px;
@@ -428,18 +410,18 @@
   box-shadow: var(--shadow-sheet);
 }
 :root[data-layout="workspace"][data-atmosphere="on"]
-  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
-  .empty-state:not(.rcard):not(.is-filter) .empty-icon svg { width: 26px; height: 26px; }
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state))
+  .empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state) .empty-icon svg { width: 26px; height: 26px; }
 :root[data-layout="workspace"][data-atmosphere="on"]
-  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
-  .empty-state:not(.rcard):not(.is-filter) .empty-title {
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state))
+  .empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state) .empty-title {
   font-size: 19px;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
 :root[data-layout="workspace"][data-atmosphere="on"]
-  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter))
-  .empty-state:not(.rcard):not(.is-filter) .empty-desc { color: var(--text-secondary); }
+  .workspace-surface:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state))
+  .empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state) .empty-desc { color: var(--text-secondary); }
 
 @keyframes empty-moment-in {
   from { opacity: 0; }

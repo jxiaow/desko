@@ -10,13 +10,22 @@ use std::net::{IpAddr, Ipv4Addr};
 
 mod hosts_bytes;
 mod route_selection;
-pub use hosts_bytes::{apply_pins_bytes, restore_managed_bytes};
+pub use hosts_bytes::{apply_pins_bytes, cleanup_hosts_bytes, replace_managed_hosts_bytes, restore_managed_bytes};
 
 pub const HOSTS_BEGIN: &str = "# BEGIN TUN-BYPASS-MANAGED";
 pub const HOSTS_END: &str = "# END TUN-BYPASS-MANAGED";
 
 /// 一轮落盘的预算。UAC 那一下由系统自己等人，这里只兜 helper 卡住不回的场面。
 pub const APPLY_BUDGET_MS: u32 = 90_000;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteBinding {
+    pub prefix: String,
+    pub prefix_len: u8,
+    pub gateway: String,
+    pub interface_index: u32,
+}
 
 /// 托管区之外的字节一律不动，所以写入只替换块内。
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -37,19 +46,34 @@ pub enum TaskItem {
         interface_index: u32,
         interface_alias: String,
     },
+    /// 显式更换出口：只替换本功能已有的同前缀路由，撤销时恢复原绑定。
+    #[serde(rename_all = "camelCase")]
+    SwapRoute {
+        id: String,
+        desired: RouteBinding,
+        previous: Vec<RouteBinding>,
+        desired_existed: bool,
+    },
+    #[serde(rename_all = "camelCase")]
+    CleanupHost {
+        id: String,
+        host: String,
+        address: String,
+        original: Option<String>,
+    },
 }
 
 impl TaskItem {
     pub fn id(&self) -> &str {
         match self {
-            TaskItem::Pin { id, .. } | TaskItem::Route { id, .. } => id,
+            TaskItem::Pin { id, .. } | TaskItem::Route { id, .. } | TaskItem::SwapRoute { id, .. } | TaskItem::CleanupHost { id, .. } => id,
         }
     }
     /// 回执里带出去的短名，与 serde tag 同名
     pub fn op_name(&self) -> &'static str {
         match self {
-            TaskItem::Pin { .. } => "pin",
-            TaskItem::Route { .. } => "route",
+            TaskItem::Pin { .. } | TaskItem::CleanupHost { .. } => "pin",
+            TaskItem::Route { .. } | TaskItem::SwapRoute { .. } => "route",
         }
     }
 }
@@ -61,6 +85,7 @@ pub enum Mode {
     #[default]
     Apply,
     Revert,
+    Cleanup,
 }
 
 /// 任务书：主进程写、helper 读。路径全部由主进程给，helper 不猜任何策略。

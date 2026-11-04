@@ -14,7 +14,7 @@ import { useClipboard } from './composables/useClipboard'
 import { useWorkspaceDirectory } from './composables/useWorkspaceDirectory'
 import { installHoverGuard } from './utils/hoverGuard'
 import { isPageShortcutBlocked } from './utils/pageShortcuts'
-import { bootEnabledModules, flushModulesBeforeLock, lockEnabledModules } from './modules/state'
+import { enabledModules, bootEnabledModules, flushModulesBeforeLock, lockEnabledModules } from './modules/state'
 import { stopModuleSync } from './modules/runtime'
 import { requestCodexAccountsView } from './services/codexState'
 import {
@@ -43,6 +43,7 @@ import ConfirmDialog from './components/shared/ConfirmDialog.vue'
 import QuitDialog from './components/shared/QuitDialog.vue'
 
 const router = useRouter()
+const sidebarHidden = computed(() => !enabledModules.value.length || router.currentRoute.value.name === 'start')
 const {
   directoryAvailable, directoryVisible, directoryCompact, directoryPinned,
   toggleDirectoryPin, toggleDirectory, closeDirectory, restoreDirectory,
@@ -220,7 +221,7 @@ function onGlobalKey(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="app-root codex-layout" :class="{ 'locked-bg': appState === 'locked', 'sidebar-collapsed': sidebarIsCompact, 'web-runtime': isWebRuntime() }" :style="{ '--toast-side': 'var(--sidebar-rail-w)', '--toast-right': toastRight }">
+  <div class="app-root codex-layout" :class="{ 'locked-bg': appState === 'locked', 'sidebar-collapsed': sidebarIsCompact, 'sidebar-hidden': appState === 'unlocked' && sidebarHidden, 'web-runtime': isWebRuntime() }" :style="{ '--sidebar-rail-w': appState === 'unlocked' && sidebarHidden ? '0px' : undefined, '--toast-side': 'var(--sidebar-rail-w)', '--toast-right': toastRight }">
     <!-- 锁定/初始化态：顶栏浮在页面上；解锁态：顶栏横跨工作区。 -->
     <TitleBar
       v-if="appState !== 'unlocked'"
@@ -232,9 +233,9 @@ function onGlobalKey(e: KeyboardEvent) {
     <UnlockPage v-else-if="appState === 'locked'" @unlock-complete="bootModules" />
 
     <template v-else>
-      <TitleBar :modules-open="showWebModules" @lock="doLock" @show-modules="showWebModules = true" />
+      <TitleBar :sidebar-hidden="sidebarHidden" :modules-open="showWebModules" @lock="doLock" @show-modules="showWebModules = true" />
       <div class="app-layout">
-        <Sidebar @open-settings="openSettingsAppearance" @lock="doLock" />
+        <Sidebar v-if="!sidebarHidden" @open-settings="openSettingsAppearance" @lock="doLock" />
         <CodexWorkspace :directory-visible="directoryVisible" :directory-compact="directoryCompact" :directory-pinned="directoryPinned" @close-directory="closeDirectory" @toggle-directory="toggleDirectory" @toggle-directory-pin="toggleDirectoryPin"><ModuleRouterView /></CodexWorkspace>
       </div>
     </template>

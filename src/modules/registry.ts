@@ -167,9 +167,9 @@ export const MODULES: ModuleDef[] = [
   {
     id: 'bypass',
     settingKey: 'bypass_enabled',
-    title: '网络直连',
-    desc: '探测域名与网段，配置 hosts 和直连路由',
-    brief: '探测域名与网段，配置直连',
+    title: '网络选路',
+    desc: '探测域名与网段，选择访问所用的网卡',
+    brief: '探测目标，选择访问网卡',
     icon: 'navBypass',
     view: async () => (await import('../views/BypassView.vue')).default,
   },

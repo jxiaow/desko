@@ -272,7 +272,16 @@ for (const theme of ['paper', 'ink']) for (const width of [800, 1040]) {
     let pop=await menu(page,1)
     await expect(pop.getByRole('button',{name:'在 WSL 中使用',exact:true})).toBeEnabled()
     const trigger=(await row(page,1).locator('.acc-more').boundingBox())!, menuBox=(await pop.boundingBox())!
-    expect(menuBox.y).toBeGreaterThanOrEqual(trigger.y+trigger.height-1)
+    // 契约是「菜单完整可见＋吸在触发钮上」，不是「一定朝下开」：800×780 里第二行卡片的 ⋯
+    // 距视口底只剩 313，而这枚带 WSL 项的菜单要 328＋16 的翻转预留，朝下必定溢出，
+    // PopoverMenu 于是翻到上方 6px。1040 那一档空间够，仍按朝下断言。
+    expect(menuBox.y).toBeGreaterThanOrEqual(8)
+    expect(menuBox.y+menuBox.height).toBeLessThanOrEqual(780-8)
+    if (width===1040) expect(menuBox.y).toBeGreaterThanOrEqual(trigger.y+trigger.height-1)
+    else {
+      expect(menuBox.y+menuBox.height).toBeLessThanOrEqual(trigger.y+1)
+      expect(menuBox.y+menuBox.height).toBeGreaterThanOrEqual(trigger.y-12)
+    }
     await shot(page,`${prefix}-C-menu`);await page.keyboard.press('Escape')
     await menu(page,0);await shot(page,`${prefix}-H-current-menu`);await page.keyboard.press('Escape')
     await menu(page,2);await shot(page,`${prefix}-G-api-key-menu`);await page.keyboard.press('Escape')

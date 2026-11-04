@@ -81,10 +81,11 @@ beforeEach(() => {
   vi.mocked(bypassApi.plan).mockResolvedValue(plan)
   vi.mocked(bypassApi.apply).mockResolvedValue(outcome())
   vi.mocked(bypassApi.revert).mockResolvedValue(outcome({ rolledBack: true }))
+  vi.mocked(bypassApi.remove).mockResolvedValue(true)
 })
 afterEach(() => wrapper?.unmount())
 
-describe('网络直连交互', () => {
+describe('网络选路交互', () => {
   it('加载失败显示重试入口，恢复后再展示清单', async () => {
     vi.mocked(bypassApi.list).mockRejectedValueOnce('数据库读取失败')
     wrapper = mount(BypassModule, { global: { stubs: { AppIcon: true, teleport: true } } })
@@ -231,6 +232,101 @@ describe('网络直连交互', () => {
     useConfirmStore().handleConfirm()
     await flushPromises()
     expect(bypassApi.remove).toHaveBeenCalledWith('b')
+  })
+
+  it('移除说明清理范围，清理完成前保留记录并锁住其他操作', async () => {
+    await boot([target({ verdict: 'directOk', applyState: 'applied', applyBatch: 'b1' })])
+    await chip('internal.example.com').trigger('click')
+    await button('移出清单').trigger('click')
+    expect(useConfirmStore().confirmDialog.message).toContain('未被其他清单项共用')
+    const removing = deferred<boolean>()
+    vi.mocked(bypassApi.remove).mockReturnValueOnce(removing.promise)
+    useConfirmStore().handleConfirm()
+    await flushPromises()
+    expect(wrapper.get('[role="status"]').text()).toContain('管理员授权')
+    expect(wrapper.findAll('.chip')).toHaveLength(1)
+    expect(wrapper.get('.probe-box input').attributes('disabled')).toBeDefined()
+    vi.mocked(bypassApi.list).mockResolvedValue([])
+    removing.resolve(true)
+    await flushPromises()
+    expect(wrapper.findAll('.chip')).toHaveLength(0)
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+  })
+
+  it.each([false, '路由清理失败'])('取消授权或清理失败时保留清单，并允许重试：%s', async (result) => {
+    await boot([target({ verdict: 'directOk', applyState: 'applied', applyBatch: 'b1' })])
+    await chip('internal.example.com').trigger('click')
+    await button('移出清单').trigger('click')
+    if (result === false) vi.mocked(bypassApi.remove).mockResolvedValueOnce(false)
+    else vi.mocked(bypassApi.remove).mockRejectedValueOnce(result)
+    useConfirmStore().handleConfirm()
+    await flushPromises()
+    expect(wrapper.findAll('.chip')).toHaveLength(1)
+    expect(useToastStore().toast.message).toContain(result === false ? '已取消授权' : result)
+    await chip('internal.example.com').trigger('click')
+    expect(button('移出清单').attributes('disabled')).toBeUndefined()
+  })
+
+  it('配置后移出清单再添加同一目标，直连可用仍能更换出口并只配置新条目', async () => {
+    const option = { interfaceIndex: 16, interfaceAlias: 'VPN', gateway: '26.0.48.1', gatewayIsOnLink: false }
+    const old = target({ id: 'old', verdict: 'directOk', applyState: 'applied', applyBatch: 'b1' })
+    await boot([old])
+    await chip(old.host).trigger('click')
+    await button('移出清单').trigger('click')
+    vi.mocked(bypassApi.list).mockResolvedValue([])
+    useConfirmStore().handleConfirm()
+    await flushPromises()
+    expect(bypassApi.remove).toHaveBeenCalledWith('old')
+    expect(wrapper.findAll('.chip')).toHaveLength(0)
+
+    vi.mocked(bypassApi.probe).mockResolvedValue(report({ verdict: 'directOk' }))
+    vi.mocked(bypassApi.save).mockResolvedValue(report({ verdict: 'directOk' }))
+    await startProbe()
+    const added = target({ id: 'new', verdict: 'directOk' })
+    vi.mocked(bypassApi.list).mockResolvedValue([added])
+    await button('加入清单').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.hero .btn-primary').exists()).toBe(false)
+
+    const row = { id: 'new', label: added.host, action: '持久路由', blocked: '', routeOptions: [option] }
+    vi.mocked(bypassApi.plan).mockResolvedValue({ planKey: 'new-plan', rows: [row], ready: 1, blocked: 0 })
+    await button('更换直连出口').trigger('click')
+    await flushPromises()
+    expect(bypassApi.plan).toHaveBeenLastCalledWith([], [], 'new')
+    expect(wrapper.find('.concl-dialog').exists()).toBe(false)
+    await wrapper.get('.plan-route select').setValue('16|26.0.48.1')
+    await flushPromises()
+    const overrides = [{ id: 'new', interfaceIndex: 16, gateway: '26.0.48.1' }]
+    expect(bypassApi.plan).toHaveBeenLastCalledWith([], overrides, 'new')
+    vi.mocked(bypassApi.apply).mockResolvedValue(outcome({ items: [{ id: 'new', op: 'route', ok: true, changed: true, error: '' }] }))
+    await button('确认并配置').trigger('click')
+    await flushPromises()
+    expect(bypassApi.apply).toHaveBeenLastCalledWith([], overrides, 'new-plan', 'new')
+    expect(bypassApi.recheck).toHaveBeenCalledWith('new', expect.any(String))
+  })
+
+  it('已有直连目标可从详情更换出口，取消后恢复普通批量配置范围', async () => {
+    await boot([target({ id: 'ready', verdict: 'directOk' }), target({ id: 'pending', host: 'pending.example.com' })])
+    await chip('internal.example.com').trigger('click')
+    await button('更换直连出口').trigger('click')
+    await flushPromises()
+    expect(bypassApi.plan).toHaveBeenLastCalledWith([], [], 'ready')
+    expect(wrapper.find('.detail-dialog').exists()).toBe(false)
+    await button('取消').trigger('click')
+    await openPlan()
+    expect(bypassApi.plan).toHaveBeenLastCalledWith([], [])
+  })
+
+  it('更换出口方案生成失败时保留详情，允许再次尝试', async () => {
+    await boot([target({ verdict: 'directOk' })])
+    await chip('internal.example.com').trigger('click')
+    vi.mocked(bypassApi.plan).mockRejectedValueOnce('出口读取失败')
+    await button('更换直连出口').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.detail-dialog').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="配置确认"]').exists()).toBe(false)
+    expect(useToastStore().toast.message).toBe('出口读取失败')
+    expect(bypassApi.apply).not.toHaveBeenCalled()
   })
 
   it('先探测再登记，保存期间关闭和重复提交不会重建弹窗', async () => {

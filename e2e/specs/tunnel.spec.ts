@@ -56,12 +56,12 @@ test.describe('内网穿透', () => {
     await dialog.locator('.dialog-close').click()
     await expect(page.locator('a.nav-item[href="/tunnel"]')).toHaveCount(1)
     await page.locator('a.nav-item[href="/tunnel"]').click()
-    await expect(page.locator('.page-bar .chip').first()).toContainText('已停止')
+    await expect(page.locator('.connection-heading .chip').first()).toContainText('已停止')
   })
 
   test('没登记服务：启动钮按不住，原因写在按钮上', async ({ page }) => {
     await gotoTunnel(page, state(true, false, false, { ...READY }))
-    const btn = page.locator('.page-bar .btn-primary')
+    const btn = page.locator('.connection-heading .toggle-btn')
     await expect(btn).toBeDisabled()
     await expect(btn).toHaveAttribute('title', '请先添加本地服务')
     expect(await e2e.count(page, 'tunnel_start')).toBe(0)
@@ -69,27 +69,27 @@ test.describe('内网穿透', () => {
 
   test('已绑定但未获取程序：启动被拒，原因落在程序上', async ({ page }) => {
     await gotoTunnel(page, state(true, false, false, { ...READY, installed: false, services: [LIVE] }))
-    await page.locator('.page-bar .btn-primary').click()
+    await page.locator('.connection-heading .toggle-btn').click()
     await expectToast(page, '穿透程序未获取')
-    await expect(page.locator('.page-bar .chip').first()).toContainText('已停止')
+    await expect(page.locator('.connection-heading .chip').first()).toContainText('已停止')
   })
 
   test('启动与停止：状态、页脚 PID、按钮文案三处同步', async ({ page }) => {
     await gotoTunnel(page, state(true, false, false, { ...READY, installed: true, services: [LIVE] }))
-    await page.locator('.page-bar .btn-primary').click()
+    await page.locator('.connection-heading .toggle-btn').click()
     await expectToast(page, '隧道已连接')
-    await expect(page.locator('.page-bar .chip').first()).toContainText('已连接')
+    await expect(page.locator('.connection-heading .chip').first()).toContainText('已连接')
     await expect(page.locator('.tn-foot')).toContainText('PID 424242')
-    await expect(page.locator('.page-bar .btn-primary')).toHaveText('停止隧道')
-    await page.locator('.page-bar .btn-primary').click()
+    await expect(page.locator('.connection-heading .toggle-btn')).toHaveText('停止隧道')
+    await page.locator('.connection-heading .toggle-btn').click()
     await expectToast(page, '隧道已停止')
-    await expect(page.locator('.page-bar .chip').first()).toContainText('已停止')
+    await expect(page.locator('.connection-heading .chip').first()).toContainText('已停止')
     await expect(page.locator('.tn-foot')).toContainText('无进程')
   })
 
   test('进程活着但没连上边缘：单独一档「启动中」，不冒充运行中', async ({ page }) => {
     await gotoTunnel(page, state(true, true, false, { ...READY, installed: true, services: [LIVE] }))
-    await expect(page.locator('.page-bar .chip').first()).toContainText('启动中')
+    await expect(page.locator('.connection-heading .chip').first()).toContainText('启动中')
     await openDetail(page)
     await expect(page.locator('.tn-note.chip-warn')).toContainText('进程在跑，尚未连上 Cloudflare 边缘')
   })
@@ -100,7 +100,7 @@ test.describe('内网穿透', () => {
     await expect(stop).toBeEnabled()
     await stop.click()
     expect(await e2e.count(page, 'tunnel_stop')).toBe(1)
-    await expect(page.locator('.page-bar .chip').first()).toContainText('已停止')
+    await expect(page.locator('.connection-heading .chip').first()).toContainText('已停止')
   })
 
   for (const width of [390, 768]) {
@@ -202,15 +202,15 @@ test.describe('内网穿透', () => {
       expect(snap.tunnel.services[0].routed).toBe(false)
     })
 
-    test('没应用的条数写在页栏与卡尾，「应用」逐条指过来', async ({ page }) => {
+    test('没应用的条数写在服务标题与卡尾，「应用」逐条指过来', async ({ page }) => {
       await gotoTunnel(page, {
         ...ROOT,
         tunnel: { ...READY, services: [{ hostname: 'a.example.com', port: 3001 }, { hostname: 'b.example.com', port: 3002 }] },
       })
-      await expect(page.locator('.page-bar .chip').nth(1)).toContainText('2 项服务 · 2 条未应用')
+      await expect(page.locator('.service-summary')).toContainText('2 项服务 · 2 条未应用')
       await page.locator('.tn-card.services .foot-row .btn-primary').click()
       await expectToast(page, '已就绪')
-      await expect(page.locator('.page-bar .chip').nth(1)).toContainText('2 项服务')
+      await expect(page.locator('.service-summary')).toContainText('2 项服务')
       const snap = await e2e.snapshot(page)
       expect(snap.tunnel.services.every((s: { routed: boolean }) => s.routed)).toBe(true)
     })
@@ -393,7 +393,7 @@ test.describe('内网穿透', () => {
     test('已授权：撤销入口把状态回到未授权，但保留隧道记录', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE] } })
       // 三步齐了 setup 卡收成一行，先展开才能看到撤销入口
-      await page.locator('.tn-card.setup .row-btn', { hasText: '调整' }).click()
+      await page.getByRole('button', { name: '隧道配置', exact: true }).click()
       await row(page, 'auth').locator('.row-btn', { hasText: '撤销本机授权' }).click()
       await expect(page.locator('.confirm-dialog .dialog-body')).toContainText('彻底吊销授权需前往 Cloudflare 控制台')
       await page.locator('.confirm-dialog .btn-danger').click()
@@ -461,17 +461,17 @@ test.describe('内网穿透', () => {
       // 三步齐了整卡收起：还在的入口只剩「调整」，重复点建不出第二条
       await expect(page.locator('.tn-card.setup')).toContainText('desko-a')
       await expect(row(page, 'tunnel')).toHaveCount(0)
-      await page.locator('.tn-card.setup .row-btn').click()
+      await page.getByRole('button', { name: '隧道配置', exact: true }).click()
       await expect(row(page, 'tunnel').locator('.tn-input')).toHaveCount(0)
       await expect(row(page, 'tunnel').locator('.row-btn')).toHaveCount(0)
     })
 
-    test('三步齐了整卡收成一行，「调整」再摊开', async ({ page }) => {
+    test('三步齐了接入准备收成一行，「隧道配置」再摊开', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { ...READY, services: [LIVE] } })
       await expect(page.locator('.tn-card.setup .tn-head')).toHaveCount(0)
       await expect(page.locator('.tn-card.setup .tn-row')).toHaveCount(1)
       await expect(page.locator('.tn-card.setup')).toContainText('desko-a')
-      await page.locator('.tn-card.setup .row-btn').click()
+      await page.getByRole('button', { name: '隧道配置', exact: true }).click()
       await expect(page.locator('.tn-card.setup .tn-row')).toHaveCount(3)
     })
 
@@ -507,3 +507,35 @@ test.describe('内网穿透', () => {
     })
   })
 })
+
+for (const theme of ['paper', 'ink']) for (const width of [800, 1440]) {
+  test(`连接卡片布局 ${theme} ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 800 })
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await bootUnlocked(page, {
+      settings: { tunnel_enabled: 'true', theme },
+      tunnel: { ...READY, alive: true, registered: true, services: [LIVE, { hostname: 'dev.example.com', port: 3000, label: '本地开发', routed: false }] },
+    }, '/tunnel')
+    const card = page.locator('.tunnel-connection')
+    await expect(card.getByRole('heading', { name: '隧道连接' })).toBeVisible()
+    await expect(card.locator('.toggle-btn')).toHaveText('停止隧道')
+    await expect(card.locator('.setup-summary')).toBeVisible()
+    await expect(page.locator('#workspace-page-toolbar .toggle-btn')).toHaveCount(0)
+    await expect(page.locator('.service-summary')).toHaveText('2 项服务 · 1 条未应用')
+    const cardColor = await card.evaluate(el => getComputedStyle(el).backgroundColor)
+    const diagnostics = page.locator('.tn-foot')
+    await expect(diagnostics).toHaveCSS('background-color', cardColor)
+    await diagnostics.getByRole('button', { name: '详情', exact: true }).click()
+    await expect(diagnostics.locator('.tn-detail')).toBeVisible()
+    await expect(diagnostics).toHaveCSS('background-color', cardColor)
+    await diagnostics.getByRole('button', { name: '收起', exact: true }).click()
+    expect(await page.locator('.tunnel-page').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+    await page.screenshot({ path: testInfo.outputPath('tunnel.png'), animations: 'disabled' })
+    await card.getByRole('button', { name: '隧道配置', exact: true }).click()
+    await expect(card.locator('.row-tunnel')).toBeVisible()
+    await card.getByRole('button', { name: '收起', exact: true }).click()
+    await card.locator('.toggle-btn').click()
+    await expect(card.locator('.toggle-btn')).toHaveText('启动隧道')
+    await expect(card.locator('.chip')).toContainText('已停止')
+  })
+}

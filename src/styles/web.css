@@ -7,8 +7,10 @@
   .app-root.web-runtime.codex-layout {
     --sidebar-rail-w: 216px;
     --workspace-toolbar-height: 64px;
+    /* 浏览器里标题栏是应用自绘的一排（品牌 + 页名 + 工具位），沿用 64px 这一档；
+       桌面那 34px 是系统窗口带，两边不同用途不共用一个高度。 */
+    --window-bar-height: 64px;
     --workspace-content-max: 1280px;
-    --workspace-heading-width: 148px;
     --page-search-max: 360px;
   }
   .app-root.web-runtime .web-workspace-sidebar { padding: 12px 12px 16px; }
@@ -43,9 +45,7 @@
   .app-root.web-runtime .web-modules-toggle { display: flex; flex-shrink: 0; }
   .app-root.web-runtime .titlebar { height: 52px; padding-top: env(safe-area-inset-top); box-sizing: content-box; }
   .app-root.web-runtime .titlebar-btn { min-width: 44px; min-height: 44px; }
-  .app-root.web-runtime .titlebar-left { min-width: 0; padding-left: var(--page-gutter); }
-  .app-root.web-runtime .titlebar-brand { min-width: 0; }
-  .app-root.web-runtime .titlebar-crumb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-root.web-runtime .titlebar-crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .app-root.web-runtime .page-bar { gap: 6px; min-height: 64px; padding-block: 12px; }
   .app-root.web-runtime .page-bar .bar-btn { min-width: 40px; height: 40px; }
   .app-root.web-runtime .page-bar .btn-primary { min-height: 40px; }
@@ -136,40 +136,32 @@
   .app-root.web-runtime .unlock-error { white-space: normal; text-align: center; }
 }
 
-/* 工作区与桌面共用结构；窄屏把导航和页工具分成两行。 */
+/* 工作区与桌面共用结构；窄屏标题栏只留品牌与页名两排，页级动作回到内容区页头。 */
 .app-root.web-runtime .workspace-surface { min-height: 0; }
 @media (max-width: 760px), (hover: none) and (max-width: 1024px) {
   .app-root.web-runtime.codex-layout {
     --sidebar-rail-w: 0px;
     --workspace-gutter: 16px;
     --workspace-directory-offset: 0px !important;
-    --workspace-heading-gap: 0px;
-    --workspace-toolbar-height: 100px;
+    /* 窄屏标题栏两排：品牌 56 + 页名 48 = 104。--window-bar-height 喂的是整块标题栏
+       （TitleBar 的 scoped 规则按它定高，压得过本文件的显式高度）；
+       页名那一排单独用 .titlebar-page 的 inset/height 定位。 */
+    --window-bar-height: 104px;
+    --workspace-toolbar-height: 56px;
     --workspace-window-space: 0px;
   }
+  /* 品牌 56 + 页名 48；页头带取消上下呼吸，让 56 + 48 + 56 仍是改动前的 160px。 */
   .app-root.web-runtime .titlebar-outer {
-    height: calc(100px + env(safe-area-inset-top));
-    flex-basis: calc(100px + env(safe-area-inset-top));
+    height: calc(104px + env(safe-area-inset-top));
+    flex-basis: calc(104px + env(safe-area-inset-top));
     padding-top: 0;
   }
+  .app-root.web-runtime .workspace-head { padding-block: 0; }
   .app-root.web-runtime .titlebar-brandcell { display: none; }
   .app-root.web-runtime .titlebar-outer .titlebar-page {
-    inset: env(safe-area-inset-top) 14px 0;
-    height: 100px;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .app-root.web-runtime .titlebar-outer .titlebar-left,
-  .app-root.web-runtime .titlebar-outer .titlebar-page:has([data-workspace-heading="replace"]) .titlebar-left {
-    display: flex;
-    width: calc(100% - 48px);
+    inset: calc(56px + env(safe-area-inset-top)) 14px 0;
     height: 48px;
-    flex: 0 0 48px;
-    padding: 0;
-    overflow: visible;
   }
-  .app-root.web-runtime .titlebar-outer .titlebar-brand { width: auto; flex: 1; }
   .app-root.web-runtime .titlebar-outer .titlebar-buttons {
     position: absolute;
     right: 8px;
@@ -178,17 +170,9 @@
     padding: 0;
   }
   .app-root.web-runtime .titlebar-outer .titlebar-buttons::before { display: none; }
-  .app-root.web-runtime .titlebar-outer .workspace-page-toolbar {
-    flex: 0 0 52px;
-    height: 52px;
-    width: 100%;
-    gap: 8px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .app-root.web-runtime #workspace-page-toolbar :is(.page-bar, .cx-band-controls) {
-    height: 52px;
-    min-height: 52px;
+  .app-root.web-runtime #workspace-page-toolbar :is(.page-bar:not(.cx-tabs-row), .cx-band-controls) {
+    height: 56px;
+    min-height: 56px;
     flex-wrap: nowrap;
     padding: 0;
     gap: 6px;
@@ -200,11 +184,21 @@
   .app-root.web-runtime #workspace-page-toolbar .page-actions { gap: 4px; }
   .app-root.web-runtime #workspace-page-toolbar > .cx-header-tabs { flex: 1 0 auto; height: 48px; margin: 0; }
   .app-root.web-runtime #workspace-page-toolbar .cx-header-tabs .cx-tab { min-height: 44px; padding-inline: 10px; }
-  .app-root.web-runtime #workspace-page-toolbar:has(.cx-header-tabs) > .page-bar { flex: 0 0 auto; }
-  .app-root.web-runtime #workspace-page-toolbar:has(.cx-header-tabs) .search-box { width: 150px; }
+  .app-root.web-runtime #workspace-page-toolbar:has(.cx-header-tabs) > .page-bar:not(.cx-tabs-row) { flex: 0 0 auto; }
+  /* Codex 的筛选带是页头的第二排：整行占满，装不下的靠换行收，不做横向滚动。 */
+  .app-root.web-runtime #workspace-page-toolbar > .page-bar.cx-tabs-row { height: auto; flex-wrap: wrap; }
+  .app-root.web-runtime #workspace-page-toolbar .cx-tabs-row > .search-box { flex: 0 1 150px; min-width: 80px; max-width: 150px; }
+  /* 动作带在窄屏独占第二排：390 一档整条只有 358px，页签自己就占 281，
+     再塞统计窗口会把动作带缩到 78px、件儿从左边溢到页签底下（实测 seg 落在 x=-256）。
+     用 100% 定基准而不是靠换行——动作带自身是 inline-size 容器，自动基准被算成 0。 */
+  .app-root.web-runtime #workspace-page-toolbar > .cx-band-controls { order: 2; flex: 1 1 100%; justify-content: flex-start; }
+  .app-root.web-runtime #workspace-page-toolbar > .page-bar.cx-tabs-row { order: 3; }
+  /* 抽屉从页头带的下沿铺开：窄屏页级动作带住在内容面里（顶沿就是它），
+     抽屉若仍从内容面顶沿起，会把搜索框整颗盖住——390 实测搜索框 110..154
+     落在抽屉 104..844 里，「点抽屉外保持展开」这一下根本点不到自己的控件。 */
   .app-root.web-runtime .workspace-directory {
     position: absolute;
-    inset: 0 0 0 auto;
+    inset: var(--workspace-toolbar-height) 0 0 auto;
     width: min(304px, calc(100% - 36px));
     z-index: 60;
     border-left: 1px solid var(--border);
@@ -214,22 +208,18 @@
   .app-root.web-runtime #workspace-directory .directory-link { min-height: 44px; }
   .app-root.web-runtime .workspace-directory-actions .ib { width: 44px; }
   .app-root.web-runtime #workspace-directory-content { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
-  .app-root.web-runtime #workspace-page-toolbar .fs-head { min-width: 0; height: 52px; padding: 0; }
-  .app-root.web-runtime #workspace-page-toolbar .fs-head .fs-meta { display: none; }
+  /* 窄屏标题栏放不下整组动作时允许横向滚动。 */
+  .app-root.web-runtime #workspace-fs-slot { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .app-root.web-runtime #workspace-fs-slot .fs-head { min-width: 0; padding: 0; }
   .app-root.web-runtime .workspace-main .content-inner { padding-top: 12px; }
 }
 
-/* 手机使用第二版设计的三行页头。 */
+/* 手机的第一排：品牌与模块入口，页名与页级动作分别住在第二排和内容区页头。 */
 @media (max-width: 760px), (hover: none) and (max-width: 1024px) {
   .app-root.web-runtime.codex-layout {
-    --workspace-toolbar-height: 160px;
     --workspace-content-padding: max(16px, env(safe-area-inset-left), env(safe-area-inset-right));
   }
-  .app-root.web-runtime.codex-layout .titlebar-outer {
-    height: calc(160px + env(safe-area-inset-top));
-    flex-basis: calc(160px + env(safe-area-inset-top));
-    overflow: visible;
-  }
+  .app-root.web-runtime.codex-layout .titlebar-outer { overflow: visible; }
   .app-root.web-runtime .web-mobile-header {
     display: flex;
     align-items: center;
@@ -245,14 +235,12 @@
   .web-runtime .web-mobile-modules { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--radius-ib); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-sm); cursor: pointer; }
   .web-runtime .web-mobile-modules:hover, .web-runtime .web-mobile-modules[aria-expanded="true"] { background: var(--fill); }
   .web-runtime .web-mobile-modules:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-page { inset: calc(56px + env(safe-area-inset-top)) var(--workspace-content-padding) 0; height: 104px; }
-  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-left { width: 100%; height: 48px; flex-basis: 48px; pointer-events: none; }
+  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-page { inset: calc(56px + env(safe-area-inset-top)) var(--workspace-content-padding) 0; height: 48px; }
   .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-crumb { font-size: var(--text-xl); line-height: 28px; letter-spacing: -.02em; }
-  .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-brand { width: auto; flex: 0 1 auto; max-width: 100%; gap: 8px; }
   .app-root.web-runtime.codex-layout .titlebar-outer .web-modules-toggle { display: none; }
   /* 目录开关跟着「模块」钮住第一排：整块 display:none 会让窄屏彻底没有目录入口（无键盘、无侧栏），
      而直接显示又会被 .web-mobile-header 的「模块」钮压住，所以把挂载位摆到它左侧。
-     112px = 16px 内距 + 「模块」钮实占 90px + 6px 间隙，与本页 152/210px 的预留档同一写法。 */
+     112px = 16px 内距 + 「模块」钮实占 90px + 6px 间隙。 */
   .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-buttons {
     display: flex;
     align-items: center;
@@ -262,12 +250,6 @@
     z-index: 3; /* .web-mobile-header 是 z-index:2 的整行覆盖层，不抬高它会用透明面吃掉这一排的点击 */
   }
   .app-root.web-runtime.codex-layout .titlebar-outer .titlebar-buttons > :not(.titlebar-fixed-tools) { display: none; }
-  .app-root.web-runtime.codex-layout .titlebar-outer .workspace-page-toolbar { height: 56px; flex: 0 0 56px; overflow: visible; container-type: normal; }
-  .app-root.web-runtime.codex-layout #workspace-page-toolbar :is(.page-bar, .cx-band-controls) { height: 56px; min-height: 56px; }
-  .app-root.web-runtime.codex-layout #workspace-page-toolbar .page-actions { position: absolute; top: 0; right: 0; height: 48px; }
-  .app-root.web-runtime.codex-layout .titlebar-page:has(.page-actions) .titlebar-brand { max-width: calc(100% - 152px); }
-  .app-root.web-runtime.codex-layout .titlebar-page:has(.create-action) .titlebar-brand { max-width: calc(100% - 210px); }
-  .app-root.web-runtime.codex-layout #workspace-page-toolbar .search-box { max-width: none; }
   .app-root.web-runtime .workspace-main :is(.stream, .content-inner, .fs-scroll) { scrollbar-width: none; scrollbar-gutter: auto; }
   .app-root.web-runtime .workspace-main :is(.stream, .content-inner, .fs-scroll)::-webkit-scrollbar { display: none; }
   .app-root.web-runtime .workspace-main .stream-inner { padding-top: 12px; }
@@ -286,7 +268,6 @@
 @media (max-width: 380px) {
   .app-root.web-runtime.codex-layout #workspace-page-toolbar .create-action { width: 44px; padding-inline: 0; }
   .app-root.web-runtime.codex-layout #workspace-page-toolbar .create-action span { display: none; }
-  .app-root.web-runtime.codex-layout .titlebar-page:has(.create-action) .titlebar-brand { max-width: calc(100% - 152px); }
 }
 
 /* 内置中文字体只留给桌面版。--font-ui/--font-mono 把 'HarmonyOS Sans SC' 排在系统 CJK

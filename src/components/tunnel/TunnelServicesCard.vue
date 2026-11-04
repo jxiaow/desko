@@ -100,7 +100,7 @@ function remove(row: TunnelServiceRow) {
   <section class="tn-card services">
     <div class="tn-head">
       <div class="section-heading">
-        <h2>公网服务 <span class="head-cnt">{{ services.length }}</span></h2>
+        <h2>公网服务 <span class="head-cnt service-summary">{{ services.length }} 项服务<span v-if="unrouted.length" class="unrouted-count"> · {{ unrouted.length }} 条未应用</span></span></h2>
         <p>将本机 HTTP 服务连接到公网，随隧道统一起停。</p>
       </div>
       <button class="btn-secondary head-btn" type="button" :disabled="busy || acting" @click="emit('add')">
@@ -198,6 +198,7 @@ function remove(row: TunnelServiceRow) {
 .services .tn-head { height: auto; min-height: 88px; padding: 20px; gap: 16px; border-bottom: 0; }
 .section-heading { min-width: 0; }
 .section-heading h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: var(--text-base); line-height: 20px; font-weight: 600; }
+.unrouted-count { color: var(--warning); }
 .head-cnt { font-size: var(--text-xs); font-weight: 500; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .section-heading p { margin: 5px 0 0; font-size: var(--text-sm); font-weight: 400; line-height: 20px; color: var(--text-secondary); }
 .head-btn { margin-left: auto; flex-shrink: 0; height: 32px; font-size: var(--text-sm); }

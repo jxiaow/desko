@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import type { Entry, Tab } from '../../types'
 import { splitUrlHostPath } from '../../utils/format'
 import { avatarLetter } from '../../utils/avatar'
@@ -95,14 +95,20 @@ const hueOf = (category?: string | null): string => {
 const slotClass = (item: Entry) => (favOf(item) ? 'grid-slot--icon' : hasCat(item) ? 'grid-slot--hue' : undefined)
 const slotStyle = (item: Entry) => (!favOf(item) && hasCat(item) ? { '--gc-hue': hueOf(item.category) } : undefined)
 
-/* ── 分类标签：页级工作栏常驻有限项，其余收进可搜索的「更多」；
+/* ── 分类标签：页级工作栏常驻项按实测宽度收口，放不下的整枚收进可搜索的「更多」；
    当前分类被收起时顶替末位常驻格，行内始终看得见选中的是谁。 ── */
-const viewportWidth = ref(window.innerWidth)
-const tabLimit = computed(() => viewportWidth.value <= 1100 ? 8 : viewportWidth.value <= 1400 ? 10 : 12)
+const workbarEl = ref<HTMLElement | null>(null)
+const tabsEl = ref<HTMLElement | null>(null)
+/** 常驻几枚；null = 全显。判据是页头里量出来的实测宽度，不按视口档位猜个数——
+    半截分类会被裁掉，整枚收进「更多」才是丢得起的。 */
+const tabTrim = ref<number | null>(null)
+let trimmingTabs = false
+
 const visibleTabs = computed(() => {
   if (!workspaceLayout) return props.tabs.slice(0, 3)
-  if (props.tabs.length <= tabLimit.value) return props.tabs
-  const base = props.tabs.slice(0, tabLimit.value)
+  const cap = Math.max(1, tabTrim.value ?? props.tabs.length)
+  if (props.tabs.length <= cap) return props.tabs
+  const base = props.tabs.slice(0, cap)
   const active = props.tabs.find(t => t.id === props.activeTab)
   if (active && !base.some(t => t.id === active.id)) return [...base.slice(0, -1), active]
   return base
@@ -110,6 +116,25 @@ const visibleTabs = computed(() => {
 const hiddenTabs = computed(() => workspaceLayout
   ? props.tabs.filter(t => !visibleTabs.value.some(visible => visible.id === t.id))
   : props.tabs.slice(3))
+
+/** 从全显开始一枚一枚往回收，收到分类栏实测宽不再超出工作栏可用宽；工作栏撑出的宽度
+    就是这一排能给本页主动作之外的全部空间（见 CodexWorkspace 的宽度契约）。 */
+async function trimTabsToFit() {
+  if (trimmingTabs || !workspaceLayout) return
+  const bar = workbarEl.value
+  const nav = tabsEl.value
+  if (!bar || !nav) return
+  trimmingTabs = true
+  try {
+    for (let cap = props.tabs.length; cap >= 1; cap--) {
+      tabTrim.value = cap < props.tabs.length ? cap : null
+      await nextTick()
+      if (nav.getBoundingClientRect().width <= bar.clientWidth) break
+    }
+  } finally {
+    trimmingTabs = false
+  }
+}
 /** 选中的分类藏在「更多」里时，触发器仍保持静止文案，只顶出激活态 */
 const activeHiddenTab = computed(() =>
   hiddenTabs.value.find(t => t.id === props.activeTab) ?? null)
@@ -134,8 +159,20 @@ const pickTab = (id: string) => {
   moreOpen.value = false
 }
 
-const onResize = () => { viewportWidth.value = window.innerWidth }
-onMounted(() => { window.addEventListener('resize', onResize) })
+/** 页头只有一排，宽度随窗口变；换宽后重收一次。分类名变了也要重量——长短不一。 */
+let trimFrame = 0
+const scheduleTrim = () => {
+  if (trimFrame) cancelAnimationFrame(trimFrame)
+  trimFrame = requestAnimationFrame(() => {
+    trimFrame = 0
+    void trimTabsToFit()
+  })
+}
+onMounted(() => {
+  window.addEventListener('resize', scheduleTrim)
+  scheduleTrim()
+})
+watch([() => props.tabs, () => props.activeTab, showFilters], scheduleTrim)
 
 /** 一次只开一张行的动作菜单 */
 const menuAnchor = ref<HTMLElement | null>(null)
@@ -184,7 +221,8 @@ const { onGridKeydown } = useGridKeys({
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalKey)
-  window.removeEventListener('resize', onResize)
+  window.removeEventListener('resize', scheduleTrim)
+  if (trimFrame) cancelAnimationFrame(trimFrame)
   if (copiedTimer) window.clearTimeout(copiedTimer)
 })
 
@@ -199,6 +237,33 @@ watchEffect(() => {
     <!-- 身份行 + 工具栏：搜索、分类、计数和两个动作；分类超出宽度改为横向滚动 -->
     <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
     <div class="page-bar">
+      <div class="page-lead">
+        <div v-if="workspaceLayout && !webRuntime && showFilters" ref="workbarEl" class="workspace-workbar entries-workbar">
+          <nav ref="tabsEl" class="workspace-workbar-tabs" aria-label="收藏分类">
+            <button
+              v-for="t in visibleTabs"
+              :key="t.id"
+              class="wb-tab"
+              :class="{ active: activeTab === t.id }"
+              type="button"
+              :aria-pressed="activeTab === t.id"
+              @click="pickTab(t.id)"
+            >
+              <span>{{ t.name }}</span>
+              <span class="wb-count">{{ t.count }}</span>
+            </button>
+            <button
+              v-if="hiddenTabs.length"
+              class="wb-tab wb-more"
+              :class="{ active: !!activeHiddenTab }"
+              type="button"
+              :aria-label="`更多分类，已收起 ${hiddenTabs.length} 项`"
+              :aria-expanded="moreOpen"
+              @click="toggleMore($event.currentTarget as HTMLElement)"
+            >更多 <span class="wb-count">{{ hiddenTabs.length }}</span> <AppIcon name="chevDown" :size="13" /></button>
+          </nav>
+        </div>
+      </div>
       <div v-if="showFilters" class="search-box">
         <span class="search-icon">
           <AppIcon name="search" :size="15" />
@@ -220,36 +285,11 @@ watchEffect(() => {
         >
           <AppIcon name="checkall" :size="16" />
         </button>
-        <CreateAction label="新增条目" @click="emit('openAdd')" />
+        <CreateAction v-if="loading || loadError || showFilters" label="新增条目" @click="emit('openAdd')" />
       </div>
     </div>
     </Teleport>
 
-    <div v-if="workspaceLayout && !webRuntime && showFilters" class="workspace-workbar entries-workbar">
-      <nav class="workspace-workbar-tabs" aria-label="收藏分类">
-        <button
-          v-for="t in visibleTabs"
-          :key="t.id"
-          class="wb-tab"
-          :class="{ active: activeTab === t.id }"
-          type="button"
-          :aria-pressed="activeTab === t.id"
-          @click="pickTab(t.id)"
-        >
-          <span>{{ t.name }}</span>
-          <span class="wb-count">{{ t.count }}</span>
-        </button>
-        <button
-          v-if="hiddenTabs.length"
-          class="wb-tab wb-more"
-          :class="{ active: !!activeHiddenTab }"
-          type="button"
-          :aria-label="`更多分类，已收起 ${hiddenTabs.length} 项`"
-          :aria-expanded="moreOpen"
-          @click="toggleMore($event.currentTarget as HTMLElement)"
-        >更多 <span class="wb-count">{{ hiddenTabs.length }}</span> <AppIcon name="chevDown" :size="13" /></button>
-      </nav>
-    </div>
     <PopoverMenu v-if="moreOpen && moreAnchor" :anchor="moreAnchor" align="start" @close="moreOpen = false">
       <div class="tab-pop">
         <div class="search-box tab-pop-search">
@@ -377,14 +417,13 @@ watchEffect(() => {
       <div class="empty-desc">{{ loadError }}</div>
       <button class="btn-secondary retry-btn" @click="emit('retryLoad')">重试</button>
     </div>
-    <div v-else class="empty-state" :class="{ 'is-filter': !!searchKeyword }">
-      <div class="empty-icon">
-        <AppIcon :name="searchKeyword ? 'searchEmpty' : 'navEntries'" :size="24" />
-      </div>
-      <div class="empty-title">{{ searchKeyword ? '未找到匹配结果' : '暂无条目' }}</div>
-      <div class="empty-desc">{{ searchKeyword ? '试试其他关键词' : '点击「新增条目」开始' }}</div>
-      <div v-if="!searchKeyword" class="empty-motto" aria-hidden="true">
-        <span class="w">收一处 · 启一窗 · 开一页</span>
+    <div v-else class="empty-state module-empty-state" :class="{ 'is-filter': filtersActive }">
+      <div class="empty-icon"><AppIcon :name="filtersActive ? 'searchEmpty' : 'navEntries'" :size="24" /></div>
+      <h2 class="empty-title">{{ filtersActive ? '未找到匹配结果' : '暂无条目' }}</h2>
+      <p class="empty-desc">{{ filtersActive ? '换个关键词，或清除筛选查看全部收藏。' : '把常用网站收在一起，下次一键打开。' }}</p>
+      <div class="empty-actions">
+        <button v-if="filtersActive" class="btn-secondary" type="button" @click="emit('update:searchKeyword', ''); emit('update:activeTab', 'all')">查看全部收藏</button>
+        <button v-else class="btn-primary" type="button" @click="emit('openAdd')"><AppIcon name="plus" :size="14" />收藏第一个网址</button>
       </div>
     </div>
 
@@ -421,8 +460,9 @@ watchEffect(() => {
 /* .content-inner / .page-bar / 搜索框 / 主按钮 / 骨架行形全部走 global.css 的页面骨架，
    此处只留本页特有的东西 */
 
-/* 工作栏下方的第一块内容由工作栏的 12px 下距接管，不再叠加网格上距。 */
-.entries-workbar + :is(.card-grid, .empty-state, .error-state) { margin-top: 0; }
+/* 工作台布局里分类页签已经并进页头，正文首块上面只剩 .content-inner 的 16px 首行内距；
+   Web 的吸顶栏还留在正文里，那一档间距照旧由它自己出。 */
+.workspace-main .content-inner > :is(.card-grid, .empty-state, .error-state):first-child { margin-top: 0; }
 .tab-count { display: inline-block; background: none; color: var(--text-muted); font-size: var(--text-xs); padding: 0; margin-left: 4px; font-weight: 500; line-height: 14px; }
 
 /* 「更多」下拉：224px 面板，内置分类搜索，列表最高 192px 再滚动 */

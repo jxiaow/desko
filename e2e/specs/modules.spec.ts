@@ -40,6 +40,23 @@ test.describe('模块开关', () => {
     await expect(page.locator('.module-tile')).toHaveCount(8)
     await expect(page.locator('.onb-count')).toHaveText('点击模块开始启用')
     await expect(page.locator('.onb-cta')).toBeDisabled()
+    await page.evaluate(async () => {
+      const path = '/src/services/transport.ts'
+      const { invoke } = await import(path)
+      await invoke('backup_set_password', { password: 'test-backup-password' })
+      await invoke('cloud_save_config', { server: 'https://cloud.example.invalid', account: 'demo', appPassword: 'demo' })
+      window.__E2E__!.emitEvent('auto-backup')
+    })
+    await expect(page.locator('.backup-badge')).toBeAttached()
+    await expect(page.locator('.backup-badge')).toBeHidden()
+    await expect(page.locator('#app-sidebar')).toHaveCount(0)
+    await expect(page.locator('.sidebar-toggle')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '云端同步', exact: true })).toHaveCount(0)
+    await expect(page.locator('.titlebar-brandcell')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await expect(page.locator('.titlebar-brandcell')).toHaveCSS('background-image', 'none')
+    await expect(page.locator('.titlebar-crumb')).toHaveCount(0)
+    await page.screenshot({ path: '.tmp/modules-home-titlebar.png' })
+    expect((await page.locator('#workspace-surface').boundingBox())!.x).toBe(0)
     await expect(page.locator('a.nav-item')).toHaveCount(0)
     await expect(page.getByRole('navigation', { name: '模块导航' }).getByRole('link')).toHaveCount(0)
     for (const cmd of ['list_notes', 'list_entries_with_paths', 'list_file_shortcuts', 'list_codex_accounts']) {
@@ -51,11 +68,13 @@ test.describe('模块开关', () => {
     await expect(page.locator('.onb-count')).toHaveText('已启用 1 个模块')
     await expect(page.locator('.onb-cta')).toBeEnabled()
     await expect(page.locator('.module-tile[aria-pressed="true"]')).toHaveCount(1)
-    await expect(page.locator('a.nav-item[href="/notes"]')).toHaveCount(1)
+    await expect(page.locator('#app-sidebar')).toHaveCount(0)
 
     await page.locator('.onb-cta').click()
     await expect(page).toHaveURL(/\/notes$/)
     await expect(page.locator('.notes-page')).toBeVisible()
+    await expect(page.locator('.backup-badge')).toBeVisible()
+    await expect(page.locator('#app-sidebar')).toBeVisible()
     const settings = (await e2e.snapshot(page)).settings
     expect(settings.notes_enabled).toBe('true')
     expect(settings.entries_enabled).toBeUndefined()
@@ -69,7 +88,7 @@ test.describe('模块开关', () => {
       await dialog.locator('.settings-pane:visible .setting-item .setting-name').evaluateAll((els) =>
         els.map((el) => el.textContent?.trim()),
       ),
-    ).toEqual(['小记', '网址收藏', '文件快捷', '验证码', '局域网传输', '内网穿透', '网络直连', 'Codex'])
+    ).toEqual(['小记', '网址收藏', '文件快捷', '验证码', '局域网传输', '内网穿透', '网络选路', 'Codex'])
   })
 
   test('关核心页：入口当场收起，当前页带回下一个开启的模块，重开即恢复', async ({ page }) => {
@@ -87,6 +106,7 @@ test.describe('模块开关', () => {
     await expect(page.locator('a.nav-item[href="/notes"]')).toHaveCount(1)
     await page.locator('a.nav-item[href="/notes"]').click()
     await expect(page.locator('.notes-page')).toBeVisible()
+    await expect(page.locator('#app-sidebar')).toBeVisible()
   })
 
   test('关闭模块不下载视图 chunk，也不留常驻请求', async ({ page }) => {
@@ -127,7 +147,10 @@ test.describe('模块开关', () => {
   test('零模块态：设置与选择器同步，CTA 才进入工作台', async ({ page }) => {
     await bootUnlocked(page, OFF)
     await expect(page.locator('.onb-page')).toBeVisible()
-    const dialog = await openSettings(page, 'modules')
+    await page.getByRole('button', { name: 'Desko 菜单', exact: true }).click()
+    await page.getByRole('menuitem', { name: '设置', exact: true }).click()
+    const dialog = page.locator('.settings-dialog')
+    await dialog.locator('.nav-tab', { hasText: '模块' }).click()
     await moduleNameRow(page, '小记').locator('.switch-slider').click()
     await expectToast(page, '小记已开启')
     await dialog.locator('.dialog-close').click()
@@ -135,11 +158,12 @@ test.describe('模块开关', () => {
     await expect(page).toHaveURL(/\/start$/)
     await expect(page.locator('.module-tile[aria-pressed="true"]')).toHaveCount(1)
     await expect(page.locator('.onb-count')).toHaveText('已启用 1 个模块')
-    await expect(page.locator('a.nav-item[href="/notes"]')).toHaveCount(1)
+    await expect(page.locator('#app-sidebar')).toHaveCount(0)
 
     await page.locator('.onb-cta').click()
     await expect(page).toHaveURL(/\/notes$/)
     await expect(page.locator('.notes-page')).toBeVisible()
+    await expect(page.locator('#app-sidebar')).toBeVisible()
   })
 
   test('最小窗口底栏直接可见，八块全选后 CTA 仍落到顺序最前的模块', async ({ page }) => {
@@ -150,16 +174,20 @@ test.describe('模块开关', () => {
     await expect(page.locator('.onb-cta')).toBeInViewport()
     expect(await page.locator('.content-inner.onb-page').evaluate((el) => el.scrollTop)).toBe(0)
 
-    for (const name of ['小记', '网址收藏', '文件快捷', '验证码', '局域网传输', '内网穿透', '网络直连', 'Codex']) {
+    for (const name of ['小记', '网址收藏', '文件快捷', '验证码', '局域网传输', '内网穿透', '网络选路', 'Codex']) {
       const tile = page.locator('.module-tile', { hasText: name })
       await tile.click()
       await expect(tile).toHaveAttribute('aria-pressed', 'true')
+      await expect(page).toHaveURL(/\/start$/)
+      await expect(page.locator('#app-sidebar')).toHaveCount(0)
     }
     await expect(page.locator('.onb-count')).toHaveText('已启用 8 个模块')
-    await expect(page.locator('a.nav-item')).toHaveCount(8)
+    await expect(page.locator('#app-sidebar')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/start$/)
 
     await page.locator('.onb-cta').click()
     await expect(page).toHaveURL(/\/notes$/)
     await expect(page.locator('.notes-page')).toBeVisible()
+    await expect(page.locator('#app-sidebar')).toBeVisible()
   })
 })

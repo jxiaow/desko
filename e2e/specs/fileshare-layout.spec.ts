@@ -9,7 +9,9 @@ for (const theme of ['paper', 'ink']) {
       await page.setViewportSize({ width, height: width === 800 ? 600 : 900 })
       await bootUnlocked(page, { settings: { fileshare_enabled: 'true', theme }, fileshare: { running: true, hasPassword: true, shareDirs } }, '/fileshare')
       await expect(page.locator('#lan-target')).toContainText('shared')
-      await expect(page.locator('#workspace-page-toolbar .service-toggle')).toHaveCount(1)
+      await expect(page.locator('#workspace-page-toolbar .service-toggle')).toHaveCount(0)
+      await expect(page.locator('.connection-heading .service-toggle')).toBeVisible()
+      await expect(page.locator('.connection-heading .manage-btn')).toBeVisible()
       await expect(page.locator('.upload-card .session-files')).toHaveCount(1)
       await expect(page.locator('.session-empty')).toBeVisible()
       const connection = (await page.locator('.connection-panel').boundingBox())!
