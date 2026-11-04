@@ -4,7 +4,7 @@ exclude = ["vendor/tiny_http"]
 
 [package]
 name = "desko"
-version = "1.0.0"
+version = "1.0.1"
 description = "案头 - 桌面办公助手"
 authors = ["you"]
 edition = "2021"
