@@ -45,7 +45,26 @@ jobs:
       - run: npm ci
       - run: npm run version:check
       - name: Build release packages
+        if: runner.os != 'macOS'
         run: npm run tauri -- build --bundles ${{ matrix.bundles }}
+      - name: Build macOS application
+        if: runner.os == 'macOS'
+        run: npm run tauri -- build --no-bundle
+      - name: Bundle macOS disk image
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if npm run tauri -- bundle --bundles dmg --verbose; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::DMG packaging failed after 3 attempts; see the bundler output above."
+              exit 1
+            fi
+            echo "::warning::DMG packaging attempt $attempt failed; retrying without recompiling."
+            sleep "$((attempt * 10))"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: desko-${{ matrix.name }}

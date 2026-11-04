@@ -28,6 +28,10 @@ npm run release
 - macOS Apple Silicon / Intel：各自的 `.dmg`。
 - Linux x64：`.deb` 和 `.AppImage`。
 
+macOS 的 Rust 编译与 DMG 封装分开执行。DMG 封装开启详细日志，失败时最多尝试三次，重试不重新编译；持续失败仍会使任务失败，具体原因见 `Bundle macOS disk image` 步骤的脚本输出。
+
+修改工作流后，可在 Actions 手动选择 `master` 验证。旧任务的 Re-run 仍使用原提交中的工作流，不会应用新的修复。
+
 当前未配置 Windows 代码签名、Apple 签名或公证。macOS / Linux 首次 CI 构建和原生功能仍需验证；网络选路等 Windows 专属能力不代表已完成跨平台适配。不要将构建成功等同于全部功能可用。
 
 日常发布无需手动修改版本文件。GitHub 手动构建使用选定提交的版本，只生成构建产物，不自动创建发布标签。
