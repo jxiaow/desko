@@ -11,7 +11,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const tauriDir = join(root, 'src-tauri')
 const release = process.argv.includes('--release')
 const profile = release ? 'release' : 'debug'
-const triple = `${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-pc-windows-msvc`
+const triple = execFileSync('rustc', ['-vV'], { encoding: 'utf8' }).match(/^host: (.+)$/m)?.[1]?.trim()
+if (!triple) throw new Error('Unable to determine Rust host triple')
 const exe = `desko-fileshare${process.platform === 'win32' ? '.exe' : ''}`
 
 execFileSync('cargo', ['build', '-p', 'fileshare-core', '--bin', 'desko-fileshare', ...(release ? ['--release'] : [])], {
@@ -23,7 +24,7 @@ const built = join(tauriDir, 'target', profile, exe)
 if (release) {
   const binDir = join(tauriDir, 'binaries')
   mkdirSync(binDir, { recursive: true })
-  const dest = join(binDir, `desko-fileshare-${triple}.exe`)
+  const dest = join(binDir, `desko-fileshare-${triple}${process.platform === 'win32' ? '.exe' : ''}`)
   rmSync(dest, { force: true })
   // 先写临时名再改名，避免服务进程正在运行旧文件时 copy 报 EBUSY 留下半成品
   const tmp = dest + '.new'

@@ -11,7 +11,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const tauriDir = join(root, 'src-tauri')
 const release = process.argv.includes('--release')
 const profile = release ? 'release' : 'debug'
-const triple = `${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-pc-windows-msvc`
+const triple = execFileSync('rustc', ['-vV'], { encoding: 'utf8' }).match(/^host: (.+)$/m)?.[1]?.trim()
+if (!triple) throw new Error('Unable to determine Rust host triple')
 const exe = `desko-netguard${process.platform === 'win32' ? '.exe' : ''}`
 
 execFileSync('cargo', ['build', '-p', 'netguard-core', '--bin', 'desko-netguard', ...(release ? ['--release'] : [])], {
@@ -23,7 +24,7 @@ const built = join(tauriDir, 'target', profile, exe)
 if (release) {
   const binDir = join(tauriDir, 'binaries')
   mkdirSync(binDir, { recursive: true })
-  const dest = join(binDir, `desko-netguard-${triple}.exe`)
+  const dest = join(binDir, `desko-netguard-${triple}${process.platform === 'win32' ? '.exe' : ''}`)
   rmSync(dest, { force: true })
   // 先写临时名再改名：主程序运行时也会拿着这个文件，直接 copy 会撞 EBUSY 留半成品
   const tmp = dest + '.new'

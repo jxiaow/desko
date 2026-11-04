@@ -1,136 +1,123 @@
-# Desko（案头）
+<div align="center">
 
-Windows 桌面个人工作台。八件事住在同一个窗口里：小记、网址收藏、文件快捷、验证码、局域网传输、内网穿透、网络直连、Codex 账号管理。
+# Desko · 案头
 
-本地优先：数据只落在本机当前档案目录，云端备份要在设置里显式连上 WebDAV 才生效；加密是小记/收藏上的一个属性，不是产品定位。桌面壳用 Tauri 2 + Rust，界面用 Vue 3 + TypeScript；同一套前端也能跑在自带的 Web 服务里给手机和别的电脑用，见 [docs/web-access.md](docs/web-access.md)。
+**把常用的东西，放回手边。**
 
-## 模块
+小记、网址、文件、验证码，还有你的 Codex 工作记录。
+一个 Windows 桌面工作台，收好每天用得到的零碎。
 
-| 侧栏名 | id | 干什么 | 可选配置页签 |
-|---|---|---|---|
-| 小记 | `notes` | 富文本 + 图片 + 待办，支持整库口令加密 | 是 |
-| 网址收藏 | `entries` | 网址与账号口令，按标签分组 | — |
-| 文件快捷 | `files` | 一键打开本机文件、目录或终端 | 是 |
-| 验证码 | `mfa` | TOTP 动态码，支持二维码导入 | — |
-| 局域网传输 | `fileshare` | 同网段设备用浏览器互传文件（常驻服务） | 是 |
-| 内网穿透 | `tunnel` | Cloudflare 隧道把本机服务挂到公网（常驻服务） | — |
-| 网络直连 | `bypass` | 探测域名与网段，配置 hosts 和直连路由（提权落盘） | — |
-| Codex | `codex` | 多账号管理、切换、会话与用量统计，含桌面额度挂件 | 是 |
+[认识 Desko](#一个窗口接住日常工作) · [开始使用](#开始使用) · [开发与构建](docs/development.md) · [反馈问题](https://github.com/jxiaow/desko/issues)
 
-模块顺序、开关键、设置页签、解锁取数、锁定/禁用钩子集中在 [src/modules/registry.ts](src/modules/registry.ts) —— 数组顺序即侧栏顺序。加一个模块只改这一处注册表 + 一个 view。
+</div>
 
-## 技术栈
+![Desko 小记工作台：记录灵感、计划与开发备忘](docs/images/notes-paper.png)
 
-- **前端** Vue 3、TypeScript、Vite、Pinia、vue-router；小记编辑器是 TipTap（`marked` / `turndown` 做 Markdown 进出，`DOMPurify` 净化，`lowlight` 高亮）。
-- **桌面壳** Rust + Tauri 2，无装饰自定义窗口、托盘、单实例锁；`rusqlite`（bundled SQLite）落数据，`aes-gcm` + `pbkdf2` 做主密钥与字段加密。
-- **Cargo workspace**（[src-tauri/Cargo.toml](src-tauri/Cargo.toml)）除主程序外还有三颗独立 crate：`fileshare-core`（传输服务进程 `desko-fileshare`）、`netguard-core`（提权 helper `desko-netguard`）、`codex-core`（Codex 账号/会话/用量）。后两颗作为 `externalBin` 随安装包分发。
-- **窗口与平台** WebView2 + `windows` crate（会话锁定、路由探测、Job Object 兜住 cloudflared、`runas` 拉提权 helper）。
-- **外观** 纸/墨两套底色 × 多强调色，令牌集中在 [src/styles/workspace-themes.css](src/styles/workspace-themes.css)；中文用内置可变字体子集，见 [public/fonts/NOTICE.md](public/fonts/NOTICE.md)。图标骨架见 [public/icons/NOTICE.md](public/icons/NOTICE.md)。
+## 一个窗口，接住日常工作
 
-## 目录结构
+刚想到的点子，散落在便签里；常用网址，埋在浏览器里；项目目录，每天都要重新找一遍。用 Codex 做完一轮工作，还想回头看看聊过什么、用了多少 Token。
 
-```
-src/                Vue 前端
-  views/            8 个模块页 + 空态页
-  components/       按模块分目录，另有 layout / settings / shared
-  stores/           Pinia 状态（auth、notes、entries、…）
-  services/         Tauri 调用封装、运行时判定、主题、额度挂件
-  modules/          模块注册表 + 模块自带设置页签
-  styles/           global.css 与主题/材质样式
-src-tauri/src/      Rust
-  commands/         前端可调的全部命令（按领域分文件）
-  services/         命令背后的实现（含隧道、传输、直连、备份、档案）
-  db/               SQLite schema 与各数据仓库（note_repo / entry_repo / …）
-  backup/           备份容器与校验
-  crypto.rs         主密钥、封条、字段加解密
-  paths.rs          当前档案根路径（进程内唯一写入点）
-src-tauri/{fileshare,netguard,codex}-core/   独立 crate 与服务二进制
-e2e/                Playwright 规格与内存版 fake backend（镜像 Rust 契约）
-docs/design/        按主题分目录的设计文档（编号 = 决策顺序）
-scripts/            截图/走查/构建辅助脚本
-design/ shots/      历轮 mock 与走查产物，默认不入版本库
-```
+Desko 把这些高频的小事放到一张「案头」上。打开它，记下一段话，取一个验证码，找到上次的会话，然后继续手头的工作。
 
-## 环境要求
+- **只留下你需要的工具。** 八个模块按需开启。可以从小记和收藏开始，再慢慢搭出自己的工作台。
+- **本地优先。** 工作区数据保存在本机；WebDAV 备份和浏览器访问由你自行开启。
+- **照顾长时间使用。** 「纸」与「墨」两套外观，搭配多种强调色和可开关的背景氛围。
+- **让电脑上的资料随手可用。** 开启 Web 访问后，手机和其他电脑也能通过浏览器使用支持的模块。
 
-- Windows 10/11（需 WebView2 运行时，Win11 自带）。
-- Node.js `^20.19.0 || ^22.12.0 || >=24.0.0`。
-- Rust 稳定版 + MSVC 工具链与 Windows SDK（`rustup` 默认 GNU 工具链不能构建 Tauri）。
+## 随手记，也能认真整理
 
-## 跑起来
+小记适合记录一个念头，也装得下一份项目备忘。富文本、图片、代码块与待办放在一起；用标签整理、用置顶留住近期重点，做完的内容可以归档。
 
-```bash
+从网页粘贴内容时，可以选择只粘贴文本，减少杂乱格式。需要保护的内容，还可以使用小记口令加密。
+
+<details>
+<summary>看看「墨」色外观</summary>
+
+![Desko 暗色小记：柔和文字与墨色背景](docs/images/notes-ink.png)
+
+</details>
+
+## 给 Codex 工作留一份清楚的记录
+
+多账号切换、历史会话、用量统计，集中在一个模块里。
+
+- **账号：** 管理多个账号，查看配额，按需切换；桌面额度挂件让剩余额度更容易看到。
+- **会话：** 按项目目录筛选，按标题或正文搜索，在列表内展开详情；支持移入回收站与恢复，也能按目录批量清理会话。
+- **用量：** 查看今天、近 7 天、近 30 天或全部记录的 Token 用量、趋势与模型排行，还能生成分享图片。
+
+![Codex 用量：总量、时段趋势与模型排行](docs/images/codex-usage.png)
+
+<details>
+<summary>看看会话列表</summary>
+
+![Codex 会话：项目目录筛选与平铺的会话列表](docs/images/codex-sessions.png)
+
+</details>
+
+用量来自本机会话记录；界面中的金额为估算值，不是服务商账单。Codex 模块用于管理账号、会话和用量，不提供内置 AI 对话界面。
+
+## 常用工具，各就各位
+
+| 模块 | 什么时候用得上 |
+| --- | --- |
+| **小记** | 随手记灵感，整理项目备忘、摘录和待办。 |
+| **网址收藏** | 收藏常用站点，连同账号信息一起管理，用标签快速找回。 |
+| **文件快捷** | 把常用文件和项目目录放到手边，一键打开文件、目录或终端。 |
+| **验证码** | 集中查看与复制 TOTP 动态码，支持二维码导入。 |
+| **局域网传输** | 同一网络里的设备通过浏览器互传文件。 |
+| **内网穿透** | 通过 Cloudflare 隧道，为本机服务配置公网访问入口。 |
+| **网络选路** | 按不同域名探测连接，选择合适的网卡出口，并应用所需的 hosts 与路由配置。 |
+| **Codex** | 管理账号与配额，检索会话，查看用量和模型排行。 |
+
+![验证码：服务与账号清晰分列，动态码和剩余时间一眼可见](docs/images/mfa.png)
+
+网络选路涉及系统配置，应用时需要 Windows 管理员授权。内网穿透需要相应的 Cloudflare 配置。
+
+## 从桌面，延伸到浏览器
+
+在「设置 → Web 访问」启动服务后，可在浏览器里登录当前工作区。需要手机访问时，开启局域网访问，打开页面提供的地址即可。
+
+浏览器支持小记、网址收藏、文件快捷、验证码、Codex、局域网传输和内网穿透。文件快捷可以浏览和下载电脑上已收藏的内容；添加本机路径、打开终端等操作仍在桌面完成。
+
+Web 服务由桌面端运行，退出 Desko 后停止。局域网访问使用 HTTP，适合可信网络。具体能力和登录方式见 [Web 访问说明](docs/web-access.md)。
+
+## 开始使用
+
+Desko 面向 **Windows 10 / 11**，需要 WebView2 运行时。
+
+目前仓库尚未发布 Release 安装包，可以从源码运行，或自行构建安装包。后续发布可在 [Releases](https://github.com/jxiaow/desko/releases) 查看。
+
+准备 Node.js（`^20.19.0 || ^22.12.0 || >=24.0.0`）、Rust 稳定版、MSVC 构建工具与 Windows SDK，然后在 Windows 终端执行：
+
+```powershell
+git clone https://github.com/jxiaow/desko.git
+cd desko
 npm install
 npm run tauri dev
 ```
 
-`tauri dev` 的 `beforeDevCommand` 会先把 `desko-fileshare`、`desko-netguard` 两颗 debug 二进制构建到 `src-tauri/target/debug/`，再拉起 Vite（`http://127.0.0.1:1420`）。装完包直接跑就行，不必手工预构建。
+首次打开时，按引导设置主密码，选择需要的模块，点击「进入工作台」。之后可以在设置里调整模块和外观。
 
-几条容易踩的：
+自行生成 Windows 安装包：
 
-- **单实例锁**：已有 Desko 在跑时，新起的 dev 会秒退。先退出正在运行的实例。
-- **缺二进制**：`externalBin` 声明的 exe 找不到时主程序 `exit 101`。改动过 sidecar 后重跑 `node scripts/sync-fileshare-server.mjs` / `node scripts/sync-netguard-helper.mjs`。
-- **端口占用**：1420（dev）或 1430（e2e/mock）被占会让 Vite 直接失败，`--strictPort` 下不会自动换端口。
-- **想在浏览器里看界面**：裸 `npm run dev` 打开的页面没有原生桥、也没有 mock，调不通。用 e2e 那套内存后端起：`npm run dev -- --mode e2e --port 1430 --strictPort`，`scripts/*-shots.mjs` 全部指向这个地址。纯设计稿（注真 token 的单页 mock）走 `node scripts/mock-build.mjs <src.html> <out.html>` 后直接打开。
-
-## 常用命令
-
-| 命令 | 作用 |
-|---|---|
-| `npm run dev` | 只起 Vite（`tauri dev` 挂载它；浏览器直开没有数据后端，见上） |
-| `npm run tauri dev` | 起桌面版 |
-| `npm run build` | `vue-tsc --noEmit` 类型检查 + `vite build` |
-| `npm run build:installer` | `tauri build` 出 NSIS 包，再把安装包拷到根目录 `installer/` |
-| `npm run test` | Vitest 单元测试（watch） |
-| `npm run test:run` | Vitest 单次全跑 |
-| `npm run test:e2e` | Playwright 全量端到端（自带 e2e 模式的 Vite mock 后端） |
-| `npm run check:codex-protocol` | 用本机 codex CLI 生成协议 JSON schema，核对本仓库依赖的方法与字段仍在（不登录、不建任务、不调模型） |
-
-## 测试
-
-```bash
-npm run test:run                      # 单元测试（jsdom）
-PW_CHANNEL=msedge npx playwright test  # 端到端
+```powershell
+npm run build:installer
 ```
 
-- E2E 不启动 Tauri，而是在 `127.0.0.1:1430` 用 Vite 的 `--mode e2e` 注入 [e2e/mocks/backend.ts](e2e/mocks/backend.ts) 这份内存 fake backend；它镜像 `src-tauri/src/commands/*.rs` 的行为契约，改 Rust 命令返回结构时要同步改这里。
-- Playwright 复用本机已装浏览器（配置里 channel 默认 `chrome`；本机只有 Edge 时传 `PW_CHANNEL=msedge`）。
-- 真机验收走 `npm run tauri dev` 手工确认，单元与 e2e 全绿不等于原生链路可用。
+安装包输出到 `installer/`。维护者可运行 `npm run release` 发起 GitHub 多平台打包，见 [发布说明](docs/release.md)。环境配置、常用命令和排错方法见 [开发与构建](docs/development.md)。
 
-## 数据在哪
+## 数据由你保管
 
-每个档案一个目录，启动时确定、进程内不换（切档案靠重启）：
+Desko 使用本地档案保存工作区数据，支持主密码锁定和多档案。数据默认位于 `%APPDATA%\com.desko.app\profiles\<档案 id>\`。
 
-```
-%APPDATA%\com.desko.app\profiles\<档案 id>\
-  data.db        SQLite：小记、收藏、快捷方式、验证码、Codex 账号与会话索引
-  attachments\   小记图片等附件
-  favicons\      收藏站点的图标缓存
-```
+在「设置 → 数据与备份」可以生成备份，也可以自行配置 WebDAV 备份。恢复备份需要备份密码；更换设备前，建议先导出并确认备份可用。
 
-备份由「设置 → 备份」生成，可只留本机，也可经 WebDAV（当前对接坚果云，含它的限流与应用密码规则）自动同步并保留指定份数；恢复需要备份密码。换主密码、切档案、恢复备份或停 Web 服务都会让既有 Web 登录会话失效。
+本地优先并不代表所有功能都离线：Codex 授权和配额查询、Cloudflare 隧道、网络探测、WebDAV 等功能需要相应的网络服务。
 
-## 设计文档
+## 一起把案头整理得更好
 
-决策过程按主题放在 [docs/design/](docs/design/)，文件名前两位数字是同一主题内的顺序；同目录还放对应的 mock 页与对账用 json/脚本，截图产物（`*.png`）默认不入版本库。
+遇到问题或有想法，欢迎提交 [Issue](https://github.com/jxiaow/desko/issues)。描述使用场景、复现步骤和预期效果，会更方便定位；分享截图或日志前，请隐去个人信息。
 
-- `themes/`、`atmosphere/`、`layering/`、`lighten/` — 色板、氛围光场、层间阶梯
-- `workspace/`、`modules/`、`onboarding/`、`profiles/` — 页面骨架、模块运行时、首启两屏、多档案
-- `notes/`、`fs-app/`、`fs-web/`、`tunnel/`、`bypass/`、`codex/`、`web/` — 各领域功能设计
-- `lock-screen/`、`toast/`、`selection/`、`unify/`、`v52/`、`redesign/` — 锁页、通知、批量、统一化轮次
+想参与开发，可以从 [开发文档](docs/development.md) 和 [设计记录](docs/design/) 开始。项目采用 Tauri 2、Rust、Vue 3 与 TypeScript。
 
-## 走查与截图脚本
-
-`scripts/` 下的 `*.mjs` 是设计和验证工具，跑完产物落 `design/`、`.tmp/`（默认不入本）：
-
-| 脚本 | 用途 |
-|---|---|
-| `design-audit.mjs`、`color-sweep.mjs` | 对照设计基线走查；全窗口主题组合的颜色对账 |
-| `check-theme-coverage.mjs`、`check-zindex-stack.mjs` | 主题令牌覆盖、层级栈冲突静态检查 |
-| `theme-shots.mjs`、`nav-shots.mjs`、`dialog-shots.mjs` 等 `*-shots.mjs` | 各面各弹窗的定帧截图 |
-| `theme-tokens-dump.mjs`、`theme-intake.mjs` | 从代码现场导出令牌清单（给外部配色稿当输入）；校验外部配色交付物，只出判决不写项目 |
-| `mock-build.mjs`、`mock-cloudflared.mjs` | 把真 token 与真图标路径注进设计 mock 产出可截图页；假 cloudflared，用同一套参数跑通报文状态机 |
-
-## 许可与致谢
-
-字体见 [public/fonts/NOTICE.md](public/fonts/NOTICE.md)，图标集见 [public/icons/NOTICE.md](public/icons/NOTICE.md)（各自保留上游许可证条款）。
+本文截图来自实际前端界面，使用隔离的演示数据，不包含真实账号、密钥或个人会话。截图复现方式见 [截图说明](docs/images/README.md)。字体与图标的许可和致谢分别见 [字体说明](public/fonts/NOTICE.md)、[图标说明](public/icons/NOTICE.md)。
