@@ -689,6 +689,7 @@ dependencies = [
  "junction",
  "keyring",
  "lazy_static",
+ "mac-notification-sys",
  "md5",
  "rand 0.8.8",
  "regex",

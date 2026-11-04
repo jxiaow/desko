@@ -40,6 +40,10 @@ reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "
 rusqlite = { version = "0.31", features = ["bundled", "backup"] }
 tokio = { version = "1", features = ["full"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# macOS 配额通知使用原生通知接口，需声明直接依赖。
+mac-notification-sys = "0.6.15"
+
 [target.'cfg(target_os = "windows")'.dependencies]
 age = { version = "0.11", default-features = false }
 keyring = { version = "3.6", features = ["windows-native"] }
