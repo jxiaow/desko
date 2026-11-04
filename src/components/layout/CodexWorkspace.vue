@@ -105,16 +105,16 @@ function onDirectoryClick(event: MouseEvent) {
   background-image: linear-gradient(var(--sheet-field-veil), var(--sheet-field-veil)), var(--material-workspace-layers);
   background-attachment: fixed;
 }
-/* 暗色标题栏与内容面共享同一套窗口坐标下的光层，避免纯底色横带。 */
-:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"]
+/* 标题栏与内容面共享同一套窗口坐标下的光层，避免纯底色横带。 */
+:root[data-layout="workspace"][data-atmosphere="on"]
   .app-root.codex-layout:not(.web-runtime) .titlebar-outer,
-:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"]
+:root[data-layout="workspace"][data-atmosphere="on"]
   .app-root.codex-layout:not(.web-runtime) .workspace-main::before {
   background-image: linear-gradient(var(--sheet-field-veil), var(--sheet-field-veil)), var(--material-workspace-layers);
   background-attachment: fixed;
 }
 /* 仍使用整窗空态背景的页面，标题栏也透出同一画布。 */
-:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"]
+:root[data-layout="workspace"][data-atmosphere="on"]
   .app-root.codex-layout:not(.web-runtime):has(.workspace-surface .empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state)) .titlebar-outer {
   background: transparent;
 }
