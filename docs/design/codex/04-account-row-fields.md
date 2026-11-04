@@ -1,5 +1,7 @@
 # Codex 账号行信息面（rev1 · 2026-10-10）
 
+> 归档说明（2026-11-04）：本文涉及的历史原型、实验附件和旧轮次拍图脚本已移出版本库；相关路径与复现命令保留作历史记录。已入库版本可通过 `git log --all -- <文件路径>` 查找，本机草稿以清理前备份为准。
+
 对拍稿：`docs/design/codex/03-page-redesign.src.html`（帧 A/B 就是本轮行形态）。
 改稿重跑：`node scripts/mock-build.mjs docs/design/codex/03-page-redesign.src.html docs/design/codex/03-page-redesign.html`
 

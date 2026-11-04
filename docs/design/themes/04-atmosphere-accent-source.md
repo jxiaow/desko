@@ -1,8 +1,10 @@
 # 氛围光场：强调色推导与分区柔光
 
+> 归档说明（2026-11-04）：本文涉及的历史原型、实验附件和旧轮次拍图脚本已移出版本库；相关路径与复现命令保留作历史记录。已入库版本可通过 `git log --all -- <文件路径>` 查找，本机草稿以清理前备份为准。
+
 状态：**分区柔光已应用到生产源码**。2026-10-16 根据原生截图复核调整光斑范围、深色配光和表面洗色，当前配方见第 16 节，落地截图与验收见第 17 节。第 3–15 节保留此前推导与实施记录，其中深色固定明度方案已被本轮替代。
 
-> **当前效果**：[调整前后原尺寸对拍](../atmosphere/06-spatial-applied.html)，覆盖 Codex、收藏、小记、设置、阅读和锁屏共 13 个页面/尺寸组合。调整后截图直接使用当前源码样式，没有叠加候选 CSS。[此前三种方案对拍](../atmosphere/05-visual-audit.html)保留用于核对选型。
+> **历史效果记录**：调整前后原尺寸对拍（历史附件：`../atmosphere/06-spatial-applied.html`）覆盖 Codex、收藏、小记、设置、阅读和锁屏共 13 个页面/尺寸组合；此前三种方案对拍为 `../atmosphere/05-visual-audit.html`。这些对拍页已归档，当前配方以生产源码和第 16、17 节为准。
 
 > **2026-10-16 复核更正：下文原解析账的数值结论暂不采纳。** `accent-derivation.mjs` 把 tint / sunken 的混合权重算反，Lab 换算又把绿色通道当作 Y；它给出的 L\*、ΔE 与“72 组全过”不能用作验收依据。按本文原推荐点在 Edge 155 实测，**9/80 组未达到可见性下限**，详见第 14 节。已制作原推荐点对拍 `../atmosphere/02-accent-source.html` 与重标定配方对拍 `../atmosphere/03-accent-source-recalibrated.html`（这两份把截图按 base64 内嵌、单文件 21.7 MB，**只留本机、未入库**；同轮的第 16 节复核对拍 `05-visual-audit.html`、`06-spatial-applied.html` 是轻量版，已入库），均为同一应用、1040 × 670，覆盖密集列表、浮层和锁屏。重标定曾把彩度系数改为**浅 0.75／深 0.65**，明度仍为 0.85／0.24，通过现有 80 组像素回归后应用。随后实际视觉反馈促成本轮分区柔光调整；当前生产配方以第 16、17 节为准。
 
@@ -158,7 +160,8 @@ tint 的 L\* 落在 **34–69**，亮极在 **17–50**，暗极在 **67–85**�
 
 ## 11. 原验收步骤（历史，当前命令见第 15 节）
 
-```bash
+```text
+# 历史命令：先恢复归档附件，再执行。
 node docs/design/atmosphere/accent-derivation.mjs      # 账 1–8 复现（改动后须重跑对推荐点）
 node scripts/check-theme-coverage.mjs                  # 未改，作为回归护栏
 PW_CHANNEL=msedge npx playwright test e2e/specs/theme-composition.spec.ts   # 80 组闸门，逐底对第 7 节
@@ -222,14 +225,15 @@ Edge 155.0.4283.45，1040 × 670，直接复用 `theme-composition.spec.ts` 的 
 
 两份对拍各含 14 组、28 张实际应用截图，可按密集列表、浮层与预览、锁屏筛选：
 
-- [文档原推荐点：现状 vs 推导](../atmosphere/02-accent-source.html)
-- [重标定候选：现状 vs 推导](../atmosphere/03-accent-source-recalibrated.html)
-- [候选 CSS](../atmosphere/03-accent-source-recalibrated.candidate.css)
-- [浏览器计算色与强度记录](../atmosphere/03-accent-source-recalibrated.browser.json)
+- 文档原推荐点：现状 vs 推导（历史附件：`../atmosphere/02-accent-source.html`）
+- 重标定候选：现状 vs 推导（历史附件：`../atmosphere/03-accent-source-recalibrated.html`）
+- 候选 CSS（历史附件：`../atmosphere/03-accent-source-recalibrated.candidate.css`）
+- 浏览器计算色与强度记录（历史附件：`../atmosphere/03-accent-source-recalibrated.browser.json`）
 
 复现（先启动 `npm run dev -- --mode e2e --port 1430 --strictPort`）：
 
-```bash
+```text
+# 历史命令：先恢复归档附件，再执行。
 node docs/design/atmosphere/02-accent-source.mjs --prepare --recalibrated
 node scripts/.tmp-accent-derivation-corrected.mjs
 npx playwright test --config tmp/atmosphere-review/candidate.config.ts --grep '八十组' --workers=1
@@ -259,7 +263,7 @@ node docs/design/atmosphere/02-accent-source.mjs --recalibrated --shots-only
 
 颜色走查中的对比度提示分为四类：绢/雾底的 `tab-count` 与 `day-head` 小字，以及夜底的 `grid-slot` 与 `ft-ico` 图标文字。抽取绢×湖蓝、雾×橄榄、夜×群青，在收藏、小记、文件共 9 个页面状态中逐一替换旧/新材质，提示与比值完全一致（如 4.19、4.04、3.94、4.41），属于既有结果；本次未调整这些前景色。走查脚本的“游离色”输出还包含局部主题预览、强调色选项和内容分类的派生色，不作为本次氛围配方的失败项。
 
-结构化结果见 [实施验证记录](../atmosphere/04-accent-source-validation.json)。`01-token-inventory.md` 已按生产样式重新导出，并修复导出脚本对 `:where(:root)` 底色选择器的识别，使清单覆盖当前 8 套底色与 20 个极性/强调色块。对拍脚本保存旧材质基线，可在落地后继续重建改动前/应用后的对比。
+结构化结果见 实施验证记录（历史附件：`../atmosphere/04-accent-source-validation.json`）。`01-token-inventory.md` 已按生产样式重新导出，并修复导出脚本对 `:where(:root)` 底色选择器的识别，使清单覆盖当前 8 套底色与 20 个极性/强调色块。对拍脚本保存旧材质基线，可在落地后继续重建改动前/应用后的对比。
 
 常规环境复现生产回归：
 
@@ -310,9 +314,9 @@ node scripts/theme-tokens-dump.mjs --out docs/design/themes/01-token-inventory.m
 
 方案阶段完成 13 组视觉对拍与对比页交互检查；落地时保留这些历史截图，并新增实际源码的前后对比与完整配色回归，见下一节。
 
-- [可切换的原尺寸对比](../atmosphere/05-visual-audit.html)
-- [试拍方案 CSS](../atmosphere/05-spatial-proposal.css)
-- [截图与采样记录](../atmosphere/05-visual-audit.json)
+- 可切换的原尺寸对比（历史附件：`../atmosphere/05-visual-audit.html`）
+- 试拍方案 CSS（历史附件：`../atmosphere/05-spatial-proposal.css`）
+- 截图与采样记录（历史附件：`../atmosphere/05-visual-audit.json`）
 - 复现：先运行 E2E 模式 Vite，再执行 `node docs/design/atmosphere/05-visual-audit.mjs`。
 
 ## 17. 2026-10-16：分区柔光落地与验收
@@ -336,13 +340,14 @@ node scripts/theme-tokens-dump.mjs --out docs/design/themes/01-token-inventory.m
 
 ### 复现与产物
 
-```bash
+```text
+# 历史命令：先恢复归档附件，再执行。
 # 先启动 Vite 的 E2E 模式，再截取生产页面；此命令不修改 src。
 node docs/design/atmosphere/05-visual-audit.mjs --applied
 
 PW_CHANNEL=msedge npx playwright test e2e/specs/theme-composition.spec.ts e2e/specs/theme.spec.ts e2e/specs/materials.spec.ts e2e/specs/appearance.spec.ts --workers=3
 ```
 
-- [调整前后对比页](../atmosphere/06-spatial-applied.html)
-- [生产截图、计算样式与采样记录](../atmosphere/06-spatial-applied.json)
-- [本轮验证汇总](../atmosphere/06-spatial-validation.json)
+- 调整前后对比页（历史附件：`../atmosphere/06-spatial-applied.html`）
+- 生产截图、计算样式与采样记录（历史附件：`../atmosphere/06-spatial-applied.json`）
+- 本轮验证汇总（历史附件：`../atmosphere/06-spatial-validation.json`）

@@ -1,8 +1,10 @@
 # Codex 切号与 WSL 账号（2026-10-23，定稿 v5）
 
+> 归档说明（2026-11-04）：本文涉及的历史原型、实验附件和旧轮次拍图脚本已移出版本库；相关路径与复现命令保留作历史记录。已入库版本可通过 `git log --all -- <文件路径>` 查找，本机草稿以清理前备份为准。
+
 一句话：**设置里只留一个「切换账号时重启 Codex」开关，默认关；Windows 切号是否关闭重开由它决定。WSL 与 Windows 默认各用各的账号：切 Windows 时在确认里勾选「同时用于 WSL」才一起切；卡片 ⋯ 的「在 WSL 中使用」是只改 WSL 的入口。所有写入都先关闭对应运行中的 Codex，避免旧进程把凭据写回。**
 
-静态设计稿：[22-account-switch-wsl-ux.html](22-account-switch-wsl-ux.html)
+静态设计稿：22-account-switch-wsl-ux.html（历史附件：`22-account-switch-wsl-ux.html`）
 
 九帧：A 设置开关 ON / B 账号页独立 WSL 账号 / C 卡片菜单 / D1 切号确认·只切 Windows / D2 切号确认·同时用于 WSL / E WSL 账号确认 / F 设置开关 OFF / G API Key 边界态 / H 已用于 WSL 的卡片菜单。
 

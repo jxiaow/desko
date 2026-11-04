@@ -12,6 +12,7 @@ installer/
 # IDE
 .vscode/
 .idea/
+.qoder/
 *.swp
 *.swo
 
@@ -29,6 +30,8 @@ npm-debug.log*
 
 # Tauri
 src-tauri/WixTools/
+# tauri-build 根据 capabilities/ 和插件权限自动生成
+src-tauri/gen/schemas/
 # 服务进程二进制由 sync-fileshare-server.mjs 构建产出
 src-tauri/binaries/
 
@@ -37,14 +40,17 @@ test-results/
 playwright-report/
 blob-report/
 
-# design/ 整目录默认不入本：历轮 mock/走查产物全部是跑完即弃的草稿。
-# 早年显式加进版本库的基线文件（原型 html/截图/脚本）已被跟踪，不受这条影响；
-# 日后要新立基线，用 git add -f 有意识地加，而不是让 git status 一轮比一轮脏。
+# 临时原型、截图和走查产物不入版本库。
 design/*
 
 shots/
 shots-proto/
 docs/design/**/*.png
+# 设计决策保留 Markdown；原型和实验产物按需生成。
+docs/design/**/*.html
+docs/design/**/*.css
+docs/design/**/*.json
+docs/design/**/*.mjs
 
 # 原型草稿与中间产物，跑完即可弃
 .scratch/
@@ -54,16 +60,11 @@ tmp/
 .tmp/
 .taste-skill/
 
-# 走查生成的 txt 报告（reports 下历史 audit-*.json 是显式入库的，不受影响）
-.design-qa/reports/*.txt
+# 走查报告按需生成，不入版本库。
+.design-qa/
 
 # 一次性截图/联调脚本，跑完即可弃
 scripts/.tmp-*
-
-# 对拍页把截图按 base64 内嵌在单行里，单个 21.7 MB；只留本机看，不入本
-# （同轮的轻量版 05-visual-audit.html / 06-spatial-applied.html 不内嵌图，已入库）
-docs/design/atmosphere/02-accent-source.html
-docs/design/atmosphere/03-accent-source-recalibrated.html
 
 # 本机运行态与 Python 编译缓存，不入业务仓库
 .workbuddy/

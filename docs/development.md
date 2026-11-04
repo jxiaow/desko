@@ -28,6 +28,7 @@ src-tauri/src/      Rust
   crypto.rs         主密钥、封条、字段加解密
   paths.rs          当前档案根路径（进程内唯一写入点）
 src-tauri/{fileshare,netguard,codex}-core/   独立 crate 与服务二进制
+src-tauri/gen/schemas/   Tauri 自动生成的权限 schema，不入版本库
 e2e/                Playwright 规格与内存版 fake backend（镜像 Rust 契约）
 docs/design/        按主题分目录的设计文档（编号 = 决策顺序）
 scripts/            截图/走查/构建辅助脚本
@@ -95,7 +96,9 @@ PW_CHANNEL=msedge npx playwright test  # 端到端
 
 ## 设计文档
 
-决策过程按主题放在 [docs/design/](design/)，文件名前两位数字是同一主题内的顺序；同目录还放对应的 mock 页与对账用 json/脚本，截图产物（`*.png`）默认不入版本库。
+决策过程按主题放在 [docs/design/](design/)，文件名前两位数字是同一主题内的顺序。仓库保留 Markdown 设计记录；历史 HTML 原型、截图、实验 CSS/JSON/脚本和旧走查报告已归档移出，文中的相关路径与复现命令是历史记录。已入库版本可通过 `git log --all -- <文件路径>` 查找；本机未提交的草稿以清理前备份为准。
+
+新的临时原型与验证产物放在 `design/` 或 `.tmp/`，不入版本库。`src-tauri/gen/schemas/` 由 `tauri-build` 在构建时根据 `capabilities/` 和插件权限重新生成，也不入版本库。
 
 - `themes/`、`atmosphere/`、`layering/`、`lighten/` — 色板、氛围光场、层间阶梯
 - `workspace/`、`modules/`、`onboarding/`、`profiles/` — 页面骨架、模块运行时、首启两屏、多档案
@@ -105,6 +108,8 @@ PW_CHANNEL=msedge npx playwright test  # 端到端
 ## 走查与截图脚本
 
 `scripts/` 下的 `*.mjs` 是设计和验证工具，跑完产物落 `design/`、`.tmp/`（默认不入本）：
+
+旧轮次的专用拍图脚本已随原型归档；通用截图、主题检查、构建发布及测试依赖脚本继续保留。
 
 | 脚本 | 用途 |
 |---|---|

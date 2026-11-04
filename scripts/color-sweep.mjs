@@ -3,7 +3,8 @@
 // 2) 画面上实际涂出来的面族（背景色 + 面积 + L*），看层级台阶
 // 3) 游离色：computed 出来的颜色不在当前主题的令牌集合里
 // 用法：先起 vite --mode e2e --port 1430，再
-//   PW_CHANNEL=msedge node scripts/color-sweep.mjs > .design-qa/reports/color-sweep.txt
+//   PW_CHANNEL=msedge node scripts/color-sweep.mjs
+// 输出到 stdout；需要留档时重定向到已创建的 .tmp/ 或 .design-qa/ 目录。
 // 判据：可读文字 ≥4.5（装饰位除外）；--fill/--sunken 上的 muted 3.97~4.49 属既定豁免
 import { chromium } from '@playwright/test'
 import { readFileSync } from 'node:fs'

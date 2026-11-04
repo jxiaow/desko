@@ -3,7 +3,7 @@
 // 弹窗语义(role/aria-modal)、焦点管理、键盘激活、reduced-motion 生效。
 // 用法：先起 vite --mode e2e --port 1430，再
 //   PW_CHANNEL=msedge node scripts/design-audit.mjs [themeId]
-// 输出：stdout 摘要 + .design-qa/reports/audit.json
+// 输出：stdout JSON 报告；需要留档时重定向到已创建的 .tmp/ 或 .design-qa/ 目录。
 import { chromium } from '@playwright/test'
 
 const BASE = 'http://127.0.0.1:1430'
