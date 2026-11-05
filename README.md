@@ -85,7 +85,7 @@ Web 服务由桌面端运行，退出 Desko 后停止。局域网访问使用 HT
 
 Desko 面向 **Windows 10 / 11**，需要 WebView2 运行时。
 
-目前仓库尚未发布 Release 安装包，可以从源码运行，或自行构建安装包。后续发布可在 [Releases](https://github.com/jxiaow/desko/releases) 查看。
+可在 [Releases](https://github.com/jxiaow/desko/releases) 下载已发布的安装包，也可以从源码运行或自行构建安装包。
 
 准备 Node.js（`^20.19.0 || ^22.12.0 || >=24.0.0`）、Rust 稳定版、MSVC 构建工具与 Windows SDK，然后在 Windows 终端执行：
 

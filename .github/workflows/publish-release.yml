@@ -1,0 +1,119 @@
+name: Publish release packages
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      artifact_run_id:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag, for example v1.0.3
+        required: true
+        type: string
+      artifact_run_id:
+        description: Successful Release packages run containing the installers
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: publish-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate build source and release version
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          tag, run_id, repo = (os.environ[k] for k in ('RELEASE_TAG', 'ARTIFACT_RUN_ID', 'GH_REPO'))
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag) or not run_id.isdigit():
+              raise SystemExit('A version tag and numeric build run ID are required.')
+          run = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/actions/runs/{run_id}']))
+          if (run['repository']['full_name'] != repo or run['head_repository']['full_name'] != repo
+                  or run['path'] != '.github/workflows/release.yml'):
+              raise SystemExit('Artifacts must come from this repository and its release build workflow.')
+          if run_id != os.environ['GITHUB_RUN_ID'] and (run['status'] != 'completed' or run['conclusion'] != 'success'):
+              raise SystemExit('The source build must have completed successfully.')
+          source_sha = run['head_sha']
+          for ref in (tag, source_sha):
+              package = json.loads(subprocess.check_output(['git', 'show', f'{ref}:package.json']))
+              if package['version'] != tag[1:]:
+                  raise SystemExit('The built version does not match the release tag.')
+          paths = [
+              'src', 'public', 'package.json', 'package-lock.json', 'index.html', 'hud.html',
+              'vite.config.ts', 'tsconfig.json', 'tsconfig.node.json',
+              'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock', 'src-tauri/build.rs',
+              'src-tauri/src', 'src-tauri/capabilities', 'src-tauri/tauri.conf.json',
+              'src-tauri/codex-core', 'src-tauri/fileshare-core', 'src-tauri/netguard-core',
+              'src-tauri/vendor', 'src-tauri/icons', 'src-tauri/.cargo',
+              'scripts/sync-fileshare-server.mjs', 'scripts/sync-netguard-helper.mjs',
+          ]
+          if subprocess.run(['git', 'diff', '--quiet', tag, source_sha, '--', *paths]).returncode:
+              raise SystemExit('The built application sources differ from the release tag.')
+          print(f'Verified build {run_id} at {source_sha} for {tag}.')
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.artifact_run_id }}
+          path: packages
+      - name: Verify installers, upload assets, and publish release
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          version = os.environ['RELEASE_TAG'][1:]
+          expected = {
+              f'Desko_{version}_x64-setup.exe',
+              f'Desko_{version}_aarch64.dmg',
+              f'Desko_{version}_x64.dmg',
+              f'Desko_{version}_amd64.deb',
+              f'Desko_{version}_amd64.AppImage',
+          }
+          files = [p for p in Path('packages').rglob('*') if p.is_file()]
+          if len(files) != len(expected) or {p.name for p in files} != expected:
+              raise SystemExit('Expected all five versioned platform installers; refusing to publish.')
+          sizes = {p.name: p.stat().st_size for p in files}
+          if not all(sizes.values()):
+              raise SystemExit('An installer is empty; refusing to publish.')
+          (Path(os.environ['RUNNER_TEMP']) / 'release-assets.json').write_text(json.dumps(sizes))
+          PY
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes \
+              --title "Desko $RELEASE_TAG" \
+              --notes "Build artifacts: https://github.com/$GH_REPO/actions/runs/$ARTIFACT_RUN_ID (application sources match $RELEASE_TAG)."
+          fi
+          mapfile -d '' asset_paths < <(find packages -type f -print0)
+          gh release upload "$RELEASE_TAG" "${asset_paths[@]}" --clobber
+          gh release view "$RELEASE_TAG" --json assets > "$RUNNER_TEMP/uploaded-release.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          expected = json.loads((temp / 'release-assets.json').read_text())
+          assets = {a['name']: a for a in json.loads((temp / 'uploaded-release.json').read_text())['assets']}
+          for name, size in expected.items():
+              asset = assets.get(name, {})
+              if asset.get('size') != size or asset.get('state') != 'uploaded':
+                  raise SystemExit(f'Release asset verification failed: {name}')
+          PY
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = false
+          gh release view "$RELEASE_TAG" --json url --jq .url

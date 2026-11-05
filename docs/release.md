@@ -23,7 +23,7 @@ npm run release
 工作流：`.github/workflows/release.yml`。
 
 - Actions → Release packages → Run workflow：构建当前分支，安装包保存在各平台的 Artifacts 中。
-- 推送 `v*` 标签：所有平台构建成功后，汇总为同名 GitHub Release 草稿，检查安装包后再发布。
+- 推送 `v*` 标签：所有平台构建成功后，自动创建同名 GitHub Release，上传并校验五个安装包后公开发布。
 - Windows x64：NSIS `.exe`。
 - macOS Apple Silicon / Intel：各自的 `.dmg`。
 - Linux x64：`.deb` 和 `.AppImage`。
@@ -31,6 +31,8 @@ npm run release
 macOS 的 Rust 编译与 DMG 封装分开执行。DMG 封装开启详细日志，失败时最多尝试三次，重试不重新编译；持续失败仍会使任务失败，具体原因见 `Bundle macOS disk image` 步骤的脚本输出。
 
 修改工作流后，可在 Actions 手动选择 `master` 验证。旧任务的 Re-run 仍使用原提交中的工作流，不会应用新的修复。
+
+若已有成功构建但 Release 未生成，可在 Actions → Publish release packages → Run workflow 中填写已有版本标签与成功构建的 run ID。该流程复用现有产物，不重新编译；发布前会核对构建来源、标签版本、应用源码和五个附件，校验失败不会发布。正常标签发布也调用同一流程。
 
 当前未配置 Windows 代码签名、Apple 签名或公证。macOS / Linux 首次 CI 构建和原生功能仍需验证；网络选路等 Windows 专属能力不代表已完成跨平台适配。不要将构建成功等同于全部功能可用。
 

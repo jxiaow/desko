@@ -34,7 +34,7 @@ try {
     } catch (error) {
       throw new Error(`推送失败，本地标签 ${tag} 已保留。请检查远端状态后重试：git push --atomic origin HEAD:refs/heads/master refs/tags/${tag}\n${error.stderr || error.message}`)
     }
-    console.log('已推送，GitHub Actions 将开始打包。全部成功后生成 Release 草稿。')
+    console.log('已推送，GitHub Actions 将开始打包。全部成功后自动发布 Release 并上传安装包。')
   }
 } catch (error) {
   console.error(`发布未完成：${error.stderr?.toString().trim() || error.message}`)
