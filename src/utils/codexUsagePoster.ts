@@ -67,12 +67,12 @@ interface PosterTheme {
 
 const themes: Record<UsagePosterTheme, PosterTheme> = {
   light: {
-    bg: '#f6f6f4', text: '#1f2325', secondary: '#555d59', muted: '#6a716c', faint: '#9ba19b',
-    line: '#dedfd9', pill: '#eef0eb', accent: '#3d7355',
+    bg: '#ffffff', text: '#0f172a', secondary: '#334155', muted: '#64748b', faint: '#94a3b8',
+    line: 'rgba(0, 0, 0, 0.08)', pill: 'rgba(0, 0, 0, 0.04)', accent: '#1b76c4',
   },
   dark: {
-    bg: '#1a1b1e', text: '#e4e6e8', secondary: '#b4bcc5', muted: '#98a2ac', faint: '#77828c',
-    line: '#33363b', pill: '#24262a', accent: '#84bc8f',
+    bg: '#14151a', text: '#e2e5ec', secondary: '#9aa1ad', muted: '#737b8a', faint: '#555d6b',
+    line: 'rgba(255, 255, 255, 0.08)', pill: 'rgba(255, 255, 255, 0.06)', accent: '#60a5fa',
   },
 }
 
@@ -98,10 +98,21 @@ export async function renderUsagePoster(data: UsagePosterData, theme: UsagePoste
   if (accent) ctx.fillStyle = accent
   ctx.fillRect(0, 0, 1, 1)
   const pixel = ctx.getImageData(0, 0, 1, 1).data
-  const mix = (target: number, amount: number) => [pixel[0], pixel[1], pixel[2]].map(v => Math.round(v * (1 - amount) + target * amount))
-  const ink = mix(theme === 'light' ? 0 : 255, theme === 'light' ? .16 : .26)
+  const rawR = pixel[0]
+  const rawG = pixel[1]
+  const rawB = pixel[2]
+  const mix = (target: number, amount: number) => [rawR, rawG, rawB].map(v => Math.round(v * (1 - amount) + target * amount))
+  const ink = mix(theme === 'light' ? 0 : 255, theme === 'light' ? .15 : .22)
   const accentRgb = ink.join(',')
   c.accent = `rgb(${accentRgb})`
+
+  // 柔光算法（对齐案头光织配比，主天光、伴生光与景深平衡）
+  const aura0 = theme === 'light'
+    ? [Math.round(rawR * 0.16 + 255 * 0.84), Math.round(rawG * 0.16 + 255 * 0.84), Math.round(rawB * 0.16 + 255 * 0.84)]
+    : [Math.round(rawR * 0.11 + 24 * 0.89), Math.round(rawG * 0.11 + 26 * 0.89), Math.round(rawB * 0.11 + 32 * 0.89)]
+  const aura48 = theme === 'light'
+    ? [Math.round(rawR * 0.045 + 255 * 0.955), Math.round(rawG * 0.045 + 255 * 0.955), Math.round(rawB * 0.045 + 255 * 0.955)]
+    : [Math.round(rawR * 0.03 + 20 * 0.97), Math.round(rawG * 0.03 + 21 * 0.97), Math.round(rawB * 0.03 + 26 * 0.97)]
   const total = Math.max(0, data.totals.totalTokens)
   const lettering = ctx as CanvasRenderingContext2D & { letterSpacing?: string }
   const width = canvas.width
@@ -155,10 +166,40 @@ export async function renderUsagePoster(data: UsagePosterData, theme: UsagePoste
     ctx.restore()
   }
 
-  ctx.fillStyle = c.bg
+  // 1. 基础纯净底色
+  const baseBg = theme === 'light' ? '#ffffff' : '#0c101a'
+  ctx.fillStyle = baseBg
   ctx.fillRect(0, 0, width, height)
-  ctx.fillStyle = c.accent
-  ctx.fillRect(0, 0, width, 10)
+
+  // 2. 案头晨曦光场：左上主天光 + 右下自然回填光
+  const keyAura = ctx.createRadialGradient(
+    width * 0.24, -height * 0.06, 0,
+    width * 0.24, -height * 0.06, width * 0.85
+  )
+  keyAura.addColorStop(0, `rgb(${aura0.join(',')})`)
+  keyAura.addColorStop(0.45, `rgb(${aura48.join(',')})`)
+  keyAura.addColorStop(0.75, baseBg)
+  keyAura.addColorStop(1, baseBg)
+  ctx.fillStyle = keyAura
+  ctx.fillRect(0, 0, width, height)
+
+  const fillAura = ctx.createRadialGradient(
+    width * 0.86, height * 0.96, 0,
+    width * 0.86, height * 0.96, width * 0.70
+  )
+  const fillAlpha = theme === 'light' ? 0.55 : 0.45
+  fillAura.addColorStop(0, rgba(aura48.join(','), fillAlpha))
+  fillAura.addColorStop(0.75, rgba(aura48.join(','), 0))
+  ctx.fillStyle = fillAura
+  ctx.fillRect(0, 0, width, height)
+
+  // 3. 顶沿轻盈品牌线条 (4px 强调色微光渐变)
+  const topGlow = ctx.createLinearGradient(0, 0, width, 0)
+  topGlow.addColorStop(0, c.accent)
+  topGlow.addColorStop(0.6, `rgba(${rawR}, ${rawG}, ${rawB}, 0.85)`)
+  topGlow.addColorStop(1, `rgba(${rawR}, ${rawG}, ${rawB}, 0.35)`)
+  ctx.fillStyle = topGlow
+  ctx.fillRect(0, 0, width, 4)
 
   // 品牌行
   ctx.fillStyle = c.accent

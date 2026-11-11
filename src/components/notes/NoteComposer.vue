@@ -71,28 +71,35 @@ const discard = () => {
    它就是同一叠纸里最上面那张空的，不该长得像一个输入框。 */
 .composer {
   position: relative;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-card);
-  border-radius: var(--radius-slip);
-  box-shadow: none;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-card, rgba(0, 0, 0, 0.05));
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02), 0 6px 18px -4px rgba(0, 0, 0, 0.04);
   container-type: inline-size;
   container-name: slip;
-  transition: background-color var(--transition), border-color var(--transition), box-shadow var(--transition);
-  margin-bottom: 0;
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-top: 4px;
+  margin-bottom: 12px;
 }
-.composer:hover { border-color: var(--card-line-hover); }
-/* 焦点态：容器描边转主色 + 3px 光圈，指明当前唯一的书写面 */
-.composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.composer:hover {
+  border-color: var(--card-line-hover, rgba(37, 99, 235, 0.25));
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.03), 0 10px 24px -4px rgba(37, 99, 235, 0.06);
+}
+/* 焦点态：纤细 1px 微边框，无外散粗环 */
+.composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: none;
+}
 
 /* 工具栏不画分隔线：书写面本身就是一张卡，卡里再切一刀会把它读成两个控件。 */
 .composer-bar {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
+  padding: 4px 12px 6px;
   border-top: 0;
 }
-.composer-hint { font-size: var(--text-xs); color: var(--text-muted); margin-left: var(--space-1); }
+.composer-hint { font-size: 11px; color: var(--text-faint); margin-left: var(--space-1); }
 /* 快捷键提示只是提示，不是键帽收藏：去掉立体底与加粗下边框，留字即可。
    书写卡里已经有三个实底控件（图片 / 全屏 / 保存），再叠两枚键帽就变工具箱。 */
 .composer-hint .kbd {
@@ -104,9 +111,11 @@ const discard = () => {
 }
 
 /* 宽窗：书写列与小记卡正文同宽（同一张纸的读写两态，列不该错位）。
-   阈值与 NoteCard 同一推导，默认 1040 窗口下不激活。 */
+   本卡内边距挂在 .ProseMirror 上，内容盒=卡宽−2，所以 960 就是卡宽 962 翻转，
+   与 NoteCard 那条 916 同一卡宽生效。
+   工具条不收：阅读卡的动作本来就贴卡右缘（时间/动作 margin-left:auto），
+   书写条跟着贴才不空半张；把条一起收进 720 会让保存悬在卡中间。 */
 @container slip (min-width: 960px) {
-  .composer > :deep(.note-editor),
-  .composer-bar { max-width: 720px; }
+  .composer > :deep(.note-editor) { max-width: 100%; }
 }
 </style>

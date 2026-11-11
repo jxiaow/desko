@@ -189,5 +189,5 @@ const iconSize = computed(() => (props.dense ? 14 : props.plain ? 13 : 12))
   justify-content: flex-end;
   min-width: 24px;
 }
-.go { height: 28px; padding: 0 var(--space-4); font-size: var(--text-sm); }
+.go { height: 24px; padding: 0 10px; font-size: 11.5px; border-radius: 6px; }
 </style>

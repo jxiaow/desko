@@ -431,9 +431,9 @@ watchEffect(() => {
   min-height: 146px;
   overflow: hidden;
   border: 1px solid var(--border-card);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--bg-surface);
-  box-shadow: none;
+  box-shadow: var(--shadow-card-rest);
   padding: 18px 20px;
   cursor: pointer;
   transition: border-color var(--transition),

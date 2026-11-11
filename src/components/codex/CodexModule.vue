@@ -546,13 +546,19 @@ watchEffect(() => {
         <template v-else-if="view === 'sessions'">
           <div v-if="showSessionFilters" class="search-box session-search-box">
             <div class="session-search-mode seg" role="group" aria-label="会话搜索范围">
-            <button class="seg-btn" :class="{ on: sessionSearchMode === 'title' }" type="button" :aria-pressed="sessionSearchMode === 'title'" @click="sessionSearchMode = 'title'">标题</button>
-            <button class="seg-btn" :class="{ on: sessionSearchMode === 'content' }" type="button" :aria-pressed="sessionSearchMode === 'content'" @click="sessionSearchMode = 'content'">正文</button>
-          </div>
+              <button class="seg-btn" :class="{ on: sessionSearchMode === 'title' }" type="button" :aria-pressed="sessionSearchMode === 'title'" @click="sessionSearchMode = 'title'">标题</button>
+              <button class="seg-btn" :class="{ on: sessionSearchMode === 'content' }" type="button" :aria-pressed="sessionSearchMode === 'content'" @click="sessionSearchMode = 'content'">正文</button>
+            </div>
             <span class="search-icon">
-              <AppIcon name="search" :size="15" />
+              <AppIcon name="search" :size="13" />
             </span>
-            <input v-model="sessionQuery" type="text" :placeholder="sessionSearchMode === 'title' ? '搜索会话标题' : '搜索会话正文'" :aria-label="sessionSearchMode === 'title' ? '搜索会话标题' : '搜索会话正文'" />
+            <input
+              v-model="sessionQuery"
+              type="text"
+              :placeholder="sessionSearchMode === 'title' ? '搜索会话标题…' : '搜索会话正文…'"
+              :aria-label="sessionSearchMode === 'title' ? '搜索会话标题' : '搜索会话正文'"
+              @keydown.esc="sessionQuery ? sessionQuery = '' : undefined"
+            />
             <button v-if="sessionQuery" class="search-clear" type="button" title="清除搜索" @click="sessionQuery = ''">
               <AppIcon name="x" :size="13" />
             </button>
@@ -855,16 +861,29 @@ watchEffect(() => {
 .cx-band-controls { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; }
 .account-filters.cx-tabs-filters { flex: 0 0 auto; max-width: 100%; margin: 0; padding: 0; }
 @container codex-controls (max-width: 300px) {
-  .cx-compact-action { --toolbar-action-padding: 0px; width: 32px; justify-content: center; }
+  .cx-compact-action { --toolbar-action-padding: 0px; width: 26px; height: 26px; justify-content: center; }
   .cx-compact-action .cx-action-label { display: none; }
   #workspace-page-toolbar .page-actions { gap: 4px; }
-  #workspace-page-toolbar .create-action { padding-inline: 10px; gap: 6px; }
+  #workspace-page-toolbar .create-action { padding-inline: 8px; gap: 4px; }
 }
-/* 用量页的第一排比别的视图多一枚统计窗口切换件（246）：800 窗口里带子只剩 407，
-   页签＋切换件＋带标签的两颗动作钮要 657，切换件会被顶到页签底下互相盖住。
-   窄档先把动作收成图标（标题与可达名都在），把宽度还给切换件。 */
-@container codex-controls (max-width: 460px) {
-  .usage-actions .bar-btn { --toolbar-action-padding: 0px; width: 32px; justify-content: center; }
+/* 用量页动作按钮组：默认保持正常全标签按钮；极窄窗口（<320px）才折叠文字 */
+.usage-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.usage-actions .bar-btn {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+@container codex-controls (max-width: 320px) {
+  .usage-actions .bar-btn { padding: 0 7px; min-width: 28px; justify-content: center; }
   .usage-actions .cx-action-label { display: none; }
 }
 .account-summary-only { margin-bottom: var(--space-2); }
@@ -1018,16 +1037,12 @@ watchEffect(() => {
 }
 
 .codex-content > .rcard-list { margin-top: 0; }
-.session-search-box .session-search-mode { flex-shrink: 0; padding: 0 6px 0 0; margin-right: 4px; border-radius: 0; border-right: 1px solid var(--border); background: transparent; }
-.session-search-box .session-search-mode > button { height: 24px; padding: 0 7px; font-size: var(--text-xs); border-radius: 4px; }
-.session-search-box .search-icon { display: none; }
-.session-search-box input { min-width: 0; text-overflow: ellipsis; }
-.session-search-box input:focus { text-overflow: clip; }
 #workspace-page-toolbar .cx-band-controls > .session-search-box {
-  flex: 0 1 300px;
-  width: 300px;
+  flex: 0 1 310px;
+  width: 310px;
   min-width: 220px;
-  max-width: 300px;
+  max-width: 340px;
   margin-right: 0;
+  height: 28px;
 }
 </style>

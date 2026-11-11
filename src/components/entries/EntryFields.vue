@@ -7,7 +7,6 @@ import { normalizeSubPath } from '../../utils/urlPath'
 import type { Entry, LocalPath, CreateEntryInput, UpdateEntryInput } from '../../types'
 import { useToastStore } from '../../stores/toast'
 import AppIcon from '../shared/AppIcon.vue'
-import PathsDialog from './PathsDialog.vue'
 
 const pageActive = usePageActive()
 const props = defineProps<{
@@ -16,7 +15,11 @@ const props = defineProps<{
   categories: string[]
 }>()
 
-const emit = defineEmits<{ saved: [id: string]; openUrl: [url: string] }>()
+const emit = defineEmits<{
+  saved: [id: string]
+  openUrl: [url: string]
+  openPaths: []
+}>()
 
 const toastStore = useToastStore()
 
@@ -53,7 +56,6 @@ function clearInvalid(key: RequiredField) {
 const localPaths = ref<LocalPath[]>([])
 /** 密码明文只在本次编辑内可见；换条目时收回，不留显示态 */
 const showPwd = ref(false)
-const showPaths = ref(false)
 
 const showCategoryDropdown = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -156,7 +158,6 @@ onUnmounted(() => {
 
 watch(() => props.entry, async (entry) => {
   showPwd.value = false
-  showPaths.value = false
   if (entry) {
     form.value = {
       name: entry.name,
@@ -262,7 +263,7 @@ const save = async () => {
   }
 }
 
-defineExpose({ save })
+defineExpose({ save, form, localPaths })
 </script>
 
 <template>
@@ -342,12 +343,12 @@ defineExpose({ save })
     <div class="form-row cred-row">
       <div class="form-group">
         <label>用户名</label>
-        <input v-model="form.username" class="mono-field" placeholder="登录用户名" />
+        <input v-model="form.username" placeholder="登录用户名" />
       </div>
       <div class="form-group">
         <label>密码{{ props.entry ? '（留空则不修改）' : '' }}</label>
         <div class="pwd-wrap">
-          <input v-model="form.password" class="mono-field" :type="showPwd ? 'text' : 'password'" placeholder="登录密码" />
+          <input v-model="form.password" :type="showPwd ? 'text' : 'password'" placeholder="登录密码" />
           <button class="pwd-act" type="button" :title="showPwd ? '隐藏密码' : '显示密码'" @click="showPwd = !showPwd">
             <AppIcon :name="showPwd ? 'eyeOff' : 'eye'" :size="14" />
           </button>
@@ -356,26 +357,27 @@ defineExpose({ save })
     </div>
 
     <div class="form-group paths-group">
-      <label>子路径</label>
-      <button class="paths-manage" type="button" @click="showPaths = true">
-        <span class="pm-sum" :class="{ empty: !activePaths.length }">{{ pathsSummary }}</span>
-        <span class="pm-go">管理<AppIcon name="chevRight" :size="12" /></span>
+      <div class="paths-header-row">
+        <label>子路径</label>
+        <span class="paths-sub-badge">{{ activePaths.length ? `${activePaths.length} 个` : '可选' }}</span>
+      </div>
+      <button class="paths-manage" type="button" @click="emit('openPaths')">
+        <AppIcon name="link" :size="13" class="pm-icon" />
+        <span class="pm-sum" :class="{ empty: !activePaths.length }">{{ pathsSummary || '添加或管理子路径（如 /docs、/admin）' }}</span>
+        <span class="pm-go">{{ activePaths.length ? '管理' : '添加' }}<AppIcon name="chevRight" :size="12" /></span>
       </button>
+      <div v-if="activePaths.length" class="paths-chips">
+        <span v-for="(p, i) in activePaths" :key="p.id || i" class="path-chip" :title="p.path">
+          <span v-if="p.label" class="pc-label">{{ p.label }}</span>
+          <span class="pc-path">{{ p.path.replace(/^\//, '') }}</span>
+        </span>
+      </div>
     </div>
 
     <div class="form-group notes-group">
       <label>备注</label>
       <textarea v-model="form.notes" placeholder="可选" rows="2"></textarea>
     </div>
-
-    <PathsDialog
-      v-if="showPaths"
-      :paths="localPaths"
-      :entry-name="form.name"
-      :base-url="form.url"
-      @close="showPaths = false"
-      @open-url="url => emit('openUrl', url)"
-    />
   </div>
 </template>
 
@@ -430,24 +432,71 @@ defineExpose({ save })
 }
 .entry-fields input.field-alert { animation: field-alert 0.5s ease-out 2; }
 
-/* ---------- 子路径：整块住独立弹窗，表单里只留一行入口，与 32px 字段同轴 ---------- */
+/* ---------- 子路径：轻量集成与卡片化芯片展示 ---------- */
+.paths-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.paths-header-row label { margin-bottom: 0; }
+.paths-sub-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
 .paths-manage {
-  width: 100%; height: 32px; padding: 0 8px 0 11px;
+  width: 100%; height: 34px; padding: 0 10px 0 10px;
   display: flex; align-items: center; gap: 8px; text-align: left;
-  font-family: inherit; font-size: var(--text-sm); color: var(--text);
-  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: inherit; font-size: 13px; color: var(--text);
+  background: rgba(255, 255, 255, 0.8); border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px;
   cursor: pointer; transition: border-color var(--transition-fast), background var(--transition-fast);
 }
-.paths-manage:hover { border-color: var(--border-strong); background: var(--bg-surface) }
-.paths-manage:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring) }
+:global(:root[data-base="dark"]) .paths-manage {
+  background: rgba(16, 17, 21, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.paths-manage:hover { border-color: rgba(0, 0, 0, 0.2); background: #ffffff; }
+:global(:root[data-base="dark"]) .paths-manage:hover { border-color: rgba(255, 255, 255, 0.18); background: #1c1e24; }
+.paths-manage:focus-visible { outline: none; border-color: var(--accent); box-shadow: none; }
+.pm-icon { color: var(--text-muted); flex-shrink: 0; }
 .pm-sum {
-  flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--text-xs);
+  flex: 1; min-width: 0; font-family: var(--font-ui); font-size: 12.5px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.pm-sum.empty { font-family: inherit; color: var(--text-muted) }
+.pm-sum.empty { color: var(--text-muted); font-size: 12.5px; }
 .pm-go {
-  flex: none; display: inline-flex; align-items: center; gap: 3px;
-  font-size: var(--text-xs); color: var(--text-muted);
+  flex: none; display: inline-flex; align-items: center; gap: 2px;
+  font-size: 11.5px; color: var(--text-muted); font-weight: 500;
+}
+.paths-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.path-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+:global(:root[data-base="dark"]) .path-chip {
+  background: rgba(255, 255, 255, 0.06);
+}
+.pc-label {
+  font-weight: 600;
+  color: var(--accent);
+}
+.pc-path {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
 }
 
 .category-create { color: var(--accent); }

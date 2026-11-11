@@ -192,6 +192,6 @@ for (const width of [800, 1920]) {
     await expect(page.locator('.acc-row').last()).toBeInViewport()
     // 工作区本体透明，浮片是唯一的底色承担者。
     await expect(page.locator('.workspace-main')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-    await expect(page.locator('.workspace-surface')).toHaveCSS('background-color', 'rgb(38, 41, 47)')
+    await expect(page.locator('.workspace-surface')).toHaveCSS('background-color', 'rgb(28, 30, 33)')
   })
 }

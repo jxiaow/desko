@@ -264,8 +264,8 @@ function trapFocus(event: KeyboardEvent) {
   flex-direction: column;
   /* 阅读与书写共用一条列宽：窗口只改左右留白，不改行长 */
   --note-measure: 680px;
-  /* 阅读与书写都落在浮片上：实底、不吃窗框的柔光。 */
-  background: var(--bg-sheet, var(--bg-editor));
+  /* 阅读与书写都落在纯净稿纸上 */
+  background: var(--panel-bg);
 }
 .fs-col {
   width: 100%;
@@ -283,30 +283,32 @@ function trapFocus(event: KeyboardEvent) {
   gap: var(--space-2);
   padding: 12px var(--workspace-gutter, var(--space-5));
 }
-/* 工作区操作仍在标题栏，48px 的栏高为 32px 按钮留出上下各 8px。 */
+/* 工作区操作仍在标题栏，统一保持标准 34px 标题栏高度 */
 .workspace-fs-head { flex: 1; min-width: 0; min-height: 0; height: 100%; padding: 0; }
 .workspace-fs-head :deep(button), .workspace-fs-head .save-hint { pointer-events: auto; }
 .fs-head :deep(button) { line-height: 1; }
 .fs-head :deep(button > svg) { display: block; flex-shrink: 0; }
 .fs-head button > span { display: block; line-height: 1; }
-/* 退出与阅读动作使用当前顶栏的 32px 控件档。 */
+/* 退出与阅读动作使用 macOS 风格的精致圆角按钮，默认透明通透 */
 .fs-exit {
-  height: 32px;
-  padding: 0 var(--space-2);
+  height: 26px;
+  padding: 0 8px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   border: 1px solid transparent;
   background: transparent;
-  border-radius: var(--radius-ib);
+  border-radius: 6px;
   color: var(--text-secondary);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   cursor: pointer;
-  transition: all var(--transition);
+  box-shadow: none;
+  transition: all var(--transition-fast);
   font-family: inherit;
   flex-shrink: 0;
 }
-.fs-exit:hover { color: var(--text); background: var(--hover-chrome); }
+.fs-exit:hover { color: var(--text); background: rgba(0, 0, 0, 0.05); border-color: rgba(0, 0, 0, 0.04); }
+:global(:root[data-base="dark"]) .fs-exit:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.06); }
 /* 状态字跟着退出钮走左组，原先孤悬右端像另一条栏 */
 .fs-head .save-hint { margin-right: auto; padding-left: var(--space-1); }
 /* 阅读态没有可保存的东西，不再报「只读浏览」：省下的 auto 外边距交给退出钮，
@@ -374,12 +376,11 @@ function trapFocus(event: KeyboardEvent) {
 .fs-foot {
   flex-shrink: 0;
   display: flex;
-  /* 不滚动，但要和正文列共用同一条滚动条槽：槽只从滚动容器里让位，
-     底栏不占这份空间时窄窗下会比正文向左多出一截 */
   overflow: hidden;
   scrollbar-gutter: stable both-edges;
-  /* 水平留白照抄 .fs-scroll：列没顶到 680 时，两处的内边距就是行首的唯一定位 */
-  padding: 10px var(--workspace-gutter, var(--space-5)) 18px;
+  padding: 10px var(--workspace-gutter, var(--space-5)) 16px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-bg);
 }
 /* 工具列与正文同宽同中线：按钮左缘就是正文左缘 */
 .fs-foot-inner {
@@ -390,22 +391,87 @@ function trapFocus(event: KeyboardEvent) {
   align-items: center;
 }
 .fs-foot :deep(.note-toolbar) { gap: 6px; }
-.fs-foot :deep(.ib) { width: 28px; height: 28px; }
-.fs-foot :deep(.eb) { height: 28px; padding: 0 10px; }
+.fs-foot :deep(.ib) {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+.fs-foot :deep(.ib):hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.fs-foot :deep(.eb) {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+}
 
-/* 编辑沿用标题栏主操作的淡染，次级操作保持无底。 */
-.fs-head .bar-btn { height: 32px; }
-/* 副动作只留图标：28px 方块与卡片动作排同档；图标间多留 6px，
-   让一排小钮不断成一块，主钮仍收在这一组的最右端 */
+/* 首栏操作按钮：macOS 原生工具栏规范，默认透明 */
+.fs-head .bar-btn {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: none;
+  transition: all var(--transition-fast);
+}
+.fs-head .bar-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text);
+  border-color: rgba(0, 0, 0, 0.04);
+}
+:global(:root[data-base="dark"]) .fs-head .bar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.06);
+}
 .fs-head .bar-btn.bar-icon,
-.fs-head :deep(.bar-btn.more) { width: 32px; height: 32px; min-width: 32px; padding: 0; margin-inline: 3px; }
-.fs-head .bar-btn.primary { margin-left: 3px; }
-/* 置顶是状态不是主操作：只染字色，页头那一颗实心留给「编辑」；
-   字色走 --text-brand，与目录选中态、主操作同一档可读色 */
-.fs-head .bar-btn.on { background: transparent; color: var(--text-brand); font-weight: 500; }
-.fs-head .bar-btn.on:hover:not(:disabled) { background: var(--hover-chrome); color: var(--text-brand); }
-.fs-head .bar-btn.primary { background: var(--accent-soft); color: var(--text-brand); font-weight: 600; padding: 0 12px; }
-.fs-head .bar-btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text-brand); }
+.fs-head :deep(.bar-btn.more) {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0;
+  margin-inline: 2px;
+  border-radius: 6px;
+}
+.fs-head .bar-btn.primary {
+  height: 26px;
+  margin-left: 4px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 500;
+  padding: 0 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.fs-head .bar-btn.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 500;
+}
+.fs-head .bar-btn.on:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+.fs-head .bar-btn.primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+  background: var(--accent);
+  color: #ffffff;
+}
+.fs-head .bar-btn.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 /* 窄屏首栏放不下状态字时：
    读写两态都让状态让位给动作，退出钮吃掉省下的 auto 外边距 */
 @container workspace-toolbar (max-width: 520px) {

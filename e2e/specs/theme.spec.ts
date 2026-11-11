@@ -4,12 +4,12 @@ import { lab } from '../../scripts/lib/theme-tokens.mjs'
 
 // 正式桌面使用纸/墨两套底色和十二种强调色；通过真实设置入口验证全部组合。
 const BASES = {
-  paper: { name: '纸', pol: 'light', bg: 'rgb(250, 250, 250)', text: 'rgb(31, 32, 35)' },
-  ink: { name: '墨', pol: 'dark', bg: 'rgb(24, 25, 27)', text: 'rgb(223, 225, 229)' },
+  paper: { name: '纸', pol: 'light', bg: 'rgb(248, 250, 252)', text: 'rgb(31, 32, 35)' },
+  ink: { name: '墨', pol: 'dark', bg: 'rgb(11, 15, 25)', text: 'rgb(223, 225, 229)' },
 } as const
 const ACCENT_HEX = {
-  light: { ink: '#1b76c4', celadon: '#38804b', clay: '#b05a00', plum: '#9456ae', rose: '#b74679', amber: '#916d00', graphite: '#6e747a', indigo: '#6966c6', brick: '#ba4b47', olive: '#747813', teal: '#00817c', sand: '#7b7263' },
-  dark: { ink: '#7eb1e6', celadon: '#84bc8f', clay: '#db9d72', plum: '#c39bd5', rose: '#e290b0', amber: '#c8a865', graphite: '#a7adb4', indigo: '#a3a5e7', brick: '#e2958e', olive: '#adb271', teal: '#6bbdb8', sand: '#b4ab9d' },
+  light: { ink: '#2563eb', celadon: '#059669', clay: '#ea580c', plum: '#7c3aed', rose: '#db2777', amber: '#d97706', graphite: '#334155', indigo: '#4f46e5', brick: '#b91c1c', olive: '#4d7c0f', teal: '#0891b2', sand: '#92400e' },
+  dark: { ink: '#60a5fa', celadon: '#34d399', clay: '#fb923c', plum: '#a78bfa', rose: '#f472b6', amber: '#fbbf24', graphite: '#94a3b8', indigo: '#818cf8', brick: '#f87171', olive: '#a3e635', teal: '#22d3ee', sand: '#e0a96d' },
 } as const
 
 type BaseId = keyof typeof BASES
@@ -220,7 +220,7 @@ test.describe('主题', () => {
     }
 
     const EXPECT: Record<'paper' | 'ink', { bg: string; color: string }> = {
-      ink: { bg: 'rgb(38, 40, 44)', color: 'rgb(154, 181, 165)' },
+      ink: { bg: 'rgb(28, 29, 33)', color: 'rgb(154, 181, 165)' },
       paper: { bg: 'rgb(38, 36, 31)', color: 'rgb(156, 196, 174)' },
     }
     const order: Array<'paper' | 'ink'> = ['ink', 'paper']

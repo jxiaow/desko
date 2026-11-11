@@ -116,7 +116,7 @@ function move(event: KeyboardEvent) {
 .usg-bar, .usg-stack { pointer-events:none; }
 .usg-bar.has-value, .usg-stack.has-value { min-height:2px; }
 .usg-segment { flex-shrink:0; width:100%; max-width:none; border-radius:0; }
-.usg-output, .sw-output { background:var(--usage-output); }.usg-cached, .sw-cached { background:var(--usage-cached); background-image:repeating-linear-gradient(135deg,transparent 0 3px,#ffffff40 3px 4px); }.usg-fresh, .sw-fresh { background:var(--usage-fresh); } /* taste-skill-ignore: 缓存数据纹理，与图例保持一致 */
+.usg-output, .sw-output { background:var(--usage-output); }.usg-cached, .sw-cached { background:var(--usage-cached); }.usg-fresh, .sw-fresh { background:var(--usage-fresh); }
 .usg-x { position:absolute; top:100%; left:50%; transform:translateX(-50%); padding-top:8px; white-space:nowrap; font-size:var(--text-xs); color:var(--text-muted); font-variant-numeric:tabular-nums; }
 .usg-x:not(.tick-regular) { display:none; }
 .daily-column:first-child .usg-x { left:0; transform:none; }

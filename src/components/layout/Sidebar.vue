@@ -7,6 +7,7 @@ import { isWebRuntime } from '../../services/runtime'
 import { sidebarCollapsed } from '../../services/sidebar'
 import AppIcon from '../shared/AppIcon.vue'
 
+defineProps<{ settingsActive?: boolean }>()
 const emit = defineEmits<{ openSettings: []; lock: [] }>()
 const route = useRoute()
 const webWorkspace = isWebRuntime()
@@ -54,7 +55,7 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
     </nav>
 
     <div class="sidebar-foot">
-      <button class="foot-item" type="button" title="设置" aria-label="设置" @click="emit('openSettings')">
+      <button class="foot-item" :class="{ active: settingsActive }" type="button" title="设置" aria-label="设置" @click="emit('openSettings')">
         <span class="foot-icon"><AppIcon name="gear" :size="20" /></span>
         <span v-if="labelsVisible" class="foot-text">设置</span>
       </button>
@@ -71,23 +72,18 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   width: var(--sidebar-rail-w);
   height: 100%;
   padding: 8px 10px 10px;
-  background: var(--bg-workspace-rail);
-  background-attachment: fixed;
-  /* 光锚在视口左上角，和整窗尺寸的图对齐；侧栏本身从视口 (0,0) 起，两者重合。 */
-  background-size: 100vw 100vh;
-  background-position: 0 0;
-  background-repeat: no-repeat;
-  border-right: 0;
+  background: transparent;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   position: relative;
+  /* 轻盈无界：去除生硬竖向分割线 */
+  border-right: none;
 }
-/* 桌面端侧栏是一块实底导轨：与正文同属一个应用，分层只由深一档的底色承担。
-   右缘原先还有一根比导轨本身更深的 1px 竖线，接触处叠成三刀，已撤。
-   不再透窗框光场——那样侧栏和正文会读成两个独立面板拼在一起。 */
+/* 桌面端侧栏：羽量级通透背景 */
 .app-root:not(.web-runtime) .sidebar {
-  background: var(--bg-rail, var(--bg-sheet));
+  background: transparent;
+  border-right: none;
 }
 .sidebar-nav {
   flex: 1;
@@ -104,12 +100,13 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
 .sidebar-group { display: flex; flex-direction: column; align-items: stretch; gap: 2px; width: 100%; }
 .sidebar-group-title {
   display: block;
-  padding: 12px 10px 5px;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  line-height: 18px;
-  letter-spacing: .04em;
+  padding: 8px 10px 4px;
+  color: var(--text-faint, #98a2b3);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 .sidebar-group:first-child .sidebar-group-title { padding-top: 4px; }
@@ -119,10 +116,10 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   justify-content: flex-start;
   gap: 10px;
   width: 100%;
-  height: 32px;
-  flex: 0 0 32px;
+  height: 34px;
+  flex: 0 0 34px;
   padding: 0 8px 0 12px;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: background-color var(--transition), color var(--transition);
@@ -149,27 +146,26 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   font-variant-numeric: tabular-nums;
   line-height: 20px;
 }
-.nav-item:hover:not(.active), .foot-item:hover { background: var(--hover-chrome); color: var(--text); }
-/* 激活项不再铺一片白底：白片会和主浮片抢「浮起」的语义，一列六行看下来
-   像六个按钮。改成左端一根 2px 竖条 + 字重抬一档，读作「目录里的当前位置」。 */
-.nav-item.active {
-  background: transparent;
-  color: var(--text);
-  box-shadow: none;
+.nav-item:hover:not(.active), .foot-item:hover:not(.active) { background: var(--hover-chrome); color: var(--text); }
+/* 激活项：轻盈微抬升纯白微岛胶囊 */
+:is(.nav-item, .foot-item).active {
+  background: var(--sidebar-active, #ffffff);
+  color: var(--accent);
+  box-shadow: var(--sidebar-active-shadow, 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.03));
+  border-radius: 8px;
 }
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 7px;
-  bottom: 7px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--accent);
+:is(.nav-item, .foot-item).active::before {
+  display: none;
 }
-.nav-item.active .nav-text { font-weight: 600; }
-.nav-item.active .nav-count { color: var(--text-muted); }
-.nav-item.active .nav-icon { color: var(--text-brand); }
+:is(.nav-item, .foot-item).active :is(.nav-text, .foot-text) { font-weight: 600; color: var(--accent); }
+.nav-item.active .nav-count {
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+:is(.nav-item, .foot-item).active :is(.nav-icon, .foot-icon) { color: var(--accent); }
+:is(.nav-item, .foot-item).active:hover { background: var(--sidebar-active, #ffffff); color: var(--accent); }
 .nav-item:focus-visible, .foot-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
 .nav-icon, .foot-icon {
   display: flex;
@@ -191,8 +187,8 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 0 2px var(--bg-workspace-rail);
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
 }
 .sidebar-foot {
   display: flex;
@@ -201,8 +197,8 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   align-items: stretch;
   gap: 2px;
   margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  border-top: none;
 }
 .foot-item { border: none; background: transparent; font: inherit; }
 .web-sidebar-logout { display: none; }

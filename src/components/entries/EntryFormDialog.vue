@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { Entry } from '../../types'
 import EntryFields from './EntryFields.vue'
+import PathsDialog from './PathsDialog.vue'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import { usePageActive } from '../../composables/usePageActive'
 import AppIcon from '../shared/AppIcon.vue'
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 
 const title = computed(() => (props.entry ? '编辑网址收藏' : '新增网址收藏'))
 const fields = ref<InstanceType<typeof EntryFields> | null>(null)
+const pathsOpen = ref(false)
 
 const onSaved = (id: string) => {
   emit('saved', id)
@@ -27,7 +29,7 @@ const save = () => fields.value?.save()
 
 /* ⌘/Ctrl+Enter 触发保存校验；徽标只是提示，不绑定额外行为 */
 const onKeydown = (e: KeyboardEvent) => {
-  if (!pageActive.value) return
+  if (!pageActive.value || pathsOpen.value) return
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
     e.preventDefault()
     save()
@@ -36,13 +38,28 @@ const onKeydown = (e: KeyboardEvent) => {
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
-useEscapeClose(() => emit('close'), () => true, { afterTarget: true })
+const onOverlayClick = () => {
+  if (pathsOpen.value) {
+    pathsOpen.value = false
+  } else {
+    emit('close')
+  }
+}
+
+useEscapeClose(() => {
+  if (pathsOpen.value) {
+    pathsOpen.value = false
+  } else {
+    emit('close')
+  }
+}, () => true, { afterTarget: true })
 </script>
 
 <template>
   <Transition name="dialog">
-    <div v-if="true" class="dialog-overlay form-overlay">
-      <div class="dialog entry-form-dialog" role="dialog" aria-modal="true" :aria-label="title">
+    <div class="dialog-overlay form-overlay" @click.self="onOverlayClick">
+      <!-- 主表单弹窗 -->
+      <div v-show="!pathsOpen" class="dialog entry-form-dialog" role="dialog" aria-modal="true" :aria-label="title">
         <div class="dialog-header">
           <h3>{{ title }}</h3>
           <button class="dialog-close" type="button" title="关闭" @click="emit('close')">
@@ -50,7 +67,14 @@ useEscapeClose(() => emit('close'), () => true, { afterTarget: true })
           </button>
         </div>
         <div class="dialog-body">
-          <EntryFields ref="fields" :entry="entry" :categories="categories" @saved="onSaved" @open-url="url => emit('openUrl', url)" />
+          <EntryFields
+            ref="fields"
+            :entry="entry"
+            :categories="categories"
+            @saved="onSaved"
+            @open-url="url => emit('openUrl', url)"
+            @open-paths="pathsOpen = true"
+          />
         </div>
         <div class="dialog-footer">
           <div class="footer-hints">
@@ -62,6 +86,16 @@ useEscapeClose(() => emit('close'), () => true, { afterTarget: true })
           </div>
         </div>
       </div>
+
+      <!-- 子路径弹窗：复用外层遮罩，遮罩零位移、零闪烁、不重复叠加 -->
+      <PathsDialog
+        v-if="pathsOpen"
+        :paths="fields?.localPaths ?? []"
+        :entry-name="fields?.form.name ?? ''"
+        :base-url="fields?.form.url ?? ''"
+        @close="pathsOpen = false"
+        @open-url="url => emit('openUrl', url)"
+      />
     </div>
   </Transition>
 </template>

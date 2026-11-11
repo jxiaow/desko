@@ -58,7 +58,7 @@ const formatNumber = (value: number) => value.toLocaleString('zh-CN', { maximumF
 .q-tag { grid-column: 1; grid-row: 1; min-width: 0; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .q-num { grid-column: 3; grid-row: 1; text-align: right; color: var(--text); font-size: var(--text-lg); font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .q-num small { margin-left: 2px; color: var(--text-muted); font-size: var(--text-xs); font-weight: 400; }
-.q-bar { grid-column: 2; grid-row: 1; display: block; height: 5px; border-radius: 3px; background: var(--fill); overflow: hidden; }
+.q-bar { grid-column: 2; grid-row: 1; display: block; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--border) 60%, transparent); overflow: hidden; }
 /* 健康态走品牌色，不用绿：一块灰蓝卡里突然一条饱和绿，读起来像"另一个系统的状态条"，
    而且它自己的用量面板（CodexUsagePanel）早就用 accent 了。绿/黄/红只留给真正需要预警的两档。 */
 .q-bar i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }

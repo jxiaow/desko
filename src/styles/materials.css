@@ -193,8 +193,8 @@
       color-mix(in srgb, var(--glow-fill) 26%, transparent) 0%,
       color-mix(in srgb, var(--glow-fill) 10%, transparent) 48%,
       transparent 80%);
-  /* 浮片：内容直接坐在这一层上。三层明度 框(有色) > 片(浅灰) > 卡(纯白)。 */
-  --bg-sheet: #f7f7f5;
+  /* Windows 11 Fluent 画布与浮层卡片层级 */
+  --bg-sheet: #f3f3f3;
   --bg-card: #ffffff;
   /* 浮片只托一档：它的影子要比卡片更短更轻，否则一块贴着窗框的大面板会读成
      「悬在桌面上」，把里面卡片的高度一起压没。分层主要交给明度（框 > 片 > 卡）。 */
@@ -220,12 +220,11 @@
   --bg-workspace-search: color-mix(in oklab, var(--panel-bg) 72%, var(--workspace-frame));
   --bg-inspector-hover: color-mix(in srgb, var(--text) 4%, var(--material-inspector-base));
   --bg-inspector-active: var(--bg-surface);
-  /* 纸底主钮：直接把强调色铺满会压出一块深色板。抬 5.5% 明度、收 6% 彩度后
-     仍是同一个色相，白字还有约 3.9:1；悬停回落一档、按下再落一档做反馈。 */
-  --bg-workspace-primary: oklch(from var(--accent) calc(l + 0.055) calc(c * 0.94) h);
-  --bg-workspace-primary-hover: oklch(from var(--accent) calc(l + 0.02) calc(c * 0.97) h);
-  --bg-workspace-primary-active: oklch(from var(--accent) calc(l + 0.005) c h);
-  --text-workspace-primary: var(--accent-on);
+  /* macOS 原生纯正主按钮 */
+  --bg-workspace-primary: var(--accent);
+  --bg-workspace-primary-hover: var(--accent-hover);
+  --bg-workspace-primary-active: var(--accent-active);
+  --text-workspace-primary: #ffffff;
 }
 
 :root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
@@ -236,17 +235,15 @@
   --material-workspace-shade: #000;
   --material-workspace-shade-strength: 42%;
   /* 墨底框压到 L .215，浮片 .262 才浮得起来；四层光与纸底同构，只是强度收一档。 */
-  --frame-base: oklch(from var(--accent) 0.165 calc(c * 0.1) h);
+  --frame-base: #14151a;
   --glow-core: color-mix(in srgb, var(--glow-key) 8%, transparent);
   --glow-key: color-mix(in srgb, var(--accent) 60%, #ffffff);
   --glow-comp: oklch(from var(--accent) 0.6 calc(c * 0.5) calc(h + 38));
   --glow-fill: oklch(from var(--accent) 0.6 calc(c * 0.45) calc(h + 30));
   --glow-warm: oklch(from var(--accent) 0.615 calc(c * 0.45) calc(h - 42));
-  --bg-sheet: #26292f;
-  /* 墨底卡面比浮片再抬一档：片 .231、卡 .258、框 .165，三层才拉得开。
-     只换卡面自己的 --bg-surface（见 CodexWorkspace 的本地绑定），
-     输入框与弹窗仍读全局卡面，否则搜索框描边会跟着掉对比度。 */
-  --bg-card: #2c2f35;
+  --bg-sheet: #14151a;
+  /* 墨底卡面：现代舒适护眼炭墨卡片 */
+  --bg-card: #1c1e24;
   --shadow-sheet: inset 0 1px 0 rgb(255 255 255 / 7%), 0 1px 2px rgb(0 0 0 / 26%), 0 5px 14px -8px rgb(0 0 0 / 30%);
   --material-surface-field: none;
   --material-workspace-field:
@@ -267,47 +264,12 @@
   /* 墨底弹窗沿用提亮档；画布光已改成近白混色，弹窗仍需要独立的提亮 key。 */
   --material-dialog-key: oklch(from var(--accent) 0.54 calc(c * 0.7) h);
   --material-dialog-fill: oklch(from var(--accent) 0.5 calc(c * 0.55) calc(h + 20));
-  --bg-workspace-primary: color-mix(in oklab, var(--accent) 14%, var(--bg));
-  --bg-workspace-primary-hover: color-mix(in oklab, var(--accent) 17%, var(--bg));
-  --bg-workspace-primary-active: color-mix(in oklab, var(--accent) 20%, var(--bg));
-  --text-workspace-primary: color-mix(in oklab, var(--accent) 50%, var(--text));
+  --bg-workspace-primary: var(--accent);
+  --bg-workspace-primary-hover: var(--accent-hover);
+  --bg-workspace-primary-active: var(--accent-active);
+  --text-workspace-primary: #ffffff;
 }
 
-/* 纸底试光：主光从左上落下来，伴光收在右缘与下缘，光沿窗框绕一圈。
-   导轨与内容面按各自强度接收同一束光，卡片保持实底。 */
-:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"] {
-  --material-workspace-layers:
-    radial-gradient(ellipse 28% 34% at 50% -8%, rgb(255 255 255 / 96%) 0%, transparent 78%),
-    radial-gradient(ellipse 88% 108% at 38% -20%,
-      color-mix(in srgb, var(--glow-key) 30%, transparent) 0%,
-      color-mix(in srgb, var(--glow-key) 18%, transparent) 44%,
-      transparent 84%),
-    radial-gradient(ellipse 74% 120% at 102% 78%,
-      color-mix(in srgb, var(--glow-comp) 26%, transparent) 0%,
-      transparent 80%),
-    radial-gradient(ellipse 58% 42% at 2% 116%,
-      color-mix(in oklab, var(--glow-fill) 34%, #ffffff) 0%,
-      color-mix(in oklab, var(--glow-fill) 16%, #ffffff) 44%,
-      transparent 82%);
-  --bg-workspace: var(--material-workspace-layers), linear-gradient(180deg, #f1f3f4 0%, #e9edef 100%);
-}
-/* 顶带单独补一层横向色光：否则窗框只有左轨够宽，整窗看着像左上角一块染色。
-   顶光从窗口上沿落下，到标题栏下沿已经淡尽，侧栏接着同一个底色，不留接缝。
-   空页整窗自有光域配方，这里不再叠一层。 */
-:root[data-layout="workspace"][data-atmosphere="on"][data-base="light"]:not(:has(.empty-state:not(.rcard):not(.is-filter):not(.notes-empty-state):not(.mfa-empty-state):not(.module-empty-state))) .titlebar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg,
-    color-mix(in srgb, var(--glow-key) 14%, transparent) 0%,
-    color-mix(in srgb, var(--glow-key) 5%, transparent) 42%,
-    transparent 62%,
-    color-mix(in srgb, var(--glow-comp) 13%, transparent) 100%);
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgb(0 0 0 / 45%) 55%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 0%, rgb(0 0 0 / 45%) 55%, transparent 100%);
-}
 /* 暗底的中性强调色只改变光的明暗，避免把大面积留白再刷成灰色。 */
 :root[data-layout="workspace"][data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]),
 .workspace-theme-prev[data-base="dark"]:is([data-accent="graphite"], [data-accent="sand"]) {
@@ -317,10 +279,6 @@
 :root[data-layout="workspace"][data-atmosphere="on"], .workspace-theme-prev[data-atmosphere="on"] {
   --bg-dialog: var(--material-dialog-field);
   --dialog-background-attachment: scroll;
-  /* 光的层与框的底色分开存：--bg-workspace 是整窗那一份，导轨还要把同一套光
-     压在自己的实底（--bg-rail）上，所以光必须能单独取到。 */
-  --material-workspace-layers: var(--workspace-grain), var(--material-workspace-field);
-  --bg-workspace: var(--material-workspace-layers), var(--frame-base);
 }
 
 /* 空态品牌时刻：整页只剩一句空态时，浮片化开，整窗落回「光域」——

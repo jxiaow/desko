@@ -1,170 +1,1614 @@
 /* 新布局的底色、强调色与光照。经典布局继续消费原有配方。
-   背景以主题中性色为主；柔光进入画布留白，卡片与输入框保持实底。 */
+   采用 Featherlight 极致轻盈设计：温润字阶、绝不锐利、透气呼吸留白。 */
 :root[data-layout="workspace"], .workspace-theme-prev[data-base] {
-  --font-ui: 'HarmonyOS Sans SC', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
   --workspace-accent-source: #1b76c4;
   --accent: var(--workspace-accent-source);
-  --accent-hover: oklch(from var(--accent) calc(l - 0.045) c h);
-  --accent-active: oklch(from var(--accent) calc(l - 0.08) c h);
+  --accent-hover: color-mix(in srgb, var(--accent) 86%, #000000);
+  --accent-active: color-mix(in srgb, var(--accent) 72%, #000000);
   --accent-on: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-  --accent-light: color-mix(in srgb, var(--accent) 20%, transparent);
-  --accent-ring: color-mix(in srgb, var(--accent) 24%, transparent);
-  --text-brand: var(--accent-active);
+  --accent-light: color-mix(in srgb, var(--accent) 18%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --text-brand: var(--accent);
+  --text-url: color-mix(in srgb, var(--accent) 76%, #ffffff);
   --badge-ver-bg: var(--accent-soft);
   --badge-ver-text: var(--text-brand);
-  --brand-g1: oklch(from var(--accent) calc(l + 0.1) calc(c * 0.8) h);
+  --brand-g1: color-mix(in srgb, var(--accent) 80%, #ffffff);
   --brand-g2: var(--accent);
   --brand-g3: var(--accent-active);
   --lock-orb-1: color-mix(in srgb, var(--accent) 10%, transparent);
   --lock-orb-2: color-mix(in srgb, var(--accent) 5%, transparent);
-  --selection: color-mix(in srgb, var(--accent) 22%, transparent);
-  --toast-info: oklch(from var(--accent) 0.78 calc(c * 0.7) h);
+  --selection: color-mix(in srgb, var(--accent) 26%, transparent);
+  --toast-info: var(--accent);
+  --bg-workspace-primary: var(--accent);
+  --bg-workspace-primary-hover: var(--accent-hover);
+  --bg-workspace-primary-active: var(--accent-active);
+  --text-workspace-primary: #ffffff;
+  --bg-aura: none;
 
-  --workspace-frame: #efefee;
-  --workspace-light: #ffffff;
-
-  /* 内容卡只剩「一条线」一种分层语言（docs/design/layering/02-content-shadow-retire.md）：
-     静息 --border-card 发丝线，悬停 --card-line-hover 压深一档，静息/悬停/焦点/选中四态一律无影。
-     纸底卡面与画布只差一档，边界全靠这条线——线不够时只许提线，不许把影加回来。 */
-  --border-card: var(--card-line-soft, var(--border));
-  --border-card-hover: var(--card-line-strong, var(--border-hover));
-  --shadow-card-rest: none;
-  --shadow-card-hover: none;
-  --card-line-hover: color-mix(in srgb, var(--text) 22%, transparent);
-  /* 小记的便签圆角比其它卡面大一档；卡影已随内容区统一归零。 */
-  --radius-slip: 14px;
-  /* 卡面上的 meta 档（时间 / 标签）：--text-muted 纸底对白卡面只有 4.49:1，
-     低于本仓小字 ≥5.8 的底线；墨底 muted 实测 6.51:1 达标，所以只提纸底一档。 */
+  /* 轻盈无界案头核心发丝边与卡片质感 */
+  --border-card: rgba(0, 0, 0, 0.05);
+  --border-card-hover: color-mix(in srgb, var(--accent) 25%, transparent);
+  --shadow-card-rest: 0 1px 3px rgba(0, 0, 0, 0.02), 0 6px 16px -2px rgba(0, 0, 0, 0.03);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.03), 0 12px 28px -4px color-mix(in srgb, var(--accent) 10%, transparent);
+  --card-line-hover: var(--accent);
+  --radius-slip: 12px;
   --text-meta: var(--text-muted);
-  --weight-card-title: 500;
-  /* 分类徽章不再画盒子：淡底 + 文字已经够分，多一根描边就多一层边框噪声。 */
+  --weight-card-title: 550;
   --badge-cat-border: transparent;
+
+  /* 生机彩色便签药丸色阶 (Featherlight Vitality Pills) */
+  --pill-work-bg: #fee2e2;
+  --pill-work-text: #b91c1c;
+  --pill-dev-bg: #e0e7ff;
+  --pill-dev-text: #4338ca;
+  --pill-idea-bg: #fef3c7;
+  --pill-idea-text: #b45309;
+  --pill-todo-bg: #dcfce7;
+  --pill-todo-text: #15803d;
 }
 
 :root[data-layout="workspace"][data-theme="paper"], .workspace-theme-prev[data-theme="paper"] {
-  /* 白纸：画布近白、内容面纯白，字色与描边全部退回中性。
-     近白灰一律 R=G=B：大片留白上 3 级偏蓝的灰会被整体读成冷灰，白纸立刻不像白纸。
-     白底会把控件填色和发丝线冲淡一档，所以填色与描边整体深一格；
-     输入槽单独给灰面、不再跟随画布，否则落在白卡和白弹窗上等于隐形。
-     画布 #fafafa 是白场上限：再白一级，白光柔光和新增小记的色阶就都掉到 1.5ΔE 以下。 */
-  --bg: #fafafa;
+  /* 轻盈通透浅色 (Featherlight Sea Salt) */
+  --bg: #f8fafc;
   --panel-bg: #ffffff;
-  --sunken: #f5f5f5;
-  --fill: #f0f0f0;
-  --hover: #f3f3f3;
-  --active: #ececec;
-  --border: #e6e6e6;
-  --border-strong: #cfcfcf;
-  --border-subtle: #f0f0f0;
-  --border-hover: #c2c2c2;
-  --card-line-soft: rgb(15 23 42 / 7%);
-  --card-line-strong: rgb(15 23 42 / 12%);
-  --border-search: color-mix(in srgb, var(--border) 80%, var(--border-hover));
-  --bg-input: #f4f4f4;
+  --sunken: #f1f5f9;
+  --fill: #f1f5f9;
+  --hover: rgba(0, 0, 0, 0.04);
+  --active: rgba(0, 0, 0, 0.07);
+  --border: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.12);
+  --border-subtle: rgba(0, 0, 0, 0.03);
+  --border-hover: rgba(0, 0, 0, 0.15);
+  --border-card: rgba(0, 0, 0, 0.05);
+  --card-line-soft: rgba(0, 0, 0, 0.04);
+  --card-line-strong: rgba(0, 0, 0, 0.08);
+  --card-line-hover: color-mix(in srgb, var(--accent) 25%, transparent);
+  --border-search: rgba(0, 0, 0, 0.08);
+  --bg-input: #ffffff;
+  --bg-sheet: #f8fafc;
+  --bg-card: #ffffff;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.02), 0 6px 16px -2px rgba(0, 0, 0, 0.03);
+  --shadow-card-rest: 0 1px 3px rgba(0, 0, 0, 0.02), 0 6px 16px -2px rgba(0, 0, 0, 0.03);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.03), 0 12px 28px -4px color-mix(in srgb, var(--accent) 10%, transparent);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.03);
+  --shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.05);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.02);
+
+  /* 极致舒适、温润自然墨色字阶系统 (消除冷蓝生硬感与视觉疲劳) */
   --text: #1f2023;
   --text-secondary: #55585d;
   --text-muted: #74777c;
-  /* meta 档要压住 5.8：#74777c 在白卡面只有 4.49，退深到 #63666b 是 5.76，
-     仍是同一支中性灰，不引入冷调。 */
-  --text-meta: #63666b;
+  --text-meta: #74777c;
   --text-faint: #8c8f94;
-  --text-url: var(--text-secondary);
-  --badge-cat-bg: #f3f3f3;
-  --badge-cat-border: #e8e8e8;
+  --text-url: color-mix(in srgb, var(--accent) 76%, #ffffff);
+
+  --badge-cat-bg: rgba(0, 0, 0, 0.04);
+  --badge-cat-border: transparent;
   --badge-cat-text: var(--text-secondary);
-  --sidebar-bg: #fafafa;
-  --sidebar-hover: #f0f0f0;
-  --workspace-frame: #f0f0f0;
+
+  --sidebar-bg: transparent;
+  --sidebar-hover: rgba(0, 0, 0, 0.04);
+  --sidebar-active: #ffffff;
+  --sidebar-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.03);
+  --workspace-frame: #f8fafc;
+  --frame-base: #f8fafc;
+
+  --material-mica: #f8fafc;
+  --bg-workspace: #f8fafc;
+  --bg-sheet: #f8fafc;
+
+  --material-acrylic-bg: #ffffff;
+  --material-acrylic-blur: none;
+  --material-acrylic-border: rgba(0, 0, 0, 0.06);
+  --material-acrylic-rim: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  --material-acrylic-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --bg-dialog: #ffffff;
+  --bg-popover: #ffffff;
+  --bg-menu: #ffffff;
+
+  --chrome-bg: transparent;
+  --overlay: rgba(15, 23, 42, 0.35);
+  --scrollbar: rgba(15, 23, 42, 0.12);
+  --scrollbar-hover: rgba(15, 23, 42, 0.22);
+
+  --success: #107c10;
+  --success-soft: rgba(16, 124, 16, 0.1);
+  --warning: #b75e00;
+  --warning-soft: rgba(183, 94, 0, 0.1);
+  --danger: #c42b1c;
+  --danger-soft: rgba(196, 43, 28, 0.1);
+  --danger-hover: #a82315;
+  --danger-active: #8f1b0f;
+  --danger-border: rgba(196, 43, 28, 0.25);
+
+  --toast-bg: #ffffff;
+  --toast-fg: #1e293b;
+  --toast-ok: #15803d;
+  --toast-err: #dc2626;
+  --toast-info: var(--accent);
 }
 
 :root[data-layout="workspace"][data-base="dark"], .workspace-theme-prev[data-base="dark"] {
   --sidebar-hover: var(--hover);
   --chrome-bg: color-mix(in srgb, var(--bg) 90%, transparent);
-  --accent-hover: oklch(from var(--accent) calc(l + 0.035) c h);
-  --accent-active: oklch(from var(--accent) calc(l - 0.035) c h);
-  --accent-on: #20201e;
-  --text-brand: color-mix(in oklab, var(--accent) 80%, var(--text));
+  --accent-hover: color-mix(in srgb, var(--accent) 85%, #ffffff);
+  --accent-active: color-mix(in srgb, var(--accent) 70%, #000000);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-light: color-mix(in srgb, var(--accent) 22%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --accent-on: #ffffff;
+  --text-brand: var(--accent);
+  --text-url: color-mix(in srgb, var(--accent) 72%, #ffffff);
   --tip-bg: var(--panel-bg);
   --tip-fg: var(--text);
-  --toast-bg: var(--panel-bg);
-  --toast-ok: #9ab5a5;
-  --toast-err: #d4a1a0;
-  --toast-info: var(--text-brand);
+  --toast-bg: #20232c;
+  --toast-fg: #f1f3f7;
+  --toast-ok: #4ade80;
+  --toast-err: #f87171;
+  --toast-info: var(--accent);
   --brand-knob: var(--bg);
   --lock-wash-a: var(--sidebar-bg);
   --lock-wash-b: var(--bg);
   --frost-bg: color-mix(in srgb, var(--panel-bg) 94%, transparent);
   --frost-border: var(--border);
+  --border-card-hover: color-mix(in srgb, var(--accent) 35%, transparent);
+  --shadow-card-hover: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  --text-workspace-primary: #ffffff;
 }
 
 :root[data-layout="workspace"][data-theme="ink"], .workspace-theme-prev[data-theme="ink"] {
-  /* 外框后退、画布居中、卡片抬起；中性深底与独立字阶保留夜间层次。 */
-  --bg: #18191b;
-  --panel-bg: #26282c;
-  --sunken: #111214;
-  --sidebar-bg: #121315;
-  --fill: #2c2f33;
-  --hover: #303238;
-  --active: #34373d;
-  --border: #35383f;
-  --border-strong: #4b505a;
-  --border-subtle: #30333a;
-  --border-hover: #5c626e;
-  --card-line-soft: rgb(255 255 255 / 8%);
-  --card-line-strong: rgb(255 255 255 / 14%);
+  /* 现代舒适护眼炭墨暗夜 (Modern Eye-Friendly Charcoal Obsidian) */
+  --bg: #14151a;
+  --panel-bg: #1c1e24;
+  --sunken: #0f1013;
+  --sidebar-bg: transparent;
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-active: #232630;
+  --sidebar-active-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --fill: #22252e;
+  --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(255, 255, 255, 0.09);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-hover: rgba(255, 255, 255, 0.2);
+  --border-card: rgba(255, 255, 255, 0.07);
+  --card-line-soft: rgba(255, 255, 255, 0.05);
+  --card-line-strong: rgba(255, 255, 255, 0.12);
+  --card-line-hover: color-mix(in srgb, var(--accent) 36%, rgba(255, 255, 255, 0.14));
+  --border-search: rgba(255, 255, 255, 0.08);
+  --bg-input: #101115;
+  --bg-sheet: #14151a;
+  --bg-card: #1c1e24;
   --shadow-xs: none;
-  --shadow-card: none;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 18%);
-  --shadow: 0 4px 14px -2px rgb(0 0 0 / 35%);
-  --text: #d0d3d8;
-  --text-secondary: #aab2bd;
-  --text-muted: #969fac;
-  --text-faint: #909aa7;
-  --text-url: var(--text-secondary);
-  --code-fg: var(--text);
-  --badge-cat-bg: var(--fill);
-  --badge-cat-border: var(--border);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-card-rest: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 8px 30px rgba(0, 0, 0, 0.55), 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow: 0 8px 24px -2px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.65);
+
+  /* 柔和护眼、温润舒适珍珠白字阶系统 (消除刺眼强光与视觉疲劳) */
+  --text: #e2e5ec;
+  --text-secondary: #9aa1ad;
+  --text-muted: #737b8a;
+  --text-meta: #737b8a;
+  --text-faint: #555d6b;
+  --text-url: color-mix(in srgb, var(--accent) 72%, #ffffff);
+  --code-fg: #e2e5ec;
+  --badge-cat-bg: rgba(255, 255, 255, 0.06);
+  --badge-cat-border: transparent;
   --badge-cat-text: var(--text-secondary);
-  --workspace-frame: #121315;
-  --workspace-light: #393b40;
+  --workspace-frame: #14151a;
+  --frame-base: #14151a;
+
+  --material-mica: #14151a;
+  --bg-workspace: #14151a;
+  --bg-sheet: #14151a;
+
+  --material-acrylic-bg: #1c1e24;
+  --material-acrylic-blur: none;
+  --material-acrylic-border: rgba(255, 255, 255, 0.07);
+  --material-acrylic-rim: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  --material-acrylic-shadow: 0 20px 48px rgba(0, 0, 0, 0.65);
+  --bg-dialog: #1c1e24;
+  --bg-popover: #1c1e24;
+  --bg-menu: #1c1e24;
+
+  --chrome-bg: transparent;
+  --overlay: rgba(0, 0, 0, 0.65);
+  --scrollbar: rgba(255, 255, 255, 0.14);
+  --scrollbar-hover: rgba(255, 255, 255, 0.28);
+
+  --success: #6ccb5f;
+  --success-soft: rgba(108, 203, 95, 0.14);
+  --warning: #fce100;
+  --warning-soft: rgba(252, 225, 0, 0.14);
+  --danger: #ff6865;
+  --danger-soft: rgba(255, 104, 101, 0.14);
+  --danger-border: rgba(255, 104, 101, 0.3);
+  --danger-hover: #ff7f7c;
+  --danger-active: #ff524f;
+  --toast-bg: #20232c;
+  --toast-fg: #f1f3f7;
+  --toast-ok: #4ade80;
+  --toast-err: #f87171;
+  --toast-info: var(--accent);
 }
 
-:root[data-layout="workspace"][data-base="light"][data-accent="ink"], .workspace-theme-prev[data-base="light"][data-accent="ink"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="ink"] { --workspace-accent-source: #1b76c4; }
-:root[data-layout="workspace"][data-base="light"][data-accent="indigo"], .workspace-theme-prev[data-base="light"][data-accent="indigo"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="indigo"] { --workspace-accent-source: #6966c6; }
-:root[data-layout="workspace"][data-base="light"][data-accent="plum"], .workspace-theme-prev[data-base="light"][data-accent="plum"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="plum"] { --workspace-accent-source: #9456ae; }
-:root[data-layout="workspace"][data-base="light"][data-accent="rose"], .workspace-theme-prev[data-base="light"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="rose"] { --workspace-accent-source: #b74679; }
-:root[data-layout="workspace"][data-base="light"][data-accent="brick"], .workspace-theme-prev[data-base="light"][data-accent="brick"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="brick"] { --workspace-accent-source: #ba4b47; }
-:root[data-layout="workspace"][data-base="light"][data-accent="clay"], .workspace-theme-prev[data-base="light"][data-accent="clay"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="clay"] { --workspace-accent-source: #b05a00; }
-:root[data-layout="workspace"][data-base="light"][data-accent="amber"], .workspace-theme-prev[data-base="light"][data-accent="amber"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="amber"] { --workspace-accent-source: #916d00; }
-:root[data-layout="workspace"][data-base="light"][data-accent="olive"], .workspace-theme-prev[data-base="light"][data-accent="olive"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="olive"] { --workspace-accent-source: #747813; }
-:root[data-layout="workspace"][data-base="light"][data-accent="celadon"], .workspace-theme-prev[data-base="light"][data-accent="celadon"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="celadon"] { --workspace-accent-source: #38804b; }
-:root[data-layout="workspace"][data-base="light"][data-accent="teal"], .workspace-theme-prev[data-base="light"][data-accent="teal"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="teal"] { --workspace-accent-source: #00817c; }
-:root[data-layout="workspace"][data-base="light"][data-accent="graphite"], .workspace-theme-prev[data-base="light"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="graphite"] { --workspace-accent-source: #6e747a; }
-:root[data-layout="workspace"][data-base="light"][data-accent="sand"], .workspace-theme-prev[data-base="light"][data-accent="sand"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="sand"] { --workspace-accent-source: #7b7263; }
+/* 背景氛围（案头晨昏生机光场 · 纯净通透双角弥散）：
+   1. 彻底移除伪噪点与杂质，回归 100% 洁净纯白底色，消除任何灰雾与脏感；
+   2. 左上晨曦主天光（16% 浓度，经 OKLab 调和呈现晶莹浅色调），肉眼自然柔和、清透宜人；
+   3. 右下自然回填光（8.5% 浓度），使全屏左右平衡、具有宽广的空气感与景深；
+   4. 正中央核心阅读与卡片区完全融入纯白 #ffffff，确保文字与便签绝对清晰锐利。 */
+:root[data-layout="workspace"]:is([data-base="light"], [data-theme="paper"])[data-atmosphere="on"],
+.workspace-theme-prev:is([data-base="light"], [data-theme="paper"])[data-atmosphere="on"] {
+  --bg-workspace: #ffffff;
+  --bg-aura:
+    radial-gradient(ellipse 90% 65% at 20% -8%, color-mix(in oklab, var(--accent) 16%, #ffffff) 0%, color-mix(in oklab, var(--accent) 4.5%, #ffffff) 45%, transparent 75%),
+    radial-gradient(ellipse 75% 55% at 85% 95%, color-mix(in oklab, var(--accent) 8.5%, #ffffff) 0%, color-mix(in oklab, var(--accent) 2%, #ffffff) 45%, transparent 75%);
+  --bg-dialog:
+    radial-gradient(ellipse 85% 60% at 24% -6%, color-mix(in oklab, var(--accent) 13%, #ffffff) 0%, color-mix(in oklab, var(--accent) 3%, #ffffff) 45%, transparent 75%),
+    #ffffff;
+}
 
-:root[data-layout="workspace"][data-base="dark"][data-accent="ink"], .workspace-theme-prev[data-base="dark"][data-accent="ink"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="ink"] { --workspace-accent-source: #7eb1e6; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="indigo"], .workspace-theme-prev[data-base="dark"][data-accent="indigo"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="indigo"] { --workspace-accent-source: #a3a5e7; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="plum"], .workspace-theme-prev[data-base="dark"][data-accent="plum"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="plum"] { --workspace-accent-source: #c39bd5; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="rose"], .workspace-theme-prev[data-base="dark"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="rose"] { --workspace-accent-source: #e290b0; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="brick"], .workspace-theme-prev[data-base="dark"][data-accent="brick"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="brick"] { --workspace-accent-source: #e2958e; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="clay"], .workspace-theme-prev[data-base="dark"][data-accent="clay"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="clay"] { --workspace-accent-source: #db9d72; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="amber"], .workspace-theme-prev[data-base="dark"][data-accent="amber"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="amber"] { --workspace-accent-source: #c8a865; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="olive"], .workspace-theme-prev[data-base="dark"][data-accent="olive"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="olive"] { --workspace-accent-source: #adb271; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="celadon"], .workspace-theme-prev[data-base="dark"][data-accent="celadon"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="celadon"] { --workspace-accent-source: #84bc8f; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="teal"], .workspace-theme-prev[data-base="dark"][data-accent="teal"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="teal"] { --workspace-accent-source: #6bbdb8; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="graphite"], .workspace-theme-prev[data-base="dark"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="graphite"] { --workspace-accent-source: #a7adb4; }
-:root[data-layout="workspace"][data-base="dark"][data-accent="sand"], .workspace-theme-prev[data-base="dark"][data-accent="sand"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="sand"] { --workspace-accent-source: #b4ab9d; }
+:root[data-layout="workspace"]:is([data-base="dark"], [data-theme="ink"])[data-atmosphere="on"],
+.workspace-theme-prev:is([data-base="dark"], [data-theme="ink"])[data-atmosphere="on"] {
+  --bg-workspace: var(--material-mica);
+  --bg-aura:
+    radial-gradient(ellipse 90% 65% at 20% -8%, color-mix(in oklab, var(--accent) 11%, #181a20) 0%, color-mix(in oklab, var(--accent) 3%, #14151a) 45%, transparent 75%),
+    radial-gradient(ellipse 75% 55% at 85% 95%, color-mix(in oklab, var(--accent) 6.5%, #181a20) 0%, transparent 68%);
+  --bg-dialog:
+    radial-gradient(ellipse 85% 60% at 24% -6%, color-mix(in oklab, var(--accent) 9%, #1c1e24) 0%, color-mix(in oklab, var(--accent) 2%, #1c1e24) 45%, transparent 75%),
+    #1c1e24;
+}
 
-/* 工作区把分类字母块的色相收一档：归堆感保留，一屏不再先看到彩色格子。 */
+:root[data-layout="workspace"][data-atmosphere="off"],
+.workspace-theme-prev[data-atmosphere="off"] {
+  --bg-aura: none;
+  --bg-dialog: #ffffff;
+}
+:root[data-layout="workspace"][data-base="dark"][data-atmosphere="off"],
+.workspace-theme-prev[data-base="dark"][data-atmosphere="off"] {
+  --bg-dialog: #1c1e24;
+}
+
+/* 强调色色盘规范（现代高纯度、高对比度与轻盈活力色阶） */
+:root[data-layout="workspace"][data-base="light"][data-accent="ink"], .workspace-theme-prev[data-base="light"][data-accent="ink"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="ink"] { --workspace-accent-source: #2563eb; }
+:root[data-layout="workspace"][data-base="light"][data-accent="indigo"], .workspace-theme-prev[data-base="light"][data-accent="indigo"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="indigo"] { --workspace-accent-source: #4f46e5; }
+:root[data-layout="workspace"][data-base="light"][data-accent="plum"], .workspace-theme-prev[data-base="light"][data-accent="plum"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="plum"] { --workspace-accent-source: #7c3aed; }
+:root[data-layout="workspace"][data-base="light"][data-accent="rose"], .workspace-theme-prev[data-base="light"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="rose"] { --workspace-accent-source: #db2777; }
+:root[data-layout="workspace"][data-base="light"][data-accent="brick"], .workspace-theme-prev[data-base="light"][data-accent="brick"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="brick"] { --workspace-accent-source: #b91c1c; }
+:root[data-layout="workspace"][data-base="light"][data-accent="clay"], .workspace-theme-prev[data-base="light"][data-accent="clay"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="clay"] { --workspace-accent-source: #ea580c; }
+:root[data-layout="workspace"][data-base="light"][data-accent="amber"], .workspace-theme-prev[data-base="light"][data-accent="amber"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="amber"] { --workspace-accent-source: #d97706; }
+:root[data-layout="workspace"][data-base="light"][data-accent="olive"], .workspace-theme-prev[data-base="light"][data-accent="olive"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="olive"] { --workspace-accent-source: #4d7c0f; }
+:root[data-layout="workspace"][data-base="light"][data-accent="celadon"], .workspace-theme-prev[data-base="light"][data-accent="celadon"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="celadon"] { --workspace-accent-source: #059669; }
+:root[data-layout="workspace"][data-base="light"][data-accent="teal"], .workspace-theme-prev[data-base="light"][data-accent="teal"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="teal"] { --workspace-accent-source: #0891b2; }
+:root[data-layout="workspace"][data-base="light"][data-accent="graphite"], .workspace-theme-prev[data-base="light"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="graphite"] { --workspace-accent-source: #334155; }
+:root[data-layout="workspace"][data-base="light"][data-accent="sand"], .workspace-theme-prev[data-base="light"][data-accent="sand"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="sand"] { --workspace-accent-source: #92400e; }
+:root[data-layout="workspace"][data-base="light"][data-accent="forest"], .workspace-theme-prev[data-base="light"][data-accent="forest"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="forest"] { --workspace-accent-source: #4d7c0f; }
+:root[data-layout="workspace"][data-base="light"][data-accent="coral"], .workspace-theme-prev[data-base="light"][data-accent="coral"], :root[data-layout="workspace"] .accent-dot[data-base="light"][data-accent="coral"] { --workspace-accent-source: #b91c1c; }
+
+:root[data-layout="workspace"][data-base="dark"][data-accent="ink"], .workspace-theme-prev[data-base="dark"][data-accent="ink"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="ink"] { --workspace-accent-source: #60a5fa; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="indigo"], .workspace-theme-prev[data-base="dark"][data-accent="indigo"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="indigo"] { --workspace-accent-source: #818cf8; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="plum"], .workspace-theme-prev[data-base="dark"][data-accent="plum"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="plum"] { --workspace-accent-source: #a78bfa; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="rose"], .workspace-theme-prev[data-base="dark"][data-accent="rose"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="rose"] { --workspace-accent-source: #f472b6; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="brick"], .workspace-theme-prev[data-base="dark"][data-accent="brick"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="brick"] { --workspace-accent-source: #f87171; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="clay"], .workspace-theme-prev[data-base="dark"][data-accent="clay"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="clay"] { --workspace-accent-source: #fb923c; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="amber"], .workspace-theme-prev[data-base="dark"][data-accent="amber"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="amber"] { --workspace-accent-source: #fbbf24; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="olive"], .workspace-theme-prev[data-base="dark"][data-accent="olive"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="olive"] { --workspace-accent-source: #a3e635; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="celadon"], .workspace-theme-prev[data-base="dark"][data-accent="celadon"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="celadon"] { --workspace-accent-source: #34d399; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="teal"], .workspace-theme-prev[data-base="dark"][data-accent="teal"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="teal"] { --workspace-accent-source: #22d3ee; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="graphite"], .workspace-theme-prev[data-base="dark"][data-accent="graphite"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="graphite"] { --workspace-accent-source: #94a3b8; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="sand"], .workspace-theme-prev[data-base="dark"][data-accent="sand"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="sand"] { --workspace-accent-source: #e0a96d; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="forest"], .workspace-theme-prev[data-base="dark"][data-accent="forest"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="forest"] { --workspace-accent-source: #a3e635; }
+:root[data-layout="workspace"][data-base="dark"][data-accent="coral"], .workspace-theme-prev[data-base="dark"][data-accent="coral"], :root[data-layout="workspace"] .accent-dot[data-base="dark"][data-accent="coral"] { --workspace-accent-source: #f87171; }
+
+/* 工作区分类徽标与强调色圆点 */
 :root[data-layout="workspace"] .grid-card .grid-slot--hue,
 .workspace-theme-prev[data-base] .grid-card .grid-slot--hue {
-  background: color-mix(in srgb, var(--gc-hue) 9%, var(--bg-surface));
-  color: color-mix(in srgb, var(--gc-hue) 55%, var(--text));
+  background: color-mix(in srgb, var(--gc-hue) 12%, var(--bg-surface));
+  color: color-mix(in srgb, var(--gc-hue) 65%, var(--text));
 }
 
-:root[data-layout="workspace"] .accent-dot { --accent: var(--workspace-accent-source); --workspace-accent-swatch: var(--workspace-accent-source); background: var(--workspace-accent-swatch); }
-/* 布局主色只用于弹窗外的可用按钮；禁用态与弹窗动作档沿用全局规范。 */
-:root[data-layout="workspace"] .btn-primary:not(:disabled):not(.ghost-danger):not(:where(.dialog *)) { background: var(--bg-workspace-primary); color: var(--text-workspace-primary); }
-:root[data-layout="workspace"] .btn-primary:hover:not(:disabled):not(.ghost-danger):not(:where(.dialog *)) { background: var(--bg-workspace-primary-hover); }
-:root[data-layout="workspace"] .btn-primary:active:not(:disabled):not(.ghost-danger):not(:where(.dialog *)) { background: var(--bg-workspace-primary-active); }
+:root[data-layout="workspace"] .accent-dot {
+  --accent: var(--workspace-accent-source);
+  --workspace-accent-swatch: var(--workspace-accent-source);
+  background: var(--workspace-accent-swatch);
+}
+
+/* Linear / Raycast 实体卡片与悬停微反馈 */
+:root[data-layout="workspace"] :is(.grid-card, .memo) {
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-card-rest);
+  transition: all var(--transition-fast);
+}
+:root[data-layout="workspace"] :is(.grid-card, .memo):hover {
+  border-color: var(--card-line-hover);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1px);
+}
+
+/* 网址收藏与快捷方式卡片标题色彩软化，消除刺眼生硬的粗纯黑 */
+:root[data-layout="workspace"] :is(.entry-card, .shortcut-row, .grid-card) :is(.ec-name, .row-name) {
+  color: #2e333d;
+  font-weight: 550;
+}
+:root[data-layout="workspace"][data-base="dark"] :is(.entry-card, .shortcut-row, .grid-card) :is(.ec-name, .row-name) {
+  color: #e2e5ec;
+}
+
+/* 链接与网址浅度优化：比原始强调色更浅雅温和，悬停时展现完整强调色 */
+:root[data-layout="workspace"] :is(
+  a:not(.btn-primary):not(.btn-secondary):not(.action-btn):not(.tag-chip):not(.nav-item),
+  .detail-link,
+  .ec-domain,
+  .shortcut-row .row2,
+  .ProseMirror a
+) {
+  color: var(--text-url);
+}
+:root[data-layout="workspace"] :is(
+  a:not(.btn-primary):not(.btn-secondary):not(.action-btn):not(.tag-chip):not(.nav-item),
+  .detail-link,
+  .ec-domain,
+  .shortcut-row .row2,
+  .ProseMirror a
+):hover {
+  color: var(--accent);
+}
+
+/* Featherlight 呼吸感轻盈主按钮系统 */
+:root[data-layout="workspace"] .btn-primary:not(:disabled):not(.ghost-danger):not(:where(.dialog *)),
+:root[data-layout="workspace"] .create-action,
+:root[data-layout="workspace"] .go {
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 25%, transparent);
+  font-weight: 600;
+  font-size: 13px;
+  height: 32px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+:root[data-layout="workspace"] .btn-primary:hover:not(:disabled):not(.ghost-danger):not(:where(.dialog *)),
+:root[data-layout="workspace"] .create-action:hover:not(:disabled),
+:root[data-layout="workspace"] .go:hover:not(:disabled) {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent);
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+:root[data-layout="workspace"] .btn-primary:active:not(:disabled):not(.ghost-danger):not(:where(.dialog *)),
+:root[data-layout="workspace"] .create-action:active:not(:disabled),
+:root[data-layout="workspace"] .go:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Featherlight 次级轻盈按钮（默认纯通透无底色，微发丝边与轻柔悬停显形） */
+:root[data-layout="workspace"] .btn-secondary:not(:disabled):not(:where(.dialog *)),
+:root[data-layout="workspace"] .action-btn:not(.primary):not(.danger) {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  box-shadow: none;
+  font-weight: 500;
+  font-size: 11.5px;
+  height: 26px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+:root[data-layout="workspace"][data-base="dark"] .btn-secondary:not(:disabled):not(:where(.dialog *)),
+:root[data-layout="workspace"][data-base="dark"] .action-btn:not(.primary):not(.danger) {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+:root[data-layout="workspace"] .btn-secondary:hover:not(:disabled):not(:where(.dialog *)),
+:root[data-layout="workspace"] .action-btn:not(.primary):not(.danger):hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.15);
+  color: var(--text);
+  transform: translateY(-0.5px);
+}
+:root[data-layout="workspace"][data-base="dark"] .btn-secondary:hover:not(:disabled):not(:where(.dialog *)),
+:root[data-layout="workspace"][data-base="dark"] .action-btn:not(.primary):not(.danger):hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+}
+:root[data-layout="workspace"] .btn-secondary:active:not(:disabled):not(:where(.dialog *)),
+:root[data-layout="workspace"] .action-btn:not(.primary):not(.danger):active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Featherlight 统一精巧按钮系统（更加小巧精致、克制、轻盈） */
+:root[data-layout="workspace"] :is(.btn-primary, .btn-secondary, .create-action, .action-btn, .go):not(:where(.dialog *, .settings-dialog *)) {
+  height: 26px !important;
+  padding: 0 10px !important;
+  font-size: 11.5px !important;
+  border-radius: 6px !important;
+  font-weight: 600;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 22%, transparent);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+:root[data-layout="workspace"] :is(.btn-secondary, .action-btn:not(.primary)):not(:where(.dialog *, .settings-dialog *)) {
+  box-shadow: none;
+  font-weight: 500;
+}
+
+/* Featherlight 编辑态带文字按钮（默认通透无白底） */
+:root[data-layout="workspace"] .eb:not(.primary) {
+  background: transparent;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+:root[data-layout="workspace"][data-base="dark"] .eb:not(.primary) {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+:root[data-layout="workspace"] .eb:not(.primary):hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.15);
+  color: var(--text);
+}
+:root[data-layout="workspace"][data-base="dark"] .eb:not(.primary):hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Featherlight 顶部操作栏小按钮（微型工具栏胶囊，默认完全通透透明，去除白底） */
+:root[data-layout="workspace"] .bar-btn {
+  height: 26px;
+  min-width: 26px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0 5px;
+}
+:root[data-layout="workspace"][data-base="dark"] .bar-btn {
+  background: transparent;
+  border-color: transparent;
+}
+:root[data-layout="workspace"] .bar-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.04);
+  color: var(--text);
+  transform: translateY(-0.5px);
+}
+:root[data-layout="workspace"][data-base="dark"] .bar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+:root[data-layout="workspace"] .bar-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Featherlight 新建底栏小芯片按钮 (mini-btn) */
+:root[data-layout="workspace"] .mini-btn {
+  height: 24px;
+  padding: 0 7px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+:root[data-layout="workspace"] .mini-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--accent);
+}
+:root[data-layout="workspace"][data-base="dark"] .mini-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+:root[data-layout="workspace"] .mini-btn.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Featherlight 空气感轻搜胶囊 (小巧精炼，默认轻柔微底无厚白，聚焦时凸显) */
+:root[data-layout="workspace"] .search-box {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 13px;
+  color: var(--text);
+  box-shadow: none;
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0 8px 0 10px;
+  height: 26px;
+  width: 170px;
+  min-width: 110px;
+  max-width: 200px;
+}
+:root[data-layout="workspace"][data-base="dark"] .search-box {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+:root[data-layout="workspace"] .search-box:hover {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+:root[data-layout="workspace"][data-base="dark"] .search-box:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+:root[data-layout="workspace"] .search-box:focus-within {
+  background: var(--panel-bg);
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+  width: 195px;
+}
+:root[data-layout="workspace"] .search-box input {
+  color: var(--text);
+  font-size: 11.5px;
+}
+:root[data-layout="workspace"] .search-box input::placeholder {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+:root[data-layout="workspace"] .search-kbd {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-faint);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  border: none;
+  padding: 1px 3px;
+}
+:root[data-layout="workspace"][data-base="dark"] .search-kbd {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Codex 会话专属复合搜索胶囊：范围分段切换 + 搜索图标 + 流式输入 */
+:root[data-layout="workspace"] .session-search-box {
+  display: flex !important;
+  align-items: center !important;
+  height: 28px !important;
+  width: 310px !important;
+  min-width: 220px !important;
+  max-width: 340px !important;
+  padding: 0 8px 0 3px !important;
+  border-radius: 14px !important;
+  background: rgba(0, 0, 0, 0.035);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+:root[data-layout="workspace"][data-base="dark"] .session-search-box {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.09);
+}
+:root[data-layout="workspace"] .session-search-box:hover {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.16);
+}
+:root[data-layout="workspace"][data-base="dark"] .session-search-box:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+:root[data-layout="workspace"] .session-search-box:focus-within {
+  background: var(--panel-bg, #ffffff) !important;
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+  width: 310px !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .session-search-box:focus-within {
+  background: #181a20 !important;
+}
+
+/* 内置微型范围分段轨道 */
+:root[data-layout="workspace"] .session-search-box .session-search-mode {
+  display: inline-flex !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  padding: 2px !important;
+  gap: 2px !important;
+  border-radius: 12px !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+  border: none !important;
+  margin-right: 7px !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .session-search-box .session-search-mode {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-layout="workspace"] .session-search-box .session-search-mode > button {
+  height: 20px !important;
+  padding: 0 8px !important;
+  font-size: 11px !important;
+  line-height: 20px !important;
+  border: none !important;
+  border-radius: 10px !important;
+  color: var(--text-muted) !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  font-weight: 500 !important;
+  transition: all 0.15s ease !important;
+  white-space: nowrap !important;
+  user-select: none !important;
+}
+:root[data-layout="workspace"] .session-search-box .session-search-mode > button:hover:not(.on) {
+  color: var(--text) !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .session-search-box .session-search-mode > button:hover:not(.on) {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+:root[data-layout="workspace"] .session-search-box .session-search-mode > button.on {
+  background: #ffffff !important;
+  color: var(--accent) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .session-search-box .session-search-mode > button.on {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* 搜索图标：通透微显，聚焦高亮强调色 */
+:root[data-layout="workspace"] .session-search-box .search-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--text-muted) !important;
+  margin-right: 5px !important;
+  flex-shrink: 0 !important;
+  opacity: 0.65 !important;
+  transition: color 0.15s ease, opacity 0.15s ease !important;
+}
+:root[data-layout="workspace"] .session-search-box:focus-within .search-icon {
+  color: var(--accent) !important;
+  opacity: 1 !important;
+}
+
+/* 会话输入框文字与占位符 */
+:root[data-layout="workspace"] .session-search-box input {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 11.5px !important;
+  color: var(--text) !important;
+  padding: 0 !important;
+}
+:root[data-layout="workspace"] .session-search-box input::placeholder {
+  color: var(--text-muted) !important;
+  font-size: 11.5px !important;
+}
+
+/* 清除按钮 */
+:root[data-layout="workspace"] .session-search-box .search-clear {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: var(--text-muted) !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  margin-left: 4px !important;
+  padding: 0 !important;
+  transition: all 0.15s ease !important;
+}
+:root[data-layout="workspace"] .session-search-box .search-clear:hover {
+  background: rgba(0, 0, 0, 0.12) !important;
+  color: var(--text) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .session-search-box .search-clear {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .session-search-box .search-clear:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+}
+
+/* Featherlight 侧栏导航与底部按钮激活态：高辨识度浮岛胶囊，带微边框与柔和浮空投影 */
+:root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active {
+  background: #ffffff;
+  color: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+}
+:root[data-layout="workspace"][data-base="dark"] .sidebar :is(.nav-item, .foot-item).active {
+  background: #232630;
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+:root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active::before {
+  display: none;
+}
+:root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active :is(.nav-text, .foot-text) {
+  font-weight: 600;
+  color: var(--accent);
+}
+:root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active :is(.nav-icon, .foot-icon) {
+  color: var(--accent);
+}
+:root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active .nav-count {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+:root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active:hover {
+  background: #ffffff;
+  color: var(--accent);
+}
+:root[data-layout="workspace"][data-base="dark"] .sidebar :is(.nav-item, .foot-item).active:hover {
+  background: #232630;
+}
+:root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item):hover:not(.active) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text);
+  border-radius: 8px;
+}
+:root[data-layout="workspace"][data-base="dark"] .sidebar :is(.nav-item, .foot-item):hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Windows 11 弹窗与开关 */
+:root[data-layout="workspace"] .switch-slider:before {
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+:root[data-layout="workspace"] .switch input:checked + .switch-slider {
+  background-color: var(--accent);
+}
+
+/* Featherlight 干净浮层与弹窗系统（对话框、设置弹窗、下拉菜单与气泡） */
+:root[data-layout="workspace"] .dialog-overlay {
+  background: rgba(15, 23, 42, 0.32) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+:root[data-layout="workspace"][data-base="dark"] .dialog-overlay {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+:root[data-layout="workspace"] :is(.dialog, .settings-dialog) {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.18), 0 4px 16px -2px rgba(15, 23, 42, 0.05), inset 0 1px 0 0 rgba(255, 255, 255, 0.95) !important;
+  border-radius: 14px !important;
+  overflow: hidden;
+  transition: none !important;
+}
+:root[data-layout="workspace"][data-base="dark"] :is(.dialog, .settings-dialog) {
+  background: #1c1e24 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 28px 64px -16px rgba(0, 0, 0, 0.75), 0 6px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.06) !important;
+  transition: none !important;
+}
+
+/* 开启柔光背景氛围时，普通弹窗顶部自然沐浴晨曦天光，底沿融于洁白/暗夜基底，OKLab 混合纯净无灰雾 */
+:root[data-layout="workspace"][data-atmosphere="on"] .dialog:not(.settings-dialog) {
+  background: radial-gradient(ellipse 95% 65% at 25% -12%, color-mix(in oklab, var(--accent) 15%, #ffffff) 0%, color-mix(in oklab, var(--accent) 5%, #ffffff) 48%, #ffffff 78%) !important;
+}
+:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"] .dialog:not(.settings-dialog) {
+  background: radial-gradient(ellipse 95% 65% at 25% -12%, color-mix(in oklab, var(--accent) 7.5%, #1c1e24) 0%, color-mix(in oklab, var(--accent) 2.5%, #1c1e24) 48%, #1c1e24 78%) !important;
+}
+
+/* 弹窗头部：自然透气首栏，去除僵硬表格横切底线 */
+:root[data-layout="workspace"] .dialog-header {
+  min-height: 50px;
+  height: auto;
+  padding: 16px 20px 8px 20px;
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+:root[data-layout="workspace"] .dialog-header h3 {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+:root[data-layout="workspace"] .dialog-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-left: auto;
+}
+:root[data-layout="workspace"] .dialog-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text);
+}
+:root[data-layout="workspace"][data-base="dark"] .dialog-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+:root[data-layout="workspace"] .dialog-close:active {
+  transform: scale(0.92);
+}
+
+/* 弹窗正文与表单空间：舒适行距与排版 */
+:root[data-layout="workspace"] .dialog-body {
+  padding: 8px 20px 18px 20px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+:root[data-layout="workspace"] .dialog-body .lead {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+:root[data-layout="workspace"] .dialog .form-group {
+  margin-bottom: 14px;
+}
+:root[data-layout="workspace"] .dialog .form-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  display: block;
+}
+:root[data-layout="workspace"] .dialog :is(input, select, textarea) {
+  font-size: 13px;
+  border-radius: 7px;
+}
+
+/* 确认与退出小弹窗特别优化：无框体切割感，呼吸感卡片 */
+:root[data-layout="workspace"] :is(.confirm-dialog, .quit-dialog) {
+  width: min(390px, calc(100vw - 32px)) !important;
+}
+:root[data-layout="workspace"] :is(.confirm-dialog, .quit-dialog) .dialog-header {
+  padding-bottom: 4px;
+}
+:root[data-layout="workspace"] :is(.confirm-dialog, .quit-dialog) .dialog-body {
+  padding-top: 4px;
+  padding-bottom: 12px;
+}
+:root[data-layout="workspace"] :is(.confirm-dialog, .quit-dialog) .dialog-body p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0;
+}
+:root[data-layout="workspace"] :is(.confirm-dialog, .quit-dialog) .dialog-body p + p {
+  margin-top: 6px;
+}
+:root[data-layout="workspace"] .quit-hint {
+  font-size: 12px !important;
+  color: var(--text-muted) !important;
+}
+:root[data-layout="workspace"] .dialog-err {
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  color: var(--danger) !important;
+  margin-top: 8px !important;
+}
+:root[data-layout="workspace"] .dialog-ok {
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  color: var(--success) !important;
+  margin-top: 8px !important;
+}
+:root[data-layout="workspace"] :is(.confirm-dialog, .quit-dialog) .dialog-footer {
+  border-top: none;
+  padding-top: 4px;
+  padding-bottom: 18px;
+}
+
+/* 弹窗底栏与按钮组（清晰的主、次、危险按钮层级） */
+:root[data-layout="workspace"] .dialog-footer {
+  min-height: 52px;
+  padding: 12px 20px 16px 20px;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  background: transparent;
+  gap: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+:root[data-layout="workspace"][data-base="dark"] .dialog-footer {
+  border-top-color: rgba(255, 255, 255, 0.05);
+}
+
+/* 弹窗主按钮：尺寸与比例优雅均衡 */
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-primary {
+  height: 30px !important;
+  padding: 0 16px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  border-radius: 7px !important;
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 26%, transparent) !important;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-primary:hover:not(:disabled) {
+  filter: brightness(1.06) !important;
+  transform: translateY(-0.5px) !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 36%, transparent) !important;
+}
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-primary:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-primary:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* 弹窗次级/取消按钮：通透微描边，轻盈悬停 */
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-secondary {
+  height: 30px !important;
+  padding: 0 14px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: var(--text-secondary) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+:root[data-layout="workspace"][data-base="dark"] :is(.dialog-footer, .dialog-body, .dialog) .btn-secondary {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-secondary:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: var(--text) !important;
+  border-color: rgba(0, 0, 0, 0.18) !important;
+  transform: translateY(-0.5px) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] :is(.dialog-footer, .dialog-body, .dialog) .btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: var(--text) !important;
+}
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-secondary:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+
+/* 弹窗危险/删除按钮 */
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) :is(.btn-danger, .btn-secondary.danger) {
+  height: 30px !important;
+  padding: 0 16px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  border-radius: 7px !important;
+  background: var(--danger) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(184, 58, 48, 0.25) !important;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) :is(.btn-danger, .btn-secondary.danger):hover:not(:disabled) {
+  filter: brightness(1.06) !important;
+  transform: translateY(-0.5px) !important;
+  box-shadow: 0 4px 14px rgba(184, 58, 48, 0.35) !important;
+}
+:root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) :is(.btn-danger, .btn-secondary.danger):active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+
+/* 快捷键提示微芯片 */
+:root[data-layout="workspace"] .footer-hints {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+:root[data-layout="workspace"] .footer-hints .kbd {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: var(--text-muted);
+}
+:root[data-layout="workspace"][data-base="dark"] .footer-hints .kbd {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 弹窗分段选择控制器 (.seg) 精修 */
+:root[data-layout="workspace"] .dialog .seg {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  gap: 2px;
+  border: none;
+}
+:root[data-layout="workspace"][data-base="dark"] .dialog .seg {
+  background: rgba(255, 255, 255, 0.06);
+}
+:root[data-layout="workspace"] .dialog .seg > :is(button, .seg-btn) {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+:root[data-layout="workspace"] .dialog .seg > :is(button, .seg-btn):hover {
+  color: var(--text);
+}
+:root[data-layout="workspace"] .dialog .seg > :is(button, .seg-btn):is(.on, [aria-selected="true"]) {
+  background: #ffffff;
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+:root[data-layout="workspace"][data-base="dark"] .dialog .seg > :is(button, .seg-btn):is(.on, [aria-selected="true"]) {
+  background: #2a2d38;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+/* SettingsDialog 特别优化：现代 macOS / Windows 11 双栏分层结构，侧栏与内容区各自独立柔光 */
+:root[data-layout="workspace"] .settings-dialog {
+  display: flex !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  overflow: hidden !important;
+  transition: none !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .settings-dialog {
+  background: #1c1e24 !important;
+  transition: none !important;
+}
+
+/* 侧边栏独立柔光：自导航列顶端独立发散轻雾天光 */
+:root[data-layout="workspace"] .settings-dialog .settings-nav {
+  background: #f8fafc !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.06) !important;
+  padding: 16px 10px !important;
+  width: 184px;
+}
+:root[data-layout="workspace"][data-base="dark"] .settings-dialog .settings-nav {
+  background: #16181f !important;
+  border-right-color: rgba(255, 255, 255, 0.06) !important;
+}
+:root[data-layout="workspace"][data-atmosphere="on"] .settings-dialog .settings-nav {
+  background: radial-gradient(ellipse 110% 65% at 50% -12%, color-mix(in oklab, var(--accent) 15%, #ffffff) 0%, color-mix(in oklab, var(--accent) 5%, #ffffff) 48%, #ffffff 78%) !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"] .settings-dialog .settings-nav {
+  background: radial-gradient(ellipse 110% 65% at 50% -12%, color-mix(in oklab, var(--accent) 7%, #16181f) 0%, color-mix(in oklab, var(--accent) 2%, #16181f) 48%, #16181f 78%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* 内容区域独立柔光：从内容面板顶端独立向内发散晨曦微光，与侧栏物理分离 */
+:root[data-layout="workspace"] .settings-dialog .settings-main {
+  background: #ffffff !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .settings-dialog .settings-main {
+  background: #1c1e24 !important;
+}
+:root[data-layout="workspace"][data-atmosphere="on"] .settings-dialog .settings-main {
+  background: radial-gradient(ellipse 95% 65% at 25% -12%, color-mix(in oklab, var(--accent) 15%, #ffffff) 0%, color-mix(in oklab, var(--accent) 5%, #ffffff) 48%, #ffffff 78%) !important;
+}
+:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"] .settings-dialog .settings-main {
+  background: radial-gradient(ellipse 95% 65% at 25% -12%, color-mix(in oklab, var(--accent) 7.5%, #1c1e24) 0%, color-mix(in oklab, var(--accent) 2.5%, #1c1e24) 48%, #1c1e24 78%) !important;
+}
+:root[data-layout="workspace"] .settings-dialog .settings-head {
+  height: 52px;
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+:root[data-layout="workspace"][data-base="dark"] .settings-dialog .settings-head {
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+:root[data-layout="workspace"] .settings-dialog .settings-head h3 {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text);
+}
+:root[data-layout="workspace"] .settings-dialog .settings-pane {
+  padding: 18px 24px 28px 24px;
+}
+:root[data-layout="workspace"] .settings-dialog :is(button.nav-item, .nav-tab) {
+  height: 32px;
+  border-radius: 7px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+:root[data-layout="workspace"] .settings-dialog :is(button.nav-item, .nav-tab):hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text);
+}
+:root[data-layout="workspace"][data-base="dark"] .settings-dialog :is(button.nav-item, .nav-tab):hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+:root[data-layout="workspace"] .settings-dialog :is(button.nav-item, .nav-tab):is(.active, .on) {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+:root[data-layout="workspace"][data-base="dark"] .settings-dialog :is(button.nav-item, .nav-tab):is(.active, .on) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+:root[data-layout="workspace"] .settings-dialog .nav-brand h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+:root[data-layout="workspace"] .settings-dialog .nav-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 10px 8px 3px;
+}
+:root[data-layout="workspace"] .settings-dialog .setting-item {
+  border-radius: 8px;
+  padding: 8px 12px;
+  transition: background 0.15s ease;
+}
+:root[data-layout="workspace"] .settings-dialog .setting-item:hover {
+  background: rgba(0, 0, 0, 0.025);
+}
+:root[data-layout="workspace"][data-base="dark"] .settings-dialog .setting-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+:root[data-layout="workspace"] .settings-dialog .setting-name {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text);
+}
+:root[data-layout="workspace"] .settings-dialog .setting-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 强调色选择胶囊 (Accent Pills) 现代卡片化 */
+:root[data-layout="workspace"] .accent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+:root[data-layout="workspace"] .accent-pill {
+  height: 30px;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+:root[data-layout="workspace"][data-base="dark"] .accent-pill {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+:root[data-layout="workspace"] .accent-pill:hover {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.16);
+  transform: translateY(-0.5px);
+}
+:root[data-layout="workspace"][data-base="dark"] .accent-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+:root[data-layout="workspace"] .accent-pill.on {
+  background: #ffffff;
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 1px 3px rgba(0, 0, 0, 0.04);
+  font-weight: 650;
+}
+:root[data-layout="workspace"][data-base="dark"] .accent-pill.on {
+  background: #232630;
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+:root[data-layout="workspace"] .accent-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* 详情弹窗 (DetailDialog) 视觉修饰 */
+:root[data-layout="workspace"] .detail-dialog {
+  width: min(500px, calc(100vw - 32px)) !important;
+}
+:root[data-layout="workspace"] .detail-identity {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 6px 0 14px;
+}
+:root[data-layout="workspace"][data-base="dark"] .detail-identity {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+:root[data-layout="workspace"] .detail-row {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  padding: 9px 0;
+}
+:root[data-layout="workspace"][data-base="dark"] .detail-row {
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+:root[data-layout="workspace"] .detail-key {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+:root[data-layout="workspace"] .detail-val {
+  font-size: 13px;
+  color: var(--text);
+}
+:root[data-layout="workspace"] .detail-path {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 550;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* 弹窗副标题（headCount / 身份邮箱） */
+:root[data-layout="workspace"] .dialog-header .sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: 8px;
+  margin-right: auto;
+}
+
+/* 子路径管理列表与表单入口 */
+:root[data-layout="workspace"] .path-row {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04) !important;
+  transition: background 0.15s ease;
+}
+:root[data-layout="workspace"][data-base="dark"] .path-row {
+  border-bottom-color: rgba(255, 255, 255, 0.05) !important;
+}
+:root[data-layout="workspace"] .path-tag {
+  border-radius: 6px !important;
+  font-weight: 550 !important;
+}
+:root[data-layout="workspace"] .paths-manage {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+  color: var(--text) !important;
+  transition: all 0.2s ease;
+}
+:root[data-layout="workspace"][data-base="dark"] .paths-manage {
+  background: rgba(16, 17, 21, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-layout="workspace"] .paths-manage:hover {
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  background: #ffffff !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .paths-manage:hover {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: #1c1e24 !important;
+}
+:root[data-layout="workspace"] .pwd-act {
+  color: var(--text-muted);
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+:root[data-layout="workspace"] .pwd-act:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* 凭据/授权分段栏容器留白 */
+:root[data-layout="workspace"] :is(.auth-tabs, .import-sources) {
+  padding: 0 20px 10px 20px !important;
+}
+
+:root[data-layout="workspace"] :is(.popover, .category-dropdown-teleported, .slash-menu) {
+  background: var(--panel-bg) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.02);
+  border-radius: 10px;
+}
+:root[data-layout="workspace"][data-base="dark"] :is(.popover, .category-dropdown-teleported, .slash-menu) {
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-layout="workspace"] .toast {
+  background: #ffffff;
+  color: #1e293b;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 30px -4px rgba(15, 23, 42, 0.12), 0 3px 10px -2px rgba(15, 23, 42, 0.04);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 550;
+  padding: 5px 16px 5px 7px;
+}
+:root[data-layout="workspace"][data-base="dark"] .toast {
+  background: #20232c;
+  color: #f1f3f7;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.5), 0 4px 12px -2px rgba(0, 0, 0, 0.3);
+}
+
+/* Featherlight 表单输入件（统一 8px 圆角、温润微边框与极致纤细 1px 精准聚焦） */
+:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input) {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input) {
+  background: rgba(16, 17, 21, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):hover {
+  border-color: rgba(0, 0, 0, 0.18);
+}
+:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):focus,
+:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):focus-visible {
+  background: #ffffff;
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):focus,
+:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):focus-visible {
+  background: #181a20;
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* 输入框占位符：采用统一规范 UI 字体与优雅温润中性弱化色 */
+:root[data-layout="workspace"] :is(.form-group input, .form-group textarea, .text-input, .select-input, .dialog input, .dialog textarea)::placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-ui) !important;
+  font-size: 13px;
+}
+
+/* 组合路径输入控件：外层容器统一度量，内层 input 与动作区融合，去除多余右边框与内边框 */
+:root[data-layout="workspace"] .path-input-row {
+  display: flex !important;
+  align-items: stretch !important;
+  height: 32px !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  overflow: hidden !important;
+  transition: border-color 0.15s ease, background-color 0.15s ease !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .path-input-row {
+  background: rgba(16, 17, 21, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-layout="workspace"] .path-input-row:hover {
+  border-color: rgba(0, 0, 0, 0.18) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .path-input-row:hover {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+:root[data-layout="workspace"] .path-input-row:focus-within {
+  border-color: var(--accent) !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .path-input-row:focus-within {
+  border-color: var(--accent) !important;
+  background: #181a20 !important;
+  box-shadow: none !important;
+}
+:root[data-layout="workspace"] .path-input-row input,
+:root[data-layout="workspace"] .path-input-row input:focus,
+:root[data-layout="workspace"] .path-input-row input:focus-visible {
+  border: none !important;
+  border-right: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  height: 100% !important;
+}
+:root[data-layout="workspace"] .path-acts {
+  display: flex !important;
+  align-items: center !important;
+  border-left: 1px solid rgba(0, 0, 0, 0.08) !important;
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .path-acts {
+  border-left-color: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+:root[data-layout="workspace"] .path-act {
+  height: 100% !important;
+  width: 32px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+:root[data-layout="workspace"] .path-act:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: var(--accent) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .path-act:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--accent) !important;
+}
+
+/* 全站输入件激活态强制收敛：极细 1px 单线描边，坚决消除任何外扩光晕与粗重环圈 */
+:root[data-layout="workspace"] :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea,
+  .form-group input,
+  .form-group select,
+  .form-group textarea,
+  .text-input,
+  .select-input,
+  .number-input,
+  .search-box input
+):focus,
+:root[data-layout="workspace"] :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea,
+  .form-group input,
+  .form-group select,
+  .form-group textarea,
+  .text-input,
+  .select-input,
+  .number-input,
+  .search-box input
+):focus-visible {
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* 小记输入卡片与便签编辑态聚焦：收敛为精致 1px 微描边，坚决消除 3px 粗厚光圈 */
+:root[data-layout="workspace"] :is(.composer, .workspace-main .composer):focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+:root[data-layout="workspace"] :is(.memo.editing, .workspace-main .memo.editing, .memo:focus-visible) {
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Linear / Raycast 极简工作台基础底色 */
+:root[data-layout="workspace"] .app-root.codex-layout:not(.locked-bg) {
+  background-color: var(--bg-workspace);
+  background-image: var(--bg-aura);
+  background-attachment: fixed;
+}
+
+/* 导航侧栏：轻盈无界羽量导轨 */
+:root[data-layout="workspace"]:not(.web-runtime) .sidebar {
+  background: transparent;
+  border-right: none;
+}
+
+/* 标题栏：轻量融入顶沿，去除厚重底线 */
+:root[data-layout="workspace"]:not(.web-runtime) .titlebar.titlebar-outer {
+  background: transparent;
+  border-bottom: none;
+}
+
+/* 原生窗体物理收边：精工微反光刃线与托盘内嵌景深 */
+:root[data-layout="workspace"]:not(.web-runtime) .app-root {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 0 0 1px var(--border-card, rgba(0, 0, 0, 0.05)),
+    inset 0 2px 14px rgba(0, 0, 0, 0.02);
+}
+:root[data-layout="workspace"][data-base="dark"]:not(.web-runtime) .app-root {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 2px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* 顶栏控制组：去除生硬竖向分割线，视野通畅 */
+:root[data-layout="workspace"] .titlebar-outer .titlebar-buttons::before {
+  display: none;
+}
+
+/* 小记视图药丸：去除旧版下划线，采用纯粹悬浮胶囊 */
+:root[data-layout="workspace"] :is(.notes-workbar, .view-pills-wrap) :is(.pill-tab, .wb-tab)::after {
+  display: none !important;
+}
+
+/* 小记便签页面：顶栏动作栏与主舞台宽度保持一致的 760px 呼吸轴线 */
+:root[data-layout="workspace"] .workspace-main:has(.notes-page) .workspace-head {
+  padding-top: 10px;
+  padding-bottom: 4px;
+}

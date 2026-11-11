@@ -1219,9 +1219,9 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 .note-editor:not(.v-full) :deep(li) { margin: 2px 0; }
 .note-editor:not(.v-full) :deep(li::marker) { color: var(--text-faint); }
 .note-editor:not(.v-full) :deep(strong) { font-weight: 600; color: var(--text); }
-.note-editor:not(.v-full) :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
-.note-editor:not(.v-full) :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
-.note-editor:not(.v-full) :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.note-editor:not(.v-full) :deep(blockquote) { border-left: 3px solid var(--accent); padding-left: var(--space-3); margin-left: 0; color: var(--text-secondary); }
+.note-editor:not(.v-full) :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1.5px 6px; color: var(--accent-active); }
+.note-editor:not(.v-full) :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.65; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 8px; padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .note-editor:not(.v-full) :deep(pre code) { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
 .note-editor:not(.v-full) :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-3) 0; }
 .note-editor:not(.v-full) :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--space-1); }
@@ -1235,15 +1235,17 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 
 .slash-menu {
   position: fixed;
-  width: 208px;
+  width: 216px;
   z-index: 300;
-  padding: 4px;
+  padding: 5px;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  background: var(--bg-surface);
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
 .slash-menu::-webkit-scrollbar { width: 4px; }
@@ -1255,11 +1257,15 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 5px 7px;
-  border-radius: var(--radius);
+  padding: 6px 8px;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text);
-  transition: background var(--transition-fast);
+  transition: all var(--transition-fast);
+}
+
+.slash-item:hover {
+  background: var(--hover);
 }
 
 .sm-icon { flex-shrink: 0; color: var(--text-secondary); }
@@ -1285,25 +1291,30 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 
 .sm-empty { padding: 9px 7px; font-size: var(--text-sm); color: var(--text-muted); }
 
-.slash-item.active { background: var(--accent-soft); }
-.slash-item.active .sm-label { color: var(--accent-active); font-weight: 500; }
-.slash-item.active .sm-icon, .slash-item.active .sm-badge { color: var(--accent-active); }
-.slash-item.active .sm-hint { color: var(--accent-active); opacity: 0.6; }
+.slash-item.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+.slash-item.active .sm-label { color: #ffffff; font-weight: 500; }
+.slash-item.active .sm-icon, .slash-item.active .sm-badge { color: #ffffff; }
+.slash-item.active .sm-hint { color: rgba(255, 255, 255, 0.85); }
 
-/* 选中浮动条：与 .slash-menu 同一档浮层语言，28px 控件跟着卡面动作排那条轴 */
+/* 选中浮动条：macOS 质感磨砂悬浮胶囊工具条 */
 .fmt-bar {
   position: fixed;
   z-index: 300;
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   width: max-content;
   min-height: 36px;
-  padding: 3px;
-  background: var(--bg-surface);
+  padding: 4px;
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: var(--shadow-pop);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .fmt-btn {
@@ -1315,10 +1326,10 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   padding: 0;
   border: none;
   background: transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: all var(--transition-fast);
 }
 
 /* B / I / S 用字面形，不为一枚字母新增图标 */
@@ -1330,37 +1341,39 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
 }
 .fmt-glyph.i { font-style: italic; font-weight: 600; }
 .fmt-glyph.s { text-decoration: line-through; }
-.fmt-divider { width: 1px; height: 16px; margin: 0 4px; background: var(--border); flex-shrink: 0; }
+.fmt-divider { width: 1px; height: 16px; margin: 0 3px; background: var(--border); flex-shrink: 0; }
 
-.fmt-btn:hover { background: var(--hover-chrome); color: var(--text); }
-.fmt-btn.on { background: var(--accent-soft); color: var(--accent-active); }
+.fmt-btn:hover { background: var(--hover); color: var(--text); }
+.fmt-btn.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 .fmt-text {
-  height: 22px;
-  padding: 0 6px;
+  height: 24px;
+  padding: 0 8px;
   border: none;
   background: transparent;
   border-radius: 6px;
   font-size: var(--text-xs);
   color: var(--text-secondary);
   cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.fmt-text:hover { background: var(--hover-chrome); color: var(--text); }
+.fmt-text:hover { background: var(--hover); color: var(--text); }
 
 .fmt-input {
   width: 168px;
-  height: 22px;
-  padding: 0 6px;
+  height: 24px;
+  padding: 0 8px;
   border: 1px solid var(--border);
-  border-radius: 5px;
-  background: transparent;
+  border-radius: 6px;
+  background: var(--bg-surface);
   color: var(--text);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.fmt-input:focus { outline: none; border-color: var(--accent); }
+.fmt-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); }
 .fmt-input.bad { border-color: var(--danger); }
 
 .paste-link-prompt {
@@ -1370,17 +1383,19 @@ defineExpose({ focusEnd, insertText, insertImage, undo, redo, canUndo, canRedo }
   align-items: center;
   gap: 6px;
   max-width: min(360px, calc(100vw - 24px));
-  padding: 4px 6px;
-  background: var(--bg-surface);
+  padding: 5px 8px;
+  background: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--border);
-  border-radius: var(--radius-ib);
-  box-shadow: var(--shadow-pop);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
   font-size: var(--text-xs);
 }
 
 .paste-link-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
-.paste-link-prompt button { flex-shrink: 0; border: 0; border-radius: 6px; padding: 4px 6px; background: transparent; color: var(--accent-active); cursor: pointer; }
-.paste-link-prompt button:hover { background: var(--hover-chrome); }
+.paste-link-prompt button { flex-shrink: 0; border: 0; border-radius: 6px; padding: 4px 8px; background: transparent; color: var(--accent); font-weight: 500; cursor: pointer; }
+.paste-link-prompt button:hover { background: var(--hover); }
 
 .lang-selector {
   position: absolute;

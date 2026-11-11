@@ -284,13 +284,15 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* 定高与导入弹窗同档：切登录方式、报错出现都不许改高度（弹窗基线：不得按内容收放）。 */
-.auth-dialog { width: 520px; height: min(480px, calc(100dvh - 40px)); }
+/* 紧凑精致定高：消除多余留白且杜绝滚动条 */
+.auth-dialog { width: 520px; height: min(360px, calc(100dvh - 40px)); }
 .auth-tabs { padding: 0 var(--space-4); flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .auth-tabs .seg { margin-bottom: 0; }
 .auth-import-link { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 4px 0; background: none; border: 0; color: var(--text-muted); font: inherit; font-size: var(--text-xs); cursor: pointer; }
 .auth-import-link:hover:not(:disabled) { color: var(--text-brand); }
-.auth-content { min-height: 0; }
+.auth-content { min-height: 0; overflow-y: auto; scrollbar-gutter: auto; padding: 8px 20px 14px 20px; }
+.auth-content .form-group { margin-bottom: 10px; }
+.auth-content .form-group label { margin-bottom: 4px; }
 .reauth-identity { margin: 0 0 var(--space-3); color: var(--text-secondary); font-size: var(--text-description); overflow-wrap: anywhere; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .note { font-size: var(--text-description); color: var(--warning); line-height: 1.6; }

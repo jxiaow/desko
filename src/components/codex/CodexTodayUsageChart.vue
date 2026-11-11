@@ -100,9 +100,9 @@ function hourTitle(hour: CodexUsageHour, format: (value: number) => string): str
 .today-heading-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: var(--text-xs); color: var(--text-muted); }
 .today-peak b { font-weight: 500; color: var(--text-secondary); }
 .hourly-svg { display: block; width: 100%; height: 180px; overflow: visible; margin-top: 8px; }
-.hour-grid line { stroke: var(--border); stroke-dasharray: 3 4; }
+.hour-grid line { stroke: color-mix(in srgb, var(--border) 50%, transparent); stroke-dasharray: 3 4; }
 .hour-grid text, .hour-x, .hour-future-label { fill: var(--text-muted); font-size: var(--text-xs); font-family: var(--font-ui); font-variant-numeric: tabular-nums; }
-.hour-future { fill: var(--fill); opacity: .5; }
+.hour-future { fill: color-mix(in srgb, var(--border) 25%, transparent); opacity: .5; }
 .hour-future-label { fill: var(--text-faint); }
 .hour-area { fill: var(--accent); opacity: .08; }
 .hour-line { stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }

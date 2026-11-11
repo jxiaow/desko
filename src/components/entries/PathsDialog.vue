@@ -68,66 +68,59 @@ onMounted(() => pathRef.value?.focus())
 </script>
 
 <template>
-  <Transition name="dialog">
-    <div class="dialog-overlay paths-overlay">
-      <div class="dialog paths-dialog" role="dialog" aria-modal="true" :aria-label="`子路径管理：${entryName}`">
-        <div class="dialog-header">
-          <h3>子路径</h3>
-          <span class="sub">{{ headCount }}</span>
-          <button class="dialog-close" type="button" title="关闭 (Esc)" @click="emit('close')">
-            <AppIcon name="x" :size="16" />
+  <div class="dialog paths-dialog" role="dialog" aria-modal="true" :aria-label="`子路径管理：${entryName}`">
+    <div class="dialog-header">
+      <h3>子路径</h3>
+      <span class="sub">{{ headCount }}</span>
+      <button class="dialog-close" type="button" title="关闭 (Esc)" @click="emit('close')">
+        <AppIcon name="x" :size="16" />
+      </button>
+    </div>
+
+    <div ref="listRef" class="dialog-body paths-body">
+      <div v-for="(path, index) in activePaths" :key="path.id" class="path-row">
+        <span class="path-tag" :title="path.label || undefined">{{ path.label || '未命名' }}</span>
+        <span class="path-sep">/</span>
+        <span class="path-value" :title="path.path">{{ path.path.replace(/^\//, '') }}</span>
+        <span class="path-acts">
+          <button v-if="baseUrl" class="ib" type="button" title="在浏览器打开" @click="emit('openUrl', fullPath(path))">
+            <AppIcon name="external" :size="14" />
           </button>
-        </div>
+          <button class="ib" type="button" title="复制路径" @click="clipboard.copyToClipboard(path.path, '路径')">
+            <AppIcon name="copy" :size="14" />
+          </button>
+          <button class="ib danger" type="button" title="删除路径" @click="removePath(index)">
+            <AppIcon name="trash" :size="14" />
+          </button>
+        </span>
+      </div>
 
-        <div ref="listRef" class="dialog-body paths-body">
-          <div v-for="(path, index) in activePaths" :key="path.id" class="path-row">
-            <span class="path-tag" :title="path.label || undefined">{{ path.label || '未命名' }}</span>
-            <span class="path-sep">/</span>
-            <span class="path-value" :title="path.path">{{ path.path.replace(/^\//, '') }}</span>
-            <span class="path-acts">
-              <button v-if="baseUrl" class="ib" type="button" title="在浏览器打开" @click="emit('openUrl', fullPath(path))">
-                <AppIcon name="external" :size="14" />
-              </button>
-              <button class="ib" type="button" title="复制路径" @click="clipboard.copyToClipboard(path.path, '路径')">
-                <AppIcon name="copy" :size="14" />
-              </button>
-              <button class="ib danger" type="button" title="删除路径" @click="removePath(index)">
-                <AppIcon name="trash" :size="14" />
-              </button>
-            </span>
-          </div>
-
-          <div class="path-row path-add">
-            <input ref="labelRef" v-model="draft.label" class="add-label" placeholder="标签" maxlength="20" @keydown.enter.prevent="addPath" />
-            <span class="path-sep">/</span>
-            <input ref="pathRef" v-model="draft.path" class="add-path url-mono" placeholder="dashboard" @keydown.enter.prevent="addPath" />
-            <button class="btn-primary" type="button" @click="addPath">添加</button>
-          </div>
-        </div>
-
-        <div class="dialog-footer">
-          <div class="footer-hints">
-            <span class="kbd">Enter</span><span>添加</span>
-            <span class="hints-dot">·</span>
-            <span class="kbd">Esc</span><span>关闭</span>
-          </div>
-          <button class="btn-primary" type="button" @click="emit('close')">完成</button>
-        </div>
+      <div class="path-row path-add">
+        <input ref="labelRef" v-model="draft.label" class="add-label" placeholder="标签" maxlength="20" @keydown.enter.prevent="addPath" />
+        <span class="path-sep">/</span>
+        <input ref="pathRef" v-model="draft.path" class="add-path url-mono" placeholder="dashboard" @keydown.enter.prevent="addPath" />
+        <button class="btn-primary" type="button" @click="addPath">添加</button>
       </div>
     </div>
-  </Transition>
+
+    <div class="dialog-footer">
+      <div class="footer-hints">
+        <span class="kbd">Enter</span><span>添加</span>
+        <span class="hints-dot">·</span>
+        <span class="kbd">Esc</span><span>关闭</span>
+      </div>
+      <button class="btn-primary" type="button" @click="emit('close')">完成</button>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.paths-overlay {
-  /* 与全局一致：纯色压暗，不做 backdrop 采样（页内弹窗在画布之上会发灰）。 */
-  background: var(--overlay);
-}
-
 /* 壳（宽高/描边/投影/头 44/底栏）全在 global.css，这里只留本页独有的列表行 */
 .paths-dialog {
-  width: 520px;
-  max-height: 91vh;
+  width: 460px;
+  max-width: calc(100vw - 32px);
+  max-height: 85vh;
+  border-radius: 14px;
 }
 
 .paths-body { max-height: 46vh }

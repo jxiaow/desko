@@ -144,7 +144,7 @@ onUnmounted(() => { active = false })
         </template>
         <div v-else-if="source === 'json'" class="form-group">
           <label for="cx-paste">账号 JSON <span class="req" aria-hidden="true">*</span></label>
-          <textarea id="cx-paste" v-model="pasteJson" class="mono paste-box" rows="6" spellcheck="false" :disabled="busy" placeholder="粘贴 auth.json 或 Desko 导出的账号 JSON，一条或数组均可" />
+          <textarea id="cx-paste" v-model="pasteJson" class="mono paste-box" rows="4" spellcheck="false" :disabled="busy" placeholder="粘贴 auth.json 或 Desko 导出的账号 JSON，一条或数组均可" />
         </div>
         <template v-else>
           <div class="token-modes seg" role="group" aria-label="Token 类型">
@@ -179,14 +179,16 @@ onUnmounted(() => { active = false })
 </template>
 
 <style scoped>
-.codex-import-dialog { width: 520px; height: min(480px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); }
+.codex-import-dialog { width: 520px; height: min(360px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); }
 .import-sources { margin: 0 var(--space-4); flex-shrink: 0; }
-.import-content { min-height: 0; }
+.import-content { min-height: 0; overflow-y: auto; scrollbar-gutter: auto; padding: 8px 20px 12px 20px; }
+.import-content .form-group { margin-bottom: 8px; }
+.import-content .form-group label { margin-bottom: 4px; }
 .mono, .pathline code { font-family: var(--font-mono); }
 .paste-box { line-height: 1.6; font-size: var(--text-sm); resize: vertical; }
 .pathline { display: flex; flex-direction: column; gap: var(--space-2); padding-block: var(--space-3); }
 .pathline .k { color: var(--text-muted); font-size: var(--text-xs); }
 .pathline code { color: var(--text-secondary); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .import-file-list { padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--text-xs); overflow-wrap: anywhere; }
-.token-modes { margin-bottom: var(--space-3); }
+.token-modes { margin-bottom: 8px; }
 </style>

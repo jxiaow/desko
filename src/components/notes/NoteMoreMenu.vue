@@ -69,7 +69,7 @@ const exec = (action: () => void) => {
     :disabled="props.sealed && props.exportDisabled"
     @click.stop="props.sealed ? toggleExport() : toggleMain()"
   >
-    <AppIcon :name="props.sealed ? 'download' : 'dots'" :size="props.variant === 'bar' ? 13 : 15" />
+    <AppIcon :name="props.sealed ? 'download' : 'dots'" :size="props.variant === 'bar' ? 13 : 14" />
   </button>
 
   <PopoverMenu v-if="exportOpen" :anchor="trigger" :width="184" @close="exportOpen = false">
@@ -137,8 +137,8 @@ const exec = (action: () => void) => {
   .note-mobile-action { display: flex; min-height: 44px; }
 }
 /* 钮在别的组件里（本组件是多根，宿主 scoped 规则进不来），尺寸自己按宿主档位补齐 */
-.ib.more { width: 26px; height: 26px; border-radius: 6px; }
-.bar-btn.more { height: 32px; min-width: 32px; padding: 0 var(--space-2); }
+.ib.more { width: 24px; height: 24px; border-radius: 5px; }
+.bar-btn.more { height: 26px; min-width: 26px; padding: 0; border-radius: 6px; }
 .pop-caret { margin-left: auto; color: var(--text-faint); display: inline-flex; }
 .export-menu-title { padding: 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--text-muted); }
 .export-menu-extension { margin-left: auto; font-size: var(--text-xs); color: var(--text-faint); }

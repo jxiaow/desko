@@ -237,13 +237,19 @@ onUnmounted(() => {
 <style scoped>
 .web-mobile-header { display: none; }
 .titlebar-wordmark { display: none; }
-.titlebar.titlebar-outer { height: var(--window-bar-height, 34px); flex: 0 0 var(--window-bar-height, 34px); overflow: hidden; }
+.titlebar.titlebar-outer {
+  height: 40px;
+  flex: 0 0 40px;
+  overflow: hidden;
+  /* 轻盈无界：无底线、自然融入天空 */
+  border-bottom: none;
+  background: transparent;
+}
 .titlebar-brandcell { width: var(--sidebar-rail-w, 56px); flex: 0 0 var(--sidebar-rail-w, 56px); align-self: stretch; display: flex; align-items: center; justify-content: center; z-index: 2; }
 .titlebar-brandcell { background: transparent; }
 .app-root:not(.web-runtime):not(.sidebar-hidden) .titlebar-brandcell {
-  /* 品牌格与侧栏连成一列：同一块导轨底色，窗口控件那侧继续坐内容色。
-     分界只由底色这一档承担，导轨右缘不再画竖线（和下面的侧栏同一配方）。 */
-  background: var(--bg-rail, var(--bg-sheet));
+  background: transparent;
+  border-right: none;
   justify-content: flex-start;
   padding-left: 15px;
 }
@@ -251,8 +257,8 @@ onUnmounted(() => {
 .titlebar-fs-slot { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; }
 /* 标题栏这一行：左端整段留给拖窗，页名与条数压在正文那条阅读列的左缘上，
    页级动作仍住内容区页头，不搬上来。 */
-.titlebar-crumb { min-width: 0; font-size: var(--text-sm); font-weight: 600; line-height: 20px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.titlebar-count { flex: 0 0 auto; margin-left: 8px; font-size: var(--text-xs); line-height: 20px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.titlebar-crumb { min-width: 0; font-size: var(--text-sm); font-weight: 600; line-height: 20px; color: var(--text); letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titlebar-count { flex: 0 0 auto; margin-left: 8px; font-size: 11px; line-height: 16px; font-weight: 500; padding: 1px 7px; border-radius: 999px; background: var(--fill); color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .titlebar-outer .sidebar-toggle {
   position: absolute;
   left: calc(-1 * var(--workspace-content-padding) - var(--sheet-inset-left) + 4px);

@@ -472,6 +472,7 @@ onMounted(() => {
   overflow: hidden;
   box-shadow: var(--shadow-pop);
   border: 1px solid var(--border);
+  transition: none !important;
 }
 
 /* 左菜单 / 右内容。菜单取侧栏那套令牌，跟应用主窗口的导航同构。 */
@@ -702,6 +703,12 @@ onMounted(() => {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
+  /* Windows 11 Fluent 主题预览卡悬停反馈 */
+  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+.theme-prev:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--border-hover);
 }
 /* 侧栏：占左边 30%，顶部一枚 accent 圆点当 logo，下面两条导航字条 */
 .tp-rail {
@@ -771,7 +778,7 @@ onMounted(() => {
   border-radius: var(--radius-pill);
 }
 .tp-row:nth-child(2) { background: var(--bg-surface-hover); }
-.workspace-theme-prev { width: 100%; height: auto; aspect-ratio: 16 / 10; background: var(--bg-workspace); }
+.workspace-theme-prev { width: 100%; height: auto; aspect-ratio: 16 / 10; background-color: var(--bg-workspace); background-image: var(--bg-aura); }
 .workspace-theme-prev .tp-rail { width: 12%; background: transparent; border: 0; }
 .workspace-theme-prev .tp-rail-dot { left: 3px; top: 12px; width: 4px; height: 5px; }
 .workspace-theme-prev .tp-rail-line { left: 3px; top: 26px; width: 4px; }
@@ -867,7 +874,7 @@ onMounted(() => {
 /* 背板淡入的同时，面板从 0.985 抬起：只动 transform，不参与布局。 */
 .dialog-enter-active .settings-dialog,
 .dialog-leave-active .settings-dialog {
-  transition: transform 0.2s cubic-bezier(.2, .8, .2, 1), opacity 0.2s ease;
+  transition: transform 0.2s cubic-bezier(.2, .8, .2, 1), opacity 0.2s ease !important;
 }
 .dialog-enter-from .settings-dialog,
 .dialog-leave-to .settings-dialog {

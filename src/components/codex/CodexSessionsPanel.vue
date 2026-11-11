@@ -550,9 +550,23 @@ async function copySessionValue(value: string, label: string) {
 .sess-browser { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 
 .sess-list { min-width: 0; display: grid; gap: 10px; }
-.sess-row { border: 0; background: transparent; display: flex; align-items: center; gap: 16px; width: 100%; min-width: 0; min-height: 78px; margin: 0; padding: 16px 20px; text-align: left; color: var(--text); font: inherit; cursor: pointer; }
-.sess-item { margin: 0; }
-.sess-item.is-selected { border-color: color-mix(in srgb, var(--accent) 38%, var(--border-card)); }
+.sess-row { border: 0; background: transparent !important; display: flex; align-items: center; gap: 16px; width: 100%; min-width: 0; min-height: 78px; margin: 0; padding: 16px 20px; text-align: left; color: var(--text); font: inherit; cursor: pointer; }
+.sess-row:focus-visible { outline: none; }
+.sess-item {
+  margin: 0;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.sess-item:hover {
+  border-color: var(--card-line-hover, var(--accent)) !important;
+  box-shadow: var(--shadow-card-hover) !important;
+}
+.sess-item:hover .sess-title {
+  color: var(--text);
+}
+.sess-item:hover .sess-toggle {
+  color: var(--accent);
+}
+.sess-item.is-selected { border-color: color-mix(in srgb, var(--accent) 45%, var(--border-card)); }
 .sess-toggle { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; font-size: var(--text-xs); color: var(--text-muted); }
 .sess-main { flex: 1; min-width: 0; display: grid; gap: 7px; }
 .sess-title { display: block; min-width: 0; font-size: var(--text-base); line-height: 1.5; font-weight: 500; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

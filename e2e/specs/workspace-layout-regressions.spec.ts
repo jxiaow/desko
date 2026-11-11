@@ -121,7 +121,8 @@ for (const width of [800, 1040, 1920]) {
         const cs = getComputedStyle(el)
         return { border: cs.borderTopColor, shadow: cs.boxShadow, radius: cs.borderTopLeftRadius }
       })
-      if (route === 'notes') expect(face.radius).toBe('14px')
+      // 文房工匠：便签圆角 14px → 8px（--radius-slip），卡面依然是零影 + 一条发丝线。
+      if (route === 'notes') expect(face.radius).toBe('8px')
       // 内容区一律无影（docs/design/layering/02-content-shadow-retire.md）：五页共用一条发丝边。
       expect(face.border).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
       expect(face.shadow).toBe('none')

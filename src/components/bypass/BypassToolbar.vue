@@ -57,9 +57,59 @@ const probeLabel = (kind: ProbeJob['kind']) => ({ probe: '正在探测', row: '�
 .bp-probe { padding: var(--space-4) 0 var(--space-5); border-bottom: 1px solid var(--border); }
 .probe-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-3); font-size: var(--text-base); font-weight: 600; color: var(--text); }
 .probe-heading span { font-size: var(--text-xs); font-weight: 400; color: var(--text-muted); }
-.bp-probe .page-bar { height: auto; min-height: 0; margin: 0; padding: 0; gap: var(--space-2); }
-.bp-probe .probe-box { flex: 1 1 auto; min-width: 0; margin-right: 0; }
-.bp-probe .btn-primary { height: 36px; flex-shrink: 0; }
+.bp-probe .page-bar {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  min-height: 48px;
+  margin: 0;
+  padding: 4px 6px 4px 14px;
+  gap: var(--space-2);
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: border-color var(--transition-fast);
+}
+.bp-probe .page-bar:hover {
+  border-color: var(--border-hover, rgba(0, 0, 0, 0.2));
+}
+.bp-probe .page-bar:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+}
+.bp-probe .probe-box {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  width: auto !important;
+  margin: 0 !important;
+  height: 100% !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+.bp-probe .probe-box input,
+.bp-probe .probe-box input:focus,
+.bp-probe .probe-box input:focus-visible {
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: var(--text-sm);
+  color: var(--text);
+  width: 100%;
+  height: 100%;
+}
+.bp-probe .btn-primary {
+  height: 38px;
+  flex-shrink: 0;
+  margin-left: auto;
+  border-radius: 7px;
+  padding: 0 16px;
+}
 .probe-help { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--text-muted); }
 .bp-probe-progress { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); min-height: 28px; color: var(--text-brand); }
 .probe-progress-text { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-xs); }

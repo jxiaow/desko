@@ -765,4 +765,45 @@ describe('NotesModule', () => {
     expect(useNotesStore().notes[0].archived).toBe(true)
     wrapper.unmount()
   })
+
+  it('内容类型驱动卡面骨架，v-html 正文树保持原样', async () => {
+    stageNotes([
+      makeNote({ id: 'link', content_html: '<p>https://github.com/tuojiaxin/TG</p>' }),
+      makeNote({ id: 'cmd', content_html: '<p>python3 studio/scripts/preview-books.py</p>' }),
+      makeNote({
+        id: 'task',
+        content_html: '<p>发版前检查</p><ul data-type="taskList">'
+          + '<li data-checked="true"><input type="checkbox" checked><div>跑单测</div></li>'
+          + '<li data-checked="false"><input type="checkbox"><div>出安装包</div></li>'
+          + '<li data-checked="false"><input type="checkbox"><div>写日志</div></li></ul>',
+      }),
+      makeNote({ id: 'plain', content_html: '<p>普通一段话</p><p>还有第二行内容</p>' }),
+    ])
+    const wrapper = await mountModule()
+
+    const link = wrapper.find('.memo[data-kind="link"]')
+    expect(link.exists()).toBe(true)
+    // 分类只驱动 data-kind 上的造型，正文仍是原来那棵 v-html 树
+    expect(link.find('.memo-body').text()).toContain('github.com')
+    expect(link.find('.memo-kind').text()).toBe('链接')
+    expect(link.find('.memo-stat').text()).toBe('github.com')
+
+    expect(wrapper.find('.memo[data-kind="command"] .memo-kind').text()).toBe('命令')
+    expect(wrapper.find('.memo[data-kind="task"] .memo-stat').text()).toBe('1/3')
+    expect(wrapper.find('.memo[data-kind="task"] .memo-body input[type="checkbox"]').exists()).toBe(true)
+    expect(wrapper.find('.memo[data-kind="text"] .memo-stat').text()).toMatch(/字$/)
+    wrapper.unmount()
+  })
+
+  it('时间与类型、读数同住卡底 meta 行，绝对时刻常驻 title', async () => {
+    stageNotes([makeNote({ content_html: '<p>甲内容</p>' })])
+    const wrapper = await mountModule()
+    const memo = wrapper.find('.memo')
+    expect(memo.find('.memo-head .memo-time').exists()).toBe(false)
+    const time = memo.find('.memo-foot .memo-time')
+    expect(time.exists()).toBe(true)
+    expect(time.attributes('title')).toContain('创建于')
+    expect(memo.find('.memo-foot .memo-kind').text()).toBe('小记')
+    wrapper.unmount()
+  })
 })

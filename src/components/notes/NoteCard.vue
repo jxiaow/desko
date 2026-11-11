@@ -8,6 +8,7 @@ import NoteMoreMenu from './NoteMoreMenu.vue'
 import AppIcon from '../shared/AppIcon.vue'
 import { formatAbsTime, formatRelativeTime, stripTagsFromHtml } from '../../utils/format'
 import { noteDisplay } from '../../utils/noteDisplay'
+import { noteKind } from '../../utils/noteKind'
 import { sanitizeNoteHtml } from '../../utils/sanitizeNoteHtml'
 import { resolveAssetHtml, unreferencedAttachments, type SaveImage } from '../../services/attachmentSrc'
 import type { Note, Attachment } from '../../types'
@@ -204,6 +205,33 @@ const voiceFirst = computed(() => display.value.voiceFirst)
 const titleText = computed(() => display.value.title || props.note.title || '未命名')
 const edited = computed(() => props.note.updated_at - props.note.created_at > 60_000)
 
+/**
+ * 卡面按内容类型长骨架（docs/design/notes 之外的新一层）。
+ * 只做派生：.memo-body 的 v-html 一棵节点都不改——toggleTask 靠「渲染序 == 库序」
+ * 对位落库、applyClamp 靠顶层块边界截断、openLinkFromClick 与图片 asset URL 都挂在上面。
+ * 分类结果只驱动 data-kind 上的 :deep() 造型和卡底 meta，不产生第二套正文 DOM。
+ */
+const kindInfo = computed(() => noteKind(locked.value ? '' : bodyHtml.value))
+const kind = computed(() => kindInfo.value.kind)
+const KIND_LABEL: Record<string, string> = {
+  link: '链接', command: '命令', task: '待办', code: '代码', image: '图片', text: '小记',
+}
+const kindLabel = computed(() => {
+  if (kind.value === 'text' || !kind.value) return ''
+  return KIND_LABEL[kind.value] ?? ''
+})
+/** 卡底那条 meta 轴上，只有这类内容才多给一个读数 */
+const kindStat = computed(() => {
+  const k = kindInfo.value
+  if (k.kind === 'text') return k.chars ? `${k.chars} 字` : ''
+  if (k.kind === 'task' && k.total) return `${k.done}/${k.total}`
+  if (k.kind === 'link') return k.host ?? ''
+  return ''
+})
+/** 相对时间只是扫读用的短标签，绝对时刻常驻在 title 里（未编辑的卡也要查得到） */
+const timeTitle = computed(() =>
+  `创建于 ${formatAbsTime(props.note.created_at)}${edited.value ? ` · 更新于 ${formatAbsTime(props.note.updated_at)}` : ''}`)
+
 /** 列表标签只在底部展示，与筛选、分类共用 noteMeta 的派生结果。 */
 const noteTags = computed(() => (locked.value ? [] : noteMeta(props.note.content_html).tags))
 
@@ -274,6 +302,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     ref="rootEl"
     class="memo"
     :class="{ pinned: props.note.pinned, batchable: props.isBatchMode, 'is-sel': props.isSelected, locked, 'without-title': !display.title }"
+    :data-kind="locked ? 'locked' : kind"
     tabindex="0"
     role="button"
     :aria-pressed="props.isBatchMode ? props.isSelected : undefined"
@@ -286,27 +315,27 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
     </span>
 
     <div class="memo-head" @click="onHeadClick">
-      <span v-if="props.note.pinned" class="memo-pin" aria-hidden="true"><AppIcon name="pin" :size="12" /></span>
-      <span v-if="display.title" class="memo-title">{{ display.title }}</span>
-      <template v-if="!locked">
-        <span class="memo-state">
-          <span v-if="props.note.starred" class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
-        </span>
-        <span class="memo-time" :title="edited ? `更新于 ${formatAbsTime(props.note.updated_at)}` : undefined">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
-      </template>
+      <div class="head-left-group">
+        <span v-if="kindLabel" class="badge-pill" :class="kind">{{ kind === 'task' ? '✅ 待办进度' : kind === 'code' ? '💻 终端脚本' : kind === 'command' ? '⌨️ 快捷命令' : kind === 'link' ? '🔗 网址链接' : kind === 'image' ? '📷 案头图片' : '📝 便签小记' }}</span>
+        <span v-if="props.note.pinned" class="memo-pin" aria-hidden="true"><AppIcon name="pin" :size="12" /></span>
+        <span v-if="display.title" class="memo-title">{{ display.title }}</span>
+      </div>
+      <span v-if="!locked" class="memo-state">
+        <span v-if="props.note.starred" class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
+      </span>
     </div>
 
     <!-- hover 显形的动作排：常用五颗，其余进 ⋯（时间在排后让位，实底不吃正文） -->
     <span v-if="!props.isBatchMode" class="memo-acts" @click.stop>
       <template v-if="locked">
         <button class="ib" type="button" title="解锁" aria-label="解锁" @click.stop="emit('unlock')">
-          <AppIcon name="unlock" :size="16" />
+          <AppIcon name="unlock" :size="14" />
         </button>
         <NoteMoreMenu v-if="!isWebRuntime()" sealed :note="props.note" :export-disabled="props.exportDisabled" @export="emit('export', $event)" />
       </template>
       <template v-else>
         <button class="ib memo-edit memo-desktop-action" type="button" title="编辑" aria-label="编辑" @click.stop="openEditor">
-          <AppIcon name="edit" :size="16" />
+          <AppIcon name="edit" :size="14" />
         </button>
         <button
           v-if="!props.archivedView"
@@ -317,7 +346,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           :aria-label="props.note.pinned ? '取消置顶' : '置顶'"
           @click.stop="emit('togglePin')"
         >
-          <AppIcon name="pin" :size="16" />
+          <AppIcon name="pin" :size="14" />
         </button>
         <button
           v-else
@@ -327,10 +356,10 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           aria-label="取消归档"
           @click.stop="emit('toggleArchive')"
         >
-          <AppIcon name="unarchive" :size="16" />
+          <AppIcon name="unarchive" :size="14" />
         </button>
         <button class="ib" type="button" title="复制正文" aria-label="复制正文" @click.stop="emit('copy')">
-          <AppIcon name="copy" :size="16" />
+          <AppIcon name="copy" :size="14" />
         </button>
         <NoteMoreMenu
           :note="props.note"
@@ -360,7 +389,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       <span v-if="props.note.starred" class="memo-state">
         <span class="state-star" title="已收藏"><AppIcon name="star" :size="12" filled /></span>
       </span>
-      <span class="memo-time" :title="edited ? `更新于 ${formatAbsTime(props.note.updated_at)}` : undefined">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
+      <span class="memo-time" :title="timeTitle">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
     </div>
     <template v-else>
       <div
@@ -372,11 +401,8 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
       />
     </template>
 
-    <div v-if="!locked && (visibleAtts.length || noteTags.length)" class="memo-foot" @click="onHeadClick">
-      <span v-if="visibleAtts.length" class="memo-att" :title="`${visibleAtts.length} 个附件`">
-        <AppIcon name="clip" :size="12" />
-        {{ visibleAtts.length }}
-      </span>
+    <!-- 卡底 meta 轴 (对齐 Featherlight 原型 card-tail，左侧标签，右侧读数与时间) -->
+    <div v-if="!locked" class="memo-foot" @click="onHeadClick">
       <span v-if="noteTags.length" class="memo-tags">
         <button
           v-for="t in noteTags"
@@ -390,12 +416,20 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
           @click.stop="emit('tagClick', t)"
         >#{{ t }}</button>
       </span>
+      <span class="memo-foot-sp"></span>
+      <span v-if="kindLabel" class="memo-kind">{{ kindLabel }}</span>
+      <span v-if="kindStat" class="memo-stat">{{ kindStat }}</span>
+      <span v-if="visibleAtts.length" class="memo-att" :title="`${visibleAtts.length} 个附件`">
+        <AppIcon name="clip" :size="12" />
+        {{ visibleAtts.length }}
+      </span>
+      <span class="memo-time" :title="timeTitle">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
     </div>
   </article>
 
   <article v-else class="memo editing">
     <div class="edit-bar">
-      <span class="memo-time" :title="edited ? `更新于 ${formatAbsTime(props.note.updated_at)}` : undefined">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
+      <span class="memo-time" :title="timeTitle">{{ formatRelativeTime(props.note.created_at) }}<template v-if="edited"> · 已编辑</template></span>
       <NoteToolbar
         dense
         :show-state-actions="false"
@@ -436,45 +470,60 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   --memo-title-color: var(--text);
   position: relative;
   background: var(--bg-surface);
-  /* 落地档：影归零，边界只交给一条发丝线（docs/design/notes/13-slip-landed.md §3）。
-     一排短记各自带一圈灰时，影说的「我浮在上一层」在密集重复里失效，读成 12 块浮岛。
-     静息线复用全局 --border-card，与其它卡面同一条；只有 hover 另配一档更强的。 */
+  /* 轻羽实体便签质感：极淡发丝边 + 空气漫反射投影 */
   border: 1px solid var(--border-card);
-  border-radius: var(--radius-slip);
-  /* 左侧留勾选位：批量态显形时文字不位移（勾选即进，无布局跳动） */
-  padding: 15px var(--space-5) 13px var(--space-6);
-  box-shadow: none;
-  /* 正文列宽跟容器宽走，不跟视口走：侧栏收起/开合目录只改容器宽 */
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: var(--shadow-card-rest);
   container-type: inline-size;
   container-name: slip;
-  transition: box-shadow var(--transition), border-color var(--transition), background-color var(--transition);
-  /* 点正文就是打开阅读：卡是摘要，读全文去阅读层 */
+  transition: box-shadow var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
   cursor: pointer;
 }
 /* 浅色卡片标题用柔和深灰，层次仍由字号与字重承担。 */
 :global(:root[data-base="light"]) .memo {
-  --memo-title-color: color-mix(in srgb, var(--text) 35%, var(--text-secondary));
+  --memo-title-color: var(--text);
 }
-/* hover 只把线压深、不抬影也不洗底：摘掉影之后线是唯一的反馈，
-   12% 一档撑不出「变了」，所以内容卡统一用 22%（--card-line-hover）。 */
-.memo:hover { border-color: var(--card-line-hover); }
+/* 轻盈微抬升悬停动效 */
+.memo:hover {
+  border-color: var(--card-line-hover);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1.5px);
+}
+.memo:active {
+  transform: translateY(0);
+}
+/* 置顶便签左侧微光呼吸带 */
+.memo.pinned {
+  border-left: 3px solid var(--accent);
+}
 /* 置顶不再给卡面描一道强调色边：置顶已经有「置顶」分组标题说，同一列里两张不同的
    边框色只会让人以为"这张是选中的"。而且它的权重压过了 hover（两者同权、它在后），
    置顶卡反而少了悬停反馈。 */
-.memo.editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-.memo:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.memo.editing { border-color: var(--accent); box-shadow: none; }
+.memo:focus-visible { border-color: var(--accent); box-shadow: none; }
+
+/* 置顶不再往卡面加任何装饰：「置顶」分组标题 + 卡内小图钉已经说清。
+   文房工匠方案里的纸胶带做过两版（纯色矩形 / 两端渐隐），真机上 42×10 的淡色块
+   两种底色都读成一枚不明污渍，且会压在下方的时间文字上，已删，勿再加回。 */
 
 .memo-body {
   position: relative;
   max-height: var(--memo-max-h);
   overflow: hidden;
-  font-size: var(--text-base);
-  line-height: 22px;
-  /* 正文退一档字色：卡面上唯一保持 --text 的是标题声部那一行，
-     纸底白卡面 7.14:1 / 墨底 7.96:1，都在小字底线之上 */
+  font-size: 13.5px;
+  line-height: 1.65;
   color: var(--text-secondary);
   word-break: break-word;
   cursor: pointer;
+}
+.memo-body :deep(p) {
+  margin: 0;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.memo-body :deep(p + p) {
+  margin-top: 6px;
 }
 /* 截断卡：末行往下压一档渐隐，说「下面还有内容」。
    遮罩作用在文字本身（mask 而非叠一层底色渐变），纸墨两底与任何卡面令牌都不用配色；
@@ -488,15 +537,14 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-body.promoted :deep(> :first-child) { display: none; }
 /* 被藏掉的标题块的邻接段距不该把三行预算挤掉一行 */
 .memo-body.promoted :deep(> :first-child + *) { margin-top: 0; }
-/* 没有真标题的卡（真机里的绝大多数）：首块就是这张纸片的标题。
-   升不升由 noteDisplay 判（纯文字段落/标题、≤40 字、不含图片任务），
-   标题用 15/22 · 600，浅底降低颜色强度，仍与 14/22 · 400 的正文拉开层次。 */
-.memo-body.voice-first :deep(> :first-child) {
-  font-size: 15px;
+/* 只有首段为短标题且后面跟着第二段时，才将首段升为标题字阶；单段短笔记保持舒适正文字阶，不整张大加粗 */
+.memo-body.voice-first:has(> :nth-child(2)) :deep(> :first-child) {
+  font-size: 14.5px;
   line-height: 22px;
-  font-weight: var(--weight-semibold);
-  letter-spacing: -0.005em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--memo-title-color);
+  margin-bottom: 6px;
 }
 
 /* 加密锁标识：整张卡退化成一条封条——锁徽 + 标题/提示 + 时间，一行读完。
@@ -545,18 +593,127 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-body :deep(ul), .memo-body :deep(ol) { padding-left: var(--space-5); }
 .memo-body :deep(li) { margin: 2px 0; }
 .memo-body :deep(li::marker) { color: var(--text-faint); }
-.memo-body :deep(blockquote) { border-left: 2px solid var(--accent-light); padding-left: var(--space-3); }
-.memo-body :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1px 5px; color: var(--accent-active); }
-.memo-body :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 21px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: var(--radius); padding: var(--space-2) var(--space-3); overflow-x: auto; }
+.memo-body :deep(blockquote) { border-left: 3px solid var(--accent); padding-left: var(--space-3); color: var(--text-secondary); }
+.memo-body :deep(code) { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--code-bg); border-radius: 4px; padding: 1.5px 6px; color: var(--accent-active); }
+.memo-body :deep(pre) { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 21px; color: var(--code-fg); background: var(--code-bg); border: 1px solid var(--code-bd); border-radius: 8px; padding: var(--space-2) var(--space-3); overflow-x: auto; }
 .memo-body :deep(pre code) { background: none; border: none; padding: 0; color: inherit; }
-.memo-body :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.memo-body :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: var(--space-2); }
+.memo-body :deep(ul[data-type='taskList']) { list-style: none; padding-left: 0; display: flex; flex-direction: column; gap: 7px; }
+.memo-body :deep(ul[data-type='taskList'] li) { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--text-secondary); cursor: pointer; }
 .memo-body :deep(ul[data-type='taskList'] li > div) { flex: 1 1 auto; min-width: 0; }
+.memo-body :deep(ul[data-type='taskList'] input[type="checkbox"]) {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin: 0;
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  flex-shrink: 0;
+}
+.memo-body :deep(ul[data-type='taskList'] input[type="checkbox"]:checked) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.memo-body :deep(ul[data-type='taskList'] input[type="checkbox"]:checked::after) {
+  content: '✓';
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.memo-body :deep(ul[data-type='taskList'] li[data-checked="true"]) {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
 /* 正文分隔线不吃 --border（chrome 发丝档，纸底实测 1.15:1 等于没画），从字色反推 */
 .memo-body :deep(hr) { border: none; border-top: 1px solid color-mix(in srgb, var(--text) 26%, transparent); margin: var(--space-3) 0; }
 .memo-body :deep(img[data-note-image]) { display: block; max-width: 100%; max-height: 34vh; object-fit: contain; border-radius: var(--radius); }
 
-/* 标题行：标题(粗) + 收藏标 + 时间(右)，对齐 mock .t */
+/* ---------- 按内容类型长骨架 ----------
+   只改 .memo-body 里已有元素的呈现，v-html 一棵节点都不动：
+   toggleTask 靠「渲染序 == 库序」对位落库、applyClamp 靠顶层块下边界截断，
+   重写 DOM 会把这两件事一起打穿。结构化读数（域名 / 进度 / 字数）放卡底 meta，不塞回正文。 */
+/* 三行预算（66px）只够文字卡：任务清单、代码块、配图各有第二条内容块，
+   66px 会把整块砍掉，只剩标题 + meta，分类就白分了。按类型放宽预算，
+   applyClamp 读的是 getComputedStyle 里的 maxHeight，会跟着新值重算整行截断。 */
+.memo[data-kind="task"] .memo-body { --memo-max-h: 180px; }
+.memo[data-kind="code"] .memo-body { --memo-max-h: 180px; }
+.memo[data-kind="image"] .memo-body { --memo-max-h: 160px; }
+/* 链接 / 命令：等宽现代轻底芯片 */
+.memo[data-kind="link"] .memo-body :deep(> :first-child) {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 6px;
+  padding: 6px 10px;
+  word-break: break-all;
+  display: inline-block;
+  max-width: 100%;
+}
+.memo[data-kind="command"] .memo-body :deep(> :first-child) {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--text);
+  background: var(--code-bg);
+  border: 1px solid var(--code-bd);
+  border-radius: 6px;
+  padding: 6px 10px;
+  word-break: break-all;
+  display: inline-block;
+  max-width: 100%;
+}
+.memo[data-kind="link"] .memo-body :deep(> :first-child)::after {
+  content: '↗';
+  margin-left: 6px;
+  color: var(--accent);
+}
+/* 任务：清单左侧钉一条极细线，和正文段落分开；完成数写在 meta 行 */
+.memo[data-kind="task"] .memo-body :deep(ul[data-type='taskList']) {
+  border-left: 2px solid var(--accent-light);
+  padding-left: var(--space-3);
+  margin-top: 2px;
+}
+/* 代码：pre 等宽浅槽，圆角与柔和微边 */
+.memo[data-kind="code"] .memo-body :deep(pre) {
+  background: rgba(0, 0, 0, 0.025);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+  border-left: none;
+}
+:global(:root[data-base="dark"]) .memo[data-kind="code"] .memo-body :deep(pre) {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+/* 配图：收成一张小图，不让它吃掉三行预算。
+   仍保持 display:block 撑开父块——浮动会让父块塌掉，applyClamp 的块边界就算错了。 */
+.memo[data-kind="image"] .memo-body :deep(img) {
+  max-height: 70px;
+  width: auto;
+  max-width: 120px;
+  object-fit: cover;
+}
+
+/* 标题行：标题(粗) + 收藏标；时间已下沉到卡底 meta */
 /* 行高与正文首行对齐：正文是 14px / line-height 22，首行中心距顶 11；
    这里取 22 高、下距 0，时间与标题的中心同样落在 11——
    20 + 3 的旧值会把时间顶高 2px，单行小记看着像时间悬在正文之外。 */
@@ -564,12 +721,34 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
-  margin-bottom: 0;
+  margin-bottom: 2px;
   min-height: 22px;
   cursor: pointer;
 }
+.head-left-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+/* 生机活力彩色徽章胶囊 (Featherlight Vitality Pills，精致小巧) */
+.badge-pill {
+  font-size: 11px;
+  font-weight: 650;
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  line-height: 1.25;
+}
+.badge-pill.task, .badge-pill.todo { background: var(--pill-todo-bg); color: var(--pill-todo-text); }
+.badge-pill.code, .badge-pill.command, .badge-pill.dev { background: var(--pill-dev-bg); color: var(--pill-dev-text); }
+.badge-pill.link, .badge-pill.image, .badge-pill.idea { background: var(--pill-idea-bg); color: var(--pill-idea-text); }
+.badge-pill.work { background: var(--pill-work-bg); color: var(--pill-work-text); }
 .memo-title {
   flex: 1;
   min-width: 0;
@@ -582,60 +761,128 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.memo-time { font-size: var(--text-xs); line-height: 22px; color: var(--text-meta); flex-shrink: 0; transition: opacity var(--transition); }
+.memo-time { font-size: var(--text-xs); line-height: 18px; color: var(--text-meta); flex-shrink: 0; }
 /* 置顶卡在标题前挂一枚小图钉：滚过「置顶」小标也认得出 */
-.memo-pin { display: inline-flex; align-items: center; flex: 0 0 auto; color: var(--text-muted); margin-right: -3px; }
+/* 文房工匠 §2.3 的手感微动效落在纯装饰的图钉上：它是 aria-hidden 的静态记号，
+   不给列表入场或任何可点击目标加位移（切页 / 入场仍只动 opacity）。 */
+.memo-pin {
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  color: var(--text-muted); margin-right: -3px;
+  transition: color var(--transition-fast);
+}
+.memo:hover .memo-pin { color: var(--text); }
+.memo:active .memo-pin { color: var(--accent); }
 .memo.batchable .memo-tags { pointer-events: none; }
-/* 底部 meta 行：附件数 + 标签（对齐 mock .tags，从顶部 meta 行下移） */
-.memo-foot { display: flex; align-items: center; gap: 10px; margin-top: var(--space-1); min-height: 18px; }
-.memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-xs); line-height: 18px; color: var(--text-meta); flex-shrink: 0; }
-/* 标签不画胶囊：正文里已经有一行 #词，卡底再套灰盒等于同一件事说两遍，
-   胶囊还会把它抬成正文同级的物件。这里只留文字，命中筛选那颗才上色。 */
-.memo-tags { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+/* 卡底 meta 轴：类型 / 时间 / 读数 / 附件 / 标签。常驻一行，不随内容有无跳高。
+   分类字只走中性灰：全屏只有一套强调色，说明性分类不做彩色徽章。 */
+.memo-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.05);
+  min-height: 18px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.memo-foot-sp { flex: 1; min-width: 8px; }
+:global(:root[data-base="dark"]) .memo-foot {
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+.memo-kind {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+:global(:root[data-base="dark"]) .memo-kind {
+  background: rgba(255, 255, 255, 0.05);
+}
+.memo-stat { font-size: 11.5px; line-height: 18px; color: var(--text-faint); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; line-height: 18px; color: var(--text-faint); flex-shrink: 0; }
+.memo-time { font-size: 11.5px; line-height: 18px; color: var(--text-faint); flex-shrink: 0; }
+/* 标签按 macOS 备忘录规范呈现为精致细圆角微胶囊 */
+.memo-tags { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .tag-pill {
-  height: auto;
-  padding: 0 4px;
-  margin: 0 -4px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.03);
   border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-meta);
-  font-size: var(--text-xs);
-  line-height: 18px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
   transition: background-color var(--transition-fast), color var(--transition-fast);
 }
-.tag-pill:hover { background: var(--fill); color: var(--text-secondary); }
-.tag-pill.on { background: var(--accent-soft); color: var(--text-brand); font-weight: var(--weight-semibold); }
-/* 状态标与时间一起让位：悬停后动作排压住卡头右端，留着就是叠字 */
+:global(:root[data-base="dark"]) .tag-pill {
+  background: rgba(255, 255, 255, 0.05);
+}
+.tag-pill:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text);
+}
+:global(:root[data-base="dark"]) .tag-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.tag-pill.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* 状态标让位：悬停后动作排压住卡头右端，留着就是叠字。
+   时间已下沉到卡底 meta 行，不在这条规则里。 */
 .memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
 .memo:not(.batchable):hover .memo-state, .memo:not(.batchable):focus-within .memo-state { opacity: 0; }
 .state-star { color: var(--warning); display: inline-flex; }
-/* 动作排就地顶替时间：底取悬停后的卡面档，看不出另贴了一块；正文永不被压。
-   它挂在卡上而不是标题行里——锁着的卡整行退化成封条，没有标题行可挂，
-   挂卡上才能让两种卡的动作都落在右上角同一处（11 / 21 就是两行各自的行心）。 */
+/* 动作排：macOS 原生悬浮胶囊工具条，带发丝线与微投影，精简小巧 */
 .memo-acts {
   position: absolute;
-  right: 18px;
-  top: 12px;
+  right: 12px;
+  top: 10px;
   z-index: 15;
   display: flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 9px;
-  background: var(--bg-surface-hover);
+  align-items: center;
+  gap: 1px;
+  padding: 2px 3px;
+  border-radius: 7px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--transition);
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  transform: translateY(-2px);
 }
-.memo.locked .memo-acts { top: 22px; }
+.memo.locked .memo-acts { top: 20px; }
 /* 悬停/聚焦才显形，且不吞正文点击（透明态 pointer-events 关） */
-.memo:hover .memo-acts, .memo:focus-within .memo-acts { opacity: 1; pointer-events: auto; }
-/* 时间让位给动作排：实底只有排这么宽，长标题会被右缘裁掉，留着时间就是叠字 */
-.memo:not(.editing):not(.batchable):hover .memo-time, .memo:not(.editing):not(.batchable):focus-within .memo-time { opacity: 0; }
-.memo-acts .ib { width: 26px; height: 26px; border-radius: 6px; }
+.memo:hover .memo-acts, .memo:focus-within .memo-acts {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+/* 时间在卡底，和动作排不在一条轴上：hover 不再让它整列消失。
+   卡头右端仍只留 .memo-state 一颗让位，动作排的落点不变。 */
+.memo-acts .ib {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.memo-acts .ib:hover {
+  background: var(--hover-chrome);
+  color: var(--text);
+}
 /* 图标尺寸交给 AppIcon 的 :size：它按渲染尺寸反算描边，全窗实笔恒为 1.5px。
    早先这里写 :size="14" 再用 CSS 拉到 16，svg 被放大 14%，描边跟着变成 1.71px——
    五颗悬停钮比旁边同为 16px 的图标都重一点，正是"看着不齐"的来源。 */
@@ -672,7 +919,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 /* 小记标题在独立标题行，选中时跟着上主色 */
 .memo.is-sel .memo-title { color: var(--text-brand); }
 
-/* 无标题时正文直接起笔，时间和操作仍在右上角；只让正文开头避让控件。 */
+/* 无标题时正文直接起笔，动作排仍在右上角；只让正文开头避让控件。 */
 .memo.without-title { --memo-controls-width: 160px; }
 .memo.without-title .memo-head {
   position: absolute;
@@ -693,16 +940,19 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 }
 
 /* 宽窗把「页宽」和「行长」解耦：卡面照旧铺满，正文列收在 720（≈48 个汉字/行）。
-   阈值 960 = 正文右缘 24+720=744 与右上控件盒左缘（卡宽−180）不相撞的下限；
+   解耦点定在卡宽 962：正文右缘 24+720=744，右上控件盒左缘 卡宽−180=782，两不相撞。
+   但容器查询量的是内容盒不是边框盒，本卡左右内边距 24+20 加两条边 2 共 46，所以阈值写
+   962−46=916。书写面那条闸门量的是自己（内边距挂在 .ProseMirror 上，内容盒=卡宽−2），
+   960 就等价于卡宽 962——两边必须按同一个卡宽翻转，否则 962~1006 这段里读写两列错位。
    默认 1040 窗口卡宽实测 709，整块不激活，走上面的让位浮动块，页面零变化。
    用容器查询而不是 @media：侧栏收起/开合目录只改容器宽，视口宽不是判据。 */
-@container slip (min-width: 960px) {
+@container slip (min-width: 916px) {
   .memo-body,
-  .memo-foot { max-width: 720px; }
+  .memo-foot,
+  .memo-locked { max-width: 100%; }
   .memo-head { justify-content: flex-start; }
-  .memo-title { flex: 0 1 auto; max-width: 720px; }
-  .memo-state,
-  .memo-time { margin-left: auto; }
+  .memo-title { flex: 0 1 auto; max-width: 100%; }
+  .memo-state { margin-left: auto; }
   /* 文字列不再伸到控件底下，让位块退场；否则首行白白少 160px，读起来一长一短 */
   .memo.without-title .memo-head { width: auto; }
   .memo.without-title .memo-body::before { width: 0; }
@@ -720,7 +970,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   flex-wrap: wrap;
   margin-bottom: var(--space-3);
   padding-bottom: var(--space-2);
-  border-bottom: 1px dashed var(--border);
+  border-bottom: 1px solid var(--border);
 }
 .edit-bar :deep(.toolbar-flex) { order: 3; }
 .edit-bar :deep(.tb-fs) { order: 5; }

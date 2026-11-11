@@ -87,9 +87,9 @@ const exportNotes = (ids: string[], scopeLabel: string, format?: NoteExportForma
 }
 const exportAll = () => exportNotes(notes.value.filter(note => note.archived === (noteView.value === 'archived')).map(note => note.id), noteView.value === 'archived' ? '全部归档小记' : '全部未归档小记')
 
-/** 便签流：置顶只换一条 18px 小标，不再按日期切章；置顶条仍按时间排在最前 */
+/** 便签流：置顶与未置顶分栏，采用轻盈舒适单列连续流 */
 const pinnedNotes = computed(() => filteredNotes.value.filter(note => note.pinned))
-const streamNotes = computed(() => pinnedNotes.value.concat(filteredNotes.value.filter(note => !note.pinned)))
+const unpinnedNotes = computed(() => filteredNotes.value.filter(note => !note.pinned))
 
 const requestRemoveLock = async (id: string) => {
   const err = await removeNoteLock(id)
@@ -457,36 +457,40 @@ watchEffect(() => {
         <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
         <div class="page-bar">
           <div class="page-lead">
-            <div v-if="workspaceLayout && !isWebRuntime() && showFilters" class="workspace-workbar notes-workbar">
-              <nav class="workspace-workbar-tabs" aria-label="小记视图">
+            <div v-if="showFilters" class="workspace-workbar notes-workbar" aria-label="小记视图">
+              <nav class="workspace-workbar-tabs">
                 <button
                   v-for="v in VIEWS"
                   :key="v.key"
-                  class="wb-tab"
+                  class="wb-tab pill-tab"
                   :class="{ active: noteView === v.key }"
                   type="button"
                   :aria-pressed="noteView === v.key"
                   @click="selectView(v.key)"
                 >
                   <span>{{ v.label }}</span>
-                  <span class="wb-count">{{ viewCounts[v.key] }}</span>
+                  <span class="wb-count pill-tag-count">{{ viewCounts[v.key] }}</span>
                 </button>
               </nav>
               <template v-if="tagsGroupShown">
                 <span class="wb-divider" aria-hidden="true"></span>
                 <button
-                  class="wb-tab wb-more"
+                  class="wb-tab wb-more pill-tab pill-tag-btn"
                   :class="{ active: activeTags.size > 0 }"
                   type="button"
                   :aria-label="`标签筛选，共 ${tagCounts.length} 个标签`"
                   :aria-expanded="moreTagsOpen"
                   @click="toggleMoreTags($event.currentTarget as HTMLElement)"
-                >标签 <span class="wb-count">{{ tagEntryCount }}</span> <AppIcon name="chevDown" :size="13" /></button>
+                >
+                  <span>标签</span>
+                  <span class="wb-count pill-tag-count">{{ tagEntryCount }}</span>
+                  <AppIcon name="chevDown" :size="10" />
+                </button>
               </template>
             </div>
           </div>
           <div v-if="showFilters" class="search-box">
-            <span class="search-icon"><AppIcon name="search" :size="16" /></span>
+            <span class="search-icon"><AppIcon name="search" :size="13" /></span>
             <input
               ref="searchEl"
               v-model="noteSearchKeyword"
@@ -503,7 +507,7 @@ watchEffect(() => {
               aria-label="清空搜索"
               @click="noteSearchKeyword = ''"
             >
-              <AppIcon name="x" :size="14" />
+              <AppIcon name="x" :size="12" />
             </button>
           </div>
 
@@ -516,10 +520,10 @@ watchEffect(() => {
               :aria-label="isBatchMode ? '完成选择' : '选择小记'"
               @click="toggleBatchMode"
             >
-              <AppIcon name="checkall" :size="16" />
+              <AppIcon name="checkall" :size="13" />
             </button>
             <button v-if="!isWebRuntime()" class="bar-btn" type="button" :title="isArchivedView ? '导出全部归档' : '导出全部小记'" :aria-label="isArchivedView ? '导出全部归档' : '导出全部小记'" :disabled="!exportAllCount || !!exportRequest" @click="exportAll">
-              <AppIcon name="download" :size="16" />
+              <AppIcon name="download" :size="13" />
             </button>
             <!-- 口令只管加密小记，没加密过就不出现在顶栏；归档视图不做批量加解密 -->
             <template v-if="noteKey.is_set && !isArchivedView">
@@ -532,7 +536,7 @@ watchEffect(() => {
                 :aria-label="noteKey.is_open ? '锁定全部加密小记' : '解锁全部加密小记'"
                 @click="toggleNoteDomain"
               >
-                <AppIcon :name="noteKey.is_open ? 'lock' : 'unlock'" :size="16" />
+                <AppIcon :name="noteKey.is_open ? 'lock' : 'unlock'" :size="13" />
               </button>
             </template>
             <button
@@ -545,7 +549,7 @@ watchEffect(() => {
               :aria-label="railVisible ? '收起侧栏' : '展开侧栏'"
               @click="toggleRail"
             >
-              <AppIcon name="panel" :size="16" />
+              <AppIcon name="panel" :size="13" />
             </button>
             <WorkspaceDirectoryToggle v-if="isWebRuntime() && showFilters" />
           </div>
@@ -607,47 +611,89 @@ watchEffect(() => {
         </div>
 
         <template v-else>
-          <div class="slip-stream">
-            <div v-if="pinnedNotes.length" class="slip-label">
+          <div v-if="pinnedNotes.length" class="slip-section">
+            <div class="slip-label">
               <AppIcon name="pin" :size="12" />
               <span>置顶</span>
               <span class="slip-label-count">{{ pinnedNotes.length }}</span>
             </div>
-            <NoteCard
-              v-for="note in streamNotes"
-              :key="note.id"
-              ref="cardRefs"
-              :note="note"
-              :editing="editingId === note.id"
-              :save-image="saveImage"
-              :is-batch-mode="isBatchMode"
-              :is-selected="selectedNoteIds.has(note.id)"
-              :attachments="noteAttachments[note.id] ?? []"
-              :save-state="editingId === note.id ? noteSaveState : ''"
-              :unlocked="notePlains[note.id] != null"
-              :active-tags="activeTags"
-              :archived-view="isArchivedView"
-              :export-disabled="!!exportRequest"
-              @open="openCard(note)"
-              @update="saveNoteContent(note.id, $event)"
-              @close="closeCard"
-              @fullscreen="openFullscreen(note.id)"
-              @view="openFullscreen(note.id, 'view')"
-              @encrypt="requestEncrypt(note.id)"
-              @unlock="requestOpenNote(note.id)"
-              @relock="relockNote(note.id)"
-              @remove-lock="requestRemoveLock(note.id)"
-              @add-image="addImageToNote(note.id)"
-              @toggle-pin="togglePin(note)"
-              @toggle-star="toggleStar(note)"
-              @toggle-archive="setArchived(note, !note.archived)"
-              @export="exportNotes([note.id], '单条小记', $event)"
-              @copy="copyNote(note)"
-              @delete="doDeleteNote(note)"
-              @select="selectNote(note.id)"
-              @tag-click="toggleTagFilter($event)"
-              @remove-attachment="deleteAttachment(note.id, $event)"
-            />
+            <div class="slip-stream">
+              <NoteCard
+                v-for="note in pinnedNotes"
+                :key="note.id"
+                ref="cardRefs"
+                :note="note"
+                :editing="editingId === note.id"
+                :save-image="saveImage"
+                :is-batch-mode="isBatchMode"
+                :is-selected="selectedNoteIds.has(note.id)"
+                :attachments="noteAttachments[note.id] ?? []"
+                :save-state="editingId === note.id ? noteSaveState : ''"
+                :unlocked="notePlains[note.id] != null"
+                :active-tags="activeTags"
+                :archived-view="isArchivedView"
+                :export-disabled="!!exportRequest"
+                @open="openCard(note)"
+                @update="saveNoteContent(note.id, $event)"
+                @close="closeCard"
+                @fullscreen="openFullscreen(note.id)"
+                @view="openFullscreen(note.id, 'view')"
+                @encrypt="requestEncrypt(note.id)"
+                @unlock="requestOpenNote(note.id)"
+                @relock="relockNote(note.id)"
+                @remove-lock="requestRemoveLock(note.id)"
+                @add-image="addImageToNote(note.id)"
+                @toggle-pin="togglePin(note)"
+                @toggle-star="toggleStar(note)"
+                @toggle-archive="setArchived(note, !note.archived)"
+                @export="exportNotes([note.id], '单条小记', $event)"
+                @copy="copyNote(note)"
+                @delete="doDeleteNote(note)"
+                @select="selectNote(note.id)"
+                @tag-click="toggleTagFilter($event)"
+                @remove-attachment="deleteAttachment(note.id, $event)"
+              />
+            </div>
+          </div>
+
+          <div v-if="unpinnedNotes.length" class="slip-section">
+            <div class="slip-stream">
+              <NoteCard
+                v-for="note in unpinnedNotes"
+                :key="note.id"
+                ref="cardRefs"
+                :note="note"
+                :editing="editingId === note.id"
+                :save-image="saveImage"
+                :is-batch-mode="isBatchMode"
+                :is-selected="selectedNoteIds.has(note.id)"
+                :attachments="noteAttachments[note.id] ?? []"
+                :save-state="editingId === note.id ? noteSaveState : ''"
+                :unlocked="notePlains[note.id] != null"
+                :active-tags="activeTags"
+                :archived-view="isArchivedView"
+                :export-disabled="!!exportRequest"
+                @open="openCard(note)"
+                @update="saveNoteContent(note.id, $event)"
+                @close="closeCard"
+                @fullscreen="openFullscreen(note.id)"
+                @view="openFullscreen(note.id, 'view')"
+                @encrypt="requestEncrypt(note.id)"
+                @unlock="requestOpenNote(note.id)"
+                @relock="relockNote(note.id)"
+                @remove-lock="requestRemoveLock(note.id)"
+                @add-image="addImageToNote(note.id)"
+                @toggle-pin="togglePin(note)"
+                @toggle-star="toggleStar(note)"
+                @toggle-archive="setArchived(note, !note.archived)"
+                @export="exportNotes([note.id], '单条小记', $event)"
+                @copy="copyNote(note)"
+                @delete="doDeleteNote(note)"
+                @select="selectNote(note.id)"
+                @tag-click="toggleTagFilter($event)"
+                @remove-attachment="deleteAttachment(note.id, $event)"
+              />
+            </div>
           </div>
           <div v-if="!filteredNotes.length && notesLoadError" class="error-state">
             <div class="empty-icon">
@@ -819,11 +865,80 @@ watchEffect(() => {
   min-height: 0;
   overflow: hidden;
   position: relative;
-  /* 便签流：卡面只留三行给扫读，读全文去阅读层（3 × 22px 正文行高） */
-  --memo-max-h: 66px;
+  /* 便签流：舒适阅读高度预算，自然展示 7-8 行正文，长篇才淡出截断 */
+  --memo-max-h: 180px;
 }
 .rail-heading { display: flex; align-items: center; justify-content: space-between; }
 .rail-heading-actions { display: flex; align-items: center; gap: var(--space-1); }
+
+/* Featherlight 轻羽胶囊式视图工作栏 */
+.notes-workbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  border-bottom: 0;
+}
+.notes-workbar .workspace-workbar-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+.notes-workbar .wb-tab::after {
+  display: none !important;
+}
+.pill-tab {
+  border: none;
+  background: transparent;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.pill-tab:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.04);
+}
+:global(:root[data-base="dark"]) .pill-tab:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.pill-tab.active {
+  background: var(--panel-bg, #ffffff);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+:global(:root[data-base="dark"]) .pill-tab.active {
+  background: #1c1e24;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.pill-tag-count {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.notes-workbar .wb-divider {
+  width: 1px;
+  height: 12px;
+  margin: 0 2px;
+  background: rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+:global(:root[data-base="dark"]) .notes-workbar .wb-divider {
+  background: rgba(255, 255, 255, 0.1);
+}
 
 .stream {
   flex: 1;
@@ -840,8 +955,9 @@ watchEffect(() => {
    工具栏、书写框与小记共用居中阅读列，窄窗口保留最小内距。 */
 .stream-inner {
   width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
   padding: 0 var(--page-gutter) 22px;
-  padding-inline: max(var(--page-gutter), calc((100% - var(--workspace-content-max, var(--stream-max))) / 2));
 }
 /* 96px 净空只服务批选底栏；没开批选时不留死白 */
 .notes-page:has(.batch-dock) .stream-inner { padding-bottom: var(--dock-clearance); }
@@ -900,38 +1016,59 @@ watchEffect(() => {
   white-space: nowrap;
   font-size: var(--text-xs);
   color: var(--text-secondary);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-strong);
+  background: transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: all var(--transition-fast);
 }
-.archive-bar .ab-btn:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.archive-bar .ab-btn:hover:not(:disabled) { background: rgba(0, 0, 0, 0.05); color: var(--text); }
+:global(:root[data-base="dark"]) .archive-bar .ab-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
 .archive-bar .ab-btn:disabled { color: var(--text-faint); }
 
-/* ---------- 便签流：一列连续的纸片，没有日期章节 ---------- */
+/* ---------- 便签流：轻盈舒适单列连续流 (无界通透、告别拉伸变形) ---------- */
+.slip-section {
+  width: 100%;
+}
 .slip-stream {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 12px;
+  width: 100%;
+  margin-top: 10px;
   padding-bottom: 8px;
 }
-/* 置顶只留一行小标，不吸顶：小记一天没几条，章节把流切得太碎。
-   图钉 + 文字 + 计数，字色和字号跟工作栏页签的计数同一档。 */
+.slip-stream .memo-skeleton {
+  width: 100%;
+}
+/* 置顶小标 (Featherlight 流标记) */
 .slip-label {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 18px;
-  margin-top: 8px;
+  height: 24px;
+  margin-top: 10px;
+  margin-bottom: 2px;
   padding-left: 2px;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.02em;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.04em;
 }
-.slip-label :deep(svg) { color: var(--text-muted); flex: 0 0 auto; }
-.slip-label-count { font-weight: 400; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-left: -2px; }
+.slip-label.unpinned-label {
+  margin-top: 16px;
+  color: var(--text-muted);
+}
+.slip-label :deep(svg) { color: var(--accent); flex: 0 0 auto; }
+.slip-label-count {
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+  background: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+}
 /* 空态里的动作：比书写条主钮小一档，和说明句同一条中轴 */
 .empty-action {
   height: 30px;

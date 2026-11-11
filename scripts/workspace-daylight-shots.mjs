@@ -10,9 +10,11 @@ import { contrast } from './lib/theme-tokens.mjs'
 const output = process.argv[2] || '.tmp/daylight-20261020'
 const source = readFileSync('src/services/theme.ts', 'utf8')
 const accents = [...source.match(/export const WORKSPACE_ACCENTS = \[([\s\S]*?)\]/)[1].matchAll(/id: '([^']+)'/g)].map(match => match[1])
+// 文房工匠暖调基线（--bg / --panel-bg / --workspace-frame / --workspace-light）。
+// 改主题 Token 时这里必须同步，否则采光交付矩阵会在第一张图上断言失败。
 const bases = {
-  paper: ['#fafafa', '#ffffff', '#f0f0f0', '#ffffff'],
-  ink: ['#18191b', '#26282c', '#121315', '#393b40'],
+  paper: ['#faf8f5', '#ffffff', '#eae5de', '#ffffff'],
+  ink: ['#16171a', '#1c1d21', '#0f1012', '#393b40'],
 }
 const names = Object.keys(bases)
 const seed = {

@@ -47,17 +47,22 @@ const broken = reactive(new Set<string>())
   position: relative;
   width: 76px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 8px;
   overflow: hidden;
-  transition: all var(--transition);
+  background: var(--panel-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all var(--transition-fast);
 }
-.att:hover { border-color: var(--border-strong); }
+.att:hover {
+  border-color: var(--border-hover, var(--border));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
 .att-thumb {
   height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--accent-light), var(--accent-soft));
+  background: var(--sunken);
 }
 .att-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .att-ext { font-size: var(--text-2xs); font-weight: 600; color: var(--accent); letter-spacing: 0.02em; }

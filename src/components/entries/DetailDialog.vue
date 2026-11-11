@@ -150,8 +150,8 @@ useEscapeClose(() => emit('close'))
 /* 密码保持 14px 等宽，分隔字距帮助辨认字符。 */
 .detail-pwd { font-family: var(--font-mono); font-size: var(--text-md); letter-spacing: 0.06em; }
 .detail-empty { color: var(--text-muted); }
-.detail-link { color: var(--accent); cursor: pointer; text-decoration: none; font-family: var(--font-mono); font-size: var(--text-content); }
-.detail-link:hover { text-decoration: underline; }
+.detail-link { color: var(--text-url); cursor: pointer; text-decoration: none; font-family: var(--font-mono); font-size: var(--text-content); transition: color var(--transition); }
+.detail-link:hover { color: var(--accent); text-decoration: underline; }
 .detail-notes { flex: 1; min-width: 0; font-size: var(--text-content); color: var(--text-secondary); line-height: var(--leading-copy); white-space: pre-wrap; }
 
 .detail-paths { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }

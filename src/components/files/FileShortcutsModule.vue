@@ -622,28 +622,66 @@ watchEffect(() => {
   display: flex;
   align-items: stretch;
   height: 32px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
   overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
   transition: border-color var(--transition), box-shadow var(--transition);
 }
-.path-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); background: var(--bg-surface); }
+:global(:root[data-base="dark"]) .path-input-row {
+  background: rgba(20, 25, 36, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.path-input-row:hover {
+  border-color: rgba(0, 0, 0, 0.18);
+}
+:global(:root[data-base="dark"]) .path-input-row:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.path-input-row:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+  background: #ffffff;
+}
+:global(:root[data-base="dark"]) .path-input-row:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: none !important;
+  background: #181a20;
+}
 .path-input-row input {
   flex: 1;
   min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
+  border: none !important;
+  border-right: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  background: transparent !important;
   padding: 0 10px;
   /* 路径框走 UI 字体（继承全局 .form-group input）：Windows 路径常混中文，
      Consolas 拉丁 + HarmonyOS 汉字混排时字重字面打架 */
   font-size: var(--text-content);
   color: var(--text);
-  box-shadow: none; /* 高亮环归容器（:focus-within），别在输入框本体上再画一圈 */
+  box-shadow: none !important; /* 高亮环归容器（:focus-within），别在输入框本体上再画一圈 */
 }
-.path-input-row input:focus { background: transparent; border: none; box-shadow: none; }
-.path-acts { display: flex; flex-shrink: 0; border-left: 1px solid var(--border); }
+.path-input-row input:focus,
+.path-input-row input:focus-visible {
+  background: transparent !important;
+  border: none !important;
+  border-right: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+.path-acts {
+  display: flex;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.02);
+}
+:global(:root[data-base="dark"]) .path-acts {
+  border-left-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
 .path-act {
   width: 32px;
   display: flex;

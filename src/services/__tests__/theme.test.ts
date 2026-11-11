@@ -16,7 +16,8 @@ it.each(['', 'unknown'])('未保存或无效的氛围值 %s 使用带柔光的�
 
   await initializeAppearance()
 
-  expect(appearance).toEqual({ theme: 'paper', accent: 'ink', backgroundAtmosphere: true })
+  /* 缺省强调色改成朱砂（brick）；经典布局没有 brick 档，经 CLASSIC_ACCENT_MAP 落到 coral。 */
+  expect(appearance).toEqual({ theme: 'paper', accent: 'coral', backgroundAtmosphere: true })
   expect(document.documentElement.dataset.atmosphere).toBe('on')
   expect(settingsApi.setSetting).not.toHaveBeenCalled()
 })

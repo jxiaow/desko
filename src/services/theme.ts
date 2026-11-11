@@ -100,8 +100,11 @@ export const ACCENTS = [
   { id: 'graphite', name: '石墨' },
 ] as const
 
-/** 新布局只保留纸/墨两套底色；旧六套在读取时归并，界面不再暴露。 */
-export const WORKSPACE_THEMES = THEMES.filter(t => ['paper', 'ink'].includes(t.id))
+/** 新布局保留浅色(明亮)/深色(暗黑)两套底色；内部 ID 仍为 paper/ink 以保持持久化与测试兼容。 */
+export const WORKSPACE_THEMES = [
+  { id: 'paper', name: '浅色' },
+  { id: 'ink', name: '深色' },
+] as const
 export const WORKSPACE_ACCENTS = [
   { id: 'ink', name: '蓝' },
   { id: 'indigo', name: '靛' },

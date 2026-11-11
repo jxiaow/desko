@@ -1402,6 +1402,12 @@ html.theme-anim * {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease, fill 0.2s ease;
 }
 
+/* 弹窗与设置弹窗边框在切色时保持即刻呈现，坚决杜绝迟滞的边框过渡与补间伪影 */
+html.theme-anim :is(.dialog, .settings-dialog, .dialog-overlay),
+html.theme-anim :is(.dialog, .settings-dialog, .dialog-overlay) * {
+  transition: none !important;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
 ::selection { background: var(--selection); }
@@ -1415,9 +1421,7 @@ body {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  text-rendering: geometricPrecision;
   font-feature-settings: 'kern' 1, 'liga' 1;
 }
 
@@ -2437,8 +2441,8 @@ button, input, select, textarea {
 .tn-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-card);
-  border-radius: 12px;
-  box-shadow: none;
+  border-radius: 8px;
+  box-shadow: var(--shadow-card-rest);
   margin-bottom: var(--space-3);
   overflow: hidden;
 }
@@ -2538,8 +2542,8 @@ button, input, select, textarea {
 .rcard {
   background: var(--bg-surface);
   border: 1px solid var(--border-card);
-  border-radius: 12px;
-  box-shadow: none;
+  border-radius: 8px;
+  box-shadow: var(--shadow-card-rest);
   margin-bottom: 10px;
   overflow: hidden;
   transition: border-color var(--transition);
@@ -2624,8 +2628,8 @@ button, input, select, textarea {
   cursor: pointer;
   background: var(--bg-surface);
   border: 1px solid var(--border-card);
-  border-radius: 12px;
-  box-shadow: none;
+  border-radius: 8px;
+  box-shadow: var(--shadow-card-rest);
   transition: background-color var(--transition),
     border-color var(--transition), box-shadow var(--transition), padding-left var(--transition);
 }
@@ -2957,26 +2961,28 @@ button.chip.on { background: var(--accent-soft); color: var(--accent) }
 }
 .tag-inline:hover { background: var(--accent-soft); }
 
-/* 任务项勾选框：三处书写面（流卡只读 / 就地编辑 / 全屏）共用一份自绘配方，
-   原生控件那副直角系统外观跟整套令牌不在同一只手。完成项划线并降一档字色——
-   这里用 muted 不用 faint：还剩哪几条是信息，faint 那档只留给装饰 */
+/* 任务项勾选框：Apple Notes 风格精致圆形待办清单 */
 ul[data-type='taskList'] li > label {
   display: flex;
   flex-shrink: 0;
 }
 ul[data-type='taskList'] input[type='checkbox'] {
   appearance: none;
-  width: 14px;
-  height: 14px;
-  margin: 3px 0 0;
+  width: 16px;
+  height: 16px;
+  margin: 4px 0 0;
   border: 1.5px solid var(--border-strong);
-  border-radius: var(--radius-xs);
-  background: var(--bg-surface);
+  border-radius: 50%;
+  background: transparent;
   position: relative;
   cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  flex-shrink: 0;
+  transition: all var(--transition-fast) ease-out;
 }
-ul[data-type='taskList'] input[type='checkbox']:hover { border-color: var(--accent); }
+ul[data-type='taskList'] input[type='checkbox']:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 ul[data-type='taskList'] input[type='checkbox']:checked {
   background: var(--accent);
   border-color: var(--accent);
@@ -2984,12 +2990,12 @@ ul[data-type='taskList'] input[type='checkbox']:checked {
 ul[data-type='taskList'] input[type='checkbox']:checked::after {
   content: '';
   position: absolute;
-  left: 4px;
-  top: 0.5px;
+  left: 5px;
+  top: 2px;
   width: 4px;
   height: 8px;
-  border: solid var(--accent-on);
-  border-width: 0 1.6px 1.6px 0;
+  border: solid #ffffff;
+  border-width: 0 1.8px 1.8px 0;
   transform: rotate(45deg);
 }
 ul[data-type='taskList'] li[data-checked='true'] > div {

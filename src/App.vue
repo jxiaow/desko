@@ -235,7 +235,7 @@ function onGlobalKey(e: KeyboardEvent) {
     <template v-else>
       <TitleBar :sidebar-hidden="sidebarHidden" :modules-open="showWebModules" @lock="doLock" @show-modules="showWebModules = true" />
       <div class="app-layout">
-        <Sidebar v-if="!sidebarHidden" @open-settings="openSettingsAppearance" @lock="doLock" />
+        <Sidebar v-if="!sidebarHidden" :settings-active="showSettings" @open-settings="openSettingsAppearance" @lock="doLock" />
         <CodexWorkspace :directory-visible="directoryVisible" :directory-compact="directoryCompact" :directory-pinned="directoryPinned" @close-directory="closeDirectory" @toggle-directory="toggleDirectory" @toggle-directory-pin="toggleDirectoryPin"><ModuleRouterView /></CodexWorkspace>
       </div>
     </template>

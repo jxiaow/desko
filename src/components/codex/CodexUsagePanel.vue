@@ -212,8 +212,8 @@ function pct(part: number, whole: number): number {
 }
 .usg-session-open { display: block; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .usg-session-open:hover { color: var(--text-brand); text-decoration: underline; text-underline-offset: 3px; }
-.usg-view { --usage-fresh: #376cb3; --usage-cached: #32856f; --usage-output: #b96b25; display: flex; flex-direction: column; gap: var(--space-3); }
-[data-base='dark'] .usg-view { --usage-fresh: #8aadf4; --usage-cached: #6bc5b4; --usage-output: #e8ac68; }
+.usg-view { --usage-fresh: #2563eb; --usage-cached: #10b981; --usage-output: #7c3aed; display: flex; flex-direction: column; gap: var(--space-3); }
+[data-base='dark'] .usg-view { --usage-fresh: #60a5fa; --usage-cached: #34d399; --usage-output: #a78bfa; }
 .usg-sum { padding: 10px 18px; }
 .usg-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; }
 .usg-heading :is(h1, h3) { margin: 0; font-size: var(--text-base); font-weight: 600; color: var(--text); }
@@ -231,10 +231,10 @@ function pct(part: number, whole: number): number {
 .usg-metric[data-metric='cached'] dt::before { background: var(--usage-cached); }
 .usg-metric[data-metric='output'] dt::before { background: var(--usage-output); }
 .usg-metric dd { margin: 6px 0 0; font-size: var(--text-md); font-family: var(--font-ui); font-variant-numeric: tabular-nums; letter-spacing: normal; color: var(--text-secondary); }
-.composition-track { display: flex; height: 6px; overflow: hidden; border-radius: 3px; background: var(--fill); margin: 2px 0 8px; }
+.composition-track { display: flex; height: 6px; overflow: hidden; border-radius: 3px; background: color-mix(in srgb, var(--border) 60%, transparent); margin: 2px 0 8px; }
 .composition-track > span + span { box-shadow: inset 1px 0 0 var(--bg-surface); } /* taste-skill-ignore: 数据分段描线，零值仍保持零宽度 */
 .part-fresh { background: var(--usage-fresh); }
-.part-cached, .usg-metric[data-metric='cached'] dt::before { background: var(--usage-cached); background-image: repeating-linear-gradient(135deg, transparent 0 3px, #ffffff40 3px 4px); } /* taste-skill-ignore: 缓存数据纹理，与图例保持一致 */
+.part-cached, .usg-metric[data-metric='cached'] dt::before { background: var(--usage-cached); }
 .part-output { background: var(--usage-output); }
 .usg-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding-top: 8px; border-top: 1px solid var(--border); font-size: var(--text-xs); color: var(--text-muted); }
 .usg-facts b { font-weight: 500; color: var(--text-secondary); }
@@ -266,8 +266,8 @@ function pct(part: number, whole: number): number {
 .usg-session-copy { display: inline-flex; align-items: center; gap: 6px; padding: 3px 0; margin-top: 2px; border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--text-xs); cursor: pointer; }
 .usg-session-copy:hover { color: var(--text-brand); }
 .usg-model-name { flex: 0 0 26%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.usg-track { flex: 1 1 auto; height: 6px; border-radius: 3px; background: var(--hover-chrome); overflow: hidden; }
-.usg-fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.usg-track { flex: 1 1 auto; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--border) 60%, transparent); overflow: hidden; }
+.usg-fill { display: block; height: 100%; border-radius: 3px; background: var(--usage-output); }
 .usg-model-num { flex-shrink: 0; min-width: 76px; text-align: right; color: var(--text-secondary); }
 .usg-model-pct { flex-shrink: 0; min-width: 46px; text-align: right; color: var(--text-muted); }
 .usg-model-requests, .usg-model-cost { flex-shrink: 0; min-width: 76px; text-align: right; color: var(--text-secondary); }

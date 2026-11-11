@@ -4,11 +4,12 @@ import { bootUnlocked } from '../helpers'
 for (const [width, height] of [[800, 600], [1280, 800]]) {
   test(`${width}px 登录与导入各自定高，切换方式不跳动，提交始终在底栏`, async ({ page }) => {
     await page.setViewportSize({ width, height })
-    await bootUnlocked(page, { settings: { codex_enabled: 'true' } }, '/codex')
+    // 「添加账号」入口只在已有账号或读取失败时才出现，零账号种子点不到这颗钮
+    await bootUnlocked(page, { settings: { codex_enabled: 'true' }, codex: { accounts: [{ email: 'layout@example.com' }] } }, '/codex')
     await page.getByRole('button', { name: '添加账号', exact: true }).click()
     const auth = page.getByRole('dialog', { name: '添加 Codex 账号', exact: true })
     const initial = (await auth.boundingBox())!
-    expect(initial.height).toBe(480)
+    expect(initial.height).toBe(360)
     for (const name of ['API Key', '设备码', '浏览器登录']) {
       await auth.getByRole('tab', { name, exact: true }).click()
       expect((await auth.boundingBox())!.y).toBe(initial.y)
@@ -22,7 +23,7 @@ for (const [width, height] of [[800, 600], [1280, 800]]) {
     for (const name of ['auth.json 文件', '粘贴 JSON', 'Token', '本机凭据', 'Token']) {
       await dialog.getByRole('tab', { name, exact: true }).click()
       expect((await dialog.boundingBox())!.y).toBe(box.y)
-      expect((await dialog.boundingBox())!.height).toBe(480)
+      expect((await dialog.boundingBox())!.height).toBe(360)
     }
     await dialog.getByRole('button', { name: 'Token 组合', exact: true }).click()
     await dialog.getByLabel('Refresh Token（可选）', { exact: true }).fill('synthetic-refresh')
