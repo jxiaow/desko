@@ -316,7 +316,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 
     <div class="memo-head" @click="onHeadClick">
       <div class="head-left-group">
-        <span v-if="kindLabel" class="badge-pill" :class="kind">{{ kind === 'task' ? '✅ 待办进度' : kind === 'code' ? '💻 终端脚本' : kind === 'command' ? '⌨️ 快捷命令' : kind === 'link' ? '🔗 网址链接' : kind === 'image' ? '📷 案头图片' : '📝 便签小记' }}</span>
         <span v-if="props.note.pinned" class="memo-pin" aria-hidden="true"><AppIcon name="pin" :size="12" /></span>
         <span v-if="display.title" class="memo-title">{{ display.title }}</span>
       </div>
@@ -734,21 +733,6 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   flex: 1;
   min-width: 0;
 }
-/* 生机活力彩色徽章胶囊 (Featherlight Vitality Pills，精致小巧) */
-.badge-pill {
-  font-size: 11px;
-  font-weight: 650;
-  padding: 1.5px 6px;
-  border-radius: 4px;
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  line-height: 1.25;
-}
-.badge-pill.task, .badge-pill.todo { background: var(--pill-todo-bg); color: var(--pill-todo-text); }
-.badge-pill.code, .badge-pill.command, .badge-pill.dev { background: var(--pill-dev-bg); color: var(--pill-dev-text); }
-.badge-pill.link, .badge-pill.image, .badge-pill.idea { background: var(--pill-idea-bg); color: var(--pill-idea-text); }
-.badge-pill.work { background: var(--pill-work-bg); color: var(--pill-work-text); }
 .memo-title {
   flex: 1;
   min-width: 0;

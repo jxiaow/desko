@@ -38,16 +38,6 @@
   --text-meta: var(--text-muted);
   --weight-card-title: 550;
   --badge-cat-border: transparent;
-
-  /* 生机彩色便签药丸色阶 (Featherlight Vitality Pills) */
-  --pill-work-bg: #fee2e2;
-  --pill-work-text: #b91c1c;
-  --pill-dev-bg: #e0e7ff;
-  --pill-dev-text: #4338ca;
-  --pill-idea-bg: #fef3c7;
-  --pill-idea-text: #b45309;
-  --pill-todo-bg: #dcfce7;
-  --pill-todo-text: #15803d;
 }
 
 :root[data-layout="workspace"][data-theme="paper"], .workspace-theme-prev[data-theme="paper"] {
