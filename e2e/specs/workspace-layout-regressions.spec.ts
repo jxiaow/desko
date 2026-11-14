@@ -240,3 +240,24 @@ test('800px Codex 长标签和排序不会溢出，筛选与账号操作仍可�
   await page.getByRole('button', { name: '添加账号', exact: true }).click()
   await expect(page.locator('.dialog:visible h3')).toContainText('添加 Codex 账号')
 })
+
+/** 页头换行是这条布局的地基：`flex: 1 1 100%` 的搜索带只有在可换行的 flex 容器里
+    才会独占第二排。容器一旦退回 nowrap，搜索带会吃掉整行、把动作带压成 0 宽，
+    动作件就从把自己的右缘当基准向左溢出，直接压在页签上（见 4df44b0 的回归）。 */
+for (const width of [800, 1040, 1440]) {
+  test(`${width}px Codex 账号页页签与页级动作不重叠，搜索带独占第二排`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 720 })
+    await bootUnlocked(page, seed, '/codex')
+    const tabs = await bounds(page.locator('.cx-header-tabs'))
+    const actions = await bounds(page.locator('#workspace-page-toolbar .page-actions'))
+    expect(actions.x).toBeGreaterThanOrEqual(tabs.x + tabs.width)
+    // 两个动作钮与「添加账号」都落在页签右侧，横向不交叠
+    for (const button of await page.locator('#workspace-page-toolbar .page-actions > *').all()) {
+      expect((await bounds(button)).x).toBeGreaterThanOrEqual(tabs.x + tabs.width)
+    }
+    // 账号搜索带（第二排）整条落在页签下沿之下，并撑满页头宽
+    const band = await bounds(page.locator('#codex-view-filters'))
+    expect(band.y).toBeGreaterThanOrEqual(tabs.y + tabs.height)
+    expect(band.width).toBeGreaterThan(tabs.width * 2)
+  })
+}

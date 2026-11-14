@@ -76,6 +76,7 @@ import CodexTrashPanel from './CodexTrashPanel.vue'
 import CodexUsagePanel from './CodexUsagePanel.vue'
 import CodexSwitchDialog from './CodexSwitchDialog.vue'
 import CodexWslAssignDialog from './CodexWslAssignDialog.vue'
+import { isWebRuntime } from '../../services/runtime'
 import CodexPlanBadge from './CodexPlanBadge.vue'
 import CodexQuotaPanel from './CodexQuotaPanel.vue'
 import ResetCreditDialog from './ResetCreditDialog.vue'
@@ -301,7 +302,7 @@ function onRowClick(a: CodexAccount) {
 
 const switchAccount = shallowRef<CodexAccount | null>(null)
 const wslAccount = shallowRef<CodexAccount | null>(null)
-const hasWslTargets = computed(() => !!wslAssignment.value?.targets.length)
+const hasWslTargets = !isWebRuntime()
 const wslCurrentId = computed(() => wslAssignment.value?.consistent ? wslAssignment.value.current?.id : null)
 function doSwitch(account: CodexAccount) {
   if (!busyId.value) switchAccount.value = account
@@ -508,20 +509,6 @@ watchEffect(() => {
             <span class="search-icon"><AppIcon name="search" :size="15" /></span>
             <input v-model="accountQuery" type="text" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
             <button v-if="accountQuery" class="search-clear" type="button" aria-label="清除账号搜索" @click="accountQuery = ''"><AppIcon name="x" :size="13" /></button>
-          </div>
-          <div v-if="workspaceLayout" class="account-filters cx-tabs-filters">
-            <OptionSelect :model-value="accountAuth" aria-label="账号类型" :options="[
-              { value: 'all', label: '全部类型' }, { value: 'oauth', label: 'OAuth' }, { value: 'apikey', label: 'API Key' },
-            ]" @update:model-value="accountAuth = String($event) as CodexAccountAuthFilter" />
-            <OptionSelect :model-value="accountStatus" aria-label="账号状态" :options="[
-              { value: 'all', label: '全部状态' }, { value: 'attention', label: '需处理' },
-              { value: 'low', label: '低配额 ≤20%' }, { value: 'expired', label: '订阅已过期' },
-            ]" @update:model-value="accountStatus = String($event) as CodexAccountStatusFilter" />
-            <OptionSelect v-if="accountTags.length" :model-value="accountTag" aria-label="账号标签" :options="tagOptions" @update:model-value="accountTag = String($event)" />
-            <OptionSelect :model-value="accountSort" aria-label="账号排序" :options="[
-              { value: 'default', label: '默认排序' }, { value: 'quota', label: '可用配额优先' },
-              { value: 'recent', label: '最近使用优先' }, { value: 'name', label: '按名称排序' },
-            ]" @update:model-value="accountSort = String($event) as CodexAccountSort" />
           </div>
         </template>
 
@@ -919,6 +906,8 @@ watchEffect(() => {
 /* 页头第二排：当前视图的搜索与筛选，控件与第一排同档（32px），
    排与排之间的呼吸交给页头的 row-gap；窄窗放不下时这一排自己换行。 */
 .cx-tabs-row { position: static; margin: 0; padding: 0; gap: 8px; flex-wrap: wrap; background: transparent; }
+#workspace-page-toolbar:has(.cx-header-tabs) > .cx-band-controls:has(.page-actions) { flex: 0 0 auto; margin-left: auto; }
+#workspace-page-toolbar:has(.cx-header-tabs) > .cx-band-controls .page-actions { flex: 0 0 auto; }
 .cx-band-controls > .usage-ranges { margin-left: 0; }
 
 /* 页签统一点击区域与字距，保留下划线选中态，与顶栏的 32px 控件同高。 */

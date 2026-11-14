@@ -28,42 +28,42 @@
   --text-workspace-primary: #ffffff;
   --bg-aura: none;
 
-  /* 轻盈无界案头核心发丝边与卡片质感 */
-  --border-card: rgba(0, 0, 0, 0.05);
-  --border-card-hover: color-mix(in srgb, var(--accent) 25%, transparent);
-  --shadow-card-rest: 0 1px 3px rgba(0, 0, 0, 0.02), 0 6px 16px -2px rgba(0, 0, 0, 0.03);
-  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.03), 0 12px 28px -4px color-mix(in srgb, var(--accent) 10%, transparent);
+  /* Fluent 2 精工案头核心发丝边、微高光与卡片质感 */
+  --border-card: rgba(0, 0, 0, 0.06);
+  --border-card-hover: color-mix(in srgb, var(--accent) 30%, rgba(0, 0, 0, 0.08));
+  --shadow-card-rest: inset 0 1px 0 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 0 rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: inset 0 1px 0 0 rgba(255, 255, 255, 1), 0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 24px -4px rgba(0, 0, 0, 0.08);
   --card-line-hover: var(--accent);
-  --radius-slip: 12px;
+  --radius-slip: 8px;
   --text-meta: var(--text-muted);
   --weight-card-title: 550;
   --badge-cat-border: transparent;
 }
 
 :root[data-layout="workspace"][data-theme="paper"], .workspace-theme-prev[data-theme="paper"] {
-  /* 轻盈通透浅色 (Featherlight Sea Salt) */
-  --bg: #f8fafc;
+  /* Fluent 2 Mica 浅色云母底板与洁白实体卡片 */
+  --bg: #f3f3f5;
   --panel-bg: #ffffff;
-  --sunken: #f1f5f9;
-  --fill: #f1f5f9;
+  --sunken: #ececf0;
+  --fill: #ebecef;
   --hover: rgba(0, 0, 0, 0.04);
   --active: rgba(0, 0, 0, 0.07);
   --border: rgba(0, 0, 0, 0.06);
   --border-strong: rgba(0, 0, 0, 0.12);
   --border-subtle: rgba(0, 0, 0, 0.03);
   --border-hover: rgba(0, 0, 0, 0.15);
-  --border-card: rgba(0, 0, 0, 0.05);
+  --border-card: rgba(0, 0, 0, 0.06);
   --card-line-soft: rgba(0, 0, 0, 0.04);
   --card-line-strong: rgba(0, 0, 0, 0.08);
-  --card-line-hover: color-mix(in srgb, var(--accent) 25%, transparent);
+  --card-line-hover: color-mix(in srgb, var(--accent) 30%, rgba(0, 0, 0, 0.08));
   --border-search: rgba(0, 0, 0, 0.08);
   --bg-input: #ffffff;
-  --bg-sheet: #f8fafc;
+  --bg-sheet: #f3f3f5;
   --bg-card: #ffffff;
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.02);
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.02), 0 6px 16px -2px rgba(0, 0, 0, 0.03);
-  --shadow-card-rest: 0 1px 3px rgba(0, 0, 0, 0.02), 0 6px 16px -2px rgba(0, 0, 0, 0.03);
-  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.03), 0 12px 28px -4px color-mix(in srgb, var(--accent) 10%, transparent);
+  --shadow-card: var(--shadow-card-rest);
+  --shadow-card-rest: inset 0 1px 0 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 0 rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: inset 0 1px 0 0 rgba(255, 255, 255, 1), 0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 24px -4px rgba(0, 0, 0, 0.08);
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.03);
   --shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.05);
   --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.02);
@@ -83,23 +83,30 @@
   --sidebar-bg: transparent;
   --sidebar-hover: rgba(0, 0, 0, 0.04);
   --sidebar-active: #ffffff;
-  --sidebar-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.03);
-  --workspace-frame: #f8fafc;
-  --frame-base: #f8fafc;
+  --sidebar-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --workspace-frame: #f3f3f5;
+  --frame-base: #f3f3f5;
 
-  --material-mica: #f8fafc;
-  --bg-workspace: #f8fafc;
-  --bg-sheet: #f8fafc;
+  --material-mica: #f3f3f5;
+  --bg-workspace: #f3f3f5;
+  --bg-sheet: #f3f3f5;
 
-  --material-acrylic-bg: #ffffff;
-  --material-acrylic-blur: none;
-  --material-acrylic-border: rgba(0, 0, 0, 0.06);
-  --material-acrylic-rim: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
-  --material-acrylic-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
-  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.08);
+  /* Fluent 2 Acrylic 磨砂材质系统 (浅色) */
+  --fluent-acrylic-bg: rgba(255, 255, 255, 0.78);
+  --fluent-acrylic-blur: blur(20px) saturate(180%);
+  --fluent-acrylic-border: rgba(0, 0, 0, 0.08);
+  --fluent-acrylic-rim: inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+  --fluent-acrylic-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.04);
+
+  --material-acrylic-bg: var(--fluent-acrylic-bg);
+  --material-acrylic-blur: var(--fluent-acrylic-blur);
+  --material-acrylic-border: var(--fluent-acrylic-border);
+  --material-acrylic-rim: var(--fluent-acrylic-rim);
+  --material-acrylic-shadow: var(--fluent-acrylic-shadow);
+  --shadow-pop: var(--fluent-acrylic-shadow);
   --bg-dialog: #ffffff;
-  --bg-popover: #ffffff;
-  --bg-menu: #ffffff;
+  --bg-popover: var(--fluent-acrylic-bg);
+  --bg-menu: var(--fluent-acrylic-bg);
 
   --chrome-bg: transparent;
   --overlay: rgba(15, 23, 42, 0.35);
@@ -194,21 +201,36 @@
   --badge-cat-bg: rgba(255, 255, 255, 0.06);
   --badge-cat-border: transparent;
   --badge-cat-text: var(--text-secondary);
-  --workspace-frame: #14151a;
-  --frame-base: #14151a;
+  --workspace-frame: #18191d;
+  --frame-base: #18191d;
 
-  --material-mica: #14151a;
-  --bg-workspace: #14151a;
-  --bg-sheet: #14151a;
+  --material-mica: #18191d;
+  --bg-workspace: #18191d;
+  --bg-sheet: #18191d;
 
-  --material-acrylic-bg: #1c1e24;
-  --material-acrylic-blur: none;
-  --material-acrylic-border: rgba(255, 255, 255, 0.07);
-  --material-acrylic-rim: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
-  --material-acrylic-shadow: 0 20px 48px rgba(0, 0, 0, 0.65);
-  --bg-dialog: #1c1e24;
-  --bg-popover: #1c1e24;
-  --bg-menu: #1c1e24;
+  /* Fluent 2 实体卡片暗色基底与边框 */
+  --bg-card: #23252b;
+  --border-card: rgba(255, 255, 255, 0.08);
+  --shadow-card: var(--shadow-card-rest);
+  --shadow-card-rest: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 2px 4px rgba(0, 0, 0, 0.28), 0 6px 16px -4px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 4px 8px rgba(0, 0, 0, 0.35), 0 12px 28px -6px rgba(0, 0, 0, 0.55);
+  --card-line-hover: color-mix(in srgb, var(--accent) 35%, rgba(255, 255, 255, 0.12));
+
+  /* Fluent 2 Acrylic 磨砂材质系统 (暗色) */
+  --fluent-acrylic-bg: rgba(32, 34, 40, 0.82);
+  --fluent-acrylic-blur: blur(20px) saturate(160%);
+  --fluent-acrylic-border: rgba(255, 255, 255, 0.09);
+  --fluent-acrylic-rim: inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  --fluent-acrylic-shadow: 0 18px 40px -6px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.4);
+
+  --material-acrylic-bg: var(--fluent-acrylic-bg);
+  --material-acrylic-blur: var(--fluent-acrylic-blur);
+  --material-acrylic-border: var(--fluent-acrylic-border);
+  --material-acrylic-rim: var(--fluent-acrylic-rim);
+  --material-acrylic-shadow: var(--fluent-acrylic-shadow);
+  --bg-dialog: #23252b;
+  --bg-popover: var(--fluent-acrylic-bg);
+  --bg-menu: var(--fluent-acrylic-bg);
 
   --chrome-bg: transparent;
   --overlay: rgba(0, 0, 0, 0.65);
@@ -231,41 +253,34 @@
   --toast-info: var(--accent);
 }
 
-/* 背景氛围（案头晨昏生机光场 · 纯净通透双角弥散）：
-   1. 彻底移除伪噪点与杂质，回归 100% 洁净纯白底色，消除任何灰雾与脏感；
-   2. 左上晨曦主天光（16% 浓度，经 OKLab 调和呈现晶莹浅色调），肉眼自然柔和、清透宜人；
-   3. 右下自然回填光（8.5% 浓度），使全屏左右平衡、具有宽广的空气感与景深；
-   4. 正中央核心阅读与卡片区完全融入纯白 #ffffff，确保文字与便签绝对清晰锐利。 */
+/* 背景氛围：Fluent 2 克制天光漫反射，绝不污染正文阅读底色，消灭发脏边缘光斑 */
 :root[data-layout="workspace"]:is([data-base="light"], [data-theme="paper"])[data-atmosphere="on"],
 .workspace-theme-prev:is([data-base="light"], [data-theme="paper"])[data-atmosphere="on"] {
-  --bg-workspace: #ffffff;
-  --bg-aura:
-    radial-gradient(ellipse 90% 65% at 20% -8%, color-mix(in oklab, var(--accent) 16%, #ffffff) 0%, color-mix(in oklab, var(--accent) 4.5%, #ffffff) 45%, transparent 75%),
-    radial-gradient(ellipse 75% 55% at 85% 95%, color-mix(in oklab, var(--accent) 8.5%, #ffffff) 0%, color-mix(in oklab, var(--accent) 2%, #ffffff) 45%, transparent 75%);
-  --bg-dialog:
-    radial-gradient(ellipse 85% 60% at 24% -6%, color-mix(in oklab, var(--accent) 13%, #ffffff) 0%, color-mix(in oklab, var(--accent) 3%, #ffffff) 45%, transparent 75%),
-    #ffffff;
+  --bg-workspace: #f3f3f5;
+  --bg-aura: radial-gradient(120% 90% at 50% -25%, color-mix(in oklab, var(--accent) 7.5%, #f3f3f5) 0%, transparent 70%);
+  --dialog-aura: radial-gradient(120% 85% at 50% -20%, color-mix(in oklab, var(--accent) 9%, #ffffff) 0%, transparent 75%);
+  --bg-dialog: var(--dialog-aura), #ffffff;
 }
 
 :root[data-layout="workspace"]:is([data-base="dark"], [data-theme="ink"])[data-atmosphere="on"],
 .workspace-theme-prev:is([data-base="dark"], [data-theme="ink"])[data-atmosphere="on"] {
-  --bg-workspace: var(--material-mica);
-  --bg-aura:
-    radial-gradient(ellipse 90% 65% at 20% -8%, color-mix(in oklab, var(--accent) 11%, #181a20) 0%, color-mix(in oklab, var(--accent) 3%, #14151a) 45%, transparent 75%),
-    radial-gradient(ellipse 75% 55% at 85% 95%, color-mix(in oklab, var(--accent) 6.5%, #181a20) 0%, transparent 68%);
-  --bg-dialog:
-    radial-gradient(ellipse 85% 60% at 24% -6%, color-mix(in oklab, var(--accent) 9%, #1c1e24) 0%, color-mix(in oklab, var(--accent) 2%, #1c1e24) 45%, transparent 75%),
-    #1c1e24;
+  --bg-workspace: #18191d;
+  --bg-aura: radial-gradient(120% 90% at 50% -25%, color-mix(in oklab, var(--accent) 8%, #18191d) 0%, transparent 70%);
+  --dialog-aura: radial-gradient(120% 85% at 50% -20%, color-mix(in oklab, var(--accent) 12%, #22242a) 0%, transparent 75%);
+  --bg-dialog: var(--dialog-aura), #22242a;
 }
 
 :root[data-layout="workspace"][data-atmosphere="off"],
 .workspace-theme-prev[data-atmosphere="off"] {
   --bg-aura: none;
+  --dialog-aura: none;
   --bg-dialog: #ffffff;
 }
 :root[data-layout="workspace"][data-base="dark"][data-atmosphere="off"],
 .workspace-theme-prev[data-base="dark"][data-atmosphere="off"] {
-  --bg-dialog: #1c1e24;
+  --bg-aura: none;
+  --dialog-aura: none;
+  --bg-dialog: #22242a;
 }
 
 /* 强调色色盘规范（现代高纯度、高对比度与轻盈活力色阶） */
@@ -312,15 +327,15 @@
   background: var(--workspace-accent-swatch);
 }
 
-/* Linear / Raycast 实体卡片与悬停微反馈 */
-:root[data-layout="workspace"] :is(.grid-card, .memo) {
+/* Fluent 2 实体卡片体系与轻盈微反馈 (所有核心业务卡片统一接入) */
+:root[data-layout="workspace"] :is(.grid-card, .memo, .composer, .mfa-card, .rcard, .tn-card, .clean-group-card) {
   border: 1px solid var(--border-card);
   border-radius: 8px;
   background: var(--panel-bg);
   box-shadow: var(--shadow-card-rest);
-  transition: all var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 }
-:root[data-layout="workspace"] :is(.grid-card, .memo):hover {
+:root[data-layout="workspace"] :is(.grid-card, .memo, .composer, .mfa-card, .rcard, .tn-card, .clean-group-card):hover {
   border-color: var(--card-line-hover);
   box-shadow: var(--shadow-card-hover);
   transform: translateY(-1px);
@@ -355,93 +370,108 @@
   color: var(--accent);
 }
 
-/* Featherlight 呼吸感轻盈主按钮系统 */
+/* Fluent 2 实体主按钮 (Accent Button) */
 :root[data-layout="workspace"] .btn-primary:not(:disabled):not(.ghost-danger):not(:where(.dialog *)),
 :root[data-layout="workspace"] .create-action,
 :root[data-layout="workspace"] .go {
   background: var(--accent);
   color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 25%, transparent);
+  border: 1px solid transparent;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.25), 0 1px 3px rgba(0, 0, 0, 0.08);
   font-weight: 600;
-  font-size: 13px;
-  height: 32px;
-  padding: 0 14px;
+  font-size: 12px;
+  height: 28px;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   cursor: pointer;
-  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all var(--transition-fast);
 }
 :root[data-layout="workspace"] .btn-primary:hover:not(:disabled):not(.ghost-danger):not(:where(.dialog *)),
 :root[data-layout="workspace"] .create-action:hover:not(:disabled),
 :root[data-layout="workspace"] .go:hover:not(:disabled) {
-  background: var(--accent);
+  background: var(--accent-hover);
   color: #ffffff;
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent);
-  transform: translateY(-1px);
-  filter: brightness(1.06);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.32), 0 2px 6px rgba(0, 0, 0, 0.12);
+  filter: none;
+  transform: none;
 }
 :root[data-layout="workspace"] .btn-primary:active:not(:disabled):not(.ghost-danger):not(:where(.dialog *)),
 :root[data-layout="workspace"] .create-action:active:not(:disabled),
 :root[data-layout="workspace"] .go:active:not(:disabled) {
-  transform: translateY(0);
+  background: var(--accent-active);
+  transform: scale(0.97) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2) !important;
 }
 
-/* Featherlight 次级轻盈按钮（默认纯通透无底色，微发丝边与轻柔悬停显形） */
+/* Fluent 2 标准次级按钮 (Standard / Secondary Button) */
 :root[data-layout="workspace"] .btn-secondary:not(:disabled):not(:where(.dialog *)),
 :root[data-layout="workspace"] .action-btn:not(.primary):not(.danger) {
-  background: transparent;
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
   border: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom-color: rgba(0, 0, 0, 0.18);
   border-radius: 6px;
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 1), 0 1px 2px rgba(0, 0, 0, 0.04);
   font-weight: 500;
-  font-size: 11.5px;
-  height: 26px;
-  padding: 0 10px;
+  font-size: 12px;
+  height: 28px;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all var(--transition-fast);
 }
 :root[data-layout="workspace"][data-base="dark"] .btn-secondary:not(:disabled):not(:where(.dialog *)),
 :root[data-layout="workspace"][data-base="dark"] .action-btn:not(.primary):not(.danger) {
-  background: transparent;
-  border-color: rgba(255, 255, 255, 0.1);
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.25);
+  color: var(--text);
 }
 :root[data-layout="workspace"] .btn-secondary:hover:not(:disabled):not(:where(.dialog *)),
 :root[data-layout="workspace"] .action-btn:not(.primary):not(.danger):hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.05);
-  border-color: rgba(0, 0, 0, 0.15);
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.14);
+  border-bottom-color: rgba(0, 0, 0, 0.24);
   color: var(--text);
-  transform: translateY(-0.5px);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  transform: none;
 }
 :root[data-layout="workspace"][data-base="dark"] .btn-secondary:hover:not(:disabled):not(:where(.dialog *)),
 :root[data-layout="workspace"][data-base="dark"] .action-btn:not(.primary):not(.danger):hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.12);
   color: var(--text);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 2px 4px rgba(0, 0, 0, 0.35);
+  transform: none;
 }
 :root[data-layout="workspace"] .btn-secondary:active:not(:disabled):not(:where(.dialog *)),
 :root[data-layout="workspace"] .action-btn:not(.primary):not(.danger):active:not(:disabled) {
-  transform: translateY(0);
+  background: rgba(0, 0, 0, 0.03);
+  transform: scale(0.97) !important;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.08) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .btn-secondary:active:not(:disabled):not(:where(.dialog *)),
+:root[data-layout="workspace"][data-base="dark"] .action-btn:not(.primary):not(.danger):active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+  transform: scale(0.97) !important;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2) !important;
 }
 
-/* Featherlight 统一精巧按钮系统（更加小巧精致、克制、轻盈） */
+/* Fluent 2 统一精巧按钮尺寸 */
 :root[data-layout="workspace"] :is(.btn-primary, .btn-secondary, .create-action, .action-btn, .go):not(:where(.dialog *, .settings-dialog *)) {
-  height: 26px !important;
-  padding: 0 10px !important;
-  font-size: 11.5px !important;
+  height: 28px !important;
+  padding: 0 11px !important;
+  font-size: 12px !important;
   border-radius: 6px !important;
-  font-weight: 600;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 22%, transparent);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 :root[data-layout="workspace"] :is(.btn-secondary, .action-btn:not(.primary)):not(:where(.dialog *, .settings-dialog *)) {
   box-shadow: none;
@@ -725,21 +755,39 @@
   color: #ffffff !important;
 }
 
-/* Featherlight 侧栏导航与底部按钮激活态：高辨识度浮岛胶囊，带微边框与柔和浮空投影 */
+/* Fluent 2 侧栏导航与底部按钮激活态：精致微岛胶囊 + 经典左缘竖向指示标 */
+:root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item) {
+  position: relative;
+  border-radius: 6px;
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+:root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item):active {
+  transform: scale(0.98);
+}
 :root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active {
   background: #ffffff;
   color: var(--accent);
-  border: 1px solid color-mix(in oklab, var(--accent) 28%, rgba(0, 0, 0, 0.08));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.03);
-  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.95), 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
 }
 :root[data-layout="workspace"][data-base="dark"] .sidebar :is(.nav-item, .foot-item).active {
-  background: #232630;
-  border: 1px solid color-mix(in oklab, var(--accent) 30%, rgba(255, 255, 255, 0.1));
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  background: #23252b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 2px 8px rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
 }
 :root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active::before {
-  display: none;
+  content: '';
+  display: block !important;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 :root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active :is(.nav-text, .foot-text) {
   font-weight: 600;
@@ -757,15 +805,15 @@
   color: var(--accent);
 }
 :root[data-layout="workspace"][data-base="dark"] .sidebar :is(.nav-item, .foot-item).active:hover {
-  background: #232630;
+  background: #23252b;
 }
 :root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item):hover:not(.active) {
   background: rgba(0, 0, 0, 0.04);
   color: var(--text);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 :root[data-layout="workspace"][data-base="dark"] .sidebar :is(.nav-item, .foot-item):hover:not(.active) {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* Windows 11 弹窗与开关 */
@@ -777,40 +825,79 @@
   background-color: var(--accent);
 }
 
-/* Featherlight 干净浮层与弹窗系统（对话框、设置弹窗、下拉菜单与气泡） */
+/* Fluent 2 质感浮层与弹窗系统（对话框、设置弹窗、磨砂微透与景深） */
 :root[data-layout="workspace"] .dialog-overlay {
-  background: rgba(15, 23, 42, 0.32) !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
+  background: rgba(15, 23, 42, 0.36) !important;
+  backdrop-filter: blur(16px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(140%) !important;
   transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 :root[data-layout="workspace"][data-base="dark"] .dialog-overlay {
-  background: rgba(0, 0, 0, 0.6) !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
+  background: rgba(0, 0, 0, 0.65) !important;
+  backdrop-filter: blur(16px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(130%) !important;
 }
 
 :root[data-layout="workspace"] :is(.dialog, .settings-dialog) {
   background: #ffffff !important;
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.18), 0 4px 16px -2px rgba(15, 23, 42, 0.05), inset 0 1px 0 0 rgba(255, 255, 255, 0.95) !important;
-  border-radius: 14px !important;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.95),
+    0 24px 54px -12px rgba(15, 23, 42, 0.22),
+    0 6px 16px -2px rgba(15, 23, 42, 0.06) !important;
+  border-radius: 12px !important;
   overflow: hidden;
   transition: none !important;
 }
 :root[data-layout="workspace"][data-base="dark"] :is(.dialog, .settings-dialog) {
-  background: #1c1e24 !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 28px 64px -16px rgba(0, 0, 0, 0.75), 0 6px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.06) !important;
+  background: #23252b !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1),
+    0 28px 64px -16px rgba(0, 0, 0, 0.75),
+    0 8px 24px rgba(0, 0, 0, 0.5) !important;
   transition: none !important;
 }
 
-/* 开启柔光背景氛围时，普通弹窗顶部自然沐浴晨曦天光，底沿融于洁白/暗夜基底，OKLab 混合纯净无灰雾 */
-:root[data-layout="workspace"][data-atmosphere="on"] .dialog:not(.settings-dialog) {
-  background: radial-gradient(ellipse 95% 65% at 25% -12%, color-mix(in oklab, var(--accent) 15%, #ffffff) 0%, color-mix(in oklab, var(--accent) 5%, #ffffff) 48%, #ffffff 78%) !important;
+/* Fluent 2 Acrylic 磨砂动作浮岛 (网格卡片/书签/文件快捷方式 hover 时显形) */
+:root[data-layout="workspace"] .grid-acts {
+  background: var(--fluent-acrylic-bg) !important;
+  backdrop-filter: var(--fluent-acrylic-blur) !important;
+  -webkit-backdrop-filter: var(--fluent-acrylic-blur) !important;
+  border: 1px solid var(--fluent-acrylic-border) !important;
+  box-shadow: var(--fluent-acrylic-shadow), var(--fluent-acrylic-rim) !important;
+  border-radius: 6px !important;
+  padding: 2px 3px !important;
 }
-:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"] .dialog:not(.settings-dialog) {
-  background: radial-gradient(ellipse 95% 65% at 25% -12%, color-mix(in oklab, var(--accent) 7.5%, #1c1e24) 0%, color-mix(in oklab, var(--accent) 2.5%, #1c1e24) 48%, #1c1e24 78%) !important;
+:root[data-layout="workspace"] .grid-acts .ib {
+  border-radius: 4px;
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+:root[data-layout="workspace"] .grid-acts .ib:hover {
+  background: var(--hover-chrome);
+  color: var(--text);
+}
+:root[data-layout="workspace"] .grid-acts .ib:active {
+  transform: scale(0.92);
+}
+
+/* 弹窗保持 Fluent 2 天光漫射背景柔光与精工多重景深阴影 */
+:root[data-layout="workspace"] .dialog:not(.settings-dialog) {
+  background-color: #ffffff !important;
+  background-image: var(--dialog-aura) !important;
+  background-attachment: scroll !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 18px 40px -6px rgba(0, 0, 0, 0.16), 0 6px 14px -2px rgba(0, 0, 0, 0.06) !important;
+  overflow: hidden;
+}
+:root[data-layout="workspace"][data-base="dark"] .dialog:not(.settings-dialog) {
+  background-color: #22242a !important;
+  background-image: var(--dialog-aura) !important;
+  background-attachment: scroll !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 24px 50px -8px rgba(0, 0, 0, 0.65), 0 8px 20px -3px rgba(0, 0, 0, 0.45) !important;
+  overflow: hidden;
 }
 
 /* 弹窗头部：自然透气首栏，去除僵硬表格横切底线 */
@@ -1059,91 +1146,90 @@
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-/* 弹窗分段选择控制器 (.seg) 精修 */
-:root[data-layout="workspace"] .dialog .seg {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.04);
-  gap: 2px;
-  border: none;
+/* 全局及弹窗分段选择控制器 (.seg) Fluent 2 精工药丸式控件 */
+:root[data-layout="workspace"] :is(.seg, .dialog .seg):not(.session-search-mode) {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 3px !important;
+  border-radius: 8px !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+  gap: 2px !important;
+  border: 1px solid rgba(0, 0, 0, 0.04) !important;
+  box-sizing: border-box !important;
 }
-:root[data-layout="workspace"][data-base="dark"] .dialog .seg {
-  background: rgba(255, 255, 255, 0.06);
+:root[data-layout="workspace"][data-base="dark"] :is(.seg, .dialog .seg):not(.session-search-mode) {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
 }
-:root[data-layout="workspace"] .dialog .seg > :is(button, .seg-btn) {
-  height: 26px;
-  padding: 0 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.18s ease;
-  white-space: nowrap;
+:root[data-layout="workspace"] :is(.seg, .dialog .seg):not(.session-search-mode) > :is(button, .seg-btn) {
+  height: 26px !important;
+  padding: 0 12px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  box-sizing: border-box !important;
+  transition: all 0.18s cubic-bezier(0.2, 0, 0, 1) !important;
+  white-space: nowrap !important;
 }
-:root[data-layout="workspace"] .dialog .seg > :is(button, .seg-btn):hover {
-  color: var(--text);
+:root[data-layout="workspace"] :is(.seg, .dialog .seg):not(.session-search-mode) > :is(button, .seg-btn):hover {
+  color: var(--text) !important;
 }
-:root[data-layout="workspace"] .dialog .seg > :is(button, .seg-btn):is(.on, [aria-selected="true"]) {
-  background: #ffffff;
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+:root[data-layout="workspace"] :is(.seg, .dialog .seg):not(.session-search-mode) > :is(button, .seg-btn):is(.on, [aria-selected="true"]) {
+  background: #ffffff !important;
+  color: var(--text) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
 }
-:root[data-layout="workspace"][data-base="dark"] .dialog .seg > :is(button, .seg-btn):is(.on, [aria-selected="true"]) {
-  background: #2a2d38;
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+:root[data-layout="workspace"][data-base="dark"] :is(.seg, .dialog .seg):not(.session-search-mode) > :is(button, .seg-btn):is(.on, [aria-selected="true"]) {
+  background: #2a2d38 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35) !important;
 }
 
-/* SettingsDialog 特别优化：现代 macOS / Windows 11 双栏分层结构，侧栏与内容区各自独立柔光 */
+/* SettingsDialog Fluent 2 精工双栏分层结构与背景柔光 */
 :root[data-layout="workspace"] .settings-dialog {
   display: flex !important;
-  border-radius: 14px !important;
-  background: #ffffff !important;
+  border-radius: 12px !important;
+  background-color: #ffffff !important;
+  background-image: var(--dialog-aura) !important;
   overflow: hidden !important;
   transition: none !important;
 }
 :root[data-layout="workspace"][data-base="dark"] .settings-dialog {
-  background: #1c1e24 !important;
+  background-color: #22242a !important;
+  background-image: var(--dialog-aura) !important;
   transition: none !important;
 }
 
-/* 侧边栏独立柔光：自导航列顶端独立发散轻雾天光 */
+/* 侧边导航栏：Fluent 2 Mica Alt 沉静质感基底 */
 :root[data-layout="workspace"] .settings-dialog .settings-nav {
-  background: #f8fafc !important;
+  background: #f3f3f5 !important;
   border-right: 1px solid rgba(0, 0, 0, 0.06) !important;
   padding: 16px 10px !important;
   width: 184px;
 }
 :root[data-layout="workspace"][data-base="dark"] .settings-dialog .settings-nav {
-  background: #16181f !important;
+  background: #18191d !important;
   border-right-color: rgba(255, 255, 255, 0.06) !important;
 }
-:root[data-layout="workspace"][data-atmosphere="on"] .settings-dialog .settings-nav {
-  background: radial-gradient(ellipse 110% 65% at 50% -12%, color-mix(in oklab, var(--accent) 15%, #ffffff) 0%, color-mix(in oklab, var(--accent) 5%, #ffffff) 48%, #ffffff 78%) !important;
-  border-right: 1px solid rgba(0, 0, 0, 0.06) !important;
-}
-:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"] .settings-dialog .settings-nav {
-  background: radial-gradient(ellipse 110% 65% at 50% -12%, color-mix(in oklab, var(--accent) 7%, #16181f) 0%, color-mix(in oklab, var(--accent) 2%, #16181f) 48%, #16181f 78%) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
-}
 
-/* 内容区域独立柔光：从内容面板顶端独立向内发散晨曦微光，与侧栏物理分离 */
+/* 内容区域：柔光漫射高品质阅读面 */
 :root[data-layout="workspace"] .settings-dialog .settings-main {
-  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: var(--dialog-aura) !important;
+  background-attachment: scroll !important;
 }
 :root[data-layout="workspace"][data-base="dark"] .settings-dialog .settings-main {
-  background: #1c1e24 !important;
-}
-:root[data-layout="workspace"][data-atmosphere="on"] .settings-dialog .settings-main {
-  background: radial-gradient(ellipse 95% 65% at 25% -12%, color-mix(in oklab, var(--accent) 15%, #ffffff) 0%, color-mix(in oklab, var(--accent) 5%, #ffffff) 48%, #ffffff 78%) !important;
-}
-:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"] .settings-dialog .settings-main {
-  background: radial-gradient(ellipse 95% 65% at 25% -12%, color-mix(in oklab, var(--accent) 7.5%, #1c1e24) 0%, color-mix(in oklab, var(--accent) 2.5%, #1c1e24) 48%, #1c1e24 78%) !important;
+  background-color: #22242a !important;
+  background-image: var(--dialog-aura) !important;
+  background-attachment: scroll !important;
 }
 :root[data-layout="workspace"] .settings-dialog .settings-head {
   height: 52px;
@@ -1162,13 +1248,17 @@
   padding: 18px 24px 28px 24px;
 }
 :root[data-layout="workspace"] .settings-dialog :is(button.nav-item, .nav-tab) {
+  position: relative;
   height: 32px;
-  border-radius: 7px;
+  border-radius: 6px;
   padding: 0 10px;
   font-size: 12.5px;
   color: var(--text-secondary);
-  transition: all 0.15s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
   font-weight: 500;
+}
+:root[data-layout="workspace"] .settings-dialog :is(button.nav-item, .nav-tab):active {
+  transform: scale(0.98);
 }
 :root[data-layout="workspace"] .settings-dialog :is(button.nav-item, .nav-tab):hover {
   background: rgba(0, 0, 0, 0.04);
@@ -1179,13 +1269,29 @@
   color: var(--text);
 }
 :root[data-layout="workspace"] .settings-dialog :is(button.nav-item, .nav-tab):is(.active, .on) {
-  background: var(--accent-soft);
+  background: #ffffff;
   color: var(--accent);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.95), 0 1px 2px rgba(0, 0, 0, 0.03);
   font-weight: 600;
 }
 :root[data-layout="workspace"][data-base="dark"] .settings-dialog :is(button.nav-item, .nav-tab):is(.active, .on) {
-  background: var(--accent-soft);
+  background: #2a2d36;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 1px 3px rgba(0, 0, 0, 0.3);
   color: var(--accent);
+}
+:root[data-layout="workspace"] .settings-dialog :is(button.nav-item, .nav-tab):is(.active, .on)::before {
+  content: '';
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 :root[data-layout="workspace"] .settings-dialog .nav-brand h2 {
   font-size: 15px;
@@ -1363,72 +1469,135 @@
   background: var(--accent-soft);
 }
 
-/* 凭据/授权分段栏容器留白 */
-:root[data-layout="workspace"] :is(.auth-tabs, .import-sources) {
+/* 凭据/授权分段栏容器留白与垂直居中对齐 */
+:root[data-layout="workspace"] :is(.auth-tabs, .import-tabs) {
   padding: 0 20px 10px 20px !important;
+  display: flex !important;
+  align-items: center !important;
 }
 
+/* Fluent 2 Acrylic 磨砂悬浮菜单与下拉气泡 */
 :root[data-layout="workspace"] :is(.popover, .category-dropdown-teleported, .slash-menu) {
-  background: var(--panel-bg) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.02);
-  border-radius: 10px;
+  background: var(--fluent-acrylic-bg) !important;
+  backdrop-filter: var(--fluent-acrylic-blur) !important;
+  -webkit-backdrop-filter: var(--fluent-acrylic-blur) !important;
+  border: 1px solid var(--fluent-acrylic-border) !important;
+  box-shadow: var(--fluent-acrylic-shadow), var(--fluent-acrylic-rim) !important;
+  border-radius: 8px !important;
 }
 :root[data-layout="workspace"][data-base="dark"] :is(.popover, .category-dropdown-teleported, .slash-menu) {
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  background: var(--fluent-acrylic-bg) !important;
+  backdrop-filter: var(--fluent-acrylic-blur) !important;
+  -webkit-backdrop-filter: var(--fluent-acrylic-blur) !important;
+  border: 1px solid var(--fluent-acrylic-border) !important;
+  box-shadow: var(--fluent-acrylic-shadow), var(--fluent-acrylic-rim) !important;
 }
 
+:root[data-layout="workspace"] .pop-item {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 450;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+:root[data-layout="workspace"] .pop-item:hover {
+  background: var(--hover-chrome);
+  color: var(--text);
+}
+:root[data-layout="workspace"] .pop-item:active {
+  transform: scale(0.98);
+}
+
+/* Fluent 2 Acrylic 磨砂微胶囊通知 (Toast) */
 :root[data-layout="workspace"] .toast {
-  background: #ffffff;
-  color: #1e293b;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 10px 30px -4px rgba(15, 23, 42, 0.12), 0 3px 10px -2px rgba(15, 23, 42, 0.04);
+  background: var(--fluent-acrylic-bg) !important;
+  backdrop-filter: var(--fluent-acrylic-blur) !important;
+  -webkit-backdrop-filter: var(--fluent-acrylic-blur) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--fluent-acrylic-border) !important;
+  box-shadow: var(--fluent-acrylic-shadow), var(--fluent-acrylic-rim) !important;
   border-radius: 999px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 550;
   padding: 5px 16px 5px 7px;
 }
 :root[data-layout="workspace"][data-base="dark"] .toast {
-  background: #20232c;
-  color: #f1f3f7;
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.5), 0 4px 12px -2px rgba(0, 0, 0, 0.3);
+  background: var(--fluent-acrylic-bg) !important;
+  color: var(--text) !important;
+  border-color: var(--fluent-acrylic-border) !important;
+  box-shadow: var(--fluent-acrylic-shadow), var(--fluent-acrylic-rim) !important;
 }
 
-/* Featherlight 表单输入件（统一 8px 圆角、温润微边框与极致纤细 1px 精准聚焦） */
-:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input) {
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
+/* Fluent 2 表单输入控件 (TextBox / ComboBox / NumberBox 经典下压指示线与精细收边，覆盖全站输入框与弹窗字段) */
+:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input, .dialog input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([hidden]), .dialog textarea, .dialog select, .unlock-input, .setup-input) {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
   color: var(--text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
-:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input) {
-  background: rgba(16, 17, 21, 0.6);
-  border-color: rgba(255, 255, 255, 0.08);
+:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input, .dialog input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([hidden]), .dialog textarea, .dialog select, .unlock-input, .setup-input) {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
   color: var(--text);
 }
-:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):hover {
-  border-color: rgba(0, 0, 0, 0.18);
+:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input, .dialog input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([hidden]), .dialog textarea, .dialog select, .unlock-input, .setup-input):hover {
+  border-color: rgba(0, 0, 0, 0.16);
+  border-bottom-color: rgba(0, 0, 0, 0.45);
 }
-:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):hover {
-  border-color: rgba(255, 255, 255, 0.18);
+:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input, .dialog input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([hidden]), .dialog textarea, .dialog select, .unlock-input, .setup-input):hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  border-bottom-color: rgba(255, 255, 255, 0.5);
 }
-:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):focus,
-:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):focus-visible {
+:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input, .dialog input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([hidden]), .dialog textarea, .dialog select, .unlock-input, .setup-input):focus,
+:root[data-layout="workspace"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input, .dialog input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([hidden]), .dialog textarea, .dialog select, .unlock-input, .setup-input):focus-visible {
   background: #ffffff;
   border-color: var(--accent) !important;
+  border-bottom-width: 2px !important;
   box-shadow: none !important;
   outline: none !important;
 }
-:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):focus,
-:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input):focus-visible {
-  background: #181a20;
+:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input, .dialog input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([hidden]), .dialog textarea, .dialog select, .unlock-input, .setup-input):focus,
+:root[data-layout="workspace"][data-base="dark"] :is(.form-group input, .form-group select, .form-group textarea, .text-input, .select-input, .dialog input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([hidden]), .dialog textarea, .dialog select, .unlock-input, .setup-input):focus-visible {
+  background: #1e2026;
   border-color: var(--accent) !important;
+  border-bottom-width: 2px !important;
   box-shadow: none !important;
   outline: none !important;
+}
+
+/* Fluent 2 锁屏与首启建码页精细材质 */
+:root[data-layout="workspace"] :is(.lock-tile, .setup-tile) {
+  border-radius: 14px !important;
+  border: 1px solid var(--border-card) !important;
+  background: var(--panel-bg) !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.95), 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] :is(.lock-tile, .setup-tile) {
+  background: #23252b !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08), 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+:root[data-layout="workspace"] :is(.unlock-btn, .setup-submit) {
+  border-radius: 6px !important;
+  transition: all var(--transition-fast) !important;
+}
+:root[data-layout="workspace"] :is(.unlock-btn, .setup-submit):active:not(:disabled) {
+  transform: translateY(-50%) scale(0.92) !important;
+}
+
+/* Fluent 2 事实徽标与等级标签 */
+:root[data-layout="workspace"] :is(.badge, .tier) {
+  border-radius: 4px !important;
+  letter-spacing: 0.02em;
 }
 
 /* 输入框占位符：采用统一规范 UI 字体与优雅温润中性弱化色 */
@@ -1561,16 +1730,77 @@
   background-attachment: fixed;
 }
 
-/* 导航侧栏：轻盈无界羽量导轨 */
-:root[data-layout="workspace"]:not(.web-runtime) .sidebar {
-  background: transparent;
-  border-right: none;
+/* ==========================================================================
+   Fluent 2 方案 B：岛屿内嵌主舞台 (The Inset Island Stage)
+   启发自 Windows 11 文件资源管理器与新版画图，以悬浮圆角面板包裹核心工作流
+   ========================================================================== */
+
+/* 1. 外层 Mica 沉静外框与顶栏自然融底 */
+:root[data-layout="workspace"]:not(.web-runtime) .app-root.codex-layout {
+  --sheet-inset-left: 6px;
+  --sheet-inset-right: 12px;
+  --sheet-gutter: 18px;
+}
+:root[data-layout="workspace"]:not(.web-runtime) .titlebar.titlebar-outer {
+  background: transparent !important;
+  border-bottom: none !important;
+}
+:root[data-layout="workspace"]:not(.web-runtime) .titlebar-brandcell {
+  background: transparent !important;
+  border-right: none !important;
 }
 
-/* 标题栏：轻量融入顶沿，去除厚重底线 */
-:root[data-layout="workspace"]:not(.web-runtime) .titlebar.titlebar-outer {
-  background: transparent;
-  border-bottom: none;
+/* 2. 侧边导航栏：轻盈置于外层 Mica 框架，右侧由岛屿舞台自身构成物理边界 */
+:root[data-layout="workspace"]:not(.web-runtime) .sidebar {
+  background: transparent !important;
+  border-right: none !important;
+  padding-right: 4px !important;
+}
+
+/* 3. 岛屿内嵌主舞台 (#workspace-surface) 实体面板规范 */
+:root[data-layout="workspace"]:not(.web-runtime) .workspace-surface {
+  margin: 0 12px 12px 6px !important;
+  border-radius: 10px !important;
+  background-color: #ffffff !important;
+  background-image: var(--dialog-aura) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 2px 12px -2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02) !important;
+  overflow: hidden !important;
+}
+
+:root[data-layout="workspace"][data-base="dark"]:not(.web-runtime) .workspace-surface {
+  margin: 0 12px 12px 6px !important;
+  border-radius: 10px !important;
+  background-color: #20222a !important;
+  background-image: var(--dialog-aura) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+  overflow: hidden !important;
+}
+
+/* 4. 舞台顶沿工具栏：在岛屿内部吸顶，并带有微型发丝分割底线 */
+:root[data-layout="workspace"] .workspace-head {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .workspace-head {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 5. 辅助目录抽屉 (便签标签/分类)：岛屿内部右侧 Dock 栏 */
+:root[data-layout="workspace"] .workspace-directory {
+  background: rgba(0, 0, 0, 0.015) !important;
+  border-left: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+:root[data-layout="workspace"][data-base="dark"] .workspace-directory {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* 6. 舞台内部暗色卡片对比度加固 (在 #20222a 岛屿上呈现清晰层次) */
+:root[data-layout="workspace"][data-base="dark"] :is(.grid-card, .memo, .composer, .mfa-card, .rcard, .tn-card, .clean-group-card) {
+  background: #262933 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* 原生窗体物理收边：精工微反光刃线与托盘内嵌景深 */

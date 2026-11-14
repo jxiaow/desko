@@ -147,15 +147,23 @@ const navLabel = (m: ModuleDef) => (m.live?.() ? `${m.title} · 服务运行中`
   line-height: 20px;
 }
 .nav-item:hover:not(.active), .foot-item:hover:not(.active) { background: var(--hover-chrome); color: var(--text); }
-/* 激活项：轻盈微抬升纯白微岛胶囊 */
+/* 激活项：Fluent 2 精致微岛胶囊 + 经典左缘竖向指示标 */
 :is(.nav-item, .foot-item).active {
   background: var(--sidebar-active, #ffffff);
   color: var(--accent);
   box-shadow: var(--sidebar-active-shadow, 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.03));
-  border-radius: 8px;
+  border-radius: 6px;
 }
 :is(.nav-item, .foot-item).active::before {
-  display: none;
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 :is(.nav-item, .foot-item).active :is(.nav-text, .foot-text) { font-weight: 600; color: var(--accent); }
 .nav-item.active .nav-count {

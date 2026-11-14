@@ -359,8 +359,10 @@ def main():
             if len(raw) > MAX_AUTH:
                 raise ValueError("auth too large")
             result = write_auth(home, json.loads(raw))
-    except Exception:
-        result = {"error": "无法完成 WSL Codex 操作，请确认目录权限并手动退出 Codex 后重试"}
+    except Exception as error:
+        # Preserve the failing stage and OS error: the caller otherwise cannot
+        # distinguish a Windows UNC permission failure from a Linux file error.
+        result = {"error": f"WSL {sys.argv[2] if len(sys.argv) > 2 else '操作'}失败: {type(error).__name__}: {error}"}
     print(json.dumps(result))
 
 

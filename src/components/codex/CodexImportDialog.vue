@@ -128,8 +128,10 @@ onUnmounted(() => { active = false })
         <h3>导入 Codex 账号</h3>
         <button class="dialog-close" type="button" aria-label="关闭" @click="emit('close')"><AppIcon name="x" :size="16" /></button>
       </header>
-      <div class="import-sources seg" role="tablist" aria-label="凭据来源">
-        <button v-for="item in sources" :id="`codex-import-${item.value}`" :key="item.value" class="seg-btn" :class="{ on: source === item.value }" type="button" role="tab" :aria-selected="source === item.value" aria-controls="codex-import-content" :disabled="busy || choosing" @click="source = item.value">{{ item.label }}</button>
+      <div class="import-tabs">
+        <div class="seg" role="tablist" aria-label="凭据来源">
+          <button v-for="item in sources" :id="`codex-import-${item.value}`" :key="item.value" class="seg-btn" :class="{ on: source === item.value }" type="button" role="tab" :aria-selected="source === item.value" aria-controls="codex-import-content" :disabled="busy || choosing" @click="source = item.value">{{ item.label }}</button>
+        </div>
       </div>
       <form id="codex-import-content" class="dialog-body import-content" role="tabpanel" :aria-labelledby="`codex-import-${source}`" @submit.prevent="importAccounts">
         <template v-if="source === 'local'">
@@ -180,7 +182,8 @@ onUnmounted(() => { active = false })
 
 <style scoped>
 .codex-import-dialog { width: 520px; height: min(360px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); }
-.import-sources { margin: 0 var(--space-4); flex-shrink: 0; }
+.import-tabs { padding: 0 20px 10px 20px; flex-shrink: 0; display: flex; align-items: center; }
+.import-tabs .seg { margin-bottom: 0; }
 .import-content { min-height: 0; overflow-y: auto; scrollbar-gutter: auto; padding: 8px 20px 12px 20px; }
 .import-content .form-group { margin-bottom: 8px; }
 .import-content .form-group label { margin-bottom: 4px; }

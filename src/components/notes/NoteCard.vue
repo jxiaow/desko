@@ -469,9 +469,9 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   --memo-title-color: var(--text);
   position: relative;
   background: var(--bg-surface);
-  /* 轻羽实体便签质感：极淡发丝边 + 空气漫反射投影 */
+  /* Fluent 2 实体便签质感：双层高光发丝边 + 物理景深投影 */
   border: 1px solid var(--border-card);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 16px 20px;
   box-shadow: var(--shadow-card-rest);
   container-type: inline-size;
@@ -828,7 +828,7 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-state { display: inline-flex; align-items: center; gap: var(--space-1); transition: opacity var(--transition); }
 .memo:not(.batchable):hover .memo-state, .memo:not(.batchable):focus-within .memo-state { opacity: 0; }
 .state-star { color: var(--warning); display: inline-flex; }
-/* 动作排：macOS 原生悬浮胶囊工具条，带发丝线与微投影，精简小巧 */
+/* 动作排：Fluent 2 Acrylic 磨砂悬浮胶囊工具条，带微反光刃线与景深微投影 */
 .memo-acts {
   position: absolute;
   right: 12px;
@@ -836,12 +836,14 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
   z-index: 15;
   display: flex;
   align-items: center;
-  gap: 1px;
-  padding: 2px 3px;
-  border-radius: 7px;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  gap: 2px;
+  padding: 3px 4px;
+  border-radius: 8px;
+  background: var(--fluent-acrylic-bg, rgba(255, 255, 255, 0.78));
+  backdrop-filter: var(--fluent-acrylic-blur, blur(20px) saturate(180%));
+  -webkit-backdrop-filter: var(--fluent-acrylic-blur, blur(20px) saturate(180%));
+  border: 1px solid var(--fluent-acrylic-border, rgba(0, 0, 0, 0.08));
+  box-shadow: var(--fluent-acrylic-shadow, 0 8px 24px -4px rgba(15, 23, 42, 0.12)), var(--fluent-acrylic-rim, inset 0 1px 0 0 rgba(255, 255, 255, 0.95));
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-fast), transform var(--transition-fast);
@@ -859,13 +861,16 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 .memo-acts .ib {
   width: 24px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: 6px;
   color: var(--text-secondary);
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
 .memo-acts .ib:hover {
   background: var(--hover-chrome);
   color: var(--text);
+}
+.memo-acts .ib:active {
+  transform: scale(0.92);
 }
 /* 图标尺寸交给 AppIcon 的 :size：它按渲染尺寸反算描边，全窗实笔恒为 1.5px。
    早先这里写 :size="14" 再用 CSS 拉到 16，svg 被放大 14%，描边跟着变成 1.71px——

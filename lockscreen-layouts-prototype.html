@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-atmosphere="on">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Desko 锁屏无卡片（Cardless）无界流原型</title>
+  <style>
+    /* ========== 全局设计系统 Token ========== */
+    :root {
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-active: #1e40af;
+      --accent-on: #ffffff;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+      --font-display: "Segoe UI Variable Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", SimSun, serif;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-full: 9999px;
+      --transition: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* 深色 Ink 模式 */
+    :root[data-theme="dark"] {
+      --bg-desktop: #0b0c0e;
+      --bg-mica-base: #14151a;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --input-bg: rgba(255, 255, 255, 0.06);
+      --input-bg-focus: rgba(255, 255, 255, 0.09);
+      --input-border: rgba(255, 255, 255, 0.12);
+      --hover-bg: rgba(255, 255, 255, 0.08);
+      --control-bar-bg: rgba(18, 19, 24, 0.92);
+      --control-bar-border: rgba(255, 255, 255, 0.08);
+      --titlebar-border: rgba(255, 255, 255, 0.04);
+      --aura-bg: radial-gradient(circle 850px at 50% 28%, color-mix(in oklab, var(--accent) 20%, #151620) 0%, #111216 80%);
+      --logo-bg: rgba(255, 255, 255, 0.08);
+      --logo-border: rgba(255, 255, 255, 0.12);
+    }
+
+    /* 浅色 Paper 模式 */
+    :root[data-theme="light"] {
+      --bg-desktop: #e2e5eb;
+      --bg-mica-base: #f5f6f9;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      --input-bg: rgba(255, 255, 255, 0.85);
+      --input-bg-focus: #ffffff;
+      --input-border: rgba(0, 0, 0, 0.12);
+      --hover-bg: rgba(0, 0, 0, 0.04);
+      --control-bar-bg: rgba(255, 255, 255, 0.92);
+      --control-bar-border: rgba(0, 0, 0, 0.08);
+      --titlebar-border: rgba(0, 0, 0, 0.04);
+      --aura-bg: radial-gradient(circle 850px at 50% 28%, color-mix(in oklab, var(--accent) 12%, #ffffff) 0%, #f4f5f8 80%);
+      --logo-bg: #ffffff;
+      --logo-border: rgba(0, 0, 0, 0.08);
+    }
+
+    :root[data-atmosphere="off"] {
+      --aura-bg: var(--bg-mica-base) !important;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-desktop);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color var(--transition);
+    }
+
+    /* ========== 顶部调试导轨 ========== */
+    .control-header {
+      height: 50px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--control-bar-bg);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--control-bar-border);
+      z-index: 1000;
+      flex-shrink: 0;
+    }
+
+    .proto-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      background: color-mix(in srgb, var(--accent) 15%, transparent);
+      color: var(--accent);
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    .style-tabs {
+      display: flex;
+      background: var(--hover-bg);
+      padding: 3px;
+      border-radius: 8px;
+      gap: 3px;
+    }
+    .style-btn {
+      border: none;
+      background: transparent;
+      padding: 5px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .style-btn:hover { color: var(--text-primary); }
+    .style-btn.active {
+      background: var(--input-bg-focus);
+      color: var(--accent);
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .btn-action {
+      border: 1px solid var(--control-bar-border);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-action:hover { background: var(--hover-bg); color: var(--text-primary); }
+
+    /* ========== 桌面主视口舞台 ========== */
+    .desktop-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 16px;
+    }
+
+    /* 模拟 Desko 窗体容器 (1040 x 670) */
+    .app-window-frame {
+      width: 1040px;
+      height: 670px;
+      max-width: 96vw;
+      max-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-mica-base);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--control-bar-border);
+      position: relative;
+    }
+
+    /* 标题栏 (Height: 40px) */
+    .sim-titlebar {
+      height: 40px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--titlebar-border);
+      background: transparent;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+    .titlebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 550;
+      color: var(--text-secondary);
+    }
+    .titlebar-controls {
+      display: flex;
+      gap: 12px;
+      color: var(--text-muted);
+    }
+
+    /* 锁屏主画布：单一全幅画布，完全无卡片切割 */
+    .lock-body {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--aura-bg);
+      background-size: 100% 100%;
+    }
+
+    /* ==========================================================================
+       【方案 A：Win11 纯粹无界流 (Pure Windows 11 Cardless Flow)】— 强烈推荐
+       没有卡片！没有白色大方盒子！没有边框！
+       时钟、Logo、密码胶囊、诗句直接浮在流光底板上，呼吸感十足、高度聚焦！
+       ========================================================================== */
+    .cardless-center-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      width: 100%;
+      max-width: 320px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .cl-clock {
+      font-family: var(--font-display);
+      font-size: 64px;
+      font-weight: 280;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      color: var(--text-primary);
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+    }
+    .cl-date {
+      font-size: 14px;
+      font-weight: 450;
+      color: var(--text-secondary);
+      margin-top: 6px;
+      letter-spacing: 0.02em;
+    }
+
+    /* 紧凑亲密的解锁中枢（与时钟仅相距 28px） */
+    .cl-auth-group {
+      margin-top: 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+    }
+
+    .cl-logo-tile {
+      width: 52px;
+      height: 52px;
+      border-radius: 15px;
+      background: var(--logo-bg);
+      border: 1px solid var(--logo-border);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .cl-logo-tile svg { width: 34px; height: 34px; }
+
+    .cl-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+    .cl-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 18px;
+    }
+
+    /* 极简无界输入框（高定胶囊风格，融入底板） */
+    .cl-form { width: 100%; }
+    .cl-field {
+      position: relative;
+      width: 100%;
+      height: 38px;
+      display: flex;
+      align-items: center;
+    }
+    .cl-field-icon {
+      position: absolute;
+      left: 12px;
+      color: var(--text-muted);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+    }
+    .cl-input {
+      width: 100%;
+      height: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: var(--radius-md);
+      padding: 0 68px 0 38px;
+      font-size: 13px;
+      color: var(--text-primary);
+      outline: none;
+      transition: all var(--transition);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    }
+    .cl-input:focus {
+      background: var(--input-bg-focus);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+    }
+    .cl-actions {
+      position: absolute;
+      right: 4px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .cl-icon-btn {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: transparent;
+      border-radius: 5px;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .cl-icon-btn:hover { color: var(--text-primary); background: var(--hover-bg); }
+    .cl-submit-btn {
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: var(--accent-on);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .cl-submit-btn:hover { background: var(--accent-hover); transform: scale(1.04); }
+    .cl-submit-btn:active { transform: scale(0.96); }
+
+    .cl-error-tip {
+      font-size: 12px;
+      color: #ef4444;
+      text-align: center;
+      height: 18px;
+      margin-top: 6px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .cl-error-tip.show { opacity: 1; }
+
+    /* 贴在输入框下方的无界题词（仅隔 20px） */
+    .cl-quote {
+      margin-top: 20px;
+      font-family: var(--font-serif);
+      font-size: 13px;
+      color: var(--text-muted);
+      letter-spacing: 0.14em;
+      line-height: 1.5;
+    }
+
+    /* ==========================================================================
+       【方案 B：左右画报无界流 (Cardless Split)】
+       依然是左时钟、右输入，但【彻底去除了卡片和白底】！
+       纯靠优雅排版在同一幅全景背景上左右对齐，绝不割裂！
+       ========================================================================== */
+    .cardless-split-flow {
+      width: 100%;
+      max-width: 680px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      gap: 48px;
+      animation: fadeIn 0.3s ease;
+    }
+    .cs-left {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      text-align: left;
+    }
+    .cs-clock {
+      font-family: var(--font-display);
+      font-size: 58px;
+      font-weight: 280;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      color: var(--text-primary);
+    }
+    .cs-date {
+      font-size: 14px;
+      font-weight: 450;
+      color: var(--text-secondary);
+      margin-top: 6px;
+    }
+    .cs-quote {
+      font-family: var(--font-serif);
+      font-size: 13px;
+      color: var(--text-muted);
+      letter-spacing: 0.12em;
+      line-height: 1.55;
+    }
+
+    .cs-right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    /* ==========================================================================
+       【方案 C：极简单轴流 (Zen Minimalist Single Axis)】
+       极度收敛：微型时间、精工徽章与单行胶囊输入框融为一体，毫无多余杂质
+       ========================================================================== */
+    .cardless-zen-flow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      width: 100%;
+      max-width: 300px;
+      animation: fadeIn 0.3s ease;
+    }
+    .zen-time-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+    }
+
+    /* 摇晃动画 */
+    .shake-anim {
+      animation: shake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(5px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(2px); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部设计模式切换控制器 -->
+  <header class="control-header">
+    <div style="display: flex; align-items: center;">
+      <strong style="font-size: 13px;">锁屏无卡片（Cardless）无界流探索</strong>
+      <span class="proto-badge">No Bounding Box</span>
+    </div>
+
+    <!-- 3 套彻底抛弃卡片的无界流方案 -->
+    <div class="style-tabs">
+      <button class="style-btn active" onclick="switchCardless('cl-center', this)">
+        <span>✨ 方案 A：Win11 纯粹无界流 (零卡片/自然呼吸/强烈推荐)</span>
+      </button>
+      <button class="style-btn" onclick="switchCardless('cl-split', this)">
+        <span>📖 方案 B：左右画报无界流 (无卡片/纯排版美感)</span>
+      </button>
+      <button class="style-btn" onclick="switchCardless('cl-zen', this)">
+        <span>🧘 方案 C：极简禅意单轴 (极简高定/零杂质)</span>
+      </button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button class="btn-action" onclick="toggleAtmosphere()">✨ 天顶柔光: <span id="atm-label">开启</span></button>
+      <button class="btn-action" onclick="toggleTheme()">🌓 主题: <span id="theme-label">深色 (Ink)</span></button>
+    </div>
+  </header>
+
+  <!-- 桌面主视口舞台 -->
+  <main class="desktop-stage">
+
+    <div class="app-window-frame" id="appWindow">
+
+      <!-- 标题栏 (Height: 40px) -->
+      <div class="sim-titlebar">
+        <div class="titlebar-brand">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span>Desko (工作台已安全锁定)</span>
+        </div>
+        <div class="titlebar-controls">
+          <span>―</span>
+          <span>口</span>
+          <span>✕</span>
+        </div>
+      </div>
+
+      <!-- 锁屏主画布：无卡片阻隔，整屏空间通透舒展 -->
+      <div class="lock-body">
+
+        <!-- ===============================================================
+             【方案 A：Win11 纯粹无界流 (Pure Windows 11 Cardless Flow)】
+             没有任何卡片！没有任何边界矩形！
+             时钟、Logo、输入框、题词如同刻在原生画布上，呼吸感与聚焦力兼备！
+             =============================================================== -->
+        <div class="cardless-center-stack" id="view-center">
+          <!-- 1. 纯粹时间 -->
+          <div>
+            <div class="cl-clock live-time">00:01</div>
+            <div class="cl-date live-date">11月14日 星期六</div>
+          </div>
+
+          <!-- 2. 解锁核心（直接浮于画布） -->
+          <div class="cl-auth-group" id="group-center">
+            <div class="cl-logo-tile">
+              <svg viewBox="0 0 40 40" fill="none">
+                <rect width="40" height="40" rx="10" fill="url(#grad1)"/>
+                <path d="M12 20L18 26L28 14" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <defs>
+                  <linearGradient id="grad1" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#3b82f6"/>
+                    <stop offset="1" stop-color="#1d4ed8"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+
+            <h2 class="cl-title">Desko 工作台</h2>
+            <p class="cl-subtitle">输入主密码解锁</p>
+
+            <form class="cl-form" onsubmit="event.preventDefault(); simulateUnlock('center-err', 'group-center');">
+              <div class="cl-field">
+                <span class="cl-field-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </span>
+                <input type="password" class="cl-input" placeholder="输入密码解锁..." autofocus />
+                <div class="cl-actions">
+                  <button class="cl-icon-btn" type="button" title="查看密码" onclick="togglePwdVisibility(this)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                  <button class="cl-submit-btn" type="submit" title="解锁">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div id="center-err" class="cl-error-tip">主密码错误，请重试</div>
+            </form>
+          </div>
+
+          <!-- 3. 静雅题词 -->
+          <div class="cl-quote live-quote">星光不问赶路人，时光不负有心人。</div>
+        </div>
+
+
+        <!-- ===============================================================
+             【方案 B：左右画报无界流 (Cardless Split Flow)】
+             左右并排，但完全去掉卡片！纯靠优雅的排版与留白，浑然天成
+             =============================================================== -->
+        <div class="cardless-split-flow" id="view-split" style="display: none;">
+          <div class="cs-left">
+            <div>
+              <div style="font-size: 11px; font-weight: 600; color: var(--accent); letter-spacing: 0.12em; margin-bottom: 6px;">FOCUS</div>
+              <div class="cs-clock live-time">00:01</div>
+              <div class="cs-date live-date">11月14日 星期六</div>
+            </div>
+            <div class="cs-quote live-quote">所有的努力，都是为了遇见更好的自己。</div>
+          </div>
+
+          <div class="cs-right" id="group-split">
+            <div class="cl-logo-tile">
+              <svg viewBox="0 0 40 40" fill="none">
+                <rect width="40" height="40" rx="10" fill="url(#grad2)"/>
+                <path d="M12 20L18 26L28 14" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <defs>
+                  <linearGradient id="grad2" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#3b82f6"/>
+                    <stop offset="1" stop-color="#1d4ed8"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+
+            <h2 class="cl-title">验证主密码</h2>
+            <p class="cl-subtitle">解除工作台锁定</p>
+
+            <form class="cl-form" style="max-width: 260px;" onsubmit="event.preventDefault(); simulateUnlock('split-err', 'group-split');">
+              <div class="cl-field">
+                <span class="cl-field-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </span>
+                <input type="password" class="cl-input" placeholder="输入密码..." />
+                <div class="cl-actions">
+                  <button class="cl-icon-btn" type="button" title="查看密码" onclick="togglePwdVisibility(this)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                  <button class="cl-submit-btn" type="submit" title="解锁">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div id="split-err" class="cl-error-tip">主密码错误，请重试</div>
+            </form>
+          </div>
+        </div>
+
+
+        <!-- ===============================================================
+             【方案 C：极简禅意单轴 (Zen Minimalist Single Axis)】
+             极致精简，去繁就简，只留最核心的呼吸与专注
+             =============================================================== -->
+        <div class="cardless-zen-flow" id="view-zen" style="display: none;">
+          <div class="zen-time-pill">
+            <span class="live-time">00:01</span>
+            <span>·</span>
+            <span class="live-date">11月14日 星期六</span>
+          </div>
+
+          <div class="cl-logo-tile" style="margin-bottom: 14px;">
+            <svg viewBox="0 0 40 40" fill="none">
+              <rect width="40" height="40" rx="10" fill="url(#grad3)"/>
+              <path d="M12 20L18 26L28 14" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <defs>
+                <linearGradient id="grad3" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#3b82f6"/>
+                  <stop offset="1" stop-color="#1d4ed8"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+
+          <h2 class="cl-title" style="margin-bottom: 16px;">欢迎回来</h2>
+
+          <form class="cl-form" onsubmit="event.preventDefault(); simulateUnlock('zen-err', 'view-zen');">
+            <div class="cl-field">
+              <span class="cl-field-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+              <input type="password" class="cl-input" placeholder="输入密码解锁..." />
+              <div class="cl-actions">
+                <button class="cl-icon-btn" type="button" title="查看密码" onclick="togglePwdVisibility(this)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="cl-submit-btn" type="submit" title="解锁">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
+            <div id="zen-err" class="cl-error-tip">主密码错误，请重试</div>
+          </form>
+
+          <div class="cl-quote live-quote" style="margin-top: 24px;">愿你出走半生，归来仍是少年。</div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    // 1. 动态时钟
+    const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+    function updateClock() {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const month = now.getMonth() + 1;
+      const date = now.getDate();
+      const day = weekDays[now.getDay()];
+
+      document.querySelectorAll('.live-time').forEach(el => el.textContent = `${hh}:${mm}`);
+      document.querySelectorAll('.live-date').forEach(el => el.textContent = `${month}月${date}日 ${day}`);
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // 2. 题词轮播
+    const quotes = [
+      '星光不问赶路人，时光不负有心人。',
+      '生活不止眼前的苟且，还有诗和远方。',
+      '愿你出走半生，归来仍是少年。',
+      '人生没有白走的路，每一步都算数。',
+      '慢慢来，比较快。',
+      '所有的努力，都是为了遇见更好的自己。'
+    ];
+    let qIdx = 0;
+    setInterval(() => {
+      qIdx = (qIdx + 1) % quotes.length;
+      document.querySelectorAll('.live-quote').forEach(el => {
+        el.style.opacity = '0';
+        setTimeout(() => {
+          el.textContent = quotes[qIdx];
+          el.style.opacity = '1';
+        }, 250);
+      });
+    }, 7000);
+
+    // 3. 无卡片模式切换
+    function switchCardless(mode, btn) {
+      document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.getElementById('view-center').style.display = mode === 'cl-center' ? 'flex' : 'none';
+      document.getElementById('view-split').style.display = mode === 'cl-split' ? 'grid' : 'none';
+      document.getElementById('view-zen').style.display = mode === 'cl-zen' ? 'flex' : 'none';
+    }
+
+    // 4. 输入交互与模拟解锁
+    function togglePwdVisibility(btn) {
+      const input = btn.closest('.cl-field').querySelector('.cl-input');
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.style.color = 'var(--accent)';
+      } else {
+        input.type = 'password';
+        btn.style.color = '';
+      }
+    }
+
+    function simulateUnlock(errId, targetId) {
+      const target = document.getElementById(targetId);
+      const errEl = document.getElementById(errId);
+      if (target) {
+        target.classList.remove('shake-anim');
+        void target.offsetWidth;
+        target.classList.add('shake-anim');
+      }
+      if (errEl) {
+        errEl.classList.add('show');
+        setTimeout(() => errEl.classList.remove('show'), 2500);
+      }
+    }
+
+    // 5. 主题与天顶柔光
+    function toggleTheme() {
+      const root = document.documentElement;
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      document.getElementById('theme-label').textContent = next === 'dark' ? '深色 (Ink)' : '浅色 (Paper)';
+    }
+
+    function toggleAtmosphere() {
+      const root = document.documentElement;
+      const next = root.getAttribute('data-atmosphere') === 'on' ? 'off' : 'on';
+      root.setAttribute('data-atmosphere', next);
+      document.getElementById('atm-label').textContent = next === 'on' ? '开启' : '关闭';
+    }
+  </script>
+</body>
+</html>

@@ -18,9 +18,17 @@ pub fn discover_usage_dirs() -> Vec<PathBuf> {
 pub(crate) fn codex_homes_in_root(root: &Path) -> Vec<PathBuf> {
     let mut homes = vec![root.join("root/.codex")];
     if let Ok(users) = fs::read_dir(root.join("home")) {
-        homes.extend(users.flatten().map(|user| user.path().join(".codex")));
+        for user in users {
+            match user {
+                Ok(user) => homes.push(user.path().join(".codex")),
+                Err(error) => crate::modules::logger::log_warn(&format!("读取 WSL 用户目录失败: {}", error)),
+            }
+        }
     }
-    homes.retain(|home| home.is_dir());
+    homes.retain(|home| match home.is_dir() {
+        true => true,
+        false => false,
+    });
     homes.sort();
     homes
 }

@@ -139,7 +139,13 @@ function onDirectoryClick(event: MouseEvent) {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
+  /* 窄窗（手机 Web 390）一条装不下页签＋动作带：允许换行，让动作带自己落到第二排。
+     单排页面永远只有一行，这条不影响其它模块。
+     Codex 账号页的搜索带（.cx-tabs-row）本来靠 flex: 1 1 100% 独占第二排，
+     少了这一条 nowrap 下它只会吃掉整行，把动作带压成 0 宽、动作件向左溢出压到页签上。 */
+  flex-wrap: wrap;
   align-items: center;
+  row-gap: 6px;
   container: workspace-toolbar / inline-size;
   pointer-events: none;
 }

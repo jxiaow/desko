@@ -72,18 +72,18 @@ const discard = () => {
 .composer {
   position: relative;
   background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-card, rgba(0, 0, 0, 0.05));
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02), 0 6px 18px -4px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card-rest);
   container-type: inline-size;
   container-name: slip;
-  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
   margin-top: 4px;
   margin-bottom: 12px;
 }
 .composer:hover {
-  border-color: var(--card-line-hover, rgba(37, 99, 235, 0.25));
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.03), 0 10px 24px -4px rgba(37, 99, 235, 0.06);
+  border-color: var(--card-line-hover);
+  box-shadow: var(--shadow-card-hover);
 }
 /* 焦点态：纤细 1px 微边框，无外散粗环 */
 .composer:focus-within {

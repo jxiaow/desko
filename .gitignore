@@ -13,6 +13,7 @@ installer/
 .vscode/
 .idea/
 .qoder/
+.qwen/
 *.swp
 *.swo
 
