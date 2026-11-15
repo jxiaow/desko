@@ -1124,7 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "desko"
-version = "1.0.11"
+version = "1.0.12"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",

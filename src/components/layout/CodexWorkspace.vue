@@ -141,8 +141,8 @@ function onDirectoryClick(event: MouseEvent) {
   display: flex;
   /* 窄窗（手机 Web 390）一条装不下页签＋动作带：允许换行，让动作带自己落到第二排。
      单排页面永远只有一行，这条不影响其它模块。
-     Codex 账号页的搜索带（.cx-tabs-row）本来靠 flex: 1 1 100% 独占第二排，
-     少了这一条 nowrap 下它只会吃掉整行，把动作带压成 0 宽、动作件向左溢出压到页签上。 */
+     别删这一条：动作带（.cx-band-controls）内联轴是容器查询、内在宽度被算成 0，
+     nowrap 下它既不换行也不撑开，只会带着自己的件儿从右缘向左溢出、直接压在页签上。 */
   flex-wrap: wrap;
   align-items: center;
   row-gap: 6px;
@@ -195,9 +195,6 @@ function onDirectoryClick(event: MouseEvent) {
 /* 第一行归内容区自己的内距管；网格的 12px 只用于组与组之间，不再和首行呼吸叠成 28px。 */
 .codex-layout .workspace-main .content-inner > .card-grid:first-child { margin-top: 0; }
 .codex-layout .workspace-main .codex-content { padding-top: 4px; }
-/* 浏览器窄屏等未走页头的分支：筛选带仍留在正文首位，此时首行内距让带给它。
-   workspace 分支里这一排已经搬进页头，正文首行重新吃 16px。 */
-.codex-layout .workspace-main .content-inner:has(> .cx-tabs-row) { padding-top: 0; }
 .codex-layout .workspace-main .stream-inner {
   max-width: 760px;
   width: 100%;
@@ -322,9 +319,9 @@ function onDirectoryClick(event: MouseEvent) {
 #workspace-page-toolbar :is(.page-bar, .cx-band-controls) > * { pointer-events: auto; }
 /* 搜索框与动作钮是同一组，靠右端收拢。
    搜索框不再 flex 撑满——撑满会把动作钮推到边缘、把搜索框一个人丢在中间。
-   Codex 的第二排（.cx-tabs-row）是筛选带，要从左读起，不参与这一档。 */
-#workspace-page-toolbar :is(.page-bar:not(.cx-tabs-row), .cx-band-controls) > :first-child:not(.page-actions):not(.page-lead) { margin-left: auto; }
-#workspace-page-toolbar .page-bar:not(.cx-tabs-row) > .search-box:first-child { margin-left: auto; }
+   Codex 页头的搜索带整组靠右（见 .cx-band-controls），不参与这一档。 */
+#workspace-page-toolbar :is(.page-bar, .cx-band-controls) > :first-child:not(.page-actions):not(.page-lead) { margin-left: auto; }
+#workspace-page-toolbar .page-bar > .search-box:first-child { margin-left: auto; }
 /* 页名上标题栏之后，整排一律靠右会把左半空成一整块空气（1040 实测 336px、1440 实测 736px）。
    .page-lead 把本页的「读」控件钉在左轴并撑满剩下的宽度，右端那组因此自然落到右缘，一排两端都有落点。
    带里还挂着视图页签：正文前那条 42px 工作栏整条搬进页头，正文因此少占一行。
@@ -342,13 +339,9 @@ function onDirectoryClick(event: MouseEvent) {
 #workspace-page-toolbar :is(.btn-primary, .btn-secondary) { font-size: 11.5px; height: 26px; border-radius: 6px; }
 /* 动作组在页头里不再吃 auto 外边距：搜索框自己撑开，两组之间保持轻柔呼吸 */
 #workspace-page-toolbar .page-actions { margin-left: 0; flex-shrink: 0; gap: 4px; }
-/* Codex 的筛选带（搜索＋下拉）搬进页头当第二排：正文上方因此不再另起一条页栏——
-   那条带子连同它上下 12px 的呼吸、以及它与正文之间 12px 的间距一起搬了进来。
-   筛选带动作件多，硬塞同一排会被挤到裁切，所以钉死独占整行；动作组用 order
-   提到它前面，才与页签一起留在第一排。 */
+/* Codex 页头的搜索与动作同为一条动作带：搜索在左、页级动作在右，全部压在页签同一排。
+   账号搜索以前独占第二排，只装一个输入框、右边全空，页头白多出 38px；现在收回到这一排。 */
 #workspace-page-toolbar > .cx-band-controls { order: 1; }
-#workspace-page-toolbar > .page-bar.cx-tabs-row { order: 2; flex: 1 1 100%; height: auto; justify-content: flex-start; }
-#workspace-page-toolbar .cx-tabs-row > .search-box { flex: 0 1 200px; width: auto; min-width: 120px; max-width: var(--page-search-max); margin-right: 0; }
 
 /* Codex 的页签是页名的一部分，靠左跟在页名后面；搜索与筛选留在右端。 */
 #workspace-page-toolbar > .cx-header-tabs { margin-right: auto; }

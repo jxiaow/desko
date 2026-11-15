@@ -107,8 +107,8 @@ for (const theme of ['paper', 'ink']) {
           await views.getByRole('button', { name: view, exact: true }).click()
           await expect(views.getByRole('button', { name: view, exact: true })).toHaveAttribute('aria-pressed', 'true')
           await expectToolbarFits(page)
-          // 页头只有一条带子：当前视图的搜索与筛选折在它的第二排，用量的统计窗口在第一排。
-          // 本用例只有一颗账号与一条会话，账号页／会话页的筛选整排收起，正文上方也就没有第二排。
+          // 页头只有一排：当前视图的搜索与统计窗口都跟页签同排。
+          // 本用例只有一颗账号与一条会话，账号页／会话页的搜索整颗收起，页头不会因此变高。
           await expect(page.locator('#codex-view-filters')).toHaveCount(0)
           await expect(page.locator('#workspace-page-toolbar .search-box, #workspace-page-toolbar .session-search-mode')).toHaveCount(0)
           const ranges = page.locator('#workspace-page-toolbar .usage-ranges')

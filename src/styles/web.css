@@ -170,7 +170,7 @@
     padding: 0;
   }
   .app-root.web-runtime .titlebar-outer .titlebar-buttons::before { display: none; }
-  .app-root.web-runtime #workspace-page-toolbar :is(.page-bar:not(.cx-tabs-row), .cx-band-controls) {
+  .app-root.web-runtime #workspace-page-toolbar :is(.page-bar, .cx-band-controls) {
     height: 56px;
     min-height: 56px;
     flex-wrap: nowrap;
@@ -184,15 +184,13 @@
   .app-root.web-runtime #workspace-page-toolbar .page-actions { gap: 4px; }
   .app-root.web-runtime #workspace-page-toolbar > .cx-header-tabs { flex: 1 0 auto; height: 48px; margin: 0; }
   .app-root.web-runtime #workspace-page-toolbar .cx-header-tabs .cx-tab { min-height: 44px; padding-inline: 10px; }
-  .app-root.web-runtime #workspace-page-toolbar:has(.cx-header-tabs) > .page-bar:not(.cx-tabs-row) { flex: 0 0 auto; }
-  /* Codex 的筛选带是页头的第二排：整行占满，装不下的靠换行收，不做横向滚动。 */
-  .app-root.web-runtime #workspace-page-toolbar > .page-bar.cx-tabs-row { height: auto; flex-wrap: wrap; }
-  .app-root.web-runtime #workspace-page-toolbar .cx-tabs-row > .search-box { flex: 0 1 150px; min-width: 80px; max-width: 150px; }
+  .app-root.web-runtime #workspace-page-toolbar:has(.cx-header-tabs) > .page-bar { flex: 0 0 auto; }
   /* 动作带在窄屏独占第二排：390 一档整条只有 358px，页签自己就占 281，
      再塞统计窗口会把动作带缩到 78px、件儿从左边溢到页签底下（实测 seg 落在 x=-256）。
      用 100% 定基准而不是靠换行——动作带自身是 inline-size 容器，自动基准被算成 0。 */
   .app-root.web-runtime #workspace-page-toolbar > .cx-band-controls { order: 2; flex: 1 1 100%; justify-content: flex-start; }
-  .app-root.web-runtime #workspace-page-toolbar > .page-bar.cx-tabs-row { order: 3; }
+  /* 这一排里搜索自己长开，把页级动作顶到右缘；桌面那一档的定宽（220）在这里让位。 */
+  .app-root.web-runtime #workspace-page-toolbar .cx-band-controls > .acc-search-box { flex: 1 1 80px; width: auto; min-width: 80px; max-width: none; }
   /* 抽屉从页头带的下沿铺开：窄屏页级动作带住在内容面里（顶沿就是它），
      抽屉若仍从内容面顶沿起，会把搜索框整颗盖住——390 实测搜索框 110..154
      落在抽屉 104..844 里，「点抽屉外保持展开」这一下根本点不到自己的控件。 */

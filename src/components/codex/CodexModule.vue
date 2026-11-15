@@ -149,8 +149,7 @@ const showAccountFilters = computed(() => accounts.value.length > 1)
 const showSessionFilters = computed(() => sessionTotalCount.value > 1)
 /** 空用量不摆统计窗口；已经换了档或有错要复核时留着。 */
 const showUsageRanges = computed(() => !!usageReport.value?.totals.fileCount || !!usageError.value || usageRange.value !== 'today')
-/** 账号筛选占第二排；会话搜索和用量时间切换均与页签同排。 */
-const showFilterBand = computed(() => view.value === 'accounts' && showAccountFilters.value)
+/** 会话搜索、账号搜索与用量时间切换都住在页头这一排，页头不再有第二排。 */
 const visibleAccounts = computed(() => filterCodexAccounts(accounts.value, {
   query: accountQuery.value, auth: accountAuth.value, status: accountStatus.value,
   tag: accountTag.value, sort: accountSort.value,
@@ -482,9 +481,9 @@ watchEffect(() => {
     </div>
 
     <template v-else>
-      <!-- 页头只有一条带子：第一排是视图页签与页级动作（用量页再带上统计窗口切换件），
-           账号搜索、筛选位于第二排，会话搜索与用量时间切换位于第一排。正文上方不再另起一行页栏——
-           那一行连同它上下 12px 的呼吸一起搬了进来。 -->
+      <!-- 页头只有一排：视图页签在左，当前视图的搜索与页级动作在右，全部压在 32px 同一条等高线上。
+           账号搜索曾经靠 flex: 1 1 100% 单独占第二排——那一排只剩一个 200px 的输入框、
+           右边全空，页头白多出 38px。现在它与会话搜索一样收进动作带，页头回到 56px。 -->
       <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
       <nav class="cx-tabs" :class="{ 'cx-header-tabs': workspaceLayout }" aria-label="Codex 视图">
         <button class="cx-tab" :class="{ active: view === 'accounts' }" :aria-pressed="view === 'accounts'" type="button" @click="view = 'accounts'">
@@ -503,21 +502,13 @@ watchEffect(() => {
       </Teleport>
 
       <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-      <div v-if="showFilterBand" :id="workspaceLayout ? 'codex-view-filters' : undefined" class="page-bar cx-tabs-row">
-        <template v-if="view === 'accounts'">
-          <div class="search-box">
-            <span class="search-icon"><AppIcon name="search" :size="15" /></span>
-            <input v-model="accountQuery" type="text" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
-            <button v-if="accountQuery" class="search-clear" type="button" aria-label="清除账号搜索" @click="accountQuery = ''"><AppIcon name="x" :size="13" /></button>
-          </div>
-        </template>
-
-
-      </div>
-      </Teleport>
-
-      <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
       <div class="cx-band-controls">
+        <div v-if="view === 'accounts' && showAccountFilters" id="codex-view-filters" class="search-box acc-search-box">
+          <span class="search-icon"><AppIcon name="search" :size="15" /></span>
+          <input v-model="accountQuery" type="text" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
+          <button v-if="accountQuery" class="search-clear" type="button" aria-label="清除账号搜索" @click="accountQuery = ''"><AppIcon name="x" :size="13" /></button>
+        </div>
+
         <div v-if="view === 'accounts'" class="page-actions">
           <button class="btn-secondary bar-btn cx-compact-action" type="button" title="刷新配额" aria-label="刷新配额" :disabled="!accounts.length" @click="refreshQuotas(accounts.map((a) => a.id))">
             <AppIcon name="refresh" :size="13" />
@@ -903,9 +894,14 @@ watchEffect(() => {
   background: var(--accent);
 }
 
-/* 页头第二排：当前视图的搜索与筛选，控件与第一排同档（32px），
-   排与排之间的呼吸交给页头的 row-gap；窄窗放不下时这一排自己换行。 */
-.cx-tabs-row { position: static; margin: 0; padding: 0; gap: 8px; flex-wrap: wrap; background: transparent; }
+/* 页头只有一排：搜索与动作同住 .cx-band-controls，靠右端收拢。
+   账号搜索不再单独占一行。这里必须写 flex-shrink: 0：动作带自身是 inline-size 容器、
+   宽度算出来是 0，带收缩的档位会被一路压到 min-width（实测只剩 150）。 */
+#workspace-page-toolbar .cx-band-controls > .acc-search-box { flex: 0 0 auto; width: 220px; min-width: 0; max-width: none; margin-right: 0; }
+/* 900 窗侧栏展开后页头只剩 610：220 的搜索会把右缘动作组推到页签上，降一档收回去。 */
+@container workspace-toolbar (max-width: 660px) {
+  #workspace-page-toolbar .cx-band-controls > .acc-search-box { width: 170px; }
+}
 #workspace-page-toolbar:has(.cx-header-tabs) > .cx-band-controls:has(.page-actions) { flex: 0 0 auto; margin-left: auto; }
 #workspace-page-toolbar:has(.cx-header-tabs) > .cx-band-controls .page-actions { flex: 0 0 auto; }
 .cx-band-controls > .usage-ranges { margin-left: 0; }

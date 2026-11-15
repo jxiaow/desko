@@ -75,12 +75,15 @@ for (const width of [800, 1040, 1920]) {
       expect((await bounds(toolbar)).y).toBeGreaterThanOrEqual(34)
       expect(actions.y).toBeGreaterThanOrEqual(34)
       if (route !== 'mfa') {
-        const search = await bounds((route === 'codex' ? page.locator('#codex-view-filters') : toolbar).locator('.search-box'))
+        // Codex 的搜索框就是 #codex-view-filters 本身（住在动作带里），其它页取工具栏里的那份。
+        const search = await bounds(route === 'codex' ? page.locator('#codex-view-filters') : toolbar.locator('.search-box'))
         if (route === 'codex') {
-          // 搜索与筛选搬进页头当第二排：左缘仍与正文同一条列，纵向落在页签那一排之下。
-          expect(search.x).toBe(content.x)
-          expect(search.y).toBeGreaterThanOrEqual(heading.y + heading.height)
-          await expect(toolbar.locator('#codex-view-filters .search-box')).toHaveCount(1)
+          // 搜索搬进页头与页签同排：纵向落在页签那一行里，左缘在页签右侧。
+          // 账号搜索不再单独占第二排，页头因此回到和其它模块同一条 56px 带子。
+          expect(search.y).toBeGreaterThanOrEqual(heading.y)
+          expect(search.y + search.height).toBeLessThanOrEqual(heading.y + heading.height)
+          expect(search.x).toBeGreaterThanOrEqual(heading.x + heading.width)
+          await expect(toolbar.locator('#codex-view-filters')).toHaveCount(1)
         } else {
           // 一排两端都有落点：本页主动作在左轴，搜索与工具钮收到右缘。
           // 谁在左谁在右由各页自己决定（文件快捷与验证码把动作组放在左轴），
@@ -219,7 +222,7 @@ test('800px Codex 长标签和排序不会溢出，筛选与账号操作仍可�
   await page.getByRole('menuitemradio', { name: '可用配额优先', exact: true }).click()
   await expect(page.getByRole('button', { name: '账号标签', exact: true }).locator('.opt-value')).toHaveCSS('white-space', 'nowrap')
   const pane = await bounds(page.locator('.workspace-main'))
-  for (const button of await page.locator('.cx-tabs-row button, #workspace-page-toolbar button').all()) {
+  for (const button of await page.locator('#workspace-page-toolbar button').all()) {
     const box = await bounds(button)
     expect(box.x).toBeGreaterThanOrEqual(pane.x + 24)
     expect(box.x + box.width).toBeLessThanOrEqual(pane.x + pane.width - 24)
@@ -241,23 +244,30 @@ test('800px Codex 长标签和排序不会溢出，筛选与账号操作仍可�
   await expect(page.locator('.dialog:visible h3')).toContainText('添加 Codex 账号')
 })
 
-/** 页头换行是这条布局的地基：`flex: 1 1 100%` 的搜索带只有在可换行的 flex 容器里
-    才会独占第二排。容器一旦退回 nowrap，搜索带会吃掉整行、把动作带压成 0 宽，
-    动作件就从把自己的右缘当基准向左溢出，直接压在页签上（见 4df44b0 的回归）。 */
+/** Codex 页头只有一排：页签在左，搜索与页级动作在右，三段的顺序与间距都得站着。
+    动作带（.cx-band-controls）自身是 inline-size 容器、内在宽度算成 0，一旦页头退回 nowrap，
+    它会带着件儿从右缘向左溢出、直接压在页签上（见 4df44b0 的回归）；搜索若被拖进溢出的那一段，
+    同样会盖住页签。 */
 for (const width of [800, 1040, 1440]) {
-  test(`${width}px Codex 账号页页签与页级动作不重叠，搜索带独占第二排`, async ({ page }) => {
+  test(`${width}px Codex 账号页页签、搜索与页级动作同排且互不交叠`, async ({ page }) => {
     await page.setViewportSize({ width, height: 720 })
     await bootUnlocked(page, seed, '/codex')
     const tabs = await bounds(page.locator('.cx-header-tabs'))
+    const search = await bounds(page.locator('#codex-view-filters'))
     const actions = await bounds(page.locator('#workspace-page-toolbar .page-actions'))
-    expect(actions.x).toBeGreaterThanOrEqual(tabs.x + tabs.width)
-    // 两个动作钮与「添加账号」都落在页签右侧，横向不交叠
-    for (const button of await page.locator('#workspace-page-toolbar .page-actions > *').all()) {
-      expect((await bounds(button)).x).toBeGreaterThanOrEqual(tabs.x + tabs.width)
+    // 三段同排：搜索与动作组都落在页签那一行的高度里
+    for (const box of [search, actions]) {
+      expect(box.y).toBeGreaterThanOrEqual(tabs.y - 1)
+      expect(box.y + box.height).toBeLessThanOrEqual(tabs.y + tabs.height + 1)
     }
-    // 账号搜索带（第二排）整条落在页签下沿之下，并撑满页头宽
-    const band = await bounds(page.locator('#codex-view-filters'))
-    expect(band.y).toBeGreaterThanOrEqual(tabs.y + tabs.height)
-    expect(band.width).toBeGreaterThan(tabs.width * 2)
+    // 横向顺序：页签 < 搜索 < 动作，两两不交叠
+    expect(search.x).toBeGreaterThanOrEqual(tabs.x + tabs.width)
+    expect(search.x + search.width).toBeLessThanOrEqual(actions.x)
+    for (const button of await page.locator('#workspace-page-toolbar .page-actions > *').all()) {
+      expect((await bounds(button)).x).toBeGreaterThanOrEqual(search.x + search.width)
+    }
+    // 页头不再为搜索单独长出第二排：一条 56px 带子装下全部
+    const head = await bounds(page.locator('.workspace-head'))
+    expect(head.height).toBeLessThanOrEqual(56)
   })
 }
