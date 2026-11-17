@@ -37,6 +37,7 @@ const strokeWidth = computed(() => +(STROKE_PX * 24 / renderSize.value).toFixed(
     stroke-linejoin="round"
     :data-icon="props.name"
     aria-hidden="true"
+    style="flex-shrink: 0"
     v-html="markup"
   />
 </template>

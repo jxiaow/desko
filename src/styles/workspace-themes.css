@@ -1757,24 +1757,34 @@
   padding-right: 4px !important;
 }
 
-/* 3. 岛屿内嵌主舞台 (#workspace-surface) 实体面板规范 */
+/* 3. 岛屿内嵌主舞台 (#workspace-surface) 实体面板规范
+   面板是「嵌进窗框的一张纸」，不是「浮在窗框上的一块板」。压 z 的做法是三层一起削：
+   1) 投影归零：净扩散收到 0，不留任何向外晕开的长尾（旧值纸 12px / 墨 20px 模糊，
+      在 8–12px 的窄留白里摊成一圈灰雾，整块读起来浮起）；
+   2) 明度台阶收窄：片只比窗框高一档（纸 244 → 250，墨 24 → 27），不再直接顶到纯白。
+      这样白卡片重新成为最亮的一层，「框 < 片 < 卡」的阶梯才成立——此前片和卡同是
+      #ffffff，卡片只能靠发丝线分界，大面板反倒成了最扎眼的亮块；
+   3) 描边由 8% 降到 5%：明度已经分开，边界线只需交代轮廓，不需要再压一圈深色。
+   层次因此由「一档明度 + 一条发丝」承担，面板嵌在窗框里而不是摆在窗框上。 */
 :root[data-layout="workspace"]:not(.web-runtime) .workspace-surface {
   margin: 0 12px 12px 6px !important;
   border-radius: 10px !important;
-  background-color: #ffffff !important;
+  background-color: #fafafa !important;
   background-image: var(--dialog-aura) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  box-shadow: 0 2px 12px -2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+  box-shadow: none !important;
   overflow: hidden !important;
 }
 
 :root[data-layout="workspace"][data-base="dark"]:not(.web-runtime) .workspace-surface {
   margin: 0 12px 12px 6px !important;
   border-radius: 10px !important;
-  background-color: #20222a !important;
+  background-color: #1b1c21 !important;
   background-image: var(--dialog-aura) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+  /* 墨底的亮边是第二重「抬升」信号：8% 白压在 29 的底上是 47，比面板本身亮一档半，
+     读起来像一圈迎光的倒角。降到 4%，边界只留轮廓。 */
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  box-shadow: none !important;
   overflow: hidden !important;
 }
 

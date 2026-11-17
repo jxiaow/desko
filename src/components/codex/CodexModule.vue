@@ -511,11 +511,11 @@ watchEffect(() => {
 
         <div v-if="view === 'accounts'" class="page-actions">
           <button class="btn-secondary bar-btn cx-compact-action" type="button" title="刷新配额" aria-label="刷新配额" :disabled="!accounts.length" @click="refreshQuotas(accounts.map((a) => a.id))">
-            <AppIcon name="refresh" :size="13" />
+            <AppIcon name="refresh" :size="16" />
             <span class="cx-action-label">刷新配额</span>
           </button>
           <button class="btn-secondary bar-btn cx-compact-action" type="button" :title="isBatchMode ? '退出选择' : '选择'" :aria-label="isBatchMode ? '退出选择' : '选择'" :disabled="!accounts.length" @click="togglePick">
-            <AppIcon :name="isBatchMode ? 'check' : 'checkall'" :size="13" />
+            <AppIcon :name="isBatchMode ? 'check' : 'checkall'" :size="16" />
             <span class="cx-action-label">{{ isBatchMode ? '退出选择' : '选择' }}</span>
           </button>
           <CreateAction v-if="accounts.length || accountsError" class="add-btn" label="添加账号" @click="openAddAuth" />
@@ -835,11 +835,16 @@ watchEffect(() => {
   padding: 2px 0;
   margin-right: var(--space-2);
 }
-/* 工作区页头第一排：视图页签在左、页级动作在右；第二排是当前视图的搜索与筛选。 */
+/* 页头只有一排：视图页签在左，搜索与页级动作在右（.cx-band-controls）。 */
 .cx-band-controls { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; }
 .account-filters.cx-tabs-filters { flex: 0 0 auto; max-width: 100%; margin: 0; padding: 0; }
-@container codex-controls (max-width: 300px) {
-  .cx-compact-action { --toolbar-action-padding: 0px; width: 26px; height: 26px; justify-content: center; }
+/* 页级动作收成图标只发生在页头真的放不下的时候。
+   判据必须是 workspace-toolbar（页头自身宽度）：曾经写的是 codex-controls，
+   而动作带挂 `container-type: inline-size` 后自身宽度算成 0，条件恒成立——
+   「刷新配额 / 选择」在任何窗口都只剩一颗 16px 图标，读起来像两个脏点。 */
+@container workspace-toolbar (max-width: 740px) {
+  /* 图标态要吃掉 .bar-btn 的左右 padding，否则 28px 里只剩 12px 给 16px 图标 */
+  .cx-compact-action { width: 28px; height: 28px; padding: 0; justify-content: center; }
   .cx-compact-action .cx-action-label { display: none; }
   #workspace-page-toolbar .page-actions { gap: 4px; }
   #workspace-page-toolbar .create-action { padding-inline: 8px; gap: 4px; }
@@ -860,7 +865,9 @@ watchEffect(() => {
   gap: 5px;
   white-space: nowrap;
 }
-@container codex-controls (max-width: 320px) {
+/* 用量页的窗口切换件比账号页动作组窄，页头更紧才折叠。
+   同样按页头宽度判，别再挂到 codex-controls 上（那是 0 宽容器）。 */
+@container workspace-toolbar (max-width: 560px) {
   .usage-actions .bar-btn { padding: 0 7px; min-width: 28px; justify-content: center; }
   .usage-actions .cx-action-label { display: none; }
 }
@@ -895,8 +902,7 @@ watchEffect(() => {
 }
 
 /* 页头只有一排：搜索与动作同住 .cx-band-controls，靠右端收拢。
-   账号搜索不再单独占一行。这里必须写 flex-shrink: 0：动作带自身是 inline-size 容器、
-   宽度算出来是 0，带收缩的档位会被一路压到 min-width（实测只剩 150）。 */
+   搜索定宽、不参与伸缩——让它撑满会把动作钮推到边缘、搜索框一个人落在中间。 */
 #workspace-page-toolbar .cx-band-controls > .acc-search-box { flex: 0 0 auto; width: 220px; min-width: 0; max-width: none; margin-right: 0; }
 /* 900 窗侧栏展开后页头只剩 610：220 的搜索会把右缘动作组推到页签上，降一档收回去。 */
 @container workspace-toolbar (max-width: 660px) {
@@ -913,7 +919,9 @@ watchEffect(() => {
 .cx-header-tabs .cx-tab.active { font-weight: 600; }
 .cx-header-tabs .cx-tab.active::after { left: 12px; right: 12px; }
 .cx-view-count { max-width: 100px; margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: var(--text-xs); }
-#workspace-page-toolbar > .cx-band-controls { container: codex-controls / inline-size; }
+/* 动作带不要再挂 container-type：inline-size 会让自身宽度算成 0，
+   以它为判据的容器查询（原 codex-controls）条件恒成立，动作钮永远折叠成图标。
+   页头宽度已经由 .workspace-page-toolbar 的 workspace-toolbar 容器提供。 */
 /* 800px 窗口里顶栏只剩 440 左右，五个视图页签按常规字距会把新建入口挤出右缘。 */
 @container workspace-toolbar (max-width: 520px) {
   #workspace-page-toolbar > .cx-header-tabs { gap: 2px; margin-right: 8px; }
