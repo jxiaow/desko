@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useDialogFocus } from '../../composables/useDialogFocus'
 import { useEscapeClose } from '../../composables/useEscapeClose'
 import AppIcon from './AppIcon.vue'
 
@@ -14,12 +16,14 @@ const emit = defineEmits<{
 // 常驻组件，注册时机跟着可见性走，否则它在栈里的位置是"应用启动那一下"，
 // 叠在它上面的设置弹窗反而会先被 Esc 关掉
 useEscapeClose(() => emit('cancel'), () => props.dialog.show)
+const panel = ref<HTMLElement | null>(null)
+const { trapFocus } = useDialogFocus(panel, { when: () => props.dialog.show, initialFocus: '.btn-secondary' })
 </script>
 
 <template>
   <Transition name="dialog">
-    <div v-if="dialog.show" class="dialog-overlay">
-    <div class="dialog confirm-dialog" role="dialog" aria-modal="true" :aria-label="dialog.title">
+    <div v-if="dialog.show" class="dialog-overlay" @mousedown.self.prevent>
+    <div ref="panel" class="dialog confirm-dialog" role="dialog" aria-modal="true" :aria-label="dialog.title" tabindex="-1" @keydown.tab="trapFocus">
       <div class="dialog-header">
         <h3>{{ dialog.title }}</h3>
         <button  class="dialog-close" @click="emit('cancel')" title="关闭">

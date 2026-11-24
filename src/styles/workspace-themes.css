@@ -11,8 +11,9 @@
   --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
   --accent-light: color-mix(in srgb, var(--accent) 18%, transparent);
   --accent-ring: color-mix(in srgb, var(--accent) 30%, transparent);
-  --text-brand: var(--accent);
-  --text-url: color-mix(in srgb, var(--accent) 76%, #ffffff);
+  --text-brand: oklch(from var(--accent) min(l, 0.48) c h);
+  --text-url: var(--text-brand);
+  --text-url-hover: oklch(from var(--accent) min(l, 0.43) c h);
   --badge-ver-bg: var(--accent-soft);
   --badge-ver-text: var(--text-brand);
   --brand-g1: color-mix(in srgb, var(--accent) 80%, #ffffff);
@@ -22,9 +23,9 @@
   --lock-orb-2: color-mix(in srgb, var(--accent) 5%, transparent);
   --selection: color-mix(in srgb, var(--accent) 26%, transparent);
   --toast-info: var(--accent);
-  --bg-workspace-primary: var(--accent);
-  --bg-workspace-primary-hover: var(--accent-hover);
-  --bg-workspace-primary-active: var(--accent-active);
+  --bg-workspace-primary: oklch(from var(--accent) min(l, 0.54) c h);
+  --bg-workspace-primary-hover: color-mix(in srgb, var(--bg-workspace-primary) 90%, #000000);
+  --bg-workspace-primary-active: color-mix(in srgb, var(--bg-workspace-primary) 82%, #000000);
   --text-workspace-primary: #ffffff;
   --bg-aura: none;
 
@@ -71,10 +72,8 @@
   /* 极致舒适、温润自然墨色字阶系统 (消除冷蓝生硬感与视觉疲劳) */
   --text: #1f2023;
   --text-secondary: #55585d;
-  --text-muted: #74777c;
-  --text-meta: #74777c;
+  --text-muted: #64686f;
   --text-faint: #8c8f94;
-  --text-url: color-mix(in srgb, var(--accent) 76%, #ffffff);
 
   --badge-cat-bg: rgba(0, 0, 0, 0.04);
   --badge-cat-border: transparent;
@@ -139,8 +138,8 @@
   --accent-light: color-mix(in srgb, var(--accent) 22%, transparent);
   --accent-ring: color-mix(in srgb, var(--accent) 30%, transparent);
   --accent-on: #ffffff;
-  --text-brand: var(--accent);
-  --text-url: color-mix(in srgb, var(--accent) 72%, #ffffff);
+  --text-brand: color-mix(in srgb, var(--accent) 90%, #ffffff);
+  --text-url-hover: color-mix(in srgb, var(--accent) 76%, #ffffff);
   --tip-bg: var(--panel-bg);
   --tip-fg: var(--text);
   --toast-bg: #20232c;
@@ -155,7 +154,10 @@
   --frost-border: var(--border);
   --border-card-hover: color-mix(in srgb, var(--accent) 35%, transparent);
   --shadow-card-hover: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
-  --text-workspace-primary: #ffffff;
+  --bg-workspace-primary: var(--accent);
+  --bg-workspace-primary-hover: color-mix(in srgb, var(--bg-workspace-primary) 90%, #ffffff);
+  --bg-workspace-primary-active: color-mix(in srgb, var(--bg-workspace-primary) 90%, #000000);
+  --text-workspace-primary: #14151a;
 }
 
 :root[data-layout="workspace"][data-theme="ink"], .workspace-theme-prev[data-theme="ink"] {
@@ -192,11 +194,9 @@
 
   /* 柔和护眼、温润舒适珍珠白字阶系统 (消除刺眼强光与视觉疲劳) */
   --text: #e2e5ec;
-  --text-secondary: #9aa1ad;
-  --text-muted: #737b8a;
-  --text-meta: #737b8a;
+  --text-secondary: #afb7c3;
+  --text-muted: #9aa3b1;
   --text-faint: #555d6b;
-  --text-url: color-mix(in srgb, var(--accent) 72%, #ffffff);
   --code-fg: #e2e5ec;
   --badge-cat-bg: rgba(255, 255, 255, 0.06);
   --badge-cat-border: transparent;
@@ -253,7 +253,7 @@
   --toast-info: var(--accent);
 }
 
-/* 背景氛围：Fluent 2 克制天光漫反射，绝不污染正文阅读底色，消灭发脏边缘光斑 */
+/* Web 工作区与对话框的柔光。 */
 :root[data-layout="workspace"]:is([data-base="light"], [data-theme="paper"])[data-atmosphere="on"],
 .workspace-theme-prev:is([data-base="light"], [data-theme="paper"])[data-atmosphere="on"] {
   --bg-workspace: #f3f3f5;
@@ -268,6 +268,21 @@
   --bg-aura: radial-gradient(120% 90% at 50% -25%, color-mix(in oklab, var(--accent) 8%, #18191d) 0%, transparent 70%);
   --dialog-aura: radial-gradient(120% 85% at 50% -20%, color-mix(in oklab, var(--accent) 12%, #22242a) 0%, transparent 75%);
   --bg-dialog: var(--dialog-aura), #22242a;
+}
+
+/* 桌面柔光的明度由底色决定，强调色提供色相与有限的彩度。
+   左上顶光和侧栏下方的反光都落在窗框上，两处光线分别衰减。 */
+:root[data-layout="workspace"][data-atmosphere="on"]:not(.web-runtime) {
+  --workspace-light-top: oklch(from var(--accent) 0.995 min(calc(c * 0.22), 0.012) h);
+  --workspace-light-bottom: oklch(from var(--accent) 0.915 min(calc(c * 0.42), 0.03) h);
+  --bg-aura:
+    radial-gradient(ellipse 80% 72% at 18% -10%, var(--workspace-light-top), transparent 90%),
+    radial-gradient(ellipse 54% 63% at 0% 107%, var(--workspace-light-bottom), transparent 78%);
+}
+
+:root[data-layout="workspace"][data-base="dark"][data-atmosphere="on"]:not(.web-runtime) {
+  --workspace-light-top: oklch(from var(--accent) 0.33 min(calc(c * 0.58), 0.037) h);
+  --workspace-light-bottom: oklch(from var(--accent) 0.28 min(calc(c * 0.5), 0.028) h);
 }
 
 :root[data-layout="workspace"][data-atmosphere="off"],
@@ -350,7 +365,7 @@
   color: #e2e5ec;
 }
 
-/* 链接与网址浅度优化：比原始强调色更浅雅温和，悬停时展现完整强调色 */
+/* 链接使用适合当前底色的品牌前景色。 */
 :root[data-layout="workspace"] :is(
   a:not(.btn-primary):not(.btn-secondary):not(.action-btn):not(.tag-chip):not(.nav-item),
   .detail-link,
@@ -367,15 +382,15 @@
   .shortcut-row .row2,
   .ProseMirror a
 ):hover {
-  color: var(--accent);
+  color: var(--text-url-hover);
 }
 
 /* Fluent 2 实体主按钮 (Accent Button) */
 :root[data-layout="workspace"] .btn-primary:not(:disabled):not(.ghost-danger):not(:where(.dialog *)),
 :root[data-layout="workspace"] .create-action,
 :root[data-layout="workspace"] .go {
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--bg-workspace-primary);
+  color: var(--text-workspace-primary);
   border: 1px solid transparent;
   border-bottom: 1px solid rgba(0, 0, 0, 0.25);
   border-radius: 6px;
@@ -394,8 +409,8 @@
 :root[data-layout="workspace"] .btn-primary:hover:not(:disabled):not(.ghost-danger):not(:where(.dialog *)),
 :root[data-layout="workspace"] .create-action:hover:not(:disabled),
 :root[data-layout="workspace"] .go:hover:not(:disabled) {
-  background: var(--accent-hover);
-  color: #ffffff;
+  background: var(--bg-workspace-primary-hover);
+  color: var(--text-workspace-primary);
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.32), 0 2px 6px rgba(0, 0, 0, 0.12);
   filter: none;
   transform: none;
@@ -403,7 +418,7 @@
 :root[data-layout="workspace"] .btn-primary:active:not(:disabled):not(.ghost-danger):not(:where(.dialog *)),
 :root[data-layout="workspace"] .create-action:active:not(:disabled),
 :root[data-layout="workspace"] .go:active:not(:disabled) {
-  background: var(--accent-active);
+  background: var(--bg-workspace-primary-active);
   transform: scale(0.97) !important;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2) !important;
 }
@@ -557,7 +572,7 @@
 /* Featherlight 空气感轻搜胶囊 (小巧精炼，默认轻柔微底无厚白，聚焦时凸显) */
 :root[data-layout="workspace"] .search-box {
   background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 13px;
   color: var(--text);
   box-shadow: none;
@@ -592,6 +607,7 @@
 }
 :root[data-layout="workspace"] .search-box input::placeholder {
   color: var(--text-muted);
+  opacity: 1;
   font-size: 11.5px;
 }
 :root[data-layout="workspace"] .search-kbd {
@@ -723,6 +739,7 @@
 }
 :root[data-layout="workspace"] .session-search-box input::placeholder {
   color: var(--text-muted) !important;
+  opacity: 1;
   font-size: 11.5px !important;
 }
 
@@ -791,18 +808,18 @@
 }
 :root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active :is(.nav-text, .foot-text) {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text-brand);
 }
 :root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active :is(.nav-icon, .foot-icon) {
   color: var(--accent);
 }
 :root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active .nav-count {
-  color: var(--accent);
+  color: var(--text-brand);
   background: var(--accent-soft);
 }
 :root[data-layout="workspace"] .sidebar :is(.nav-item, .foot-item).active:hover {
   background: #ffffff;
-  color: var(--accent);
+  color: var(--text-brand);
 }
 :root[data-layout="workspace"][data-base="dark"] .sidebar :is(.nav-item, .foot-item).active:hover {
   background: #23252b;
@@ -1035,8 +1052,8 @@
   font-size: 12.5px !important;
   font-weight: 600 !important;
   border-radius: 7px !important;
-  background: var(--accent) !important;
-  color: #ffffff !important;
+  background: var(--bg-workspace-primary) !important;
+  color: var(--text-workspace-primary) !important;
   border: none !important;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 26%, transparent) !important;
   cursor: pointer;
@@ -1047,11 +1064,12 @@
   gap: 6px;
 }
 :root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.06) !important;
+  background: var(--bg-workspace-primary-hover) !important;
   transform: translateY(-0.5px) !important;
   box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 36%, transparent) !important;
 }
 :root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-primary:active:not(:disabled) {
+  background: var(--bg-workspace-primary-active) !important;
   transform: translateY(0) !important;
 }
 :root[data-layout="workspace"] :is(.dialog-footer, .dialog-body, .dialog) .btn-primary:disabled {
@@ -1603,6 +1621,7 @@
 /* 输入框占位符：采用统一规范 UI 字体与优雅温润中性弱化色 */
 :root[data-layout="workspace"] :is(.form-group input, .form-group textarea, .text-input, .select-input, .dialog input, .dialog textarea)::placeholder {
   color: var(--text-muted);
+  opacity: 1;
   font-family: var(--font-ui) !important;
   font-size: 13px;
 }
@@ -1772,8 +1791,8 @@
 :root[data-layout="workspace"]:not(.web-runtime) .workspace-surface {
   margin: 0 6px 6px 6px !important;
   border-radius: 10px !important;
-  background-color: #fafafa !important;
-  background-image: var(--dialog-aura) !important;
+  /* 柔光由外层窗框承载，正文面板以主题实底隔开光场。 */
+  background: #fafafa !important;
   border: 1px solid rgba(0, 0, 0, 0.05) !important;
   box-shadow: none !important;
   overflow: hidden !important;
@@ -1783,7 +1802,6 @@
   margin: 0 6px 6px 6px !important;
   border-radius: 10px !important;
   background-color: #1b1c21 !important;
-  background-image: var(--dialog-aura) !important;
   /* 墨底的亮边是第二重「抬升」信号：8% 白压在 29 的底上是 47，比面板本身亮一档半，
      读起来像一圈迎光的倒角。降到 4%，边界只留轮廓。 */
   border: 1px solid rgba(255, 255, 255, 0.04) !important;
@@ -1844,4 +1862,10 @@
 :root[data-layout="workspace"] .workspace-main:has(.notes-page) .workspace-head {
   padding-top: 10px;
   padding-bottom: 4px;
+}
+
+/* 键盘焦点用实色轮廓，保留按钮阴影和输入框的细描边。 */
+:root[data-layout="workspace"] :is(.dialog, .settings-dialog) :is(button, a[href], input, select, textarea, [tabindex="0"]):focus-visible {
+  outline: 2px solid var(--text-brand) !important;
+  outline-offset: 2px;
 }

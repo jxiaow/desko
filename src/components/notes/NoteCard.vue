@@ -787,9 +787,9 @@ defineExpose({ insertImage, noteId: computed(() => props.note.id) })
 :global(:root[data-base="dark"]) .memo-kind {
   background: rgba(255, 255, 255, 0.05);
 }
-.memo-stat { font-size: 11.5px; line-height: 18px; color: var(--text-faint); flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; line-height: 18px; color: var(--text-faint); flex-shrink: 0; }
-.memo-time { font-size: 11.5px; line-height: 18px; color: var(--text-faint); flex-shrink: 0; }
+.memo-stat { font-size: 11.5px; line-height: 18px; color: var(--text-meta); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.memo-att { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; line-height: 18px; color: var(--text-meta); flex-shrink: 0; }
+.memo-time { font-size: 11.5px; line-height: 18px; color: var(--text-meta); flex-shrink: 0; }
 /* 标签按 macOS 备忘录规范呈现为精致细圆角微胶囊 */
 .memo-tags { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .tag-pill {

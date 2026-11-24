@@ -157,6 +157,11 @@
     padding-top: 0;
   }
   .app-root.web-runtime .workspace-head { padding-block: 0; }
+  /* 窄屏标题伸出实际占位的 40px。正文直出时给标题让位，Codex 的页签保持固定位置。 */
+  .app-root.web-runtime:has(.titlebar-crumb) .workspace-head:not(:has(#workspace-page-toolbar > *)) + .workspace-body,
+  .app-root.web-runtime .workspace-head:has(#workspace-page-toolbar > .cx-header-tabs) {
+    margin-block-start: calc(var(--window-bar-height) - 40px + env(safe-area-inset-top));
+  }
   .app-root.web-runtime .titlebar-brandcell { display: none; }
   .app-root.web-runtime .titlebar-outer .titlebar-page {
     inset: calc(56px + env(safe-area-inset-top)) 14px 0;
@@ -182,7 +187,7 @@
   .app-root.web-runtime #workspace-page-toolbar :is(.bar-btn, .btn-primary, .btn-secondary) { min-height: 44px; }
   .app-root.web-runtime #workspace-page-toolbar .bar-btn { min-width: 40px; }
   .app-root.web-runtime #workspace-page-toolbar .page-actions { gap: 4px; }
-  .app-root.web-runtime #workspace-page-toolbar > .cx-header-tabs { flex: 1 0 auto; height: 48px; margin: 0; }
+  .app-root.web-runtime #workspace-page-toolbar > .cx-header-tabs { flex: 1 0 auto; align-self: flex-start; height: 48px; margin: 0; }
   .app-root.web-runtime #workspace-page-toolbar .cx-header-tabs .cx-tab { min-height: 44px; padding-inline: 10px; }
   .app-root.web-runtime #workspace-page-toolbar:has(.cx-header-tabs) > .page-bar { flex: 0 0 auto; }
   /* 动作带在窄屏独占第二排：390 一档整条只有 358px，页签自己就占 281，

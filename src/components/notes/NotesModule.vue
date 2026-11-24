@@ -383,9 +383,9 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (!pageActive.value) return
   if (isPageShortcutBlocked(e)) return
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-    if (fsTarget.value) return
+    if (fsTarget.value || !searchEl.value) return
     e.preventDefault()
-    searchEl.value?.focus()
+    searchEl.value.focus()
     return
   }
   if (e.key !== 'Escape' || fsTarget.value) return
@@ -446,7 +446,7 @@ watchEffect(() => {
   const total = filtered ? `${filteredNotes.value.length} / ${headTotal.value}` : `${headTotal.value}`
   // 条数跟着视图换口径，顶栏就得把视图名一起报出来，否则「0 条」看着像总数算错
   const view = noteView.value === 'all' ? '' : `${VIEWS.find(v => v.key === noteView.value)?.label} · `
-  pageHead.setHead('小记', `${view}${total} 条`)
+  pageHead.setHead('小记', showFilters.value ? `${view}${total} 条` : '')
 })
 </script>
 
@@ -455,9 +455,9 @@ watchEffect(() => {
     <div class="stream">
       <div class="stream-inner" @keydown="onStreamKeydown">
         <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-        <div class="page-bar">
+        <div v-if="showFilters" class="page-bar">
           <div class="page-lead">
-            <div v-if="showFilters" class="workspace-workbar notes-workbar" aria-label="小记视图">
+            <div class="workspace-workbar notes-workbar" aria-label="小记视图">
               <nav class="workspace-workbar-tabs">
                 <button
                   v-for="v in VIEWS"
@@ -489,7 +489,7 @@ watchEffect(() => {
               </template>
             </div>
           </div>
-          <div v-if="showFilters" class="search-box">
+          <div class="search-box">
             <span class="search-icon"><AppIcon name="search" :size="13" /></span>
             <input
               ref="searchEl"
@@ -513,6 +513,7 @@ watchEffect(() => {
 
           <div class="page-actions">
             <button
+              v-if="filteredNotes.length || isBatchMode"
               class="bar-btn"
               :class="{ active: isBatchMode }"
               type="button"
@@ -522,7 +523,7 @@ watchEffect(() => {
             >
               <AppIcon name="checkall" :size="13" />
             </button>
-            <button v-if="!isWebRuntime()" class="bar-btn" type="button" :title="isArchivedView ? '导出全部归档' : '导出全部小记'" :aria-label="isArchivedView ? '导出全部归档' : '导出全部小记'" :disabled="!exportAllCount || !!exportRequest" @click="exportAll">
+            <button v-if="!isWebRuntime() && exportAllCount" class="bar-btn" type="button" :title="isArchivedView ? '导出全部归档' : '导出全部小记'" :aria-label="isArchivedView ? '导出全部归档' : '导出全部小记'" :disabled="!!exportRequest" @click="exportAll">
               <AppIcon name="download" :size="13" />
             </button>
             <!-- 口令只管加密小记，没加密过就不出现在顶栏；归档视图不做批量加解密 -->
@@ -540,7 +541,7 @@ watchEffect(() => {
               </button>
             </template>
             <button
-              v-if="!workspaceLayout && showFilters"
+              v-if="!workspaceLayout"
               ref="railToggleEl"
               class="bar-btn"
               :class="{ active: railVisible }"
@@ -551,7 +552,7 @@ watchEffect(() => {
             >
               <AppIcon name="panel" :size="13" />
             </button>
-            <WorkspaceDirectoryToggle v-if="isWebRuntime() && showFilters" />
+            <WorkspaceDirectoryToggle v-if="isWebRuntime()" />
           </div>
         </div>
         </Teleport>

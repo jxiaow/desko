@@ -43,7 +43,16 @@ export async function webApp(page: Page, config: E2EConfig = {}, initialPath = '
       if (path.endsWith('/file-0') || relative === 'demo.txt') return route.fulfill({ contentType: 'application/octet-stream', headers: { 'Content-Disposition': 'attachment' }, body: 'download fixture' })
       return send(200, { name: 'Web 目录', path: relative, entries: relative ? [] : [{ name: '子目录', path: '子目录', directory: true, size: 0 }, { name: 'demo.txt', path: 'demo.txt', directory: false, size: 16 }] })
     }
-    if (path === '/api/share-upload') return send(200, { name: new URL(route.request().url()).searchParams.get('name') })
+    if (path === '/api/share-upload') {
+      const url = new URL(route.request().url())
+      const name = url.searchParams.get('name') ?? ''
+      const size = route.request().postDataBuffer()?.length ?? 0
+      const share = Number(url.searchParams.get('share') ?? 0)
+      // 真实后端落盘后各记一条文件消息（handlers::handle_upload），这里跟着写，
+      // 否则网页端传完文件，流里读回来是空的
+      await page.evaluate(({ name, size, share }) => (window as any).__E2E__?.pushFileshareFile(name, size, share), { name, size, share })
+      return send(200, { name })
+    }
     if (path === '/api/invoke') {
       const body = route.request().postDataJSON()
       invocations.push(body.command)
@@ -54,6 +63,15 @@ export async function webApp(page: Page, config: E2EConfig = {}, initialPath = '
       if (body.command === 'web_codex_read_session') return send(200, '{\"type\":\"message\",\"content\":\"Web 会话正文\"}')
       if (body.command === 'web_seal_draft') return send(200, { iv: 'fixture-draft-iv', ciphertext: Buffer.from(body.args.plaintext).toString('base64') })
       if (body.command === 'web_open_draft') return send(200, Buffer.from(body.args.sealed.ciphertext, 'base64').toString())
+      if (body.command === 'fileshare_message_push') {
+        // 浏览器发出的文字在真实桥里记成 web（web_access/network.rs 的 fileshare_message_push），
+        // mock 得跟着改向，否则网页端自己的消息会被读成「电脑发的」
+        const value = await page.evaluate(
+          ({ content, dir }) => (window as any).__E2E__?.pushFileshareText(content, dir),
+          { content: body.args.content, dir: 'web' },
+        )
+        return send(200, value ?? null)
+      }
       try {
         const value = await page.evaluate(async ({ command, args }) => {
           const { getBackend } = await import('/e2e/mocks/backend.ts' as string)
@@ -70,7 +88,9 @@ export async function webApp(page: Page, config: E2EConfig = {}, initialPath = '
     await route.fulfill({ response, body: html })
   })
   await page.goto(initialPath)
-  await expect(page.getByRole('heading', { name: 'Desko', exact: true })).toBeVisible()
+  // 解锁页标题是「Desko 登录 / Desko 工作台」，不是光秃秃的 Desko：
+  // exact 匹配会把所有走 webApp 的 spec 卡在启动这一步
+  await expect(page.getByRole('heading', { name: /^Desko\b/ })).toBeVisible()
   const login = async (selector = '.notes-page') => {
     await page.locator('input[type="password"]').fill('e2e-master-123')
     await page.locator('input[type="password"]').press('Enter')

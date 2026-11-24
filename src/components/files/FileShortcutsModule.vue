@@ -6,6 +6,7 @@ import type { FileShortcut } from '../../types'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { useDialogFocus } from '../../composables/useDialogFocus'
 import { useGridKeys } from '../../composables/useGridKeys'
 import AppIcon from '../shared/AppIcon.vue'
 import CreateAction from '../shared/CreateAction.vue'
@@ -34,6 +35,8 @@ const props = defineProps<{
 const toastStore = useToastStore()
 const confirmStore = useConfirmStore()
 const webRuntime = isWebRuntime()
+const showSearch = computed(() => props.totalShortcuts > 0 || !!props.searchKeyword)
+const showAddInToolbar = computed(() => !webRuntime && (props.loading || !!props.loadError || showSearch.value))
 const browsingShortcut = ref<FileShortcut | null>(null)
 
 const emit = defineEmits<{
@@ -173,6 +176,11 @@ const cancelAdd = () => {
 }
 
 useEscapeClose(cancelAdd, () => showAddDialog.value)
+const shortcutDialog = ref<HTMLElement | null>(null)
+const { trapFocus } = useDialogFocus(shortcutDialog, {
+  when: () => showAddDialog.value,
+  initialFocus: '.path-input-row input',
+})
 
 const openShortcut = async (shortcut: FileShortcut) => {
   try {
@@ -324,10 +332,10 @@ const onGlobalKey = (e: KeyboardEvent) => {
     return
   }
   if (isPageShortcutBlocked(e)) return
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+  if (searchRef.value && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
-    searchRef.value?.focus()
-    searchRef.value?.select()
+    searchRef.value.focus()
+    searchRef.value.select()
   }
 }
 
@@ -350,8 +358,8 @@ watchEffect(() => {
 <template>
   <div class="content-inner" :class="{ 'web-runtime': webRuntime }">
     <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-    <div class="page-bar">
-      <div v-if="totalShortcuts > 0 || searchKeyword" class="search-box">
+    <div v-if="showSearch || showAddInToolbar" class="page-bar">
+      <div v-if="showSearch" class="search-box">
         <span class="search-icon"><AppIcon name="search" :size="15" /></span>
         <input ref="searchRef" :value="searchKeyword" placeholder="搜索快捷方式…" @input="emit('update:searchKeyword', ($event.target as HTMLInputElement).value)" />
         <kbd v-if="!searchKeyword" class="search-kbd">{{ kbdHint }}</kbd>
@@ -359,8 +367,8 @@ watchEffect(() => {
           <AppIcon name="x" :size="13" />
         </button>
       </div>
-      <div v-if="!webRuntime" class="page-actions">
-        <CreateAction v-if="loading || loadError || totalShortcuts > 0 || searchKeyword" label="添加快捷方式" @click="showAddDialog = true" />
+      <div v-if="showAddInToolbar" class="page-actions">
+        <CreateAction label="添加快捷方式" @click="showAddDialog = true" />
       </div>
     </div>
     </Teleport>
@@ -458,8 +466,8 @@ watchEffect(() => {
 
     <!-- Add/Edit Dialog：与收藏表单弹窗同一套骨架（居中悬浮 + 42px 头 + 32px 字段轴 + 46px 底栏带快捷键徽标） -->
     <Transition name="dialog">
-      <div v-if="!webRuntime && showAddDialog" class="dialog-overlay form-overlay">
-        <div class="dialog shortcut-dialog" role="dialog" aria-modal="true" :aria-label="isEditing() ? '编辑快捷方式' : '添加快捷方式'">
+      <div v-if="!webRuntime && showAddDialog" class="dialog-overlay form-overlay" @mousedown.self.prevent>
+        <div ref="shortcutDialog" class="dialog shortcut-dialog" role="dialog" aria-modal="true" :aria-label="isEditing() ? '编辑快捷方式' : '添加快捷方式'" tabindex="-1" @keydown.tab="trapFocus">
           <div class="dialog-header">
             <div class="dialog-header-left">
               <h3>{{ isEditing() ? '编辑快捷方式' : '添加快捷方式' }}</h3>

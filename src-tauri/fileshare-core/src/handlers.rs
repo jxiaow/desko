@@ -1,4 +1,4 @@
-//! 路由处理：/ 列表、/download、/upload、/save-text、/settings（仅 POST，首页弹窗提交）、/login。
+//! 路由处理：/ 列表、/download、/upload、/text、/settings（仅 POST，首页弹窗提交）、/login。
 //! 行为基准 ftp/server.py 的 FileTransferHandler，逐分支对照移植。
 
 use std::io::{BufReader, Cursor, Read};
@@ -10,7 +10,7 @@ use tiny_http::{Header, Request, Response, StatusCode};
 use crate::auth::{sanitize_next, LAN_SCOPE, SESSION_COOKIE};
 use crate::config::{ensure_dirs_exist, normalize_share_dirs, PublicPolicy, ShareConfig, ThemeStamp};
 use crate::files::{
-    claim_available_name, format_size, list_files, resolve_file_in_share, sanitize_upload_name, FileEntry,
+    format_size, list_files, resolve_file_in_share, FileEntry,
 };
 use crate::guard::{FailGate, Rule, RULE_HOST, RULE_SOURCE};
 use crate::http_util::{
@@ -18,10 +18,13 @@ use crate::http_util::{
 };
 use crate::multipart;
 use crate::pages::{self, HomePage, RowData};
+use crate::messages;
 
 const PAGE_SIZE: usize = 20;
 const MAX_FORM_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_LOGIN_BYTES: u64 = 8 * 1024;
+/// 文字表单的正文上限：单条 64 KiB，urlencode 后按三倍留余量，超了直接 413
+const MAX_TEXT_FORM_BYTES: u64 = 3 * messages::MAX_TEXT_BYTES as u64;
 /// 单次上传请求的合计字节上限：挡误操作与恶意灌盘，正常局域网传文件够用
 const MAX_UPLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 const SESSION_TTL_COOKIE_SECS: u64 = 7 * 24 * 3600;
@@ -48,6 +51,11 @@ impl RuntimeState {
             Ok(g) => g.clone(),
             Err(_) => ShareConfig::default(),
         }
+    }
+
+    /// 消息流的落点：档案根下的 messages.json，与 App 命令层同一份文件
+    pub fn messages_path(&self) -> std::path::PathBuf {
+        messages::message_path(&self.base_dir)
     }
 }
 
@@ -190,7 +198,7 @@ fn dispatch(
         if method == "POST" && path == "/settings" {
             return ok_respond(request, text_resp(StatusCode(403), "公网侧不能改共享目录"));
         }
-        if method == "POST" && policy.read_only && matches!(path, "/upload" | "/save-text") {
+        if method == "POST" && policy.read_only && matches!(path, "/upload" | "/text" | "/message-delete") {
             return ok_respond(request, text_resp(StatusCode(403), "这条在公网侧是只读的"));
         }
     }
@@ -219,10 +227,22 @@ fn dispatch(
 
     match (method, path) {
         ("GET", "/") => handle_index(request, state, cfg, &stamp, query),
+        ("GET", "/message-stream") => {
+            let entries = messages::list(&state.messages_path());
+            let body = serde_json::json!({
+                "count": entries.len(),
+                "html": pages::render_stream(&entries, &cfg.share_dirs),
+            });
+            let response = Response::from_string(body.to_string()).with_header(
+                Header::from_bytes("Content-Type", "application/json").unwrap(),
+            ).with_header(Header::from_bytes("Cache-Control", "no-store").unwrap());
+            ok_respond(request, response)
+        }
         ("GET", "/download") => handle_download(request, state, cfg, query),
         ("POST", "/settings") => handle_settings_post(request, state),
         ("POST", "/upload") => handle_upload(request, state, cfg, query, content_type),
-        ("POST", "/save-text") => handle_save_text(request, state, cfg, query),
+        ("POST", "/text") => handle_text_post(request, state, query),
+        ("POST", "/message-delete") => handle_message_delete(request, state),
         ("GET", "/login") => {
             let next = sanitize_next(pair_get(query, "next").unwrap_or(""));
             ok_respond(request, html_resp(StatusCode(200), &pages::login_page(None, &next, &stamp), None))
@@ -253,7 +273,7 @@ fn original_target(method: &str, path: &str, query: &[(String, String)]) -> Stri
 
 fn handle_index(
     request: Request,
-    _state: &Arc<RuntimeState>,
+    state: &Arc<RuntimeState>,
     cfg: &ShareConfig,
     stamp: &ThemeStamp,
     query: &[(String, String)],
@@ -265,13 +285,8 @@ fn handle_index(
 
     // 无筛选无排序开关：全目录合并，固定按修改时间倒序
     let (rows, count, shown, has_more, dir_counts) = page_entries(cfg, &search, page);
-    let count_text = if has_more {
-        format!("已显示 {} / {} 个文件", shown, count)
-    } else {
-        format!("{} 个文件", count)
-    };
-    let share_index = 0usize;
-    let next_page = if has_more { shown / PAGE_SIZE + 1 } else { 0 };
+    let count_text = count_text(count, shown, has_more);
+    let next_page = page_after(shown, has_more);
 
     if is_partial {
         let body = pages::partial_response(
@@ -281,6 +296,8 @@ fn handle_index(
         return ok_respond(request, html_resp(StatusCode(200), &body, None));
     }
 
+    // 消息流只在整页渲染：文件续加时重排会打断正在读的那一段
+    let entries = messages::list(&state.messages_path());
     let dirs: Vec<String> = cfg.share_dirs.iter().map(|d| d.display().to_string()).collect();
     let html = pages::home_page(&HomePage {
         stamp,
@@ -288,11 +305,26 @@ fn handle_index(
         search_q: &search,
         count_text,
         rows_html: pages::render_more_and(next_page, &search, &pages::render_rows(&rows, &search)),
-        share_index,
+        stream: pages::render_stream(&entries, &cfg.share_dirs),
+        stream_count: entries.len(),
+        share_index: 0,
         share_dirs: &dirs,
         dir_counts: &dir_counts,
     });
     ok_respond(request, html_resp(StatusCode(200), &html, None))
+}
+
+fn count_text(count: usize, shown: usize, has_more: bool) -> String {
+    if has_more {
+        format!("已显示 {} / {} 个文件", shown, count)
+    } else {
+        format!("{} 个文件", count)
+    }
+}
+
+/// 还有下一页时给下一页号，否则 0（哨兵行不挂）
+fn page_after(shown: usize, has_more: bool) -> usize {
+    if has_more { shown / PAGE_SIZE + 1 } else { 0 }
 }
 
 fn page_entries(
@@ -402,7 +434,7 @@ pub fn download_headers(path: &std::path::Path) -> Vec<Header> {
 
 fn handle_upload(
     mut request: Request,
-    _state: &Arc<RuntimeState>,
+    state: &Arc<RuntimeState>,
     cfg: &ShareConfig,
     query: &[(String, String)],
     content_type: &str,
@@ -432,55 +464,90 @@ fn handle_upload(
     if saved.is_empty() {
         return fail(request, text_resp(StatusCode(400), "No files uploaded"));
     }
-    let target = with_message("/".to_string(), "上传完成");
+    // 落盘之后各记一条消息：文件本体留在共享目录（用户去文件夹也找得到），
+    // 对话流里只留"谁在什么时候发过一个叫什么、多大的文件"这份快照。
+    // 记账失败不该让已经上传成功的文件变成一个错误页，所以这里忽略错误。
+    let hint = dir.display().to_string();
+    for f in &saved {
+        let _ = messages::push_file(
+            &state.messages_path(),
+            &f.name,
+            f.size,
+            share_index,
+            &hint,
+            messages::DIR_WEB,
+        );
+    }
+    let done = if saved.len() == 1 {
+        "已送达".to_string()
+    } else {
+        format!("已送达 {} 个文件", saved.len())
+    };
+    let target = with_query(with_message("/".to_string(), &done), query);
     ok_respond(request, redirect_resp(&target, None))
 }
 
-// ── 文本保存 ────────────────────────────────────────────────
+// ── 消息：文字和文件都进同一条流 ──────────────────────────────
 
-fn handle_save_text(
+/// 从浏览器那一面发来一条文字。落进 messages.json，App 侧下一次轮询就看得见，
+/// 而不是在共享目录里丢一个 .txt 等用户去翻。
+fn handle_text_post(
     mut request: Request,
-    _state: &Arc<RuntimeState>,
-    cfg: &ShareConfig,
+    state: &Arc<RuntimeState>,
     query: &[(String, String)],
 ) -> Handled {
-    let share: Option<usize> = pair_get(query, "share")
-        .and_then(|s| s.parse().ok())
-        .filter(|i| *i < cfg.share_dirs.len());
-    let Some(share_index) = share else {
-        drain_body(&mut request);
-        return fail(request, text_resp(StatusCode(400), "Invalid share index"));
-    };
-    let body_result = multipart::read_limited(request.as_reader(), MAX_FORM_BYTES);
+    let body_result = multipart::read_limited(request.as_reader(), MAX_TEXT_FORM_BYTES);
     let body = match body_result {
         Ok(b) => b,
-        Err(_) => return fail(request, text_resp(StatusCode(413), "Body too large")),
+        Err(_) => {
+            drain_body(&mut request);
+            return fail(request, text_resp(StatusCode(413), "这段文字太长了，单条最多 64 KB"));
+        }
     };
     let pairs = parse_pairs(&String::from_utf8_lossy(&body));
-    let filename = pair_get(&pairs, "filename").unwrap_or("").trim().to_string();
-    let content = pair_get(&pairs, "content").unwrap_or("").to_string();
-    if filename.is_empty() || content.trim().is_empty() {
-        return fail(request, text_resp(StatusCode(400), "Missing filename or content"));
+    let content = pair_get(&pairs, "content").unwrap_or("");
+    // 空与超限的原因由 store 给：网页端在提交前也拦一道，走到这里说明是绕过前端的请求
+    if let Err(msg) = messages::push_text(&state.messages_path(), content, messages::DIR_WEB) {
+        return fail(request, text_resp(StatusCode(400), &msg));
     }
-    let name = if filename.to_ascii_lowercase().ends_with(".txt") {
-        filename
+    if pair_get(query, "response") == Some("empty") {
+        return ok_respond(request, Response::empty(StatusCode(204)));
+    }
+    // 普通表单提交后回到首页，并保留搜索词。
+    let target = with_query(with_message("/".to_string(), "已送达"), query);
+    ok_respond(request, redirect_resp(&target, None))
+}
+
+/// 删一条消息：网页上读完就能清掉，不用回电脑上操作。id 由页面带过来。
+/// **只删这条记录，共享目录里的文件不动**——那是用户的文件，不是我们的缓存。
+fn handle_message_delete(request: Request, state: &Arc<RuntimeState>) -> Handled {
+    let (request, body) = match read_body(request, MAX_LOGIN_BYTES) {
+        Ok(pair) => pair,
+        Err((request, ())) => return fail(request, text_resp(StatusCode(400), "Body too large")),
+    };
+    let pairs = parse_pairs(&String::from_utf8_lossy(&body));
+    let id = pair_get(&pairs, "id").unwrap_or("");
+    if id.is_empty() {
+        return fail(request, text_resp(StatusCode(400), "Missing id"));
+    }
+    match messages::remove(&state.messages_path(), id) {
+        // 已经不在库里也回成功：按钮比数据旧是常态，没必要让用户看到一条"删不掉"
+        Ok(_) => ok_respond(request, redirect_resp(&with_message("/".to_string(), "已删除"), None)),
+        Err(msg) => fail(request, text_resp(StatusCode(500), &msg)),
+    }
+}
+
+/// 表单页带过来的 `q` 之类原样带回，刷新后还停在原搜索结果上
+fn with_query(base: String, query: &[(String, String)]) -> String {    let keep: Vec<String> = query
+        .iter()
+        .filter(|(k, _)| k == "q")
+        .map(|(k, v)| format!("{}={}", url_encode(k), url_encode(v)))
+        .collect();
+    if keep.is_empty() {
+        base
     } else {
-        format!("{}.txt", filename)
-    };
-    let Some(name) = sanitize_upload_name(&name) else {
-        return fail(request, text_resp(StatusCode(400), "Invalid filename"));
-    };
-    let dir = cfg.share_dirs[share_index].clone();
-    let target = match claim_available_name(&dir, &name) {
-        Ok(t) => t,
-        Err(_) => return fail(request, text_resp(StatusCode(500), "Write failed")),
-    };
-    if std::fs::write(&target, content.as_bytes()).is_err() {
-        let _ = std::fs::remove_file(&target);
-        return fail(request, text_resp(StatusCode(500), "Write failed"));
+        format!("{}&{}", base, keep.join("&"))
     }
-    let redirect = with_message("/".to_string(), "文本已保存");
-    ok_respond(request, redirect_resp(&redirect, None))
 }
 
 // ── 共享目录设置（首页弹窗 → POST /settings）─────────────────
@@ -765,7 +832,8 @@ mod tests {
             persist_dirs: Arc::new(|_| Ok(())),
             bound_port: 8000,
             lan_ip: "127.0.0.1".to_string(),
-            base_dir: std::env::temp_dir(),
+            // 文字落盘跟着 base_dir 走：每个 state 一个独立空目录，别把系统 temp 根当案头
+            base_dir: temp_dir(),
         })
     }
 
@@ -903,7 +971,7 @@ mod tests {
     }
 
     #[test]
-    fn upload_and_save_text_roundtrip() {
+    fn upload_and_text_roundtrip() {
         use std::fs;
         let dir = std::env::temp_dir().join(format!("desko-up-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
@@ -944,16 +1012,52 @@ mod tests {
         assert_eq!(resp.status() as u16, 302);
         assert!(dir.join("上 传 (1).txt").exists());
 
-        // save-text
-        let form = format!("filename=笔记&content={}", url_encode("line1\nline2"));
+        // 上传落盘之后要记一条文件消息：对话流里得能看出来"谁在什么时候发了什么"。
+        // 两次上传 → 两条，第二条是避让后的实际落盘名
+        let stream = crate::messages::list(&crate::messages::message_path(&state.base_dir));
+        assert_eq!(stream.len(), 2, "{:?}", stream.iter().map(|m| &m.name).collect::<Vec<_>>());
+        assert_eq!(stream[0].name, "上 传 (1).txt");
+        assert!(stream[0].is_file());
+        assert_eq!(stream[0].dir, crate::messages::DIR_WEB);
+        assert_eq!(stream[0].size, b"payload-data".len() as u64);
+
+        // 文字：不落成 .txt，直接进 messages.json，回首页的那一刻就在最下面一条
+        let form = format!("content={}", url_encode("line1\nline2"));
         let resp = agent
-            .post(&format!("{}/save-text?share=0", base))
+            .post(&format!("{}/text", base))
             .set("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
             .send_string(&form)
             .unwrap();
         assert_eq!(resp.status() as u16, 302);
-        assert!(dir.join("笔记.txt").exists());
-        assert_eq!(fs::read_to_string(dir.join("笔记.txt")).unwrap(), "line1\nline2");
+        assert!(resp.header("Location").unwrap_or("").contains("message="));
+        let saved = crate::messages::list(&crate::messages::message_path(&state.base_dir));
+        assert_eq!(saved[0].text, "line1\nline2");
+        assert_eq!(saved[0].dir, crate::messages::DIR_WEB);
+        assert!(!saved[0].is_file());
+        assert!(!dir.join("笔记.txt").exists(), "文字不该再写成文件");
+        let response = ureq::get(&format!("{}/message-stream", base)).call().unwrap();
+        assert_eq!(response.header("Content-Type"), Some("application/json"));
+        let stream: serde_json::Value =
+            serde_json::from_str(&response.into_string().unwrap()).unwrap();
+        assert_eq!(stream["count"], 3);
+        let html = stream["html"].as_str().unwrap();
+        assert!(html.contains("line1\nline2"));
+        assert!(html.contains("上 传 (1).txt"));
+        // 再发一条：新的在最前
+        agent
+            .post(&format!("{}/text", base))
+            .set("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+            .send_string(&format!("content={}", url_encode("第二条")))
+            .unwrap();
+        let saved = crate::messages::list(&crate::messages::message_path(&state.base_dir));
+        assert_eq!(saved[0].text, "第二条");
+        // 首页是一条时间流：文字和文件都在里面，方向靠位置表达
+        let page = ureq::get(&format!("{}/", base)).call().unwrap().into_string().unwrap();
+        assert!(page.contains("第二条"), "网页要能直接读到文字");
+        assert!(page.contains(r#"data-kind="file""#), "文件也要进同一条流");
+        assert!(page.contains("上 传 (1).txt"));
+        assert!(page.contains(r#"class="chat""#), "首页主体应该是对话而不是三块列表");
+        assert!(page.contains("4 条"), "计数要跟着条数走");
 
         stop.store(true, std::sync::atomic::Ordering::Relaxed);
         fs::remove_dir_all(&dir).ok();
@@ -1192,7 +1296,7 @@ mod tests {
     fn read_only_public_entry_blocks_writes() {
         let dir = temp_dir();
         let state = test_state_with(vec![dir.clone()], vec![public("ro.example.com", Some("sesame"), true)]);
-        let (port, stop) = serve(state);
+        let (port, stop) = serve(state.clone());
         let token = log_in(port, "ro.example.com", "sesame");
         assert!(!token.is_empty(), "登录没拿到会话");
 
@@ -1209,12 +1313,13 @@ mod tests {
         assert!(upload.contains("只读"), "resp={upload}");
         assert!(!dir.join("x.txt").exists(), "被拒的上传不能落盘");
 
-        let save_body = "filename=y&content=hello";
-        let mut lines = request("POST", "/save-text?share=0", "ro.example.com");
+        let write_body = "content=hello";
+        let mut lines = request("POST", "/text", "ro.example.com");
         lines.push(format!("Cookie: {token}"));
-        lines.extend(form(save_body));
-        assert_eq!(status_of(&exchange(port, &lines, save_body)), 403);
-        assert!(!dir.join("y.txt").exists(), "被拒的写文本不能落盘");
+        lines.extend(form(write_body));
+        assert_eq!(status_of(&exchange(port, &lines, write_body)), 403);
+        let saved = crate::messages::list(&crate::messages::message_path(&state.base_dir));
+        assert!(saved.is_empty(), "被拒的写文字不能进库");
 
         // 读的一面照常
         assert_eq!(status_of(&get_as(port, "ro.example.com", "/", &token)), 200);

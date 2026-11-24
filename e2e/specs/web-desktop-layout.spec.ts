@@ -47,6 +47,26 @@ for (const width of [1100, 1440, 1920]) {
   })
 }
 
+test('浏览器设置键盘焦点循环并返回 Desko 菜单', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const app = await webApp(page, { settings })
+  await app.login()
+  const appMenu = page.getByRole('button', { name: 'Desko 菜单', exact: true })
+  await appMenu.press('Enter')
+  await page.getByRole('menuitem', { name: '模块管理', exact: true }).click()
+  const modulePreferences = page.getByRole('dialog', { name: '浏览器设置' })
+  await expect(modulePreferences.getByRole('switch', { name: '小记', exact: true })).toBeChecked()
+  await expect(modulePreferences.locator('[aria-pressed="true"]')).toBeFocused()
+  const done = modulePreferences.getByRole('button', { name: '完成', exact: true })
+  await done.focus()
+  await page.keyboard.press('Tab')
+  await expect(modulePreferences.getByRole('button', { name: '关闭', exact: true })).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(done).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(appMenu).toBeFocused()
+})
+
 test('桌面 Web 分组跟随模块启停，退出仍走真实会话清理', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   const app = await webApp(page, { settings })

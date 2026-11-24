@@ -21,13 +21,14 @@ function state(bound: boolean, alive: boolean, registered: boolean, extra = {}) 
 
 /** 准备流走完后页面主角是服务列表，行按子域取 */
 const svcRow = (page: Page, host: string) => page.locator('.tn-card.services .svc-row', { hasText: host })
+const addServiceButton = (page: Page) => page.locator('.tn-card.services').getByRole('button', { name: '添加服务', exact: true })
 
 async function openDetail(page: Page) {
   await page.locator('.tn-foot .foot-btn').click()
 }
 
 async function addService(page: Page, host: string, port: string, label = '') {
-  await page.locator('.tn-card.services .head-btn').click()
+  await addServiceButton(page).click()
   const dlg = page.locator('.tunnel-service-dialog')
   if (label) await dlg.locator('#tn-svc-name').fill(label)
   await dlg.locator('#tn-svc-host').fill(host.replace(/\.example\.com$/i, ''))
@@ -57,13 +58,13 @@ test.describe('内网穿透', () => {
     await expect(page.locator('a.nav-item[href="/tunnel"]')).toHaveCount(1)
     await page.locator('a.nav-item[href="/tunnel"]').click()
     await expect(page.locator('.connection-heading .chip').first()).toContainText('已停止')
+    await expect(page.locator('.tn-foot')).toHaveCount(0)
   })
 
-  test('没登记服务：启动钮按不住，原因写在按钮上', async ({ page }) => {
+  test('未登记服务时隐藏启动钮，保留添加入口', async ({ page }) => {
     await gotoTunnel(page, state(true, false, false, { ...READY }))
-    const btn = page.locator('.connection-heading .toggle-btn')
-    await expect(btn).toBeDisabled()
-    await expect(btn).toHaveAttribute('title', '请先添加本地服务')
+    await expect(page.locator('.connection-heading .toggle-btn')).toHaveCount(0)
+    await expect(addServiceButton(page)).toBeVisible()
     expect(await e2e.count(page, 'tunnel_start')).toBe(0)
   })
 
@@ -162,7 +163,7 @@ test.describe('内网穿透', () => {
       test(`切换服务类型保持弹窗与字段位置（${viewport.width}×${viewport.height}）`, async ({ page }) => {
         await page.setViewportSize(viewport)
         await gotoTunnel(page, { ...ROOT, tunnel: READY })
-        await page.locator('.tn-card.services .head-btn').click()
+        await addServiceButton(page).click()
         const dlg = page.locator('.tunnel-service-dialog')
         const empty = await dlg.boundingBox()
         await dlg.locator('.seg button', { hasText: '局域网传输' }).click()
@@ -190,12 +191,16 @@ test.describe('内网穿透', () => {
     test('空态只有一行添加：登记一条就上一行', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: READY })
       await expect(page.locator('.tn-card.services .tn-add')).toBeVisible()
+      await expect(addServiceButton(page)).toHaveCount(1)
+      await expect(page.locator('.service-summary')).toHaveCount(0)
 
       await addService(page, 'Desk.Example.com', '9090', '文档站')
       await expectToast(page, '服务已保存')
       const row = svcRow(page, 'desk.example.com')
       await expect(row).toContainText('127.0.0.1:9090')
       await expect(row).toContainText('文档站')
+      await expect(page.locator('.connection-heading .toggle-btn')).toBeEnabled()
+      await expect(page.locator('.service-summary')).toContainText('1 项服务')
       // 输入框里的大小写不是最终值：子域按小写落库，DNS 与配置都按它走
       const snap = await e2e.snapshot(page)
       expect(snap.tunnel.services[0].hostname).toBe('desk.example.com')
@@ -283,7 +288,7 @@ test.describe('内网穿透', () => {
 
     test('端口不合法时保存按不住，不让它走到远端', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: READY })
-      await page.locator('.tn-card.services .head-btn').click()
+      await addServiceButton(page).click()
       const dlg = page.locator('.tunnel-service-dialog')
       await dlg.locator('#tn-svc-host').fill('a')
       const save = dlg.locator('.dialog-footer .btn-primary')
@@ -297,7 +302,7 @@ test.describe('内网穿透', () => {
 
     test('服务类型说明与端口获取入口准确', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: READY })
-      await page.locator('.tn-card.services .head-btn').click()
+      await addServiceButton(page).click()
       const dlg = page.locator('.tunnel-service-dialog')
       await expect(dlg.locator('.service-note')).toHaveText('访问权限由原服务管理。')
       await expect(dlg.locator('.port-line .port-btn')).toBeHidden()
@@ -361,7 +366,7 @@ test.describe('内网穿透', () => {
     test('授权后自动展示主域名，新增服务只填前缀即可得到公网地址', async ({ page }) => {
       await gotoTunnel(page, { ...ROOT, tunnel: { installed: true, authorized: true, domain: 'demo.example.net' } })
       await expect(row(page, 'auth')).toContainText('demo.example.net')
-      await page.locator('.tn-card.services .head-btn').click()
+      await addServiceButton(page).click()
       const dlg = page.locator('.tunnel-service-dialog')
       await expect(dlg.locator('.domain-name')).toHaveText('demo.example.net')
       await dlg.locator('#tn-svc-host').fill('files')
@@ -382,7 +387,7 @@ test.describe('内网穿透', () => {
       await expect(page.locator('.tn-card.setup .tn-note.chip-warn .note-text')).toHaveText('无法读取主域名：无法连接 Cloudflare')
       await page.locator('.tn-card.setup .row-btn', { hasText: '重试读取主域名' }).click()
       await expect.poll(() => e2e.count(page, 'tunnel_authorized_domain')).toBe(2)
-      await page.locator('.tn-card.services .head-btn').click()
+      await addServiceButton(page).click()
       const dlg = page.locator('.tunnel-service-dialog')
       await dlg.locator('#tn-svc-host').fill('files')
       await dlg.locator('#tn-svc-port').fill('8421')

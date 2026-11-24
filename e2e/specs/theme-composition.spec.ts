@@ -1,11 +1,11 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import { bootUnlocked } from '../helpers'
 import { contrast, lab } from '../../scripts/lib/theme-tokens.mjs'
 
 /* 骨架契约（导轨 + 通栏内容面）：
-   1. 导轨与内容面共享柔光，卡片保持实底；
+   1. 外层窗框承载柔光，内容面与卡片使用主题实底；
    2. 三层明度各差一档：导轨（比内容面降一档） < 内容面 < 卡片；
-   3. 关掉柔光后导轨与内容面回到纯色，卡片不变。 */
+   3. 柔光开关与强调色只影响窗框的受光区域。 */
 const THEMES = ['paper', 'ink'] as const
 const ACCENTS = ['ink', 'indigo', 'plum', 'rose', 'brick', 'clay', 'amber', 'olive', 'celadon', 'teal', 'graphite', 'sand'] as const
 type RGB = [number, number, number]
@@ -38,6 +38,7 @@ async function renderedSurfaces(page: Page) {
     const main = rect('.workspace-body > .main-content')
     const card = rect(document.querySelector('.memo') ? '.memo' : '.grid-card')
     const composer = rect('.composer')
+    const searchBox = rect('.search-box')
     const style = (selector: string) => getComputedStyle(document.querySelector(selector)!)
     const input = style('.search-box input'), search = style('.search-box'), body = style('.memo-body')
     const root = getComputedStyle(document.documentElement)
@@ -47,16 +48,12 @@ async function renderedSurfaces(page: Page) {
       return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3) as RGB
     }
     return {
-      // 窗框：左轨上/中段、标题栏带、浮片下沿与右沿
+      // 窗框取标题栏与导轨留白，避开图标与文字。
       railTop: meanPixel(rail.right - 4, rail.y + 10),
-      railMid: pixel(rail.right - 4, rail.y + rail.height * .62),
       // 关灯后的「纯色」检查点取左轨内侧留白：浮片投影够不到这里。
       railLeftTop: meanPixel(rail.x + 6, rail.y + rail.height * .2),
       railLeftBottom: meanPixel(rail.x + 6, rail.y + rail.height * .9),
-      topStrip: pixel(surface.x + surface.width * .55, 12),
-      // 内容面右下与侧栏共享同一个窗口坐标系的柔光。
-      bottomStrip: pixel(surface.right - 3, surface.bottom - 3),
-      rightStrip: pixel(surface.right - 3, surface.y + surface.height * .5),
+      topStrip: meanPixel(surface.x + surface.width * .55, 12),
       seamRail: meanPixel(rail.right - 4, rail.y + rail.height * .62),
       seamSheet: meanPixel(surface.x + 4, rail.y + rail.height * .62),
       // 内容面与卡片（都取中部平坦区）
@@ -68,51 +65,172 @@ async function renderedSurfaces(page: Page) {
       secondaryText: color(root.getPropertyValue('--text-secondary').trim()),
       mutedText: color(root.getPropertyValue('--text-muted').trim()),
       inputText: color(input.color),
-      inputBg: color(search.backgroundColor),
-      searchBorder: color(search.borderTopColor),
+      inputBg: pixel(searchBox.x + searchBox.width / 2, searchBox.bottom - 4),
+      searchBorder: pixel(searchBox.x + searchBox.width / 2, searchBox.y),
       searchBorderWidth: Number.parseFloat(search.borderTopWidth),
     }
   }, png.toString('base64'))
 }
 
+async function bootComposition(page: Page, theme: (typeof THEMES)[number]) {
+  await page.setViewportSize({ width: 1280, height: 760 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  let themeUrl = ''
+  page.on('request', req => { if (new URL(req.url()).pathname === '/src/services/theme.ts') themeUrl = req.url() })
+  await bootUnlocked(page, {
+    settings: { theme, background_atmosphere: 'false' },
+    notes: [{ title: '渲染检查', content_html: '<h2>渲染检查</h2><p>整理思路，专注手头的工作。</p>' }],
+  }, '/notes')
+  await expect(page.locator('.workspace-workbar')).toBeVisible()
+  expect(themeUrl).not.toBe('')
+  return themeUrl
+}
+
+async function captureAtmosphere(page: Page, themeUrl: string, accent: (typeof ACCENTS)[number], enabled: boolean) {
+  await page.evaluate(async ([url, accent, enabled]) => {
+    const theme = await import(/* @vite-ignore */ url)
+    await theme.chooseAccent(accent)
+    await theme.chooseBackgroundAtmosphere(enabled)
+  }, [themeUrl, accent, enabled] as const)
+  await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
+  return renderedSurfaces(page)
+}
+
+async function textContrast(locator: Locator, pseudo?: string) {
+  const [foreground, background] = await locator.evaluate((element, pseudo) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    const ctx = canvas.getContext('2d')!
+    const layers = []
+    for (let node: Element | null = element; node; node = node.parentElement) {
+      layers.unshift(getComputedStyle(node).backgroundColor)
+    }
+    // 将半透明底色按绘制顺序叠加，再计算实际可见的文字颜色。
+    const sample = (): RGB => [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3) as RGB
+    const paint = (color: string) => {
+      ctx.fillStyle = color
+      ctx.fillRect(0, 0, 1, 1)
+    }
+    paint('#fff')
+    for (const color of layers) paint(color)
+    const background = sample()
+    paint(getComputedStyle(element, pseudo).color)
+    return [sample(), background]
+  }, pseudo)
+  return contrast(foreground, background)
+}
+
 for (const theme of THEMES) {
-  test(`${theme}：柔光跨越接缝，导轨与内容面自然分层、卡片保持实底`, async ({ page }, testInfo) => {
-    test.setTimeout(90_000)
-    await page.setViewportSize({ width: 1280, height: 760 })
+  test(`${theme}：强调色按钮、链接和辅助文字达到 4.5:1`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    let themeUrl = ''
-    page.on('request', req => { if (new URL(req.url()).pathname === '/src/services/theme.ts') themeUrl = req.url() })
     await bootUnlocked(page, {
-      settings: { theme, background_atmosphere: 'false' },
-      notes: [{ title: '渲染检查', content_html: '<h2>渲染检查</h2><p>整理思路，专注手头的工作。</p>' }],
+      settings: { theme, background_atmosphere: 'true' },
+      entries: [{ name: '维基', url: 'https://example.org/help', category: '参考' }],
+      notes: [{ title: '示例', content_html: '<p>内容</p>' }],
     }, '/notes')
-    await expect(page.locator('.workspace-workbar')).toBeVisible()
-    expect(themeUrl).not.toBe('')
+    await page.addStyleTag({ content: '* { transition: none !important; animation: none !important; }' })
+    const noteTime = await textContrast(page.locator('.memo-foot .memo-time').first())
+    const placeholder = await textContrast(page.locator('.search-box input').first(), '::placeholder')
+    expect(noteTime, '小记时间').toBeGreaterThanOrEqual(4.5)
+    expect(placeholder, '搜索占位文字').toBeGreaterThanOrEqual(4.5)
+
+    await page.locator('a.nav-item[href="/entries"]').click()
+    const html = page.locator('html')
+    const link = page.locator('.ec-domain').first()
+    const toolbar = page.getByRole('button', { name: '新增条目', exact: true })
+    const measurements = []
+    const setAccent = (accent: (typeof ACCENTS)[number]) =>
+      html.evaluate((element, accent) => { element.dataset.accent = accent }, accent)
+    for (const accent of ACCENTS) {
+      await setAccent(accent)
+      await page.mouse.move(0, 0)
+      const linkRest = await textContrast(link)
+      await link.hover()
+      const linkHover = await textContrast(link)
+      const toolbarRest = await textContrast(toolbar)
+      await toolbar.hover()
+      const toolbarHover = await textContrast(toolbar)
+      await page.mouse.down()
+      const toolbarActive = await textContrast(toolbar)
+      await page.mouse.move(0, 0)
+      await page.mouse.up()
+      measurements.push({ accent, linkRest, linkHover, toolbarRest, toolbarHover, toolbarActive })
+    }
+
+    await toolbar.click()
+    const dialog = page.getByRole('dialog', { name: '新增网址收藏' })
+    const dialogButton = dialog.getByRole('button', { name: '保存条目', exact: true })
+    const cancelButton = dialog.getByRole('button', { name: '取消', exact: true })
+    await expect(dialogButton).toBeEnabled()
+    const dialogMeasurements = []
+    for (const accent of ACCENTS) {
+      await setAccent(accent)
+      await page.mouse.move(0, 0)
+      const rest = await textContrast(dialogButton)
+      await dialogButton.hover()
+      const hover = await textContrast(dialogButton)
+      await page.mouse.down()
+      const active = await textContrast(dialogButton)
+      await cancelButton.hover()
+      await page.mouse.up()
+      dialogMeasurements.push({ accent, rest, hover, active })
+    }
+
+    await testInfo.attach('contrast', {
+      body: JSON.stringify({ noteTime, placeholder, measurements, dialogMeasurements }),
+      contentType: 'application/json',
+    })
+    for (const { accent, ...ratios } of [...measurements, ...dialogMeasurements]) {
+      for (const [state, ratio] of Object.entries(ratios)) {
+        expect.soft(ratio, `${theme}/${accent}/${state}`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+}
+
+for (const theme of THEMES) {
+  test(`${theme}：所有强调色开启后窗框都有可见的柔光`, async ({ page }, testInfo) => {
+    test.setTimeout(90_000)
+    const themeUrl = await bootComposition(page, theme)
+    const measurements = []
+    for (const accent of ACCENTS) {
+      const flat = await captureAtmosphere(page, themeUrl, accent, false)
+      const glow = await captureAtmosphere(page, themeUrl, accent, true)
+      const upper = distance(glow.railTop, flat.railTop)
+      const lower = distance(glow.railLeftBottom, flat.railLeftBottom)
+      const top = distance(glow.topStrip, flat.topStrip)
+      const label = `${theme}/${accent}`
+      expect(top, `${label} 标题栏有柔光`).toBeGreaterThan(1)
+      expect(upper, `${label} 导轨顶部有柔光`).toBeGreaterThan(1.5)
+      expect(lower, `${label} 导轨底部有可见反光`).toBeGreaterThan(3.5)
+      expect(glow.sheet, `${label} 正文底色保持一致`).toEqual(flat.sheet)
+      if (accent === 'graphite' || accent === 'sand') {
+        await testInfo.attach(`${theme}-${accent}-softlight`, { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' })
+      }
+      measurements.push({ accent, top, upper, lower })
+    }
+    await testInfo.attach('frame-glow', { body: JSON.stringify(measurements), contentType: 'application/json' })
+  })
+
+  test(`${theme}：窗框有柔光，内容面与卡片保持实底`, async ({ page }) => {
+    test.setTimeout(90_000)
+    const themeUrl = await bootComposition(page, theme)
 
     let sheetPaint: RGB | undefined
     let cardPaint: RGB | undefined
-    const measurements = []
     for (const accent of ACCENTS) {
-      await page.evaluate(async ([url, accent]) => {
-        const t = await import(/* @vite-ignore */ url)
-        await t.chooseAccent(accent)
-        await t.chooseBackgroundAtmosphere(false)
-      }, [themeUrl, accent])
-      await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
-      const flat = await renderedSurfaces(page)
-      await page.evaluate(async url => (await import(/* @vite-ignore */ url)).chooseBackgroundAtmosphere(true), themeUrl)
-      await expect(page.locator('html')).not.toHaveClass(/theme-anim/)
-      const glow = await renderedSurfaces(page)
+      const flat = await captureAtmosphere(page, themeUrl, accent, false)
+      const glow = await captureAtmosphere(page, themeUrl, accent, true)
       const label = `${theme}/${accent}`
-      const neutral = accent === 'graphite' || accent === 'sand'
 
       // 1. 关掉柔光后窗框是一块纯色：左轨上下两端没有可见差异。
       expect(distance(flat.railLeftTop, flat.railLeftBottom), `${label} 关闭柔光后窗框同色`).toBeLessThan(1)
 
-      // 2. 内容面只接收轻微色光，卡片仍保持实底。
-      if (sheetPaint) expect(distance(glow.sheet, sheetPaint), `${label} 内容面染色克制`).toBeLessThan(4)
+      // 2. 拿开启柔光后的像素与同主题基准比较。
+      if (sheetPaint) expect(glow.sheet, `${label} 内容面底色不随强调色变化`).toEqual(sheetPaint)
       else sheetPaint = glow.sheet
-      expect(distance(glow.sheet, flat.sheet), `${label} 内容面柔光不过量`).toBeLessThan(4)
+      expect(glow.sheet, `${label} 内容面底色不随柔光变化`).toEqual(flat.sheet)
       if (cardPaint) expect(distance(glow.card, cardPaint), `${label} 卡片底色不随强调色变化`).toBeLessThan(1.2)
       else cardPaint = glow.card
       expect(distance(glow.card, flat.card), `${label} 卡片不吃窗框的柔光`).toBeLessThan(.8)
@@ -125,25 +243,9 @@ for (const theme of THEMES) {
       // 接缝只保留一档明度差，不能出现反向提亮或突兀色带。
       expect(lab(glow.seamSheet).L - lab(glow.seamRail).L, `${label} 导轨比正文深`).toBeGreaterThan(.5)
       expect(distance(glow.seamRail, glow.seamSheet), `${label} 接缝色差克制`).toBeLessThan(6)
-      expect(distance(glow.sheet, flat.sheet), `${label} 柔光延续到正文`).toBeGreaterThan(.2)
+      expect(glow.seamSheet, `${label} 接缝内侧保持实底`).toEqual(flat.seamSheet)
 
-      // 4. 降低柔光强度后仍可见，且保持色相。
-      const upper = distance(glow.railTop, flat.railTop)
-      const lower = distance(glow.bottomStrip, flat.bottomStrip)
-      if (!neutral) {
-        expect(upper, `${label} 左上迎光端可见`).toBeGreaterThan(.5)
-        expect(chromatic(glow.railTop.map((v, i) => v - flat.railTop[i]) as RGB), `${label} 迎光端保留色光`).toBeGreaterThan(.3)
-        if (theme === 'paper') expect(lower, `${label} 右下补光可见`).toBeGreaterThan(.5)
-        // 浮片退役后窗框只剩左轨与顶带，右下没有一圈留白可当光轴的落点；
-        // 方向改在同一条导轨上量：迎光的顶端要比落进的底端更亮。
-        else expect(lab(glow.railTop).L - lab(glow.railLeftBottom).L, `${label} 光轴自上落向导轨底`).toBeGreaterThan(.5)
-      } else {
-        expect(chromatic(glow.railTop.map((v, i) => v - flat.railTop[i]) as RGB), `${label} 中性分支不引入彩色`).toBeLessThanOrEqual(5)
-      }
-
-      expect(distance(glow.railLeftBottom, flat.railLeftBottom), `${label} 左下柔光可见`).toBeGreaterThan(.4)
-
-      // 5. 正文与控件仍然可读，且与浮片无关。
+      // 4. 正文与控件保持可读。
       expect(contrast(glow.text, glow.card), `${label} 正文文字`).toBeGreaterThanOrEqual(4.5)
       expect(contrast(glow.inputText, glow.inputBg), `${label} 搜索文字`).toBeGreaterThanOrEqual(4.5)
       expect(glow.searchBorderWidth, `${label} 搜索默认边框`).toBeGreaterThanOrEqual(1)
@@ -161,17 +263,13 @@ for (const theme of THEMES) {
         }
       }
 
-      // 6. 悬停不洗底：卡面是实底，抬的只有影，绝不跟光场抢色。
+      // 5. 悬停时卡面保持实底。
       await page.locator('.memo').hover()
       const hover = await renderedSurfaces(page)
       expect(distance(hover.card, hover.sheet), `${label} 悬停后卡片仍与浮片分层`).toBeGreaterThan(1.2)
       expect(distance(hover.card, glow.card), `${label} 悬停不改卡面实底`).toBeLessThan(1)
       await page.mouse.move(0, 0)
-
-      if (accent === 'indigo') await testInfo.attach(`${theme}-softlight`, { body: await page.screenshot({ path: testInfo.outputPath(`${theme}-softlight.png`) }), contentType: 'image/png' })
-      measurements.push({ accent, upper: Math.round(upper * 10) / 10, lower: Math.round(lower * 10) / 10, sheet: distance(glow.sheet, flat.sheet) })
     }
-    await testInfo.attach('frame-glow', { body: JSON.stringify(measurements), contentType: 'application/json' })
   })
 }
 

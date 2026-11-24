@@ -14,6 +14,7 @@ import { toggleModule } from '../../modules/runtime'
 import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { useDialogFocus } from '../../composables/useDialogFocus'
 import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
@@ -175,6 +176,8 @@ const close = () => {
 }
 
 useEscapeClose(close)
+const panel = ref<HTMLElement | null>(null)
+const { trapFocus } = useDialogFocus(panel, { initialFocus: '.nav-tab.on' })
 
 onMounted(() => {
   loadSettings()
@@ -186,8 +189,8 @@ onMounted(() => {
 
 <template>
   <Transition name="dialog">
-    <div v-if="show" class="dialog-overlay">
-      <div class="settings-dialog" role="dialog" aria-modal="true" aria-label="设置">
+    <div v-if="show" class="dialog-overlay" @mousedown.self.prevent>
+      <div ref="panel" class="settings-dialog" role="dialog" aria-modal="true" aria-label="设置" tabindex="-1" @keydown.tab="trapFocus">
         <aside class="settings-nav">
           <div class="nav-brand">
             <BrandLogo />
@@ -378,12 +381,12 @@ onMounted(() => {
           <section v-show="tab === 'security'" class="settings-pane">
             <h4 class="settings-section-label">口令</h4>
             <div class="group-content">
-              <div class="setting-item clickable" @click="emit('openChangePassword')">
-                <div class="setting-info">
+              <button type="button" class="setting-item clickable" @click="emit('openChangePassword')">
+                <span class="setting-info">
                   <span class="setting-name">修改主密码</span>
-                </div>
+                </span>
                 <AppIcon class="arrow-icon" name="chevRight" :size="16" />
-              </div>
+              </button>
             </div>
             <h4 class="settings-section-label">锁定</h4>
             <div class="group-content">
@@ -574,6 +577,13 @@ onMounted(() => {
 .nav-tab.on svg {
   color: inherit;
   opacity: 1;
+}
+
+button.setting-item.clickable {
+  width: calc(100% + 2 * var(--space-2));
+  border: 0;
+  background: transparent;
+  text-align: start;
 }
 
 .settings-main {

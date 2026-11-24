@@ -237,6 +237,78 @@ fn render_dir_rows(dirs: &[String], counts: &[usize]) -> String {
         .join("\n")
 }
 
+/// 网页一屏最多摊这么多条：再往回翻就翻到"上次传的那批"里去了，
+/// 不是这轮对话的内容；旧记录在 desko 那一侧翻（那边是一列可滚动的气泡）
+const WEB_STREAM_LIMIT: usize = 40;
+
+/// 方向按网页访问者的视角计算。文件仍在共享目录时才渲染下载入口。
+fn render_message(entry: &crate::messages::Message, share_dirs: &[std::path::PathBuf]) -> String {
+    let mine = entry.dir == crate::messages::DIR_WEB;
+    let side = if mine { "me" } else { "peer" };
+    let who = if mine { "我发出" } else { "电脑发来" };
+    let time = html_escape(&entry.time());
+    let id = html_escape(&entry.id);
+    let (kind, body, actions) = if entry.is_file() {
+        let index = entry.share_index(share_dirs);
+        let download = match index.filter(|&i| share_dirs[i].join(&entry.name).is_file()) {
+            Some(i) => format!(
+                r#"<a class="mget" href="{}" download>下载</a>"#,
+                html_escape(&download_href(i, &entry.name))
+            ),
+            None => r#"<span class="mgone">已不在共享目录</span>"#.to_string(),
+        };
+        let body = format!(
+            r#"<div class="mfile"><span class="mname" title="{name}">{name}</span><span class="mfile-info mono">{kind} · {size}</span></div>"#,
+            kind = html_escape(&file_ext(&entry.name)),
+            name = html_escape(&entry.name),
+            size = html_escape(&crate::messages::short_size(entry.size)),
+        );
+        let actions = format!(
+            r#"{download}<button class="mact" type="button" data-del="1" title="删除记录，共享目录里的文件会保留">删除</button>"#
+        );
+        ("file", body, actions)
+    } else {
+        let body = format!(
+            r#"<p class="mtext">{content}</p><button class="mmore" type="button" hidden>展开全文</button>"#,
+            content = html_escape(&entry.text),
+        );
+        let actions = r#"<button class="mact" type="button" data-copy="1">复制</button><button class="mact" type="button" data-del="1" title="删除这条传输记录">删除</button>"#;
+        ("text", body, actions.to_string())
+    };
+    format!(
+        r#"<article class="msg" data-dir="{side}" data-kind="{kind}" data-id="{id}"><div class="mmeta"><span class="mdir">{who}</span><span class="mono">{time}</span></div><div class="mcontent">{body}</div><div class="mactions">{actions}</div></article>"#
+    )
+}
+
+/// 记录中的文件类型取扩展名，没有扩展名时显示「文件」。
+fn file_ext(name: &str) -> String {
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() && !ext.is_empty() && ext.len() <= 4 => {
+            ext.to_ascii_uppercase()
+        }
+        _ => "文件".to_string(),
+    }
+}
+
+/// 传输记录按从新到旧的顺序显示。
+pub fn render_stream(entries: &[crate::messages::Message], share_dirs: &[std::path::PathBuf]) -> String {
+    if entries.is_empty() {
+        return r#"<p class="sempty">还没有消息。发送或收到的内容会显示在这里。</p>"#.to_string();
+    }
+    let shown = entries.len().min(WEB_STREAM_LIMIT);
+    let mut out = entries.iter().take(shown)
+        .map(|entry| render_message(entry, share_dirs))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if entries.len() > shown {
+        out.push_str(&format!(
+            "\n<p class=\"sempty\">更早的 {} 条在 desko 的局域网传输页里</p>",
+            entries.len() - shown
+        ));
+    }
+    out
+}
+
 fn replace_all(source: &str, pairs: &[(&str, String)]) -> String {
     let mut out = source.to_string();
     for (key, value) in pairs {
@@ -251,6 +323,9 @@ pub struct HomePage<'a> {
     pub search_q: &'a str,
     pub count_text: String,
     pub rows_html: String,
+    /// 已渲染的传输记录，包含空态。
+    pub stream: String,
+    pub stream_count: usize,
     pub share_index: usize,
     pub share_dirs: &'a [String],
     pub dir_counts: &'a [usize],
@@ -284,6 +359,8 @@ pub fn home_page(ctx: &HomePage) -> String {
             ("%%SEARCH_Q%%", html_escape(ctx.search_q)),
             ("%%COUNT%%", html_escape(&ctx.count_text)),
             ("%%ROWS%%", ctx.rows_html.clone()),
+            ("%%STREAM%%", ctx.stream.clone()),
+            ("%%STREAM_COUNT%%", ctx.stream_count.to_string()),
             ("%%SHARE_INDEX%%", ctx.share_index.to_string()),
             ("%%DIR_COUNT%%", ctx.share_dirs.len().to_string()),
             ("%%DIR_ROWS%%", render_dir_rows(ctx.share_dirs, ctx.dir_counts)),
@@ -448,6 +525,107 @@ mod tests {
     }
 
     #[test]
+    fn stream_marks_direction_and_escapes_content() {
+        let now = crate::messages::now_ms();
+        let entries = vec![
+            crate::messages::Message {
+                id: "a".to_string(),
+                dir: crate::messages::DIR_WEB.to_string(),
+                kind: crate::messages::KIND_TEXT.to_string(),
+                text: "<b>x</b>\n第二行".to_string(),
+                created_ms: now,
+                ..Default::default()
+            },
+            crate::messages::Message {
+                id: "b".to_string(),
+                dir: crate::messages::DIR_APP.to_string(),
+                kind: crate::messages::KIND_TEXT.to_string(),
+                text: "发出去的".to_string(),
+                created_ms: now,
+                ..Default::default()
+            },
+        ];
+        let html = render_stream(&entries, &[]);
+        assert!(html.contains(r#"data-dir="me""#), "{html}");
+        assert!(html.contains(r#"data-dir="peer""#), "{html}");
+        assert!(html.contains(r#"<span class="mdir">我发出</span>"#));
+        assert!(html.contains(r#"<span class="mdir">电脑发来</span>"#));
+        assert!(!html.contains(r#"class="bubble""#));
+        // 全文进 DOM 且过转义：复制靠 textContent，XSS 不能从这儿进
+        assert!(html.contains("&lt;b&gt;x&lt;/b&gt;"));
+        assert!(!html.contains("<b>x</b>"));
+        assert!(html.contains("第二行"));
+        assert!(html.contains(r#"data-id="a""#));
+        assert!(html.contains(r#"data-del="1""#), "网页上读完能直接删掉");
+        assert!(render_stream(&[], &[]).contains("还没有消息"));
+    }
+
+    #[test]
+    fn file_message_links_to_download_or_flags_missing() {
+        let dir = std::env::temp_dir().join(format!("desko-shot-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("报告.pdf"), b"x").unwrap();
+        let now = crate::messages::now_ms();
+        let make = |name: &str| crate::messages::Message {
+            id: format!("f-{name}"),
+            dir: crate::messages::DIR_WEB.to_string(),
+            kind: crate::messages::KIND_FILE.to_string(),
+            name: name.to_string(),
+            size: 2488320,
+            share: 0,
+            created_ms: now,
+            ..Default::default()
+        };
+        let html = render_stream(&[make("报告.pdf")], &[dir.clone()]);
+        // 文件类型和大小与文件名同排，下载指向共享目录里的文件。
+        assert!(html.contains("PDF · 2.4 MB"), "{html}");
+        assert!(html.contains("/download?share=0&amp;name="), "{html}");
+        assert!(html.contains(r#"data-kind="file""#), "{html}");
+        // 文件消息没有"复制"（复制的是一串名字，没意义）
+        assert!(!html.contains(r#"data-copy="1""#), "{html}");
+
+        // 文件被用户挪走/删掉：卡片要当场说清，而不是给一个点开就 404 的按钮
+        let gone = render_stream(&[make("已经没了.pdf")], &[dir.clone()]);
+        assert!(gone.contains("已不在共享目录"), "{gone}");
+        assert!(!gone.contains("/download?"), "{gone}");
+        let mut moved = make("报告.pdf");
+        moved.dir_hint = dir.display().to_string();
+        let other = dir.join("其他目录");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join("报告.pdf"), b"other").unwrap();
+        let reordered = render_stream(&[moved.clone()], &[other.clone(), dir.clone()]);
+        assert!(reordered.contains("/download?share=1&amp;name="), "{reordered}");
+        let removed = render_stream(&[moved], &[other]);
+        assert!(!removed.contains("/download?"), "{removed}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn stream_shows_only_the_newest_batch() {
+        let now = crate::messages::now_ms();
+        let items: Vec<crate::messages::Message> = (0..(WEB_STREAM_LIMIT + 8))
+            .map(|i| crate::messages::Message {
+                id: format!("id{i}"),
+                dir: crate::messages::DIR_APP.to_string(),
+                kind: crate::messages::KIND_TEXT.to_string(),
+                text: format!("第 {i} 条"),
+                created_ms: now,
+                ..Default::default()
+            })
+            .collect();
+        let html = render_stream(&items, &[]);
+        assert_eq!(html.matches(r#"class="msg""#).count(), WEB_STREAM_LIMIT);
+        assert!(html.contains("更早的 8 条"));
+        // 摊出来的是最新那批（列表是新的在前，所以排在最前的是 id0）
+        assert!(html.contains("第 0 条"));
+        assert!(!html.contains("第 40 条"), "超出条数的旧记录不该还渲染");
+        let newest = html.find("第 0 条").unwrap();
+        let older = html.find("第 1 条").unwrap();
+        assert!(newest < older, "最新的一条应该在最上面");
+        assert!(html.find("第 39 条").unwrap() < html.find("更早的 8 条").unwrap());
+    }
+
+    #[test]
     fn home_page_replaces_all_placeholders() {
         let dirs = vec![r"D:\sh<>&a".to_string(), r"D:\photos".to_string()];
         let counts = [3usize, 128usize];
@@ -458,6 +636,8 @@ mod tests {
             search_q: "",
             count_text: "3 个文件".to_string(),
             rows_html: "<div></div>".to_string(),
+            stream: render_stream(&[], &[]),
+            stream_count: 0,
             share_index: 0,
             share_dirs: &dirs,
             dir_counts: &counts,
@@ -477,10 +657,13 @@ mod tests {
         assert!(html.contains(r#""D:\\sh\u003C\u003E\u0026a""#), "落点全路径进 JS 要过两道");
         assert!(html.contains("落到 D:/sh&lt;&gt;&amp;a"), "上传弹窗头部的落点短路径");
         assert!(html.contains("2 个目录可读 · 只有第一个收文件"), "弹窗底栏的空闲提示");
-        // r2：上传回到弹窗，页条不再挂页签
-        assert!(html.contains(r#"class="btn-primary" id="btn-upload""#));
-        assert!(!html.contains(r#"data-tab=""#), "首页不该还有页签状态");
-        assert!(!html.contains("id=\"btn-text\""), "文字档住在弹窗里，页条不给第二个入口");
+        // 发送区只有一个文件入口，并且在浏览内容上方常驻。
+        let composer = html.find(r#"id="text-form""#).unwrap();
+        let upload = html.find(r#"id="btn-upload""#).unwrap();
+        let history = html.find(r#"id="history-block""#).unwrap();
+        assert!(composer < upload && upload < history);
+        assert_eq!(html.matches(r#"id="btn-upload""#).count(), 1);
+        assert!(html.contains(r#"aria-pressed="false" aria-controls="files-block""#));
         assert!(html.contains(r#"<span class="badge ok">上传落点</span>"#));
         assert!(html.contains(r#"<span class="badge mono">128 个</span>"#));
         assert!(!html.contains(">3 个</span>"), "第一个目录挂落点徽标，不重复报条数");
@@ -494,6 +677,8 @@ mod tests {
             search_q: "",
             count_text: "0 个文件".to_string(),
             rows_html: String::new(),
+            stream: render_stream(&[], &[]),
+            stream_count: 0,
             share_index: 0,
             share_dirs: &[],
             dir_counts: &[],

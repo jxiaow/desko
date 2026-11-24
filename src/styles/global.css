@@ -2043,8 +2043,9 @@ button, input, select, textarea {
 }
 
 /* 关键主操作：品牌实底，一栏里只许一颗，其余都走描边 */
-.action-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
-.action-btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-on); }
+.action-btn.primary { background: var(--bg-workspace-primary, var(--accent)); border-color: var(--bg-workspace-primary, var(--accent)); color: var(--text-workspace-primary, var(--accent-on)); }
+.action-btn.primary:hover:not(:disabled) { background: var(--bg-workspace-primary-hover, var(--accent-hover)); border-color: var(--bg-workspace-primary-hover, var(--accent-hover)); }
+.action-btn.primary:active:not(:disabled) { background: var(--bg-workspace-primary-active, var(--accent-active)); border-color: var(--bg-workspace-primary-active, var(--accent-active)); }
 .action-btn.primary:active:not(:disabled) { background: var(--accent-active); }
 
 /* 行内主操作降为淡染：账号列、配置档列里每行都有一颗"切换"，铺实底 accent 就成了
@@ -2185,9 +2186,9 @@ button, input, select, textarea {
 .module-empty-state .empty-actions > button { min-height: 36px; padding-inline: 16px; }
 .module-empty-state .empty-note { margin: 14px 0 0; font-size: var(--text-xs); line-height: 1.7; color: var(--text-muted); }
 .module-empty-state.compact-empty-state { min-height: 250px; }
-.codex-content:has(> :is(.sess-view, .thr-view) > .module-empty-state),
-.codex-content > :is(.sess-view, .thr-view):has(> .module-empty-state) { display: flex; flex-direction: column; flex: 1; }
-.codex-content > :is(.sess-view, .thr-view) > .module-empty-state { flex: 1; }
+.codex-content:has(> :is(.sess-view, .thr-view, .usg-view) > .module-empty-state:not(.compact-empty-state)),
+.codex-content > :is(.sess-view, .thr-view, .usg-view):has(> .module-empty-state:not(.compact-empty-state)) { display: flex; flex-direction: column; flex: 1; }
+.codex-content > :is(.sess-view, .thr-view, .usg-view) > .module-empty-state:not(.compact-empty-state) { flex: 1; }
 @media (max-width: 600px) {
   .empty-state.module-empty-state { min-height: 320px; padding: 32px 16px; }
   .module-empty-state .empty-actions > button { min-height: 40px; }
@@ -2276,8 +2277,9 @@ button, input, select, textarea {
 .eb.on.warn { border-color: var(--warning); color: var(--warning); background: var(--warning-soft); }
 .eb.danger { color: var(--danger); }
 .eb.danger:hover:not(:disabled) { background: var(--danger-soft); border-color: var(--danger-border); }
-.eb.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); font-weight: 500; }
-.eb.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-on); }
+.eb.primary { background: var(--bg-workspace-primary, var(--accent)); border-color: var(--bg-workspace-primary, var(--accent)); color: var(--text-workspace-primary, var(--accent-on)); font-weight: 500; }
+.eb.primary:hover:not(:disabled) { background: var(--bg-workspace-primary-hover, var(--accent-hover)); border-color: var(--bg-workspace-primary-hover, var(--accent-hover)); }
+.eb.primary:active:not(:disabled) { background: var(--bg-workspace-primary-active, var(--accent-active)); border-color: var(--bg-workspace-primary-active, var(--accent-active)); }
 
 /* 新建态底栏：无边框轻量按钮（原型 .mini-btn） */
 .mini-btn {

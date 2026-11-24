@@ -26,6 +26,7 @@ export function useBatch() {
   // 条目从库里消失（单条删除、外部同步）就把残 id 摘掉，免得混进下一次批量入参。
   // 筛选变化不剪枝——跨分类攒批是有意保留的能力。
   watch(() => entriesStore.entries, list => {
+    if (!list.length) pickMode.value = false
     const next = prune(selectedIds.value, list.map(item => item.id))
     if (next !== selectedIds.value) selectedIds.value = next
   }, { flush: 'post' })

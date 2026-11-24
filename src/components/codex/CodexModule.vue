@@ -36,6 +36,7 @@ import {
   usageBusy,
   usageRange,
   usageReport,
+  usageHistoryEmpty,
   usageError,
   usageReportRange,
   usageUpdatedAt,
@@ -97,7 +98,8 @@ const confirmStore = useConfirmStore()
 /** 同一份官方数据的四档视图：账号（desko 的档案）、会话（官方目录）、回收站（desko 留底）、用量（现扫官方 rollout） */
 const view = ref<'accounts' | 'sessions' | 'usage' | 'trash'>('accounts')
 const poster = shallowRef<UsagePosterData | null>(null)
-const canShareUsage = computed(() => !!usageReport.value && usageUpdatedAt.value != null && usageReportRange.value === usageRange.value)
+const showUsageShare = computed(() => !!usageReport.value && !usageHistoryEmpty.value)
+const canShareUsage = computed(() => showUsageShare.value && usageUpdatedAt.value != null && usageReportRange.value === usageRange.value)
 function shareUsage() {
   if (!canShareUsage.value) return
   poster.value = usagePosterData(usageReport.value!, usageReportRange.value, usageUpdatedAt.value!)
@@ -148,7 +150,7 @@ const accountSort = ref<CodexAccountSort>('default')
 const showAccountFilters = computed(() => accounts.value.length > 1)
 const showSessionFilters = computed(() => sessionTotalCount.value > 1)
 /** 空用量不摆统计窗口；已经换了档或有错要复核时留着。 */
-const showUsageRanges = computed(() => !!usageReport.value?.totals.fileCount || !!usageError.value || usageRange.value !== 'today')
+const showUsageRanges = computed(() => !usageHistoryEmpty.value && (!!usageReport.value?.totals.fileCount || !!usageError.value || usageRange.value !== 'today'))
 /** 会话搜索、账号搜索与用量时间切换都住在页头这一排，页头不再有第二排。 */
 const visibleAccounts = computed(() => filterCodexAccounts(accounts.value, {
   query: accountQuery.value, auth: accountAuth.value, status: accountStatus.value,
@@ -171,6 +173,7 @@ const offScreenSentence = (ids: readonly string[]) => {
 
 // 账号删掉或回收后，残 id 不能混进下一次批量入参；筛选变化不剪枝——跨筛选攒批是有意保留的。
 watch(accounts, list => {
+  if (!list.length) pickMode.value = false
   const next = prune(selected.value, list.map(a => a.id))
   if (next !== selected.value) selected.value = next
 }, { flush: 'post' })
@@ -460,13 +463,16 @@ const pageHead = usePageHeadStore()
 watchEffect(() => {
   if (!pageActive.value) return
   if (view.value === 'accounts') {
-    pageHead.setHead('Codex', `${accounts.value.length} 个`)
+    pageHead.setHead('Codex', accounts.value.length ? `${accounts.value.length} 个` : '')
   } else if (view.value === 'sessions') {
-    pageHead.setHead('Codex 会话', `${sessions.value.length} 条`)
+    pageHead.setHead('Codex 会话', sessionTotalCount.value ? `${sessions.value.length} 条` : '')
   } else if (view.value === 'usage') {
-    pageHead.setHead('Codex 用量', `${usageReport.value?.totals.requestCount ?? 0} 次请求`)
+    const count = usageReport.value?.totals.requestCount ?? 0
+    pageHead.setHead('Codex 用量', count ? `${count} 次请求` : '')
   } else {
-    pageHead.setHead('Codex 回收站', `${recycledAccounts.value.length} 个账号 · ${trashSessions.value.length} 条会话`)
+    const accountCount = recycledAccounts.value.length
+    const sessionCount = trashSessions.value.length
+    pageHead.setHead('Codex 回收站', accountCount || sessionCount ? `${accountCount} 个账号 · ${sessionCount} 条会话` : '')
   }
 })
 </script>
@@ -502,7 +508,7 @@ watchEffect(() => {
       </Teleport>
 
       <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-      <div class="cx-band-controls">
+      <div v-if="view !== 'accounts' || accounts.length || accountsError" class="cx-band-controls">
         <div v-if="view === 'accounts' && showAccountFilters" id="codex-view-filters" class="search-box acc-search-box">
           <span class="search-icon"><AppIcon name="search" :size="15" /></span>
           <input v-model="accountQuery" type="text" placeholder="搜索邮箱、名称、标签…" aria-label="搜索 Codex 账号" />
@@ -510,15 +516,15 @@ watchEffect(() => {
         </div>
 
         <div v-if="view === 'accounts'" class="page-actions">
-          <button class="btn-secondary bar-btn cx-compact-action" type="button" title="刷新配额" aria-label="刷新配额" :disabled="!accounts.length" @click="refreshQuotas(accounts.map((a) => a.id))">
+          <button v-if="accounts.length" class="btn-secondary bar-btn cx-compact-action" type="button" title="刷新配额" aria-label="刷新配额" @click="refreshQuotas(accounts.map((a) => a.id))">
             <AppIcon name="refresh" :size="16" />
             <span class="cx-action-label">刷新配额</span>
           </button>
-          <button class="btn-secondary bar-btn cx-compact-action" type="button" :title="isBatchMode ? '退出选择' : '选择'" :aria-label="isBatchMode ? '退出选择' : '选择'" :disabled="!accounts.length" @click="togglePick">
+          <button v-if="visibleAccounts.length || isBatchMode" class="btn-secondary bar-btn cx-compact-action" type="button" :title="isBatchMode ? '退出选择' : '选择'" :aria-label="isBatchMode ? '退出选择' : '选择'" @click="togglePick">
             <AppIcon :name="isBatchMode ? 'check' : 'checkall'" :size="16" />
             <span class="cx-action-label">{{ isBatchMode ? '退出选择' : '选择' }}</span>
           </button>
-          <CreateAction v-if="accounts.length || accountsError" class="add-btn" label="添加账号" @click="openAddAuth" />
+          <CreateAction class="add-btn" label="添加账号" @click="openAddAuth" />
         </div>
 
         <template v-else-if="view === 'sessions'">
@@ -566,7 +572,7 @@ watchEffect(() => {
             </button>
           </nav>
           <div class="page-actions usage-actions">
-            <button class="btn-secondary bar-btn" type="button" title="分享" aria-label="分享" :disabled="!canShareUsage" @click="shareUsage">
+            <button v-if="showUsageShare" class="btn-secondary bar-btn" type="button" title="分享" aria-label="分享" :disabled="!canShareUsage" @click="shareUsage">
               <AppIcon name="image" :size="13" /><span class="cx-action-label">分享</span>
             </button>
             <button class="btn-secondary bar-btn cx-refresh" type="button" aria-label="重新统计" title="每 30 秒自动刷新" :disabled="usageBusy" @click="loadUsage()">

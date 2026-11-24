@@ -347,24 +347,24 @@ function onDirectoryClick(event: MouseEvent) {
 #workspace-page-toolbar > .cx-header-tabs { margin-right: auto; }
 #workspace-page-toolbar :is(.btn-primary, .btn-secondary, .bar-btn) { white-space: nowrap; }
 #workspace-page-toolbar .btn-primary:where(:not(.ghost-danger)):not(:disabled) {
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--bg-workspace-primary);
+  color: var(--text-workspace-primary);
   border: none;
   border-radius: 6px;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 20%, transparent);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 #workspace-page-toolbar .btn-primary:hover:not(:disabled):not(.ghost-danger) {
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--bg-workspace-primary-hover);
+  color: var(--text-workspace-primary);
   transform: translateY(-0.5px);
-  filter: brightness(1.06);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  filter: none;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 #workspace-page-toolbar .btn-primary:active:not(:disabled):not(.ghost-danger) {
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--bg-workspace-primary-active);
+  color: var(--text-workspace-primary);
   transform: translateY(0);
 }
 /* 带子里的动作一律无描边：描边留给弹窗表单，这里只靠淡染和字色分层。 */

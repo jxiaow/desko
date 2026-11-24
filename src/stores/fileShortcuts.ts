@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { fileShortcutsApi as api } from '../services/api/fileShortcuts'
 import type { FileShortcut } from '../types'
 
@@ -10,6 +10,10 @@ const loadError = ref<string | null>(null)
 const searchKeyword = ref('')
 
 export const useFileShortcutsStore = defineStore('fileShortcuts', () => {
+  watch(() => shortcuts.value.length, count => {
+    if (!count) searchKeyword.value = ''
+  })
+
   const filteredShortcuts = computed(() => {
     if (!searchKeyword.value) return shortcuts.value
     const kw = searchKeyword.value.toLowerCase()

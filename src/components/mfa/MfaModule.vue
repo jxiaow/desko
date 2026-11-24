@@ -8,6 +8,7 @@ import { errText } from '../../services/api/backup'
 import { useToastStore } from '../../stores/toast'
 import { useConfirmStore } from '../../stores/confirm'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { useDialogFocus } from '../../composables/useDialogFocus'
 import { usePageActive } from '../../composables/usePageActive'
 import { useWorkspaceLayout, workspaceToolbarTarget } from '../layout/workspaceLayout'
 import AppIcon from '../shared/AppIcon.vue'
@@ -141,6 +142,8 @@ const closeAdd = () => {
 }
 
 useEscapeClose(closeAdd, () => showAddDialog.value)
+const addDialog = ref<HTMLElement | null>(null)
+const { trapFocus } = useDialogFocus(addDialog, { when: () => showAddDialog.value, initialFocus: '.uri-box' })
 
 const submitAdd = async () => {
   if (busy.value) return
@@ -275,9 +278,9 @@ watchEffect(() => {
 <template>
   <div class="content-inner" @paste="onPaste">
     <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-    <div class="page-bar">
+    <div v-if="loading || codes.length" class="page-bar">
       <div class="page-actions">
-        <CreateAction v-if="loading || codes.length" label="新增验证码" @click="openAdd" />
+        <CreateAction label="新增验证码" @click="openAdd" />
       </div>
     </div>
     </Teleport>
@@ -352,8 +355,8 @@ watchEffect(() => {
 
     <!-- Add Dialog -->
     <Transition name="dialog">
-      <div v-if="showAddDialog" class="dialog-overlay">
-        <div class="dialog" role="dialog" aria-modal="true" aria-label="添加验证码" @paste="onPaste">
+      <div v-if="showAddDialog" class="dialog-overlay" @mousedown.self.prevent>
+        <div ref="addDialog" class="dialog" role="dialog" aria-modal="true" aria-label="添加验证码" tabindex="-1" @keydown.tab="trapFocus" @paste="onPaste">
           <div class="dialog-header">
             <div class="dialog-header-left">
               <h3>添加验证码</h3>

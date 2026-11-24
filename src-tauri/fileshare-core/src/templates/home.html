@@ -22,13 +22,15 @@
   --lan-ink: var(--text); --lan-muted: var(--text-secondary);
   --lan-line: color-mix(in srgb, var(--text) 10%, var(--panel-bg));
   --lan-hover: color-mix(in srgb, var(--text) 3%, var(--panel-bg));
-  --lan-primary: var(--text); --lan-on-primary: var(--bg);
   --lan-radius: 8px; --lan-control-radius: 6px;
 }
-html { min-height: 100%; scrollbar-gutter: stable; }
+html { height: 100%; scrollbar-gutter: stable; }
 body {
-  min-height: 100vh; background: var(--lan-ground); color: var(--lan-ink);
+  /* 浏览区独立滚动，短窗口可滚动整个工作区。 */
+  height: 100vh; height: 100dvh; overflow: hidden;
+  background: var(--bg-workspace); color: var(--lan-ink);
   font: 14px/1.5 var(--lan-font); -webkit-font-smoothing: antialiased;
+  display: flex; flex-direction: column;
 }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
@@ -39,29 +41,37 @@ svg { display: block; flex-shrink: 0; }
 :where(a, button, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 button:disabled { cursor: wait; }
 .pagebar, .wrap { width: min(calc(100% - var(--gutter) * 2), var(--col-max)); margin-inline: auto; }
-.pagebar { min-height: 76px; display: flex; align-items: center; gap: 12px; }
+.wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; padding-bottom: 16px; }
+.pagebar { min-height: 60px; display: flex; align-items: center; gap: 12px; }
 .wordmark { display: inline-flex; align-items: center; gap: 9px; font-size: 21px; font-weight: 650; letter-spacing: -.04em; }
 .brand { color: var(--lan-ink); display: grid; place-items: center; }
 .connection { display: flex; align-items: center; gap: 7px; color: var(--lan-muted); font-size: 13px; }
 .connection span { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-btn { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 10px; border-radius: var(--lan-control-radius); color: var(--lan-muted); }
 .settings-btn:hover, .ib:hover { background: var(--lan-hover); color: var(--lan-ink); }
-.wrap { padding-top: 28px; padding-bottom: 40px; }
-.page-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
+.wrap { padding-top: 12px; }
+.page-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-shrink: 0; }
 h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 600; }
-.page-description { margin-top: 9px; color: var(--lan-muted); font-size: 14px; }
-.btn-primary {
-  position: relative; height: 40px; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  border-radius: var(--lan-control-radius); background: var(--lan-primary); color: var(--lan-on-primary);
-  font-weight: 500; white-space: nowrap; flex-shrink: 0;
-  transition: opacity var(--transition), transform var(--transition);
+.view-switch { display: flex; align-items: stretch; gap: var(--space-1); flex: none; }
+.view-tab {
+  position: relative;
+  height: 32px;
+  padding-inline: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: color var(--transition-fast);
 }
-.btn-primary:hover, .fb.primary:hover { opacity: .84; }
-.btn-primary:active, .fb:active { transform: translateY(1px); }
-.btn-primary .n { min-width: 20px; height: 20px; padding: 0 5px; border-radius: 4px; background: var(--lan-on-primary); color: var(--lan-primary); font-size: 12px; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
-.btn-primary.bad .n { background: var(--danger); color: var(--accent-on); }
-.bpg { position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; background: color-mix(in srgb, var(--lan-on-primary) 25%, transparent); overflow: hidden; }
-.bpg i { display: block; height: 100%; width: 0; background: var(--lan-on-primary); }
+.view-tab:hover { color: var(--text); }
+.view-tab[aria-pressed="true"] { color: var(--text-brand); font-weight: 600; }
+.view-tab[aria-pressed="true"]::after {
+  content: '';
+  position: absolute;
+  inset: auto var(--space-3) 0;
+  height: 2px;
+  border-radius: 1px 1px 0 0;
+  background: var(--accent);
+}
 .file-panel { background: var(--lan-surface); border: 1px solid var(--lan-line); border-radius: var(--lan-radius); }
 .list-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 20px 24px 16px; }
 .list-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
@@ -73,7 +83,7 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 .search input { width: 100%; min-width: 0; height: 100%; border: 0; outline: 0; background: none; font: 13px var(--lan-font); color: var(--lan-ink); }
 .search input::placeholder { color: var(--lan-muted); }
 .ib { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--lan-control-radius); color: var(--lan-muted); }
-.refresh-btn { width: auto; min-width: 44px; padding-inline: 6px; font-size: 13px; }
+.refresh-btn { width: auto; min-width: 44px; padding-inline: 6px; font-size: 13px; white-space: nowrap; flex: none; }
 /* At 1120px: 48px insets + 430px fixed columns + 5 × 16px gaps + 562px name = 1120px.
    Desktop columns share one grid; below 720px each file becomes a two-line list row. */
 .list-columns, .frow { display: grid; grid-template-columns: 32px minmax(0, 1fr) 156px 90px 120px 32px; column-gap: 16px; align-items: center; padding-inline: 24px; }
@@ -101,10 +111,91 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 .empty-tile { margin: 0 auto 14px; width: 24px; height: 24px; color: var(--lan-muted); display: grid; place-items: center; }
 .empty-t { display: block; font-size: 16px; font-weight: 500; overflow-wrap: anywhere; }
 .empty-d { display: block; margin-top: 8px; font-size: 13px; color: var(--lan-muted); }
-.receipt { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 20px; color: var(--lan-muted); font-size: 12px; }
-.receipt strong { color: var(--lan-ink); font-weight: 500; max-width: min(240px, 60vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.receipt .destination { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
-.page-note { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--lan-muted); font-size: 12px; }
+/* 传输记录共用一个面板，以分隔线、方向和时间组织收发。 */
+.chat { flex: 0 1 auto; min-height: 220px; display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border-card); border-radius: var(--radius-card); overflow: hidden; }
+.chat:has(.stream > .sempty:only-child) { min-height: 0; }
+.chat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }
+.chat-head h2 { font-size: 16px; font-weight: 600; }
+.stream { flex: 1 1 auto; min-height: 0; overflow: auto; padding-inline: 20px; }
+.msg {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+}
+.stream > * + .msg { border-top: 1px solid var(--border-subtle); }
+.mcontent { min-width: 0; align-self: center; padding-block: var(--space-1); }
+.mtext { font-size: var(--text-base); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mtext.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; overflow: hidden; }
+.mmore { margin-top: var(--space-1); min-height: 28px; font-size: var(--text-xs); color: var(--text-brand); text-decoration: underline; text-underline-offset: 3px; }
+.mmeta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); align-self: center; color: var(--text-secondary); font-size: var(--text-xs); }
+.mdir { min-width: 4em; font-weight: 500; }
+.msg[data-dir="me"] .mdir { color: var(--text-brand); }
+.mactions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-1); }
+.mact, .mget {
+  display: inline-flex; align-items: center; min-height: 32px;
+  padding-inline: var(--space-2); border-radius: var(--radius-ib);
+  color: var(--text-secondary); font-size: var(--text-xs); white-space: nowrap;
+}
+.mget { color: var(--text-brand); }
+.mact:hover, .mget:hover { background: var(--hover); }
+.mfile { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--space-2); }
+.mname { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-base); font-weight: 600; }
+.mfile-info, .mgone { color: var(--text-secondary); font-size: var(--text-xs); white-space: nowrap; }
+.sempty { padding-block: var(--space-4); color: var(--text-secondary); font-size: var(--text-sm); }
+.composer {
+  flex: none;
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+}
+.composer:focus-within { border-color: var(--accent); outline: 2px solid var(--accent-ring); }
+.composer .ta {
+  display: block;
+  min-height: 64px;
+  max-height: 144px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--bg-surface);
+  font-size: var(--text-base);
+}
+.composer .ta:focus { outline: none; }
+.composer-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+.composer-bar .fb {
+  height: 32px;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-ib);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.composer-bar .fb:hover:not(:disabled) { background: var(--hover); border-color: var(--border-strong); color: var(--text); }
+.composer-bar .fb:disabled { background: var(--fill); border-color: var(--border); color: var(--text-secondary); cursor: not-allowed; }
+.composer-file { position: relative; }
+.composer-file .n {
+  min-width: 20px; height: 20px; padding-inline: var(--space-1);
+  border-radius: var(--radius-tag);
+  background: var(--accent-soft); color: var(--text-brand);
+  font-size: var(--text-xs); line-height: 20px; text-align: center; font-variant-numeric: tabular-nums;
+}
+.composer-file.bad .n { background: var(--danger-soft); color: var(--danger); }
+.bpg { position: absolute; left: var(--space-2); right: var(--space-2); bottom: 2px; height: 2px; background: var(--border-subtle); overflow: hidden; }
+.bpg i { display: block; height: 100%; width: 0; background: var(--accent); }
+.composer-dir { flex: 1 1 90px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: var(--text-xs); }
+.composer-bar .st { font-size: var(--text-xs); color: var(--text-muted); overflow-wrap: anywhere; }
+.composer-bar .st.er { color: var(--danger); }
+.files-block { flex: 0 1 auto; min-height: 220px; overflow: auto; }
 .list-status { display: flex; align-items: center; gap: 12px; padding: 12px 24px; font-size: 13px; color: var(--lan-muted); }
 .list-status button { text-decoration: underline; text-underline-offset: 3px; }
 .toast { position: fixed; bottom: 24px; right: max(var(--gutter), calc((100% - var(--col-max)) / 2)); z-index: 200; padding: 12px 18px; border-radius: var(--lan-control-radius); background: var(--tip-bg); color: var(--tip-fg); font-size: 14px; box-shadow: var(--shadow-pop); }
@@ -113,7 +204,7 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 .veil b { padding: 20px; text-align: center; color: var(--lan-ink); font-size: 20px; font-weight: 500; overflow-wrap: anywhere; }
 .overlay { position: fixed; inset: 0; z-index: 150; background: var(--overlay); display: none; place-items: center; padding: 24px; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .overlay.on { display: grid; }
-.dialog { position: relative; width: 580px; max-width: 100%; height: min(512px, 100%); display: flex; flex-direction: column; background: var(--lan-surface); border: 1px solid var(--lan-line); border-radius: var(--lan-radius); box-shadow: var(--shadow-pop); overflow: hidden; }
+.dialog { position: relative; width: 580px; max-width: 100%; height: min(512px, 100%); display: flex; flex-direction: column; background: var(--bg-dialog); border: 1px solid var(--border-card); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop); overflow: hidden; }
 .dialog.tall { height: min(600px, 100%); }
 .dlg-pg { height: 3px; background: var(--lan-line); overflow: hidden; flex-shrink: 0; }
 .dlg-pg i { display: block; height: 100%; width: 0; background: var(--accent); }
@@ -123,11 +214,6 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 .dlg-close { margin-left: auto; width: 32px; height: 32px; color: var(--lan-muted); border-radius: var(--lan-control-radius); display: grid; place-items: center; flex-shrink: 0; }
 .dlg-close:hover { background: var(--lan-hover); color: var(--lan-ink); }
 .dlg-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 0 24px 20px; overflow: auto; }
-.dlg-body > .seg { margin-bottom: 16px; flex-shrink: 0; }
-.seg { display: flex; align-items: center; gap: 4px; }
-.seg > button { height: 36px; padding: 0 12px; border-radius: var(--lan-control-radius); color: var(--lan-muted); font-size: 14px; display: inline-flex; align-items: center; gap: 7px; }
-.seg > button:hover { background: var(--lan-hover); }
-.seg > button.on { background: var(--lan-ground); color: var(--lan-ink); font-weight: 500; }
 .pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
 .lead { font-size: 13px; line-height: 1.6; color: var(--lan-muted); flex-shrink: 0; }
 .grp + .grp { margin-top: 20px; }
@@ -135,13 +221,10 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 .grp.grow form { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .grp.grow .ta { flex: 1 1 auto; min-height: 80px; resize: none; }
 .grp-t { display: block; margin-bottom: 8px; font-size: 13px; line-height: 1.6; color: var(--lan-muted); }
-.field-label { font-size: 13px; font-weight: 500; }
-.field, .ta { width: 100%; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: var(--lan-control-radius); background: var(--lan-surface); color: var(--lan-ink); font: 14px var(--lan-font); outline: none; flex-shrink: 0; }
-.field { height: 40px; }
-.ta { min-height: 100px; padding: 10px 12px; line-height: 1.6; resize: vertical; }
+.ta { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--lan-control-radius); background: var(--lan-surface); color: var(--lan-ink); font: 14px var(--lan-font); line-height: 1.6; outline: none; resize: vertical; min-height: 100px; flex-shrink: 0; }
 .pane .ta { flex: 1 1 auto; min-height: 80px; resize: none; }
-.field:focus, .ta:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
-.field::placeholder, .ta::placeholder { color: var(--lan-muted); }
+.ta:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ta::placeholder { color: var(--lan-muted); }
 .dir-row { display: flex; align-items: center; gap: 10px; min-height: 44px; flex-shrink: 0; }
 .dir-row > svg { color: var(--lan-muted); }
 .dir-row .p { flex: 1; min-width: 0; font-size: 12px; color: var(--lan-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -151,14 +234,17 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 .dlg-foot .st { margin-right: auto; flex: 1 1 180px; min-width: 0; font-size: 12px; color: var(--lan-muted); }
 .dlg-foot .st.ok { color: var(--success); } .dlg-foot .st.er { color: var(--danger); }
 .fb { flex-shrink: 0; height: 36px; padding: 0 14px; border-radius: var(--lan-control-radius); font: 500 14px var(--lan-font); display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
-.fb.primary { background: var(--lan-primary); color: var(--lan-on-primary); }
+.fb.primary { border-color: transparent; background: var(--accent); color: var(--accent-on); }
+.fb.primary:hover:not(:disabled) { border-color: transparent; background: var(--accent-hover); color: var(--accent-on); }
+.fb.primary:active:not(:disabled) { background: var(--accent-active); }
+.fb:active:not(:disabled) { transform: translateY(1px); }
 .fb.bare { color: var(--lan-muted); }
 .fb.bare:hover { background: var(--lan-hover); color: var(--lan-ink); }
-.fb:disabled { color: var(--lan-muted); background: var(--lan-ground); }
+.fb:disabled { color: var(--text-secondary); background: var(--fill); cursor: not-allowed; }
 .swatches { display: flex; gap: 8px; flex-shrink: 0; }
 .sw { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 10px; border: 1px solid var(--lan-line); border-radius: var(--lan-control-radius); font-size: 14px; color: var(--lan-muted); }
-.sw.on { border-color: var(--lan-muted); background: var(--lan-ground); color: var(--lan-ink); }
-.sw:hover { background: var(--lan-hover); }
+.sw.on { border-color: var(--accent); background: var(--accent-soft); color: var(--text-brand); }
+.sw:hover:not(.on) { background: var(--lan-hover); }
 .sw .chip2 { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--lan-muted); flex-shrink: 0; }
 .sw .chip2.p { background: var(--lan-surface); }
 .sw .chip2.i { background: var(--lan-ink); }
@@ -210,23 +296,22 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 }
 @media (max-width: 720px) {
   :root { --gutter: 16px; }
-  .pagebar { min-height: 64px; }
+  .pagebar { min-height: 56px; }
   .wordmark { font-size: 20px; }
   .connection { margin-left: auto; }
   .connection span { max-width: 130px; }
   .pagebar > .spacer { display: none; }
   .settings-btn { width: 44px; height: 44px; padding: 0; justify-content: center; }
   .settings-btn span { display: none; }
-  .wrap { padding-top: 22px; padding-bottom: 24px; }
-  .page-heading { align-items: flex-start; gap: 12px; margin-bottom: 24px; }
+  .wrap { padding-top: 8px; padding-bottom: 12px; }
+  .page-heading { gap: 8px; margin-bottom: 10px; }
   h1 { font-size: 22px; }
-  .page-description { max-width: 210px; font-size: 13px; line-height: 1.6; }
-  .btn-primary { height: 44px; padding: 0 13px; }
-  .btn-primary .upload-label { display: none; }
   .list-toolbar { gap: 12px; padding: 16px; }
   .list-title { flex: 1; }
   .list-toolbar > .spacer { display: none; }
   .ib { width: 44px; height: 44px; }
+  /* 带字的钮不能被 44px 定宽卡住：「共享文件」会折成两行 */
+  .refresh-btn { width: auto; }
   .search { order: 5; width: 100%; height: 44px; }
   .search input { font-size: 16px; }
   .list-columns { display: none; }
@@ -239,11 +324,17 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
   .fsize { grid-column: 2; grid-row: 2; text-align: left; line-height: 1.5; }
   .fdate { grid-column: 2; grid-row: 2; justify-self: end; line-height: 1.5; }
   .dl { grid-column: 3; grid-row: 1 / 3; width: 40px; height: 44px; }
-  .receipt { align-items: flex-start; gap: 8px; margin-top: 16px; font-size: 12px; }
-  .receipt .spacer { display: none; }
-  .receipt .receipt-detail { flex-basis: 100%; }
-  .page-note { align-items: flex-start; line-height: 1.6; }
-  .page-note svg { margin-top: 3px; }
+  .chat-head { padding: 12px 14px; }
+  .stream { padding-inline: 14px; }
+  .msg { grid-template-columns: minmax(0, 1fr) auto; gap: 0 var(--space-1); }
+  .mcontent { grid-area: 1 / 1 / 2 / -1; }
+  .mmeta { grid-area: 2 / 1; }
+  .mactions { grid-area: 2 / 2; }
+  .mact, .mget, .mmore { min-height: 40px; }
+  .composer-bar .fb, .view-tab { min-height: 44px; }
+  .composer .ta { font-size: 16px; }
+  .view-tab { padding-inline: var(--space-2); }
+  .view-tab[aria-pressed="true"]::after { inset-inline: var(--space-2); }
   .overlay { padding: 16px; }
   .dialog { width: 100%; height: min(560px, 100%); }
   .dialog.tall { height: min(660px, 100%); }
@@ -252,9 +343,8 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
   .dlg-head .sub { flex-basis: calc(100% - 48px); order: 3; }
   .dlg-close { width: 44px; height: 44px; }
   .dlg-body { padding: 0 16px 16px; }
-  .seg > button, .fb, .sw { min-height: 44px; }
-  .field { height: 44px; }
-  .field, .ta { font-size: 16px; }
+  .fb, .sw { min-height: 44px; }
+  .ta { font-size: 16px; }
   .dlg-foot { padding: 12px 16px; }
   .dlg-foot .st { flex-basis: 100%; line-height: 1.5; }
   .qrow { grid-template-columns: 20px minmax(0, 1fr) 40px; }
@@ -262,6 +352,12 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
   .qfoot { flex-wrap: wrap; }
   .fold .act { min-height: 44px; }
   .toast { left: 16px; right: 16px; bottom: 16px; }
+}
+@media (max-width: 400px) {
+  .page-heading { flex-wrap: wrap; }
+  .composer-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .composer-dir { grid-column: 2 / -1; }
+  .composer-bar .st { grid-column: 1 / 3; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
   </style>
@@ -278,10 +374,33 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 
   <main class="wrap">
     <div class="page-heading">
-      <div><h1>局域网传输</h1><p class="page-description">文件和文字，在设备间轻松传递。</p></div>
-      <button class="btn-primary" id="btn-upload" type="button" aria-haspopup="dialog">%%I:upload:16%%<span>上传<span class="upload-label">文件</span></span><span class="n" id="up-badge" hidden>0</span><span class="bpg" hidden><i id="up-fill"></i></span></button>
+      <h1>局域网传输</h1>
+      <div class="view-switch" role="group" aria-label="浏览内容">
+        <button class="view-tab" id="btn-history" type="button" aria-pressed="true" aria-controls="history-block">传输记录</button>
+        <button class="view-tab" id="btn-files" type="button" aria-pressed="false" aria-controls="files-block">共享文件</button>
+      </div>
     </div>
-    <section class="file-panel" aria-labelledby="files-heading">
+    <form class="composer" id="text-form" action="/text" method="post" aria-label="发送到电脑">
+      <textarea class="ta" id="text-content" name="content" rows="2" placeholder="输入或粘贴要发送的文字…" aria-label="要发到电脑的文字" aria-describedby="text-st"></textarea>
+      <div class="composer-bar">
+        <button class="fb composer-file" id="btn-upload" type="button" aria-haspopup="dialog" aria-describedby="upload-destination">%%I:upload:16%%<span>发送文件</span><span class="n" id="up-badge" hidden>0</span><span class="bpg" hidden><i id="up-fill"></i></span></button>
+        <span class="composer-dir" id="upload-destination" title="%%UPLOAD_DIR_TAIL%%">存到 %%UPLOAD_DIR_NAME%%</span>
+        <span class="st" id="text-st" role="status">最多 64 KB</span>
+        <button class="fb primary" type="submit" id="text-send">发送文字</button>
+      </div>
+    </form>
+    <section class="chat" id="history-block" aria-labelledby="chat-heading">
+      <div class="chat-head">
+        <h2 id="chat-heading">传输记录</h2>
+        <span class="cnt" id="stream-count" role="status">%%STREAM_COUNT%% 条</span>
+        <span class="cnt" id="stream-sync" role="status" hidden>暂时无法同步，正在重试</span>
+      </div>
+      <div class="stream" id="stream" role="log" aria-live="polite" aria-label="往来消息">
+%%STREAM%%
+      </div>
+    </section>
+
+    <section class="file-panel files-block" id="files-block" aria-labelledby="files-heading" hidden>
       <div class="list-toolbar">
         <div class="list-title"><h2 id="files-heading">共享文件</h2><span class="cnt"><span id="file-count" role="status">%%COUNT%%</span> · %%DIR_COUNT%% 个目录</span></div>
         <span class="spacer"></span>
@@ -294,8 +413,6 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 %%ROWS%%
       </div>
     </section>
-    <div class="receipt"><span class="destination">%%I:folder:14%%接收位置 <strong title="%%UPLOAD_DIR_TAIL%%">%%UPLOAD_DIR_NAME%%</strong></span><span class="spacer"></span><span class="receipt-detail">单文件最大 4 GiB · 同名文件自动保留两份</span></div>
-    <p class="page-note">%%I:info:14%%全部目录按修改时间排序。点击文件下载，或拖入文件上传。</p>
   </main>
 
   <!-- 队列各档的字面形与井的空闲文案由服务端渲染一次，JS 只克隆不改画 -->
@@ -310,16 +427,12 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
 
   <div class="veil" id="veil"><b id="veil-t"></b></div>
 
-  <!-- 上传：文件与文字两档同住一个弹窗 -->
+  <!-- 文件上传队列 -->
   <div class="overlay" id="up-bg">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="upload-heading">
       <div class="dlg-pg" id="up-pg" hidden><i></i></div>
       <div class="dlg-head"><h3 id="upload-heading">上传到电脑</h3><span class="sub mono">落到 %%UPLOAD_DIR_TAIL%%<span id="up-prog"></span></span><button class="dlg-close" id="up-close" type="button" title="关闭" aria-label="关闭上传窗口">%%I:x:16%%</button></div>
       <div class="dlg-body">
-        <div class="seg">
-          <button class="on" type="button" data-pane="file" aria-pressed="true">%%I:file:14%%文件</button>
-          <button type="button" data-pane="text" aria-pressed="false">%%I:clip:14%%文字</button>
-        </div>
         <div class="pane no-q" id="pane-file">
           <div class="well" id="well-big" role="button" tabindex="0" aria-label="选择要上传的文件">
             <div class="well-ico">%%I:upload:24%%</div>
@@ -343,21 +456,11 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
             <div class="qfoot" id="q-foot" hidden></div>
           </div>
         </div>
-        <div class="pane" id="pane-text" hidden>
-          <span class="lead">粘贴文字或链接，保存为文本文件，其他设备即可下载。</span>
-          <form id="txt-form" action="/save-text?share=%%SHARE_INDEX%%" method="post" style="display:contents">
-            <label class="field-label" for="text-filename">文件名</label>
-            <input class="field" id="text-filename" name="filename" type="text" placeholder="可留空，自动添加 .txt" autocomplete="off">
-            <label class="field-label" for="text-content">文本内容</label>
-            <textarea class="ta" id="text-content" name="content" placeholder="粘贴或输入要传过去的文本…"></textarea>
-          </form>
-        </div>
       </div>
       <div class="dlg-foot" id="up-foot">
         <span class="st" id="up-st">%%UPLOAD_HINT%%</span>
         <button class="fb bare" id="up-cancel" type="button">关闭</button>
         <button class="fb primary" id="up-pick" type="button">%%I:file:14%%<span id="up-pick-t">再加文件</span></button>
-        <button class="fb primary" form="txt-form" type="submit" id="txt-save" hidden>保存文本</button>
       </div>
     </div>
   </div>
@@ -542,7 +645,10 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
     function closeUp() { closeDialog(upBg); }
     function closeSet() { closeDialog(setBg); }
     function closeDialogs() { closeUp(); closeSet(); }
-    upBtn.addEventListener('click', function () { openDialog(upBg); });
+    upBtn.addEventListener('click', function () {
+      openDialog(upBg);
+      if (upBadge.hidden) wellInput.click();
+    });
     document.getElementById('btn-settings').addEventListener('click', function () { openDialog(setBg); });
     [['up-close', closeUp], ['up-cancel', closeUp], ['set-close', closeSet], ['set-cancel', closeSet]].forEach(function (pair) {
       document.getElementById(pair[0]).addEventListener('click', pair[1]);
@@ -558,28 +664,12 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
 
-    /* ---------- 弹窗内「文件 / 文字」两档 ---------- */
+    /* ---------- 上传队列 ---------- */
     var paneFile = document.getElementById('pane-file');
-    var paneText = document.getElementById('pane-text');
-    var txtSave = document.getElementById('txt-save');
     var upPick = document.getElementById('up-pick');
     var upPickT = document.getElementById('up-pick-t');
     var upSt = document.getElementById('up-st');
     var upIdleSt = upSt.textContent;
-    function setPane(name) {
-      paneFile.hidden = name !== 'file';
-      paneText.hidden = name !== 'text';
-      txtSave.hidden = name !== 'text';
-      upPick.hidden = name !== 'file';
-      document.querySelectorAll('#up-bg .seg > button').forEach(function (b) {
-        b.classList.toggle('on', b.dataset.pane === name);
-        b.setAttribute('aria-pressed', b.dataset.pane === name ? 'true' : 'false');
-      });
-      if (name === 'file') { upSt.className = 'st'; upSt.textContent = upIdleSt; } else { txtStat(); }
-    }
-    document.querySelectorAll('#up-bg .seg > button').forEach(function (b) {
-      b.addEventListener('click', function () { setPane(b.dataset.pane); });
-    });
 
     /* ---------- 目录与外观 ---------- */
     var setForm = document.getElementById('set-form');
@@ -830,14 +920,14 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
         sp.className = 'spacer';
         var a = document.createElement('a');
         a.href = '#';
-        a.textContent = '去看 ›';
-        a.addEventListener('click', function (e) { e.preventDefault(); closeUp(); refreshList(); });
+        a.textContent = '查看共享文件';
+        a.addEventListener('click', function (e) { e.preventDefault(); closeUp(); showFiles(true); filesBtn.focus(); refreshList(); });
         qFoot.append(s, sp, a);
       }
       paintWell(run, waits, fails);
       /* 一批投完（有活变没活）才刷下载列表并报数，不做整页 reload */
       if (wasLive && !run && !waits.length) {
-        if (justDone) { refreshList(); toast('已接收 ' + justDone + ' 个文件'); }
+        if (justDone) { refreshList(); refreshStream(); toast('已接收 ' + justDone + ' 个文件'); }
         justDone = 0;
       }
       wasLive = !!run || waits.length > 0;
@@ -853,9 +943,9 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
       return (needTotal - sentBytes()) / rate * 1000;
     }
     /* 底栏那句不讲条数（条数住在 qhead 与折叠行里，永远不用滚动就能看见），
-       只讲这一批的去向；文字档可见时不抢那行，免得把「先粘贴一点内容」盖掉。 */
+       只讲这一批的去向。 */
     function sayStatus(text) {
-      if (!paneFile.hidden) { upSt.className = 'st'; upSt.textContent = text; }
+      upSt.className = 'st'; upSt.textContent = text;
     }
     function paintWell(run, waits, fails) {
       var idle = !run && !waits.length;
@@ -1007,52 +1097,230 @@ h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.035em; font-weight: 60
       veil.classList.remove('on');
       var files = e.dataTransfer && e.dataTransfer.files;
       if (!files || !files.length) return;
-      setPane('file');
       openDialog(upBg);
       enqueue([].slice.call(files));
     });
 
-    /* ---------- 粘贴文字：存好就进下载列表，不进队列 ---------- */
-    var txtForm = document.getElementById('txt-form');
-    var txtArea = txtForm.querySelector('[name=content]');
-    function txtStat() {
-      var t = txtArea.value;
-      /* 空态这句与有内容时共用后半句，底栏不跳字；「空文本」是状态词不是话 */
-      if (!t.trim()) { upSt.className = 'st'; upSt.textContent = '存好后直接出现在下载列表'; return; }
+    /* ---------- 文字：发一条，读最近几条 ---------- */
+    /* 与 messages::MAX_TEXT_BYTES 相同：提交前先拦，
+       免得把整段内容推上去再拿 413 回来，用户还得重新粘一遍。 */
+    var MAX_TEXT_BYTES = 64 * 1024;
+    var textForm = document.getElementById('text-form');
+    var textArea = document.getElementById('text-content');
+    var textSt = document.getElementById('text-st');
+    var textSend = document.getElementById('text-send');
+    var textIdleSt = textSt.textContent;
+    var sendingText = false;
+    var stream = document.getElementById('stream');
+
+    function textStat() {
+      var t = textArea.value;
       var bytes = new TextEncoder().encode(t).length;
-      upSt.className = 'st';
-      upSt.textContent = t.split('\n').length + ' 行 · ' + fmtSize(bytes) + ' · 存好后直接出现在下载列表';
+      textSend.disabled = sendingText || !t.trim() || bytes > MAX_TEXT_BYTES;
+      if (!t.trim()) { textSt.className = 'st'; textSt.textContent = textIdleSt; return; }
+      textSt.className = bytes > MAX_TEXT_BYTES ? 'st er' : 'st';
+      textSt.textContent = t.split('\n').length + ' 行 · ' + fmtSize(bytes) + ' / 64 KB';
     }
-    txtArea.addEventListener('input', txtStat);
-    txtForm.addEventListener('submit', function (e) {
+    textArea.addEventListener('input', textStat);
+    textArea.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || (!e.ctrlKey && !e.metaKey) || e.isComposing) return;
       e.preventDefault();
-      if (!txtArea.value.trim()) { upSt.className = 'st er'; upSt.textContent = '先粘贴一点内容'; return; }
-      var btn = txtSave, orig = btn.textContent;
-      btn.disabled = true; btn.textContent = '保存中…';
+      textForm.requestSubmit();
+    });
+    textStat();
+
+    textForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (textSend.disabled) return;
+      var content = textArea.value;
+      if (!content.trim()) { textSt.className = 'st er'; textSt.textContent = '先粘贴一点内容'; return; }
+      if (new TextEncoder().encode(content).length > MAX_TEXT_BYTES) {
+        textSt.className = 'st er'; textSt.textContent = '太长了，删减到 64 KB 以内再发';
+        return;
+      }
+      var orig = textSend.textContent;
+      sendingText = true;
+      textSend.disabled = true; textSend.textContent = '发送中…';
       var x = new XMLHttpRequest();
       x.addEventListener('load', function () {
-        btn.disabled = false; btn.textContent = orig;
-        if (x.status >= 200 && x.status < 400) {
-          var name = (txtForm.querySelector('[name=filename]').value || '文本').trim() + '.txt';
-          txtArea.value = '';
-          txtForm.querySelector('[name=filename]').value = '';
-          closeUp();
-          refreshList();
-          toast('已存为 ' + name);
-        } else {
-          upSt.className = 'st er'; upSt.textContent = failReason(x.status).msg;
+        sendingText = false;
+        textSend.textContent = orig;
+        textStat();
+        if (x.status === 204) {
+          if (textArea.value === content) textArea.value = '';
+          textStat();
+          toast('已送达');
+          refreshStream();
+          return;
         }
+        textSt.className = 'st er';
+        var msg = (x.responseText || '').trim();
+        textSt.textContent = (msg && msg.charAt(0) !== '<' ? msg.slice(0, 80) : '发送失败');
       });
       x.addEventListener('error', function () {
-        btn.disabled = false; btn.textContent = orig;
-        upSt.className = 'st er'; upSt.textContent = '网络异常';
+        sendingText = false;
+        textSend.textContent = orig;
+        textStat();
+        textSt.className = 'st er'; textSt.textContent = '网络异常，没有发出去';
       });
-      x.open('POST', txtForm.action);
+      x.open('POST', textForm.action + '?response=empty');
       x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8');
-      x.send(new URLSearchParams(new FormData(txtForm)).toString());
+      x.send('content=' + encodeURIComponent(content));
     });
 
-    setPane('file');
+    /* 局域网是 http://10.x.x.x，不是安全上下文，navigator.clipboard 拿不到；
+       走 execCommand 的老路，失败就请用户长按选中——不装作复制成功。 */
+    function copyText(value) {
+      function legacy() {
+        var ta = document.createElement('textarea');
+        ta.value = value;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+        ta.remove();
+        toast(ok ? '已复制' : '复制失败，长按选中文字复制');
+      }
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(value).then(function () { toast('已复制'); }, legacy);
+        return;
+      }
+      legacy();
+    }
+
+    function deleteMessage(card, btn) {
+      btn.disabled = true;
+      var x = new XMLHttpRequest();
+      x.addEventListener('load', function () {
+        btn.disabled = false;
+        if (x.status >= 200 && x.status < 400) {
+          card.remove();
+          document.getElementById('stream-count').textContent =
+            Math.max(0, parseInt(document.getElementById('stream-count').textContent, 10) - 1) + ' 条';
+          lastStreamHtml = null;
+          refreshStream();
+        } else {
+          toast('删除失败');
+        }
+      });
+      x.addEventListener('error', function () { btn.disabled = false; toast('网络异常，没删掉'); });
+      x.open('POST', '/message-delete');
+      x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8');
+      x.send('id=' + encodeURIComponent(card.dataset.id));
+    }
+
+    /* 全文都在 DOM 里：CSS 先裁成八行，真溢出了才放出「展开」，没 JS 也能读到前八行 */
+    function prepareMessages(expanded) {
+      stream.querySelectorAll('.msg[data-kind="text"]').forEach(function (card) {
+        var body = card.querySelector('.mtext');
+        var more = card.querySelector('.mmore');
+        if (!body || !more) return;
+        body.classList.add('clamp');
+        if (body.scrollHeight - body.clientHeight > 2) {
+          more.hidden = false;
+          if (expanded.has(card.dataset.id)) {
+            body.classList.remove('clamp');
+            more.textContent = '收起';
+          }
+          more.addEventListener('click', function () {
+            var clamped = body.classList.toggle('clamp');
+            more.textContent = clamped ? '展开全文' : '收起';
+          });
+        } else {
+          body.classList.remove('clamp');
+        }
+      });
+    }
+    prepareMessages(new Set());
+    stream.addEventListener('click', function (e) {
+      var btn = e.target.closest ? e.target.closest('.mact') : null;
+      if (!btn) return;
+      var card = btn.closest('.msg');
+      if (!card) return;
+      if (btn.hasAttribute('data-copy')) {
+        var body = card.querySelector('.mtext');
+        if (body) copyText(body.textContent);
+      } else if (btn.hasAttribute('data-del')) {
+        deleteMessage(card, btn);
+      }
+    });
+
+    var lastStreamHtml = null;
+    var streamLoading = false;
+    var streamStatus = document.getElementById('stream-sync');
+
+    async function refreshStream() {
+      if (document.hidden || streamLoading || historyBlock.hidden) return;
+      streamLoading = true;
+      try {
+        var response = await fetch('/message-stream', { cache: 'no-store' });
+        if (response.redirected || !response.ok) throw new Error('stream unavailable');
+        var data = await response.json();
+        if (historyBlock.hidden) return;
+        streamStatus.hidden = true;
+        if (data.html === lastStreamHtml) return;
+        var active = document.activeElement;
+        var activeCard = stream.contains(active) && active.closest('.msg');
+        var activeIndex = activeCard ? Array.from(activeCard.querySelectorAll('button, a')).indexOf(active) : -1;
+        var top = stream.scrollTop;
+        var follow = top < 48;
+        var edge = stream.getBoundingClientRect().top;
+        // 新记录插在顶部。翻看旧记录时，以当前可见的一条定位，保留它到视口上沿的距离。
+        var anchor = follow ? null : Array.from(stream.querySelectorAll('.msg')).find(function (card) {
+          return card.getBoundingClientRect().bottom > edge;
+        });
+        var anchorOffset = anchor ? anchor.getBoundingClientRect().top - edge : 0;
+        var expanded = new Set();
+        stream.querySelectorAll('.msg .mtext:not(.clamp)').forEach(function (body) {
+          expanded.add(body.closest('.msg').dataset.id);
+        });
+        stream.innerHTML = data.html;
+        prepareMessages(expanded);
+        var cards = Array.from(stream.querySelectorAll('.msg'));
+        if (activeIndex >= 0) {
+          var replacement = cards.find(function (card) {
+            return card.dataset.id === activeCard.dataset.id;
+          });
+          var control = replacement && replacement.querySelectorAll('button, a')[activeIndex];
+          if (control) control.focus({ preventScroll: true });
+        }
+        lastStreamHtml = data.html;
+        document.getElementById('stream-count').textContent = data.count + ' 条';
+        var nextAnchor = anchor && cards.find(function (card) { return card.dataset.id === anchor.dataset.id; });
+        if (nextAnchor) {
+          stream.scrollTop += nextAnchor.getBoundingClientRect().top - edge - anchorOffset;
+        } else {
+          stream.scrollTop = follow ? 0 : top;
+        }
+      } catch (error) {
+        streamStatus.hidden = false;
+      } finally {
+        streamLoading = false;
+      }
+    }
+    window.setInterval(refreshStream, 3000);
+    document.addEventListener('visibilitychange', refreshStream);
+
+
+    var historyBlock = document.getElementById('history-block');
+    var historyBtn = document.getElementById('btn-history');
+    var filesBlock = document.getElementById('files-block');
+    var filesBtn = document.getElementById('btn-files');
+
+    function showFiles(open) {
+      historyBlock.hidden = open;
+      filesBlock.hidden = !open;
+      historyBtn.setAttribute('aria-pressed', String(!open));
+      filesBtn.setAttribute('aria-pressed', String(open));
+      if (!open) refreshStream();
+    }
+    filesBtn.addEventListener('click', function () { showFiles(true); });
+    historyBtn.addEventListener('click', function () { showFiles(false); });
+
     updateChrome();
   })();
   </script>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { CodexUsageBucket } from '../../services/api/codex'
-import { loadUsage, usageBusy, usageError, usageRange, usageReportRange, usageReport, usageUpdatedAt } from '../../services/codexState'
+import { loadUsage, usageBusy, usageError, usageHistoryEmpty, usageRange, usageReportRange, usageReport, usageUpdatedAt } from '../../services/codexState'
 import { formatTokenCount as compact, formatUsageCost, formatUsageCostDetail, localDayKey } from '../../utils/codexUsage'
 import { writeClipboardText } from '../../utils/clipboard'
 import { useToastStore } from '../../stores/toast'
@@ -84,7 +84,7 @@ function pct(part: number, whole: number): number {
 
 <template>
   <div class="usg-view" :aria-busy="usageBusy">
-    <div v-if="usageError && !totals" class="empty-state module-empty-state">
+    <div v-if="usageError && (!totals || usageHistoryEmpty)" class="empty-state module-empty-state">
       <div class="empty-icon"><AppIcon name="alert" :size="24" /></div>
       <h1 class="empty-title">读不到用量</h1>
       <div class="empty-desc" :title="usageError">{{ usageError }}</div>
@@ -92,6 +92,12 @@ function pct(part: number, whole: number): number {
     </div>
 
     <CodexLoadingSkeleton v-else-if="!totals" variant="usage" />
+
+    <div v-else-if="usageHistoryEmpty" class="empty-state module-empty-state">
+      <div class="empty-icon"><AppIcon name="clock" :size="24" /></div>
+      <h1 class="empty-title">还没有用量记录</h1>
+      <p class="empty-desc">在 Codex 中完成一次对话，用量会自动显示在这里。</p>
+    </div>
 
     <template v-else>
       <p v-if="usageBusy && usageReportRange !== usageRange" class="page-note" role="status">正在读取{{ ranges[usageRange] }}，暂显示{{ scope }}。</p>

@@ -1,6 +1,6 @@
 // 局域网传输网页真机拍图：起真 sidecar + 真目录，用 Playwright 拍服务端渲染出来的页面。
 // 用法: node scripts/fs-web-shots.mjs [--keep]
-// 产物: .tmp/fs-web/shots/*.png   （32 帧：纸/墨 × 1280·1920·760·390 × 下载/上传弹窗各态/设置/拖入/登录/关氛围/批量折叠）
+// 产物: .tmp/fs-web/shots/*.png   （32 帧：纸/墨 × 1280·1920·760·390 × 对话流/下载/上传弹窗各态/设置/拖入/登录/关氛围/批量折叠）
 import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
@@ -54,6 +54,30 @@ mkdirSync(empty, { recursive: true })
 const sha = (s) => createHash('sha256').update(s).digest('hex')
 const configFile = join(tmp, 'fileshare.json')
 const statusFile = join(tmp, 'status.json')
+/* 消息流跟配置同目录（sidecar 的 base_dir），先在盘上放三条：一句网页发来的文字、
+   一条电脑发出去的文件、一句电脑发的文字。快照里的 share 指向第一个共享目录（docs），
+   文件真在盘上，下载位才是「下载」而不是「已不在共享目录」 */
+const streamFile = join(tmp, 'messages.json')
+const nowMs = Date.now()
+writeFileSync(streamFile, JSON.stringify({
+  items: [
+    {
+      id: 'm3', dir: 'web', kind: 'text', name: '', size: 0, share: 0,
+      createdMs: nowMs - 90_000,
+      text: 'wifi 密码 desko-2026\n客厅那台路由器 5G 频段还没改名，别连错',
+    },
+    {
+      id: 'm2', dir: 'app', kind: 'file', share: 0, createdMs: nowMs - 900_000,
+      name: '项目周报-2026W42.pdf', size: 2457600,
+      text: '',
+    },
+    {
+      id: 'm1', dir: 'app', kind: 'text', name: '', size: 0, share: 0,
+      createdMs: nowMs - 3_600_000,
+      text: 'git clone git@gitee.com:desko/app.git && cd app && npm ci',
+    },
+  ],
+}, null, 2))
 
 function writeCfg({ theme, base, accent, atmosphere, password, dirs }) {
   writeFileSync(configFile, JSON.stringify({
@@ -163,7 +187,18 @@ async function probeTypes(label, url) {
     ` │ 新档 vid ${at('vid')} audio ${at('audio')}`)
 }
 const openUp = (page) => page.evaluate(() => document.getElementById('btn-upload').click())
-const openText = (page) => page.evaluate(() => document.querySelector('#up-bg .seg [data-pane=text]').click())
+/* 共享目录在对话流之下、默认收起（r4）：拍目录那几帧先把它展开 */
+const openFiles = async (page) => {
+  await page.locator('#btn-files').click()
+  await page.locator('#files-block').waitFor({ state: 'visible' })
+  // 展开会把这一段顶到阅读区上沿（smooth），等它滚稳再拍
+  await page.waitForTimeout(500)
+}
+/* 对话流是常驻区块：往输入框里填一句，拍"打字中"的样子（提交走 POST /text，回执页就是同一页） */
+const sendText = (text) => async (page) => {
+  await page.locator('#text-content').fill(text)
+  await page.waitForTimeout(120)
+}
 async function throttle(page, kbps) {
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('Network.emulateNetworkConditions', {
@@ -185,25 +220,27 @@ const LIVE_KBPS = 2000
 /* ── 纸·浅·群青（氛围开）── */
 let url = await apply({ theme: 'paper', base: 'light', accent: 'ink', atmosphere: 'on' })
 await shot('01-dl-paper-1280', url, 1280, 820)
-await shot('02-dl-hover', url, 1280, 820, (p) => p.locator('.frow').first().hover())
+await shot('02-dl-hover', url, 1280, 820, async (p) => {
+  await openFiles(p)
+  await p.locator('.frow').first().hover()
+})
 await shot('03-dl-search', url, 1280, 820, async (p) => {
+  await openFiles(p)
   await p.locator('#file-search').fill('周报')
   await p.waitForTimeout(700)
 })
 await shot('04-dl-miss', url, 1280, 820, async (p) => {
+  await openFiles(p)
   await p.locator('#file-search').fill('绝对没有的词')
   await p.waitForTimeout(700)
 })
 await shot('05-up-empty', url, 1280, 820, openUp)
 await shot('06-up-live', url, 1280, 820, sendFiles(files2, 900, LIVE_KBPS))
 await shot('07-up-done', url, 1280, 820, sendFiles(files2, 2600))
-await shot('08-up-text', url, 1280, 820, async (p) => {
-  await openUp(p)
-  await openText(p)
-})
-await shot('09-dl-1920', url, 1920, 1080)
+await shot('08-stream', url, 1280, 820, sendText('明天九点在三楼会议室对稿'))
+await shot('09-dl-1920', url, 1920, 1080, openFiles)
 await shot('10-up-1920', url, 1920, 1080, sendFiles(files2, 900, LIVE_KBPS))
-await shot('11-dl-760', url, 760, 820)
+await shot('11-dl-760', url, 760, 820, openFiles)
 await shot('12-settings', url, 1280, 820, (p) => p.locator('#btn-settings').click())
 /* 拖入中：造一次真 DataTransfer，让药丸报出真的文件数（Playwright 的 drag API 不落 drop，这里只拍状态） */
 await shot('13-dl-veil', url, 1280, 820, (p) => p.evaluate(() => {
@@ -215,7 +252,7 @@ await probeTypes('纸·群青', url)
 
 /* ── 0 文件 + 单目录（底栏那句提示的说法随目录数变）── */
 url = await apply({ theme: 'paper', base: 'light', accent: 'ink', atmosphere: 'on', dirs: [empty] })
-await shot('14-dl-empty', url, 1280, 820)
+await shot('14-dl-empty', url, 1280, 820, openFiles)
 await shot('15-up-empty-1dir', url, 1280, 820, openUp)
 
 /* ── 墨·深·青 ── */
@@ -224,16 +261,17 @@ await shot('16-dl-ink', url, 1280, 820)
 await shot('17-dl-ink-1920', url, 1920, 1080)
 await shot('18-up-ink-live', url, 1280, 820, sendFiles(files2, 900, LIVE_KBPS))
 await shot('19-settings-ink', url, 1280, 820, (p) => p.locator('#btn-settings').click())
-await shot('20-dl-ink-scrolled', url, 1280, 430, (p) => p.evaluate(() => window.scrollTo(0, 300)))
+await shot('20-dl-ink-scrolled', url, 1280, 430, async (p) => {
+  await openFiles(p)
+  // 整页定死一屏高，滚的是中间那一列
+  await p.evaluate(() => { document.querySelector('.wrap').scrollTop = 300 })
+})
 await probeTypes('墨·青', url)
 
 /* ── 手机 390 ── */
 await shot('21-phone-dl', url, 390, 844)
 await shot('22-phone-up-live', url, 390, 844, sendFiles(files2, 900, LIVE_KBPS))
-await shot('23-phone-up-text', url, 390, 844, async (p) => {
-  await openUp(p)
-  await openText(p)
-})
+await shot('23-phone-text', url, 390, 844, sendText('一段从手机发出的文字'))
 await shot('24-phone-settings', url, 390, 844, (p) => p.locator('#btn-settings').click())
 
 /* ── 口令页（另起一枚带口令的戳）── */

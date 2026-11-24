@@ -79,6 +79,8 @@ export interface E2EConfig {
     hasPassword?: boolean
     /** 共享目录里"已存在"的文件名，用来演拖入同名避让 */
     imported?: string[]
+    /** 已有的文字条目：source 分方向，演"手机发来一条"就靠它 */
+    messages?: { id: string; dir: string; kind: string; text?: string; name?: string; size?: number; share?: number; createdMs: number; time: string; sizeText?: string }[]
   }
   /** 内网穿透：绑定态、进程态、二进制态各自独立，页面三格要能分别演 */
   tunnel?: {
@@ -444,7 +446,7 @@ interface BackendState {
   settings: Record<string, string>
   backup: { hasPassword: boolean; files: BackupPackageRecord[]; exports: string[]; busy: boolean }
   cloud: { configured: boolean; server: string; account: string; lastSyncAt: number; packages: BackupPackageRecord[]; attachments: string[] }
-  fileshare: { running: boolean; port: number; boundPort: number | null; shareDirs: string[]; localOnly: boolean; hasPassword: boolean; imported: string[] }
+  fileshare: { running: boolean; port: number; boundPort: number | null; shareDirs: string[]; localOnly: boolean; hasPassword: boolean; imported: string[]; messages: { id: string; dir: string; kind: string; text: string; name: string; size: number; share: number; createdMs: number; time: string; sizeText: string }[] }
   tunnel: {
     bound: boolean
     alive: boolean
@@ -635,6 +637,10 @@ export interface E2EBridge {
   setCodexSwitchUx(config: SwitchUxConfig): void
   hasListener(event: string): boolean
   count(cmd: string): number
+  /** 网页端上传：真实后端在 handle_upload 落盘后记一条 dir=web 的文件消息 */
+  pushFileshareFile(name: string, size: number, share: number): void
+  /** 网页端发文字：真实桥把方向改成 web（web_access/network.rs），mock 跟着记 */
+  pushFileshareText(content: string, dir: string): unknown
 }
 
 const DEFAULT_MASTER_PASSWORD = 'e2e-master-123'
@@ -785,7 +791,7 @@ class MockBackend {
       settings: { ...(config.initialized === false ? {} : { notes_enabled: 'true', entries_enabled: 'true', files_enabled: 'true' }), ...(config.settings ?? {}) },
       backup: { hasPassword: false, files: [], exports: [], busy: false },
       cloud: { configured: false, server: '', account: '', lastSyncAt: 0, packages: [], attachments: [] },
-      fileshare: { running: false, port: 8000, boundPort: null, shareDirs: [], localOnly: false, hasPassword: false, imported: [] },
+      fileshare: { running: false, port: 8000, boundPort: null, shareDirs: [], localOnly: false, hasPassword: false, imported: [], messages: [] },
       tunnel: {
         bound: false,
         alive: false,
@@ -860,6 +866,18 @@ class MockBackend {
       state.fileshare.localOnly = config.fileshare.localOnly ?? false
       state.fileshare.hasPassword = config.fileshare.hasPassword ?? false
       state.fileshare.imported = (config.fileshare.imported ?? []).slice()
+      state.fileshare.messages = (config.fileshare.messages ?? []).map((m) => ({
+        id: m.id,
+        dir: m.dir,
+        kind: m.kind,
+        text: m.text ?? '',
+        name: m.name ?? '',
+        size: m.size ?? 0,
+        share: m.share ?? 0,
+        createdMs: m.createdMs,
+        time: m.time,
+        sizeText: m.sizeText ?? '',
+      }))
       if (config.fileshare.running) {
         state.fileshare.running = true
         state.fileshare.boundPort = config.fileshare.boundPort ?? state.fileshare.port
@@ -1141,7 +1159,62 @@ class MockBackend {
         this.eventListeners.get(event)?.forEach((h) => h(payload))
       },
       setBackupBusy: (busy: boolean) => { this.state.backup.busy = busy },
+      /** 演"网页刚发来一条"：页面每 3 秒读一次，轮询路径只有换掉库里那份才走得到 */
+      setFileshareMessages: (messages: { id: string; dir: string; kind: string; text?: string; name?: string; size?: number; createdMs: number; time: string; sizeText?: string }[]) => {
+        this.state.fileshare.messages = messages.map((m) => ({
+          id: m.id,
+          dir: m.dir,
+          kind: m.kind,
+          text: m.text ?? '',
+          name: m.name ?? '',
+          size: m.size ?? 0,
+          share: m.share ?? 0,
+          createdMs: m.createdMs,
+          time: m.time,
+          sizeText: m.sizeText ?? '',
+        }))
+      },
       hasListener: (event: string) => (this.eventListeners.get(event)?.size ?? 0) > 0,
+      /**
+       * 网页端在浏览器里传文件走的是 /api/share-upload，真实后端由 handlers::handle_upload 落盘后记一条
+       * （dir=web）。这条命令不在 invoke 表里，所以由 web-helpers 的伪服务端直接调这个口子。
+       */
+      pushFileshareFile: (name: string, size: number, share: number) => {
+        const f = this.state.fileshare
+        const text = size < 1024 ? `${size} B` : `${(size / 1024).toFixed(size < 10240 ? 1 : 0)} KB`
+        f.messages.unshift({
+          id: `w${f.messages.length + 1}`,
+          dir: 'web',
+          kind: 'file',
+          text: '',
+          name,
+          size,
+          share,
+          createdMs: Date.now(),
+          time: '10:41',
+          sizeText: text,
+        })
+      },
+      /** 同上：浏览器里发的文字，真实桥改记成 web，mock 得跟着改向才不漏这层语义 */
+      pushFileshareText: (content: string, dir: string) => {
+        const value = String(content ?? '')
+        if (!value.trim()) throw '还没有内容'
+        const f = this.state.fileshare
+        const entry = {
+          id: `w${f.messages.length + 1}`,
+          dir,
+          kind: 'text',
+          text: value,
+          name: '',
+          size: 0,
+          share: 0,
+          createdMs: Date.now(),
+          time: '10:42',
+          sizeText: '',
+        }
+        f.messages.unshift(entry)
+        return { ...entry }
+      },
       count: (cmd: string) => this.invocations.filter((i) => i.cmd === cmd).length,
     }
   }
@@ -2739,8 +2812,53 @@ class MockBackend {
         f.imported.push(final)
         stored.push({ name: final })
       }
+      // 真实后端在落盘之后各记一条文件消息（commands/fileshare.rs 的 import_inner），
+      // 这里跟着写，否则页面读回来的流里看不到刚发出去的文件
+      for (const item of stored) {
+        f.messages.unshift({
+          id: `f${f.messages.length + 1}-${item.name}`,
+          dir: 'app',
+          kind: 'file',
+          text: '',
+          name: item.name,
+          size: 2048,
+          share: Number(shareIndex),
+          createdMs: Date.now(),
+          time: '10:40',
+          sizeText: '2 KB',
+        })
+      }
       return { stored, failed }
     },
+
+    // 文字条目：与 Rust 侧同一套形态（source 分辨方向、time 是已渲染好的短串）
+    fileshare_messages: () => this.state.fileshare.messages.map((m) => ({ ...m })),
+
+    fileshare_message_push: ({ content }) => {
+      const value = String(content ?? '')
+      if (!value.trim()) throw '还没有内容'
+      if (new TextEncoder().encode(value).length > 64 * 1024) throw '单条文字最多 64 KB，更长的内容请走文件'
+      const entry = {
+        id: `m${this.state.fileshare.messages.length + 1}`,
+        dir: 'app',
+        kind: 'text',
+        text: value,
+        name: '',
+        size: 0,
+        share: 0,
+        createdMs: Date.now(),
+        time: '10:38',
+        sizeText: '',
+      }
+      this.state.fileshare.messages.unshift(entry)
+      return { ...entry }
+    },
+
+    fileshare_message_delete: ({ id }) => {
+      this.state.fileshare.messages = this.state.fileshare.messages.filter((m) => m.id !== id)
+    },
+
+    fileshare_reveal_file: () => undefined,
 
     // ===== tunnel.rs：三格各自独立（绑定 / 进程 / 注册），页面的状态机全靠它们组合 =====
     tunnel_binary_status: () => {

@@ -293,6 +293,10 @@ export const useNotesStore = defineStore('notes', () => {
   // 小记从库里消失（单条删除、批量删除、合并吞掉源条目）就把残 id 摘掉。
   // 视图/搜索/标签变化不剪枝——跨视图攒批是有意保留的能力。
   watch(notes, list => {
+    if (!list.length) {
+      notePickMode.value = false
+      clearFilters()
+    }
     const next = prune(selectedNoteIds.value, list.map(n => n.id))
     if (next !== selectedNoteIds.value) selectedNoteIds.value = next
   }, { flush: 'post' })

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import type { Locator, Page } from '@playwright/test'
-import { bootUnlocked, e2e, expectToast, openSettings, settingsTab, visiblePane, waitForToastGone, E2E_PASSWORD } from '../helpers'
+import { bootUnlocked, e2e, expectToast, openSettings, settingsTab, tipButton, visiblePane, waitForToastGone, E2E_PASSWORD } from '../helpers'
 import { AuthPage } from '../pages/auth-page'
 
 const SEED = {
@@ -165,6 +165,45 @@ test.describe('Settings 设置', () => {
 
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
+  })
+
+
+  test('设置与子弹窗循环键盘焦点并归还入口', async ({ page }) => {
+    await bootUnlocked(page, { ...SEED, staged: ['unreferenced.png'] })
+    const trigger = tipButton(page, '设置').first()
+    await trigger.press('Enter')
+    const dialog = page.getByRole('dialog', { name: '设置', exact: true })
+    const appearance = dialog.locator('.nav-tab').first()
+    await expect(appearance).toBeFocused()
+
+    const atmosphere = dialog.getByRole('switch', { name: '背景氛围' })
+    await page.keyboard.press('Shift+Tab')
+    await expect(atmosphere).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(appearance).toBeFocused()
+    await expect(appearance).toHaveCSS('outline-width', '2px')
+    await dialog.locator('h2').click()
+    await expect(dialog).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(appearance).toBeFocused()
+
+    await settingsTab(dialog, 'security')
+    const changePassword = dialog.getByRole('button', { name: '修改主密码' })
+    await changePassword.press('Enter')
+    const passwordDialog = page.getByRole('dialog', { name: '修改主密码' })
+    await expect(passwordDialog.getByPlaceholder('请输入当前密码')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(changePassword).toBeFocused()
+
+    await settingsTab(dialog, 'backup')
+    const cleanup = dialog.locator('.setting-item', { hasText: '未引用附件' }).locator('button.action-btn')
+    await cleanup.press('Enter')
+    const confirm = page.locator('.confirm-dialog')
+    await expect(confirm.getByRole('button', { name: '取消' })).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(cleanup).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(trigger).toBeFocused()
   })
 
   test('弹窗内的 hover 提示压在遮罩之上', async ({ page }) => {

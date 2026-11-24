@@ -399,7 +399,6 @@ async function copySessionValue(value: string, label: string) {
         {{ sessionQuery.trim() ? '更换关键词或清空搜索。' : '在 Codex 中开始一次对话，会话记录会自动显示在这里。' }}
       </div>
       <div v-if="sessionQuery.trim()" class="empty-actions"><button class="btn-secondary" type="button" @click="sessionQuery = ''">清空会话搜索</button></div>
-      <p v-else class="empty-note">读取本机已有会话，无需手动添加</p>
     </div>
 
     <div v-else class="rcard-list">

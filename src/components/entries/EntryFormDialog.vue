@@ -4,6 +4,7 @@ import type { Entry } from '../../types'
 import EntryFields from './EntryFields.vue'
 import PathsDialog from './PathsDialog.vue'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { useDialogFocus } from '../../composables/useDialogFocus'
 import { usePageActive } from '../../composables/usePageActive'
 import AppIcon from '../shared/AppIcon.vue'
 
@@ -19,6 +20,8 @@ const emit = defineEmits<{
 const title = computed(() => (props.entry ? '编辑网址收藏' : '新增网址收藏'))
 const fields = ref<InstanceType<typeof EntryFields> | null>(null)
 const pathsOpen = ref(false)
+const panel = ref<HTMLElement | null>(null)
+const { trapFocus } = useDialogFocus(panel)
 
 const onSaved = (id: string) => {
   emit('saved', id)
@@ -59,7 +62,7 @@ useEscapeClose(() => {
   <Transition name="dialog">
     <div class="dialog-overlay form-overlay" @click.self="onOverlayClick">
       <!-- 主表单弹窗 -->
-      <div v-show="!pathsOpen" class="dialog entry-form-dialog" role="dialog" aria-modal="true" :aria-label="title">
+      <div v-show="!pathsOpen" ref="panel" class="dialog entry-form-dialog" role="dialog" aria-modal="true" :aria-label="title" tabindex="-1" @keydown.tab="trapFocus">
         <div class="dialog-header">
           <h3>{{ title }}</h3>
           <button class="dialog-close" type="button" title="关闭" @click="emit('close')">

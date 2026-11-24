@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import type { LocalPath } from '../../types'
 import { normalizeSubPath, joinEntryUrl } from '../../utils/urlPath'
 import { useToastStore } from '../../stores/toast'
 import { useClipboard } from '../../composables/useClipboard'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { useDialogFocus } from '../../composables/useDialogFocus'
 import AppIcon from '../shared/AppIcon.vue'
 
 /** 增删直接写进父表单的草稿数组，落库统一等「保存条目」 */
@@ -64,11 +65,12 @@ const removePath = (index: number) => {
 }
 
 useEscapeClose(() => emit('close'))
-onMounted(() => pathRef.value?.focus())
+const panel = ref<HTMLElement | null>(null)
+const { trapFocus } = useDialogFocus(panel, { initialFocus: '.add-path' })
 </script>
 
 <template>
-  <div class="dialog paths-dialog" role="dialog" aria-modal="true" :aria-label="`子路径管理：${entryName}`">
+  <div ref="panel" class="dialog paths-dialog" role="dialog" aria-modal="true" :aria-label="`子路径管理：${entryName}`" tabindex="-1" @keydown.tab="trapFocus">
     <div class="dialog-header">
       <h3>子路径</h3>
       <span class="sub">{{ headCount }}</span>

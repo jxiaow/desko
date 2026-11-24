@@ -67,12 +67,12 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 const kbdHint = computed(() => (isMac ? '⌘K' : 'Ctrl K'))
 
 const onGlobalKey = (e: KeyboardEvent) => {
-  if (!pageActive.value) return
+  if (!pageActive.value || !searchRef.value) return
   if (isPageShortcutBlocked(e)) return
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
-    searchRef.value?.focus()
-    searchRef.value?.select()
+    searchRef.value.focus()
+    searchRef.value.select()
   }
 }
 
@@ -188,7 +188,8 @@ const openMenu = (el: HTMLElement, item: Entry) => {
   menuEntry.value = item
 }
 
-const closeMenu = () => {
+const closeMenu = (restoreFocus = false) => {
+  if (restoreFocus) menuAnchor.value?.focus({ preventScroll: true })
   menuAnchor.value = null
   menuEntry.value = null
 }
@@ -236,7 +237,7 @@ watchEffect(() => {
   <div class="content-inner" :class="{ 'web-runtime': webRuntime }">
     <!-- 身份行 + 工具栏：搜索、分类、计数和两个动作；分类超出宽度改为横向滚动 -->
     <Teleport :to="workspaceToolbarTarget" :disabled="!workspaceLayout || !pageActive" defer>
-    <div class="page-bar">
+    <div v-if="loading || loadError || showFilters" class="page-bar">
       <div class="page-lead">
         <div v-if="workspaceLayout && !webRuntime && showFilters" ref="workbarEl" class="workspace-workbar entries-workbar">
           <nav ref="tabsEl" class="workspace-workbar-tabs" aria-label="收藏分类">
@@ -276,6 +277,7 @@ watchEffect(() => {
       </div>
       <div class="page-actions">
         <button
+          v-if="filteredEntries.length || isBatchMode"
           class="bar-btn"
           :class="{ active: isBatchMode }"
           type="button"
@@ -285,7 +287,7 @@ watchEffect(() => {
         >
           <AppIcon name="checkall" :size="16" />
         </button>
-        <CreateAction v-if="loading || loadError || showFilters" label="新增条目" @click="emit('openAdd')" />
+        <CreateAction label="新增条目" @click="emit('openAdd')" />
       </div>
     </div>
     </Teleport>
@@ -402,9 +404,9 @@ watchEffect(() => {
           v-if="menuEntry?.id === item.id"
           :anchor="menuAnchor"
           @detail="closeMenu(); emit('openDetail', item)"
-          @edit="closeMenu(); emit('openEdit', item)"
+          @edit="closeMenu(true); emit('openEdit', item)"
           @duplicate="closeMenu(); emit('duplicateEntry', item)"
-          @delete="closeMenu(); emit('delete', item)"
+          @delete="closeMenu(true); emit('delete', item)"
           @close="closeMenu"
         />
       </article>
@@ -534,8 +536,7 @@ watchEffect(() => {
   cursor: pointer;
   transition: color var(--transition);
 }
-.ec-domain:hover { color: var(--accent); }
-.ec-domain:hover .u-path { color: var(--accent-light); }
+.ec-domain:hover { color: var(--text-url-hover, var(--accent)); }
 /* 凭证锁标顶右、hover 让位给动作浮岛（同格交错，不叠字） */
 .ec-cred {
   margin-left: auto;

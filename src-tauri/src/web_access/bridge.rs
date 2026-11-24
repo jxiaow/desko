@@ -1,3 +1,4 @@
+use crate::commands::fileshare;
 use super::{Backend, Resource};
 use crate::{commands, error::AppError, AppState};
 use serde::{de::DeserializeOwned, Serialize};
@@ -304,6 +305,29 @@ impl Backend for AppBackend {
                 &crate::webdav::percent_decode(name),
                 true,
             );
+        }
+        if let Some(id) = url.path().strip_prefix("/api/share-download/") {
+            self.require_module("fileshare_enabled")?;
+            let path = fileshare::messages_path(&self.app).map_err(|e| e.user_message())?;
+            let message = fileshare_core::messages::list(&path)
+                .into_iter()
+                .find(|entry| entry.id == id && entry.is_file())
+                .ok_or("文件消息不存在")?;
+            let config = fileshare::fileshare_get_config(self.app.clone())
+                .map_err(|e| e.user_message())?;
+            let dirs: Vec<_> = config.share_dirs.iter().map(std::path::PathBuf::from).collect();
+            let index = message.share_index(&dirs).ok_or("共享目录已移除")?;
+            let root = dirs[index].canonicalize().map_err(|_| "共享目录不可访问")?;
+            let target = fileshare_core::files::resolve_file_in_share(&root, &message.name)
+                .and_then(|path| path.canonicalize().ok())
+                .filter(|path| path.starts_with(&root) && path.is_file())
+                .ok_or("文件已不在共享目录")?;
+            return Ok(Resource {
+                bytes: Vec::new(),
+                mime: "application/octet-stream".into(),
+                download: true,
+                file: Some(std::fs::File::open(target).map_err(|_| "无法读取文件")?.into()),
+            });
         }
         let id = url.path().strip_prefix("/api/files/").ok_or("资源不存在")?;
         self.require_module("files_enabled")?;

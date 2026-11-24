@@ -100,10 +100,10 @@ function remove(row: TunnelServiceRow) {
   <section class="tn-card services">
     <div class="tn-head">
       <div class="section-heading">
-        <h2>公网服务 <span class="head-cnt service-summary">{{ services.length }} 项服务<span v-if="unrouted.length" class="unrouted-count"> · {{ unrouted.length }} 条未应用</span></span></h2>
-        <p>将本机 HTTP 服务连接到公网，随隧道统一起停。</p>
+        <h2>公网服务 <span v-if="services.length" class="head-cnt service-summary">{{ services.length }} 项服务<span v-if="unrouted.length" class="unrouted-count"> · {{ unrouted.length }} 条未应用</span></span></h2>
+        <p v-if="services.length">将本机 HTTP 服务连接到公网，随隧道统一起停。</p>
       </div>
-      <button class="btn-secondary head-btn" type="button" :disabled="busy || acting" @click="emit('add')">
+      <button v-if="services.length" class="btn-secondary head-btn" type="button" :disabled="busy || acting" @click="emit('add')">
         <AppIcon name="plus" :size="12" />
         添加服务
       </button>

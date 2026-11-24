@@ -61,7 +61,7 @@ test.describe('Entries 网址收藏', () => {
 
     await search.fill('不存在的关键字')
     await expect(page.locator('.empty-title')).toHaveText('未找到匹配结果')
-    await expect(page.locator('.empty-desc')).toHaveText('试试其他关键词')
+    await expect(page.getByRole('button', { name: '查看全部收藏', exact: true })).toBeVisible()
 
     await tipButton(page, '清除搜索').click()
     await expect(page.locator('.entry-card')).toHaveCount(3)
@@ -75,6 +75,29 @@ test.describe('Entries 网址收藏', () => {
     await expect(entryCard(page, 'Gmail')).toBeVisible()
     await workbar.locator('.wb-tab', { hasText: '全部' }).click()
     await expect(page.locator('.entry-card')).toHaveCount(3)
+  })
+
+
+  test('新增条目和子路径管理保留键盘焦点', async ({ page }) => {
+    await bootEntries(page, SEED)
+    const trigger = page.getByRole('button', { name: '新增条目', exact: true })
+    await trigger.press('Enter')
+    const dialog = page.getByRole('dialog', { name: '新增网址收藏' })
+    const close = tipButton(dialog, '关闭')
+    await expect(dialog.getByPlaceholder('例如：OA系统')).toBeFocused()
+    await close.focus()
+    await page.keyboard.press('Shift+Tab')
+    await expect(dialog.getByRole('button', { name: '保存条目' })).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(close).toBeFocused()
+
+    const managePaths = dialog.locator('.paths-manage')
+    await managePaths.press('Enter')
+    await expect(page.locator('.paths-dialog .add-path')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(managePaths).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(trigger).toBeFocused()
   })
 
   test('新增网址收藏：必填警示 + 创建成功', async ({ page }) => {

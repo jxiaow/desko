@@ -155,7 +155,7 @@ fn main() {
             backup::recover_swap(&paths::profile_root(), &paths::attachments_dir()).expect("failed to recover interrupted restore");
 
             let db = Database::new(db_path_str).expect("failed to init database");
-            
+
             app.manage(web_access::WebAccessState::default());
             app.manage(services::codex_bridge::BridgeState::default());
             app.manage(AppState {
@@ -273,22 +273,22 @@ fn main() {
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
-                        
+
                         // Check if lock-on-close is enabled
                         let app_state = app_handle.state::<AppState>();
                         let should_lock = app_state.db.lock()
                             .map(|db| db.get_meta("lock_on_close").ok().flatten().map(|v| v == "true").unwrap_or(false))
                             .unwrap_or(false);
-                        
+
                         if should_lock {
                             commands::auth::request_lock(&app_handle);
                         }
-                        
+
                         let _ = window_clone.hide();
                     }
                 });
             }
-            
+
             Ok(())
         })
         .invoke_handler({
@@ -371,6 +371,10 @@ fn main() {
             commands::fileshare::fileshare_set_password,
             commands::fileshare::fileshare_set_theme,
             commands::fileshare::fileshare_import_files,
+            commands::fileshare::fileshare_messages,
+            commands::fileshare::fileshare_message_push,
+            commands::fileshare::fileshare_message_delete,
+            commands::fileshare::fileshare_reveal_file,
             // ── 内网穿透 ──
             commands::tunnel::tunnel_binary_status,
             commands::tunnel::tunnel_fetch_binary,

@@ -540,9 +540,26 @@ fn import_inner(app: &AppHandle, share_index: usize, paths: Vec<String>) -> Resu
         .map_err(|_| AppError::FileShare(format!("共享目录不可访问：{}", dir.display())))?;
     let mut stored = Vec::new();
     let mut failed = Vec::new();
+    // 落盘之后各记一条消息：文件本体留在共享目录，对话流里只留一份快照。
+    // 记账失败不该让已经复制成功的文件变成一个错误，所以忽略错误。
+    let stream = messages_path(app)?;
+    let dir_hint = dir.display().to_string();
     for raw in &paths {
         match import_one(&dir_canon, raw) {
-            Ok(file) => stored.push(file),
+            Ok(file) => {
+                let size = std::fs::metadata(dir_canon.join(&file.name))
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+                let _ = fileshare_core::messages::push_file(
+                    &stream,
+                    &file.name,
+                    size,
+                    share_index,
+                    &dir_hint,
+                    fileshare_core::messages::DIR_APP,
+                );
+                stored.push(file)
+            }
             Err(msg) => failed.push(msg),
         }
     }
@@ -562,8 +579,134 @@ pub async fn fileshare_import_files(
         .map_err(|e| AppError::FileShare(format!("投递任务失败: {}", e)))?
 }
 
-// ── 生命周期钩子（main.rs 调用）─────────────────────────────
+// ── 消息流 ──────────────────────────────────────────────────
+//
+// 一段文字和一个文件是同一层的东西：都带方向和时间，都排在一条时间线上。
+// 落点在档案根下的 messages.json（用户的文件夹里不会凭空多出 笔记.txt）。
+// 写入方有两个：这里（桌面发出）与网页端（`POST /text`、`POST /upload`），
+// 两个进程共用 fileshare_core::messages 那把文件锁。所以服务没启动也能记，
+// 网页那一侧等它启动后自然看得见。
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageDto {
+    pub id: String,
+    /// `app` = 这台电脑发出；`web` = 网页（任意设备上的浏览器）发来
+    pub dir: String,
+    /// `text` | `file`
+    pub kind: String,
+    pub text: String,
+    pub name: String,
+    pub size: u64,
+    pub share: usize,
+    pub dir_hint: String,
+    pub created_ms: i64,
+    /// 今天只给时分的短串，两端不必各自再算一次时区
+    pub time: String,
+    /// 文件消息：落盘名字的展示大小（"2.4 MB"）
+    pub size_text: String,
+}
+
+fn message_dto(entry: fileshare_core::messages::Message) -> MessageDto {
+    MessageDto {
+        time: entry.time(),
+        size_text: fileshare_core::messages::short_size(entry.size),
+        id: entry.id,
+        dir: entry.dir,
+        kind: entry.kind,
+        text: entry.text,
+        name: entry.name,
+        size: entry.size,
+        share: entry.share,
+        dir_hint: entry.dir_hint,
+        created_ms: entry.created_ms,
+    }
+}
+
+pub(crate) fn messages_path(app: &AppHandle) -> Result<PathBuf, AppError> {
+    let base = app_data_dir(app)?;
+    // 旧版只装文字的 texts.json 在这里一次性并进流里
+    fileshare_core::messages::migrate_legacy_texts(&base);
+    Ok(fileshare_core::messages::message_path(&base))
+}
+
+/// 最近 N 条，新的在前。页面每 3 秒读一次，读不到就当"还没有"，不打断界面
+#[tauri::command]
+pub fn fileshare_messages(app: AppHandle) -> Vec<MessageDto> {
+    match messages_path(&app) {
+        Ok(path) => fileshare_core::messages::list(&path).into_iter().map(message_dto).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// 记一条文字。方向由调用方给：桌面记 app，浏览器里发的记 web ——
+/// 流是两端共读一份，方向错了对面就会看到"自己说的话"。
+pub fn push_message(app: &AppHandle, content: &str, dir: &str) -> Result<MessageDto, AppError> {
+    let path = messages_path(app)?;
+    fileshare_core::messages::push_text(&path, content, dir)
+        .map(message_dto)
+        .map_err(AppError::FileShare)
+}
+
+/// 发一条文字到网页。服务没启动也照记：它是本机的一份东西，不是一条挂在端口上的消息
+#[tauri::command]
+pub fn fileshare_message_push(app: AppHandle, content: String) -> Result<MessageDto, AppError> {
+    push_message(&app, &content, fileshare_core::messages::DIR_APP)
+}
+
+/// 删一条消息。**只删记录，不碰共享目录里的文件**
+#[tauri::command]
+pub fn fileshare_message_delete(app: AppHandle, id: String) -> Result<(), AppError> {
+    let path = messages_path(&app)?;
+    fileshare_core::messages::remove(&path, &id)
+        .map(|_| ())
+        .map_err(AppError::FileShare)
+}
+
+/// 在资源管理器里定位一个收到的文件。用「定位」而不是「打开」：
+/// 文件内容来自别的设备，双击执行该由用户自己决定。
+#[tauri::command]
+pub fn fileshare_reveal_file(app: AppHandle, share_index: usize, name: String) -> Result<(), AppError> {
+    let cfg = ensure_config(&app)?;
+    let dir = cfg
+        .share_dirs
+        .get(share_index)
+        .ok_or_else(|| AppError::FileShare("共享目录已不在列表里".to_string()))?;
+    // 消息里的名字是自己写进去的，但仍然只认最后一段路径，防止拼出目录外的路径
+    let base = std::path::Path::new(&name)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .ok_or_else(|| AppError::FileShare("文件名不合法".to_string()))?;
+    let path = dir.join(&base);
+    if !path.exists() {
+        return Err(AppError::FileShare("这个文件已经不在共享目录里了".to_string()));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", path.display()))
+            .spawn()
+            .map_err(|e| AppError::FileShare(format!("打不开资源管理器: {e}")))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| AppError::FileShare(format!("打不开访达: {e}")))?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| AppError::FileShare(format!("打不开文件管理器: {e}")))?;
+    }
+    Ok(())
+}
+
+// ── 生命周期钩子（main.rs 调用）─────────────────────────────
 /// 退出收尾：杀子进程、删状态文件。子进程另有 --parent 看门狗兜底强杀场景。
 /// 开机不再自动恢复监听：服务只由模块页的启动按钮拉起。
 pub fn stop_for_exit(app: &AppHandle) {

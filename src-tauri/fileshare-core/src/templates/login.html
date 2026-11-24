@@ -39,8 +39,9 @@ form { margin-top: 28px; }
 .reveal .off { display: none; }
 .field.shown .on { display: none; }
 .field.shown .off { display: block; }
-.go { width: 100%; height: 44px; border-radius: 6px; background: var(--text); color: var(--bg); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; transition: opacity var(--transition); }
-.go:hover { opacity: .84; }
+.go { width: 100%; height: 44px; border-radius: 6px; background: var(--accent); color: var(--accent-on); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; transition: background-color var(--transition); }
+.go:hover { background: var(--accent-hover); }
+.go:active { background: var(--accent-active); }
 .err-slot { min-height: 32px; padding-top: 6px; font-size: 13px; color: var(--danger); }
 .note { margin-top: 20px; color: var(--text-secondary); font-size: 12px; }
 @media (max-width: 600px) { .pagebar { width: calc(100% - 32px); min-height: 64px; } .stage { padding: 24px 16px; min-height: calc(100svh - 128px); } .card { padding: 24px; } h1 { font-size: 22px; } }

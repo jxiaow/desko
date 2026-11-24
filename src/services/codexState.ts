@@ -937,6 +937,8 @@ async function clearBatchDeleteJob(): Promise<void> {
  */
 export const usageRange = ref<UsageRange>('today')
 export const usageReport = ref<CodexSessionUsageReport | null>(null)
+// fileCount 是全部扫描文件数，与选中的统计时间范围无关。
+export const usageHistoryEmpty = computed(() => usageReport.value?.totals.fileCount === 0)
 export const usageReportRange = ref<UsageRange>('today')
 export const usageUpdatedAt = ref<number | null>(null)
 export const usageBusy = ref(false)

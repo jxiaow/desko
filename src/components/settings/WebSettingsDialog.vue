@@ -3,6 +3,7 @@ import { defineAsyncComponent, ref, watch } from 'vue'
 import { WORKSPACE_THEMES as THEMES, WORKSPACE_ACCENTS as ACCENTS, appearance, chooseTheme, chooseAccent, chooseBackgroundAtmosphere, polarityOf } from '../../services/theme'
 import { useToastStore } from '../../stores/toast'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { useDialogFocus } from '../../composables/useDialogFocus'
 import AppIcon from '../shared/AppIcon.vue'
 import NotesSettings from '../../modules/settings/NotesSettings.vue'
 import { WEB_MODULE_IDS, moduleFlags } from '../../modules/state'
@@ -21,6 +22,8 @@ watch(() => props.initialTab, value => { tab.value = value ?? 'appearance' })
 watch(tab, value => { if (value === 'fileshare' && moduleFlags.fileshare) void fsRefresh() }, { immediate: true })
 const saving = ref(false)
 useEscapeClose(() => emit('close'))
+const panel = ref<HTMLElement | null>(null)
+const { trapFocus } = useDialogFocus(panel, { initialFocus: '.web-setting-tabs [aria-pressed="true"]' })
 
 async function save(action: () => Promise<boolean>) {
   if (saving.value) return
@@ -43,7 +46,7 @@ async function changeModule(id: typeof WEB_MODULE_IDS[number], event: Event) {
 
 <template>
   <div class="dialog-overlay" @click.self="emit('close')">
-    <section class="dialog web-settings" role="dialog" aria-modal="true" aria-label="浏览器设置">
+    <section ref="panel" class="dialog web-settings" role="dialog" aria-modal="true" aria-label="浏览器设置" tabindex="-1" @keydown.tab="trapFocus">
       <header class="dialog-header">
         <h3>浏览器设置</h3>
         <button class="dialog-close" type="button" aria-label="关闭" @click="emit('close')"><AppIcon name="x" :size="16" /></button>

@@ -40,6 +40,7 @@ const titlebarElement = ref<HTMLElement | null>(null)
 const windowControls = ref<HTMLElement | null>(null)
 let controlsObserver: ResizeObserver | undefined
 function openAppPane(tab: 'profiles' | 'about' | 'appearance' | 'modules') {
+  appMenuAnchor.value?.focus({ preventScroll: true })
   appMenuOpen.value = false
   window.dispatchEvent(new CustomEvent('desko:open-settings-tab', { detail: tab }))
 }

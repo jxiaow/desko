@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { authApi as api } from '../../services/api/auth'
 import { useToastStore } from '../../stores/toast'
 import { useEscapeClose } from '../../composables/useEscapeClose'
+import { useDialogFocus } from '../../composables/useDialogFocus'
 import AppIcon from '../shared/AppIcon.vue'
 
 const toastStore = useToastStore()
@@ -47,12 +48,14 @@ const close = () => {
 }
 
 useEscapeClose(close)
+const panel = ref<HTMLElement | null>(null)
+const { trapFocus } = useDialogFocus(panel, { initialFocus: 'input[type="password"]' })
 </script>
 
 <template>
   <Transition name="dialog">
-    <div v-if="show" class="dialog-overlay">
-    <div class="dialog masterpw-dialog" role="dialog" aria-modal="true" aria-label="修改主密码">
+    <div v-if="show" class="dialog-overlay" @mousedown.self.prevent>
+    <div ref="panel" class="dialog masterpw-dialog" role="dialog" aria-modal="true" aria-label="修改主密码" tabindex="-1" @keydown.tab="trapFocus">
       <div class="dialog-header">
         <h3>修改主密码</h3>
         <button  class="dialog-close" @click="close" title="关闭">

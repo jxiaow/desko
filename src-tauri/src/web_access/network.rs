@@ -28,6 +28,26 @@ pub(super) fn invoke(app: &AppHandle, command: &str, args: &Value) -> Result<Val
             app.clone(),
             arg(args, "password")?,
         )),
+        // 消息流与桌面走同一份 messages.json：浏览器里发出的，桌面页下一次轮询就看得见
+        "fileshare_messages" => Ok(json!(fileshare::fileshare_messages(app.clone()))),
+        "fileshare_message_push" => {
+            // 浏览器发出的记成 web：桌面那边要显示成「网页」而不是「我」
+            let content: String = arg(args, "content")?;
+            result(fileshare::push_message(
+                app,
+                &content,
+                fileshare_core::messages::DIR_WEB,
+            ))
+        }
+        "fileshare_message_delete" => result(fileshare::fileshare_message_delete(
+            app.clone(),
+            arg(args, "id")?,
+        )),
+        "fileshare_reveal_file" => result(fileshare::fileshare_reveal_file(
+            app.clone(),
+            arg(args, "shareIndex")?,
+            arg(args, "name")?,
+        )),
         "tunnel_binary_status" => result(tauri::async_runtime::block_on(
             tunnel::tunnel_binary_status(),
         )),
@@ -76,12 +96,21 @@ pub(super) fn import_file(
         .share_dirs
         .get(index)
         .ok_or("共享目录已不在列表里，请重新选择")?;
+    let dir_hint = root.clone();
+    let stream = fileshare::messages_path(app).map_err(|e| e.user_message())?;
     let root = std::fs::canonicalize(root).map_err(|_| "共享目录不可访问")?;
     let name = sanitize_upload_name(name).ok_or("文件名无效")?;
     let target = claim_available_name(&root, &name).map_err(|_| "无法在共享目录创建文件")?;
-    if std::fs::copy(source, &target).is_err() {
-        let _ = std::fs::remove_file(target);
-        return Err("无法保存到共享目录".into());
-    }
-    Ok(json!({"name":target.file_name().unwrap().to_string_lossy()}))
+    let size = match std::fs::copy(source, &target) {
+        Ok(size) => size,
+        Err(_) => {
+            let _ = std::fs::remove_file(target);
+            return Err("无法保存到共享目录".into());
+        }
+    };
+    let name = target.file_name().unwrap().to_string_lossy();
+    let _ = fileshare_core::messages::push_file(
+        &stream, &name, size, index, &dir_hint, fileshare_core::messages::DIR_WEB,
+    );
+    Ok(json!({"name": name}))
 }

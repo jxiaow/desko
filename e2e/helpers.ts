@@ -29,6 +29,12 @@ export const e2e = {
     page.evaluate((e) => (window as any).__E2E__.hasListener(e), event),
   queueDialog: (page: Page, value: unknown): Promise<void> =>
     page.evaluate((v) => (window as any).__E2E__.queueDialog(v), value),
+  /** 换掉文字库里的那份：演"手机刚发来一条"，走的是页面自己的 3 秒轮询 */
+  setFileshareMessages: (
+    page: Page,
+    messages: { id: string; dir: string; kind: string; text?: string; name?: string; size?: number; createdMs: number; time: string; sizeText?: string }[],
+  ): Promise<void> =>
+    page.evaluate((m) => (window as any).__E2E__.setFileshareMessages(m), messages),
 }
 
 import { expect } from '@playwright/test'

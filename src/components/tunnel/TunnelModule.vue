@@ -170,7 +170,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
             <span class="chip" :class="{ live: running, connecting: status?.alive && !running }" role="status"><span class="dot" aria-hidden="true"></span>{{ state }}</span>
           </div>
           <div class="connection-actions">
-            <button class="bar-btn btn-primary toggle-btn" :class="{ 'ghost-danger': status?.alive }" :disabled="busy || !canToggle" :title="canToggle ? '' : (services.length ? '请先创建隧道' : '请先添加本地服务')" @click="toggle" :aria-busy="busy">
+            <button v-if="canToggle || services.length" class="bar-btn btn-primary toggle-btn" :class="{ 'ghost-danger': status?.alive }" :disabled="busy || !canToggle" :title="canToggle ? '' : '请先创建隧道'" @click="toggle" :aria-busy="busy">
               <AppIcon :name="status?.alive ? 'x' : 'external'" :size="13" />
               {{ busy ? '处理中…' : status?.alive ? '停止隧道' : '启动隧道' }}
             </button>
@@ -210,7 +210,7 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
       />
 
       <!-- 程序与进程：默认只给一行摘要，点开再看完整事实 -->
-      <section class="tn-card tn-foot" :class="{ expanded: showDetail, attention: pollError || report?.conflict || status?.note }">
+      <section v-if="binary?.installed || provision?.tunnelId || status?.alive || status?.note || pollError || report?.conflict" class="tn-card tn-foot" :class="{ expanded: showDetail, attention: pollError || report?.conflict || status?.note }">
         <div class="tn-head">
           <h2>连接诊断</h2>
           <span class="diag-summary">{{ summary }}</span>
@@ -238,9 +238,10 @@ watchEffect(() => { if (pageActive.value) pageHead.setHead('内网穿透') })
               {{ report?.message ?? '检查隧道是否同时在其他设备运行' }}
             </span>
             <button
+              v-if="provision?.tunnelId"
               class="btn-secondary d-btn"
               type="button"
-              :disabled="probing || !provision?.tunnelId"
+              :disabled="probing"
               @click="probe"
             >
               检查

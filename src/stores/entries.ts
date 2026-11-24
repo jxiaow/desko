@@ -50,6 +50,10 @@ export const useEntriesStore = defineStore('entries', () => {
     try {
       entries.value = await api.listEntriesWithPaths()
       loadError.value = null
+      if (!entries.value.length) {
+        searchKeyword.value = ''
+        activeTab.value = 'all'
+      }
     } catch (e: any) {
       console.error('Failed to fetch entries:', e)
       loadError.value = e?.message || '加载数据失败'

@@ -8,6 +8,7 @@ pub mod guard;
 pub mod handlers;
 pub mod http_util;
 pub mod icons;
+pub mod messages;
 pub mod multipart;
 pub mod net;
 pub mod pages;
@@ -181,7 +182,16 @@ mod tests {
 
     /// 测试专用随机高端口：port=0 会回落到默认 8000，和真实服务/并发测试撞端口
     /// （tiny_http 开 SO_REUSEADDR，Windows 下双绑不报错、请求随机投递，测试会永久挂起）
+    ///
+    /// 随机还得先探一遍：Windows 上 Hyper-V/WSL 会整段预留端口，并发跑的测试也在抢，
+    /// 光靠随机数挑到这些端口时调用方 bind 直接 panic（port_drifts_when_busy 曾三次挂一次）。
     pub(crate) fn ephemeral_port() -> u16 {
+        for _ in 0..64 {
+            let port = 20000 + (rand::random::<u16>() % 40000);
+            if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+                return port;
+            }
+        }
         20000 + (rand::random::<u16>() % 40000)
     }
 
